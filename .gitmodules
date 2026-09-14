@@ -4,3 +4,9 @@
 [submodule "submodules/superspec"]
 	path = submodules/superspec
 	url = git@github.com:WangX0111/superspec.git
+[submodule "submodules/llama.cpp"]
+	path = submodules/llama.cpp
+	url = git@github.com:ggml-org/llama.cpp.git
+[submodule "submodules/colibri"]
+	path = submodules/colibri
+	url = git@github.com:JustVugg/colibri.git
