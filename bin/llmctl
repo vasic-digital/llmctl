@@ -1,0 +1,186 @@
+#!/usr/bin/env bash
+# llmctl - local LLM orchestration: hardware probe, verified model downloads,
+# engine builds, multi-model scheduling, and OS-native services.
+# Portable bash targeting Linux (systemd --user) and macOS (launchd).
+set -euo pipefail
+
+LLMCTL_VERSION="0.1.0"
+
+_bin_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LLMCTL_ROOT="$(cd "${_bin_dir}/.." && pwd)"
+export LLMCTL_ROOT
+
+# shellcheck source=../lib/common.sh
+source "${LLMCTL_ROOT}/lib/common.sh"
+# shellcheck source=../lib/os_detect.sh
+source "${LLMCTL_ROOT}/lib/os_detect.sh"
+# shellcheck source=../lib/hardware.sh
+source "${LLMCTL_ROOT}/lib/hardware.sh"
+# shellcheck source=../lib/catalog.sh
+source "${LLMCTL_ROOT}/lib/catalog.sh"
+# shellcheck source=../lib/download.sh
+source "${LLMCTL_ROOT}/lib/download.sh"
+# shellcheck source=../lib/engine.sh
+source "${LLMCTL_ROOT}/lib/engine.sh"
+# shellcheck source=../lib/scheduler.sh
+source "${LLMCTL_ROOT}/lib/scheduler.sh"
+# shellcheck source=../lib/doctor.sh
+source "${LLMCTL_ROOT}/lib/doctor.sh"
+
+usage() {
+  cat <<'EOF'
+llmctl - local LLM orchestration (llama.cpp + colibri)
+
+USAGE
+  llmctl <command> [args]
+
+SETUP & DIAGNOSIS
+  setup                       doctor + build engines + print plan
+  doctor                      environment self-diagnosis
+  hw [--json]                 probe hardware (human-readable or JSON)
+
+PLANNING
+  plan [--json]               which catalog profiles fit this host, launch
+                              flags, and co-residency groups
+
+MODELS
+  models list                 list catalog profiles (port, engine, size, tier)
+  models download <profile>   verified download (resume, sha256, smoke test)
+  models verify <profile>     re-verify checksums of a downloaded profile
+
+ENGINES
+  build [llama|colibri|all]   build engines from vendor/ submodules
+                              (backend auto-detect: CUDA / Metal / ROCm / CPU)
+
+RUNTIME (multi-model co-residency)
+  start <profile> [more...]   start profiles if the combined footprint fits
+  stop <profile|all>          stop services
+  switch <profile>            stop all, start exactly one (always works)
+  auto <chat|coder|vision>..  best set that fits now; LRU-evicts non-enabled
+                              services when room is needed
+  status                      show running services and reservations
+  logs <profile> [lines]      tail a service log
+
+PERSISTENT SERVICES (systemd --user on Linux, launchd on macOS)
+  install                     install/refresh unit templates (Linux) or
+                              prepare LaunchAgents dir (macOS)
+  enable <profile>            write env/plist, enable + start at login
+  disable <profile>           stop + disable autostart
+  restart <profile>           restart a service
+
+MISC
+  version                     print version
+  help                        this help
+
+ENVIRONMENT
+  LLMCTL_DRY_RUN=1            print service actions instead of executing them
+  LLMCTL_FAKE_HW=<file.json>  use a hardware fixture (testing)
+  LLMCTL_MODELS_DIR=<dir>     override the model storage directory
+EOF
+}
+
+cmd_models_list() {
+  catalog_check
+  printf '%-16s %-6s %-8s %-10s %-12s %s\n' "profile" "port" "engine" "size GiB" "min-tier" "capabilities"
+  local p
+  for p in $(catalog_profiles); do
+    local size_mb; size_mb="$(catalog_total_size_mb "${p}")"
+    printf '%-16s %-6s %-8s %-10s %-12s %s\n' \
+      "${p}" "$(catalog_port "${p}")" "$(catalog_engine "${p}")" \
+      "$(( (size_mb + 1023) / 1024 ))" "$(catalog_min_tier "${p}")" \
+      "$(catalog_capability "${p}")"
+  done
+}
+
+cmd_setup() {
+  log "llmctl setup: doctor -> build -> plan"
+  doctor_run || die "doctor reported failures; fix them and re-run 'llmctl setup'"
+  engine_build all
+  echo
+  hw_probe_json | catalog_plan_json | catalog_plan_human
+  echo
+  info "setup complete. Next: llmctl models download <profile>, then llmctl start <profile>"
+}
+
+main() {
+  local cmd="${1:-help}"
+  [[ "$#" -gt 0 ]] && shift
+  case "${cmd}" in
+    setup)    cmd_setup "$@" ;;
+    doctor)   doctor_run ;;
+    hw|probe)
+      if [[ "${1:-}" == "--json" ]]; then hw_probe_json; else hw_probe_human; fi
+      ;;
+    plan)
+      if [[ "${1:-}" == "--json" ]]; then
+        hw_probe_json | catalog_plan_json
+      else
+        hw_probe_json | catalog_plan_json | catalog_plan_human
+      fi
+      ;;
+    models)
+      local sub="${1:-list}"; [[ "$#" -gt 0 ]] && shift
+      case "${sub}" in
+        list)     cmd_models_list ;;
+        download) [[ "$#" -eq 1 ]] || die "usage: llmctl models download <profile>"
+                  download_profile "$1" ;;
+        verify)   [[ "$#" -eq 1 ]] || die "usage: llmctl models verify <profile>"
+                  verify_profile "$1" ;;
+        *)        die "unknown models subcommand: ${sub} (list|download|verify)" ;;
+      esac
+      ;;
+    build)    engine_build "${@:-all}" ;;
+    install)  sched_load_backend; svc_install ;;
+    enable)
+      [[ "$#" -eq 1 ]] || die "usage: llmctl enable <profile>"
+      sched_load_backend
+      # enable = write env (from a fresh plan footprint) + enable + start
+      local plan_file; plan_file="$(mktemp)"
+      hw_probe_json | catalog_plan_json > "${plan_file}"
+      local mode port ctx ngl parallel fa ram vram
+      mode="$(json_query "${plan_file}" "d[\"profiles\"][\"$1\"][\"mode\"]")"
+      port="$(json_query "${plan_file}" "d[\"profiles\"][\"$1\"][\"port\"]")"
+      ctx="$(json_query "${plan_file}" "d[\"profiles\"][\"$1\"][\"ctx\"]")"
+      ngl="$(json_query "${plan_file}" "d[\"profiles\"][\"$1\"][\"ngl\"]")"
+      parallel="$(json_query "${plan_file}" "d[\"profiles\"][\"$1\"][\"parallel\"]")"
+      fa="$(json_query "${plan_file}" "d[\"profiles\"][\"$1\"][\"flash_attn\"]")"
+      ram="$(json_query "${plan_file}" "d[\"profiles\"][\"$1\"][\"ram_mb\"]")"
+      vram="$(json_query "${plan_file}" "d[\"profiles\"][\"$1\"][\"vram_mb\"]")"
+      rm -f "${plan_file}"
+      sched_build_launch "$1" "${mode}" "${port}" "${ctx}" "${ngl}" "${parallel}" "${fa}"
+      svc_write_env "$1" "$(catalog_engine "$1")" "${SCHED_EXEC}" "${SCHED_ARGS[@]}"
+      touch "${LLMCTL_SERVICES_DIR}/$1.enabled"
+      svc_enable "$1"
+      # Record the reservation so the scheduler budgets correctly (enable
+      # implies start).
+      ensure_dir "${LLMCTL_RUNTIME_DIR}"
+      _sched_write_reservation "$1" "${mode}" "${port}" "${ram}" "${vram}"
+      info "enabled and started $1 (mode=${mode}, port=${port})"
+      ;;
+    disable)
+      [[ "$#" -eq 1 ]] || die "usage: llmctl disable <profile>"
+      sched_load_backend; svc_disable "$1"
+      rm -f "${LLMCTL_SERVICES_DIR}/$1.enabled" "${LLMCTL_RUNTIME_DIR}/$1.run"
+      ;;
+    start)    sched_start "$@" ;;
+    stop)     sched_stop "$@" ;;
+    restart)
+      [[ "$#" -eq 1 ]] || die "usage: llmctl restart <profile>"
+      sched_load_backend; svc_restart "$1"
+      ;;
+    switch)   [[ "$#" -eq 1 ]] || die "usage: llmctl switch <profile>"; sched_switch "$1" ;;
+    auto)     sched_auto "$@" ;;
+    status)   sched_status ;;
+    logs)     [[ "$#" -ge 1 ]] || die "usage: llmctl logs <profile> [lines]"
+              sched_load_backend; svc_logs "$@" ;;
+    version)  echo "llmctl ${LLMCTL_VERSION}" ;;
+    help|-h|--help) usage ;;
+    *)
+      err "unknown command: ${cmd}"
+      usage >&2
+      exit 2
+      ;;
+  esac
+}
+
+main "$@"

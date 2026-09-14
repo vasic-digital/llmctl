@@ -1,0 +1,18 @@
+{
+  "os": "macos",
+  "arch": "arm64",
+  "cpu": {
+    "cores": 16,
+    "model": "Apple M4 Max",
+    "arch": "arm64",
+    "simd": ["neon"],
+    "apple_silicon": true,
+    "apple_chip": "M4 Max"
+  },
+  "memory": {"total_mb": 65536, "available_mb": 50000},
+  "gpus": [
+    {"vendor": "apple", "name": "M4 Max", "vram_mb": 45875, "unified_memory": true}
+  ],
+  "gpu_total_vram_mb": 45875,
+  "storage": {"path": "/Users/mac/.local/share/llmctl/models", "free_mb": 800000, "type": "nvme"}
+}

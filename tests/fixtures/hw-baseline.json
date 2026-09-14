@@ -1,0 +1,19 @@
+{
+  "os": "linux",
+  "arch": "x86_64",
+  "cpu": {
+    "cores": 8,
+    "model": "AMD Ryzen 7 2700X Eight-Core Processor",
+    "arch": "x86_64",
+    "simd": ["sse4_2", "avx", "avx2", "fma", "f16c"],
+    "apple_silicon": false,
+    "apple_chip": null
+  },
+  "memory": {"total_mb": 32768, "available_mb": 30000},
+  "gpus": [
+    {"vendor": "nvidia", "name": "NVIDIA GeForce RTX 3060", "vram_mb": 12288,
+     "driver": "560.35.03", "cuda_version": "12.6"}
+  ],
+  "gpu_total_vram_mb": 12288,
+  "storage": {"path": "/home/user/.local/share/llmctl/models", "free_mb": 500000, "type": "nvme"}
+}
