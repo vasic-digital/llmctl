@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  validate:
+    name: Validate extension
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Validate metadata and docs
+        run: python3 scripts/validate-extension-metadata.py
+
+      # The catalog installs from GitHub's generated tag ZIP, which spec-kit
+      # size-validates before extracting. Rebuild that ZIP and check it here so
+      # an oversized asset fails CI instead of failing `specify extension add`.
+      - name: Validate release archive
+        run: python3 scripts/validate-release-archive.py
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Verify install with latest spec-kit
+        run: |
+          set -euo pipefail
+          tmpdir="$(mktemp -d)"
+          cd "$tmpdir"
+          uvx --from git+https://github.com/github/spec-kit.git specify init --here --offline --integration codex --ignore-agent-tools --no-git --force
+          uvx --from git+https://github.com/github/spec-kit.git specify extension add "$GITHUB_WORKSPACE" --dev
+          uvx --from git+https://github.com/github/spec-kit.git specify extension list | tee extension-list.txt
+          grep -q "Commands: 5 | Hooks: 3" extension-list.txt
+          test -f .specify/extensions.yml
+          grep -q "speckit.superspec.tasks" .specify/extensions.yml
+          grep -q "speckit.superspec.execute" .specify/extensions.yml
+          grep -q "speckit.superspec.review" .specify/extensions.yml
