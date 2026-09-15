@@ -127,6 +127,18 @@ func New(cfg Config) *LocalExecutor {
 	return &LocalExecutor{llmctlPath: path, tenantID: cfg.TenantID}
 }
 
+// WithTenant returns a COPY of e scoped to tenantID - the base
+// executor's llmctlPath is preserved, only the tenant scoping changes.
+// e itself is never mutated: LocalExecutor is a small, immutable-by-
+// convention value, so a single shared "base" executor (constructed
+// once, e.g. at cmd/llmctld daemon startup) can safely serve many
+// different tenants' concurrent requests, each via its own
+// base.WithTenant(id) call, without one tenant's dispatch ever sharing
+// mutable state with another's.
+func (e *LocalExecutor) WithTenant(tenantID string) *LocalExecutor {
+	return &LocalExecutor{llmctlPath: e.llmctlPath, tenantID: tenantID}
+}
+
 // run invokes the real bin/llmctl with args, inheriting the calling
 // process's environment (os/exec's default when Cmd.Env is nil) so a
 // caller's LLMCTL_DRY_RUN, LLMCTL_FAKE_HW, LLMCTL_STATE_DIR, etc. reach the

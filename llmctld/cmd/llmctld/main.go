@@ -17,6 +17,7 @@ import (
 	"github.com/vasic-digital/llmctl/llmctld/internal/audit"
 	"github.com/vasic-digital/llmctl/llmctld/internal/auth"
 	"github.com/vasic-digital/llmctl/llmctld/internal/authz"
+	"github.com/vasic-digital/llmctl/llmctld/internal/executor"
 	"github.com/vasic-digital/llmctl/llmctld/internal/mtls"
 	"github.com/vasic-digital/llmctl/llmctld/internal/raft"
 	"github.com/vasic-digital/llmctl/llmctld/internal/replication"
@@ -88,14 +89,16 @@ func newAuthzDecider(signingKey string) (*authz.Decider, *auth.Store) {
 	return decider, auth.NewKeyStore()
 }
 
-// registerAuthzRoutes wires T074's auth/tenant/audit route sets onto
-// srv's router, backed by decider and keys - the one call site both
+// registerAuthzRoutes wires T074's auth/tenant/audit route sets, plus
+// T072-FU4's model-lifecycle dispatch routes, onto srv's router, backed
+// by decider, keys, and modelExecutor - the one call site both
 // runClusterBootstrap and runClusterJoinReal use, so the two subcommands'
 // wiring can never drift apart.
-func registerAuthzRoutes(srv *api.Server, decider *authz.Decider, keys *auth.Store) {
+func registerAuthzRoutes(srv *api.Server, decider *authz.Decider, keys *auth.Store, modelExecutor *executor.LocalExecutor) {
 	api.RegisterAuthRoutes(srv.Router(), decider, keys)
 	api.RegisterTenantRoutes(srv.Router(), decider)
 	api.RegisterAuditRoutes(srv.Router(), decider)
+	api.RegisterModelRoutes(srv.Router(), decider, modelExecutor)
 }
 
 // version is the llmctld build version. It is bumped alongside the bash
@@ -136,6 +139,7 @@ type clusterFlags struct {
 	caKey          string
 	stateDir       string
 	bootstrapAdmin bool
+	llmctlPath     string
 }
 
 func parseClusterFlags(fs *flag.FlagSet, args []string) *clusterFlags {
@@ -147,6 +151,7 @@ func parseClusterFlags(fs *flag.FlagSet, args []string) *clusterFlags {
 	fs.StringVar(&f.caKey, "ca-key", "", "path to the cluster's shared CA private-key PEM (required)")
 	fs.StringVar(&f.stateDir, "state-dir", "", "directory for this node's replication.Store (WAL + checkpoints); default: a per-node subdirectory next to -ca-cert")
 	fs.BoolVar(&f.bootstrapAdmin, "bootstrap-admin", false, "seed one admin-role API key into this node's own auth.Store at startup and print its id+secret to stdout once, as \"BOOTSTRAP_ADMIN_KEY_ID=... BOOTSTRAP_ADMIN_KEY_SECRET=...\" (before the READY line) - the out-of-the-box way to stand up a cluster with no existing credential (a first-time operator, or a test harness with no other bootstrap path); only meaningful on \"cluster bootstrap\" since that is where a node's auth.Store is genuinely empty")
+	fs.StringVar(&f.llmctlPath, "llmctl-path", "", "path to the real bin/llmctl script this node's model-lifecycle routes (T072-FU4) shell out to; default: the bare \"llmctl\" name, PATH-resolved at call time (executor.Config.LLMCtlPath's own documented default)")
 	if err := fs.Parse(args); err != nil {
 		fmt.Fprintln(os.Stderr, "llmctld:", err)
 		os.Exit(2)
@@ -274,7 +279,8 @@ func runClusterBootstrap(args []string) {
 		os.Exit(1)
 	}
 	decider, keys := newAuthzDecider(signingKey)
-	registerAuthzRoutes(srv, decider, keys)
+	modelExecutor := executor.New(executor.Config{LLMCtlPath: f.llmctlPath})
+	registerAuthzRoutes(srv, decider, keys, modelExecutor)
 
 	if f.bootstrapAdmin {
 		adminKeyID, adminKeySecret, err := keys.Create(bootstrapAdminOwnerID, []string{auth.RoleAdmin}, 0)
@@ -322,13 +328,14 @@ func runClusterJoin(args []string) {
 func runClusterJoinReal(args []string) int {
 	fs := flag.NewFlagSet("cluster join", flag.ExitOnError)
 	var (
-		nodeID    string
-		raftBind  string
-		apiBind   string
-		caCert    string
-		caKey     string
-		leaderAPI string
-		stateDir  string
+		nodeID     string
+		raftBind   string
+		apiBind    string
+		caCert     string
+		caKey      string
+		leaderAPI  string
+		stateDir   string
+		llmctlPath string
 	)
 	fs.StringVar(&nodeID, "node-id", "", "this node's stable Raft/mTLS identity (required)")
 	fs.StringVar(&raftBind, "raft-bind", "127.0.0.1:0", "address for this node's Raft QUIC+mTLS transport to listen on")
@@ -337,6 +344,7 @@ func runClusterJoinReal(args []string) int {
 	fs.StringVar(&caKey, "ca-key", "", "path to the cluster's shared CA private-key PEM (required)")
 	fs.StringVar(&leaderAPI, "leader-api", "", "the existing cluster leader's api-bind address to join through (required)")
 	fs.StringVar(&stateDir, "state-dir", "", "directory for this node's replication.Store (WAL + checkpoints); default: a per-node subdirectory next to -ca-cert")
+	fs.StringVar(&llmctlPath, "llmctl-path", "", "path to the real bin/llmctl script this node's model-lifecycle routes (T072-FU4) shell out to; default: the bare \"llmctl\" name, PATH-resolved at call time (executor.Config.LLMCtlPath's own documented default)")
 	if err := fs.Parse(args); err != nil {
 		fmt.Fprintln(os.Stderr, "llmctld:", err)
 		return 2
@@ -398,7 +406,8 @@ func runClusterJoinReal(args []string) int {
 		return 1
 	}
 	decider, keys := newAuthzDecider(signingKey)
-	registerAuthzRoutes(srv, decider, keys)
+	modelExecutor := executor.New(executor.Config{LLMCtlPath: llmctlPath})
+	registerAuthzRoutes(srv, decider, keys, modelExecutor)
 
 	if err := srv.Listen(apiBind); err != nil {
 		fmt.Fprintln(os.Stderr, "llmctld: cluster join: api.Listen:", err)

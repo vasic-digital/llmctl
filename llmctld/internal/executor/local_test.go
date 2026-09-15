@@ -244,6 +244,39 @@ func TestLocalExecutor_Start_WithTenantID_WritesTenantScopedEnvFile(t *testing.T
 // falls back to the bare "llmctl" name (PATH-resolved by os/exec at call
 // time), matching how a human operator would invoke it from a shell where
 // llmctl is already on PATH.
+// TestLocalExecutor_WithTenant_ReturnsDistinctTenantScopedExecutor proves
+// WithTenant produces a tenant-scoped COPY rather than mutating the
+// receiver - a single shared "base" LocalExecutor (as cmd/llmctld
+// constructs once at startup) must be able to serve many different
+// tenants' requests concurrently, each via its own WithTenant(id) call,
+// without one tenant's dispatch ever leaking into another's via shared
+// mutable state.
+func TestLocalExecutor_WithTenant_ReturnsDistinctTenantScopedExecutor(t *testing.T) {
+	base := New(Config{LLMCtlPath: "/some/path/llmctl"})
+	if base.tenantID != "" {
+		t.Fatalf("base executor tenantID = %q, want empty (Config{} carried no TenantID)", base.tenantID)
+	}
+
+	tenantA := base.WithTenant("tenant-a")
+	tenantB := base.WithTenant("tenant-b")
+
+	if tenantA.tenantID != "tenant-a" {
+		t.Errorf("tenantA.tenantID = %q, want %q", tenantA.tenantID, "tenant-a")
+	}
+	if tenantB.tenantID != "tenant-b" {
+		t.Errorf("tenantB.tenantID = %q, want %q", tenantB.tenantID, "tenant-b")
+	}
+	if tenantA.llmctlPath != base.llmctlPath || tenantB.llmctlPath != base.llmctlPath {
+		t.Errorf("WithTenant must preserve llmctlPath: base=%q tenantA=%q tenantB=%q", base.llmctlPath, tenantA.llmctlPath, tenantB.llmctlPath)
+	}
+	// The base executor itself MUST remain untouched (still tenant-less)
+	// after deriving two tenant-scoped copies from it - proving WithTenant
+	// returns a copy, never mutates the receiver.
+	if base.tenantID != "" {
+		t.Errorf("base.tenantID changed to %q after WithTenant calls - WithTenant must not mutate its receiver", base.tenantID)
+	}
+}
+
 func TestNew_DefaultsLLMCtlPath(t *testing.T) {
 	exec := New(Config{})
 	if exec.llmctlPath != "llmctl" {

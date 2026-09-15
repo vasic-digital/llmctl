@@ -1,6 +1,6 @@
 # CONTINUATION
 
-**Revision:** 10
+**Revision:** 11
 **Last modified:** 2026-09-15T00:00:00Z
 
 Per Constitution §12.10: this file reflects the live state of work on the
@@ -675,10 +675,81 @@ Closes §10b's remaining open item — Clarification 20/FR-051.
   Clarification 20 (per-tenant encryption at rest) for
   `internal/replication`'s KV-cache/WAL state are now closed.** No
   further honest scope boundary remains on this thread of follow-up
-  work. The one still-open item across the whole feature remains
+  work. The one still-open item across the whole feature was
   `internal/executor.LocalExecutor` itself not being constructed
   anywhere in `cmd/llmctld`'s live HTTP/scheduler dispatch path (§10a) —
-  a separate, larger wiring task, not part of this thread.
+  now closed too, see §10d immediately below.
+
+## 10d. Follow-up: T072-FU4 — LocalExecutor wired into a live model-lifecycle dispatch path (closed 2026-09-15)
+
+This closes the LAST disclosed gap across the whole feature. Unlike
+T072-FU1/FU2/FU3 (all backward-compatible wiring of an already-built
+mechanism into its OWN pre-existing call site), this one required
+inventing a genuinely NEW HTTP API surface — classified **architectural**
+per the brainstorming discipline, and presented to the operator via
+`AskUserQuestion` before any code was written; the operator chose
+"Design it now".
+
+- **Investigation before designing**: confirmed `internal/auth/rbac.go`'s
+  `ActionModelStart`/`ActionModelStop`/`ActionModelDelete`/`ActionModelView`
+  (built in T066's `predefinedRoles` table) were consumed by NO route
+  anywhere — the same class of built-but-unwired gap `TenantStateDir`/
+  `OpenEncryptedStore` were before FU1/FU3. Also confirmed no doc
+  anywhere actually specifies a model-lifecycle cluster API despite
+  `rbac.go`'s own doc comment citing one — that citation was stale, so
+  this design is genuine original composition of already-tested pieces,
+  not an implementation of a pre-specified contract.
+- **Design**: new `internal/api/routes_models.go` —
+  `POST /v1/tenants/:id/models/:model/start`, `POST .../stop`,
+  `GET .../status`, mirroring the exact `:id`/`:model` path shape the
+  pre-existing `GET .../visible` route already uses. Every route
+  requires, in order: `authorizeTenantOwnership` + `decider.CheckRBAC`
+  with the SPECIFIC action for that route (orthogonal to tenant
+  ownership) + `decider.CheckTenantBoundary` (the same audited
+  visibility check `.../visible` uses — a tenant can never
+  start/stop/query a model it never registered). Dispatch is THIS NODE
+  ONLY — no cross-node scheduler exists anywhere in this codebase,
+  matching the already-disclosed per-node boundary from T073/T075.
+- **`internal/executor` gained `WithTenant(tenantID) *LocalExecutor`** —
+  a purely additive tenant-scoped-COPY method (never mutates the
+  receiver), needed because `Config.TenantID` (T072-FU1) was
+  construction-time-only, but one daemon process must serve MANY
+  tenants concurrently from a single shared "base" executor. Zero
+  changes to any existing tested method.
+- **Tests, all real, no mocked Executor**: `TestModelStart_
+  RealDryRunSubprocess_WritesTenantScopedEnvFile` is the full
+  end-to-end proof — a real HTTP POST, through every real gate,
+  dispatching against the real dry-run `bin/llmctl` subprocess, which
+  writes a REAL tenant-scoped env file on disk (thanks to T072-FU1's
+  bash-side wiring), asserted directly. Plus role-denial,
+  cross-tenant-denial, unregistered-model-denial, real stop, and
+  viewer-can-query/tenant-admin-cannot coverage.
+- **`cmd/llmctld/main.go`**: new optional `-llmctl-path` flag on both
+  subcommands' independent flag sets; `registerAuthzRoutes` (the
+  shared no-drift call site) extended to also register the model
+  routes; both subcommands construct and pass through a
+  `*executor.LocalExecutor`.
+- **`docs/api-reference.md`**: documented the new routes, with an
+  explicit disclosure that the pre-existing Phase-1-era "planned"
+  route table is stale relative to what Phases 9-12 actually shipped —
+  pre-existing drift, not introduced by or fixed in full by this task.
+- **Full verification** (fresh, `go clean -testcache` first): `gofmt`/
+  `go vet`/`go build` clean, `go test ./... -race` (all 12 packages)
+  zero regressions/zero races, `golangci-lint run
+  --max-issues-per-linter=0 --max-same-issues=0 ./...` **0 issues**.
+  `bash tests/run_tests.sh` **22/22 PASS** (unaffected — Go-only
+  change).
+- **Result**: `internal/executor.LocalExecutor` is now genuinely wired
+  into a live HTTP dispatch path.
+- **Honest scope boundary, still open (not part of this task)**:
+  dispatch remains single-node only — no cluster-wide model-placement
+  scheduler, no cross-node request forwarding, no automatic node
+  selection exist anywhere in this codebase. An operator or future
+  orchestrator must target the specific node it wants a model started
+  on directly — the same already-disclosed per-node boundary T073/T075
+  established for the tenancy/auth stack, not a new limitation.
+
+**No further disclosed gap remains anywhere in this feature.**
 
 ## 11. Binding constraints (unchanged, restated per §12.10)
 

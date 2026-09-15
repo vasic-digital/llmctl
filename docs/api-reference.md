@@ -120,3 +120,32 @@ None of these routes are registered anywhere in this repository as of this
 session. This table is a design target derived from the spec, not a claim
 of shipped behavior — see `docs/CONTINUATION.md` for the live phase-by-phase
 implementation status.
+
+**Honest disclosure (added 2026-09-15, T072-FU4)**: the table above is a
+Phase-1-era planning target and is now STALE relative to what Phases 9-12
+actually shipped (the real cluster/replication/tenant/auth/audit/model
+route surface is materially different and more detailed than what's
+listed above — see `internal/api/routes_*.go` for the authoritative,
+tested implementation). A full refresh of this section to match the real
+shipped surface is a legitimate but separate documentation task, not
+undertaken here; the one addition below documents ONLY the new routes
+this task itself added, so this table's drift is not made worse by this
+change.
+
+### Model-lifecycle dispatch routes (T072-FU4, real, shipped)
+
+Added directly to `internal/api/routes_models.go`, gated by RBAC actions
+`model:start`/`model:stop`/`model:view` (defined since T066) plus tenant
+ownership + tenant-visibility checks (mirroring the pre-existing
+`/v1/tenants/:id/models/:model/visible` route's own gating):
+
+| Method | Route | Purpose |
+|---|---|---|
+| POST | `/v1/tenants/:id/models/:model/start` | Start `:model` (a registered/shared bin/llmctl catalog profile) for tenant `:id`, dispatched to THIS node's real `bin/llmctl start` subprocess with `LLMCTL_TENANT_ID=:id` |
+| POST | `/v1/tenants/:id/models/:model/stop` | Stop `:model` for tenant `:id` on this node |
+| GET | `/v1/tenants/:id/models/:model/status` | Real `bin/llmctl status` output, filtered to `:model`'s row |
+
+Scope boundary: dispatch is THIS NODE ONLY — no cluster-wide scheduler or
+cross-node request-forwarding exists anywhere in this codebase yet
+(the same disclosed per-node boundary T073/T075 already established for
+the tenancy/auth stack).
