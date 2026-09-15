@@ -1,6 +1,6 @@
 # CONTINUATION
 
-**Revision:** 9
+**Revision:** 10
 **Last modified:** 2026-09-15T00:00:00Z
 
 Per Constitution §12.10: this file reflects the live state of work on the
@@ -629,16 +629,56 @@ summary.
   3-node failover test, exercising the untenanted default path,
   unchanged). `bash tests/run_tests.sh` **22/22 PASS** (unaffected — this
   task touches Go only).
-- **Honest scope boundary, still open**: `StoreRegistry.Get` always opens
-  a PLAINTEXT `Store`, never `OpenEncryptedStore` — Clarification 20's
-  per-tenant encryption-at-rest is a DISTINCT threat model (filesystem-
-  level compromise/backup exposure) from Clarification 18's per-tenant-
-  directory requirement this task closes. `OpenEncryptedStore`/
-  `internal/tenancy.DeriveKey` both already exist and are independently
-  tested but remain otherwise unwired — needs its own decision about
-  where a master encryption secret is sourced from (mirroring
-  `LLMCTLD_JWT_SIGNING_KEY`'s env-var convention). This is the one
-  remaining open item for a resuming session to pick up, if directed to.
+- **Honest scope boundary, now closed — see §10c below**:
+  `StoreRegistry.Get` always opened a PLAINTEXT `Store`, never
+  `OpenEncryptedStore`. Kept here unedited as the accurate historical
+  record of what was true when §10b was written; closed by `T072-FU3`
+  (2026-09-15).
+
+## 10c. Follow-up: T072-FU3 — per-tenant encryption at rest wired (closed 2026-09-15)
+
+Closes §10b's remaining open item — Clarification 20/FR-051.
+
+- New `NewEncryptedStoreRegistry(baseDir, cfg, masterSecret)` mirrors the
+  pre-existing `OpenStore`/`OpenEncryptedStore` naming pair: a non-empty
+  tenant ID's `Store` opens via `OpenEncryptedStore` under a key
+  `internal/tenancy.DeriveKey` derives specifically for THAT tenant from
+  `masterSecret` — two tenants sharing one master secret never share a
+  readable key. The empty (`""`) tenant ID is deliberately EXEMPT from
+  encryption under either constructor (it represents "no tenant", the
+  single-node/no-tenancy default path) — T072-FU2's own established
+  invariant (`Get("")` byte-identical to a bare `OpenStore` call) holds
+  unconditionally, so a deployment that never opts into multi-tenancy
+  observes zero behavior change. `NewStoreRegistry` (the plain
+  constructor) is completely unaffected.
+- 3 new tests, TDD RED (`undefined: NewEncryptedStoreRegistry`) then
+  GREEN: a genuine-ciphertext proof (re-opening the same on-disk
+  directory afterward via a bare, keyless `OpenStore` fails to `Restore`
+  — AES-GCM's auth-tag check fails closed); per-tenant-derived-key
+  independence proven at the registry WIRING layer (not merely at
+  `DeriveKey`'s own unit-test layer) — tenant-b's derived key cannot
+  decrypt tenant-a's real on-disk directory; the plain registry's
+  default path reconfirmed unaffected.
+- `cmd/llmctld/main.go`: new env var `LLMCTLD_TENANT_ENCRYPTION_KEY` —
+  deliberately OPTIONAL (unlike the required JWT signing key), following
+  this project's zero-means-unset convention, since encryption at rest
+  is opt-in hardening rather than a security-critical fail-fast
+  requirement. A new `newStoreRegistry` helper resolves
+  `NewEncryptedStoreRegistry` vs `NewStoreRegistry` in ONE place both
+  `runClusterBootstrap`/`runClusterJoinReal` use, so the two subcommands
+  cannot drift apart on it. `.env.example` documents the new var.
+- **Full verification** (fresh, `go clean -testcache` first): `gofmt`/
+  `go vet`/`go build` clean, `go test ./... -race` (all 12 packages) zero
+  regressions/zero races. `bash tests/run_tests.sh` **22/22 PASS**
+  (unaffected — Go-only change).
+- **Result: both Clarification 18 (per-tenant directory) and
+  Clarification 20 (per-tenant encryption at rest) for
+  `internal/replication`'s KV-cache/WAL state are now closed.** No
+  further honest scope boundary remains on this thread of follow-up
+  work. The one still-open item across the whole feature remains
+  `internal/executor.LocalExecutor` itself not being constructed
+  anywhere in `cmd/llmctld`'s live HTTP/scheduler dispatch path (§10a) —
+  a separate, larger wiring task, not part of this thread.
 
 ## 11. Binding constraints (unchanged, restated per §12.10)
 

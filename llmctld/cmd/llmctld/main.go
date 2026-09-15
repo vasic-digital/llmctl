@@ -33,6 +33,33 @@ import (
 // fallback (Constitution §11.4.6).
 const jwtSigningKeyEnvVar = "LLMCTLD_JWT_SIGNING_KEY"
 
+// tenantEncryptionKeyEnvVar names the environment variable .env.example
+// documents for llmctld's per-tenant replication-state encryption master
+// secret (Clarification 20/FR-051, T072-FU3) - the raw material
+// internal/tenancy.DeriveKey turns into each tenant's own AES-256 key
+// for internal/replication's WAL/checkpoint Store. Unlike
+// jwtSigningKeyEnvVar, this one is OPTIONAL and follows this project's
+// established zero-means-unset convention (Constitution §11.4.6 - no
+// invented default): when unset, every tenant's replication state is
+// stored in plaintext (StoreRegistry, not NewEncryptedStoreRegistry) -
+// the exact T072-FU2 behavior every existing test and deployment already
+// relies on - and encryption at rest is opt-in for a deployment that
+// configures it, never silently forced on or off.
+const tenantEncryptionKeyEnvVar = "LLMCTLD_TENANT_ENCRYPTION_KEY"
+
+// newStoreRegistry returns a *replication.StoreRegistry rooted at
+// stateDir: NewEncryptedStoreRegistry when tenantEncryptionKeyEnvVar is
+// set (real per-tenant encryption at rest, T072-FU3), else
+// NewStoreRegistry (plaintext, T072-FU2's original behavior) - the one
+// place both cluster-bootstrap and cluster-join wiring resolve this
+// choice, so the two subcommands can never drift apart on it.
+func newStoreRegistry(stateDir string, cfg replication.CheckpointConfig) *replication.StoreRegistry {
+	if secret := os.Getenv(tenantEncryptionKeyEnvVar); secret != "" {
+		return replication.NewEncryptedStoreRegistry(stateDir, cfg, []byte(secret))
+	}
+	return replication.NewStoreRegistry(stateDir, cfg)
+}
+
 // bootstrapAdminOwnerID is the OwnerID recorded on the API key
 // `-bootstrap-admin` seeds (main.go's runClusterBootstrap) - a fixed,
 // documented, non-secret label (the key's ID/secret are the real
@@ -237,7 +264,7 @@ func runClusterBootstrap(args []string) {
 	// now surfaces on that tenant's first /v1/replication/* request
 	// rather than at node startup - stateDir's own creation is still
 	// verified eagerly above, exactly as before.
-	storeRegistry := replication.NewStoreRegistry(stateDir, replication.CheckpointConfig{})
+	storeRegistry := newStoreRegistry(stateDir, replication.CheckpointConfig{})
 	defer func() { _ = storeRegistry.Close() }()
 	api.RegisterReplicationRoutes(srv.Router(), storeRegistry)
 
@@ -361,7 +388,7 @@ func runClusterJoinReal(args []string) int {
 	}
 	// See runClusterBootstrap's identical StoreRegistry wiring comment
 	// above (T072-FU2) - kept symmetric across both subcommands.
-	storeRegistry := replication.NewStoreRegistry(resolvedStateDir, replication.CheckpointConfig{})
+	storeRegistry := newStoreRegistry(resolvedStateDir, replication.CheckpointConfig{})
 	defer func() { _ = storeRegistry.Close() }()
 	api.RegisterReplicationRoutes(srv.Router(), storeRegistry)
 

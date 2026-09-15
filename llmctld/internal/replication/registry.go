@@ -36,23 +36,55 @@ import (
 	"sync"
 
 	"github.com/vasic-digital/llmctl/llmctld/internal/isolation"
+	"github.com/vasic-digital/llmctl/llmctld/internal/tenancy"
 )
 
 // StoreRegistry lazily opens and caches one *Store per tenant ID.
 type StoreRegistry struct {
-	baseDir string
-	cfg     CheckpointConfig
+	baseDir      string
+	cfg          CheckpointConfig
+	masterSecret []byte
 
 	mu     sync.Mutex
 	stores map[string]*Store
 }
 
-// NewStoreRegistry returns a StoreRegistry rooted at baseDir. It opens no
-// Store itself - each tenant's Store is opened lazily, on its own first
-// Get(tenantID) call, so a caller that never serves a given tenant never
-// pays the cost (or risk) of opening that tenant's bbolt files.
+// NewStoreRegistry returns a StoreRegistry rooted at baseDir that opens
+// every tenant's Store in PLAINTEXT (via OpenStore) - the original,
+// backward-compatible T072-FU2 behavior. It opens no Store itself - each
+// tenant's Store is opened lazily, on its own first Get(tenantID) call,
+// so a caller that never serves a given tenant never pays the cost (or
+// risk) of opening that tenant's bbolt files.
 func NewStoreRegistry(baseDir string, cfg CheckpointConfig) *StoreRegistry {
 	return &StoreRegistry{baseDir: baseDir, cfg: cfg, stores: make(map[string]*Store)}
+}
+
+// NewEncryptedStoreRegistry is NewStoreRegistry with per-tenant
+// encryption at rest (Clarification 20/FR-051, T072-FU3 - the disclosed
+// scope boundary T072-FU2 left open): every NON-EMPTY tenant ID's Store
+// is opened via OpenEncryptedStore under a key derived from masterSecret
+// specifically for that tenant (internal/tenancy.DeriveKey), so no two
+// tenants' data is ever readable under the same key even though they
+// share one masterSecret - the exact per-tenant-key property
+// Clarification 20 requires, applied here for the first time at the
+// registry (wiring) layer rather than left as an independently-tested
+// but unused capability.
+//
+// The empty ("") tenant ID is DELIBERATELY EXEMPT from encryption even
+// under this constructor: it represents "no tenant" (the single-node/
+// no-tenancy default path), not "a tenant whose ID happens to be
+// empty", and T072-FU2's own established invariant - Get("") is
+// byte-identical to a bare OpenStore(baseDir, cfg) call - stays true
+// under EITHER constructor, so a deployment that never opts into
+// multi-tenancy observes zero behavior change from this file existing.
+//
+// masterSecret's provenance (an env var, a secrets manager, etc.) is the
+// caller's concern, exactly as internal/tenancy.DeriveKey's own doc
+// comment already establishes - this constructor only wires the
+// already-built DeriveKey/OpenEncryptedStore pair together at the
+// correct place.
+func NewEncryptedStoreRegistry(baseDir string, cfg CheckpointConfig, masterSecret []byte) *StoreRegistry {
+	return &StoreRegistry{baseDir: baseDir, cfg: cfg, masterSecret: masterSecret, stores: make(map[string]*Store)}
 }
 
 // Get returns tenantID's Store, opening (and caching) it on first
@@ -67,15 +99,14 @@ func NewStoreRegistry(baseDir string, cfg CheckpointConfig) *StoreRegistry {
 // re-implemented isolation check - before its Store is opened under
 // that real, permission-verified subdirectory of baseDir.
 //
-// Honest scope boundary (disclosed, not silently narrowed): Get always
-// opens a PLAINTEXT Store (OpenStore), never OpenEncryptedStore -
-// Clarification 20's per-tenant encryption-at-rest requirement is a
-// distinct, separate threat model ("protects against a filesystem-level
-// compromise or backup exposure", per spec.md) from Clarification 18's
-// per-tenant-directory requirement this file closes, and wiring it needs
-// its own decision about where a master encryption secret is sourced
-// from (mirroring how LLMCTLD_JWT_SIGNING_KEY is sourced today) - real,
-// tracked follow-up work, not invented speculatively here.
+// If r was built via NewEncryptedStoreRegistry, a non-empty tenantID's
+// Store is opened via OpenEncryptedStore under a key
+// internal/tenancy.DeriveKey derives specifically for tenantID from r's
+// masterSecret (Clarification 20/FR-051, T072-FU3); the empty tenant ID
+// is always plaintext regardless of which constructor built r (see
+// NewEncryptedStoreRegistry's doc comment for why). If r was built via
+// NewStoreRegistry (masterSecret nil), every tenant is plaintext -
+// T072-FU2's original behavior, unchanged.
 func (r *StoreRegistry) Get(tenantID string) (*Store, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -93,7 +124,14 @@ func (r *StoreRegistry) Get(tenantID string) (*Store, error) {
 		dir = d
 	}
 
-	s, err := OpenStore(dir, r.cfg)
+	var s *Store
+	var err error
+	if tenantID != "" && r.masterSecret != nil {
+		key := tenancy.DeriveKey(r.masterSecret, tenantID)
+		s, err = OpenEncryptedStore(dir, r.cfg, key)
+	} else {
+		s, err = OpenStore(dir, r.cfg)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("replication: open store for tenant %q: %w", tenantID, err)
 	}

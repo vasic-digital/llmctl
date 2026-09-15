@@ -11,6 +11,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/vasic-digital/llmctl/llmctld/internal/tenancy"
 )
 
 // TestStoreRegistry_EmptyTenantID_OpensBaseDirDirectly proves Get("")
@@ -133,6 +135,115 @@ func TestStoreRegistry_InvalidTenantID_ReturnsError(t *testing.T) {
 
 	if _, err := reg.Get("../../etc"); err == nil {
 		t.Fatal("Get(\"../../etc\") unexpectedly succeeded - path-traversal tenant ID must be rejected")
+	}
+}
+
+// TestNewEncryptedStoreRegistry_NonEmptyTenant_DataIsGenuinelyEncrypted
+// proves NewEncryptedStoreRegistry (T072-FU3, closing Clarification 20's
+// remaining half of the isolation requirement) derives a real per-tenant
+// key via internal/tenancy.DeriveKey and actually applies it -
+// re-opening the SAME on-disk directory via a bare, keyless OpenStore
+// afterward must FAIL to Restore (AES-GCM's auth-tag check fails closed
+// on the wrong "key" of no-decryption-at-all, per crypto.go), which is
+// only possible if the persisted bytes are genuinely ciphertext, not
+// merely "some wrapper" around the plaintext JSON checkpoint record.
+func TestNewEncryptedStoreRegistry_NonEmptyTenant_DataIsGenuinelyEncrypted(t *testing.T) {
+	baseDir := t.TempDir()
+	masterSecret := []byte("test-master-secret-32-bytes-long!!")
+	reg := NewEncryptedStoreRegistry(baseDir, CheckpointConfig{}, masterSecret)
+	defer func() { _ = reg.Close() }()
+
+	store, err := reg.Get("tenant-a")
+	if err != nil {
+		t.Fatalf("Get(tenant-a): %v", err)
+	}
+	if err := store.Checkpoint(1, KVState{Tokens: []int32{999}, Positions: []int32{0}}); err != nil {
+		t.Fatalf("Checkpoint: %v", err)
+	}
+
+	// The registry's own Store can still read back its own data
+	// correctly (proves encrypt+decrypt round-trips, not just that it
+	// writes something).
+	got, err := store.Restore()
+	if err != nil {
+		t.Fatalf("Restore via the registry's own Store: %v", err)
+	}
+	if len(got.Tokens) != 1 || got.Tokens[0] != 999 {
+		t.Fatalf("Restore via the registry's own Store = %+v, want Tokens=[999]", got)
+	}
+
+	// Close so the on-disk bbolt files are released before reopening
+	// them independently below.
+	if err := reg.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	tenantDir := filepath.Join(baseDir, "tenant-a")
+	plainStore, err := OpenStore(tenantDir, CheckpointConfig{})
+	if err != nil {
+		t.Fatalf("re-open tenant-a's directory with a bare OpenStore: %v", err)
+	}
+	defer func() { _ = plainStore.Close() }()
+	if _, err := plainStore.Restore(); err == nil {
+		t.Fatal("bare OpenStore (no key) successfully restored tenant-a's data - it was NOT genuinely encrypted")
+	}
+}
+
+// TestNewEncryptedStoreRegistry_DifferentTenants_UseDifferentDerivedKeys
+// proves two tenants under the SAME master secret get genuinely
+// DIFFERENT derived keys (internal/tenancy.DeriveKey's own documented
+// per-tenantID independence property, exercised here through the
+// registry's real wiring rather than asserted only at the DeriveKey
+// unit-test layer): opening tenant-a's on-disk directory directly with
+// tenant-b's derived key must fail to decrypt.
+func TestNewEncryptedStoreRegistry_DifferentTenants_UseDifferentDerivedKeys(t *testing.T) {
+	baseDir := t.TempDir()
+	masterSecret := []byte("shared-master-secret-for-both-tenants")
+	reg := NewEncryptedStoreRegistry(baseDir, CheckpointConfig{}, masterSecret)
+
+	storeA, err := reg.Get("tenant-a")
+	if err != nil {
+		t.Fatalf("Get(tenant-a): %v", err)
+	}
+	if err := storeA.Checkpoint(1, KVState{Tokens: []int32{111}, Positions: []int32{0}}); err != nil {
+		t.Fatalf("tenant-a Checkpoint: %v", err)
+	}
+	if err := reg.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	keyB := tenancy.DeriveKey(masterSecret, "tenant-b")
+	wrongKeyStore, err := OpenEncryptedStore(filepath.Join(baseDir, "tenant-a"), CheckpointConfig{}, keyB)
+	if err != nil {
+		t.Fatalf("OpenEncryptedStore(tenant-a's dir, tenant-b's key): %v", err)
+	}
+	defer func() { _ = wrongKeyStore.Close() }()
+	if _, err := wrongKeyStore.Restore(); err == nil {
+		t.Fatal("tenant-b's derived key successfully decrypted tenant-a's data - DeriveKey per-tenant independence was not genuinely applied by the registry")
+	}
+}
+
+// TestStoreRegistry_PlaintextRegistry_EmptyTenant_NeverEncrypted proves
+// NewStoreRegistry (the plain, non-encrypting constructor) is completely
+// unaffected by this task: the default/no-tenant ("") path always stays
+// plaintext, exactly as every pre-existing caller already relies on.
+func TestStoreRegistry_PlaintextRegistry_EmptyTenant_NeverEncrypted(t *testing.T) {
+	reg := NewStoreRegistry(t.TempDir(), CheckpointConfig{})
+	defer func() { _ = reg.Close() }()
+
+	store, err := reg.Get("")
+	if err != nil {
+		t.Fatalf("Get(\"\"): %v", err)
+	}
+	if err := store.Checkpoint(1, KVState{Tokens: []int32{7}, Positions: []int32{0}}); err != nil {
+		t.Fatalf("Checkpoint: %v", err)
+	}
+	got, err := store.Restore()
+	if err != nil {
+		t.Fatalf("Restore: %v", err)
+	}
+	if len(got.Tokens) != 1 || got.Tokens[0] != 7 {
+		t.Fatalf("Restore = %+v, want Tokens=[7]", got)
 	}
 }
 
