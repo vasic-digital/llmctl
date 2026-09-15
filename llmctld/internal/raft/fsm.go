@@ -148,7 +148,7 @@ func (f *ClusterFSM) Snapshot() (hraft.FSMSnapshot, error) {
 
 // Restore implements hraft.FSM.
 func (f *ClusterFSM) Restore(rc io.ReadCloser) error {
-	defer rc.Close()
+	defer func() { _ = rc.Close() }()
 	var state cluster.ClusterState
 	if err := json.NewDecoder(rc).Decode(&state); err != nil {
 		return err
@@ -184,11 +184,11 @@ type fsmSnapshot struct {
 func (s *fsmSnapshot) Persist(sink hraft.SnapshotSink) error {
 	data, err := json.Marshal(s.state)
 	if err != nil {
-		sink.Cancel()
+		_ = sink.Cancel()
 		return err
 	}
 	if _, err := sink.Write(data); err != nil {
-		sink.Cancel()
+		_ = sink.Cancel()
 		return err
 	}
 	return sink.Close()

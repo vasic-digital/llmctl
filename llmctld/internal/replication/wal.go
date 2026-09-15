@@ -79,7 +79,7 @@ func openWAL(path string, key []byte) (*WAL, error) {
 		_, err := tx.CreateBucketIfNotExists(walBucket)
 		return err
 	}); err != nil {
-		db.Close()
+		_ = db.Close() // best-effort cleanup of the resource we're abandoning; the original bucket-creation error is what the caller needs
 		return nil, fmt.Errorf("replication: create WAL bucket in %q: %w", path, err)
 	}
 	return &WAL{db: db, path: path, key: key}, nil

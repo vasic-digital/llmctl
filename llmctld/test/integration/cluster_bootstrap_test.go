@@ -250,7 +250,7 @@ func (tc *testCluster) getNodes(client *http.Client, apiAddr string) (nodesRespo
 	if err != nil {
 		return nodesResponse{}, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	var got nodesResponse
 	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
 		return nodesResponse{}, fmt.Errorf("decode /v1/cluster/nodes response: %w", err)
@@ -263,7 +263,7 @@ func (tc *testCluster) getStatus(client *http.Client, apiAddr string) (statusRes
 	if err != nil {
 		return statusResponse{}, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	var got statusResponse
 	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
 		return statusResponse{}, fmt.Errorf("decode /v1/cluster/status response: %w", err)

@@ -75,10 +75,10 @@ func replicationAppend(t *testing.T, client *http.Client, apiAddr string, entrie
 		}
 		if resp.StatusCode != http.StatusOK {
 			respBody, _ := io.ReadAll(resp.Body)
-			resp.Body.Close()
+			_ = resp.Body.Close()
 			t.Fatalf("POST /v1/replication/append to %s: status = %d, body = %s", apiAddr, resp.StatusCode, respBody)
 		}
-		resp.Body.Close()
+		_ = resp.Body.Close()
 	}
 }
 
@@ -94,7 +94,7 @@ func replicationCheckpoint(t *testing.T, client *http.Client, apiAddr string, se
 	if err != nil {
 		t.Fatalf("POST /v1/replication/checkpoint to %s (seq=%d): %v", apiAddr, seq, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		respBody, _ := io.ReadAll(resp.Body)
 		t.Fatalf("POST /v1/replication/checkpoint to %s (seq=%d): status = %d, body = %s", apiAddr, seq, resp.StatusCode, respBody)
@@ -109,7 +109,7 @@ func replicationState(t *testing.T, client *http.Client, apiAddr string) replKVS
 	if err != nil {
 		t.Fatalf("GET /v1/replication/state from %s: %v", apiAddr, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	var got replKVState
 	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
 		t.Fatalf("decode /v1/replication/state response from %s: %v", apiAddr, err)

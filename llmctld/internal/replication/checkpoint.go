@@ -118,15 +118,15 @@ func openStore(dir string, cfg CheckpointConfig, key []byte) (*Store, error) {
 
 	db, err := bolt.Open(filepath.Join(dir, "checkpoint.db"), 0o600, nil)
 	if err != nil {
-		wal.Close()
+		_ = wal.Close() // best-effort cleanup of the resource we're abandoning; the original open error is what the caller needs
 		return nil, fmt.Errorf("replication: open checkpoint store in %q: %w", dir, err)
 	}
 	if err := db.Update(func(tx *bolt.Tx) error {
 		_, err := tx.CreateBucketIfNotExists(checkpointBucket)
 		return err
 	}); err != nil {
-		db.Close()
-		wal.Close()
+		_ = db.Close() // best-effort cleanup of the resources we're abandoning; the original bucket-creation error is what the caller needs
+		_ = wal.Close()
 		return nil, fmt.Errorf("replication: create checkpoint bucket in %q: %w", dir, err)
 	}
 

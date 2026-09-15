@@ -21,7 +21,7 @@ func TestOpenEncryptedWAL_CorrectKeyRoundTrips(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenEncryptedWAL: %v", err)
 	}
-	defer w.Close()
+	defer func() { _ = w.Close() }()
 
 	entry := WALEntry{Seq: 1, TokenID: 999, Position: 0}
 	if err := w.Append(entry); err != nil {
@@ -61,7 +61,7 @@ func TestOpenEncryptedWAL_WrongKeyFailsToDecrypt(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenEncryptedWAL (wrong-key reopen): %v", err)
 	}
-	defer w2.Close()
+	defer func() { _ = w2.Close() }()
 
 	if _, err := w2.ReadAll(); err == nil {
 		t.Fatalf("ReadAll with the WRONG tenant key must fail, got nil error (encryption is not load-bearing)")
@@ -115,7 +115,7 @@ func TestOpenWAL_UnencryptedStillWorks(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenWAL: %v", err)
 	}
-	defer w.Close()
+	defer func() { _ = w.Close() }()
 	if err := w.Append(WALEntry{Seq: 1, TokenID: 1, Position: 0}); err != nil {
 		t.Fatalf("Append: %v", err)
 	}
@@ -137,7 +137,7 @@ func TestOpenEncryptedStore_CheckpointRoundTripsWithCorrectKey(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenEncryptedStore: %v", err)
 	}
-	defer s.Close()
+	defer func() { _ = s.Close() }()
 
 	state := KVState{Tokens: []int32{1, 2, 3}, Positions: []int32{0, 1, 2}}
 	if err := s.Checkpoint(3, state); err != nil {
@@ -176,7 +176,7 @@ func TestOpenEncryptedStore_CheckpointUnreadableWithoutCorrectKey(t *testing.T) 
 	if err != nil {
 		t.Fatalf("OpenEncryptedStore (wrong-key reopen): %v", err)
 	}
-	defer s2.Close()
+	defer func() { _ = s2.Close() }()
 
 	if _, err := s2.Restore(); err == nil {
 		t.Fatalf("Restore with the WRONG tenant key must fail, got nil error - the checkpoint file must be unreadable without the correct key")

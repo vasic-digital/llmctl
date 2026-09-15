@@ -83,13 +83,13 @@ func Bootstrap(cfg Config) (*Node, error) {
 		},
 	}
 	if err := hraft.BootstrapCluster(raftConfig, logStore, stableStore, snapStore, transport, bootstrapConfig); err != nil {
-		transport.Close()
+		_ = transport.Close()
 		return nil, fmt.Errorf("raft: bootstrap %q: %w", cfg.NodeID, err)
 	}
 
 	r, err := hraft.NewRaft(raftConfig, fsm, logStore, stableStore, snapStore, transport)
 	if err != nil {
-		transport.Close()
+		_ = transport.Close()
 		return nil, fmt.Errorf("raft: bootstrap %q: start raft: %w", cfg.NodeID, err)
 	}
 
@@ -109,7 +109,7 @@ func New(cfg Config) (*Node, error) {
 
 	r, err := hraft.NewRaft(raftConfig, fsm, logStore, stableStore, snapStore, transport)
 	if err != nil {
-		transport.Close()
+		_ = transport.Close()
 		return nil, fmt.Errorf("raft: new node %q: start raft: %w", cfg.NodeID, err)
 	}
 

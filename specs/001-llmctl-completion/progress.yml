@@ -273,6 +273,29 @@ phase_11_completed:
 
 phase_11_status: complete_pending_checkpoint_approval
 
+phase: 12
+phase_name: "Polish & Cross-Cutting Concerns"
+status: complete
+
+phase_12_completed:
+  - id: T076
+    evidence: "make validate (json-check + lint + test) exit 0; tests/run_tests.sh 21/21 PASS. Honest environment gap: shellcheck not installed, cannot install without interactive sudo (attempted, refused, no workaround attempted) - Makefile's lint target honestly skips rather than falsely passing, matching T004's established never-hard-fail-on-optional-capability pattern. bin/llmctl doctor WARN lines in the test output are the same pre-existing environment-dependent conditions T004 already documented."
+  - id: T077
+    evidence: "make llmctld-build/llmctld-test clean (all 12 packages pass). golangci-lint was not installed at task start; installed via go install (no sudo needed) to get a genuine result rather than accept an avoidable skip. Found 76 genuine findings (75 errcheck + 1 staticcheck deprecated-field) across 3 no-cap runs; ALL fixed: 2 production-code instances (wal.go/checkpoint.go/node.go error-path cleanup) explicitly ignored via `_ = ` with justification comments; ~70 test-file defer-Close/Shutdown calls mechanically converted to `defer func() { _ = x.Close() }()`; audit/log.go's fmt.Fprintf into a hash.Hash explicitly discarded; the deprecated hashicorp/raft AppendEntriesRequest.Leader field replaced with the modern RPCHeader.Addr (confirmed via reading the real v1.7.3 source). Final: golangci-lint run --max-issues-per-linter=0 --max-same-issues=0 -> 0 issues. go build/go vet/gofmt clean; full-module go test ./... -race (fresh) zero regressions, zero races."
+  - id: T078
+    evidence: "run_verification.sh: ALL VERIFICATIONS PASSED, 17/17, 0 failures, 0 skipped, exit 0. meta_test_verification.sh: both mutations (missing-submodule, corrupted-verification-logic) genuinely caught + correctly restored (constitution submodule git status clean post-run), exit 0."
+  - id: T079
+    evidence: "Evidence archived at docs/qa/phase12-final-validation/ (bash_test_suite.log, go_test_suite_race.log, README.md). tests/run_tests.sh 21/21 PASS. go test ./... -race -v -timeout 240s (fresh) all 12 packages ok, zero races, including a fresh re-confirmation of T073's 1000-concurrent-request zero-cross-tenant-leakage result."
+  - id: T080
+    evidence: "Verified all 19 README Documentation-table links resolve (100%); verified all 17 top-level docs/*.md files are exactly the already-linked set, zero orphans. Found + closed one real orphan: docs/qa/phase12-final-validation/README.md (T079's new evidence dir) had no README pointer - added a Documentation-table row for it."
+  - id: T081
+    evidence: "docs/CONTINUATION.md updated to Revision 7 (final Phase 12 state: all 12 phases done, final live-state anchors, Phase 12 findings section)."
+  - id: T082
+    evidence: "bash scripts/release/create_release.sh --dry-run v2.1.0: SemVer validation PASS, submodule preflight (dry-run), changelog-since-v2.0.0 generation (correctly picked up this session's real commits), archive-build (dry-run), GitHub+GitLab publish (dry-run) - zero network-mutating gh/glab calls made, exit 0. Never run in real/publishing mode per this project's standing constraint."
+  - id: T083
+    honest_scope_boundary: "The one pre-existing gap (internal/isolation/cgroup.go's WrapCommand/TenantStateDir not wired into any production call site) remains open and unchanged - re-confirmed via grep (zero call sites in cmd/llmctld/main.go or internal/executor/local.go), not a new violation, not silently claimed closed."
+    evidence: "Re-ran every US6 audit (T032-T036) against the complete finished tree. T032/T033 re-confirmed via T078/T079's fresh runs. T034 (Sec9 data-safety) re-audited across ALL Phase 9-11 Go code (auth/authz/tenancy/isolation/api/main.go) - zero destructive-git/filesystem-op matches, same clean result as the original audit. T035 (Sec12.6 RAM ceiling + now-real per-tenant cgroup scopes) - WrapCommand's MemoryMaxBytes correctly zero-means-unset, but confirmed no production call site actually wires it in yet (same T072 disclosed boundary, re-confirmed unchanged). T035a (submodule inheritance) - all 4 submodules re-verified, zero drift. T036 satisfied by T081. SC-010 verdict: zero NEW violations found across the finished tree."
+
 completed:
   - id: T001
     evidence: "llmctld/ scaffold builds and runs: `go build ./cmd/llmctld && ./llmctld version` -> 'llmctld 0.1.0', exit 0"

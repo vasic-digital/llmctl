@@ -214,7 +214,7 @@ func runClusterBootstrap(args []string) {
 		fmt.Fprintln(os.Stderr, "llmctld: cluster bootstrap: raft.Bootstrap:", err)
 		os.Exit(1)
 	}
-	defer node.Shutdown()
+	defer func() { _ = node.Shutdown() }()
 
 	apiTLS, err := buildNodeTLSConfig(ca, f.nodeID+"-api")
 	if err != nil {
@@ -233,7 +233,7 @@ func runClusterBootstrap(args []string) {
 		fmt.Fprintln(os.Stderr, "llmctld: cluster bootstrap: replication.OpenStore:", err)
 		os.Exit(1)
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 	api.RegisterReplicationRoutes(srv.Router(), store)
 
 	signingKey := os.Getenv(jwtSigningKeyEnvVar)
@@ -265,7 +265,7 @@ func runClusterBootstrap(args []string) {
 		fmt.Fprintln(os.Stderr, "llmctld: cluster bootstrap: api.Listen:", err)
 		os.Exit(1)
 	}
-	defer srv.Close()
+	defer func() { _ = srv.Close() }()
 
 	// A single machine-readable READY line, emitted once and flushed, is
 	// how a test harness spawning this as a real subprocess learns the
@@ -340,7 +340,7 @@ func runClusterJoinReal(args []string) int {
 		fmt.Fprintln(os.Stderr, "llmctld: cluster join: raft.New:", err)
 		return 1
 	}
-	defer node.Shutdown()
+	defer func() { _ = node.Shutdown() }()
 
 	apiTLS, err := buildNodeTLSConfig(ca, nodeID+"-api")
 	if err != nil {
@@ -359,7 +359,7 @@ func runClusterJoinReal(args []string) int {
 		fmt.Fprintln(os.Stderr, "llmctld: cluster join: replication.OpenStore:", err)
 		return 1
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 	api.RegisterReplicationRoutes(srv.Router(), store)
 
 	signingKey := os.Getenv(jwtSigningKeyEnvVar)
@@ -374,7 +374,7 @@ func runClusterJoinReal(args []string) int {
 		fmt.Fprintln(os.Stderr, "llmctld: cluster join: api.Listen:", err)
 		return 1
 	}
-	defer srv.Close()
+	defer func() { _ = srv.Close() }()
 
 	joinClientTLS, err := buildNodeTLSConfig(ca, nodeID+"-join-client")
 	if err != nil {

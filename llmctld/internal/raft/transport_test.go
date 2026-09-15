@@ -62,7 +62,7 @@ func TestTransport_TwoNodesExchangeRealRaftRPCOverLoopback(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewTransport(server): %v", err)
 	}
-	defer serverTransport.Close()
+	defer func() { _ = serverTransport.Close() }()
 
 	serverAddr := serverTransport.LocalAddr()
 
@@ -73,7 +73,7 @@ func TestTransport_TwoNodesExchangeRealRaftRPCOverLoopback(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewTransport(client): %v", err)
 	}
-	defer clientTransport.Close()
+	defer func() { _ = clientTransport.Close() }()
 
 	// Consume the server's inbound RPCs on a background goroutine and
 	// respond, exactly as raft.Raft's main loop would.
@@ -101,9 +101,8 @@ func TestTransport_TwoNodesExchangeRealRaftRPCOverLoopback(t *testing.T) {
 	}()
 
 	req := &hraft.AppendEntriesRequest{
-		RPCHeader: hraft.RPCHeader{ProtocolVersion: hraft.ProtocolVersionMax},
+		RPCHeader: hraft.RPCHeader{ProtocolVersion: hraft.ProtocolVersionMax, Addr: []byte("node-client")},
 		Term:      7,
-		Leader:    []byte("node-client"),
 	}
 	var resp hraft.AppendEntriesResponse
 	if err := clientTransport.AppendEntries(hraft.ServerID("node-server"), hraft.ServerAddress(string(serverAddr)), req, &resp); err != nil {
@@ -142,14 +141,14 @@ func TestTransport_RejectsConnectionFromUntrustedCA(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewTransport(server): %v", err)
 	}
-	defer serverTransport.Close()
+	defer func() { _ = serverTransport.Close() }()
 	serverAddr := serverTransport.LocalAddr()
 
 	imposterTransport, err := NewTransport("127.0.0.1:0", untrustedClientTLS, 2, 2*time.Second)
 	if err != nil {
 		t.Fatalf("NewTransport(imposter): %v", err)
 	}
-	defer imposterTransport.Close()
+	defer func() { _ = imposterTransport.Close() }()
 
 	req := &hraft.AppendEntriesRequest{RPCHeader: hraft.RPCHeader{ProtocolVersion: hraft.ProtocolVersionMax}, Term: 1}
 	var resp hraft.AppendEntriesResponse

@@ -12,7 +12,7 @@ func openTestStore(t *testing.T, cfg CheckpointConfig) *Store {
 	if err != nil {
 		t.Fatalf("OpenStore: %v", err)
 	}
-	t.Cleanup(func() { s.Close() })
+	t.Cleanup(func() { _ = s.Close() })
 	return s
 }
 
@@ -147,7 +147,7 @@ func TestRestore_IsDeterministic(t *testing.T) {
 	if err != nil {
 		t.Fatalf("re-OpenStore: %v", err)
 	}
-	defer s2.Close()
+	defer func() { _ = s2.Close() }()
 
 	second, err := s2.Restore()
 	if err != nil {

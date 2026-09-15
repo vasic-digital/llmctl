@@ -152,6 +152,7 @@ fastest path to a running model.
 | [`docs/llmctl_progress_status.md`](docs/llmctl_progress_status.md) | A point-in-time build-progress snapshot from an earlier session |
 | [`specs/001-llmctl-completion/spec.md`](specs/001-llmctl-completion/spec.md) | The current feature spec (functional requirements, success criteria, clarifications, edge cases) |
 | [`specs/001-llmctl-completion/tasks.md`](specs/001-llmctl-completion/tasks.md) | The phased task breakdown this spec is being executed against |
+| [`docs/qa/phase12-final-validation/README.md`](docs/qa/phase12-final-validation/README.md) | Captured evidence (Constitution §11.4.83) for Phase 12's final combined bash + Go test-suite run (T079) |
 
 ## License
 

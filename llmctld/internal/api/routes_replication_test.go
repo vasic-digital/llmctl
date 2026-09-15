@@ -40,21 +40,21 @@ func TestReplicationRoutes_AppendCheckpointStateRealHTTP3RoundTrip(t *testing.T)
 	if err != nil {
 		t.Fatalf("raft.Bootstrap: %v", err)
 	}
-	defer node.Shutdown()
+	defer func() { _ = node.Shutdown() }()
 	waitForRealLeader(t, node, 3*time.Second)
 
 	store, err := replication.OpenStore(t.TempDir(), replication.CheckpointConfig{})
 	if err != nil {
 		t.Fatalf("replication.OpenStore: %v", err)
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	srv := NewServer(node, buildTestTLSConfig(t, ca, "node-a-api"))
 	RegisterReplicationRoutes(srv.Router(), store)
 	if err := srv.Listen("127.0.0.1:0"); err != nil {
 		t.Fatalf("Listen: %v", err)
 	}
-	defer srv.Close()
+	defer func() { _ = srv.Close() }()
 
 	client := newTestClient(buildTestTLSConfig(t, ca, "test-client"))
 
@@ -84,10 +84,10 @@ func TestReplicationRoutes_AppendCheckpointStateRealHTTP3RoundTrip(t *testing.T)
 	}
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		t.Fatalf("POST /v1/replication/append: status = %d, body = %s", resp.StatusCode, body)
 	}
-	resp.Body.Close()
+	_ = resp.Body.Close()
 
 	// GET /v1/replication/state must reflect all 10 appended entries.
 	stateResp, err := client.Get("https://" + srv.Addr + "/v1/replication/state")
@@ -101,7 +101,7 @@ func TestReplicationRoutes_AppendCheckpointStateRealHTTP3RoundTrip(t *testing.T)
 	if err := json.NewDecoder(stateResp.Body).Decode(&got1); err != nil {
 		t.Fatalf("decode state response: %v", err)
 	}
-	stateResp.Body.Close()
+	_ = stateResp.Body.Close()
 	if len(got1.Tokens) != 10 || len(got1.Positions) != 10 {
 		t.Fatalf("GET /v1/replication/state after append = %+v, want 10 tokens/positions", got1)
 	}
@@ -130,10 +130,10 @@ func TestReplicationRoutes_AppendCheckpointStateRealHTTP3RoundTrip(t *testing.T)
 	}
 	if cpResp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(cpResp.Body)
-		cpResp.Body.Close()
+		_ = cpResp.Body.Close()
 		t.Fatalf("POST /v1/replication/checkpoint: status = %d, body = %s", cpResp.StatusCode, body)
 	}
-	cpResp.Body.Close()
+	_ = cpResp.Body.Close()
 
 	appendBody2, err := json.Marshal(map[string]any{
 		"entries": []map[string]any{
@@ -150,16 +150,16 @@ func TestReplicationRoutes_AppendCheckpointStateRealHTTP3RoundTrip(t *testing.T)
 	}
 	if resp2.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp2.Body)
-		resp2.Body.Close()
+		_ = resp2.Body.Close()
 		t.Fatalf("POST /v1/replication/append (post-checkpoint): status = %d, body = %s", resp2.StatusCode, body)
 	}
-	resp2.Body.Close()
+	_ = resp2.Body.Close()
 
 	stateResp2, err := client.Get("https://" + srv.Addr + "/v1/replication/state")
 	if err != nil {
 		t.Fatalf("GET /v1/replication/state (post-checkpoint): %v", err)
 	}
-	defer stateResp2.Body.Close()
+	defer func() { _ = stateResp2.Body.Close() }()
 	var got2 struct {
 		Tokens    []int32 `json:"tokens"`
 		Positions []int32 `json:"positions"`

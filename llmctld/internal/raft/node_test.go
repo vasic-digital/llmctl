@@ -44,7 +44,7 @@ func TestBootstrap_SingleNodeBecomesLeaderQuickly(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Bootstrap: %v", err)
 	}
-	defer node.Shutdown()
+	defer func() { _ = node.Shutdown() }()
 
 	waitForLeader(t, node, 3*time.Second)
 }
@@ -68,7 +68,7 @@ func TestJoin_SecondNodeReplicatesRealAppliedCommand(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Bootstrap(node-a): %v", err)
 	}
-	defer nodeA.Shutdown()
+	defer func() { _ = nodeA.Shutdown() }()
 	waitForLeader(t, nodeA, 3*time.Second)
 
 	nodeB, err := New(Config{
@@ -79,7 +79,7 @@ func TestJoin_SecondNodeReplicatesRealAppliedCommand(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New(node-b): %v", err)
 	}
-	defer nodeB.Shutdown()
+	defer func() { _ = nodeB.Shutdown() }()
 
 	peerAddr := string(nodeB.transport.LocalAddr())
 	if err := nodeA.Join("node-b", peerAddr); err != nil {
@@ -125,7 +125,7 @@ func TestLeave_LeaderRemovesItselfFromConfiguration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Bootstrap(node-a): %v", err)
 	}
-	defer nodeA.Shutdown()
+	defer func() { _ = nodeA.Shutdown() }()
 	waitForLeader(t, nodeA, 3*time.Second)
 
 	nodeB, err := New(Config{
@@ -136,7 +136,7 @@ func TestLeave_LeaderRemovesItselfFromConfiguration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New(node-b): %v", err)
 	}
-	defer nodeB.Shutdown()
+	defer func() { _ = nodeB.Shutdown() }()
 
 	peerAddr := string(nodeB.transport.LocalAddr())
 	if err := nodeA.Join("node-b", peerAddr); err != nil {
@@ -197,7 +197,7 @@ func TestLeaderCh_ReceivesTrueOnElection(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Bootstrap: %v", err)
 	}
-	defer node.Shutdown()
+	defer func() { _ = node.Shutdown() }()
 
 	select {
 	case isLeader := <-node.LeaderCh():
@@ -259,7 +259,7 @@ func TestJoin_SurvivingFollowerBecomesLeaderAfterOriginalLeaderShutsDown(t *test
 	if err != nil {
 		t.Fatalf("New(node-b): %v", err)
 	}
-	defer followerB.Shutdown()
+	defer func() { _ = followerB.Shutdown() }()
 	if err := leader.Join("node-b", followerB.Addr()); err != nil {
 		t.Fatalf("Join(node-b): %v", err)
 	}
@@ -272,7 +272,7 @@ func TestJoin_SurvivingFollowerBecomesLeaderAfterOriginalLeaderShutsDown(t *test
 	if err != nil {
 		t.Fatalf("New(node-c): %v", err)
 	}
-	defer followerC.Shutdown()
+	defer func() { _ = followerC.Shutdown() }()
 	if err := leader.Join("node-c", followerC.Addr()); err != nil {
 		t.Fatalf("Join(node-c): %v", err)
 	}

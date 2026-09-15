@@ -24,7 +24,7 @@ func TestAcquireRelease_RoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Bootstrap: %v", err)
 	}
-	defer node.Shutdown()
+	defer func() { _ = node.Shutdown() }()
 	waitForLeader(t, node, 3*time.Second)
 
 	lease, err := node.Acquire("model:llama-3-70b", time.Minute)
@@ -68,7 +68,7 @@ func TestAcquire_SecondCallerBlocksUntilRelease(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Bootstrap(node-a): %v", err)
 	}
-	defer leader.Shutdown()
+	defer func() { _ = leader.Shutdown() }()
 	waitForLeader(t, leader, 3*time.Second)
 
 	lease, err := leader.Acquire("shared-key", 500*time.Millisecond)
@@ -127,7 +127,7 @@ func TestAcquire_SecondCallerUnblocksOnTTLExpiry(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Bootstrap: %v", err)
 	}
-	defer node.Shutdown()
+	defer func() { _ = node.Shutdown() }()
 	waitForLeader(t, node, 3*time.Second)
 
 	if _, err := node.acquireAs("node-a", "ttl-key", 200*time.Millisecond); err != nil {

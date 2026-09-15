@@ -1,6 +1,6 @@
 # CONTINUATION
 
-**Revision:** 6
+**Revision:** 7
 **Last modified:** 2026-09-15T00:00:00Z
 
 Per Constitution §12.10: this file reflects the live state of work on the
@@ -28,25 +28,32 @@ breakdown live under `specs/001-llmctl-completion/`:
 
 ## 2. Current phase / immediate next action
 
-**Phase 11 (User Story 9 — Built-in Authentication, Authorization &
-Multi-Tenancy) is complete, pending checkpoint approval; Phases 1–10 are
-approved.** All 11 Phase 11 tasks (T065–T075, including T074a) are done.
-The operator has directed the agent to proceed autonomously through every
-remaining phase (Phase 11 → Phase 12) without pausing for per-phase
-approval, committing and pushing via `commit_fully` along the way — this
-supersedes the default mandatory-checkpoint-pause rule for the remainder
-of this run. The immediate next action is: **start Phase 12 (Polish &
-Cross-Cutting Concerns)**, the final phase.
+**ALL 12 PHASES OF THE `001-llmctl-completion` FEATURE ARE NOW COMPLETE.**
+Phase 12 (Polish & Cross-Cutting Concerns), the final phase, finished all 8
+of its tasks (T076–T083) with zero blocking findings. Combined with Phases
+1–11 already being complete (Phases 1–10 approved at their own checkpoints;
+Phase 11 completed with a security review that found and fixed 4 genuine
+exploitable defects), **all 89 tasks across all 12 phases are done.** The
+operator directed the agent (mid-Phase-11) to proceed autonomously through
+every remaining phase without pausing for per-phase approval, committing and
+pushing via `commit_fully` along the way — this superseded the default
+mandatory-checkpoint-pause rule for the remainder of the run, and that
+autonomous run is now finished. There is no next phase. The immediate next
+action for a resuming session is: **present the final project state to the
+operator** (this file, plus `specs/001-llmctl-completion/tasks.md` and
+`progress.yml`, are the complete record) and await further instruction —
+e.g. whether to actually cut a real release (see the standing constraint
+below), start a new feature, or address any of the honestly-disclosed
+follow-up items noted in §9/§10 below.
 
 **Important standing constraint carried forward:** `scripts/release/create_release.sh`
 in NON-dry-run mode creates a real, public, irreversible GitHub+GitLab
 release. It has NEVER been run in that mode this session (only
-`--dry-run`, and only against real fake-PATH-injected `gh`/`glab` binaries
-in tests). It MUST NOT be run for real without explicit, separate operator
-instruction to actually cut a release — completing Phase 8 is not that
-instruction.
+`--dry-run`, most recently as Phase 12's T082 rehearsal — `v2.1.0`, zero
+network-mutating `gh`/`glab` calls made). It MUST NOT be run for real
+without explicit, separate operator instruction to actually cut a release.
 
-## 3. Phase-by-phase state
+## 3. Phase-by-phase state — ALL PHASES COMPLETE
 
 | Phase | Story | Status |
 |---|---|---|
@@ -60,8 +67,8 @@ instruction.
 | 8 | US5 — Release Automation with GitHub/GitLab CLIs | approved |
 | 9 | US7 — Distributed Multi-Host Model Orchestration | approved |
 | 10 | US8 — Model State Persistence & Recovery | approved |
-| 11 | US9 — Built-in Authentication, Authorization & Multi-Tenancy | **complete, pending checkpoint approval (T065–T075, 11/11)** |
-| 12 | Polish & Cross-Cutting Concerns | in progress |
+| 11 | US9 — Built-in Authentication, Authorization & Multi-Tenancy | **complete (T065–T075, 11/11)** |
+| 12 | Polish & Cross-Cutting Concerns | **complete (T076–T083, 8/8)** |
 
 Full per-task evidence for every completed phase is in
 `specs/001-llmctl-completion/tasks.md` (inline, per-task) and
@@ -69,32 +76,31 @@ Full per-task evidence for every completed phase is in
 
 ## 4. Live-state anchors
 
-- **Git HEAD**: working tree only — nothing from this feature's work has
-  been committed yet (by design; the operator has not asked for a commit).
-  `git status` shows extensive modified/untracked files under `lib/`,
-  `tests/`, `docs/`, plus the `vendor/` removal from Phase 3.
+- **Git HEAD**: `f7cf4e5` — this entire feature's Phases 9-11 work (plus
+  everything accumulated in the working tree through Phase 8) was committed
+  and pushed to all 6 configured upstreams (codeberg, gitflic, github,
+  gitlab, gitverse, upstream) via `commit_fully`, verified on every remote.
+  Phase 12's own polish work (lint fixes, evidence archive, doc updates)
+  lands in a follow-up commit at the very end of this session (see the
+  operator's instruction in §2).
 - **Test suite**: `bash tests/run_tests.sh` → **21/21 test files pass, 0
   failures** (first zero-failure run of this project was reached in Phase
-  4; still 0 failures as of Phase 11 — Phase 11 added no new bash test
-  files, only Go work).
+  4; still 0 failures as of Phase 12 — Phase 12 added no new bash test
+  files, only Go work + doc/evidence updates).
 - **Go suite**: `go test ./... -race` inside `llmctld/` (fresh, `go clean
   -testcache` first) → **all tests pass across all 12 packages, zero data
   races** (api, audit, auth, authz, cluster, executor, isolation, mtls,
-  raft, replication, tenancy, test/integration — `auth`, `authz`, and
-  `isolation` are new in Phase 11: JWT/RBAC/API-key/OIDC, the audited
-  authZ/authN decision layer, and per-tenant systemd-scope wrapping;
-  `api`/`cmd/llmctld`/`test/integration` grew — new `/v1/auth/*`,
-  `/v1/tenants/*`, `/v1/audit/*` HTTP routes and a real 3-tenant
-  1000-concurrent-request isolation test). **This module is now verified
-  race-clean end-to-end for the first time this session** — Phase 11's
-  work (the first genuine concurrent HTTP load this codebase ever drove)
-  surfaced and fixed THREE real, previously-undiscovered data races (two
-  in `internal/audit/log.go` + `internal/raft/fsm.go`, both present since
-  earlier phases; see §8 below). `go build ./...`, `go vet ./...`, and
-  `gofmt -l .` all clean.
+  raft, replication, tenancy, test/integration). This module is verified
+  race-clean end-to-end (Phase 11's T073 — the first genuine concurrent
+  HTTP load this codebase ever drove — surfaced and fixed THREE real,
+  previously-undiscovered data races present since earlier phases; see §9
+  below) AND lint-clean (`golangci-lint run --max-issues-per-linter=0
+  --max-same-issues=0 ./...` → **0 issues**, Phase 12's T077 fixed 76
+  genuine `errcheck`/`staticcheck` findings; see §10 below). `go build
+  ./...`, `go vet ./...`, and `gofmt -l .` all clean.
 - **Constitution verification harness**: `bash
   constitution/scripts/validation/run_verification.sh` → 17/17 submodules
-  verified, 0 failures (T032).
+  verified, 0 failures (re-confirmed fresh at Phase 12's T078).
 - **Constitution inheritance test**: `bash
   tests/test_constitution_inheritance.sh` → all 10 invariants pass (T033).
 
@@ -427,7 +433,68 @@ resuming session most needs to know.
   finding the mandatory independent-review gate (Constitution §11.4.125/
   §11.4.142/§11.4.209) exists to catch before a phase is allowed to close.
 
-## 10. Binding constraints (unchanged, restated per §12.10)
+## 10. Phase 12 findings (T076–T083) — the final phase
+
+Full per-task evidence is in `specs/001-llmctl-completion/tasks.md`
+(inline) and `progress.yml` (structured); this section highlights what a
+resuming session most needs to know.
+
+- **T076/T077** (`make validate`, `make llmctld-build/test/lint`): two
+  honest environment gaps were found and handled differently. `shellcheck`
+  is not installed on this build host and cannot be installed without
+  interactive `sudo` (attempted, refused) — the Makefile's own `lint`
+  target already handles this gracefully with an explicit skip message,
+  matching this project's established never-hard-fail-on-an-optional-tool
+  pattern (T004). `golangci-lint`, by contrast, installs via `go install`
+  with no `sudo` needed, so it WAS installed to get a genuine result. That
+  real run found **76 genuine lint findings** (75 `errcheck` unchecked
+  error returns + 1 `staticcheck` deprecated-field usage) hiding behind
+  golangci-lint's default per-run issue cap — three successive
+  `--max-issues-per-linter=0 --max-same-issues=0` runs were needed to see
+  the complete list. ALL 76 were fixed: two genuine production-code
+  instances (`wal.go`/`checkpoint.go`/`node.go`'s error-path cleanup calls,
+  explicitly ignored via `_ = ...Close()` with a comment explaining the
+  original error is what the caller needs) and ~70 mechanical test-file
+  `defer x.Close()`/`defer x.Shutdown()` → `defer func() { _ = x.Close() }()`
+  conversions, plus one deprecated hashicorp/raft field
+  (`AppendEntriesRequest.Leader` → the modern `RPCHeader.Addr`, confirmed
+  via reading the real v1.7.3 library source). Final: **0 lint issues**,
+  zero regressions.
+- **T078/T079**: clean re-runs, no new findings — the constitution
+  verification harness + meta-test mutation gate both pass exactly as at
+  every prior phase, and the combined bash+Go test suite (archived at
+  `docs/qa/phase12-final-validation/`) shows zero regressions across the
+  whole 12-phase feature, including a fresh re-confirmation of T073's
+  1000-concurrent-request zero-cross-tenant-leakage result.
+- **T080** (doc cross-reference audit): found and closed one real orphan —
+  `docs/qa/phase12-final-validation/README.md` (T079's own newly-created
+  evidence directory) had no README pointer; added a Documentation-table
+  row for it. Every other doc (19 links, 17 top-level `docs/*.md` files)
+  was already correctly reachable.
+- **T081**: this file, updated to its final Revision 7.
+- **T082** (release rehearsal): `create_release.sh --dry-run v2.1.0`
+  genuinely ran every check (SemVer validation, submodule preflight,
+  changelog generation from real commit history, archive build, GitHub+
+  GitLab publish) with **zero network-mutating `gh`/`glab` calls** —
+  confirmed still never run in real/publishing mode this session.
+- **T083** (final Constitution compliance sign-off, SC-010): re-ran every
+  US6 audit (T032-T036) against the complete, finished 12-phase tree.
+  **Zero new violations found.** The one pre-existing honest gap —
+  `internal/isolation/cgroup.go`'s `WrapCommand`/`TenantStateDir` (T072)
+  still has no production call site wiring it into `cmd/llmctld/main.go`
+  or `internal/executor/local.go` — was re-confirmed unchanged via a fresh
+  grep, exactly as T072's own evidence entry already disclosed. This is
+  the ONE remaining open, honestly-tracked follow-up item across the
+  entire feature: per-tenant cgroup isolation exists as a real, tested
+  library but is not yet wired into the live daemon's process-spawn path.
+
+**Every other honestly-disclosed scope boundary from Phases 9-11 remains
+exactly as documented in §7/§8/§9 above** — none has silently changed
+status during Phase 12's polish work. The feature is complete: all 89
+tasks across 12 phases done, zero blocking findings, one disclosed
+non-blocking follow-up item (cgroup wiring) for future work.
+
+## 11. Binding constraints (unchanged, restated per §12.10)
 
 - Anti-bluff (Constitution §11.4 family): every PASS claim in this
   project's task evidence cites real captured command output, never an

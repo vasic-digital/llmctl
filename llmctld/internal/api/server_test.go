@@ -99,21 +99,21 @@ func TestClusterStatus_RealHTTP3RequestOverMTLS(t *testing.T) {
 	if err != nil {
 		t.Fatalf("raft.Bootstrap: %v", err)
 	}
-	defer node.Shutdown()
+	defer func() { _ = node.Shutdown() }()
 	waitForRealLeader(t, node, 3*time.Second)
 
 	srv := NewServer(node, buildTestTLSConfig(t, ca, "node-a-api"))
 	if err := srv.Listen("127.0.0.1:0"); err != nil {
 		t.Fatalf("Listen: %v", err)
 	}
-	defer srv.Close()
+	defer func() { _ = srv.Close() }()
 
 	client := newTestClient(buildTestTLSConfig(t, ca, "test-client"))
 	resp, err := client.Get("https://" + srv.Addr + "/v1/cluster/status")
 	if err != nil {
 		t.Fatalf("GET /v1/cluster/status: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
@@ -147,21 +147,21 @@ func TestClusterNodes_RealHTTP3RequestReturnsRealConfiguration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("raft.Bootstrap: %v", err)
 	}
-	defer node.Shutdown()
+	defer func() { _ = node.Shutdown() }()
 	waitForRealLeader(t, node, 3*time.Second)
 
 	srv := NewServer(node, buildTestTLSConfig(t, ca, "node-a-api"))
 	if err := srv.Listen("127.0.0.1:0"); err != nil {
 		t.Fatalf("Listen: %v", err)
 	}
-	defer srv.Close()
+	defer func() { _ = srv.Close() }()
 
 	client := newTestClient(buildTestTLSConfig(t, ca, "test-client"))
 	resp, err := client.Get("https://" + srv.Addr + "/v1/cluster/nodes")
 	if err != nil {
 		t.Fatalf("GET /v1/cluster/nodes: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	var got struct {
 		Servers []raft.ServerInfo `json:"servers"`
@@ -192,7 +192,7 @@ func TestClusterJoin_RealHTTP3RequestActuallyJoinsRaft(t *testing.T) {
 	if err != nil {
 		t.Fatalf("raft.Bootstrap(node-a): %v", err)
 	}
-	defer leader.Shutdown()
+	defer func() { _ = leader.Shutdown() }()
 	waitForRealLeader(t, leader, 3*time.Second)
 
 	follower, err := raft.New(raft.Config{
@@ -203,13 +203,13 @@ func TestClusterJoin_RealHTTP3RequestActuallyJoinsRaft(t *testing.T) {
 	if err != nil {
 		t.Fatalf("raft.New(node-b): %v", err)
 	}
-	defer follower.Shutdown()
+	defer func() { _ = follower.Shutdown() }()
 
 	srv := NewServer(leader, buildTestTLSConfig(t, ca, "node-a-api"))
 	if err := srv.Listen("127.0.0.1:0"); err != nil {
 		t.Fatalf("Listen: %v", err)
 	}
-	defer srv.Close()
+	defer func() { _ = srv.Close() }()
 
 	client := newTestClient(buildTestTLSConfig(t, ca, "test-client"))
 	reqBody := []byte(`{"peer_id":"node-b","peer_addr":"` + follower.Addr() + `"}`)
@@ -217,7 +217,7 @@ func TestClusterJoin_RealHTTP3RequestActuallyJoinsRaft(t *testing.T) {
 	if err != nil {
 		t.Fatalf("POST /v1/cluster/join: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		t.Fatalf("POST /v1/cluster/join: status = %d, body = %s", resp.StatusCode, body)
@@ -227,7 +227,7 @@ func TestClusterJoin_RealHTTP3RequestActuallyJoinsRaft(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET /v1/cluster/nodes after join: %v", err)
 	}
-	defer getResp.Body.Close()
+	defer func() { _ = getResp.Body.Close() }()
 	var got struct {
 		Servers []raft.ServerInfo `json:"servers"`
 	}
@@ -257,7 +257,7 @@ func TestClusterLeave_RealHTTP3RequestActuallyLeavesRaft(t *testing.T) {
 	if err != nil {
 		t.Fatalf("raft.Bootstrap(node-a): %v", err)
 	}
-	defer leader.Shutdown()
+	defer func() { _ = leader.Shutdown() }()
 	waitForRealLeader(t, leader, 3*time.Second)
 
 	follower, err := raft.New(raft.Config{
@@ -268,7 +268,7 @@ func TestClusterLeave_RealHTTP3RequestActuallyLeavesRaft(t *testing.T) {
 	if err != nil {
 		t.Fatalf("raft.New(node-b): %v", err)
 	}
-	defer follower.Shutdown()
+	defer func() { _ = follower.Shutdown() }()
 
 	if err := leader.Join("node-b", follower.Addr()); err != nil {
 		t.Fatalf("leader.Join: %v", err)
@@ -290,14 +290,14 @@ func TestClusterLeave_RealHTTP3RequestActuallyLeavesRaft(t *testing.T) {
 	if err := srv.Listen("127.0.0.1:0"); err != nil {
 		t.Fatalf("Listen: %v", err)
 	}
-	defer srv.Close()
+	defer func() { _ = srv.Close() }()
 
 	client := newTestClient(buildTestTLSConfig(t, ca, "test-client"))
 	resp, err := client.Post("https://"+srv.Addr+"/v1/cluster/leave", "application/json", bytes.NewReader(nil))
 	if err != nil {
 		t.Fatalf("POST /v1/cluster/leave: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		t.Fatalf("POST /v1/cluster/leave: status = %d, body = %s", resp.StatusCode, body)
@@ -346,14 +346,14 @@ func TestRequireMTLS_RejectsRequestFromUntrustedCA(t *testing.T) {
 	if err != nil {
 		t.Fatalf("raft.Bootstrap: %v", err)
 	}
-	defer node.Shutdown()
+	defer func() { _ = node.Shutdown() }()
 	waitForRealLeader(t, node, 3*time.Second)
 
 	srv := NewServer(node, buildTestTLSConfig(t, ca, "node-a-api"))
 	if err := srv.Listen("127.0.0.1:0"); err != nil {
 		t.Fatalf("Listen: %v", err)
 	}
-	defer srv.Close()
+	defer func() { _ = srv.Close() }()
 
 	imposterClient := newTestClient(buildTestTLSConfig(t, otherCA, "imposter"))
 	_, err = imposterClient.Get("https://" + srv.Addr + "/v1/cluster/status")

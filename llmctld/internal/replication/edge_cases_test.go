@@ -64,7 +64,7 @@ func TestCheckpoint_FailureDoesNotLoseWAL_NextAttemptIncludesDelta(t *testing.T)
 	if err != nil {
 		t.Fatalf("re-OpenStore: %v", err)
 	}
-	defer s2.Close()
+	defer func() { _ = s2.Close() }()
 
 	if err := s2.Checkpoint(2, KVState{Tokens: []int32{1, 2}, Positions: []int32{0, 1}}); err != nil {
 		t.Fatalf("retry Checkpoint: %v", err)
@@ -95,7 +95,7 @@ func TestShouldForceCheckpoint_TriggersWhenWALExceedsConfiguredSize(t *testing.T
 	if err != nil {
 		t.Fatalf("OpenStore: %v", err)
 	}
-	defer s.Close()
+	defer func() { _ = s.Close() }()
 
 	if err := s.WAL().Append(WALEntry{Seq: 1, TokenID: 1, Position: 0}); err != nil {
 		t.Fatalf("Append: %v", err)
@@ -119,7 +119,7 @@ func TestShouldForceCheckpoint_FalseWhenNoThresholdConfigured(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenStore: %v", err)
 	}
-	defer s.Close()
+	defer func() { _ = s.Close() }()
 
 	for seq := uint64(1); seq <= 50; seq++ {
 		if err := s.WAL().Append(WALEntry{Seq: seq, TokenID: int32(seq), Position: int32(seq - 1)}); err != nil {

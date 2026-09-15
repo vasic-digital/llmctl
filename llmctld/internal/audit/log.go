@@ -79,7 +79,7 @@ func (l *Log) Append(actor, action, resource, decision string) Entry {
 
 func entryHash(e Entry) string {
 	h := sha256.New()
-	fmt.Fprintf(h, "%d|%s|%s|%s|%s|%s", e.Seq, e.Actor, e.Action, e.Resource, e.Decision, e.PrevHash)
+	_, _ = fmt.Fprintf(h, "%d|%s|%s|%s|%s|%s", e.Seq, e.Actor, e.Action, e.Resource, e.Decision, e.PrevHash) // hash.Hash.Write never returns an error, per its documented contract
 	return hex.EncodeToString(h.Sum(nil))
 }
 

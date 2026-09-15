@@ -1,0 +1,1071 @@
+?   	github.com/vasic-digital/llmctl/llmctld/cmd/llmctld	[no test files]
+=== RUN   TestRequestJoin_RealCrossProcessJoinOverHTTP3
+2026-09-15T17:49:55.722+0200 [INFO]  raft: initial configuration: index=1 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:35371}]"
+2026-09-15T17:49:55.723+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:35371 [Follower]" leader-address= leader-id=
+2026-09-15T17:49:57.607+0200 [WARN]  raft: heartbeat timeout reached, starting election: last-leader-addr= last-leader-id=
+2026-09-15T17:49:57.607+0200 [INFO]  raft: entering candidate state: node="Node at 127.0.0.1:35371 [Candidate]" term=2
+2026-09-15T17:49:57.607+0200 [DEBUG] raft: pre-voting for self: term=2 id=node-a
+2026-09-15T17:49:57.607+0200 [DEBUG] raft: calculated votes needed: needed=1 term=2
+2026-09-15T17:49:57.607+0200 [DEBUG] raft: pre-vote received: from=node-a term=2 tally=0
+2026-09-15T17:49:57.607+0200 [DEBUG] raft: pre-vote granted: from=node-a term=2 tally=1
+2026-09-15T17:49:57.607+0200 [INFO]  raft: pre-vote successful, starting election: term=2 tally=1 refused=0 votesNeeded=1
+2026-09-15T17:49:57.607+0200 [DEBUG] raft: voting for self: term=2 id=node-a
+2026-09-15T17:49:57.607+0200 [DEBUG] raft: vote granted: from=node-a term=2 tally=1
+2026-09-15T17:49:57.607+0200 [INFO]  raft: election won: term=2 tally=1
+2026-09-15T17:49:57.607+0200 [INFO]  raft: entering leader state: leader="Node at 127.0.0.1:35371 [Leader]"
+2026-09-15T17:49:57.615+0200 [INFO]  raft: initial configuration: index=0 servers=[]
+2026-09-15T17:49:57.615+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:47210 [Follower]" leader-address= leader-id=
+2026-09-15T17:49:57.634+0200 [INFO]  raft: updating configuration: command=AddVoter server-id=node-b server-addr=127.0.0.1:47210 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:35371} {Suffrage:Voter ID:node-b Address:127.0.0.1:47210}]"
+2026-09-15T17:49:57.634+0200 [INFO]  raft: added peer, starting replication: peer=node-b
+2026-09-15T17:50:02.638+0200 [ERROR] raft: failed to appendEntries to: peer="{Voter node-b 127.0.0.1:47210}" error="timeout: no recent network activity"
+2026-09-15T17:50:02.811+0200 [ERROR] raft: failed to heartbeat to: peer=127.0.0.1:47210 backoff time=10ms error="timeout: no recent network activity"
+--- PASS: TestRequestJoin_RealCrossProcessJoinOverHTTP3 (7.09s)
+=== RUN   TestRequestJoin_RetriesUntilLeaderElectionCompletes
+2026-09-15T17:50:02.815+0200 [INFO]  raft: initial configuration: index=1 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:37165}]"
+2026-09-15T17:50:02.815+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:37165 [Follower]" leader-address= leader-id=
+2026-09-15T17:50:02.820+0200 [INFO]  raft: initial configuration: index=0 servers=[]
+2026-09-15T17:50:02.820+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:38856 [Follower]" leader-address= leader-id=
+2026-09-15T17:50:04.123+0200 [WARN]  raft: heartbeat timeout reached, starting election: last-leader-addr= last-leader-id=
+2026-09-15T17:50:04.123+0200 [INFO]  raft: entering candidate state: node="Node at 127.0.0.1:37165 [Candidate]" term=2
+2026-09-15T17:50:04.123+0200 [DEBUG] raft: pre-voting for self: term=2 id=node-a
+2026-09-15T17:50:04.123+0200 [DEBUG] raft: calculated votes needed: needed=1 term=2
+2026-09-15T17:50:04.123+0200 [DEBUG] raft: pre-vote received: from=node-a term=2 tally=0
+2026-09-15T17:50:04.123+0200 [DEBUG] raft: pre-vote granted: from=node-a term=2 tally=1
+2026-09-15T17:50:04.123+0200 [INFO]  raft: pre-vote successful, starting election: term=2 tally=1 refused=0 votesNeeded=1
+2026-09-15T17:50:04.123+0200 [DEBUG] raft: voting for self: term=2 id=node-a
+2026-09-15T17:50:04.123+0200 [DEBUG] raft: vote granted: from=node-a term=2 tally=1
+2026-09-15T17:50:04.123+0200 [INFO]  raft: election won: term=2 tally=1
+2026-09-15T17:50:04.123+0200 [INFO]  raft: entering leader state: leader="Node at 127.0.0.1:37165 [Leader]"
+2026-09-15T17:50:04.174+0200 [INFO]  raft: updating configuration: command=AddVoter server-id=node-b server-addr=127.0.0.1:38856 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:37165} {Suffrage:Voter ID:node-b Address:127.0.0.1:38856}]"
+2026-09-15T17:50:04.174+0200 [INFO]  raft: added peer, starting replication: peer=node-b
+2026-09-15T17:50:09.179+0200 [ERROR] raft: failed to appendEntries to: peer="{Voter node-b 127.0.0.1:38856}" error="timeout: no recent network activity"
+2026-09-15T17:50:09.353+0200 [ERROR] raft: failed to heartbeat to: peer=127.0.0.1:38856 backoff time=10ms error="timeout: no recent network activity"
+--- PASS: TestRequestJoin_RetriesUntilLeaderElectionCompletes (6.54s)
+=== RUN   TestRequestJoin_SurfacesLeaderRefusal
+2026-09-15T17:50:09.357+0200 [INFO]  raft: initial configuration: index=1 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:42739}]"
+2026-09-15T17:50:09.357+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:42739 [Follower]" leader-address= leader-id=
+2026-09-15T17:50:10.718+0200 [WARN]  raft: heartbeat timeout reached, starting election: last-leader-addr= last-leader-id=
+2026-09-15T17:50:10.718+0200 [INFO]  raft: entering candidate state: node="Node at 127.0.0.1:42739 [Candidate]" term=2
+2026-09-15T17:50:10.718+0200 [DEBUG] raft: pre-voting for self: term=2 id=node-a
+2026-09-15T17:50:10.718+0200 [DEBUG] raft: calculated votes needed: needed=1 term=2
+2026-09-15T17:50:10.718+0200 [DEBUG] raft: pre-vote received: from=node-a term=2 tally=0
+2026-09-15T17:50:10.719+0200 [DEBUG] raft: pre-vote granted: from=node-a term=2 tally=1
+2026-09-15T17:50:10.719+0200 [INFO]  raft: pre-vote successful, starting election: term=2 tally=1 refused=0 votesNeeded=1
+2026-09-15T17:50:10.719+0200 [DEBUG] raft: voting for self: term=2 id=node-a
+2026-09-15T17:50:10.719+0200 [DEBUG] raft: vote granted: from=node-a term=2 tally=1
+2026-09-15T17:50:10.719+0200 [INFO]  raft: election won: term=2 tally=1
+2026-09-15T17:50:10.719+0200 [INFO]  raft: entering leader state: leader="Node at 127.0.0.1:42739 [Leader]"
+--- PASS: TestRequestJoin_SurfacesLeaderRefusal (1.39s)
+=== RUN   TestRequireJWT_ValidTokenSetsClaimsAndCallsNext
+--- PASS: TestRequireJWT_ValidTokenSetsClaimsAndCallsNext (0.00s)
+=== RUN   TestRequireJWT_MissingHeaderRejectedWith401
+--- PASS: TestRequireJWT_MissingHeaderRejectedWith401 (0.00s)
+=== RUN   TestRequireJWT_MalformedTokenRejectedWith401
+--- PASS: TestRequireJWT_MalformedTokenRejectedWith401 (0.00s)
+=== RUN   TestRequireJWT_ExpiredTokenRejectedWith401
+--- PASS: TestRequireJWT_ExpiredTokenRejectedWith401 (0.00s)
+=== RUN   TestRequireJWT_WrongKeyRejectedWith401
+--- PASS: TestRequireJWT_WrongKeyRejectedWith401 (0.00s)
+=== RUN   TestAuditEntries_RequiresAdminRole
+--- PASS: TestAuditEntries_RequiresAdminRole (0.00s)
+=== RUN   TestAuditVerify_ReportsCleanChain
+--- PASS: TestAuditVerify_ReportsCleanChain (0.00s)
+=== RUN   TestTokenExchange_ValidAPIKeyIssuesJWT
+--- PASS: TestTokenExchange_ValidAPIKeyIssuesJWT (0.00s)
+=== RUN   TestTokenExchange_InvalidSecretRejectedWith401
+--- PASS: TestTokenExchange_InvalidSecretRejectedWith401 (0.00s)
+=== RUN   TestCreateAPIKey_PrivilegeEscalation_NonAdminCannotSelfMintAdminKey
+--- PASS: TestCreateAPIKey_PrivilegeEscalation_NonAdminCannotSelfMintAdminKey (0.00s)
+=== RUN   TestRotateRevokeAPIKey_RequiresTenantManageRole
+--- PASS: TestRotateRevokeAPIKey_RequiresTenantManageRole (0.00s)
+=== RUN   TestAPIKeyLifecycle_CreateRotateRevoke_RequiresJWT
+--- PASS: TestAPIKeyLifecycle_CreateRotateRevoke_RequiresJWT (0.00s)
+=== RUN   TestReplicationRoutes_AppendCheckpointStateRealHTTP3RoundTrip
+2026-09-15T17:50:10.760+0200 [INFO]  raft: initial configuration: index=1 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:45047}]"
+2026-09-15T17:50:10.760+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:45047 [Follower]" leader-address= leader-id=
+2026-09-15T17:50:12.238+0200 [WARN]  raft: heartbeat timeout reached, starting election: last-leader-addr= last-leader-id=
+2026-09-15T17:50:12.238+0200 [INFO]  raft: entering candidate state: node="Node at 127.0.0.1:45047 [Candidate]" term=2
+2026-09-15T17:50:12.238+0200 [DEBUG] raft: pre-voting for self: term=2 id=node-a
+2026-09-15T17:50:12.238+0200 [DEBUG] raft: calculated votes needed: needed=1 term=2
+2026-09-15T17:50:12.238+0200 [DEBUG] raft: pre-vote received: from=node-a term=2 tally=0
+2026-09-15T17:50:12.238+0200 [DEBUG] raft: pre-vote granted: from=node-a term=2 tally=1
+2026-09-15T17:50:12.238+0200 [INFO]  raft: pre-vote successful, starting election: term=2 tally=1 refused=0 votesNeeded=1
+2026-09-15T17:50:12.238+0200 [DEBUG] raft: voting for self: term=2 id=node-a
+2026-09-15T17:50:12.238+0200 [DEBUG] raft: vote granted: from=node-a term=2 tally=1
+2026-09-15T17:50:12.238+0200 [INFO]  raft: election won: term=2 tally=1
+2026-09-15T17:50:12.238+0200 [INFO]  raft: entering leader state: leader="Node at 127.0.0.1:45047 [Leader]"
+--- PASS: TestReplicationRoutes_AppendCheckpointStateRealHTTP3RoundTrip (1.53s)
+=== RUN   TestCreateTenant_RequiresAdminRole
+--- PASS: TestCreateTenant_RequiresAdminRole (0.00s)
+=== RUN   TestModelNamespace_IsolationAndSharing
+--- PASS: TestModelNamespace_IsolationAndSharing (0.00s)
+=== RUN   TestModelNamespace_CrossTenantAccessDenied
+--- PASS: TestModelNamespace_CrossTenantAccessDenied (0.00s)
+=== RUN   TestCheckModelVisible_ExercisesTenantBoundaryCheck
+--- PASS: TestCheckModelVisible_ExercisesTenantBoundaryCheck (0.00s)
+=== RUN   TestCheckModelVisible_CrossTenantQueryDenied
+--- PASS: TestCheckModelVisible_CrossTenantQueryDenied (0.00s)
+=== RUN   TestClusterStatus_RealHTTP3RequestOverMTLS
+2026-09-15T17:50:12.298+0200 [INFO]  raft: initial configuration: index=1 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:46100}]"
+2026-09-15T17:50:12.298+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:46100 [Follower]" leader-address= leader-id=
+2026-09-15T17:50:14.084+0200 [WARN]  raft: heartbeat timeout reached, starting election: last-leader-addr= last-leader-id=
+2026-09-15T17:50:14.084+0200 [INFO]  raft: entering candidate state: node="Node at 127.0.0.1:46100 [Candidate]" term=2
+2026-09-15T17:50:14.084+0200 [DEBUG] raft: pre-voting for self: term=2 id=node-a
+2026-09-15T17:50:14.084+0200 [DEBUG] raft: calculated votes needed: needed=1 term=2
+2026-09-15T17:50:14.084+0200 [DEBUG] raft: pre-vote received: from=node-a term=2 tally=0
+2026-09-15T17:50:14.084+0200 [DEBUG] raft: pre-vote granted: from=node-a term=2 tally=1
+2026-09-15T17:50:14.084+0200 [INFO]  raft: pre-vote successful, starting election: term=2 tally=1 refused=0 votesNeeded=1
+2026-09-15T17:50:14.084+0200 [DEBUG] raft: voting for self: term=2 id=node-a
+2026-09-15T17:50:14.084+0200 [DEBUG] raft: vote granted: from=node-a term=2 tally=1
+2026-09-15T17:50:14.084+0200 [INFO]  raft: election won: term=2 tally=1
+2026-09-15T17:50:14.084+0200 [INFO]  raft: entering leader state: leader="Node at 127.0.0.1:46100 [Leader]"
+--- PASS: TestClusterStatus_RealHTTP3RequestOverMTLS (1.81s)
+=== RUN   TestClusterNodes_RealHTTP3RequestReturnsRealConfiguration
+2026-09-15T17:50:14.109+0200 [INFO]  raft: initial configuration: index=1 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:45510}]"
+2026-09-15T17:50:14.110+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:45510 [Follower]" leader-address= leader-id=
+2026-09-15T17:50:15.753+0200 [WARN]  raft: heartbeat timeout reached, starting election: last-leader-addr= last-leader-id=
+2026-09-15T17:50:15.753+0200 [INFO]  raft: entering candidate state: node="Node at 127.0.0.1:45510 [Candidate]" term=2
+2026-09-15T17:50:15.753+0200 [DEBUG] raft: pre-voting for self: term=2 id=node-a
+2026-09-15T17:50:15.753+0200 [DEBUG] raft: calculated votes needed: needed=1 term=2
+2026-09-15T17:50:15.753+0200 [DEBUG] raft: pre-vote received: from=node-a term=2 tally=0
+2026-09-15T17:50:15.753+0200 [DEBUG] raft: pre-vote granted: from=node-a term=2 tally=1
+2026-09-15T17:50:15.753+0200 [INFO]  raft: pre-vote successful, starting election: term=2 tally=1 refused=0 votesNeeded=1
+2026-09-15T17:50:15.753+0200 [DEBUG] raft: voting for self: term=2 id=node-a
+2026-09-15T17:50:15.753+0200 [DEBUG] raft: vote granted: from=node-a term=2 tally=1
+2026-09-15T17:50:15.753+0200 [INFO]  raft: election won: term=2 tally=1
+2026-09-15T17:50:15.753+0200 [INFO]  raft: entering leader state: leader="Node at 127.0.0.1:45510 [Leader]"
+--- PASS: TestClusterNodes_RealHTTP3RequestReturnsRealConfiguration (1.67s)
+=== RUN   TestClusterJoin_RealHTTP3RequestActuallyJoinsRaft
+2026-09-15T17:50:15.778+0200 [INFO]  raft: initial configuration: index=1 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:58407}]"
+2026-09-15T17:50:15.778+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:58407 [Follower]" leader-address= leader-id=
+2026-09-15T17:50:17.477+0200 [WARN]  raft: heartbeat timeout reached, starting election: last-leader-addr= last-leader-id=
+2026-09-15T17:50:17.477+0200 [INFO]  raft: entering candidate state: node="Node at 127.0.0.1:58407 [Candidate]" term=2
+2026-09-15T17:50:17.477+0200 [DEBUG] raft: pre-voting for self: term=2 id=node-a
+2026-09-15T17:50:17.477+0200 [DEBUG] raft: calculated votes needed: needed=1 term=2
+2026-09-15T17:50:17.477+0200 [DEBUG] raft: pre-vote received: from=node-a term=2 tally=0
+2026-09-15T17:50:17.477+0200 [DEBUG] raft: pre-vote granted: from=node-a term=2 tally=1
+2026-09-15T17:50:17.477+0200 [INFO]  raft: pre-vote successful, starting election: term=2 tally=1 refused=0 votesNeeded=1
+2026-09-15T17:50:17.478+0200 [DEBUG] raft: voting for self: term=2 id=node-a
+2026-09-15T17:50:17.478+0200 [DEBUG] raft: vote granted: from=node-a term=2 tally=1
+2026-09-15T17:50:17.478+0200 [INFO]  raft: election won: term=2 tally=1
+2026-09-15T17:50:17.478+0200 [INFO]  raft: entering leader state: leader="Node at 127.0.0.1:58407 [Leader]"
+2026-09-15T17:50:17.484+0200 [INFO]  raft: initial configuration: index=0 servers=[]
+2026-09-15T17:50:17.485+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:58382 [Follower]" leader-address= leader-id=
+2026-09-15T17:50:17.505+0200 [INFO]  raft: updating configuration: command=AddVoter server-id=node-b server-addr=127.0.0.1:58382 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:58407} {Suffrage:Voter ID:node-b Address:127.0.0.1:58382}]"
+2026-09-15T17:50:17.506+0200 [INFO]  raft: added peer, starting replication: peer=node-b
+2026-09-15T17:50:22.510+0200 [ERROR] raft: failed to appendEntries to: peer="{Voter node-b 127.0.0.1:58382}" error="timeout: no recent network activity"
+2026-09-15T17:50:22.648+0200 [ERROR] raft: failed to heartbeat to: peer=127.0.0.1:58382 backoff time=10ms error="timeout: no recent network activity"
+--- PASS: TestClusterJoin_RealHTTP3RequestActuallyJoinsRaft (6.87s)
+=== RUN   TestClusterLeave_RealHTTP3RequestActuallyLeavesRaft
+2026-09-15T17:50:22.652+0200 [INFO]  raft: initial configuration: index=1 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:50674}]"
+2026-09-15T17:50:22.652+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:50674 [Follower]" leader-address= leader-id=
+2026-09-15T17:50:23.782+0200 [WARN]  raft: heartbeat timeout reached, starting election: last-leader-addr= last-leader-id=
+2026-09-15T17:50:23.782+0200 [INFO]  raft: entering candidate state: node="Node at 127.0.0.1:50674 [Candidate]" term=2
+2026-09-15T17:50:23.783+0200 [DEBUG] raft: pre-voting for self: term=2 id=node-a
+2026-09-15T17:50:23.783+0200 [DEBUG] raft: calculated votes needed: needed=1 term=2
+2026-09-15T17:50:23.783+0200 [DEBUG] raft: pre-vote received: from=node-a term=2 tally=0
+2026-09-15T17:50:23.783+0200 [DEBUG] raft: pre-vote granted: from=node-a term=2 tally=1
+2026-09-15T17:50:23.783+0200 [INFO]  raft: pre-vote successful, starting election: term=2 tally=1 refused=0 votesNeeded=1
+2026-09-15T17:50:23.783+0200 [DEBUG] raft: voting for self: term=2 id=node-a
+2026-09-15T17:50:23.783+0200 [DEBUG] raft: vote granted: from=node-a term=2 tally=1
+2026-09-15T17:50:23.783+0200 [INFO]  raft: election won: term=2 tally=1
+2026-09-15T17:50:23.783+0200 [INFO]  raft: entering leader state: leader="Node at 127.0.0.1:50674 [Leader]"
+2026-09-15T17:50:23.792+0200 [INFO]  raft: initial configuration: index=0 servers=[]
+2026-09-15T17:50:23.792+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:39687 [Follower]" leader-address= leader-id=
+2026-09-15T17:50:23.792+0200 [INFO]  raft: updating configuration: command=AddVoter server-id=node-b server-addr=127.0.0.1:39687 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:50674} {Suffrage:Voter ID:node-b Address:127.0.0.1:39687}]"
+2026-09-15T17:50:23.792+0200 [INFO]  raft: added peer, starting replication: peer=node-b
+2026-09-15T17:50:23.807+0200 [WARN]  raft: failed to get previous log: previous-index=3 last-index=0 error="log not found"
+2026-09-15T17:50:23.808+0200 [WARN]  raft: appendEntries rejected, sending older logs: peer="{Voter node-b 127.0.0.1:39687}" next=1
+2026-09-15T17:50:23.810+0200 [INFO]  raft: pipelining replication: peer="{Voter node-b 127.0.0.1:39687}"
+2026-09-15T17:50:23.832+0200 [INFO]  raft: updating configuration: command=RemoveServer server-id=node-a server-addr= servers="[{Suffrage:Voter ID:node-b Address:127.0.0.1:39687}]"
+2026-09-15T17:50:23.834+0200 [INFO]  raft: removed ourself, shutting down
+2026-09-15T17:50:23.834+0200 [INFO]  raft: aborting pipeline replication: peer="{Voter node-b 127.0.0.1:39687}"
+--- PASS: TestClusterLeave_RealHTTP3RequestActuallyLeavesRaft (1.19s)
+=== RUN   TestRequireMTLS_RejectsRequestFromUntrustedCA
+2026-09-15T17:50:23.841+0200 [INFO]  raft: initial configuration: index=1 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:33554}]"
+2026-09-15T17:50:23.841+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:33554 [Follower]" leader-address= leader-id=
+2026-09-15T17:50:25.074+0200 [WARN]  raft: heartbeat timeout reached, starting election: last-leader-addr= last-leader-id=
+2026-09-15T17:50:25.074+0200 [INFO]  raft: entering candidate state: node="Node at 127.0.0.1:33554 [Candidate]" term=2
+2026-09-15T17:50:25.074+0200 [DEBUG] raft: pre-voting for self: term=2 id=node-a
+2026-09-15T17:50:25.074+0200 [DEBUG] raft: calculated votes needed: needed=1 term=2
+2026-09-15T17:50:25.074+0200 [DEBUG] raft: pre-vote received: from=node-a term=2 tally=0
+2026-09-15T17:50:25.074+0200 [DEBUG] raft: pre-vote granted: from=node-a term=2 tally=1
+2026-09-15T17:50:25.074+0200 [INFO]  raft: pre-vote successful, starting election: term=2 tally=1 refused=0 votesNeeded=1
+2026-09-15T17:50:25.074+0200 [DEBUG] raft: voting for self: term=2 id=node-a
+2026-09-15T17:50:25.074+0200 [DEBUG] raft: vote granted: from=node-a term=2 tally=1
+2026-09-15T17:50:25.074+0200 [INFO]  raft: election won: term=2 tally=1
+2026-09-15T17:50:25.074+0200 [INFO]  raft: entering leader state: leader="Node at 127.0.0.1:33554 [Leader]"
+--- PASS: TestRequireMTLS_RejectsRequestFromUntrustedCA (1.26s)
+PASS
+ok  	github.com/vasic-digital/llmctl/llmctld/internal/api	30.420s
+=== RUN   TestVerifyChain_CleanChainPasses
+--- PASS: TestVerifyChain_CleanChainPasses (0.00s)
+=== RUN   TestEntries_ReturnsACopyNotTheLiveSlice
+--- PASS: TestEntries_ReturnsACopyNotTheLiveSlice (0.00s)
+=== RUN   TestVerifyChain_TamperedMiddleEntryDetected
+--- PASS: TestVerifyChain_TamperedMiddleEntryDetected (0.00s)
+=== RUN   TestVerifyChain_DoesNotCatchDeletionRecomputedForward
+--- PASS: TestVerifyChain_DoesNotCatchDeletionRecomputedForward (0.00s)
+=== RUN   TestVerifyAgainstAnchor_DetectsWhatChainAloneCannot
+--- PASS: TestVerifyAgainstAnchor_DetectsWhatChainAloneCannot (0.00s)
+=== RUN   TestVerifyAgainstAnchor_DetectsTailTruncation
+--- PASS: TestVerifyAgainstAnchor_DetectsTailTruncation (0.00s)
+=== RUN   TestVerifyAgainstAnchor_CleanLogPasses
+--- PASS: TestVerifyAgainstAnchor_CleanLogPasses (0.00s)
+=== RUN   TestLog_ConcurrentAppendIsRaceFree
+--- PASS: TestLog_ConcurrentAppendIsRaceFree (0.01s)
+=== RUN   TestLog_ConcurrentReadsAndWritesAreRaceFree
+--- PASS: TestLog_ConcurrentReadsAndWritesAreRaceFree (0.23s)
+PASS
+ok  	github.com/vasic-digital/llmctl/llmctld/internal/audit	1.291s
+=== RUN   TestStore_RotatedKey_OldValueImmediatelyRejected
+--- PASS: TestStore_RotatedKey_OldValueImmediatelyRejected (0.00s)
+=== RUN   TestStore_Create_SecretIsHighEntropyAndNotPersistedPlaintext
+--- PASS: TestStore_Create_SecretIsHighEntropyAndNotPersistedPlaintext (0.00s)
+=== RUN   TestStore_Validate_ExpiredKeyFails
+--- PASS: TestStore_Validate_ExpiredKeyFails (0.00s)
+=== RUN   TestStore_Validate_ZeroTTLNeverExpires
+--- PASS: TestStore_Validate_ZeroTTLNeverExpires (0.00s)
+=== RUN   TestStore_Revoke_RevokedKeyFailsValidate
+--- PASS: TestStore_Revoke_RevokedKeyFailsValidate (0.00s)
+=== RUN   TestStore_Validate_UnknownIDFails
+--- PASS: TestStore_Validate_UnknownIDFails (0.00s)
+=== RUN   TestStore_Validate_WrongSecretFails
+--- PASS: TestStore_Validate_WrongSecretFails (0.00s)
+=== RUN   TestStore_Create_PersistsScopesAndOwner
+--- PASS: TestStore_Create_PersistsScopesAndOwner (0.00s)
+=== RUN   TestStore_Rotate_UnknownIDFails
+--- PASS: TestStore_Rotate_UnknownIDFails (0.00s)
+=== RUN   TestValidateToken_P99LatencyUnderCeiling
+    jwt_bench_test.go:52: ValidateToken p99 latency over 1000 samples: 210.57µs (ceiling 5ms)
+--- PASS: TestValidateToken_P99LatencyUnderCeiling (0.11s)
+=== RUN   TestIssueThenValidate_RoundTripsClaims
+--- PASS: TestIssueThenValidate_RoundTripsClaims (0.00s)
+=== RUN   TestValidateToken_RejectsTamperedSignature
+--- PASS: TestValidateToken_RejectsTamperedSignature (0.00s)
+=== RUN   TestValidateToken_RejectsTamperedPayload
+--- PASS: TestValidateToken_RejectsTamperedPayload (0.00s)
+=== RUN   TestValidateToken_RejectsExpiredToken
+--- PASS: TestValidateToken_RejectsExpiredToken (0.00s)
+=== RUN   TestValidateToken_RejectsWrongKey
+--- PASS: TestValidateToken_RejectsWrongKey (0.00s)
+=== RUN   TestValidateToken_RejectsAlgNone
+--- PASS: TestValidateToken_RejectsAlgNone (0.00s)
+=== RUN   TestAuthenticate_SuccessfulVerification_ReturnsSubjectAndPopulatesCache
+--- PASS: TestAuthenticate_SuccessfulVerification_ReturnsSubjectAndPopulatesCache (0.00s)
+=== RUN   TestAuthenticate_ProviderDown_FreshCacheEntry_FallsBackSuccessfully
+--- PASS: TestAuthenticate_ProviderDown_FreshCacheEntry_FallsBackSuccessfully (0.00s)
+=== RUN   TestAuthenticate_ProviderDown_CacheExpired_Denied
+--- PASS: TestAuthenticate_ProviderDown_CacheExpired_Denied (0.00s)
+=== RUN   TestAuthenticate_ProviderDown_NoCacheEntry_DeniedOutright
+--- PASS: TestAuthenticate_ProviderDown_NoCacheEntry_DeniedOutright (0.00s)
+=== RUN   TestAuthenticate_InvalidToken_DeniedAndNeverCached
+--- PASS: TestAuthenticate_InvalidToken_DeniedAndNeverCached (0.00s)
+=== RUN   TestAuthenticate_DifferentTokens_HaveIndependentCacheEntries
+--- PASS: TestAuthenticate_DifferentTokens_HaveIndependentCacheEntries (0.00s)
+=== RUN   TestAuthenticate_FreshCacheEntryButTokenPastItsOwnExpClaim_Denied
+--- PASS: TestAuthenticate_FreshCacheEntryButTokenPastItsOwnExpClaim_Denied (0.00s)
+=== RUN   TestAuthenticate_ProviderDown_FreshCacheEntry_NonJWTToken_StillFallsBack
+--- PASS: TestAuthenticate_ProviderDown_FreshCacheEntry_NonJWTToken_StillFallsBack (0.00s)
+=== RUN   TestNewRealVerifier_UnreachableIssuer_ReturnsError
+--- PASS: TestNewRealVerifier_UnreachableIssuer_ReturnsError (0.00s)
+=== RUN   TestCheck_P99LatencyUnderCeiling
+    rbac_bench_test.go:38: Check p99 latency over 1000 samples: 1.94µs (ceiling 5ms)
+--- PASS: TestCheck_P99LatencyUnderCeiling (0.00s)
+=== RUN   TestCheck_ModelOperatorCanDeleteModel_ModelViewerCannot
+--- PASS: TestCheck_ModelOperatorCanDeleteModel_ModelViewerCannot (0.00s)
+=== RUN   TestCheck_ModelViewerCanView
+--- PASS: TestCheck_ModelViewerCanView (0.00s)
+=== RUN   TestCheck_AdminGrantsEverythingDefined
+--- PASS: TestCheck_AdminGrantsEverythingDefined (0.00s)
+=== RUN   TestCheck_TenantAdminCanManageTenants
+--- PASS: TestCheck_TenantAdminCanManageTenants (0.00s)
+=== RUN   TestCheck_AnyMatchingRoleGrantsAccess
+--- PASS: TestCheck_AnyMatchingRoleGrantsAccess (0.00s)
+=== RUN   TestCheck_UnknownRoleGrantsNothing
+--- PASS: TestCheck_UnknownRoleGrantsNothing (0.00s)
+=== RUN   TestCheck_EmptyRolesGrantsNothing
+--- PASS: TestCheck_EmptyRolesGrantsNothing (0.00s)
+=== RUN   TestRegistry_CustomRoleGrantsOnlyItsRegisteredActions
+--- PASS: TestRegistry_CustomRoleGrantsOnlyItsRegisteredActions (0.00s)
+=== RUN   TestRegistry_UnregisteredCustomRoleGrantsNothing
+--- PASS: TestRegistry_UnregisteredCustomRoleGrantsNothing (0.00s)
+=== RUN   TestRegistry_StillHonorsPredefinedRoles
+--- PASS: TestRegistry_StillHonorsPredefinedRoles (0.00s)
+PASS
+ok  	github.com/vasic-digital/llmctl/llmctld/internal/auth	1.137s
+=== RUN   TestValidateToken_LogsAllowAndDeny
+--- PASS: TestValidateToken_LogsAllowAndDeny (0.00s)
+=== RUN   TestCheckRBAC_LogsAllowAndDeny
+--- PASS: TestCheckRBAC_LogsAllowAndDeny (0.00s)
+=== RUN   TestCheckQuota_LogsAllowAndDeny
+--- PASS: TestCheckQuota_LogsAllowAndDeny (0.00s)
+=== RUN   TestCheckTenantBoundary_LogsAllowAndDeny
+--- PASS: TestCheckTenantBoundary_LogsAllowAndDeny (0.00s)
+=== RUN   TestAllDecisionPaths_ProduceAValidChain
+--- PASS: TestAllDecisionPaths_ProduceAValidChain (0.00s)
+=== RUN   TestCheckAPIKey_LogsAllowAndDeny
+--- PASS: TestCheckAPIKey_LogsAllowAndDeny (0.00s)
+PASS
+ok  	github.com/vasic-digital/llmctl/llmctld/internal/authz	1.043s
+=== RUN   TestMonitor_CheckOnce_ReschedulesOnFirstFailureOnly
+--- PASS: TestMonitor_CheckOnce_ReschedulesOnFirstFailureOnly (0.00s)
+=== RUN   TestMonitor_CheckOnce_ReschedulesAgainAfterRecovery
+--- PASS: TestMonitor_CheckOnce_ReschedulesAgainAfterRecovery (0.00s)
+=== RUN   TestMonitor_StartStop_RunsPeriodically
+--- PASS: TestMonitor_StartStop_RunsPeriodically (0.17s)
+=== RUN   TestReconcile_ReplacesUnderReplicatedModel
+--- PASS: TestReconcile_ReplacesUnderReplicatedModel (0.00s)
+=== RUN   TestReconcile_NoOpWhenAtTarget
+--- PASS: TestReconcile_NoOpWhenAtTarget (0.00s)
+=== RUN   TestReconcile_StopsWhenNoHealthyCandidateLeft
+--- PASS: TestReconcile_StopsWhenNoHealthyCandidateLeft (0.00s)
+=== RUN   TestPartitionWatcher_LeaderNeverDrains
+--- PASS: TestPartitionWatcher_LeaderNeverDrains (0.00s)
+=== RUN   TestPartitionWatcher_FollowerWithStaleContactDrains
+--- PASS: TestPartitionWatcher_FollowerWithStaleContactDrains (0.00s)
+=== RUN   TestPartitionWatcher_FollowerWithFreshContactDoesNotDrain
+--- PASS: TestPartitionWatcher_FollowerWithFreshContactDoesNotDrain (0.00s)
+=== RUN   TestPartitionWatcher_RecoversWhenContactResumes
+--- PASS: TestPartitionWatcher_RecoversWhenContactResumes (0.00s)
+=== RUN   TestPartitionWatcher_GraceExpiresAfterDuration
+--- PASS: TestPartitionWatcher_GraceExpiresAfterDuration (0.06s)
+=== RUN   TestPartitionWatcher_GraceExpired_FalseWhenNotDraining
+--- PASS: TestPartitionWatcher_GraceExpired_FalseWhenNotDraining (0.00s)
+=== RUN   TestPlace_ExactFit
+--- PASS: TestPlace_ExactFit (0.00s)
+=== RUN   TestPlace_OverBudgetRefusal
+--- PASS: TestPlace_OverBudgetRefusal (0.00s)
+=== RUN   TestPlace_MultiCandidateBestFit
+--- PASS: TestPlace_MultiCandidateBestFit (0.00s)
+=== RUN   TestPlace_UnhealthyNodeSkippedInFavorOfHealthy
+--- PASS: TestPlace_UnhealthyNodeSkippedInFavorOfHealthy (0.00s)
+=== RUN   TestPlace_UnhealthyOnlyCandidateRefused
+--- PASS: TestPlace_UnhealthyOnlyCandidateRefused (0.00s)
+=== RUN   TestPlace_Deterministic
+--- PASS: TestPlace_Deterministic (0.00s)
+=== RUN   TestDefaultTargetReplicaCount_IsThree
+--- PASS: TestDefaultTargetReplicaCount_IsThree (0.00s)
+=== RUN   TestReplicaState_UnderReplicated
+--- PASS: TestReplicaState_UnderReplicated (0.00s)
+=== RUN   TestPlanShards_SelectsDistinctNodesCoveringEvenSplit
+--- PASS: TestPlanShards_SelectsDistinctNodesCoveringEvenSplit (0.00s)
+=== RUN   TestPlanShards_RefusesWhenNotEnoughCapacity
+--- PASS: TestPlanShards_RefusesWhenNotEnoughCapacity (0.00s)
+=== RUN   TestPlanShards_RefusesShardCountLessThanTwo
+--- PASS: TestPlanShards_RefusesShardCountLessThanTwo (0.00s)
+=== RUN   TestClone_IsIndependentCopy
+--- PASS: TestClone_IsIndependentCopy (0.00s)
+=== RUN   TestNewClusterState_StartsEmpty
+--- PASS: TestNewClusterState_StartsEmpty (0.00s)
+PASS
+ok  	github.com/vasic-digital/llmctl/llmctld/internal/cluster	1.261s
+=== RUN   TestLocalExecutor_StartStatusStop_RealDryRunSubprocess
+--- PASS: TestLocalExecutor_StartStatusStop_RealDryRunSubprocess (1.63s)
+=== RUN   TestLocalExecutor_Start_UnknownProfile_RealError
+--- PASS: TestLocalExecutor_Start_UnknownProfile_RealError (0.42s)
+=== RUN   TestNew_DefaultsLLMCtlPath
+--- PASS: TestNew_DefaultsLLMCtlPath (0.00s)
+PASS
+ok  	github.com/vasic-digital/llmctl/llmctld/internal/executor	3.079s
+=== RUN   TestWrapCommand_ArgvShape
+=== RUN   TestWrapCommand_ArgvShape/plain_command_no_args_no_memory_limit
+=== RUN   TestWrapCommand_ArgvShape/command_with_args_no_memory_limit
+=== RUN   TestWrapCommand_ArgvShape/command_with_memory_limit_set
+=== RUN   TestWrapCommand_ArgvShape/zero_memory_limit_means_no_property_added
+--- PASS: TestWrapCommand_ArgvShape (0.00s)
+    --- PASS: TestWrapCommand_ArgvShape/plain_command_no_args_no_memory_limit (0.00s)
+    --- PASS: TestWrapCommand_ArgvShape/command_with_args_no_memory_limit (0.00s)
+    --- PASS: TestWrapCommand_ArgvShape/command_with_memory_limit_set (0.00s)
+    --- PASS: TestWrapCommand_ArgvShape/zero_memory_limit_means_no_property_added (0.00s)
+=== RUN   TestWrapCommand_RejectsMaliciousTenantID
+=== RUN   TestWrapCommand_RejectsMaliciousTenantID/semicolon
+=== RUN   TestWrapCommand_RejectsMaliciousTenantID/slash
+=== RUN   TestWrapCommand_RejectsMaliciousTenantID/parent-dir-traversal
+=== RUN   TestWrapCommand_RejectsMaliciousTenantID/embedded-parent-dir
+=== RUN   TestWrapCommand_RejectsMaliciousTenantID/space
+=== RUN   TestWrapCommand_RejectsMaliciousTenantID/empty
+--- PASS: TestWrapCommand_RejectsMaliciousTenantID (0.00s)
+    --- PASS: TestWrapCommand_RejectsMaliciousTenantID/semicolon (0.00s)
+    --- PASS: TestWrapCommand_RejectsMaliciousTenantID/slash (0.00s)
+    --- PASS: TestWrapCommand_RejectsMaliciousTenantID/parent-dir-traversal (0.00s)
+    --- PASS: TestWrapCommand_RejectsMaliciousTenantID/embedded-parent-dir (0.00s)
+    --- PASS: TestWrapCommand_RejectsMaliciousTenantID/space (0.00s)
+    --- PASS: TestWrapCommand_RejectsMaliciousTenantID/empty (0.00s)
+=== RUN   TestWrapCommand_AcceptsValidTenantID
+--- PASS: TestWrapCommand_AcceptsValidTenantID (0.00s)
+=== RUN   TestTenantStateDir_CreatesRealDirectoryWithReal0700Permissions
+--- PASS: TestTenantStateDir_CreatesRealDirectoryWithReal0700Permissions (0.00s)
+=== RUN   TestTenantStateDir_IsIdempotent
+--- PASS: TestTenantStateDir_IsIdempotent (0.00s)
+=== RUN   TestTenantStateDir_RejectsPathTraversal
+--- PASS: TestTenantStateDir_RejectsPathTraversal (0.00s)
+=== RUN   TestTenantStateDir_DetectsPermissionDrift
+--- PASS: TestTenantStateDir_DetectsPermissionDrift (0.00s)
+=== RUN   TestWrapCommand_RealSystemdRunInvocation
+--- PASS: TestWrapCommand_RealSystemdRunInvocation (0.03s)
+PASS
+ok  	github.com/vasic-digital/llmctl/llmctld/internal/isolation	1.061s
+=== RUN   TestIssueNodeCert_ValidatesAgainstItsOwnCA
+--- PASS: TestIssueNodeCert_ValidatesAgainstItsOwnCA (0.00s)
+=== RUN   TestIssueNodeCert_RejectedByADifferentCA
+--- PASS: TestIssueNodeCert_RejectedByADifferentCA (0.00s)
+=== RUN   TestIssueNodeCert_KeyPEMIsUsableTLSKeyPair
+--- PASS: TestIssueNodeCert_KeyPEMIsUsableTLSKeyPair (0.00s)
+=== RUN   TestCA_KeyPEM_IsPresentAndUsableToReloadTheCA
+--- PASS: TestCA_KeyPEM_IsPresentAndUsableToReloadTheCA (0.00s)
+=== RUN   TestLoadCA_ReloadedCAIssuesCertsIndistinguishableFromTheOriginal
+--- PASS: TestLoadCA_ReloadedCAIssuesCertsIndistinguishableFromTheOriginal (0.00s)
+=== RUN   TestLoadCA_RejectsMismatchedKeyAndCert
+--- PASS: TestLoadCA_RejectsMismatchedKeyAndCert (0.00s)
+PASS
+ok  	github.com/vasic-digital/llmctl/llmctld/internal/mtls	1.045s
+=== RUN   TestApply_AcquireLock_GrantsWhenFree
+--- PASS: TestApply_AcquireLock_GrantsWhenFree (0.00s)
+=== RUN   TestApply_AcquireLock_RefusedWhenHeldAndNotExpired
+--- PASS: TestApply_AcquireLock_RefusedWhenHeldAndNotExpired (0.00s)
+=== RUN   TestApply_AcquireLock_GrantedAfterExpiry
+--- PASS: TestApply_AcquireLock_GrantedAfterExpiry (0.00s)
+=== RUN   TestApply_ReleaseLock_ByHolderSucceedsByOtherFails
+--- PASS: TestApply_ReleaseLock_ByHolderSucceedsByOtherFails (0.00s)
+=== RUN   TestApply_ReleaseLock_OfAbsentKeyIsIdempotentNoOp
+--- PASS: TestApply_ReleaseLock_OfAbsentKeyIsIdempotentNoOp (0.00s)
+=== RUN   TestApply_LockCommandsDeterministic
+--- PASS: TestApply_LockCommandsDeterministic (0.00s)
+=== RUN   TestApply_JoinThenLeave
+--- PASS: TestApply_JoinThenLeave (0.00s)
+=== RUN   TestApply_DeterministicGivenSameLogSequence
+--- PASS: TestApply_DeterministicGivenSameLogSequence (0.00s)
+=== RUN   TestApply_UnknownCommandRejected
+--- PASS: TestApply_UnknownCommandRejected (0.00s)
+=== RUN   TestSnapshotRestore_RoundTrips
+--- PASS: TestSnapshotRestore_RoundTrips (0.00s)
+=== RUN   TestApplyAndState_ConcurrentAccessIsRaceFree
+--- PASS: TestApplyAndState_ConcurrentAccessIsRaceFree (0.05s)
+=== RUN   TestAcquireRelease_RoundTrip
+2026-09-15T17:49:55.783+0200 [INFO]  raft: initial configuration: index=1 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:34449}]"
+2026-09-15T17:49:55.783+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:34449 [Follower]" leader-address= leader-id=
+2026-09-15T17:49:57.186+0200 [WARN]  raft: heartbeat timeout reached, starting election: last-leader-addr= last-leader-id=
+2026-09-15T17:49:57.186+0200 [INFO]  raft: entering candidate state: node="Node at 127.0.0.1:34449 [Candidate]" term=2
+2026-09-15T17:49:57.186+0200 [DEBUG] raft: pre-voting for self: term=2 id=node-a
+2026-09-15T17:49:57.186+0200 [DEBUG] raft: calculated votes needed: needed=1 term=2
+2026-09-15T17:49:57.186+0200 [DEBUG] raft: pre-vote received: from=node-a term=2 tally=0
+2026-09-15T17:49:57.187+0200 [DEBUG] raft: pre-vote granted: from=node-a term=2 tally=1
+2026-09-15T17:49:57.187+0200 [INFO]  raft: pre-vote successful, starting election: term=2 tally=1 refused=0 votesNeeded=1
+2026-09-15T17:49:57.187+0200 [DEBUG] raft: voting for self: term=2 id=node-a
+2026-09-15T17:49:57.187+0200 [DEBUG] raft: vote granted: from=node-a term=2 tally=1
+2026-09-15T17:49:57.187+0200 [INFO]  raft: election won: term=2 tally=1
+2026-09-15T17:49:57.187+0200 [INFO]  raft: entering leader state: leader="Node at 127.0.0.1:34449 [Leader]"
+--- PASS: TestAcquireRelease_RoundTrip (1.42s)
+=== RUN   TestAcquire_SecondCallerBlocksUntilRelease
+2026-09-15T17:49:57.198+0200 [INFO]  raft: initial configuration: index=1 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:49249}]"
+2026-09-15T17:49:57.199+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:49249 [Follower]" leader-address= leader-id=
+2026-09-15T17:49:59.066+0200 [WARN]  raft: heartbeat timeout reached, starting election: last-leader-addr= last-leader-id=
+2026-09-15T17:49:59.066+0200 [INFO]  raft: entering candidate state: node="Node at 127.0.0.1:49249 [Candidate]" term=2
+2026-09-15T17:49:59.066+0200 [DEBUG] raft: pre-voting for self: term=2 id=node-a
+2026-09-15T17:49:59.066+0200 [DEBUG] raft: calculated votes needed: needed=1 term=2
+2026-09-15T17:49:59.066+0200 [DEBUG] raft: pre-vote received: from=node-a term=2 tally=0
+2026-09-15T17:49:59.066+0200 [DEBUG] raft: pre-vote granted: from=node-a term=2 tally=1
+2026-09-15T17:49:59.066+0200 [INFO]  raft: pre-vote successful, starting election: term=2 tally=1 refused=0 votesNeeded=1
+2026-09-15T17:49:59.066+0200 [DEBUG] raft: voting for self: term=2 id=node-a
+2026-09-15T17:49:59.066+0200 [DEBUG] raft: vote granted: from=node-a term=2 tally=1
+2026-09-15T17:49:59.066+0200 [INFO]  raft: election won: term=2 tally=1
+2026-09-15T17:49:59.066+0200 [INFO]  raft: entering leader state: leader="Node at 127.0.0.1:49249 [Leader]"
+--- PASS: TestAcquire_SecondCallerBlocksUntilRelease (2.03s)
+=== RUN   TestAcquire_SecondCallerUnblocksOnTTLExpiry
+2026-09-15T17:49:59.232+0200 [INFO]  raft: initial configuration: index=1 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:49584}]"
+2026-09-15T17:49:59.233+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:49584 [Follower]" leader-address= leader-id=
+2026-09-15T17:50:00.905+0200 [WARN]  raft: heartbeat timeout reached, starting election: last-leader-addr= last-leader-id=
+2026-09-15T17:50:00.905+0200 [INFO]  raft: entering candidate state: node="Node at 127.0.0.1:49584 [Candidate]" term=2
+2026-09-15T17:50:00.905+0200 [DEBUG] raft: pre-voting for self: term=2 id=node-a
+2026-09-15T17:50:00.905+0200 [DEBUG] raft: calculated votes needed: needed=1 term=2
+2026-09-15T17:50:00.905+0200 [DEBUG] raft: pre-vote received: from=node-a term=2 tally=0
+2026-09-15T17:50:00.905+0200 [DEBUG] raft: pre-vote granted: from=node-a term=2 tally=1
+2026-09-15T17:50:00.906+0200 [INFO]  raft: pre-vote successful, starting election: term=2 tally=1 refused=0 votesNeeded=1
+2026-09-15T17:50:00.906+0200 [DEBUG] raft: voting for self: term=2 id=node-a
+2026-09-15T17:50:00.906+0200 [DEBUG] raft: vote granted: from=node-a term=2 tally=1
+2026-09-15T17:50:00.906+0200 [INFO]  raft: election won: term=2 tally=1
+2026-09-15T17:50:00.906+0200 [INFO]  raft: entering leader state: leader="Node at 127.0.0.1:49584 [Leader]"
+--- PASS: TestAcquire_SecondCallerUnblocksOnTTLExpiry (1.89s)
+=== RUN   TestIsLeader_ReflectsRealRaftState
+2026-09-15T17:50:01.118+0200 [INFO]  raft: initial configuration: index=1 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:39111}]"
+2026-09-15T17:50:01.118+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:39111 [Follower]" leader-address= leader-id=
+2026-09-15T17:50:02.273+0200 [WARN]  raft: heartbeat timeout reached, starting election: last-leader-addr= last-leader-id=
+2026-09-15T17:50:02.273+0200 [INFO]  raft: entering candidate state: node="Node at 127.0.0.1:39111 [Candidate]" term=2
+2026-09-15T17:50:02.273+0200 [DEBUG] raft: pre-voting for self: term=2 id=node-a
+2026-09-15T17:50:02.273+0200 [DEBUG] raft: calculated votes needed: needed=1 term=2
+2026-09-15T17:50:02.273+0200 [DEBUG] raft: pre-vote received: from=node-a term=2 tally=0
+2026-09-15T17:50:02.273+0200 [DEBUG] raft: pre-vote granted: from=node-a term=2 tally=1
+2026-09-15T17:50:02.273+0200 [INFO]  raft: pre-vote successful, starting election: term=2 tally=1 refused=0 votesNeeded=1
+2026-09-15T17:50:02.273+0200 [DEBUG] raft: voting for self: term=2 id=node-a
+2026-09-15T17:50:02.273+0200 [DEBUG] raft: vote granted: from=node-a term=2 tally=1
+2026-09-15T17:50:02.273+0200 [INFO]  raft: election won: term=2 tally=1
+2026-09-15T17:50:02.273+0200 [INFO]  raft: entering leader state: leader="Node at 127.0.0.1:39111 [Leader]"
+--- PASS: TestIsLeader_ReflectsRealRaftState (1.16s)
+=== RUN   TestServers_ReflectsRealConfigurationAfterJoin
+2026-09-15T17:50:02.279+0200 [INFO]  raft: initial configuration: index=1 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:58988}]"
+2026-09-15T17:50:02.279+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:58988 [Follower]" leader-address= leader-id=
+2026-09-15T17:50:03.406+0200 [WARN]  raft: heartbeat timeout reached, starting election: last-leader-addr= last-leader-id=
+2026-09-15T17:50:03.406+0200 [INFO]  raft: entering candidate state: node="Node at 127.0.0.1:58988 [Candidate]" term=2
+2026-09-15T17:50:03.406+0200 [DEBUG] raft: pre-voting for self: term=2 id=node-a
+2026-09-15T17:50:03.406+0200 [DEBUG] raft: calculated votes needed: needed=1 term=2
+2026-09-15T17:50:03.406+0200 [DEBUG] raft: pre-vote received: from=node-a term=2 tally=0
+2026-09-15T17:50:03.406+0200 [DEBUG] raft: pre-vote granted: from=node-a term=2 tally=1
+2026-09-15T17:50:03.406+0200 [INFO]  raft: pre-vote successful, starting election: term=2 tally=1 refused=0 votesNeeded=1
+2026-09-15T17:50:03.406+0200 [DEBUG] raft: voting for self: term=2 id=node-a
+2026-09-15T17:50:03.406+0200 [DEBUG] raft: vote granted: from=node-a term=2 tally=1
+2026-09-15T17:50:03.406+0200 [INFO]  raft: election won: term=2 tally=1
+2026-09-15T17:50:03.406+0200 [INFO]  raft: entering leader state: leader="Node at 127.0.0.1:58988 [Leader]"
+2026-09-15T17:50:03.418+0200 [INFO]  raft: initial configuration: index=0 servers=[]
+2026-09-15T17:50:03.418+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:50817 [Follower]" leader-address= leader-id=
+2026-09-15T17:50:03.418+0200 [INFO]  raft: updating configuration: command=AddVoter server-id=node-b server-addr=127.0.0.1:50817 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:58988} {Suffrage:Voter ID:node-b Address:127.0.0.1:50817}]"
+2026-09-15T17:50:03.419+0200 [INFO]  raft: added peer, starting replication: peer=node-b
+2026-09-15T17:50:08.424+0200 [ERROR] raft: failed to appendEntries to: peer="{Voter node-b 127.0.0.1:50817}" error="timeout: no recent network activity"
+2026-09-15T17:50:08.560+0200 [ERROR] raft: failed to heartbeat to: peer=127.0.0.1:50817 backoff time=10ms error="timeout: no recent network activity"
+--- PASS: TestServers_ReflectsRealConfigurationAfterJoin (6.29s)
+=== RUN   TestServerInfo_SuffrageIsRealHraftValue
+--- PASS: TestServerInfo_SuffrageIsRealHraftValue (0.00s)
+=== RUN   TestBootstrap_SingleNodeBecomesLeaderQuickly
+2026-09-15T17:50:08.564+0200 [INFO]  raft: initial configuration: index=1 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:46625}]"
+2026-09-15T17:50:08.564+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:46625 [Follower]" leader-address= leader-id=
+2026-09-15T17:50:10.028+0200 [WARN]  raft: heartbeat timeout reached, starting election: last-leader-addr= last-leader-id=
+2026-09-15T17:50:10.028+0200 [INFO]  raft: entering candidate state: node="Node at 127.0.0.1:46625 [Candidate]" term=2
+2026-09-15T17:50:10.029+0200 [DEBUG] raft: pre-voting for self: term=2 id=node-a
+2026-09-15T17:50:10.029+0200 [DEBUG] raft: calculated votes needed: needed=1 term=2
+2026-09-15T17:50:10.029+0200 [DEBUG] raft: pre-vote received: from=node-a term=2 tally=0
+2026-09-15T17:50:10.029+0200 [DEBUG] raft: pre-vote granted: from=node-a term=2 tally=1
+2026-09-15T17:50:10.029+0200 [INFO]  raft: pre-vote successful, starting election: term=2 tally=1 refused=0 votesNeeded=1
+2026-09-15T17:50:10.029+0200 [DEBUG] raft: voting for self: term=2 id=node-a
+2026-09-15T17:50:10.029+0200 [DEBUG] raft: vote granted: from=node-a term=2 tally=1
+2026-09-15T17:50:10.029+0200 [INFO]  raft: election won: term=2 tally=1
+2026-09-15T17:50:10.029+0200 [INFO]  raft: entering leader state: leader="Node at 127.0.0.1:46625 [Leader]"
+--- PASS: TestBootstrap_SingleNodeBecomesLeaderQuickly (1.48s)
+=== RUN   TestJoin_SecondNodeReplicatesRealAppliedCommand
+2026-09-15T17:50:10.043+0200 [INFO]  raft: initial configuration: index=1 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:38139}]"
+2026-09-15T17:50:10.044+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:38139 [Follower]" leader-address= leader-id=
+2026-09-15T17:50:11.286+0200 [WARN]  raft: heartbeat timeout reached, starting election: last-leader-addr= last-leader-id=
+2026-09-15T17:50:11.286+0200 [INFO]  raft: entering candidate state: node="Node at 127.0.0.1:38139 [Candidate]" term=2
+2026-09-15T17:50:11.287+0200 [DEBUG] raft: pre-voting for self: term=2 id=node-a
+2026-09-15T17:50:11.287+0200 [DEBUG] raft: calculated votes needed: needed=1 term=2
+2026-09-15T17:50:11.287+0200 [DEBUG] raft: pre-vote received: from=node-a term=2 tally=0
+2026-09-15T17:50:11.287+0200 [DEBUG] raft: pre-vote granted: from=node-a term=2 tally=1
+2026-09-15T17:50:11.287+0200 [INFO]  raft: pre-vote successful, starting election: term=2 tally=1 refused=0 votesNeeded=1
+2026-09-15T17:50:11.287+0200 [DEBUG] raft: voting for self: term=2 id=node-a
+2026-09-15T17:50:11.287+0200 [DEBUG] raft: vote granted: from=node-a term=2 tally=1
+2026-09-15T17:50:11.287+0200 [INFO]  raft: election won: term=2 tally=1
+2026-09-15T17:50:11.287+0200 [INFO]  raft: entering leader state: leader="Node at 127.0.0.1:38139 [Leader]"
+2026-09-15T17:50:11.294+0200 [INFO]  raft: initial configuration: index=0 servers=[]
+2026-09-15T17:50:11.294+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:36694 [Follower]" leader-address= leader-id=
+2026-09-15T17:50:11.294+0200 [INFO]  raft: updating configuration: command=AddVoter server-id=node-b server-addr=127.0.0.1:36694 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:38139} {Suffrage:Voter ID:node-b Address:127.0.0.1:36694}]"
+2026-09-15T17:50:11.294+0200 [INFO]  raft: added peer, starting replication: peer=node-b
+2026-09-15T17:50:11.311+0200 [WARN]  raft: failed to get previous log: previous-index=3 last-index=0 error="log not found"
+2026-09-15T17:50:11.311+0200 [WARN]  raft: appendEntries rejected, sending older logs: peer="{Voter node-b 127.0.0.1:36694}" next=1
+2026-09-15T17:50:11.313+0200 [INFO]  raft: pipelining replication: peer="{Voter node-b 127.0.0.1:36694}"
+2026-09-15T17:50:11.377+0200 [INFO]  raft: aborting pipeline replication: peer="{Voter node-b 127.0.0.1:36694}"
+--- PASS: TestJoin_SecondNodeReplicatesRealAppliedCommand (1.34s)
+=== RUN   TestLeave_LeaderRemovesItselfFromConfiguration
+2026-09-15T17:50:11.381+0200 [INFO]  raft: initial configuration: index=1 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:47123}]"
+2026-09-15T17:50:11.381+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:47123 [Follower]" leader-address= leader-id=
+2026-09-15T17:50:13.368+0200 [WARN]  raft: heartbeat timeout reached, starting election: last-leader-addr= last-leader-id=
+2026-09-15T17:50:13.368+0200 [INFO]  raft: entering candidate state: node="Node at 127.0.0.1:47123 [Candidate]" term=2
+2026-09-15T17:50:13.368+0200 [DEBUG] raft: pre-voting for self: term=2 id=node-a
+2026-09-15T17:50:13.368+0200 [DEBUG] raft: calculated votes needed: needed=1 term=2
+2026-09-15T17:50:13.368+0200 [DEBUG] raft: pre-vote received: from=node-a term=2 tally=0
+2026-09-15T17:50:13.368+0200 [DEBUG] raft: pre-vote granted: from=node-a term=2 tally=1
+2026-09-15T17:50:13.368+0200 [INFO]  raft: pre-vote successful, starting election: term=2 tally=1 refused=0 votesNeeded=1
+2026-09-15T17:50:13.369+0200 [DEBUG] raft: voting for self: term=2 id=node-a
+2026-09-15T17:50:13.369+0200 [DEBUG] raft: vote granted: from=node-a term=2 tally=1
+2026-09-15T17:50:13.369+0200 [INFO]  raft: election won: term=2 tally=1
+2026-09-15T17:50:13.369+0200 [INFO]  raft: entering leader state: leader="Node at 127.0.0.1:47123 [Leader]"
+2026-09-15T17:50:13.375+0200 [INFO]  raft: initial configuration: index=0 servers=[]
+2026-09-15T17:50:13.375+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:59707 [Follower]" leader-address= leader-id=
+2026-09-15T17:50:13.375+0200 [INFO]  raft: updating configuration: command=AddVoter server-id=node-b server-addr=127.0.0.1:59707 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:47123} {Suffrage:Voter ID:node-b Address:127.0.0.1:59707}]"
+2026-09-15T17:50:13.375+0200 [INFO]  raft: added peer, starting replication: peer=node-b
+2026-09-15T17:50:13.391+0200 [WARN]  raft: failed to get previous log: previous-index=3 last-index=0 error="log not found"
+2026-09-15T17:50:13.391+0200 [WARN]  raft: appendEntries rejected, sending older logs: peer="{Voter node-b 127.0.0.1:59707}" next=1
+2026-09-15T17:50:13.394+0200 [INFO]  raft: pipelining replication: peer="{Voter node-b 127.0.0.1:59707}"
+2026-09-15T17:50:13.396+0200 [INFO]  raft: updating configuration: command=RemoveServer server-id=node-a server-addr= servers="[{Suffrage:Voter ID:node-b Address:127.0.0.1:59707}]"
+2026-09-15T17:50:13.398+0200 [INFO]  raft: removed ourself, shutting down
+2026-09-15T17:50:13.398+0200 [INFO]  raft: aborting pipeline replication: peer="{Voter node-b 127.0.0.1:59707}"
+--- PASS: TestLeave_LeaderRemovesItselfFromConfiguration (2.02s)
+=== RUN   TestLeaderCh_ReceivesTrueOnElection
+2026-09-15T17:50:13.402+0200 [INFO]  raft: initial configuration: index=1 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:40287}]"
+2026-09-15T17:50:13.402+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:40287 [Follower]" leader-address= leader-id=
+2026-09-15T17:50:15.276+0200 [WARN]  raft: heartbeat timeout reached, starting election: last-leader-addr= last-leader-id=
+2026-09-15T17:50:15.276+0200 [INFO]  raft: entering candidate state: node="Node at 127.0.0.1:40287 [Candidate]" term=2
+2026-09-15T17:50:15.276+0200 [DEBUG] raft: pre-voting for self: term=2 id=node-a
+2026-09-15T17:50:15.276+0200 [DEBUG] raft: calculated votes needed: needed=1 term=2
+2026-09-15T17:50:15.276+0200 [DEBUG] raft: pre-vote received: from=node-a term=2 tally=0
+2026-09-15T17:50:15.276+0200 [DEBUG] raft: pre-vote granted: from=node-a term=2 tally=1
+2026-09-15T17:50:15.276+0200 [INFO]  raft: pre-vote successful, starting election: term=2 tally=1 refused=0 votesNeeded=1
+2026-09-15T17:50:15.276+0200 [DEBUG] raft: voting for self: term=2 id=node-a
+2026-09-15T17:50:15.277+0200 [DEBUG] raft: vote granted: from=node-a term=2 tally=1
+2026-09-15T17:50:15.277+0200 [INFO]  raft: election won: term=2 tally=1
+2026-09-15T17:50:15.277+0200 [INFO]  raft: entering leader state: leader="Node at 127.0.0.1:40287 [Leader]"
+--- PASS: TestLeaderCh_ReceivesTrueOnElection (1.88s)
+=== RUN   TestJoin_SurvivingFollowerBecomesLeaderAfterOriginalLeaderShutsDown
+2026-09-15T17:50:15.281+0200 [INFO]  raft: initial configuration: index=1 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:57578}]"
+2026-09-15T17:50:15.281+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:57578 [Follower]" leader-address= leader-id=
+2026-09-15T17:50:16.608+0200 [WARN]  raft: heartbeat timeout reached, starting election: last-leader-addr= last-leader-id=
+2026-09-15T17:50:16.608+0200 [INFO]  raft: entering candidate state: node="Node at 127.0.0.1:57578 [Candidate]" term=2
+2026-09-15T17:50:16.608+0200 [DEBUG] raft: pre-voting for self: term=2 id=node-a
+2026-09-15T17:50:16.608+0200 [DEBUG] raft: calculated votes needed: needed=1 term=2
+2026-09-15T17:50:16.608+0200 [DEBUG] raft: pre-vote received: from=node-a term=2 tally=0
+2026-09-15T17:50:16.608+0200 [DEBUG] raft: pre-vote granted: from=node-a term=2 tally=1
+2026-09-15T17:50:16.608+0200 [INFO]  raft: pre-vote successful, starting election: term=2 tally=1 refused=0 votesNeeded=1
+2026-09-15T17:50:16.608+0200 [DEBUG] raft: voting for self: term=2 id=node-a
+2026-09-15T17:50:16.608+0200 [DEBUG] raft: vote granted: from=node-a term=2 tally=1
+2026-09-15T17:50:16.608+0200 [INFO]  raft: election won: term=2 tally=1
+2026-09-15T17:50:16.608+0200 [INFO]  raft: entering leader state: leader="Node at 127.0.0.1:57578 [Leader]"
+2026-09-15T17:50:16.614+0200 [INFO]  raft: initial configuration: index=0 servers=[]
+2026-09-15T17:50:16.614+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:52138 [Follower]" leader-address= leader-id=
+2026-09-15T17:50:16.614+0200 [INFO]  raft: updating configuration: command=AddVoter server-id=node-b server-addr=127.0.0.1:52138 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:57578} {Suffrage:Voter ID:node-b Address:127.0.0.1:52138}]"
+2026-09-15T17:50:16.615+0200 [INFO]  raft: added peer, starting replication: peer=node-b
+2026-09-15T17:50:16.617+0200 [INFO]  raft: initial configuration: index=0 servers=[]
+2026-09-15T17:50:16.617+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:44678 [Follower]" leader-address= leader-id=
+2026-09-15T17:50:16.617+0200 [INFO]  raft: updating configuration: command=AddVoter server-id=node-c server-addr=127.0.0.1:44678 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:57578} {Suffrage:Voter ID:node-b Address:127.0.0.1:52138} {Suffrage:Voter ID:node-c Address:127.0.0.1:44678}]"
+2026-09-15T17:50:16.618+0200 [INFO]  raft: added peer, starting replication: peer=node-c
+2026-09-15T17:50:16.631+0200 [WARN]  raft: failed to get previous log: previous-index=3 last-index=0 error="log not found"
+2026-09-15T17:50:16.632+0200 [WARN]  raft: appendEntries rejected, sending older logs: peer="{Voter node-b 127.0.0.1:52138}" next=1
+2026-09-15T17:50:16.634+0200 [WARN]  raft: failed to get previous log: previous-index=4 last-index=0 error="log not found"
+2026-09-15T17:50:16.635+0200 [WARN]  raft: appendEntries rejected, sending older logs: peer="{Voter node-c 127.0.0.1:44678}" next=1
+2026-09-15T17:50:16.635+0200 [INFO]  raft: pipelining replication: peer="{Voter node-b 127.0.0.1:52138}"
+2026-09-15T17:50:16.637+0200 [INFO]  raft: aborting pipeline replication: peer="{Voter node-b 127.0.0.1:52138}"
+2026-09-15T17:50:18.105+0200 [WARN]  raft: heartbeat timeout reached, starting election: last-leader-addr=127.0.0.1:57578 last-leader-id=node-a
+2026-09-15T17:50:18.105+0200 [INFO]  raft: entering candidate state: node="Node at 127.0.0.1:52138 [Candidate]" term=3
+2026-09-15T17:50:18.105+0200 [DEBUG] raft: asking for pre-vote: term=3 from=node-a address=127.0.0.1:57578
+2026-09-15T17:50:18.105+0200 [DEBUG] raft: pre-voting for self: term=3 id=node-b
+2026-09-15T17:50:18.105+0200 [DEBUG] raft: asking for pre-vote: term=3 from=node-c address=127.0.0.1:44678
+2026-09-15T17:50:18.105+0200 [DEBUG] raft: calculated votes needed: needed=2 term=3
+2026-09-15T17:50:18.105+0200 [DEBUG] raft: pre-vote received: from=node-b term=3 tally=0
+2026-09-15T17:50:18.105+0200 [DEBUG] raft: pre-vote granted: from=node-b term=3 tally=1
+2026-09-15T17:50:18.120+0200 [WARN]  raft: rejecting pre-vote request since we have a leader: from=127.0.0.1:52138 leader=127.0.0.1:57578 leader-id=node-a
+2026-09-15T17:50:18.121+0200 [DEBUG] raft: pre-vote received: from=node-c term=2 tally=1
+2026-09-15T17:50:18.122+0200 [DEBUG] raft: pre-vote denied: from=node-c term=2 tally=1
+2026-09-15T17:50:18.391+0200 [WARN]  raft: heartbeat timeout reached, starting election: last-leader-addr=127.0.0.1:57578 last-leader-id=node-a
+2026-09-15T17:50:18.392+0200 [INFO]  raft: entering candidate state: node="Node at 127.0.0.1:44678 [Candidate]" term=3
+2026-09-15T17:50:18.392+0200 [DEBUG] raft: asking for pre-vote: term=3 from=node-a address=127.0.0.1:57578
+2026-09-15T17:50:18.392+0200 [DEBUG] raft: asking for pre-vote: term=3 from=node-b address=127.0.0.1:52138
+2026-09-15T17:50:18.392+0200 [DEBUG] raft: pre-voting for self: term=3 id=node-c
+2026-09-15T17:50:18.392+0200 [DEBUG] raft: calculated votes needed: needed=2 term=3
+2026-09-15T17:50:18.392+0200 [DEBUG] raft: pre-vote received: from=node-c term=3 tally=0
+2026-09-15T17:50:18.392+0200 [DEBUG] raft: pre-vote granted: from=node-c term=3 tally=1
+2026-09-15T17:50:18.412+0200 [DEBUG] raft: received a requestPreVote with a newer term, grant the pre-vote
+2026-09-15T17:50:18.413+0200 [DEBUG] raft: pre-vote received: from=node-b term=3 tally=1
+2026-09-15T17:50:18.413+0200 [DEBUG] raft: pre-vote granted: from=node-b term=3 tally=2
+2026-09-15T17:50:18.413+0200 [INFO]  raft: pre-vote successful, starting election: term=3 tally=2 refused=0 votesNeeded=2
+2026-09-15T17:50:18.413+0200 [DEBUG] raft: asking for vote: term=3 from=node-a address=127.0.0.1:57578
+2026-09-15T17:50:18.413+0200 [DEBUG] raft: asking for vote: term=3 from=node-b address=127.0.0.1:52138
+2026-09-15T17:50:18.413+0200 [DEBUG] raft: voting for self: term=3 id=node-c
+2026-09-15T17:50:18.413+0200 [DEBUG] raft: vote granted: from=node-c term=3 tally=1
+2026-09-15T17:50:18.414+0200 [DEBUG] raft: lost leadership because received a requestVote with a newer term
+2026-09-15T17:50:18.414+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:52138 [Follower]" leader-address= leader-id=
+2026-09-15T17:50:18.415+0200 [DEBUG] raft: vote granted: from=node-b term=3 tally=2
+2026-09-15T17:50:18.415+0200 [INFO]  raft: election won: term=3 tally=2
+2026-09-15T17:50:18.415+0200 [INFO]  raft: entering leader state: leader="Node at 127.0.0.1:44678 [Leader]"
+2026-09-15T17:50:18.415+0200 [INFO]  raft: added peer, starting replication: peer=node-a
+2026-09-15T17:50:18.415+0200 [INFO]  raft: added peer, starting replication: peer=node-b
+2026-09-15T17:50:18.418+0200 [INFO]  raft: pipelining replication: peer="{Voter node-b 127.0.0.1:52138}"
+2026-09-15T17:50:18.418+0200 [INFO]  raft: aborting pipeline replication: peer="{Voter node-b 127.0.0.1:52138}"
+2026-09-15T17:50:20.026+0200 [WARN]  raft: heartbeat timeout reached, starting election: last-leader-addr=127.0.0.1:44678 last-leader-id=node-c
+2026-09-15T17:50:20.026+0200 [INFO]  raft: entering candidate state: node="Node at 127.0.0.1:52138 [Candidate]" term=4
+2026-09-15T17:50:20.026+0200 [DEBUG] raft: asking for pre-vote: term=4 from=node-a address=127.0.0.1:57578
+2026-09-15T17:50:20.026+0200 [DEBUG] raft: pre-voting for self: term=4 id=node-b
+2026-09-15T17:50:20.026+0200 [DEBUG] raft: asking for pre-vote: term=4 from=node-c address=127.0.0.1:44678
+2026-09-15T17:50:20.026+0200 [DEBUG] raft: calculated votes needed: needed=2 term=4
+2026-09-15T17:50:20.026+0200 [DEBUG] raft: pre-vote received: from=node-b term=4 tally=0
+2026-09-15T17:50:20.026+0200 [DEBUG] raft: pre-vote granted: from=node-b term=4 tally=1
+2026-09-15T17:50:21.858+0200 [WARN]  raft: Election timeout reached, restarting election
+2026-09-15T17:50:21.858+0200 [INFO]  raft: entering candidate state: node="Node at 127.0.0.1:52138 [Candidate]" term=4
+2026-09-15T17:50:21.858+0200 [DEBUG] raft: asking for pre-vote: term=4 from=node-a address=127.0.0.1:57578
+2026-09-15T17:50:21.858+0200 [DEBUG] raft: pre-voting for self: term=4 id=node-b
+2026-09-15T17:50:21.858+0200 [DEBUG] raft: asking for pre-vote: term=4 from=node-c address=127.0.0.1:44678
+2026-09-15T17:50:21.858+0200 [DEBUG] raft: calculated votes needed: needed=2 term=4
+2026-09-15T17:50:21.858+0200 [DEBUG] raft: pre-vote received: from=node-b term=4 tally=0
+2026-09-15T17:50:21.858+0200 [DEBUG] raft: pre-vote granted: from=node-b term=4 tally=1
+2026-09-15T17:50:23.108+0200 [ERROR] raft: failed to make requestVote RPC: target="{Voter node-a 127.0.0.1:57578}" error="timeout: no recent network activity" term=3
+2026-09-15T17:50:23.395+0200 [ERROR] raft: failed to make requestVote RPC: target="{Voter node-a 127.0.0.1:57578}" error="timeout: no recent network activity" term=3
+2026-09-15T17:50:23.418+0200 [ERROR] raft: failed to make requestVote RPC: target="{Voter node-a 127.0.0.1:57578}" error="timeout: no recent network activity" term=3
+2026-09-15T17:50:23.420+0200 [ERROR] raft: failed to appendEntries to: peer="{Voter node-a 127.0.0.1:57578}" error="timeout: no recent network activity"
+2026-09-15T17:50:23.475+0200 [WARN]  raft: Election timeout reached, restarting election
+2026-09-15T17:50:23.475+0200 [INFO]  raft: entering candidate state: node="Node at 127.0.0.1:52138 [Candidate]" term=4
+2026-09-15T17:50:23.475+0200 [DEBUG] raft: asking for pre-vote: term=4 from=node-a address=127.0.0.1:57578
+2026-09-15T17:50:23.475+0200 [DEBUG] raft: pre-voting for self: term=4 id=node-b
+2026-09-15T17:50:23.475+0200 [DEBUG] raft: asking for pre-vote: term=4 from=node-c address=127.0.0.1:44678
+2026-09-15T17:50:23.476+0200 [DEBUG] raft: calculated votes needed: needed=2 term=4
+2026-09-15T17:50:23.476+0200 [DEBUG] raft: pre-vote received: from=node-b term=4 tally=0
+2026-09-15T17:50:23.476+0200 [DEBUG] raft: pre-vote granted: from=node-b term=4 tally=1
+2026-09-15T17:50:23.564+0200 [ERROR] raft: failed to heartbeat to: peer=127.0.0.1:57578 backoff time=10ms error="timeout: no recent network activity"
+2026-09-15T17:50:25.029+0200 [ERROR] raft: failed to make requestVote RPC: target="{Voter node-a 127.0.0.1:57578}" error="timeout: no recent network activity" term=4
+2026-09-15T17:50:25.144+0200 [WARN]  raft: Election timeout reached, restarting election
+2026-09-15T17:50:25.144+0200 [INFO]  raft: entering candidate state: node="Node at 127.0.0.1:52138 [Candidate]" term=4
+2026-09-15T17:50:25.144+0200 [DEBUG] raft: asking for pre-vote: term=4 from=node-a address=127.0.0.1:57578
+2026-09-15T17:50:25.145+0200 [DEBUG] raft: pre-voting for self: term=4 id=node-b
+2026-09-15T17:50:25.145+0200 [DEBUG] raft: asking for pre-vote: term=4 from=node-c address=127.0.0.1:44678
+2026-09-15T17:50:25.145+0200 [DEBUG] raft: calculated votes needed: needed=2 term=4
+2026-09-15T17:50:25.145+0200 [DEBUG] raft: pre-vote received: from=node-b term=4 tally=0
+2026-09-15T17:50:25.145+0200 [DEBUG] raft: pre-vote granted: from=node-b term=4 tally=1
+2026-09-15T17:50:26.860+0200 [WARN]  raft: Election timeout reached, restarting election
+2026-09-15T17:50:26.860+0200 [INFO]  raft: entering candidate state: node="Node at 127.0.0.1:52138 [Candidate]" term=4
+2026-09-15T17:50:26.860+0200 [DEBUG] raft: asking for pre-vote: term=4 from=node-a address=127.0.0.1:57578
+2026-09-15T17:50:26.860+0200 [DEBUG] raft: pre-voting for self: term=4 id=node-b
+2026-09-15T17:50:26.860+0200 [DEBUG] raft: asking for pre-vote: term=4 from=node-c address=127.0.0.1:44678
+2026-09-15T17:50:26.860+0200 [DEBUG] raft: calculated votes needed: needed=2 term=4
+2026-09-15T17:50:26.860+0200 [DEBUG] raft: pre-vote received: from=node-b term=4 tally=0
+2026-09-15T17:50:26.860+0200 [DEBUG] raft: pre-vote granted: from=node-b term=4 tally=1
+2026-09-15T17:50:26.862+0200 [ERROR] raft: failed to make requestVote RPC: target="{Voter node-a 127.0.0.1:57578}" error="timeout: no recent network activity" term=4
+2026-09-15T17:50:28.426+0200 [ERROR] raft: failed to appendEntries to: peer="{Voter node-a 127.0.0.1:57578}" error="timeout: no recent network activity"
+2026-09-15T17:50:28.478+0200 [ERROR] raft: failed to make requestVote RPC: target="{Voter node-a 127.0.0.1:57578}" error="timeout: no recent network activity" term=4
+2026-09-15T17:50:28.577+0200 [WARN]  raft: Election timeout reached, restarting election
+2026-09-15T17:50:28.577+0200 [INFO]  raft: entering candidate state: node="Node at 127.0.0.1:52138 [Candidate]" term=4
+2026-09-15T17:50:28.577+0200 [DEBUG] raft: asking for pre-vote: term=4 from=node-a address=127.0.0.1:57578
+2026-09-15T17:50:28.577+0200 [DEBUG] raft: pre-voting for self: term=4 id=node-b
+2026-09-15T17:50:28.578+0200 [DEBUG] raft: asking for pre-vote: term=4 from=node-c address=127.0.0.1:44678
+2026-09-15T17:50:28.578+0200 [DEBUG] raft: calculated votes needed: needed=2 term=4
+2026-09-15T17:50:28.578+0200 [DEBUG] raft: pre-vote received: from=node-b term=4 tally=0
+2026-09-15T17:50:28.578+0200 [DEBUG] raft: pre-vote granted: from=node-b term=4 tally=1
+2026-09-15T17:50:28.772+0200 [ERROR] raft: failed to heartbeat to: peer=127.0.0.1:57578 backoff time=10ms error="timeout: no recent network activity"
+2026-09-15T17:50:28.773+0200 [ERROR] raft-net: failed to decode incoming command: error="transport shutdown"
+2026-09-15T17:50:28.773+0200 [ERROR] raft-net: failed to decode incoming command: error="transport shutdown"
+2026-09-15T17:50:28.773+0200 [ERROR] raft-net: failed to decode incoming command: error="transport shutdown"
+2026-09-15T17:50:28.773+0200 [ERROR] raft-net: failed to decode incoming command: error="transport shutdown"
+2026-09-15T17:50:28.773+0200 [ERROR] raft-net: failed to decode incoming command: error="transport shutdown"
+2026-09-15T17:50:28.773+0200 [ERROR] raft-net: failed to decode incoming command: error="transport shutdown"
+2026-09-15T17:50:28.773+0200 [ERROR] raft: failed to make requestVote RPC: target="{Voter node-c 127.0.0.1:44678}" error=EOF term=4
+2026-09-15T17:50:28.773+0200 [ERROR] raft: failed to make requestVote RPC: target="{Voter node-c 127.0.0.1:44678}" error=EOF term=4
+2026-09-15T17:50:28.773+0200 [ERROR] raft: failed to make requestVote RPC: target="{Voter node-c 127.0.0.1:44678}" error=EOF term=4
+2026-09-15T17:50:28.773+0200 [ERROR] raft: failed to make requestVote RPC: target="{Voter node-c 127.0.0.1:44678}" error=EOF term=4
+2026-09-15T17:50:28.774+0200 [ERROR] raft: failed to make requestVote RPC: target="{Voter node-c 127.0.0.1:44678}" error=EOF term=4
+2026-09-15T17:50:28.774+0200 [ERROR] raft: failed to make requestVote RPC: target="{Voter node-c 127.0.0.1:44678}" error=EOF term=4
+2026-09-15T17:50:30.148+0200 [ERROR] raft: failed to make requestVote RPC: target="{Voter node-a 127.0.0.1:57578}" error="timeout: no recent network activity" term=4
+2026-09-15T17:50:31.863+0200 [ERROR] raft: failed to make requestVote RPC: target="{Voter node-a 127.0.0.1:57578}" error="timeout: no recent network activity" term=4
+2026-09-15T17:50:33.583+0200 [ERROR] raft: failed to make requestVote RPC: target="{Voter node-a 127.0.0.1:57578}" error="timeout: no recent network activity" term=4
+--- PASS: TestJoin_SurvivingFollowerBecomesLeaderAfterOriginalLeaderShutsDown (18.31s)
+=== RUN   TestTransport_TwoNodesExchangeRealRaftRPCOverLoopback
+--- PASS: TestTransport_TwoNodesExchangeRealRaftRPCOverLoopback (0.03s)
+=== RUN   TestTransport_RejectsConnectionFromUntrustedCA
+--- PASS: TestTransport_RejectsConnectionFromUntrustedCA (0.02s)
+PASS
+ok  	github.com/vasic-digital/llmctl/llmctld/internal/raft	38.953s
+=== RUN   TestShouldCheckpoint_TriggersOnTokenIntervalOrTimeInterval
+--- PASS: TestShouldCheckpoint_TriggersOnTokenIntervalOrTimeInterval (0.00s)
+=== RUN   TestShouldCheckpoint_DefaultsWhenZero
+--- PASS: TestShouldCheckpoint_DefaultsWhenZero (0.00s)
+=== RUN   TestCheckpointThenRestore_ReconstructsKVState
+--- PASS: TestCheckpointThenRestore_ReconstructsKVState (0.00s)
+=== RUN   TestRestore_ReplaysWALEntriesAfterCheckpoint
+--- PASS: TestRestore_ReplaysWALEntriesAfterCheckpoint (0.00s)
+=== RUN   TestRestore_IsDeterministic
+--- PASS: TestRestore_IsDeterministic (0.00s)
+=== RUN   TestCheckpoint_TruncatesWALUpToCheckpointSeq
+--- PASS: TestCheckpoint_TruncatesWALUpToCheckpointSeq (0.00s)
+=== RUN   TestRestore_OnFreshStoreWithNoCheckpointReturnsEmptyState
+--- PASS: TestRestore_OnFreshStoreWithNoCheckpointReturnsEmptyState (0.00s)
+=== RUN   TestCheckpoint_FailureDoesNotLoseWAL_NextAttemptIncludesDelta
+--- PASS: TestCheckpoint_FailureDoesNotLoseWAL_NextAttemptIncludesDelta (0.00s)
+=== RUN   TestShouldForceCheckpoint_TriggersWhenWALExceedsConfiguredSize
+--- PASS: TestShouldForceCheckpoint_TriggersWhenWALExceedsConfiguredSize (0.00s)
+=== RUN   TestShouldForceCheckpoint_FalseWhenNoThresholdConfigured
+--- PASS: TestShouldForceCheckpoint_FalseWhenNoThresholdConfigured (0.02s)
+=== RUN   TestOpenEncryptedWAL_CorrectKeyRoundTrips
+--- PASS: TestOpenEncryptedWAL_CorrectKeyRoundTrips (0.00s)
+=== RUN   TestOpenEncryptedWAL_WrongKeyFailsToDecrypt
+--- PASS: TestOpenEncryptedWAL_WrongKeyFailsToDecrypt (0.00s)
+=== RUN   TestOpenEncryptedWAL_RawFileContentDoesNotContainPlaintextTokenID
+--- PASS: TestOpenEncryptedWAL_RawFileContentDoesNotContainPlaintextTokenID (0.00s)
+=== RUN   TestOpenWAL_UnencryptedStillWorks
+--- PASS: TestOpenWAL_UnencryptedStillWorks (0.00s)
+=== RUN   TestOpenEncryptedStore_CheckpointRoundTripsWithCorrectKey
+--- PASS: TestOpenEncryptedStore_CheckpointRoundTripsWithCorrectKey (0.00s)
+=== RUN   TestOpenEncryptedStore_CheckpointUnreadableWithoutCorrectKey
+--- PASS: TestOpenEncryptedStore_CheckpointUnreadableWithoutCorrectKey (0.00s)
+=== RUN   TestReplicateAdapter_WeightsAreByteIdenticalOnReplica
+--- PASS: TestReplicateAdapter_WeightsAreByteIdenticalOnReplica (0.00s)
+=== RUN   TestReplicateAdapter_FailsIfAnySinkFails
+--- PASS: TestReplicateAdapter_FailsIfAnySinkFails (0.00s)
+=== RUN   TestReplicateAdapter_MissingSourceFileFails
+--- PASS: TestReplicateAdapter_MissingSourceFileFails (0.00s)
+=== RUN   TestAppend_ThenReadBack
+--- PASS: TestAppend_ThenReadBack (0.00s)
+=== RUN   TestAppend_PersistsAcrossReopen
+--- PASS: TestAppend_PersistsAcrossReopen (0.00s)
+=== RUN   TestTruncate_RemovesEntriesUpToAndIncludingSeq
+--- PASS: TestTruncate_RemovesEntriesUpToAndIncludingSeq (0.00s)
+=== RUN   TestTruncate_OfEverythingLeavesEmptyWAL
+--- PASS: TestTruncate_OfEverythingLeavesEmptyWAL (0.00s)
+=== RUN   TestReadAll_OnFreshWALReturnsEmpty
+--- PASS: TestReadAll_OnFreshWALReturnsEmpty (0.00s)
+PASS
+ok  	github.com/vasic-digital/llmctl/llmctld/internal/replication	1.103s
+=== RUN   TestDeriveKey_IsDeterministic
+--- PASS: TestDeriveKey_IsDeterministic (0.00s)
+=== RUN   TestDeriveKey_DifferentTenantsGetDifferentKeys
+--- PASS: TestDeriveKey_DifferentTenantsGetDifferentKeys (0.00s)
+=== RUN   TestDeriveKey_DifferentMasterSecretsGetDifferentKeys
+--- PASS: TestDeriveKey_DifferentMasterSecretsGetDifferentKeys (0.00s)
+=== RUN   TestDeriveKey_Is32Bytes
+--- PASS: TestDeriveKey_Is32Bytes (0.00s)
+=== RUN   TestAllowRequest_P99LatencyUnderCeiling
+    quota_bench_test.go:45: AllowRequest p99 latency over 1000 samples: 3.77µs (ceiling 1ms)
+--- PASS: TestAllowRequest_P99LatencyUnderCeiling (0.00s)
+=== RUN   TestAllowRequest_UnlimitedWhenRequestsPerSecondIsZero
+--- PASS: TestAllowRequest_UnlimitedWhenRequestsPerSecondIsZero (0.00s)
+=== RUN   TestAllowRequest_ExceedingRateQuotaReturnsRetryAfter
+--- PASS: TestAllowRequest_ExceedingRateQuotaReturnsRetryAfter (0.00s)
+=== RUN   TestAllowRequest_IsolatedPerTenant
+--- PASS: TestAllowRequest_IsolatedPerTenant (0.00s)
+=== RUN   TestAcquireConcurrencySlot_DeniesBeyondLimit
+--- PASS: TestAcquireConcurrencySlot_DeniesBeyondLimit (0.00s)
+=== RUN   TestAcquireConcurrencySlot_ReleaseFreesSlotForNextAcquisition
+--- PASS: TestAcquireConcurrencySlot_ReleaseFreesSlotForNextAcquisition (0.00s)
+=== RUN   TestAcquireConcurrencySlot_UnlimitedWhenMaxConcurrentRequestsIsZero
+--- PASS: TestAcquireConcurrencySlot_UnlimitedWhenMaxConcurrentRequestsIsZero (0.00s)
+=== RUN   TestCheckResourceBudget_AllowsWithinBudget
+--- PASS: TestCheckResourceBudget_AllowsWithinBudget (0.00s)
+=== RUN   TestCheckResourceBudget_DeniesOverBudgetPerDimensionIndependently
+--- PASS: TestCheckResourceBudget_DeniesOverBudgetPerDimensionIndependently (0.00s)
+=== RUN   TestCheckResourceBudget_UnlimitedWhenCeilingsAreZero
+--- PASS: TestCheckResourceBudget_UnlimitedWhenCeilingsAreZero (0.00s)
+=== RUN   TestRegistry_CreateThenGet
+--- PASS: TestRegistry_CreateThenGet (0.00s)
+=== RUN   TestRegistry_CreateDuplicateIDFails
+--- PASS: TestRegistry_CreateDuplicateIDFails (0.00s)
+=== RUN   TestRegistry_GetMissingReturnsFalse
+--- PASS: TestRegistry_GetMissingReturnsFalse (0.00s)
+=== RUN   TestRegistry_DeleteRemovesTenant
+--- PASS: TestRegistry_DeleteRemovesTenant (0.00s)
+=== RUN   TestRegistry_DeleteMissingFails
+--- PASS: TestRegistry_DeleteMissingFails (0.00s)
+=== RUN   TestNamespaceIsolation_SharedModelVisibleOnlyToGrantedTenant
+--- PASS: TestNamespaceIsolation_SharedModelVisibleOnlyToGrantedTenant (0.00s)
+=== RUN   TestNamespaceIsolation_ShareGrantsOnlyTheNamedModel
+--- PASS: TestNamespaceIsolation_ShareGrantsOnlyTheNamedModel (0.00s)
+=== RUN   TestNamespaceIsolation_ListVisibleModelsIncludesOwnAndShared
+--- PASS: TestNamespaceIsolation_ListVisibleModelsIncludesOwnAndShared (0.00s)
+=== RUN   TestShareModel_UnknownOwnerModelFails
+--- PASS: TestShareModel_UnknownOwnerModelFails (0.00s)
+PASS
+ok  	github.com/vasic-digital/llmctl/llmctld/internal/tenancy	1.033s
+=== RUN   TestClusterBootstrap_ThreeRealProcessesElectLeaderWithin5s
+2026-09-15T17:49:57.148+0200 [INFO]  raft: initial configuration: index=1 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:34580}]"
+2026-09-15T17:49:57.148+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:34580 [Follower]" leader-address= leader-id=
+2026-09-15T17:49:57.157+0200 [INFO]  raft: initial configuration: index=0 servers=[]
+2026-09-15T17:49:57.158+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:45751 [Follower]" leader-address= leader-id=
+2026-09-15T17:49:58.406+0200 [WARN]  raft: heartbeat timeout reached, starting election: last-leader-addr= last-leader-id=
+2026-09-15T17:49:58.406+0200 [INFO]  raft: entering candidate state: node="Node at 127.0.0.1:34580 [Candidate]" term=2
+2026-09-15T17:49:58.406+0200 [DEBUG] raft: pre-voting for self: term=2 id=node-a
+2026-09-15T17:49:58.406+0200 [DEBUG] raft: calculated votes needed: needed=1 term=2
+2026-09-15T17:49:58.406+0200 [DEBUG] raft: pre-vote received: from=node-a term=2 tally=0
+2026-09-15T17:49:58.406+0200 [DEBUG] raft: pre-vote granted: from=node-a term=2 tally=1
+2026-09-15T17:49:58.406+0200 [INFO]  raft: pre-vote successful, starting election: term=2 tally=1 refused=0 votesNeeded=1
+2026-09-15T17:49:58.406+0200 [DEBUG] raft: voting for self: term=2 id=node-a
+2026-09-15T17:49:58.406+0200 [DEBUG] raft: vote granted: from=node-a term=2 tally=1
+2026-09-15T17:49:58.406+0200 [INFO]  raft: election won: term=2 tally=1
+2026-09-15T17:49:58.406+0200 [INFO]  raft: entering leader state: leader="Node at 127.0.0.1:34580 [Leader]"
+2026-09-15T17:49:58.479+0200 [INFO]  raft: updating configuration: command=AddVoter server-id=node-b server-addr=127.0.0.1:45751 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:34580} {Suffrage:Voter ID:node-b Address:127.0.0.1:45751}]"
+2026-09-15T17:49:58.479+0200 [INFO]  raft: added peer, starting replication: peer=node-b
+2026-09-15T17:49:58.484+0200 [WARN]  raft: failed to get previous log: previous-index=3 last-index=0 error="log not found"
+2026-09-15T17:49:58.484+0200 [WARN]  raft: appendEntries rejected, sending older logs: peer="{Voter node-b 127.0.0.1:45751}" next=1
+2026-09-15T17:49:58.485+0200 [INFO]  raft: pipelining replication: peer="{Voter node-b 127.0.0.1:45751}"
+2026-09-15T17:49:58.489+0200 [INFO]  raft: initial configuration: index=0 servers=[]
+2026-09-15T17:49:58.489+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:39008 [Follower]" leader-address= leader-id=
+2026-09-15T17:49:58.493+0200 [INFO]  raft: updating configuration: command=AddVoter server-id=node-c server-addr=127.0.0.1:39008 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:34580} {Suffrage:Voter ID:node-b Address:127.0.0.1:45751} {Suffrage:Voter ID:node-c Address:127.0.0.1:39008}]"
+2026-09-15T17:49:58.494+0200 [INFO]  raft: added peer, starting replication: peer=node-c
+2026-09-15T17:49:58.497+0200 [WARN]  raft: failed to get previous log: previous-index=4 last-index=0 error="log not found"
+2026-09-15T17:49:58.497+0200 [WARN]  raft: appendEntries rejected, sending older logs: peer="{Voter node-c 127.0.0.1:39008}" next=1
+2026-09-15T17:49:58.498+0200 [INFO]  raft: pipelining replication: peer="{Voter node-c 127.0.0.1:39008}"
+    cluster_bootstrap_test.go:298: leader election + full 3-node configuration confirmed within 10.419126ms
+2026-09-15T17:49:58.507+0200 [INFO]  raft: aborting pipeline replication: peer="{Voter node-c 127.0.0.1:39008}"
+2026-09-15T17:49:58.507+0200 [INFO]  raft: aborting pipeline replication: peer="{Voter node-b 127.0.0.1:45751}"
+--- PASS: TestClusterBootstrap_ThreeRealProcessesElectLeaderWithin5s (2.80s)
+=== RUN   TestClusterFailover_KillingLeaderElectsNewRealLeaderAmongSurvivors
+2026-09-15T17:49:59.983+0200 [INFO]  raft: initial configuration: index=1 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:53573}]"
+2026-09-15T17:49:59.984+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:53573 [Follower]" leader-address= leader-id=
+2026-09-15T17:49:59.992+0200 [INFO]  raft: initial configuration: index=0 servers=[]
+2026-09-15T17:49:59.992+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:45712 [Follower]" leader-address= leader-id=
+2026-09-15T17:50:01.605+0200 [WARN]  raft: no known peers, aborting election
+2026-09-15T17:50:01.776+0200 [WARN]  raft: heartbeat timeout reached, starting election: last-leader-addr= last-leader-id=
+2026-09-15T17:50:01.776+0200 [INFO]  raft: entering candidate state: node="Node at 127.0.0.1:53573 [Candidate]" term=2
+2026-09-15T17:50:01.776+0200 [DEBUG] raft: pre-voting for self: term=2 id=node-a
+2026-09-15T17:50:01.776+0200 [DEBUG] raft: calculated votes needed: needed=1 term=2
+2026-09-15T17:50:01.776+0200 [DEBUG] raft: pre-vote received: from=node-a term=2 tally=0
+2026-09-15T17:50:01.776+0200 [DEBUG] raft: pre-vote granted: from=node-a term=2 tally=1
+2026-09-15T17:50:01.776+0200 [INFO]  raft: pre-vote successful, starting election: term=2 tally=1 refused=0 votesNeeded=1
+2026-09-15T17:50:01.776+0200 [DEBUG] raft: voting for self: term=2 id=node-a
+2026-09-15T17:50:01.776+0200 [DEBUG] raft: vote granted: from=node-a term=2 tally=1
+2026-09-15T17:50:01.776+0200 [INFO]  raft: election won: term=2 tally=1
+2026-09-15T17:50:01.776+0200 [INFO]  raft: entering leader state: leader="Node at 127.0.0.1:53573 [Leader]"
+2026-09-15T17:50:01.822+0200 [INFO]  raft: updating configuration: command=AddVoter server-id=node-b server-addr=127.0.0.1:45712 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:53573} {Suffrage:Voter ID:node-b Address:127.0.0.1:45712}]"
+2026-09-15T17:50:01.822+0200 [INFO]  raft: added peer, starting replication: peer=node-b
+2026-09-15T17:50:01.828+0200 [WARN]  raft: failed to get previous log: previous-index=3 last-index=0 error="log not found"
+2026-09-15T17:50:01.828+0200 [WARN]  raft: appendEntries rejected, sending older logs: peer="{Voter node-b 127.0.0.1:45712}" next=1
+2026-09-15T17:50:01.828+0200 [INFO]  raft: pipelining replication: peer="{Voter node-b 127.0.0.1:45712}"
+2026-09-15T17:50:01.834+0200 [INFO]  raft: initial configuration: index=0 servers=[]
+2026-09-15T17:50:01.834+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:58761 [Follower]" leader-address= leader-id=
+2026-09-15T17:50:01.838+0200 [INFO]  raft: updating configuration: command=AddVoter server-id=node-c server-addr=127.0.0.1:58761 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:53573} {Suffrage:Voter ID:node-b Address:127.0.0.1:45712} {Suffrage:Voter ID:node-c Address:127.0.0.1:58761}]"
+2026-09-15T17:50:01.838+0200 [INFO]  raft: added peer, starting replication: peer=node-c
+2026-09-15T17:50:01.842+0200 [WARN]  raft: failed to get previous log: previous-index=4 last-index=0 error="log not found"
+2026-09-15T17:50:01.843+0200 [WARN]  raft: appendEntries rejected, sending older logs: peer="{Voter node-c 127.0.0.1:58761}" next=1
+2026-09-15T17:50:01.843+0200 [INFO]  raft: pipelining replication: peer="{Voter node-c 127.0.0.1:58761}"
+2026-09-15T17:50:03.039+0200 [WARN]  raft: heartbeat timeout reached, starting election: last-leader-addr=127.0.0.1:53573 last-leader-id=node-a
+2026-09-15T17:50:03.039+0200 [INFO]  raft: entering candidate state: node="Node at 127.0.0.1:45712 [Candidate]" term=3
+2026-09-15T17:50:03.039+0200 [DEBUG] raft: asking for pre-vote: term=3 from=node-a address=127.0.0.1:53573
+2026-09-15T17:50:03.039+0200 [DEBUG] raft: pre-voting for self: term=3 id=node-b
+2026-09-15T17:50:03.039+0200 [DEBUG] raft: asking for pre-vote: term=3 from=node-c address=127.0.0.1:58761
+2026-09-15T17:50:03.039+0200 [DEBUG] raft: calculated votes needed: needed=2 term=3
+2026-09-15T17:50:03.039+0200 [DEBUG] raft: pre-vote received: from=node-b term=3 tally=0
+2026-09-15T17:50:03.039+0200 [DEBUG] raft: pre-vote granted: from=node-b term=3 tally=1
+2026-09-15T17:50:03.043+0200 [WARN]  raft: rejecting pre-vote request since we have a leader: from=127.0.0.1:45712 leader=127.0.0.1:53573 leader-id=node-a
+2026-09-15T17:50:03.043+0200 [DEBUG] raft: pre-vote received: from=node-c term=2 tally=1
+2026-09-15T17:50:03.043+0200 [DEBUG] raft: pre-vote denied: from=node-c term=2 tally=1
+2026-09-15T17:50:03.557+0200 [WARN]  raft: heartbeat timeout reached, starting election: last-leader-addr=127.0.0.1:53573 last-leader-id=node-a
+2026-09-15T17:50:03.557+0200 [INFO]  raft: entering candidate state: node="Node at 127.0.0.1:58761 [Candidate]" term=3
+2026-09-15T17:50:03.557+0200 [DEBUG] raft: asking for pre-vote: term=3 from=node-a address=127.0.0.1:53573
+2026-09-15T17:50:03.557+0200 [DEBUG] raft: asking for pre-vote: term=3 from=node-b address=127.0.0.1:45712
+2026-09-15T17:50:03.557+0200 [DEBUG] raft: pre-voting for self: term=3 id=node-c
+2026-09-15T17:50:03.557+0200 [DEBUG] raft: calculated votes needed: needed=2 term=3
+2026-09-15T17:50:03.557+0200 [DEBUG] raft: pre-vote received: from=node-c term=3 tally=0
+2026-09-15T17:50:03.557+0200 [DEBUG] raft: pre-vote granted: from=node-c term=3 tally=1
+2026-09-15T17:50:03.562+0200 [DEBUG] raft: received a requestPreVote with a newer term, grant the pre-vote
+2026-09-15T17:50:03.562+0200 [DEBUG] raft: pre-vote received: from=node-b term=3 tally=1
+2026-09-15T17:50:03.562+0200 [DEBUG] raft: pre-vote granted: from=node-b term=3 tally=2
+2026-09-15T17:50:03.562+0200 [INFO]  raft: pre-vote successful, starting election: term=3 tally=2 refused=0 votesNeeded=2
+2026-09-15T17:50:03.562+0200 [DEBUG] raft: asking for vote: term=3 from=node-a address=127.0.0.1:53573
+2026-09-15T17:50:03.562+0200 [DEBUG] raft: asking for vote: term=3 from=node-b address=127.0.0.1:45712
+2026-09-15T17:50:03.562+0200 [DEBUG] raft: voting for self: term=3 id=node-c
+2026-09-15T17:50:03.562+0200 [DEBUG] raft: vote granted: from=node-c term=3 tally=1
+2026-09-15T17:50:03.563+0200 [DEBUG] raft: lost leadership because received a requestVote with a newer term
+2026-09-15T17:50:03.563+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:45712 [Follower]" leader-address= leader-id=
+2026-09-15T17:50:03.563+0200 [DEBUG] raft: vote granted: from=node-b term=3 tally=2
+2026-09-15T17:50:03.563+0200 [INFO]  raft: election won: term=3 tally=2
+2026-09-15T17:50:03.563+0200 [INFO]  raft: entering leader state: leader="Node at 127.0.0.1:58761 [Leader]"
+2026-09-15T17:50:03.563+0200 [INFO]  raft: added peer, starting replication: peer=node-a
+2026-09-15T17:50:03.563+0200 [INFO]  raft: added peer, starting replication: peer=node-b
+2026-09-15T17:50:03.563+0200 [INFO]  raft: pipelining replication: peer="{Voter node-b 127.0.0.1:45712}"
+    cluster_bootstrap_test.go:394: new real leader "node-c" elected among the survivors within 1.749688793s of node-a's kill
+2026-09-15T17:50:03.617+0200 [INFO]  raft: aborting pipeline replication: peer="{Voter node-b 127.0.0.1:45712}"
+2026-09-15T17:50:08.041+0200 [ERROR] raft: failed to make requestVote RPC: target="{Voter node-a 127.0.0.1:53573}" error="timeout: no recent network activity" term=3
+2026-09-15T17:50:08.560+0200 [ERROR] raft: failed to make requestVote RPC: target="{Voter node-a 127.0.0.1:53573}" error="timeout: no recent network activity" term=3
+2026-09-15T17:50:08.563+0200 [ERROR] raft: failed to make requestVote RPC: target="{Voter node-a 127.0.0.1:53573}" error="timeout: no recent network activity" term=3
+2026-09-15T17:50:08.564+0200 [ERROR] raft: failed to appendEntries to: peer="{Voter node-a 127.0.0.1:53573}" error="timeout: no recent network activity"
+2026-09-15T17:50:08.730+0200 [ERROR] raft: failed to heartbeat to: peer=127.0.0.1:53573 backoff time=10ms error="timeout: no recent network activity"
+--- PASS: TestClusterFailover_KillingLeaderElectsNewRealLeaderAmongSurvivors (10.23s)
+=== RUN   TestFailoverState_KVCacheSurvivesPrimaryKill
+2026-09-15T17:50:10.219+0200 [INFO]  raft: initial configuration: index=1 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:54747}]"
+2026-09-15T17:50:10.219+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:54747 [Follower]" leader-address= leader-id=
+2026-09-15T17:50:10.233+0200 [INFO]  raft: initial configuration: index=0 servers=[]
+2026-09-15T17:50:10.234+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:42332 [Follower]" leader-address= leader-id=
+2026-09-15T17:50:11.532+0200 [WARN]  raft: heartbeat timeout reached, starting election: last-leader-addr= last-leader-id=
+2026-09-15T17:50:11.532+0200 [INFO]  raft: entering candidate state: node="Node at 127.0.0.1:54747 [Candidate]" term=2
+2026-09-15T17:50:11.532+0200 [DEBUG] raft: pre-voting for self: term=2 id=node-a
+2026-09-15T17:50:11.532+0200 [DEBUG] raft: calculated votes needed: needed=1 term=2
+2026-09-15T17:50:11.532+0200 [DEBUG] raft: pre-vote received: from=node-a term=2 tally=0
+2026-09-15T17:50:11.532+0200 [DEBUG] raft: pre-vote granted: from=node-a term=2 tally=1
+2026-09-15T17:50:11.532+0200 [INFO]  raft: pre-vote successful, starting election: term=2 tally=1 refused=0 votesNeeded=1
+2026-09-15T17:50:11.532+0200 [DEBUG] raft: voting for self: term=2 id=node-a
+2026-09-15T17:50:11.532+0200 [DEBUG] raft: vote granted: from=node-a term=2 tally=1
+2026-09-15T17:50:11.532+0200 [INFO]  raft: election won: term=2 tally=1
+2026-09-15T17:50:11.532+0200 [INFO]  raft: entering leader state: leader="Node at 127.0.0.1:54747 [Leader]"
+2026-09-15T17:50:11.557+0200 [INFO]  raft: updating configuration: command=AddVoter server-id=node-b server-addr=127.0.0.1:42332 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:54747} {Suffrage:Voter ID:node-b Address:127.0.0.1:42332}]"
+2026-09-15T17:50:11.557+0200 [INFO]  raft: added peer, starting replication: peer=node-b
+2026-09-15T17:50:11.564+0200 [WARN]  raft: failed to get previous log: previous-index=3 last-index=0 error="log not found"
+2026-09-15T17:50:11.565+0200 [WARN]  raft: appendEntries rejected, sending older logs: peer="{Voter node-b 127.0.0.1:42332}" next=1
+2026-09-15T17:50:11.565+0200 [INFO]  raft: pipelining replication: peer="{Voter node-b 127.0.0.1:42332}"
+2026-09-15T17:50:11.569+0200 [INFO]  raft: initial configuration: index=0 servers=[]
+2026-09-15T17:50:11.570+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:54724 [Follower]" leader-address= leader-id=
+2026-09-15T17:50:11.575+0200 [INFO]  raft: updating configuration: command=AddVoter server-id=node-c server-addr=127.0.0.1:54724 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:54747} {Suffrage:Voter ID:node-b Address:127.0.0.1:42332} {Suffrage:Voter ID:node-c Address:127.0.0.1:54724}]"
+2026-09-15T17:50:11.575+0200 [INFO]  raft: added peer, starting replication: peer=node-c
+2026-09-15T17:50:11.579+0200 [WARN]  raft: failed to get previous log: previous-index=4 last-index=0 error="log not found"
+2026-09-15T17:50:11.579+0200 [WARN]  raft: appendEntries rejected, sending older logs: peer="{Voter node-c 127.0.0.1:54724}" next=1
+2026-09-15T17:50:11.580+0200 [INFO]  raft: pipelining replication: peer="{Voter node-c 127.0.0.1:54724}"
+    failover_state_test.go:205: primary (current Raft leader) is "node-a"
+    failover_state_test.go:248: replicated + checkpointed 5000 simulated tokens to all 3 real nodes in 1.124946945s
+    failover_state_test.go:268: verified all 3 real nodes durably hold the full 5000-token state before the kill
+2026-09-15T17:50:15.239+0200 [WARN]  raft: heartbeat timeout reached, starting election: last-leader-addr=127.0.0.1:54747 last-leader-id=node-a
+2026-09-15T17:50:15.239+0200 [INFO]  raft: entering candidate state: node="Node at 127.0.0.1:54724 [Candidate]" term=3
+2026-09-15T17:50:15.239+0200 [DEBUG] raft: asking for pre-vote: term=3 from=node-a address=127.0.0.1:54747
+2026-09-15T17:50:15.239+0200 [DEBUG] raft: asking for pre-vote: term=3 from=node-b address=127.0.0.1:42332
+2026-09-15T17:50:15.239+0200 [DEBUG] raft: pre-voting for self: term=3 id=node-c
+2026-09-15T17:50:15.239+0200 [DEBUG] raft: calculated votes needed: needed=2 term=3
+2026-09-15T17:50:15.239+0200 [DEBUG] raft: pre-vote received: from=node-c term=3 tally=0
+2026-09-15T17:50:15.239+0200 [DEBUG] raft: pre-vote granted: from=node-c term=3 tally=1
+2026-09-15T17:50:15.243+0200 [WARN]  raft: rejecting pre-vote request since we have a leader: from=127.0.0.1:54724 leader=127.0.0.1:54747 leader-id=node-a
+2026-09-15T17:50:15.243+0200 [DEBUG] raft: pre-vote received: from=node-b term=2 tally=1
+2026-09-15T17:50:15.243+0200 [DEBUG] raft: pre-vote denied: from=node-b term=2 tally=1
+2026-09-15T17:50:15.259+0200 [WARN]  raft: heartbeat timeout reached, starting election: last-leader-addr=127.0.0.1:54747 last-leader-id=node-a
+2026-09-15T17:50:15.259+0200 [INFO]  raft: entering candidate state: node="Node at 127.0.0.1:42332 [Candidate]" term=3
+2026-09-15T17:50:15.259+0200 [DEBUG] raft: asking for pre-vote: term=3 from=node-a address=127.0.0.1:54747
+2026-09-15T17:50:15.259+0200 [DEBUG] raft: pre-voting for self: term=3 id=node-b
+2026-09-15T17:50:15.259+0200 [DEBUG] raft: asking for pre-vote: term=3 from=node-c address=127.0.0.1:54724
+2026-09-15T17:50:15.259+0200 [DEBUG] raft: calculated votes needed: needed=2 term=3
+2026-09-15T17:50:15.259+0200 [DEBUG] raft: pre-vote received: from=node-b term=3 tally=0
+2026-09-15T17:50:15.259+0200 [DEBUG] raft: pre-vote granted: from=node-b term=3 tally=1
+2026-09-15T17:50:15.264+0200 [DEBUG] raft: received a requestPreVote with a newer term, grant the pre-vote
+2026-09-15T17:50:15.264+0200 [DEBUG] raft: pre-vote received: from=node-c term=3 tally=1
+2026-09-15T17:50:15.264+0200 [DEBUG] raft: pre-vote granted: from=node-c term=3 tally=2
+2026-09-15T17:50:15.264+0200 [INFO]  raft: pre-vote successful, starting election: term=3 tally=2 refused=0 votesNeeded=2
+2026-09-15T17:50:15.264+0200 [DEBUG] raft: asking for vote: term=3 from=node-a address=127.0.0.1:54747
+2026-09-15T17:50:15.264+0200 [DEBUG] raft: voting for self: term=3 id=node-b
+2026-09-15T17:50:15.264+0200 [DEBUG] raft: asking for vote: term=3 from=node-c address=127.0.0.1:54724
+2026-09-15T17:50:15.264+0200 [DEBUG] raft: vote granted: from=node-b term=3 tally=1
+2026-09-15T17:50:15.265+0200 [DEBUG] raft: lost leadership because received a requestVote with a newer term
+2026-09-15T17:50:15.265+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:54724 [Follower]" leader-address= leader-id=
+2026-09-15T17:50:15.265+0200 [DEBUG] raft: vote granted: from=node-c term=3 tally=2
+2026-09-15T17:50:15.265+0200 [INFO]  raft: election won: term=3 tally=2
+2026-09-15T17:50:15.265+0200 [INFO]  raft: entering leader state: leader="Node at 127.0.0.1:42332 [Leader]"
+2026-09-15T17:50:15.265+0200 [INFO]  raft: added peer, starting replication: peer=node-a
+2026-09-15T17:50:15.265+0200 [INFO]  raft: added peer, starting replication: peer=node-c
+2026-09-15T17:50:15.265+0200 [INFO]  raft: pipelining replication: peer="{Voter node-c 127.0.0.1:54724}"
+    failover_state_test.go:299: new primary (elected Raft leader) is "node-b", 2.44224637s after killing "node-a"
+    failover_state_test.go:314: new primary "node-b" reports 5000/5000 tokens after failover (0.00% loss), recovery took 2.477023926s
+2026-09-15T17:50:15.312+0200 [INFO]  raft: aborting pipeline replication: peer="{Voter node-c 127.0.0.1:54724}"
+2026-09-15T17:50:20.241+0200 [ERROR] raft: failed to make requestVote RPC: target="{Voter node-a 127.0.0.1:54747}" error="timeout: no recent network activity" term=3
+2026-09-15T17:50:20.261+0200 [ERROR] raft: failed to make requestVote RPC: target="{Voter node-a 127.0.0.1:54747}" error="timeout: no recent network activity" term=3
+2026-09-15T17:50:20.266+0200 [ERROR] raft: failed to make requestVote RPC: target="{Voter node-a 127.0.0.1:54747}" error="timeout: no recent network activity" term=3
+2026-09-15T17:50:20.266+0200 [ERROR] raft: failed to appendEntries to: peer="{Voter node-a 127.0.0.1:54747}" error="timeout: no recent network activity"
+2026-09-15T17:50:20.451+0200 [ERROR] raft: failed to heartbeat to: peer=127.0.0.1:54747 backoff time=10ms error="timeout: no recent network activity"
+--- PASS: TestFailoverState_KVCacheSurvivesPrimaryKill (11.72s)
+=== RUN   TestBootstrapAdminKey_SeedsRealAdminAPIKeyAndIssuesRealJWT
+2026-09-15T17:50:21.910+0200 [INFO]  raft: initial configuration: index=1 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:44773}]"
+2026-09-15T17:50:21.911+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:44773 [Follower]" leader-address= leader-id=
+    multitenancy_isolation_test.go:368: bootstrap admin key id="ec246a08018f66515ffa1793d8154d2f" issued a real JWT that successfully created a real tenant via HTTP
+--- PASS: TestBootstrapAdminKey_SeedsRealAdminAPIKeyAndIssuesRealJWT (1.46s)
+=== RUN   TestMultitenancyIsolation_1000ConcurrentRequestsZeroCrossTenantLeakage
+2026-09-15T17:50:23.405+0200 [INFO]  raft: initial configuration: index=1 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:52229}]"
+2026-09-15T17:50:23.405+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:52229 [Follower]" leader-address= leader-id=
+2026-09-15T17:50:23.416+0200 [INFO]  raft: initial configuration: index=0 servers=[]
+2026-09-15T17:50:23.416+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:49573 [Follower]" leader-address= leader-id=
+2026-09-15T17:50:25.208+0200 [WARN]  raft: no known peers, aborting election
+2026-09-15T17:50:25.295+0200 [WARN]  raft: heartbeat timeout reached, starting election: last-leader-addr= last-leader-id=
+2026-09-15T17:50:25.295+0200 [INFO]  raft: entering candidate state: node="Node at 127.0.0.1:52229 [Candidate]" term=2
+2026-09-15T17:50:25.295+0200 [DEBUG] raft: pre-voting for self: term=2 id=node-a
+2026-09-15T17:50:25.295+0200 [DEBUG] raft: calculated votes needed: needed=1 term=2
+2026-09-15T17:50:25.295+0200 [DEBUG] raft: pre-vote received: from=node-a term=2 tally=0
+2026-09-15T17:50:25.295+0200 [DEBUG] raft: pre-vote granted: from=node-a term=2 tally=1
+2026-09-15T17:50:25.295+0200 [INFO]  raft: pre-vote successful, starting election: term=2 tally=1 refused=0 votesNeeded=1
+2026-09-15T17:50:25.295+0200 [DEBUG] raft: voting for self: term=2 id=node-a
+2026-09-15T17:50:25.295+0200 [DEBUG] raft: vote granted: from=node-a term=2 tally=1
+2026-09-15T17:50:25.295+0200 [INFO]  raft: election won: term=2 tally=1
+2026-09-15T17:50:25.295+0200 [INFO]  raft: entering leader state: leader="Node at 127.0.0.1:52229 [Leader]"
+2026-09-15T17:50:25.346+0200 [INFO]  raft: updating configuration: command=AddVoter server-id=node-b server-addr=127.0.0.1:49573 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:52229} {Suffrage:Voter ID:node-b Address:127.0.0.1:49573}]"
+2026-09-15T17:50:25.346+0200 [INFO]  raft: added peer, starting replication: peer=node-b
+2026-09-15T17:50:25.353+0200 [WARN]  raft: failed to get previous log: previous-index=3 last-index=0 error="log not found"
+2026-09-15T17:50:25.353+0200 [WARN]  raft: appendEntries rejected, sending older logs: peer="{Voter node-b 127.0.0.1:49573}" next=1
+2026-09-15T17:50:25.353+0200 [INFO]  raft: pipelining replication: peer="{Voter node-b 127.0.0.1:49573}"
+2026-09-15T17:50:25.358+0200 [INFO]  raft: initial configuration: index=0 servers=[]
+2026-09-15T17:50:25.358+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:50776 [Follower]" leader-address= leader-id=
+2026-09-15T17:50:25.362+0200 [INFO]  raft: updating configuration: command=AddVoter server-id=node-c server-addr=127.0.0.1:50776 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:52229} {Suffrage:Voter ID:node-b Address:127.0.0.1:49573} {Suffrage:Voter ID:node-c Address:127.0.0.1:50776}]"
+2026-09-15T17:50:25.362+0200 [INFO]  raft: added peer, starting replication: peer=node-c
+2026-09-15T17:50:25.367+0200 [WARN]  raft: failed to get previous log: previous-index=4 last-index=0 error="log not found"
+2026-09-15T17:50:25.367+0200 [WARN]  raft: appendEntries rejected, sending older logs: peer="{Voter node-c 127.0.0.1:50776}" next=1
+2026-09-15T17:50:25.367+0200 [INFO]  raft: pipelining replication: peer="{Voter node-c 127.0.0.1:50776}"
+    multitenancy_isolation_test.go:496: provisioned 3 real tenants, each with 2 registered models, written identically to all 3 real nodes
+    multitenancy_isolation_test.go:512: precondition confirmed: every tenant's own model set is correct on all 3 real nodes before the concurrent phase
+    multitenancy_isolation_test.go:607: concurrent phase complete (1000 requests across 3 real nodes): selfList ok=200 wrong=0 | crossList denied=200 leaked=0 | crossWrite denied=200 leaked=0 | selfVisible ok=200 wrong=0 | crossVisible ok=200 leaked=0
+    multitenancy_isolation_test.go:660: post-condition confirmed: every tenant's real model set on every real node is UNCHANGED after 1000 concurrent requests, including every denied cross-tenant write attempt
+    multitenancy_isolation_test.go:677: node-a's real chained audit log holds 631 entries after this test's real traffic (JWT validation + RBAC + tenant-boundary decisions from setup and the concurrent phase)
+2026-09-15T17:50:25.576+0200 [INFO]  raft: aborting pipeline replication: peer="{Voter node-c 127.0.0.1:50776}"
+2026-09-15T17:50:25.576+0200 [INFO]  raft: aborting pipeline replication: peer="{Voter node-b 127.0.0.1:49573}"
+--- PASS: TestMultitenancyIsolation_1000ConcurrentRequestsZeroCrossTenantLeakage (3.66s)
+PASS
+ok  	github.com/vasic-digital/llmctl/llmctld/test/integration	30.927s

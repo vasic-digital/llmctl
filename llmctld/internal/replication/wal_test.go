@@ -12,7 +12,7 @@ func openTestWAL(t *testing.T) *WAL {
 	if err != nil {
 		t.Fatalf("OpenWAL: %v", err)
 	}
-	t.Cleanup(func() { w.Close() })
+	t.Cleanup(func() { _ = w.Close() })
 	return w
 }
 
@@ -68,7 +68,7 @@ func TestAppend_PersistsAcrossReopen(t *testing.T) {
 	if err != nil {
 		t.Fatalf("re-OpenWAL: %v", err)
 	}
-	defer w2.Close()
+	defer func() { _ = w2.Close() }()
 
 	got, err := w2.ReadAll()
 	if err != nil {

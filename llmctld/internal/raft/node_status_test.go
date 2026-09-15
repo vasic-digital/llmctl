@@ -24,7 +24,7 @@ func TestIsLeader_ReflectsRealRaftState(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Bootstrap: %v", err)
 	}
-	defer node.Shutdown()
+	defer func() { _ = node.Shutdown() }()
 	waitForLeader(t, node, 3*time.Second)
 
 	if !node.IsLeader() {
@@ -48,7 +48,7 @@ func TestServers_ReflectsRealConfigurationAfterJoin(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Bootstrap: %v", err)
 	}
-	defer leader.Shutdown()
+	defer func() { _ = leader.Shutdown() }()
 	waitForLeader(t, leader, 3*time.Second)
 
 	servers, err := leader.Servers()
@@ -67,7 +67,7 @@ func TestServers_ReflectsRealConfigurationAfterJoin(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New(node-b): %v", err)
 	}
-	defer follower.Shutdown()
+	defer func() { _ = follower.Shutdown() }()
 
 	peerAddr := string(follower.transport.LocalAddr())
 	if err := leader.Join("node-b", peerAddr); err != nil {

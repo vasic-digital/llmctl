@@ -228,7 +228,7 @@ func doJSON(t *testing.T, client *http.Client, method, apiAddr, path, bearerToke
 		t.Errorf("%s %s to %s: %v", method, path, apiAddr, err)
 		return -1
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if out != nil {
 		if err := json.NewDecoder(resp.Body).Decode(out); err != nil {

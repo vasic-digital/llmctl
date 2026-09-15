@@ -67,12 +67,12 @@ func RequestJoin(clientTLS *tls.Config, leaderAPIAddr, peerID, peerAddr string) 
 		}
 
 		if resp.StatusCode == http.StatusOK {
-			resp.Body.Close()
+			_ = resp.Body.Close()
 			return nil
 		}
 
 		respBody, _ := io.ReadAll(resp.Body)
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		lastErr = fmt.Errorf("api: RequestJoin: leader at %s returned %d: %s", leaderAPIAddr, resp.StatusCode, respBody)
 
 		if resp.StatusCode != http.StatusConflict || time.Now().After(deadline) {

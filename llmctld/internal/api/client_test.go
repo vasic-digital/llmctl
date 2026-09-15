@@ -27,14 +27,14 @@ func TestRequestJoin_RealCrossProcessJoinOverHTTP3(t *testing.T) {
 	if err != nil {
 		t.Fatalf("raft.Bootstrap(node-a): %v", err)
 	}
-	defer leader.Shutdown()
+	defer func() { _ = leader.Shutdown() }()
 	waitForRealLeader(t, leader, 3*time.Second)
 
 	srv := NewServer(leader, buildTestTLSConfig(t, ca, "node-a-api"))
 	if err := srv.Listen("127.0.0.1:0"); err != nil {
 		t.Fatalf("Listen: %v", err)
 	}
-	defer srv.Close()
+	defer func() { _ = srv.Close() }()
 
 	follower, err := raft.New(raft.Config{
 		NodeID:    "node-b",
@@ -44,7 +44,7 @@ func TestRequestJoin_RealCrossProcessJoinOverHTTP3(t *testing.T) {
 	if err != nil {
 		t.Fatalf("raft.New(node-b): %v", err)
 	}
-	defer follower.Shutdown()
+	defer func() { _ = follower.Shutdown() }()
 
 	if err := RequestJoin(buildTestTLSConfig(t, ca, "node-b-api-client"), srv.Addr, "node-b", follower.Addr()); err != nil {
 		t.Fatalf("RequestJoin: %v", err)
@@ -84,7 +84,7 @@ func TestRequestJoin_RetriesUntilLeaderElectionCompletes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("raft.Bootstrap(node-a): %v", err)
 	}
-	defer leader.Shutdown()
+	defer func() { _ = leader.Shutdown() }()
 	// Deliberately NOT calling waitForRealLeader here - the whole point
 	// of this test is to reproduce the real race where the leader has not
 	// yet elected itself when the join attempt starts.
@@ -93,7 +93,7 @@ func TestRequestJoin_RetriesUntilLeaderElectionCompletes(t *testing.T) {
 	if err := srv.Listen("127.0.0.1:0"); err != nil {
 		t.Fatalf("Listen: %v", err)
 	}
-	defer srv.Close()
+	defer func() { _ = srv.Close() }()
 
 	follower, err := raft.New(raft.Config{
 		NodeID:    "node-b",
@@ -103,7 +103,7 @@ func TestRequestJoin_RetriesUntilLeaderElectionCompletes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("raft.New(node-b): %v", err)
 	}
-	defer follower.Shutdown()
+	defer func() { _ = follower.Shutdown() }()
 
 	start := time.Now()
 	if err := RequestJoin(buildTestTLSConfig(t, ca, "node-b-api-client"), srv.Addr, "node-b", follower.Addr()); err != nil {
@@ -142,14 +142,14 @@ func TestRequestJoin_SurfacesLeaderRefusal(t *testing.T) {
 	if err != nil {
 		t.Fatalf("raft.Bootstrap(node-a): %v", err)
 	}
-	defer leader.Shutdown()
+	defer func() { _ = leader.Shutdown() }()
 	waitForRealLeader(t, leader, 3*time.Second)
 
 	srv := NewServer(leader, buildTestTLSConfig(t, ca, "node-a-api"))
 	if err := srv.Listen("127.0.0.1:0"); err != nil {
 		t.Fatalf("Listen: %v", err)
 	}
-	defer srv.Close()
+	defer func() { _ = srv.Close() }()
 
 	// An empty peerAddr fails joinRequest's "required" binding - real
 	// server-side refusal, not a client-fabricated one.
