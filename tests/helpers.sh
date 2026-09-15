@@ -84,7 +84,14 @@ test_setup_env() {
 }
 
 test_teardown_env() {
-  [[ -n "${TEST_TMP:-}" && -d "${TEST_TMP}" ]] && rm -rf "${TEST_TMP}"
+  # `[[ ... ]] && cmd` as a bare statement returns the condition's own exit
+  # status (1) when false, which - under this file's `set -e` - aborts the
+  # calling script entirely the moment a test skips test_setup_env (TEST_TMP
+  # unset) and calls test_finish directly. Wrapped in `if` so the function
+  # always returns 0 regardless of whether TEST_TMP was ever set.
+  if [[ -n "${TEST_TMP:-}" && -d "${TEST_TMP}" ]]; then
+    rm -rf "${TEST_TMP}"
+  fi
 }
 
 # Finish a test file: exit non-zero when any assertion failed.

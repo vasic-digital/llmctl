@@ -1,0 +1,20 @@
+# Credentials — never versioned (Constitution §11.4.10, §11.4.30)
+.env
+.env.*
+!.env.example
+
+# Go build artifacts / caches (llmctld)
+llmctld/llmctld
+llmctld/bin/
+llmctld/*.test
+
+# Downloaded model weights (verified via sha256 at download time, not versioned)
+/models/*.gguf
+/models/downloads/
+
+# Engine build outputs
+vendor/*/build/
+
+# Release archives written next to the repo by `make archive`
+/*.tar.gz
+/*.zip

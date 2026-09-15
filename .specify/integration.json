@@ -2,14 +2,14 @@
   "version": "1.0.7.dev0",
   "integration_state_schema": 1,
   "installed_integrations": [
-    "opencode"
+    "claude"
   ],
   "integration_settings": {
-    "opencode": {
+    "claude": {
       "script": "sh",
-      "invoke_separator": "."
+      "invoke_separator": "-"
     }
   },
-  "integration": "opencode",
-  "default_integration": "opencode"
+  "integration": "claude",
+  "default_integration": "claude"
 }

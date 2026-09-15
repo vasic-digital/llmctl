@@ -56,7 +56,7 @@ doctor_run() {
 
   # Submodules.
   local m
-  for m in vendor/llama.cpp vendor/colibri; do
+  for m in submodules/llama.cpp submodules/colibri; do
     if [[ -e "${LLMCTL_ROOT}/${m}/.git" ]]; then
       _doc_pass "submodule ${m} initialized ($(git -C "${LLMCTL_ROOT}/${m}" rev-parse --short HEAD 2>/dev/null || echo '?'))"
     else
@@ -104,10 +104,25 @@ doctor_run() {
   esac
 
   # Built engines.
-  if [[ -x "${LLMCTL_ROOT}/vendor/llama.cpp/build/bin/llama-server" ]]; then
+  if [[ -x "${LLMCTL_ROOT}/submodules/llama.cpp/build/bin/llama-server" ]]; then
     _doc_pass "llama-server built"
   else
     _doc_warn "llama-server not built yet (llmctl build llama)"
+  fi
+
+  # Cluster mode (optional): only relevant when the operator enables llmctld.
+  # Never a FAIL for single-host use — these are informational SKIP/WARN only.
+  if have_cmd curl; then
+    if curl --version 2>/dev/null | grep -qiE '(^| )HTTP3( |$)'; then
+      _doc_pass "curl supports HTTP/3 - llmctld client calls can use --http3"
+    else
+      _doc_warn "curl lacks HTTP/3 (Features: $(curl --version 2>/dev/null | awk -F': ' '/^Features/{print $2}')) - llmctl cluster commands will use HTTP/2 against llmctld (llmctld itself always serves both)"
+    fi
+  fi
+  if have_cmd go; then
+    _doc_pass "go toolchain available ($(go version 2>/dev/null | awk '{print $3}')) - can build llmctld from source (make llmctld-build)"
+  else
+    _doc_warn "go not installed - only needed to build the opt-in llmctld cluster daemon; single-host llmctl is unaffected"
   fi
 
   echo

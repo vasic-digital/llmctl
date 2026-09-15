@@ -92,10 +92,29 @@ to `datacenter`.
 * **Budget refusals**: the scheduler never overcommits; it refuses with exact
   numbers and a suggested alternative.
 * **OS-level protection**: systemd units carry `MemoryHigh`/`MemoryMax`
-  computed from probed RAM, `Restart=always`, and unbounded restart attempts
-  (`StartLimitIntervalSec=0`); launchd agents use `KeepAlive` +
-  `ThrottleInterval`.
+  computed from probed RAM, `Restart=always`, and a bounded restart budget
+  (`StartLimitBurst=5` within `StartLimitIntervalSec=60`) so a permanently
+  broken model fails visibly instead of crash-looping forever — `llmctl
+  status` reports it as `failed (crash-loop)` with its last log line;
+  launchd agents use `KeepAlive` + a widened `ThrottleInterval=60` (launchd
+  has no native give-up-after-N-restarts primitive, so this bounds the
+  restart *rate*, not the total attempts).
 * **Local-only**: all servers bind to `127.0.0.1`.
+
+## Credentials
+
+Copy `.env.example` to `.env`, fill in real values, and lock it down:
+
+```bash
+cp .env.example .env
+chmod 600 .env
+```
+
+`.env` is gitignored and never printed or logged (Constitution §11.4.10).
+Single-host usage needs no credentials by default; `HF_TOKEN` is only
+required for gated/private Hugging Face model repos, and the
+`LLMCTLD_*` variables are only read when the opt-in cluster daemon
+(`llmctld`, see `docs/cluster-architecture.md`) is enabled.
 
 ## Development
 
@@ -106,9 +125,33 @@ make validate   # json-check + lint + test
 make archive    # ../llmctl.tar.gz + ../llmctl.zip
 ```
 
-See `docs/validation.md` for the V&V contract, `docs/integrations.md` for
-wiring coding agents (opencode, pi, crush, Claude Code, aider, continue.dev,
-Cline) to the local endpoints, and `docs/architecture.md` for the internals.
+## Documentation
+
+Every doc in this project is reachable from this table (Constitution
+§11.4.212 — no orphan docs). Start with the Quickstart above for the
+fastest path to a running model.
+
+| Doc | What it covers |
+|---|---|
+| [`docs/quickstart.md`](docs/quickstart.md) | Fresh-clone → setup → real model verification; the full release-gating live-challenge procedure for all 7 CLI agents |
+| [`docs/tutorial.md`](docs/tutorial.md) | A narrative first walkthrough: clone → setup → download → start → use with one real CLI agent (aider) |
+| [`docs/user-manual.md`](docs/user-manual.md) | Complete command reference for every `bin/llmctl` subcommand, including the `cluster`/`tenant`/`apikey` stubs |
+| [`docs/faq.md`](docs/faq.md) | Every edge case from the spec, each honestly labeled as current behavior (with source/test citations) or planned-for-a-later-phase |
+| [`docs/integrations.md`](docs/integrations.md) | Per-agent config + install-verify scripts + normalization filters for all 7 CLI agents (opencode, pi, crush, Claude Code, aider, continue.dev, Cline) |
+| [`docs/architecture.md`](docs/architecture.md) | Internals: layout, memory model, scheduler state machine, service backends, port map — with Mermaid diagrams |
+| [`docs/cluster-architecture.md`](docs/cluster-architecture.md) | `llmctld`'s Raft/mTLS/JWT/WAL design, with an explicit ✅ implemented / 📋 planned boundary per diagram |
+| [`docs/api-reference.md`](docs/api-reference.md) | The real llama.cpp/colibri HTTP API every profile serves, plus `llmctld`'s planned (not yet built) cluster API |
+| [`docs/release-process.md`](docs/release-process.md) | The full GitHub+GitLab release procedure: dry-run, submodule preflight, archive build, idempotent per-forge retry |
+| [`docs/hardware-tiers.md`](docs/hardware-tiers.md) | The `below-minimum`/`baseline`/`workstation`/`datacenter` tier classification rules |
+| [`docs/validation.md`](docs/validation.md) | The project's V&V (validation & verification) contract |
+| [`docs/validation_and_verification.md`](docs/validation_and_verification.md) | Why fully-deterministic V&V matters for CLI-agent-driven development |
+| [`docs/CONTINUATION.md`](docs/CONTINUATION.md) | Live session-resumption state: current phase, next action, per-phase findings (Constitution §12.10) |
+| [`docs/commit-fully-integration.md`](docs/commit-fully-integration.md) | The `commit-fully` tooling integration |
+| [`docs/llmctl_plan.md`](docs/llmctl_plan.md) | The original build plan this project was delivered against |
+| [`docs/llmctl_initial_request.md`](docs/llmctl_initial_request.md) | The original project request/scoping exploration |
+| [`docs/llmctl_progress_status.md`](docs/llmctl_progress_status.md) | A point-in-time build-progress snapshot from an earlier session |
+| [`specs/001-llmctl-completion/spec.md`](specs/001-llmctl-completion/spec.md) | The current feature spec (functional requirements, success criteria, clarifications, edge cases) |
+| [`specs/001-llmctl-completion/tasks.md`](specs/001-llmctl-completion/tasks.md) | The phased task breakdown this spec is being executed against |
 
 ## License
 

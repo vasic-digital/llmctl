@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# engine.sh - build llama.cpp and colibri from the pinned vendor/ submodules.
+# engine.sh - build llama.cpp and colibri from the pinned submodules/ git
+# submodules (submodules/llama.cpp, submodules/colibri - see .gitmodules).
 #
 # Backend auto-detection:
 #   * nvcc on PATH            -> GGML_CUDA=ON  (Linux)
@@ -17,8 +18,8 @@ source "${_eng_dir}/common.sh"
 # shellcheck source=os_detect.sh
 source "${_eng_dir}/os_detect.sh"
 
-LLMCTL_LLAMA_SRC="${LLMCTL_ROOT}/vendor/llama.cpp"
-LLMCTL_COLIBRI_SRC="${LLMCTL_ROOT}/vendor/colibri"
+LLMCTL_LLAMA_SRC="${LLMCTL_ROOT}/submodules/llama.cpp"
+LLMCTL_COLIBRI_SRC="${LLMCTL_ROOT}/submodules/colibri"
 
 engine_llama_server_bin() {
   echo "${LLMCTL_LLAMA_SRC}/build/bin/llama-server"
@@ -27,7 +28,7 @@ engine_llama_server_bin() {
 engine_ensure_submodules() {
   need_cmd git
   local missing=0 m
-  for m in vendor/llama.cpp vendor/colibri; do
+  for m in submodules/llama.cpp submodules/colibri; do
     if [[ ! -e "${LLMCTL_ROOT}/${m}/.git" ]]; then
       warn "submodule ${m} not initialized"
       missing=1
@@ -79,6 +80,12 @@ engine_build_llama() {
   esac
 
   local jobs; jobs="$(llmctl_nproc)"
+  if [[ "${LLMCTL_DRY_RUN}" == "1" ]]; then
+    log "[dry-run] cmake -S ${LLMCTL_LLAMA_SRC} -B ${LLMCTL_LLAMA_SRC}/build ${cmake_args[*]}"
+    log "[dry-run] cmake --build ${LLMCTL_LLAMA_SRC}/build --config Release --target llama-server -j ${jobs}"
+    return 0
+  fi
+
   log "configuring llama.cpp (${backend} backend)"
   cmake -S "${LLMCTL_LLAMA_SRC}" -B "${LLMCTL_LLAMA_SRC}/build" "${cmake_args[@]}"
   log "building llama-server with ${jobs} jobs"
@@ -104,6 +111,10 @@ engine_build_colibri() {
 
   local t bin
   for t in "${targets[@]}"; do
+    if [[ "${LLMCTL_DRY_RUN}" == "1" ]]; then
+      log "[dry-run] make -C ${LLMCTL_COLIBRI_SRC}/c ${t}"
+      continue
+    fi
     log "building colibri engine target: ${t}"
     make -C "${LLMCTL_COLIBRI_SRC}/c" "${t}"
     bin="${LLMCTL_COLIBRI_SRC}/c/${t}"
@@ -111,17 +122,22 @@ engine_build_colibri() {
     info "colibri engine built: ${bin}"
   done
 
+  if [[ "${LLMCTL_DRY_RUN}" == "1" ]]; then
+    log "[dry-run] pip install -e ${LLMCTL_COLIBRI_SRC}"
+    return 0
+  fi
+
   # Optional Python launcher (`coli`). Clear skip when pip is unavailable.
   if have_cmd pip3 || have_cmd pip; then
     local pip; pip="$(command -v pip3 || command -v pip)"
-    log "installing colibri Python launcher (pip install -e vendor/colibri)"
+    log "installing colibri Python launcher (pip install -e submodules/colibri)"
     if "${pip}" install -e "${LLMCTL_COLIBRI_SRC}"; then
       info "coli launcher installed"
     else
-      warn "pip install -e vendor/colibri failed; C engines still usable directly"
+      warn "pip install -e submodules/colibri failed; C engines still usable directly"
     fi
   else
-    warn "pip not found - skipping 'coli' launcher install (C engines in vendor/colibri/c are unaffected)"
+    warn "pip not found - skipping 'coli' launcher install (C engines in submodules/colibri/c are unaffected)"
   fi
 }
 

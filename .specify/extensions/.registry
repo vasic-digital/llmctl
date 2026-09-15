@@ -8,7 +8,7 @@
       "enabled": true,
       "priority": 10,
       "registered_commands": {
-        "opencode": [
+        "claude": [
           "speckit.superspec.status",
           "speckit.superspec.brainstorm",
           "speckit.superspec.tasks",
@@ -17,7 +17,7 @@
         ]
       },
       "registered_skills": [],
-      "installed_at": "2026-09-14T16:22:29.499236+00:00"
+      "installed_at": "2026-09-15T08:32:36.725032+00:00"
     }
   }
 }

@@ -26,6 +26,8 @@ source "${LLMCTL_ROOT}/lib/engine.sh"
 source "${LLMCTL_ROOT}/lib/scheduler.sh"
 # shellcheck source=../lib/doctor.sh
 source "${LLMCTL_ROOT}/lib/doctor.sh"
+# shellcheck source=../lib/cluster.sh
+source "${LLMCTL_ROOT}/lib/cluster.sh"
 
 usage() {
   cat <<'EOF'
@@ -68,6 +70,19 @@ PERSISTENT SERVICES (systemd --user on Linux, launchd on macOS)
   disable <profile>           stop + disable autostart
   restart <profile>           restart a service
 
+CLUSTER (opt-in, requires llmctld)
+  cluster join <peer-addr>    join this node to a running cluster
+  cluster leave               leave the cluster
+  cluster status              show cluster/Raft status
+  tenant create <name>        create a tenant namespace
+  tenant list                 list tenants
+  tenant quota <name> [...]   view/set a tenant's quota
+  apikey create <scope>       issue a new API key
+  apikey rotate <key-id>      rotate an existing API key
+                              All cluster commands hard-fail if llmctld is
+                              unreachable - single-host mode never depends on
+                              it and never silently substitutes for it.
+
 MISC
   version                     print version
   help                        this help
@@ -76,6 +91,8 @@ ENVIRONMENT
   LLMCTL_DRY_RUN=1            print service actions instead of executing them
   LLMCTL_FAKE_HW=<file.json>  use a hardware fixture (testing)
   LLMCTL_MODELS_DIR=<dir>     override the model storage directory
+  LLMCTL_CLUSTER_ENDPOINT=<url>  llmctld API endpoint (default https://127.0.0.1:9443)
+  LLMCTL_CLUSTER_TOKEN=<jwt>     bearer token for cluster/tenant/apikey commands
 EOF
 }
 
@@ -173,6 +190,40 @@ main() {
     status)   sched_status ;;
     logs)     [[ "$#" -ge 1 ]] || die "usage: llmctl logs <profile> [lines]"
               sched_load_backend; svc_logs "$@" ;;
+    cluster)
+      local csub="${1:-status}"; [[ "$#" -gt 0 ]] && shift
+      cluster::require_daemon
+      case "${csub}" in
+        join)   [[ "$#" -eq 1 ]] || die "usage: llmctl cluster join <peer-addr>"
+                die "llmctld reachable but 'cluster join' is not yet implemented (Phase 9, US7)" ;;
+        leave)  die "llmctld reachable but 'cluster leave' is not yet implemented (Phase 9, US7)" ;;
+        status) cluster::request GET /v1/cluster/status ;;
+        *)      die "unknown cluster subcommand: ${csub} (join|leave|status)" ;;
+      esac
+      ;;
+    tenant)
+      local tsub="${1:-list}"; [[ "$#" -gt 0 ]] && shift
+      cluster::require_daemon
+      case "${tsub}" in
+        create) [[ "$#" -eq 1 ]] || die "usage: llmctl tenant create <name>"
+                die "llmctld reachable but 'tenant create' is not yet implemented (Phase 11, US9)" ;;
+        list)   die "llmctld reachable but 'tenant list' is not yet implemented (Phase 11, US9)" ;;
+        quota)  [[ "$#" -ge 1 ]] || die "usage: llmctl tenant quota <name> [...]"
+                die "llmctld reachable but 'tenant quota' is not yet implemented (Phase 11, US9)" ;;
+        *)      die "unknown tenant subcommand: ${tsub} (create|list|quota)" ;;
+      esac
+      ;;
+    apikey)
+      local asub="${1:-}"; [[ "$#" -gt 0 ]] && shift
+      cluster::require_daemon
+      case "${asub}" in
+        create) [[ "$#" -eq 1 ]] || die "usage: llmctl apikey create <scope>"
+                die "llmctld reachable but 'apikey create' is not yet implemented (Phase 11, US9)" ;;
+        rotate) [[ "$#" -eq 1 ]] || die "usage: llmctl apikey rotate <key-id>"
+                die "llmctld reachable but 'apikey rotate' is not yet implemented (Phase 11, US9)" ;;
+        *)      die "unknown apikey subcommand: ${asub} (create|rotate)" ;;
+      esac
+      ;;
     version)  echo "llmctl ${LLMCTL_VERSION}" ;;
     help|-h|--help) usage ;;
     *)

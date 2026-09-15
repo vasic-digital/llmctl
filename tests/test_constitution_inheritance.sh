@@ -2,7 +2,7 @@
 # test_constitution_inheritance.sh — Comprehensive inheritance verification
 # Verifies all invariants from Constitution Submodule Setup Agent Step 7 & 9
 
-set -uo pipefail
+set -euo pipefail
 
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CONSTITUTION_DIR="${PROJECT_ROOT}/constitution"
@@ -14,17 +14,26 @@ echo
 
 declare -a FAILURES=()
 
+# NOTE: each of these three helpers always returns 0, deliberately, even on
+# a failed check. The real failure signal is the FAILURES array (read by the
+# final summary), never the function's own exit status - nothing in this
+# script ever consumes it (every call site below is a bare statement, not an
+# `if check_...; then` condition). This is required for `set -e` (added here
+# so this script complies with the project-wide strict-mode convention
+# tests/test_syntax.sh checks for): under `set -e`, a bare statement
+# returning nonzero aborts the WHOLE script immediately, which would make it
+# stop at the FIRST failing invariant instead of collecting and reporting
+# every one - exactly the audit behaviour this script exists to provide.
 check_file_exists() {
     local file="$1"
     local description="$2"
     if [[ -f "${file}" ]]; then
         echo "  ✓ ${description}: ${file}"
-        return 0
     else
         echo "  ✗ ${description}: ${file} (MISSING)"
         FAILURES+=("${description} missing: ${file}")
-        return 1
     fi
+    return 0
 }
 
 check_anchor() {
@@ -33,12 +42,11 @@ check_anchor() {
     local description="$3"
     if [[ -f "${file}" ]] && grep -qF "${anchor}" "${file}"; then
         echo "  ✓ ${description} anchor found in ${file}"
-        return 0
     else
         echo "  ✗ ${description} anchor MISSING in ${file}"
         FAILURES+=("${description} anchor missing in ${file}")
-        return 1
     fi
+    return 0
 }
 
 check_inheritance_pointer() {
@@ -47,12 +55,11 @@ check_inheritance_pointer() {
     local description="$3"
     if [[ -f "${file}" ]] && grep -qF "${pattern}" "${file}"; then
         echo "  ✓ ${description} inheritance pointer found in ${file}"
-        return 0
     else
         echo "  ✗ ${description} inheritance pointer MISSING in ${file}"
         FAILURES+=("${description} inheritance pointer missing in ${file}")
-        return 1
     fi
+    return 0
 }
 
 # Invariant 1: constitution/ directory exists
@@ -172,16 +179,21 @@ done
 # Verify upstream remotes configured
 echo
 echo "Invariant 8: Constitution submodule has 4+ upstream remotes configured"
-cd "${CONSTITUTION_DIR}"
-REMOTE_COUNT=$(git remote | grep -v '^origin$' | wc -l)
-ORIGIN_PUSH_COUNT=$(git remote get-url --push --all origin 2>/dev/null | wc -l)
-echo "  Upstream remotes (excluding origin): ${REMOTE_COUNT}"
-echo "  Origin push URLs: ${ORIGIN_PUSH_COUNT}"
-if [[ ${REMOTE_COUNT} -ge 4 ]] && [[ ${ORIGIN_PUSH_COUNT} -ge 4 ]]; then
-    echo "  ✓ At least 4 upstream remotes configured"
+if [[ -d "${CONSTITUTION_DIR}" ]]; then
+    (
+        cd "${CONSTITUTION_DIR}"
+        REMOTE_COUNT=$(git remote | grep -v '^origin$' | wc -l)
+        ORIGIN_PUSH_COUNT=$(git remote get-url --push --all origin 2>/dev/null | wc -l)
+        echo "  Upstream remotes (excluding origin): ${REMOTE_COUNT}"
+        echo "  Origin push URLs: ${ORIGIN_PUSH_COUNT}"
+        [[ ${REMOTE_COUNT} -ge 4 ]] && [[ ${ORIGIN_PUSH_COUNT} -ge 4 ]]
+    ) && echo "  ✓ At least 4 upstream remotes configured" || {
+        echo "  ✗ Insufficient upstream remotes (need 4+, or constitution/ directory missing)"
+        FAILURES+=("Insufficient upstream remotes or constitution/ directory missing")
+    }
 else
-    echo "  ✗ Insufficient upstream remotes (need 4+)"
-    FAILURES+=("Insufficient upstream remotes: ${REMOTE_COUNT} found, need 4+")
+    echo "  ✗ constitution/ directory missing - cannot check upstream remotes"
+    FAILURES+=("Cannot check upstream remotes: constitution/ directory missing")
 fi
 
 # Run the verification harness

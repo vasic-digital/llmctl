@@ -19,10 +19,15 @@ export LLMCTL_FAKE_HW="${LLMCTL_ROOT}/tests/fixtures/hw-baseline.json"
 UNIT="${LLMCTL_UNIT_DIR}/llmctl-llama@.service"
 assert_file_contains "${UNIT}" "Restart=always" "llama unit: Restart=always"
 assert_file_contains "${UNIT}" "RestartSec=5" "llama unit: RestartSec=5"
-assert_file_contains "${UNIT}" "StartLimitIntervalSec=0" "llama unit: StartLimitIntervalSec=0"
-# baseline fixture: total 32768 MiB -> MemoryMax=(32768-4096)=28672M, MemoryHigh=25804M
-assert_file_contains "${UNIT}" "MemoryMax=28672M" "llama unit: MemoryMax from probed RAM"
-assert_file_contains "${UNIT}" "MemoryHigh=25804M" "llama unit: MemoryHigh = 90% of MemoryMax"
+assert_file_contains "${UNIT}" "StartLimitBurst=5" "llama unit: StartLimitBurst=5 (bounded restarts, FR-044)"
+assert_file_contains "${UNIT}" "StartLimitIntervalSec=60" "llama unit: StartLimitIntervalSec=60 (bounded restarts, FR-044)"
+# Operator decision (Phase 6 T035, 2026-09-15): served-model resource limits
+# carry NO artificial ceiling - a served profile gets maximal performance and
+# the full probed hardware, not a percentage/headroom-reduced cap. baseline
+# fixture: total 32768 MiB -> MemoryMax=MemoryHigh=32768M (the full probed
+# total, no subtraction, no throttle zone below the max).
+assert_file_contains "${UNIT}" "MemoryMax=32768M" "llama unit: MemoryMax = full probed RAM, no artificial ceiling"
+assert_file_contains "${UNIT}" "MemoryHigh=32768M" "llama unit: MemoryHigh = MemoryMax (no soft-throttle zone below the max, for maximal performance)"
 assert_file_contains "${UNIT}" "EnvironmentFile=${LLMCTL_SERVICES_DIR}/%i.env" "llama unit: per-profile EnvironmentFile"
 assert_file_contains "${UNIT}" 'ExecStart=${LLMCTL_EXEC} ${LLMCTL_ARGS}' "llama unit: ExecStart from env file"
 assert_file_contains "${UNIT}" "append:${LLMCTL_LOG_DIR}/%i.log" "llama unit: log location"
@@ -35,7 +40,7 @@ assert_file_contains "${CUNIT}" "Description=llmctl colibri inference server" "c
 (
   source "${LLMCTL_ROOT}/lib/common.sh"
   source "${LLMCTL_ROOT}/lib/service_linux.sh"
-  svc_write_env fast llama /opt/llmctl/vendor/llama.cpp/build/bin/llama-server \
+  svc_write_env fast llama /opt/llmctl/submodules/llama.cpp/build/bin/llama-server \
     --model /models/fast/m.gguf --host 127.0.0.1 --port 8080 --ctx-size 8192 \
     --n-gpu-layers 99 --flash-attn auto --parallel 1 --jinja
 )
@@ -58,14 +63,14 @@ assert_contains "${captured}" "[dry-run] systemctl --user start llmctl-llama@fas
 captured="$(
   source "${LLMCTL_ROOT}/lib/common.sh"
   source "${LLMCTL_ROOT}/lib/service_macos.sh"
-  svc_write_env fast llama /opt/llmctl/vendor/llama.cpp/build/bin/llama-server \
+  svc_write_env fast llama /opt/llmctl/submodules/llama.cpp/build/bin/llama-server \
     --model /models/fast/m.gguf --host 127.0.0.1 --port 8080
 )"
 PLIST="${LLMCTL_PLIST_DIR}/com.llmctl.fast.plist"
 assert_file_contains "${PLIST}" "<string>com.llmctl.fast</string>" "plist: label"
 assert_file_contains "${PLIST}" "<key>KeepAlive</key>" "plist: KeepAlive"
 assert_file_contains "${PLIST}" "<key>ThrottleInterval</key>" "plist: ThrottleInterval"
-assert_file_contains "${PLIST}" "<integer>5</integer>" "plist: throttle 5s"
+assert_file_contains "${PLIST}" "<integer>60</integer>" "plist: throttle 60s (bounded restart rate, FR-044)"
 assert_file_contains "${PLIST}" "<string>--port</string>" "plist: arg present"
 assert_file_contains "${PLIST}" "<string>8080</string>" "plist: port present"
 assert_file_contains "${PLIST}" "${LLMCTL_LOG_DIR}/fast.log" "plist: log path"

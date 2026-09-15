@@ -38,13 +38,23 @@ svc_install() {
   ensure_dir "${unit_dir}"
   ensure_state_dirs
 
-  # Memory limits from a live probe (fixtures allowed for tests).
+  # Memory limits from a live probe (fixtures allowed for tests). Operator
+  # decision (2026-09-15): served profiles carry NO artificial ceiling below
+  # the physical hardware - maximal performance and resources, not a
+  # percentage/headroom-reduced cap. MemoryMax is set to the FULL probed
+  # total RAM (not total-minus-headroom, not a 60%-style fraction), and
+  # MemoryHigh equals MemoryMax so there is no soft-throttle zone below it.
+  # The directives themselves stay present (satisfying the OS-level
+  # protection half of FR-015/Constitution §12.6 - a hard cgroup ceiling at
+  # the machine's own physical limit still contains a runaway profile to a
+  # clean, cgroup-level OOM-kill of just that one service rather than an
+  # uncontrolled whole-host kernel OOM event) - only the ARTIFICIAL
+  # reduction below that hardware ceiling is removed.
   local total memmax memhigh
   total="$(hw_probe_json | json_stdin 'd["memory"]["total_mb"]')" \
     || die "cannot probe memory for service limits"
-  memmax=$(( total - 4096 ))
-  (( memmax > 0 )) || memmax=$(( total * 9 / 10 ))
-  memhigh=$(( memmax * 9 / 10 ))
+  memmax="${total}"
+  memhigh="${total}"
 
   cat > "${unit_dir}/llmctl-llama@.service" <<EOF
 [Unit]
@@ -58,7 +68,8 @@ EnvironmentFile=${LLMCTL_SERVICES_DIR}/%i.env
 ExecStart=\${LLMCTL_EXEC} \${LLMCTL_ARGS}
 Restart=always
 RestartSec=5
-StartLimitIntervalSec=0
+StartLimitBurst=5
+StartLimitIntervalSec=60
 MemoryHigh=${memhigh}M
 MemoryMax=${memmax}M
 StandardOutput=append:${LLMCTL_LOG_DIR}/%i.log
@@ -80,7 +91,8 @@ EnvironmentFile=${LLMCTL_SERVICES_DIR}/%i.env
 ExecStart=\${LLMCTL_EXEC} \${LLMCTL_ARGS}
 Restart=always
 RestartSec=5
-StartLimitIntervalSec=0
+StartLimitBurst=5
+StartLimitIntervalSec=60
 MemoryHigh=${memhigh}M
 MemoryMax=${memmax}M
 StandardOutput=append:${LLMCTL_LOG_DIR}/%i.log
@@ -177,6 +189,23 @@ svc_is_active() {
     return
   fi
   systemctl --user is-active --quiet "$(_svc_unit_for "${profile}")"
+}
+
+# svc_is_failed <profile> - true once the unit has exceeded its restart
+# bound (StartLimitBurst within StartLimitIntervalSec, see svc_install) and
+# systemd has given up restarting it (Restart=always never fires again until
+# `systemctl --user reset-failed`). This is the crash-loop signal FR-044
+# expects `llmctl status` to surface.
+svc_is_failed() {
+  local profile="$1"
+  if [[ "${LLMCTL_DRY_RUN}" == "1" ]]; then
+    # Dry-run marker file, same testability convention as svc_is_active's
+    # dry-run branch above (no real systemd session needed to test the
+    # status-reporting logic that consumes this).
+    [[ -f "${LLMCTL_RUNTIME_DIR}/${profile}.failed" ]]
+    return
+  fi
+  systemctl --user is-failed --quiet "$(_svc_unit_for "${profile}")"
 }
 
 # Profiles with an env file (i.e. known to llmctl).

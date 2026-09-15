@@ -1,0 +1,4 @@
+[2026-09-15T12:00:00Z] session 550e8400-e29b-41d4-a716-446655440000 started
+OK
+wrote /tmp/agent-9f8e7d6c-run1/output.diff
+(1234 tokens, 3.2s)

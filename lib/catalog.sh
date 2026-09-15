@@ -80,10 +80,25 @@ catalog_total_size_mb() {
 }
 
 # --- Tier classification ----------------------------------------------------
-# Exposed as its own function so tests can pin the rules.
+# Exposed as its own function so tests can pin the rules, AND so
+# catalog_plan_json (below) has a single source of truth for the thresholds
+# instead of a hand-duplicated copy. Uses a real python script (not
+# json_stdin's eval()-based helper, which can only evaluate a single
+# expression and cannot run this function's if/elif/else - that mismatch
+# is exactly why this function was previously unwired: calling it raised a
+# SyntaxError, discovered via Constitution §11.4.124 investigation).
 catalog_classify_tier() {
-  # reads hardware JSON on stdin
-  json_stdin '
+  # reads hardware JSON on stdin. MUST use `python3 -c '<script>'` (script as
+  # an argument), NOT `python3 - <<HEREDOC` - a heredoc attached to `python3 -`
+  # redirects stdin to feed the SCRIPT ITSELF to the interpreter, which
+  # collides with the script's own `json.load(sys.stdin)` (stdin would
+  # already be at EOF by the time the script runs). This was the second bug
+  # found while wiring this function in (the first was the eval()/exec()
+  # mismatch fixed above this function's history).
+  need_cmd python3
+  python3 -c '
+import json, sys
+d = json.load(sys.stdin)
 cores = d["cpu"]["cores"]
 ram = d["memory"]["total_mb"]
 vram = d.get("gpu_total_vram_mb", 0)
@@ -114,9 +129,10 @@ catalog_tier_rank() {
 catalog_plan_json() {
   catalog_check
   need_cmd python3
-  local hw_doc
+  local hw_doc tier
   hw_doc="$(cat)"
-  LLMCTL_HW_DOC="${hw_doc}" python3 - "${LLMCTL_CATALOG}" <<'PYEOF'
+  tier="$(printf '%s' "${hw_doc}" | catalog_classify_tier)"
+  LLMCTL_HW_DOC="${hw_doc}" LLMCTL_TIER="${tier}" python3 - "${LLMCTL_CATALOG}" <<'PYEOF'
 import json, math, os, sys
 
 with open(sys.argv[1], "r", encoding="utf-8") as fh:
@@ -129,15 +145,9 @@ ram_avail = hw["memory"]["available_mb"]
 vram_total = hw.get("gpu_total_vram_mb", 0)
 storage_free = hw["storage"]["free_mb"]
 
-# Tier rules (mirrors catalog_classify_tier).
-if cores >= 32 and ram_total >= 98304 and storage_free >= 409600:
-    tier = "datacenter"
-elif cores >= 24 or ram_total >= 65536 or vram_total >= 20480:
-    tier = "workstation"
-elif cores >= 8 and ram_total >= 32768:
-    tier = "baseline"
-else:
-    tier = "below-minimum"
+# Tier computed by catalog_classify_tier (bash) - the single source of
+# truth for tier thresholds; no longer duplicated here.
+tier = os.environ["LLMCTL_TIER"]
 tier_rank = {"below-minimum": 0, "baseline": 1, "workstation": 2, "datacenter": 3}
 
 ram_budget = max(0, ram_avail - 4096)          # 4 GiB RAM headroom

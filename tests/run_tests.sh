@@ -22,7 +22,7 @@ for t in "${TESTS_DIR}"/test_*.sh; do
   printf 'TEST: %s\nCMD:  %s\n' "${name}" "${cmd}"
   printf -- '----------------------------------------------------------------------\n'
   out="$(cd "${ROOT}" && bash "${t}" 2>&1)" && rc=0 || rc=$?
-  printf '%s\n' "${out}"
+  printf 'OUTPUT:\n%s\n' "${out}"
   printf 'EXIT: %d\n' "${rc}"
   if [[ "${rc}" -eq 0 ]]; then
     results+=("PASS  ${name}")

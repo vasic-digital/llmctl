@@ -1,0 +1,4 @@
+[2026-09-15T12:03:47Z] session 01234567-89ab-cdef-0123-456789abcdef started
+OK
+wrote /tmp/agent-aabbccdd-run2/output.diff
+(1234 tokens, 3.7s)

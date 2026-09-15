@@ -60,4 +60,23 @@ human="$(plan_for baseline | catalog_plan_human)"
 assert_contains "${human}" "Host tier:   baseline" "human plan header"
 assert_contains "${human}" "Co-residency groups" "human plan groups"
 
+# --- catalog_classify_tier is the SAME tier `catalog_plan_json` computes ------
+# catalog_classify_tier's own doc comment says it is "exposed as its own
+# function so tests can pin the rules" - until now nothing actually called
+# or tested it directly (Constitution §11.4.124 investigate-before-remove:
+# git history is a single squashed "Init." commit with no further trail, so
+# the wiring gap could not be traced further than this; the function's own
+# stated purpose is proof enough that it should be wired in, not deleted).
+# It is now the single source of truth catalog_plan_json calls, closing a
+# real duplication/drift-risk gap (the tier thresholds used to be hand-
+# copied in two places).
+assert_eq "baseline" "$(printf '%s' "$(LLMCTL_FAKE_HW="${LLMCTL_ROOT}/tests/fixtures/hw-baseline.json" hw_probe_json)" | catalog_classify_tier)" \
+  "catalog_classify_tier: baseline fixture"
+assert_eq "datacenter" "$(printf '%s' "$(LLMCTL_FAKE_HW="${LLMCTL_ROOT}/tests/fixtures/hw-workstation.json" hw_probe_json)" | catalog_classify_tier)" \
+  "catalog_classify_tier: workstation fixture (actually computes datacenter, matching catalog_plan_json above)"
+assert_eq "workstation" "$(printf '%s' "$(LLMCTL_FAKE_HW="${LLMCTL_ROOT}/tests/fixtures/hw-apple.json" hw_probe_json)" | catalog_classify_tier)" \
+  "catalog_classify_tier: apple fixture"
+assert_eq "baseline" "$(printf '%s' "$(LLMCTL_FAKE_HW="${LLMCTL_ROOT}/tests/fixtures/hw-constrained.json" hw_probe_json)" | catalog_classify_tier)" \
+  "catalog_classify_tier: constrained fixture (8 cores / 32768 MiB RAM sits exactly at the baseline threshold)"
+
 test_finish

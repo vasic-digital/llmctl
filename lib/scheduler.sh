@@ -49,6 +49,26 @@ sched_rank_for_capability() {
   esac
 }
 
+# --- concurrency ---------------------------------------------------------------
+# scheduler::with_lock <command> [args...]
+# Runs <command> under an exclusive advisory lock on the scheduler state
+# directory, so two concurrent llmctl invocations (e.g. a cron job and an
+# interactive user) never interleave their read-budgets-then-write-reservation
+# sequence. A second invocation BLOCKS until the first releases the lock,
+# then runs against fresh state - it never proceeds on a stale read (FR-043).
+scheduler::with_lock() {
+  ensure_dir "${LLMCTL_RUNTIME_DIR}"
+  local lock_file="${LLMCTL_RUNTIME_DIR}/.scheduler.lock"
+  local lock_fd
+  exec {lock_fd}>"${lock_file}"
+  flock -x "${lock_fd}"
+  local rc=0
+  "$@" || rc=$?
+  flock -u "${lock_fd}"
+  exec {lock_fd}>&-
+  return "${rc}"
+}
+
 # --- reservation records ------------------------------------------------------
 _sched_run_file() { echo "${LLMCTL_RUNTIME_DIR}/$1.run"; }
 
@@ -99,7 +119,7 @@ sched_build_launch() {
   case "${engine}" in
     llama)
       local bin model="" mmproj="" name role
-      bin="${LLMCTL_LLAMA_SERVER:-${LLMCTL_ROOT}/vendor/llama.cpp/build/bin/llama-server}"
+      bin="${LLMCTL_LLAMA_SERVER:-${LLMCTL_ROOT}/submodules/llama.cpp/build/bin/llama-server}"
       while IFS='|' read -r name _ _ role; do
         case "${role}" in
           mmproj) mmproj="${LLMCTL_MODELS_DIR}/${profile}/${name}" ;;
@@ -114,6 +134,13 @@ sched_build_launch() {
                   --ctx-size "${ctx}" --n-gpu-layers "${ngl}"
                   --flash-attn "${fa}" --parallel "${parallel}" --jinja)
       [[ -n "${mmproj}" && -f "${mmproj}" ]] && SCHED_ARGS+=(--mmproj "${mmproj}")
+      # Deterministic live-challenge mode (spec.md FR-012/SC-008): opt-in via
+      # LLMCTL_SEED, not baked into every default launch - an always-on fixed
+      # seed would make every interactive coding-assistant session
+      # identically non-creative, which FR-012 does not ask for (it scopes
+      # determinism to "live challenges", the release-gating procedure in
+      # docs/quickstart.md, not everyday interactive use).
+      [[ -n "${LLMCTL_SEED:-}" ]] && SCHED_ARGS+=(--seed "${LLMCTL_SEED}" --temp 0)
       SCHED_EXEC="${bin}"
       ;;
     colibri)
@@ -129,9 +156,21 @@ sched_build_launch() {
 }
 
 # --- core operations ----------------------------------------------------------
-# sched_start <profile...> - returns non-zero (with a clear message) when the
-# combined footprint does not fit.
-sched_start() {
+# Public entry points acquire the scheduler lock exactly once each and
+# delegate to an unlocked _impl. sched_auto's _impl calls _sched_start_impl
+# directly (never the public, locking sched_start) so its eviction-then-start
+# sequence runs as ONE atomic locked unit instead of two separate acquisitions
+# with a gap between them - and so nested acquisition (which would deadlock
+# flock against itself) never happens.
+sched_start() { scheduler::with_lock _sched_start_impl "$@"; }
+sched_stop()  { scheduler::with_lock _sched_stop_impl "$@"; }
+sched_auto()  { scheduler::with_lock _sched_auto_impl "$@"; }
+
+# _sched_start_impl <profile...> - returns non-zero (with a clear message)
+# when the combined footprint does not fit. Call sched_start (above) from
+# outside this file; this unlocked form exists so sched_auto can compose it
+# under a single lock acquisition.
+_sched_start_impl() {
   [[ "$#" -ge 1 ]] || die "usage: llmctl start <profile> [more...]"
   sched_load_backend
   ensure_state_dirs
@@ -198,7 +237,7 @@ sched_start() {
   rm -f "${plan_file}"
 }
 
-sched_stop() {
+_sched_stop_impl() {
   sched_load_backend
   local -a targets=()
   if [[ "${1:-}" == "all" || "$#" -eq 0 ]]; then
@@ -221,8 +260,10 @@ sched_switch() {
   sched_start "${profile}"
 }
 
-# sched_auto <capability...>
-sched_auto() {
+# _sched_auto_impl <capability...> - call sched_auto (above) from outside
+# this file; this unlocked form exists so the eviction loop and the final
+# start happen under one lock acquisition instead of two.
+_sched_auto_impl() {
   [[ "$#" -ge 1 ]] || die "usage: llmctl auto <chat|coder|vision> [...]"
   sched_load_backend
   ensure_state_dirs
@@ -295,18 +336,22 @@ sched_auto() {
   done
 
   rm -f "${plan_file}"
-  sched_start "${want[@]}"
+  _sched_start_impl "${want[@]}"
 }
 
-# Human-readable status of running services.
+# Human-readable status of running services. Surfaces a crash-looped
+# profile (restart limit exceeded, systemd/launchd gave up) as
+# "failed (crash-loop)" with its last log line, rather than silently
+# showing it as just another row (FR-044, Clarification 14).
 sched_status() {
+  sched_load_backend
   local running; running="$(sched_running)"
   if [[ -z "${running}" ]]; then
     echo "no llmctl services running"
     return 0
   fi
-  printf '%-16s %-6s %-8s %-10s %-10s %s\n' "profile" "port" "mode" "RAM MiB" "VRAM MiB" "enabled"
-  local f p port mode ram vram en
+  printf '%-16s %-6s %-8s %-10s %-10s %-8s %s\n' "profile" "port" "mode" "RAM MiB" "VRAM MiB" "enabled" "state"
+  local f p port mode ram vram en state
   for f in "${LLMCTL_RUNTIME_DIR}"/*.run; do
     [[ -e "${f}" ]] || continue
     p="$(basename "${f}" .run)"
@@ -315,6 +360,14 @@ sched_status() {
     ram="$(sed -n 's/^ram_mb=//p' "${f}")"
     vram="$(sed -n 's/^vram_mb=//p' "${f}")"
     sched_is_enabled "${p}" && en="yes" || en="no"
-    printf '%-16s %-6s %-8s %-10s %-10s %s\n' "${p}" "${port}" "${mode}" "${ram}" "${vram}" "${en}"
+    if svc_is_failed "${p}" 2>/dev/null; then
+      state="failed (crash-loop)"
+    else
+      state="running"
+    fi
+    printf '%-16s %-6s %-8s %-10s %-10s %-8s %s\n' "${p}" "${port}" "${mode}" "${ram}" "${vram}" "${en}" "${state}"
+    if [[ "${state}" == "failed (crash-loop)" ]]; then
+      printf '  last log line: %s\n' "$(tail -n 1 "${LLMCTL_LOG_DIR}/${p}.log" 2>/dev/null || echo "(no log)")"
+    fi
   done
 }

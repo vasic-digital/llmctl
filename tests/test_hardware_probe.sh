@@ -36,13 +36,19 @@ assert_eq "AMD Ryzen 7 2700X Eight-Core Processor" "${model}" "fake probe return
 vram="$(printf '%s' "${fake}" | json_stdin 'd["gpu_total_vram_mb"]')"
 assert_eq 12288 "${vram}" "fake probe returns fixture VRAM"
 
-# 4. Broken overrides fail loudly (subshells contain die()'s exit).
+# 4. Broken overrides fail loudly (subshells contain die()'s exit), and fail
+#    for the RIGHT reason - captured, not discarded to /dev/null, so a
+#    regression that crashes for some unrelated cause could never pass this
+#    silently (Constitution §11.4/§11.4.1: an rc-only check does not prove
+#    the failure is the one this test claims to exercise).
 rc=0
-( LLMCTL_FAKE_HW="/nonexistent.json" hw_probe_json ) >/dev/null 2>&1 || rc=$?
+errout="$( ( LLMCTL_FAKE_HW="/nonexistent.json" hw_probe_json ) 2>&1 1>/dev/null )" || rc=$?
 assert_eq 1 "${rc}" "missing fixture file -> probe fails"
+assert_contains "${errout}" "LLMCTL_FAKE_HW is set but unreadable" "missing fixture file fails for the real stated reason"
 echo '{"not": "closed"' > "${TEST_TMP}/broken.json"
 rc=0
-( LLMCTL_FAKE_HW="${TEST_TMP}/broken.json" hw_probe_json ) >/dev/null 2>&1 || rc=$?
+errout="$( ( LLMCTL_FAKE_HW="${TEST_TMP}/broken.json" hw_probe_json ) 2>&1 1>/dev/null )" || rc=$?
 assert_eq 1 "${rc}" "invalid fixture JSON -> probe fails"
+assert_contains "${errout}" "LLMCTL_FAKE_HW fixture is not valid JSON" "invalid fixture JSON fails for the real stated reason"
 
 test_finish

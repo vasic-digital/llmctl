@@ -1,0 +1,4 @@
+[<TIMESTAMP>] session <UUID> started
+OK
+wrote <TMPPATH>
+(1234 tokens, <DURATION>s)

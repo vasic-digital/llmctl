@@ -23,10 +23,13 @@ assert_contains "${captured}" "unknown command: frobnicate" "unknown command mes
 # missing-arg errors -> exit 1 with usage hint
 captured="$("${LLMCTL}" switch 2>&1)" && rc=0 || rc=$?
 assert_eq 1 "${rc}" "switch without profile exits 1"
+assert_contains "${captured}" "usage: llmctl switch <profile>" "switch without profile names the real usage error"
 captured="$("${LLMCTL}" models download 2>&1)" && rc=0 || rc=$?
 assert_eq 1 "${rc}" "models download without profile exits 1"
+assert_contains "${captured}" "usage: llmctl models download <profile>" "models download without profile names the real usage error"
 captured="$("${LLMCTL}" models frob 2>&1)" && rc=0 || rc=$?
 assert_eq 1 "${rc}" "unknown models subcommand exits 1"
+assert_contains "${captured}" "unknown models subcommand: frob" "unknown models subcommand names the real bad input"
 
 # models list renders all profiles
 captured="$("${LLMCTL}" models list)"

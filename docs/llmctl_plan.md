@@ -11,7 +11,7 @@ Output: verified facts sheet (URLs, flags, model repo IDs, filenames, sizes). FA
 ## Stage 1 — Implementation (coder, foreground, single repo)
 Workdir: /mnt/agents/output/llmctl (git init; commits per milestone).
 Deliverables:
-- `.gitmodules` + submodules `vendor/llama.cpp`, `vendor/colibri` (shallow), `git submodule update --init --recursive` works offline from archive.
+- `.gitmodules` + submodules `submodules/llama.cpp`, `submodules/colibri` (shallow), `git submodule update --init --recursive` works offline from archive. **[Corrected 2026-09-15]**: this plan originally named the path `vendor/llama.cpp`/`vendor/colibri`; the project ultimately placed the real, pinned git submodules under `submodules/` instead (matching `.gitmodules`), and `lib/engine.sh`/`lib/doctor.sh`/`lib/download.sh`/`lib/scheduler.sh` are wired to that path. An earlier, un-pinned, directly-committed copy that had accumulated at `vendor/llama.cpp`/`vendor/colibri` (not a submodule - no `.git` link, different content/version) was removed from git tracking as part of this correction (Phase 3, US1, T017).
 - `lib/`: os_detect.sh (Linux/macOS), hardware.sh (CPU cores/model/flags, RAM, GPU incl. NVIDIA CUDA/AMD ROCm/Apple Metal, VRAM, storage type NVMe/SATA/HDD), catalog.sh, scheduler.sh (VRAM/RAM budget → co-residency set or fallback switching), download.sh (resume + checksum verify + post-download smoke test), systemd.sh (Linux) / launchd.sh (macOS), doctor.sh.
 - `bin/llmctl`: init/setup/build/models/list/plan/start/stop/restart/status/switch/enable/disable/logs/test/doctor.
 - `models/catalog.json`: verified models only, tiered by hardware class (baseline: Ryzen 7 2700X/32GB/RTX3060-12GB; workstation: Threadripper 64-core/32GB VRAM).

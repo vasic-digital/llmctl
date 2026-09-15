@@ -5,7 +5,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/helpers.sh"
 test_setup_env
 
 shopt -s nullglob
-scripts=( "${LLMCTL_ROOT}/bin/llmctl" "${LLMCTL_ROOT}"/lib/*.sh "${LLMCTL_ROOT}"/tests/*.sh )
+scripts=( "${LLMCTL_ROOT}/bin/llmctl" "${LLMCTL_ROOT}"/lib/*.sh "${LLMCTL_ROOT}"/tests/*.sh "${LLMCTL_ROOT}"/docs/integrations/*.sh "${LLMCTL_ROOT}"/scripts/release/*.sh )
 echo "checking ${#scripts[@]} scripts with bash -n"
 for s in "${scripts[@]}"; do
   rc=0

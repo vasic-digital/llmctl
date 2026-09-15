@@ -143,6 +143,21 @@ _dl_download_file() {
   else
     curl -fL --continue-at - --retry 3 --retry-delay 5 -o "${part}" "${url}" || rc=$?
     _dl_log "curl exit: ${rc}"
+    if [[ "${rc}" == "33" ]]; then
+      # curl 33 = "HTTP server does not seem to support byte ranges. Cannot
+      # resume." A pre-existing .part file is a real interrupted-download
+      # remnant, and the server we are talking to right now genuinely cannot
+      # serve a Range request for it - resuming is impossible against THIS
+      # server, not a bug in our .part file. Fall back to a full re-download
+      # from byte 0 rather than hard-failing; curl left the stale .part file
+      # untouched (never corrupted it), so it is safe to discard and restart.
+      warn "server does not support HTTP Range requests; falling back to a full re-download of ${name}"
+      _dl_log "curl exit 33 (no Range support) - discarding stale ${part} and restarting from byte 0"
+      rm -f "${part}"
+      rc=0
+      curl -fL --retry 3 --retry-delay 5 -o "${part}" "${url}" || rc=$?
+      _dl_log "curl exit (full re-download): ${rc}"
+    fi
     [[ "${rc}" == "0" ]] || die "download failed (curl exit ${rc}): ${url}"
     # Verify BEFORE the atomic rename: mismatched content must never land at
     # the final path.
@@ -159,7 +174,7 @@ _dl_llama_server_bin() {
   if [[ -n "${LLMCTL_LLAMA_SERVER:-}" && -x "${LLMCTL_LLAMA_SERVER}" ]]; then
     echo "${LLMCTL_LLAMA_SERVER}"; return 0
   fi
-  local cand="${LLMCTL_ROOT}/vendor/llama.cpp/build/bin/llama-server"
+  local cand="${LLMCTL_ROOT}/submodules/llama.cpp/build/bin/llama-server"
   [[ -x "${cand}" ]] && { echo "${cand}"; return 0; }
   return 1
 }

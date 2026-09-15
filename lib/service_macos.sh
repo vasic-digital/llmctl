@@ -4,6 +4,13 @@
 # Each enabled profile gets ~/Library/LaunchAgents/com.llmctl.<profile>.plist
 # with KeepAlive + ThrottleInterval and append logs under $LLMCTL_LOG_DIR.
 #
+# Crash-loop bounding (FR-044): ThrottleInterval=60 rate-limits restarts to
+# at most once per 60s. Unlike systemd's StartLimitBurst, launchd has NO
+# native "give up after N failures" primitive for a KeepAlive=true job - a
+# permanently-broken model restarts forever here, just slowly. This is an
+# honest platform gap (documented, not silently claimed equivalent to
+# Linux); see svc_is_failed below.
+#
 # LLMCTL_DRY_RUN=1: plist/env files are still written (so their content is
 # testable), but every launchctl invocation is printed instead of executed.
 set -euo pipefail
@@ -84,7 +91,7 @@ PLISTARGS
   <key>KeepAlive</key>
   <true/>
   <key>ThrottleInterval</key>
-  <integer>5</integer>
+  <integer>60</integer>
   <key>RunAtLoad</key>
   <true/>
   <key>StandardOutPath</key>
@@ -143,6 +150,22 @@ svc_is_active() {
     return
   fi
   launchctl print "$(_svc_domain)/$(_svc_label "${profile}")" >/dev/null 2>&1
+}
+
+# svc_is_failed <profile> - see the crash-loop bounding note at the top of
+# this file: launchd has no native equivalent of systemd's "permanently
+# failed after N restarts" state for a KeepAlive=true job, so the real
+# (non-dry-run) case honestly reports false rather than fabricating a
+# signal launchd does not provide. The dry-run branch still supports the
+# marker-file convention so the OS-agnostic status-reporting logic in
+# lib/scheduler.sh is testable the same way on both backends.
+svc_is_failed() {
+  local profile="$1"
+  if [[ "${LLMCTL_DRY_RUN}" == "1" ]]; then
+    [[ -f "${LLMCTL_RUNTIME_DIR}/${profile}.failed" ]]
+    return
+  fi
+  return 1
 }
 
 svc_known_profiles() {
