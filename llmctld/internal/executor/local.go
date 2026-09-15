@@ -65,6 +65,7 @@ package executor
 import (
 	"bytes"
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 )
@@ -81,6 +82,29 @@ type Config struct {
 	// filesystem location that would only work from one specific working
 	// directory.
 	LLMCtlPath string
+
+	// TenantID identifies the tenant this executor's real bin/llmctl
+	// subprocess invocations act on behalf of. When non-empty, every
+	// invocation's subprocess environment carries an additional
+	// LLMCTL_TENANT_ID=<TenantID> entry, which is the real,
+	// already-implemented lib/service_linux.sh tenant-aware instance-keying
+	// mechanism (_svc_instance_key / _svc_ensure_tenant_slice_dropin) - the
+	// real per-tenant cgroup isolation mechanism for this project's
+	// systemd-unit-based service model. A systemd-run wrapper around this
+	// short-lived CLI invocation (as internal/isolation.WrapCommand alone
+	// would produce) cannot isolate the actual long-running model-server
+	// process, since `systemctl --user start` hands the unit off to
+	// systemd's own user manager, which resolves cgroup placement from the
+	// UNIT's own Slice= property - never inherited from the process that
+	// invoked `systemctl --user start` (see
+	// internal/isolation/cgroup.go's WrapCommand doc comment for the full
+	// investigation). LLMCTL_TENANT_ID is therefore the correct and
+	// sufficient signal to pass through: it is the SAME environment
+	// variable lib/service_linux.sh's tenant-aware unit-instance-keying
+	// already reads, real and tested (tests/test_tenant_service_isolation.sh).
+	// Left empty, no LLMCTL_TENANT_ID is set and behavior is byte-identical
+	// to a Config with no tenant awareness at all.
+	TenantID string
 }
 
 // LocalExecutor shells out to the real bin/llmctl on the local node to
@@ -90,6 +114,7 @@ type Config struct {
 // subprocess invocations of the real script.
 type LocalExecutor struct {
 	llmctlPath string
+	tenantID   string
 }
 
 // New returns a LocalExecutor that shells out to cfg.LLMCtlPath (or the
@@ -99,7 +124,7 @@ func New(cfg Config) *LocalExecutor {
 	if path == "" {
 		path = "llmctl"
 	}
-	return &LocalExecutor{llmctlPath: path}
+	return &LocalExecutor{llmctlPath: path, tenantID: cfg.TenantID}
 }
 
 // run invokes the real bin/llmctl with args, inheriting the calling
@@ -113,6 +138,13 @@ func New(cfg Config) *LocalExecutor {
 // the "unknown profile: ..." error bin/llmctl prints to stderr via `err`).
 func (e *LocalExecutor) run(args ...string) (string, error) {
 	cmd := exec.Command(e.llmctlPath, args...)
+	if e.tenantID != "" {
+		// Deliberately append to os.Environ() rather than leaving Cmd.Env
+		// nil: nil would still inherit the parent environment (os/exec's
+		// default), but there would be nowhere to add LLMCTL_TENANT_ID
+		// without first materializing that inherited set explicitly.
+		cmd.Env = append(os.Environ(), "LLMCTL_TENANT_ID="+e.tenantID)
+	}
 	var out bytes.Buffer
 	cmd.Stdout = &out
 	cmd.Stderr = &out

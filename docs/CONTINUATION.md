@@ -1,6 +1,6 @@
 # CONTINUATION
 
-**Revision:** 7
+**Revision:** 8
 **Last modified:** 2026-09-15T00:00:00Z
 
 Per Constitution §12.10: this file reflects the live state of work on the
@@ -28,7 +28,9 @@ breakdown live under `specs/001-llmctl-completion/`:
 
 ## 2. Current phase / immediate next action
 
-**ALL 12 PHASES OF THE `001-llmctl-completion` FEATURE ARE NOW COMPLETE.**
+**ALL 12 PHASES OF THE `001-llmctl-completion` FEATURE ARE COMPLETE, AND ITS
+ONE DISCLOSED FOLLOW-UP ITEM (T072-FU1, per-tenant cgroup isolation wiring)
+IS NOW ALSO CLOSED (2026-09-15) — see §10a below.**
 Phase 12 (Polish & Cross-Cutting Concerns), the final phase, finished all 8
 of its tasks (T076–T083) with zero blocking findings. Combined with Phases
 1–11 already being complete (Phases 1–10 approved at their own checkpoints;
@@ -37,14 +39,19 @@ exploitable defects), **all 89 tasks across all 12 phases are done.** The
 operator directed the agent (mid-Phase-11) to proceed autonomously through
 every remaining phase without pausing for per-phase approval, committing and
 pushing via `commit_fully` along the way — this superseded the default
-mandatory-checkpoint-pause rule for the remainder of the run, and that
-autonomous run is now finished. There is no next phase. The immediate next
-action for a resuming session is: **present the final project state to the
-operator** (this file, plus `specs/001-llmctl-completion/tasks.md` and
-`progress.yml`, are the complete record) and await further instruction —
-e.g. whether to actually cut a real release (see the standing constraint
-below), start a new feature, or address any of the honestly-disclosed
-follow-up items noted in §9/§10 below.
+mandatory-checkpoint-pause rule for the remainder of the run. After the
+89-task plan finished, the operator selected "wire cgroup isolation in" as
+explicitly-scoped follow-up work (via an `AskUserQuestion` clarification,
+since the 12-phase plan itself had nothing left); that follow-up (tracked as
+`T072-FU1` in `tasks.md`/`progress.yml`) is now done on both the bash and Go
+sides — see §10a. There is no next phase and no next follow-up item queued.
+The immediate next action for a resuming session is: **present the final
+project state to the operator** (this file, plus
+`specs/001-llmctl-completion/tasks.md` and `progress.yml`, are the complete
+record) and await further instruction — e.g. whether to actually cut a real
+release (see the standing constraint below), start a new feature, or address
+the one remaining honestly-disclosed boundary noted in §10a
+(`internal/isolation.TenantStateDir` still has no caller on either side).
 
 **Important standing constraint carried forward:** `scripts/release/create_release.sh`
 in NON-dry-run mode creates a real, public, irreversible GitHub+GitLab
@@ -492,7 +499,77 @@ resuming session most needs to know.
 exactly as documented in §7/§8/§9 above** — none has silently changed
 status during Phase 12's polish work. The feature is complete: all 89
 tasks across 12 phases done, zero blocking findings, one disclosed
-non-blocking follow-up item (cgroup wiring) for future work.
+non-blocking follow-up item (cgroup wiring) which was subsequently closed —
+see §10a immediately below.
+
+## 10a. Follow-up: T072-FU1 — per-tenant cgroup isolation wiring (closed 2026-09-15)
+
+This closes the ONE remaining open item §10 named above. Full evidence is
+in `specs/001-llmctl-completion/tasks.md`'s "Follow-up Work" section and
+`progress.yml`'s `follow_up_work` key; this is the resumption-relevant
+summary.
+
+- **Root-cause investigation performed before any code was written**
+  (Constitution §11.4.102): the obvious-looking plan — wrap
+  `internal/executor.LocalExecutor`'s `exec.Command` call in
+  `internal/isolation.WrapCommand`'s `systemd-run --user --scope
+  --slice=...` prefix — was read through `lib/service_linux.sh` in full and
+  confirmed to be a **bluff fix**. `bin/llmctl start <profile>` invokes
+  `systemctl --user start llmctl-<engine>@<profile>.service`, a real
+  systemd template unit whose actual long-running model-server process is
+  spawned and owned by systemd's own user-manager, independent of the
+  short-lived `bin/llmctl` CLI invocation that exits in milliseconds.
+  Wrapping that short-lived invocation in `systemd-run` would isolate
+  nothing of the real process — cgroup placement for a
+  `systemctl --user start`-launched unit resolves from the UNIT's own
+  `Slice=` property, never from the calling process. The correct
+  mechanism, identified before implementing: a per-instance systemd
+  **drop-in file** (`<unit>.service.d/tenant-slice.conf`,
+  `[Service]\nSlice=llmctl-tenant-<id>.slice`).
+- **Bash side** (`lib/service_linux.sh`): added `_svc_validate_tenant_id`
+  (mirrors the Go-side `internal/isolation/cgroup.go` tenant-ID allow-list
+  so both languages diverge as little as possible), `_svc_instance_key`
+  (`<tenant>--<profile>` when `LLMCTL_TENANT_ID` is set, else the bare
+  profile name — byte-identical to prior behavior when untenanted), and
+  `_svc_ensure_tenant_slice_dropin` (idempotent drop-in write +
+  `daemon-reload`, routed through the existing dry-run gate).
+  `svc_write_env`/`_svc_unit_for`/`svc_enable`/`svc_disable`/`svc_start`/
+  `svc_restart`/`svc_logs` all route through the tenant-aware key;
+  `svc_enable` AND `svc_start` (not just the first-install path) both
+  independently ensure the drop-in exists. New
+  `tests/test_tenant_service_isolation.sh`: 15/15 assertions, TDD RED
+  confirmed first. Full bash suite: **22/22 PASS** (was 21 — new file
+  auto-discovered, zero regressions).
+- **Go side** (`internal/executor/local.go`): `Config` gained `TenantID`;
+  `run()` now sets `LLMCTL_TENANT_ID` in the real subprocess environment
+  when non-empty (untenanted behavior unchanged). New test
+  `TestLocalExecutor_Start_WithTenantID_WritesTenantScopedEnvFile` is a
+  genuine real-subprocess proof with no mock anywhere: it never sets
+  `LLMCTL_TENANT_ID` on the test process itself, so the only way it can
+  reach the subprocess is via `LocalExecutor.run()`'s own injection, and it
+  asserts on the real tenant-qualified env file the real bash mechanism
+  either did or didn't write. TDD RED confirmed first (compile-time, then
+  behavioral), GREEN after wiring. **Independent finding, confirmed via a
+  fresh grep audit before writing Go code**: `internal/executor.LocalExecutor`
+  was, and after this task still is, not constructed anywhere in
+  `cmd/llmctld` or any other package — it remains dead code from the
+  daemon's runtime perspective, exactly as T073's own evidence entry
+  already disclosed. Wiring it into a live HTTP/scheduler dispatch path in
+  `cmd/llmctld` is separate, larger scope not claimed done here.
+- **Full verification** (fresh, `go clean -testcache` first): `gofmt -l .`
+  clean, `go vet ./...` clean, `go build ./...` clean,
+  `go test ./... -race` (all 12 packages) zero regressions/zero races,
+  `bash tests/run_tests.sh` **22/22 PASS**.
+- **Honest scope boundary, still open**: `internal/isolation.TenantStateDir`
+  (Clarification 18's per-tenant KV-cache/WAL directory half) remains
+  independently correct and independently tested but has NO caller on
+  either the Go or bash side. Wiring it needs a decision about how a
+  tenant-scoped model-DATA path threads into `bin/llmctl`'s existing
+  `LLMCTL_DATA_DIR`/model-storage conventions — models are plausibly a
+  SHARED resource across tenants (only runtime state needs isolating), and
+  no existing evidence in `lib/*.sh` establishes how that split should
+  work, so this was not invented speculatively. This is the one remaining
+  open item for a resuming session to pick up, if directed to.
 
 ## 11. Binding constraints (unchanged, restated per §12.10)
 

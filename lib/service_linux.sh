@@ -32,6 +32,69 @@ _svc_sys() {
   systemctl --user "$@"
 }
 
+# --- per-tenant isolation (Phase 11 US9, Clarification 18/FR-049) -----------
+# LLMCTL_TENANT_ID: optional. Unset (the default) is the single-host path,
+# completely unchanged from every prior release - _svc_instance_key returns
+# the bare profile name, byte-identical to this file's original behavior.
+#
+# When set, every profile-keyed artifact (env file, unit instance) is
+# TENANT-QUALIFIED (<tenant>--<profile>), so two tenants registering the
+# SAME profile NAME never share an env file, a systemd unit instance, or
+# (via _svc_ensure_tenant_slice_dropin below) a cgroup.
+#
+# Investigated real mechanism (Constitution §11.4.102 - root-caused before
+# implementing, not assumed): internal/isolation/cgroup.go's WrapCommand
+# (T072) prepends `systemd-run --user --scope --slice=...` to an arbitrary
+# COMMAND, which is the correct mechanism for a process llmctld spawns
+# directly. It is NOT the correct mechanism for THIS project's actual
+# service architecture: `bin/llmctl start <profile>` merely invokes
+# `systemctl --user start llmctl-<engine>@<profile>.service`, and systemd
+# then manages that unit as an INDEPENDENT process under its own user
+# manager - the unit's cgroup placement is resolved from the UNIT's own
+# `Slice=` property, never inherited from whatever short-lived process
+# happened to call `systemctl --user start`. Wrapping the CLI invocation
+# in a systemd-run scope would isolate only the CLI call itself (which
+# exits in milliseconds) and would NOT affect where the real, long-running
+# llama-server/colibri process's cgroup lands - a bluff this investigation
+# exists to prevent. The real, working mechanism is a per-instance systemd
+# drop-in setting `Slice=llmctl-tenant-<id>.slice` directly on the unit.
+_svc_validate_tenant_id() {
+  local id="$1"
+  [[ "${id}" =~ ^[A-Za-z0-9_-]+$ ]] || die "invalid LLMCTL_TENANT_ID: '${id}' (must match ^[A-Za-z0-9_-]+\$ - the same allow-list internal/isolation/cgroup.go's Go-side sanitization enforces, T072)"
+}
+
+_svc_instance_key() {
+  local profile="$1"
+  if [[ -n "${LLMCTL_TENANT_ID:-}" ]]; then
+    _svc_validate_tenant_id "${LLMCTL_TENANT_ID}"
+    echo "${LLMCTL_TENANT_ID}--${profile}"
+  else
+    echo "${profile}"
+  fi
+}
+
+# _svc_ensure_tenant_slice_dropin <unit> - idempotently ensures unit's real
+# systemd drop-in carries Slice=llmctl-tenant-<id>.slice. A no-op when
+# LLMCTL_TENANT_ID is unset. Writing the drop-in file is plain filesystem
+# I/O (safe to do for real even under LLMCTL_DRY_RUN=1, exactly like
+# svc_install's own unit-file writes already are) - only the subsequent
+# daemon-reload is dry-run-gated via _svc_sys.
+_svc_ensure_tenant_slice_dropin() {
+  local unit="$1"
+  [[ -n "${LLMCTL_TENANT_ID:-}" ]] || return 0
+  _svc_validate_tenant_id "${LLMCTL_TENANT_ID}"
+  local dropin_dir="$(svc_unit_dir)/${unit}.d"
+  local dropin_file="${dropin_dir}/tenant-slice.conf"
+  local want
+  want="$(printf '[Service]\nSlice=llmctl-tenant-%s.slice\n' "${LLMCTL_TENANT_ID}")"
+  if [[ -f "${dropin_file}" ]] && [[ "$(cat "${dropin_file}")" == "${want}" ]]; then
+    return 0
+  fi
+  ensure_dir "${dropin_dir}"
+  printf '%s' "${want}" > "${dropin_file}"
+  _svc_sys daemon-reload
+}
+
 # --- unit installation -------------------------------------------------------
 svc_install() {
   local unit_dir; unit_dir="$(svc_unit_dir)"
@@ -122,7 +185,8 @@ EOF
 svc_write_env() {
   local profile="$1" engine="$2" exec_bin="$3"; shift 3
   ensure_dir "${LLMCTL_SERVICES_DIR}"
-  local env_file="${LLMCTL_SERVICES_DIR}/${profile}.env"
+  local instance; instance="$(_svc_instance_key "${profile}")"
+  local env_file="${LLMCTL_SERVICES_DIR}/${instance}.env"
   {
     printf 'LLMCTL_PROFILE=%q\n' "${profile}"
     printf 'LLMCTL_ENGINE=%q\n' "${engine}"
@@ -136,16 +200,18 @@ svc_write_env() {
 
 _svc_unit_for() {
   local profile="$1"
+  local instance; instance="$(_svc_instance_key "${profile}")"
   local engine=""
-  [[ -f "${LLMCTL_SERVICES_DIR}/${profile}.env" ]] && \
-    engine="$(sed -n 's/^LLMCTL_ENGINE=//p' "${LLMCTL_SERVICES_DIR}/${profile}.env" | tr -d "'")"
+  [[ -f "${LLMCTL_SERVICES_DIR}/${instance}.env" ]] && \
+    engine="$(sed -n 's/^LLMCTL_ENGINE=//p' "${LLMCTL_SERVICES_DIR}/${instance}.env" | tr -d "'")"
   engine="${engine:-llama}"
-  echo "llmctl-${engine}@${profile}.service"
+  echo "llmctl-${engine}@${instance}.service"
 }
 
 # --- lifecycle ---------------------------------------------------------------
 svc_enable() {
   local unit; unit="$(_svc_unit_for "$1")"
+  _svc_ensure_tenant_slice_dropin "${unit}"
   _svc_sys enable "${unit}"
   _svc_sys start "${unit}"
 }
@@ -154,12 +220,12 @@ svc_disable() {
   local unit; unit="$(_svc_unit_for "$1")"
   _svc_sys stop "${unit}" || true
   _svc_sys disable "${unit}" || true
-  [[ "${LLMCTL_DRY_RUN}" == "1" ]] || rm -f "${LLMCTL_SERVICES_DIR}/$1.env"
+  [[ "${LLMCTL_DRY_RUN}" == "1" ]] || rm -f "${LLMCTL_SERVICES_DIR}/$(_svc_instance_key "$1").env"
 }
 
-svc_start()   { _svc_sys start "$(_svc_unit_for "$1")"; }
+svc_start()   { local unit; unit="$(_svc_unit_for "$1")"; _svc_ensure_tenant_slice_dropin "${unit}"; _svc_sys start "${unit}"; }
 svc_stop()    { _svc_sys stop  "$(_svc_unit_for "$1")"; }
-svc_restart() { _svc_sys restart "$(_svc_unit_for "$1")"; }
+svc_restart() { local unit; unit="$(_svc_unit_for "$1")"; _svc_ensure_tenant_slice_dropin "${unit}"; _svc_sys restart "${unit}"; }
 
 svc_status() {
   local unit; unit="$(_svc_unit_for "$1")"
@@ -172,7 +238,8 @@ svc_status() {
 
 svc_logs() {
   local profile="$1" lines="${2:-100}"
-  local logf="${LLMCTL_LOG_DIR}/${profile}.log"
+  local instance; instance="$(_svc_instance_key "${profile}")"
+  local logf="${LLMCTL_LOG_DIR}/${instance}.log"
   if [[ "${LLMCTL_DRY_RUN}" == "1" ]]; then
     printf '[dry-run] tail -n %s %s\n' "${lines}" "${logf}"
     return 0

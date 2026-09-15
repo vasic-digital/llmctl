@@ -168,6 +168,78 @@ func TestLocalExecutor_Start_UnknownProfile_RealError(t *testing.T) {
 	}
 }
 
+// newDryRunExecutorForTenant is identical to newDryRunExecutor except the
+// returned LocalExecutor is configured with Config.TenantID set - and,
+// critically, LLMCTL_TENANT_ID is deliberately NEVER set via t.Setenv here,
+// so the only way it can reach the real bin/llmctl subprocess is if
+// LocalExecutor's own run() explicitly injects it. That is the exact
+// behavior under test: a real dry-run bin/llmctl subprocess, with the real
+// lib/service_linux.sh tenant-aware instance-keying (_svc_instance_key /
+// _svc_ensure_tenant_slice_dropin) that already exists on the bash side,
+// engaging ONLY because LocalExecutor passed the tenant ID through.
+func newDryRunExecutorForTenant(t *testing.T, tenantID string) (exec *LocalExecutor, servicesDir string) {
+	t.Helper()
+	tmp := t.TempDir()
+
+	stateDir := filepath.Join(tmp, "state")
+	runtimeDir := filepath.Join(stateDir, "run")
+	servicesDir = filepath.Join(stateDir, "services")
+	env := map[string]string{
+		"LLMCTL_STATE_DIR":    stateDir,
+		"LLMCTL_RUNTIME_DIR":  runtimeDir,
+		"LLMCTL_CONFIG_DIR":   filepath.Join(tmp, "config"),
+		"LLMCTL_DATA_DIR":     filepath.Join(tmp, "data"),
+		"LLMCTL_MODELS_DIR":   filepath.Join(tmp, "models"),
+		"LLMCTL_LOG_DIR":      filepath.Join(stateDir, "logs"),
+		"LLMCTL_VERIFY_DIR":   filepath.Join(stateDir, "verify"),
+		"LLMCTL_SERVICES_DIR": servicesDir,
+		"LLMCTL_UNIT_DIR":     filepath.Join(tmp, "systemd-user"),
+		"LLMCTL_PLIST_DIR":    filepath.Join(tmp, "LaunchAgents"),
+		"NO_COLOR":            "1",
+		"LLMCTL_DRY_RUN":      "1",
+		"LLMCTL_FAKE_HW":      llmctlFakeHWFixture(t),
+	}
+	for k, v := range env {
+		t.Setenv(k, v)
+	}
+	if err := os.MkdirAll(runtimeDir, 0o755); err != nil {
+		t.Fatalf("mkdir runtime dir: %v", err)
+	}
+
+	return New(Config{LLMCtlPath: llmctlBinPath(t), TenantID: tenantID}), servicesDir
+}
+
+// TestLocalExecutor_Start_WithTenantID_WritesTenantScopedEnvFile is the
+// real-subprocess proof that LocalExecutor's Config.TenantID actually
+// reaches bin/llmctl's real subprocess environment as LLMCTL_TENANT_ID -
+// closing T072's disclosed gap (WrapCommand alone would only isolate this
+// short-lived CLI invocation, never the long-running systemd-unit-managed
+// server process; see internal/isolation/cgroup.go). The oracle is the
+// REAL lib/service_linux.sh tenant-aware instance-keying mechanism
+// (_svc_instance_key) that already exists on the bash side (see
+// tests/test_tenant_service_isolation.sh): when LLMCTL_TENANT_ID reaches
+// the subprocess, svc_write_env writes to a tenant-qualified env file
+// instead of the bare profile name. This is real-subprocess testing, not a
+// mock: the assertion is on a real file the real bash script actually
+// wrote (or didn't).
+func TestLocalExecutor_Start_WithTenantID_WritesTenantScopedEnvFile(t *testing.T) {
+	e, servicesDir := newDryRunExecutorForTenant(t, "tenant-a")
+
+	if err := e.Start("small"); err != nil {
+		t.Fatalf("Start(small) with Config.TenantID=tenant-a returned an error against the real dry-run subprocess: %v", err)
+	}
+
+	tenantEnvFile := filepath.Join(servicesDir, "tenant-a--small.env")
+	if _, err := os.Stat(tenantEnvFile); err != nil {
+		t.Fatalf("expected tenant-scoped env file %s to exist (proves LLMCTL_TENANT_ID reached the real bin/llmctl subprocess and lib/service_linux.sh's _svc_instance_key engaged); stat error: %v", tenantEnvFile, err)
+	}
+
+	untenantedEnvFile := filepath.Join(servicesDir, "small.env")
+	if _, err := os.Stat(untenantedEnvFile); err == nil {
+		t.Fatalf("bare (untenanted) env file %s unexpectedly exists - tenant scoping did not take effect, the profile fell back to the untenanted path", untenantedEnvFile)
+	}
+}
+
 // TestNew_DefaultsLLMCtlPath confirms Config's LLMCtlPath is optional and
 // falls back to the bare "llmctl" name (PATH-resolved by os/exec at call
 // time), matching how a human operator would invoke it from a shell where
