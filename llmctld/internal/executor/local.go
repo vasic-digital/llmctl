@@ -127,6 +127,24 @@ func New(cfg Config) *LocalExecutor {
 	return &LocalExecutor{llmctlPath: path, tenantID: cfg.TenantID}
 }
 
+// filterOutTenantIDEnv returns a copy of env (in os.Environ()'s
+// "KEY=VALUE" string form) with every entry named LLMCTL_TENANT_ID
+// removed - the mechanism that guarantees run()'s explicitly-untenanted
+// path never lets a stray inherited value pass through to the real
+// bin/llmctl subprocess (see run()'s doc comment for why this matters).
+// Preserves every other entry's exact order and value; never mutates
+// env itself.
+func filterOutTenantIDEnv(env []string) []string {
+	filtered := make([]string, 0, len(env))
+	for _, kv := range env {
+		if strings.HasPrefix(kv, "LLMCTL_TENANT_ID=") {
+			continue
+		}
+		filtered = append(filtered, kv)
+	}
+	return filtered
+}
+
 // WithTenant returns a COPY of e scoped to tenantID - the base
 // executor's llmctlPath is preserved, only the tenant scoping changes.
 // e itself is never mutated: LocalExecutor is a small, immutable-by-
@@ -156,6 +174,17 @@ func (e *LocalExecutor) run(args ...string) (string, error) {
 		// default), but there would be nowhere to add LLMCTL_TENANT_ID
 		// without first materializing that inherited set explicitly.
 		cmd.Env = append(os.Environ(), "LLMCTL_TENANT_ID="+e.tenantID)
+	} else {
+		// Explicitly untenanted MUST mean genuinely untenanted, never
+		// "whatever this process happened to inherit" - an independent
+		// code review flagged that leaving Cmd.Env nil here would let a
+		// stray LLMCTL_TENANT_ID already present in llmctld's OWN
+		// process environment (e.g. leaked from its parent shell/
+		// launcher) silently pass through to the subprocess, breaking
+		// the "untenanted is byte-identical to before" guarantee this
+		// executor's own tests rely on. filterOutTenantIDEnv strips any
+		// such inherited entry before it ever reaches cmd.Env.
+		cmd.Env = filterOutTenantIDEnv(os.Environ())
 	}
 	var out bytes.Buffer
 	cmd.Stdout = &out

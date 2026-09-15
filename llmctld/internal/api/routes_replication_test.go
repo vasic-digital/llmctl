@@ -13,10 +13,137 @@ import (
 	"testing"
 	"time"
 
+	"github.com/vasic-digital/llmctl/llmctld/internal/audit"
+	"github.com/vasic-digital/llmctl/llmctld/internal/auth"
+	"github.com/vasic-digital/llmctl/llmctld/internal/authz"
 	"github.com/vasic-digital/llmctl/llmctld/internal/mtls"
 	"github.com/vasic-digital/llmctl/llmctld/internal/raft"
 	"github.com/vasic-digital/llmctl/llmctld/internal/replication"
+	"github.com/vasic-digital/llmctl/llmctld/internal/tenancy"
 )
+
+// newReplicationTestDecider builds a fresh *authz.Decider for this
+// file's real-process tests, mirroring newDeciderAndEngine's exact
+// construction (routes_tenants_test.go) so both test files' deciders
+// are built identically.
+func newReplicationTestDecider() *authz.Decider {
+	return authz.NewDecider(audit.NewLog(), []byte("test-signing-key"), auth.NewRoleRegistry(), tenancy.NewEnforcer(), tenancy.NewRegistry())
+}
+
+// issueReplicationTestJWT mints a real JWT for tenantID against
+// decider's own signing key - mirrors routes_tenants_test.go's
+// issueTenantJWT exactly (duplicated here rather than shared across
+// files, matching this package's existing per-file helper convention).
+func issueReplicationTestJWT(t *testing.T, decider *authz.Decider, tenantID string) string {
+	t.Helper()
+	token, err := auth.IssueToken(auth.Claims{
+		TenantID: tenantID,
+	}, decider.SigningKey)
+	if err != nil {
+		t.Fatalf("issue jwt for tenant %q: %v", tenantID, err)
+	}
+	return token
+}
+
+// doAuthedReplicationRequest issues a real HTTP request against apiAddr
+// carrying bearerToken (via the standard Authorization: Bearer header)
+// and tenantIDHeaderVal (via X-Tenant-ID, empty means omit the header
+// entirely) - the shared low-level request helper every test below uses
+// so token/tenant-header placement is identical across append/
+// checkpoint/state calls.
+func doAuthedReplicationRequest(t *testing.T, client *http.Client, method, apiAddr, path, bearerToken, tenantIDHeaderVal string, body []byte) *http.Response {
+	t.Helper()
+	var reader *bytes.Reader
+	if body != nil {
+		reader = bytes.NewReader(body)
+	} else {
+		reader = bytes.NewReader(nil)
+	}
+	req, err := http.NewRequest(method, "https://"+apiAddr+path, reader)
+	if err != nil {
+		t.Fatalf("new request %s %s: %v", method, path, err)
+	}
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	if bearerToken != "" {
+		req.Header.Set("Authorization", "Bearer "+bearerToken)
+	}
+	if tenantIDHeaderVal != "" {
+		req.Header.Set(tenantIDHeader, tenantIDHeaderVal)
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("%s %s: %v", method, path, err)
+	}
+	return resp
+}
+
+// TestReplicationRoutes_RequireJWTAndTenantOwnership is the security
+// fix's own proof: before this fix, RegisterReplicationRoutes required
+// NO authentication at all, so any caller reaching this mTLS-gated
+// router could read/append/checkpoint ANY tenant's replicated
+// conversation state simply by setting X-Tenant-ID to whatever it
+// wanted - the exact cross-tenant data-leakage class Clarification 18/
+// FR-049 exists to prevent. This test proves that gap is closed: (1) no
+// bearer token at all is rejected outright; (2) a valid token for
+// tenant-b attempting to address tenant-a's data (via the header) is
+// rejected; (3) a valid token for tenant-a addressing its OWN data
+// succeeds.
+func TestReplicationRoutes_RequireJWTAndTenantOwnership(t *testing.T) {
+	ca, err := mtls.GenerateCA()
+	if err != nil {
+		t.Fatalf("GenerateCA: %v", err)
+	}
+	node, err := raft.Bootstrap(raft.Config{
+		NodeID:    "node-a",
+		BindAddr:  "127.0.0.1:0",
+		TLSConfig: buildTestTLSConfig(t, ca, "node-a"),
+	})
+	if err != nil {
+		t.Fatalf("raft.Bootstrap: %v", err)
+	}
+	defer func() { _ = node.Shutdown() }()
+	waitForRealLeader(t, node, 3*time.Second)
+
+	registry := replication.NewStoreRegistry(t.TempDir(), replication.CheckpointConfig{})
+	defer func() { _ = registry.Close() }()
+	decider := newReplicationTestDecider()
+
+	srv := NewServer(node, buildTestTLSConfig(t, ca, "node-a-api"))
+	RegisterReplicationRoutes(srv.Router(), registry, decider)
+	if err := srv.Listen("127.0.0.1:0"); err != nil {
+		t.Fatalf("Listen: %v", err)
+	}
+	defer func() { _ = srv.Close() }()
+
+	client := newTestClient(buildTestTLSConfig(t, ca, "test-client"))
+
+	// (1) No bearer token at all -> 401.
+	resp := doAuthedReplicationRequest(t, client, http.MethodGet, srv.Addr, "/v1/replication/state", "", "tenant-a", nil)
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("no-token GET /v1/replication/state (X-Tenant-ID: tenant-a): status = %d, want 401", resp.StatusCode)
+	}
+
+	// (2) A valid tenant-b token attempting to address tenant-a's data
+	// via the header -> 403, never 200.
+	tenantBToken := issueReplicationTestJWT(t, decider, "tenant-b")
+	resp2 := doAuthedReplicationRequest(t, client, http.MethodGet, srv.Addr, "/v1/replication/state", tenantBToken, "tenant-a", nil)
+	_ = resp2.Body.Close()
+	if resp2.StatusCode != http.StatusForbidden {
+		t.Fatalf("tenant-b token addressing tenant-a's state: status = %d, want 403 (cross-tenant access must be denied)", resp2.StatusCode)
+	}
+
+	// (3) tenant-a's own token addressing its own data -> 200.
+	tenantAToken := issueReplicationTestJWT(t, decider, "tenant-a")
+	resp3 := doAuthedReplicationRequest(t, client, http.MethodGet, srv.Addr, "/v1/replication/state", tenantAToken, "tenant-a", nil)
+	body3, _ := io.ReadAll(resp3.Body)
+	_ = resp3.Body.Close()
+	if resp3.StatusCode != http.StatusOK {
+		t.Fatalf("tenant-a token addressing its own state: status = %d, want 200, body = %s", resp3.StatusCode, body3)
+	}
+}
 
 // TestReplicationRoutes_AppendCheckpointStateRealHTTP3RoundTrip proves
 // POST /v1/replication/append, POST /v1/replication/checkpoint, and
@@ -45,9 +172,15 @@ func TestReplicationRoutes_AppendCheckpointStateRealHTTP3RoundTrip(t *testing.T)
 
 	registry := replication.NewStoreRegistry(t.TempDir(), replication.CheckpointConfig{})
 	defer func() { _ = registry.Close() }()
+	decider := newReplicationTestDecider()
+	// This test exercises the default (no X-Tenant-ID header) tenant
+	// path, so its token carries an empty TenantID - authorizeTenantOwnership
+	// grants access because claims.TenantID ("") == the resolved tenant
+	// ID (also "").
+	token := issueReplicationTestJWT(t, decider, "")
 
 	srv := NewServer(node, buildTestTLSConfig(t, ca, "node-a-api"))
-	RegisterReplicationRoutes(srv.Router(), registry)
+	RegisterReplicationRoutes(srv.Router(), registry, decider)
 	if err := srv.Listen("127.0.0.1:0"); err != nil {
 		t.Fatalf("Listen: %v", err)
 	}
@@ -75,10 +208,7 @@ func TestReplicationRoutes_AppendCheckpointStateRealHTTP3RoundTrip(t *testing.T)
 	if err != nil {
 		t.Fatalf("marshal append body: %v", err)
 	}
-	resp, err := client.Post("https://"+srv.Addr+"/v1/replication/append", "application/json", bytes.NewReader(appendBody))
-	if err != nil {
-		t.Fatalf("POST /v1/replication/append: %v", err)
-	}
+	resp := doAuthedReplicationRequest(t, client, http.MethodPost, srv.Addr, "/v1/replication/append", token, "", appendBody)
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		_ = resp.Body.Close()
@@ -87,10 +217,7 @@ func TestReplicationRoutes_AppendCheckpointStateRealHTTP3RoundTrip(t *testing.T)
 	_ = resp.Body.Close()
 
 	// GET /v1/replication/state must reflect all 10 appended entries.
-	stateResp, err := client.Get("https://" + srv.Addr + "/v1/replication/state")
-	if err != nil {
-		t.Fatalf("GET /v1/replication/state: %v", err)
-	}
+	stateResp := doAuthedReplicationRequest(t, client, http.MethodGet, srv.Addr, "/v1/replication/state", token, "", nil)
 	var got1 struct {
 		Tokens    []int32 `json:"tokens"`
 		Positions []int32 `json:"positions"`
@@ -121,10 +248,7 @@ func TestReplicationRoutes_AppendCheckpointStateRealHTTP3RoundTrip(t *testing.T)
 	if err != nil {
 		t.Fatalf("marshal checkpoint body: %v", err)
 	}
-	cpResp, err := client.Post("https://"+srv.Addr+"/v1/replication/checkpoint", "application/json", bytes.NewReader(checkpointBody))
-	if err != nil {
-		t.Fatalf("POST /v1/replication/checkpoint: %v", err)
-	}
+	cpResp := doAuthedReplicationRequest(t, client, http.MethodPost, srv.Addr, "/v1/replication/checkpoint", token, "", checkpointBody)
 	if cpResp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(cpResp.Body)
 		_ = cpResp.Body.Close()
@@ -141,10 +265,7 @@ func TestReplicationRoutes_AppendCheckpointStateRealHTTP3RoundTrip(t *testing.T)
 	if err != nil {
 		t.Fatalf("marshal second append body: %v", err)
 	}
-	resp2, err := client.Post("https://"+srv.Addr+"/v1/replication/append", "application/json", bytes.NewReader(appendBody2))
-	if err != nil {
-		t.Fatalf("POST /v1/replication/append (post-checkpoint): %v", err)
-	}
+	resp2 := doAuthedReplicationRequest(t, client, http.MethodPost, srv.Addr, "/v1/replication/append", token, "", appendBody2)
 	if resp2.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp2.Body)
 		_ = resp2.Body.Close()
@@ -152,10 +273,7 @@ func TestReplicationRoutes_AppendCheckpointStateRealHTTP3RoundTrip(t *testing.T)
 	}
 	_ = resp2.Body.Close()
 
-	stateResp2, err := client.Get("https://" + srv.Addr + "/v1/replication/state")
-	if err != nil {
-		t.Fatalf("GET /v1/replication/state (post-checkpoint): %v", err)
-	}
+	stateResp2 := doAuthedReplicationRequest(t, client, http.MethodGet, srv.Addr, "/v1/replication/state", token, "", nil)
 	defer func() { _ = stateResp2.Body.Close() }()
 	var got2 struct {
 		Tokens    []int32 `json:"tokens"`
@@ -200,9 +318,10 @@ func TestReplicationRoutes_DifferentTenantHeaders_AreIsolatedRealHTTP3RoundTrip(
 
 	registry := replication.NewStoreRegistry(t.TempDir(), replication.CheckpointConfig{})
 	defer func() { _ = registry.Close() }()
+	decider := newReplicationTestDecider()
 
 	srv := NewServer(node, buildTestTLSConfig(t, ca, "node-a-api"))
-	RegisterReplicationRoutes(srv.Router(), registry)
+	RegisterReplicationRoutes(srv.Router(), registry, decider)
 	if err := srv.Listen("127.0.0.1:0"); err != nil {
 		t.Fatalf("Listen: %v", err)
 	}
@@ -210,6 +329,13 @@ func TestReplicationRoutes_DifferentTenantHeaders_AreIsolatedRealHTTP3RoundTrip(
 
 	client := newTestClient(buildTestTLSConfig(t, ca, "test-client"))
 
+	// Each tenant authenticates with ITS OWN token, matching the
+	// tenant ID it addresses via X-Tenant-ID - proving isolation holds
+	// under real per-tenant authorization, not merely under one shared,
+	// unauthenticated client identity (the exact gap an independent
+	// review found in this test's own pre-fix form: it previously used
+	// ONE client identity with NO token at all to freely address both
+	// tenants).
 	appendForTenant := func(tenantID string, seq uint64, tokenID int32) {
 		body, err := json.Marshal(map[string]any{
 			"entries": []map[string]any{
@@ -219,18 +345,7 @@ func TestReplicationRoutes_DifferentTenantHeaders_AreIsolatedRealHTTP3RoundTrip(
 		if err != nil {
 			t.Fatalf("marshal append body for tenant %q: %v", tenantID, err)
 		}
-		req, err := http.NewRequest(http.MethodPost, "https://"+srv.Addr+"/v1/replication/append", bytes.NewReader(body))
-		if err != nil {
-			t.Fatalf("new request for tenant %q: %v", tenantID, err)
-		}
-		req.Header.Set("Content-Type", "application/json")
-		if tenantID != "" {
-			req.Header.Set("X-Tenant-ID", tenantID)
-		}
-		resp, err := client.Do(req)
-		if err != nil {
-			t.Fatalf("POST /v1/replication/append for tenant %q: %v", tenantID, err)
-		}
+		resp := doAuthedReplicationRequest(t, client, http.MethodPost, srv.Addr, "/v1/replication/append", issueReplicationTestJWT(t, decider, tenantID), tenantID, body)
 		defer func() { _ = resp.Body.Close() }()
 		if resp.StatusCode != http.StatusOK {
 			respBody, _ := io.ReadAll(resp.Body)
@@ -242,17 +357,7 @@ func TestReplicationRoutes_DifferentTenantHeaders_AreIsolatedRealHTTP3RoundTrip(
 		Tokens    []int32 `json:"tokens"`
 		Positions []int32 `json:"positions"`
 	} {
-		req, err := http.NewRequest(http.MethodGet, "https://"+srv.Addr+"/v1/replication/state", nil)
-		if err != nil {
-			t.Fatalf("new state request for tenant %q: %v", tenantID, err)
-		}
-		if tenantID != "" {
-			req.Header.Set("X-Tenant-ID", tenantID)
-		}
-		resp, err := client.Do(req)
-		if err != nil {
-			t.Fatalf("GET /v1/replication/state for tenant %q: %v", tenantID, err)
-		}
+		resp := doAuthedReplicationRequest(t, client, http.MethodGet, srv.Addr, "/v1/replication/state", issueReplicationTestJWT(t, decider, tenantID), tenantID, nil)
 		defer func() { _ = resp.Body.Close() }()
 		var got struct {
 			Tokens    []int32 `json:"tokens"`

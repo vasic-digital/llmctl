@@ -32,6 +32,7 @@
 package replication
 
 import (
+	"errors"
 	"fmt"
 	"sync"
 
@@ -147,12 +148,16 @@ func (r *StoreRegistry) Close() error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	var firstErr error
+	// errors.Join (not "keep only the first error") so a second or
+	// later tenant's close failure is never silently dropped just
+	// because an earlier one already failed - every failure is visible,
+	// even though every store is still attempted regardless.
+	var errs []error
 	for tenantID, s := range r.stores {
-		if err := s.Close(); err != nil && firstErr == nil {
-			firstErr = fmt.Errorf("replication: closing store for tenant %q: %w", tenantID, err)
+		if err := s.Close(); err != nil {
+			errs = append(errs, fmt.Errorf("replication: closing store for tenant %q: %w", tenantID, err))
 		}
 	}
 	r.stores = make(map[string]*Store)
-	return firstErr
+	return errors.Join(errs...)
 }

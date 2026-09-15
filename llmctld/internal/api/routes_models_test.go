@@ -206,11 +206,12 @@ func TestModelStop_RealDryRunSubprocess(t *testing.T) {
 	}
 }
 
-// TestModelStatus_ModelViewerCanQuery_ButUnauthenticatedCannot proves
-// the status route accepts the weakest real role (model-viewer, per
-// rbac.go's predefinedRoles table) since ActionModelView is read-only,
-// while still requiring SOME valid role.
-func TestModelStatus_ModelViewerCanQuery_ButUnauthenticatedCannot(t *testing.T) {
+// TestModelStatus_ModelViewerCanQuery_ButTenantAdminOnlyAndUnauthenticatedCannot
+// proves the status route accepts the weakest real role (model-viewer,
+// per rbac.go's predefinedRoles table) since ActionModelView is
+// read-only, while still requiring BOTH a valid token at all (RequireJWT)
+// AND that the caller's role specifically grants ActionModelView.
+func TestModelStatus_ModelViewerCanQuery_ButTenantAdminOnlyAndUnauthenticatedCannot(t *testing.T) {
 	engine, decider, _ := newModelRoutesTestEngine(t)
 	registerTenantAndModel(t, engine, decider, "tenant-a", "small")
 
@@ -227,5 +228,16 @@ func TestModelStatus_ModelViewerCanQuery_ButUnauthenticatedCannot(t *testing.T) 
 	rec2 := doJSON(t, engine, http.MethodGet, "/v1/tenants/tenant-a/models/small/status", nil, tenantAdminToken)
 	if rec2.Code != http.StatusForbidden {
 		t.Fatalf("expected 403 for a tenant-admin-only caller (no model action granted), got %d: %s", rec2.Code, rec2.Body.String())
+	}
+
+	// A genuinely unauthenticated request (no Authorization header at
+	// all - doJSON's bearer="" omits it entirely) must be rejected by
+	// RequireJWT itself (401), never reach the RBAC/ownership/visibility
+	// gates at all - closing a real gap an independent review found: the
+	// PRIOR version of this test never actually exercised the
+	// no-token case its own name claimed to.
+	rec3 := doJSON(t, engine, http.MethodGet, "/v1/tenants/tenant-a/models/small/status", nil, "")
+	if rec3.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 for a request with no bearer token at all, got %d: %s", rec3.Code, rec3.Body.String())
 	}
 }

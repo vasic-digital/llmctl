@@ -247,6 +247,49 @@ func TestStoreRegistry_PlaintextRegistry_EmptyTenant_NeverEncrypted(t *testing.T
 	}
 }
 
+// TestNewEncryptedStoreRegistry_EmptyTenant_StaysPlaintext closes a gap
+// an independent code review found: the empty-tenant-stays-plaintext
+// claim was correctly IMPLEMENTED (Get's `tenantID != ""` guard) but
+// never directly TESTED under the ENCRYPTING constructor - the only
+// existing plaintext-default test built via the plain NewStoreRegistry,
+// which could never have caught a future regression narrowing that
+// guard. This test builds via NewEncryptedStoreRegistry specifically,
+// then proves the empty tenant's data is genuinely plaintext the same
+// way TestNewEncryptedStoreRegistry_NonEmptyTenant_DataIsGenuinelyEncrypted
+// proves the OPPOSITE for a real tenant: re-opening the SAME on-disk
+// directory afterward via a bare, keyless OpenStore must SUCCEED (a
+// bare OpenStore on genuinely-encrypted data would fail to Restore, per
+// that sibling test) and see the exact plaintext token written.
+func TestNewEncryptedStoreRegistry_EmptyTenant_StaysPlaintext(t *testing.T) {
+	baseDir := t.TempDir()
+	masterSecret := []byte("test-master-secret-for-empty-tenant-check")
+	reg := NewEncryptedStoreRegistry(baseDir, CheckpointConfig{}, masterSecret)
+
+	store, err := reg.Get("")
+	if err != nil {
+		t.Fatalf("Get(\"\"): %v", err)
+	}
+	if err := store.Checkpoint(1, KVState{Tokens: []int32{42}, Positions: []int32{0}}); err != nil {
+		t.Fatalf("Checkpoint: %v", err)
+	}
+	if err := reg.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	plainStore, err := OpenStore(baseDir, CheckpointConfig{})
+	if err != nil {
+		t.Fatalf("re-open the empty tenant's directory with a bare, keyless OpenStore: %v", err)
+	}
+	defer func() { _ = plainStore.Close() }()
+	got, err := plainStore.Restore()
+	if err != nil {
+		t.Fatalf("bare OpenStore failed to Restore the empty tenant's data under NewEncryptedStoreRegistry - it was NOT genuinely plaintext: %v", err)
+	}
+	if len(got.Tokens) != 1 || got.Tokens[0] != 42 {
+		t.Fatalf("Restore via a bare OpenStore = %+v, want Tokens=[42]", got)
+	}
+}
+
 // TestStoreRegistry_Close_ClosesEveryOpenedStore proves Close() closes
 // every tenant Store the registry has opened, not just one.
 func TestStoreRegistry_Close_ClosesEveryOpenedStore(t *testing.T) {

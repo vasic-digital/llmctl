@@ -60,7 +60,22 @@ _svc_sys() {
 # drop-in setting `Slice=llmctl-tenant-<id>.slice` directly on the unit.
 _svc_validate_tenant_id() {
   local id="$1"
-  [[ "${id}" =~ ^[A-Za-z0-9_-]+$ ]] || die "invalid LLMCTL_TENANT_ID: '${id}' (must match ^[A-Za-z0-9_-]+\$ - the same allow-list internal/isolation/cgroup.go's Go-side sanitization enforces, T072)"
+  # Mirrors internal/isolation/cgroup.go's Go-side tenantIDPattern
+  # exactly (`^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$`) plus its second,
+  # independent ".." rejection - an independent code review (2026-09-15)
+  # found the PRIOR bash pattern (`^[A-Za-z0-9_-]+$`) genuinely differed
+  # from the Go one (no dots permitted, no first-character-alnum
+  # requirement, no length cap), causing a real user-visible
+  # inconsistency: the SAME tenant ID could succeed against one
+  # language's validated routes and fail against the other's, despite
+  # both languages' comments claiming to enforce "the same allow-list".
+  [[ "${id}" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$ ]] || die "invalid LLMCTL_TENANT_ID: '${id}' (must match ^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}\$ - the same allow-list internal/isolation/cgroup.go's Go-side tenantIDPattern enforces, T072)"
+  # Defense in depth beyond the charset check above, mirroring Go's
+  # validateTenantID: ".." alone matches the charset (dots are a
+  # permitted character for ordinary tenant IDs like "tenant.3"), but an
+  # id containing ".." ANYWHERE is exactly the path-traversal component
+  # a filesystem join would otherwise resolve upward through.
+  [[ "${id}" != *..* ]] || die "invalid LLMCTL_TENANT_ID: '${id}' (must not contain \"..\")"
 }
 
 _svc_instance_key() {

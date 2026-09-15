@@ -10,15 +10,25 @@
 // Store per tenant is sufficient for this scope - see cmd/llmctld's
 // wiring comment for the full honest boundary).
 //
-// Tenant resolution: the optional X-Tenant-ID request header, read once
-// per request via resolveStore below. An absent header resolves to the
-// empty tenant ID, which StoreRegistry.Get documents as opening baseDir
-// directly - byte-identical to this file's pre-registry behavior, so an
-// existing caller that never sends the header (every test/integration
-// caller today) observes no change at all. This mirrors
-// routes_cluster.go's peer_id/peer_addr JSON-field convention in spirit
-// but uses a header rather than a body field, since GET /v1/replication/
-// state has no request body to carry one in.
+// Tenant resolution + authorization (T072-FU5, fixing a real gap an
+// independent review found in T072-FU2/FU3's own diff): the optional
+// X-Tenant-ID request header names which tenant's Store a request
+// operates against, EXACTLY as before - but every route now ALSO
+// requires RequireJWT plus authorizeTenantOwnership(decider, claims,
+// tenantID) before resolveStore trusts that header at all. Before this
+// fix, X-Tenant-ID was trusted with NO authorization check whatsoever:
+// any caller reaching this mTLS-gated router (every JWT-gated route in
+// this package shares the SAME router - server.go's RequireMTLS group,
+// not a separate internal-only listener) could read/append/checkpoint
+// ANY tenant's replicated conversation content simply by naming it in
+// the header - the exact cross-tenant data-leakage class Clarification
+// 18/FR-049 exists to prevent, on the one route surface T072-FU2/FU3
+// touched without adding the authorization layer T072-FU4's sibling
+// model-lifecycle routes got from the start. An absent header still
+// resolves to the empty tenant ID (StoreRegistry.Get's documented
+// default-baseDir path) - byte-identical to this file's pre-registry
+// behavior for a caller entitled to the empty tenant (its own claims
+// carry TenantID == "", or it holds ActionTenantManage).
 package api
 
 import (
@@ -26,6 +36,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/vasic-digital/llmctl/llmctld/internal/authz"
 	"github.com/vasic-digital/llmctl/llmctld/internal/replication"
 )
 
@@ -72,13 +83,22 @@ type stateResponse struct {
 const tenantIDHeader = "X-Tenant-ID"
 
 // resolveStore resolves c's real *replication.Store from registry via
-// the request's X-Tenant-ID header, writing a 400 response and
-// returning ok=false if the tenant ID registry rejects (e.g. a
-// malicious/malformed tenant ID internal/isolation.TenantStateDir's
-// allow-list refuses) - callers return immediately on ok=false without
-// writing any further response.
-func resolveStore(c *gin.Context, registry *replication.StoreRegistry) (store *replication.Store, ok bool) {
+// the request's X-Tenant-ID header, FIRST requiring the caller
+// (RequireJWT's validated claims, already run by the time this executes)
+// is authorized to act as that tenant - authorizeTenantOwnership, the
+// SAME check every sibling tenant/model route in this package already
+// applies (routes_tenants.go, routes_models.go). Writes 403 and returns
+// ok=false on an authorization failure, or 400 and ok=false if the
+// tenant ID registry itself rejects (e.g. a malicious/malformed tenant
+// ID internal/isolation.TenantStateDir's allow-list refuses) - callers
+// return immediately on ok=false without writing any further response.
+func resolveStore(c *gin.Context, registry *replication.StoreRegistry, decider *authz.Decider) (store *replication.Store, ok bool) {
+	claims := ClaimsFromContext(c)
 	tenantID := c.GetHeader(tenantIDHeader)
+	if !authorizeTenantOwnership(decider, claims, tenantID) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "caller may only operate on its own tenant's replication state"})
+		return nil, false
+	}
 	store, err := registry.Get(tenantID)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -89,15 +109,19 @@ func resolveStore(c *gin.Context, registry *replication.StoreRegistry) (store *r
 
 // RegisterReplicationRoutes wires the KV-cache replication routes onto r,
 // backed by registry (one *replication.Store per tenant, see this file's
-// package doc comment). mTLS enforcement for these routes is the
-// caller's route-group choice (applied by wrapping r in a group that
-// already runs RequireMTLS, exactly as NewServer does for
-// RegisterClusterRoutes) - never re-checked inside an individual handler
-// here, matching routes_cluster.go's own documented enforcement-seam
-// discipline.
-func RegisterReplicationRoutes(r gin.IRoutes, registry *replication.StoreRegistry) {
-	r.POST("/v1/replication/append", func(c *gin.Context) {
-		store, ok := resolveStore(c, registry)
+// package doc comment) and decider (the RequireJWT + tenant-ownership
+// authorization every route now requires - see this file's package doc
+// comment for why). mTLS enforcement for these routes is the caller's
+// route-group choice (applied by wrapping r in a group that already runs
+// RequireMTLS, exactly as NewServer does for RegisterClusterRoutes) -
+// never re-checked inside an individual handler here, matching
+// routes_cluster.go's own documented enforcement-seam discipline. JWT
+// enforcement, unlike mTLS, IS applied per-route here (RequireJWT), not
+// left to the caller's route-group choice - every route in this file
+// requires one.
+func RegisterReplicationRoutes(r gin.IRoutes, registry *replication.StoreRegistry, decider *authz.Decider) {
+	r.POST("/v1/replication/append", RequireJWT(decider), func(c *gin.Context) {
+		store, ok := resolveStore(c, registry, decider)
 		if !ok {
 			return
 		}
@@ -116,8 +140,8 @@ func RegisterReplicationRoutes(r gin.IRoutes, registry *replication.StoreRegistr
 		c.JSON(http.StatusOK, gin.H{"status": "appended", "count": len(req.Entries)})
 	})
 
-	r.POST("/v1/replication/checkpoint", func(c *gin.Context) {
-		store, ok := resolveStore(c, registry)
+	r.POST("/v1/replication/checkpoint", RequireJWT(decider), func(c *gin.Context) {
+		store, ok := resolveStore(c, registry, decider)
 		if !ok {
 			return
 		}
@@ -133,8 +157,8 @@ func RegisterReplicationRoutes(r gin.IRoutes, registry *replication.StoreRegistr
 		c.JSON(http.StatusOK, gin.H{"status": "checkpointed", "seq": req.Seq})
 	})
 
-	r.GET("/v1/replication/state", func(c *gin.Context) {
-		store, ok := resolveStore(c, registry)
+	r.GET("/v1/replication/state", RequireJWT(decider), func(c *gin.Context) {
+		store, ok := resolveStore(c, registry, decider)
 		if !ok {
 			return
 		}

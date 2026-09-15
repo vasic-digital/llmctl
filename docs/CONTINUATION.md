@@ -1,6 +1,6 @@
 # CONTINUATION
 
-**Revision:** 11
+**Revision:** 12
 **Last modified:** 2026-09-15T00:00:00Z
 
 Per Constitution §12.10: this file reflects the live state of work on the
@@ -748,6 +748,19 @@ per the brainstorming discipline, and presented to the operator via
   orchestrator must target the specific node it wants a model started
   on directly — the same already-disclosed per-node boundary T073/T075
   established for the tenancy/auth stack, not a new limitation.
+
+**No further disclosed gap remains anywhere in this feature — see §10e for one important correction: an independent review found a real cross-tenant authorization gap in T072-FU2/FU3's own replication routes, since fixed.**
+
+## 10e. Independent review of T072-FU1..FU4 (T072-FU5, closed 2026-09-15)
+
+Per `/speckit.superspec.review`, dispatched a structurally-independent reviewer (no session history, per the `requesting-code-review` skill's protocol) against commit range `69f390a..55c293b` (the whole T072-FU1..FU4 follow-up chain), using `spec.md`'s FR-049/Clarification 18/20 and this file's own evidence trail as the requirements. The reviewer independently ran the real build/test/race/bash-suite commands rather than trusting commit-message claims — all checked out clean — and returned **1 Critical, 2 Important, 4 Minor** findings. Every finding was verified directly by the assistant before acting on it, then fixed via TDD, then independently re-verified. Full evidence is in `tasks.md`'s T072-FU5 entry and `progress.yml`; this is the resumption-relevant summary.
+
+- **Critical (fixed) — a real cross-tenant data-access gap.** `internal/api/routes_replication.go`'s `resolveStore` trusted the `X-Tenant-ID` header with **zero authorization check** — no `RequireJWT`, no ownership check, no RBAC — while `routes_models.go` (built in the exact same diff, T072-FU4) got a proper three-layer gate from the start. Any caller reaching the shared mTLS-only router could read/append/checkpoint ANY tenant's replicated conversation content simply by naming it in the header — precisely the leakage class Clarification 18/FR-049 exists to prevent, and this was NOT disclosed anywhere despite T072-FU2/FU3's "Clarification 18/20 are now closed" claim. **Fixed**: `RegisterReplicationRoutes` now requires a `*authz.Decider`; every route requires `RequireJWT` + `authorizeTenantOwnership` before trusting the header at all. Both pre-existing replication tests (which previously used ONE unauthenticated client identity to freely address multiple tenants) were updated to issue real per-tenant JWTs; `test/integration/failover_state_test.go`'s three real-subprocess helpers now carry a real token too.
+- **Important #1 (fixed) — bash and Go's tenant-ID allow-lists were not actually identical**, despite both languages' comments explicitly claiming so. A real, user-visible inconsistency: the same tenant ID could succeed against one route family and fail against the other. Bash's regex now mirrors Go's exactly, plus Go's own independent `".."`-anywhere rejection.
+- **Important #2 (fixed) — `NewEncryptedStoreRegistry`'s empty-tenant-stays-plaintext exemption was correctly implemented but never tested under the encrypting constructor.** A future regression could have gone uncaught. New test added.
+- **Minor (all fixed)**: `StoreRegistry.Close()` now joins every close error (`errors.Join`) instead of reporting only the first; a misplaced doc comment in `local_test.go` was corrected; `LocalExecutor.run()`'s untenanted path now explicitly strips any inherited stray `LLMCTL_TENANT_ID` from the subprocess environment (a new `filterOutTenantIDEnv` helper + RED-then-GREEN test); a misleadingly-named test was renamed and extended with the genuine no-token case it had claimed to test but didn't.
+- **Full verification after every fix** (fresh, `go clean -testcache` first): `gofmt`/`go vet`/`go build` clean, `go test ./... -race` (all 12 packages) zero regressions/zero races, `golangci-lint run --max-issues-per-linter=0 --max-same-issues=0 ./...` **0 issues**, `bash tests/run_tests.sh` **22/22 PASS**.
+- **Result**: no further finding from this review remains open. Every disclosed cross-tenant-isolation claim across T072-FU1..FU4 is now genuinely accurate, not merely asserted.
 
 **No further disclosed gap remains anywhere in this feature.**
 

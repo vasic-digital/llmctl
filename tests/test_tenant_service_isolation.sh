@@ -128,5 +128,31 @@ assert_rc 1 "malicious tenant ID (path traversal) is rejected" \
     source "'"${LLMCTL_ROOT}"'/lib/service_linux.sh"
     _svc_unit_for fast
   '
+assert_rc 1 "malicious tenant ID (embedded '..' mid-string, not just a leading path-traversal) is rejected - same defense-in-depth internal/isolation/cgroup.go's Go-side validateTenantID applies beyond its charset check" \
+  bash -c '
+    export LLMCTL_TENANT_ID="tenant..other"
+    source "'"${LLMCTL_ROOT}"'/lib/common.sh"
+    source "'"${LLMCTL_ROOT}"'/lib/service_linux.sh"
+    _svc_unit_for fast
+  '
+
+# --- bash and Go tenant-ID allow-lists genuinely match --------------------
+# An independent code review (2026-09-15) found the bash and Go regexes
+# were NOT actually identical despite comments claiming they were: Go
+# permits '.' (internal/isolation/cgroup.go's tenantIDPattern), bash did
+# not - so a tenant ID like "tenant.3" (which Registry.Create performs no
+# format validation on, so nothing upstream would have caught this) could
+# succeed against /v1/replication/* (Go-validated) but fail with an opaque
+# error against /v1/tenants/:id/models/:model/start (bash-validated). This
+# assertion proves the SAME tenant ID bash's own allow-list historically
+# rejected is now genuinely accepted, closing that user-visible
+# inconsistency rather than merely asserting bash rejects bad input.
+captured="$(
+  export LLMCTL_TENANT_ID="tenant.3"
+  source "${LLMCTL_ROOT}/lib/common.sh"
+  source "${LLMCTL_ROOT}/lib/service_linux.sh"
+  _svc_unit_for fast
+)"
+assert_eq "llmctl-llama@tenant.3--fast.service" "${captured}" "tenant ID containing '.' (accepted by Go's allow-list) is now ALSO accepted by bash's - the two languages' allow-lists genuinely match, not merely claimed to"
 
 test_finish

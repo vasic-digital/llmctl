@@ -255,6 +255,13 @@ func runClusterBootstrap(args []string) {
 	}
 	srv := api.NewServer(node, apiTLS)
 
+	signingKey := os.Getenv(jwtSigningKeyEnvVar)
+	if signingKey == "" {
+		fmt.Fprintf(os.Stderr, "llmctld: cluster bootstrap: %s must be set (see .env.example)\n", jwtSigningKeyEnvVar)
+		os.Exit(1)
+	}
+	decider, keys := newAuthzDecider(signingKey)
+
 	stateDir := resolveStateDir(f.stateDir, f.caCert, f.nodeID)
 	if err := os.MkdirAll(stateDir, 0o700); err != nil {
 		fmt.Fprintln(os.Stderr, "llmctld: cluster bootstrap: create state dir:", err)
@@ -268,17 +275,15 @@ func runClusterBootstrap(args []string) {
 	// (e.g. a permission problem specific to one tenant's subdirectory)
 	// now surfaces on that tenant's first /v1/replication/* request
 	// rather than at node startup - stateDir's own creation is still
-	// verified eagerly above, exactly as before.
+	// verified eagerly above, exactly as before. decider is required
+	// (T072-FU5): every /v1/replication/* route now requires RequireJWT
+	// + tenant-ownership authorization, closing a real cross-tenant
+	// data-access gap an independent review found in T072-FU2/FU3's own
+	// diff - see routes_replication.go's package doc comment.
 	storeRegistry := newStoreRegistry(stateDir, replication.CheckpointConfig{})
 	defer func() { _ = storeRegistry.Close() }()
-	api.RegisterReplicationRoutes(srv.Router(), storeRegistry)
+	api.RegisterReplicationRoutes(srv.Router(), storeRegistry, decider)
 
-	signingKey := os.Getenv(jwtSigningKeyEnvVar)
-	if signingKey == "" {
-		fmt.Fprintf(os.Stderr, "llmctld: cluster bootstrap: %s must be set (see .env.example)\n", jwtSigningKeyEnvVar)
-		os.Exit(1)
-	}
-	decider, keys := newAuthzDecider(signingKey)
 	modelExecutor := executor.New(executor.Config{LLMCtlPath: f.llmctlPath})
 	registerAuthzRoutes(srv, decider, keys, modelExecutor)
 
@@ -389,23 +394,23 @@ func runClusterJoinReal(args []string) int {
 	}
 	srv := api.NewServer(node, apiTLS)
 
-	resolvedStateDir := resolveStateDir(stateDir, caCert, nodeID)
-	if err := os.MkdirAll(resolvedStateDir, 0o700); err != nil {
-		fmt.Fprintln(os.Stderr, "llmctld: cluster join: create state dir:", err)
-		return 1
-	}
-	// See runClusterBootstrap's identical StoreRegistry wiring comment
-	// above (T072-FU2) - kept symmetric across both subcommands.
-	storeRegistry := newStoreRegistry(resolvedStateDir, replication.CheckpointConfig{})
-	defer func() { _ = storeRegistry.Close() }()
-	api.RegisterReplicationRoutes(srv.Router(), storeRegistry)
-
 	signingKey := os.Getenv(jwtSigningKeyEnvVar)
 	if signingKey == "" {
 		fmt.Fprintf(os.Stderr, "llmctld: cluster join: %s must be set (see .env.example)\n", jwtSigningKeyEnvVar)
 		return 1
 	}
 	decider, keys := newAuthzDecider(signingKey)
+
+	resolvedStateDir := resolveStateDir(stateDir, caCert, nodeID)
+	if err := os.MkdirAll(resolvedStateDir, 0o700); err != nil {
+		fmt.Fprintln(os.Stderr, "llmctld: cluster join: create state dir:", err)
+		return 1
+	}
+	// See runClusterBootstrap's identical StoreRegistry wiring comment
+	// above (T072-FU2/T072-FU5) - kept symmetric across both subcommands.
+	storeRegistry := newStoreRegistry(resolvedStateDir, replication.CheckpointConfig{})
+	defer func() { _ = storeRegistry.Close() }()
+	api.RegisterReplicationRoutes(srv.Router(), storeRegistry, decider)
 	modelExecutor := executor.New(executor.Config{LLMCtlPath: llmctlPath})
 	registerAuthzRoutes(srv, decider, keys, modelExecutor)
 

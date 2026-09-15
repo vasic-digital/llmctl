@@ -15,6 +15,8 @@ import (
 	"net/http"
 	"testing"
 	"time"
+
+	"github.com/vasic-digital/llmctl/llmctld/internal/auth"
 )
 
 // replAppendEntry/replAppendRequest/replKVState/replCheckpointRequest
@@ -57,8 +59,12 @@ type replCheckpointRequest struct {
 const replicationAppendBatchSize = 500
 
 // replicationAppend POSTs entries to apiAddr's real
-// /v1/replication/append route, batched per replicationAppendBatchSize.
-func replicationAppend(t *testing.T, client *http.Client, apiAddr string, entries []replAppendEntry) {
+// /v1/replication/append route (bearing token as an
+// "Authorization: Bearer" header - every /v1/replication/* route
+// requires a valid JWT since T072-FU5 closed a real cross-tenant
+// data-access gap; see internal/api/routes_replication.go's package doc
+// comment), batched per replicationAppendBatchSize.
+func replicationAppend(t *testing.T, client *http.Client, apiAddr, token string, entries []replAppendEntry) {
 	t.Helper()
 	for i := 0; i < len(entries); i += replicationAppendBatchSize {
 		end := i + replicationAppendBatchSize
@@ -69,7 +75,13 @@ func replicationAppend(t *testing.T, client *http.Client, apiAddr string, entrie
 		if err != nil {
 			t.Fatalf("marshal append batch [%d:%d]: %v", i, end, err)
 		}
-		resp, err := client.Post("https://"+apiAddr+"/v1/replication/append", "application/json", bytes.NewReader(body))
+		req, err := http.NewRequest(http.MethodPost, "https://"+apiAddr+"/v1/replication/append", bytes.NewReader(body))
+		if err != nil {
+			t.Fatalf("new append request to %s: %v", apiAddr, err)
+		}
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+token)
+		resp, err := client.Do(req)
 		if err != nil {
 			t.Fatalf("POST /v1/replication/append to %s: %v", apiAddr, err)
 		}
@@ -83,14 +95,21 @@ func replicationAppend(t *testing.T, client *http.Client, apiAddr string, entrie
 }
 
 // replicationCheckpoint POSTs a checkpoint request to apiAddr's real
-// /v1/replication/checkpoint route.
-func replicationCheckpoint(t *testing.T, client *http.Client, apiAddr string, seq uint64, state replKVState) {
+// /v1/replication/checkpoint route, bearing token (see replicationAppend's
+// doc comment for why a token is required).
+func replicationCheckpoint(t *testing.T, client *http.Client, apiAddr, token string, seq uint64, state replKVState) {
 	t.Helper()
 	body, err := json.Marshal(replCheckpointRequest{Seq: seq, State: state})
 	if err != nil {
 		t.Fatalf("marshal checkpoint request (seq=%d): %v", seq, err)
 	}
-	resp, err := client.Post("https://"+apiAddr+"/v1/replication/checkpoint", "application/json", bytes.NewReader(body))
+	req, err := http.NewRequest(http.MethodPost, "https://"+apiAddr+"/v1/replication/checkpoint", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("new checkpoint request to %s (seq=%d): %v", apiAddr, seq, err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp, err := client.Do(req)
 	if err != nil {
 		t.Fatalf("POST /v1/replication/checkpoint to %s (seq=%d): %v", apiAddr, seq, err)
 	}
@@ -101,11 +120,17 @@ func replicationCheckpoint(t *testing.T, client *http.Client, apiAddr string, se
 	}
 }
 
-// replicationState GETs apiAddr's real /v1/replication/state route -
-// the node's current reconstructed KVState.
-func replicationState(t *testing.T, client *http.Client, apiAddr string) replKVState {
+// replicationState GETs apiAddr's real /v1/replication/state route,
+// bearing token (see replicationAppend's doc comment for why a token is
+// required) - the node's current reconstructed KVState.
+func replicationState(t *testing.T, client *http.Client, apiAddr, token string) replKVState {
 	t.Helper()
-	resp, err := client.Get("https://" + apiAddr + "/v1/replication/state")
+	req, err := http.NewRequest(http.MethodGet, "https://"+apiAddr+"/v1/replication/state", nil)
+	if err != nil {
+		t.Fatalf("new state request to %s: %v", apiAddr, err)
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp, err := client.Do(req)
 	if err != nil {
 		t.Fatalf("GET /v1/replication/state from %s: %v", apiAddr, err)
 	}
@@ -175,6 +200,25 @@ func TestFailoverState_KVCacheSurvivesPrimaryKill(t *testing.T) {
 
 	client := tc.httpClient()
 
+	// Every /v1/replication/* route requires a valid JWT since T072-FU5
+	// (a real cross-tenant data-access gap an independent review found -
+	// see internal/api/routes_replication.go's package doc comment).
+	// This test exercises the default (no X-Tenant-ID header) tenant
+	// path, so an empty-TenantID token authorizes it: JWTs are stateless
+	// HS256 tokens validated purely by signature against
+	// tc.jwtSigningKey (the SAME known key every spawned node's
+	// LLMCTLD_JWT_SIGNING_KEY carries, per spawn()), so minting one
+	// directly via auth.IssueToken - rather than round-tripping through
+	// the real /v1/auth/token API-key-exchange flow
+	// multitenancy_isolation_test.go's bootstrapWithAdmin/exchangeToken
+	// helpers establish - is the right scope here: this test is about
+	// failover/replication persistence, not about re-proving the auth
+	// exchange flow's own correctness (already covered elsewhere).
+	token, err := auth.IssueToken(auth.Claims{}, []byte(tc.jwtSigningKey))
+	if err != nil {
+		t.Fatalf("issue test jwt: %v", err)
+	}
+
 	// Precondition: the full 3-node Raft configuration is durably
 	// replicated to EVERY node before proceeding - the same discipline
 	// TestClusterFailover_KillingLeaderElectsNewRealLeaderAmongSurvivors
@@ -232,7 +276,7 @@ func TestFailoverState_KVCacheSurvivesPrimaryKill(t *testing.T) {
 	for _, n := range allNodes {
 		for cpEnd := checkpointInterval; cpEnd <= totalTokens; cpEnd += checkpointInterval {
 			batch := entries[cpEnd-checkpointInterval : cpEnd]
-			replicationAppend(t, client, n.apiAddr, batch)
+			replicationAppend(t, client, n.apiAddr, token, batch)
 
 			state := replKVState{
 				Tokens:    make([]int32, cpEnd),
@@ -242,7 +286,7 @@ func TestFailoverState_KVCacheSurvivesPrimaryKill(t *testing.T) {
 				state.Tokens[i] = entries[i].TokenID
 				state.Positions[i] = entries[i].Position
 			}
-			replicationCheckpoint(t, client, n.apiAddr, uint64(cpEnd), state)
+			replicationCheckpoint(t, client, n.apiAddr, token, uint64(cpEnd), state)
 		}
 	}
 	t.Logf("replicated + checkpointed %d simulated tokens to all 3 real nodes in %s", totalTokens, time.Since(replicationStart))
@@ -255,7 +299,7 @@ func TestFailoverState_KVCacheSurvivesPrimaryKill(t *testing.T) {
 	// already applies to Raft configuration, applied here to replicated
 	// KV state.
 	for _, n := range allNodes {
-		got := replicationState(t, client, n.apiAddr)
+		got := replicationState(t, client, n.apiAddr, token)
 		if len(got.Tokens) != totalTokens || len(got.Positions) != totalTokens {
 			t.Fatalf("node %q reports %d tokens / %d positions before the kill, want %d/%d - replication did not durably reach every node", n.nodeID, len(got.Tokens), len(got.Positions), totalTokens, totalTokens)
 		}
@@ -300,7 +344,7 @@ func TestFailoverState_KVCacheSurvivesPrimaryKill(t *testing.T) {
 
 	// Query the new primary's real reconstructed KV cache state and
 	// assert SC-019's two bounds: <=30s recovery, <=5% token loss.
-	newState := replicationState(t, client, newPrimary.apiAddr)
+	newState := replicationState(t, client, newPrimary.apiAddr, token)
 	recoveryElapsed := time.Since(killTime)
 	if recoveryElapsed > 30*time.Second {
 		t.Fatalf("SC-019 violated: recovery took %s (from killing %q to querying the new primary %q's state), want <= 30s", recoveryElapsed, primary.nodeID, newPrimary.nodeID)

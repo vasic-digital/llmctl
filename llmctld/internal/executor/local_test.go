@@ -240,10 +240,39 @@ func TestLocalExecutor_Start_WithTenantID_WritesTenantScopedEnvFile(t *testing.T
 	}
 }
 
-// TestNew_DefaultsLLMCtlPath confirms Config's LLMCtlPath is optional and
-// falls back to the bare "llmctl" name (PATH-resolved by os/exec at call
-// time), matching how a human operator would invoke it from a shell where
-// llmctl is already on PATH.
+// TestLocalExecutor_Start_Untenanted_IgnoresInheritedStrayTenantID closes
+// a gap an independent code review found: the untenanted path (no
+// Config.TenantID) left cmd.Env nil, meaning a stray LLMCTL_TENANT_ID
+// already present in the CALLING process's own environment (e.g. leaked
+// from its parent shell/launcher) would silently pass through to the
+// subprocess. This test sets exactly such a stray value directly on the
+// TEST PROCESS itself (t.Setenv, simulating llmctld inheriting a dirty
+// environment) and proves an explicitly-untenanted executor's real
+// dry-run subprocess never sees it: the resulting env file uses the bare
+// (untenanted) profile name, never a tenant-scoped one.
+func TestLocalExecutor_Start_Untenanted_IgnoresInheritedStrayTenantID(t *testing.T) {
+	e := newDryRunExecutor(t)
+	// Simulate a dirty inherited environment - set AFTER newDryRunExecutor
+	// so it is unambiguously present when Start (and therefore run) is
+	// called, not merely at construction time (run() reads os.Environ()
+	// fresh on every call, never at New()).
+	t.Setenv("LLMCTL_TENANT_ID", "stray-inherited-tenant")
+
+	if err := e.Start("small"); err != nil {
+		t.Fatalf("Start(small) returned an error against the real dry-run subprocess: %v", err)
+	}
+
+	servicesDir := os.Getenv("LLMCTL_SERVICES_DIR")
+	untenantedEnvFile := filepath.Join(servicesDir, "small.env")
+	if _, statErr := os.Stat(untenantedEnvFile); statErr != nil {
+		t.Fatalf("expected the untenanted env file %s to exist (explicitly-untenanted Start must never observe an inherited stray LLMCTL_TENANT_ID): %v", untenantedEnvFile, statErr)
+	}
+	strayTenantEnvFile := filepath.Join(servicesDir, "stray-inherited-tenant--small.env")
+	if _, statErr := os.Stat(strayTenantEnvFile); statErr == nil {
+		t.Fatalf("tenant-scoped env file %s unexpectedly exists - the inherited stray LLMCTL_TENANT_ID leaked through to the subprocess despite Config carrying no TenantID", strayTenantEnvFile)
+	}
+}
+
 // TestLocalExecutor_WithTenant_ReturnsDistinctTenantScopedExecutor proves
 // WithTenant produces a tenant-scoped COPY rather than mutating the
 // receiver - a single shared "base" LocalExecutor (as cmd/llmctld
@@ -277,6 +306,10 @@ func TestLocalExecutor_WithTenant_ReturnsDistinctTenantScopedExecutor(t *testing
 	}
 }
 
+// TestNew_DefaultsLLMCtlPath confirms Config's LLMCtlPath is optional and
+// falls back to the bare "llmctl" name (PATH-resolved by os/exec at call
+// time), matching how a human operator would invoke it from a shell where
+// llmctl is already on PATH.
 func TestNew_DefaultsLLMCtlPath(t *testing.T) {
 	exec := New(Config{})
 	if exec.llmctlPath != "llmctl" {
