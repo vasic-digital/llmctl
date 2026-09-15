@@ -1,6 +1,6 @@
 # CONTINUATION
 
-**Revision:** 8
+**Revision:** 9
 **Last modified:** 2026-09-15T00:00:00Z
 
 Per Constitution §12.10: this file reflects the live state of work on the
@@ -560,16 +560,85 @@ summary.
   clean, `go vet ./...` clean, `go build ./...` clean,
   `go test ./... -race` (all 12 packages) zero regressions/zero races,
   `bash tests/run_tests.sh` **22/22 PASS**.
-- **Honest scope boundary, still open**: `internal/isolation.TenantStateDir`
-  (Clarification 18's per-tenant KV-cache/WAL directory half) remains
-  independently correct and independently tested but has NO caller on
-  either the Go or bash side. Wiring it needs a decision about how a
-  tenant-scoped model-DATA path threads into `bin/llmctl`'s existing
-  `LLMCTL_DATA_DIR`/model-storage conventions — models are plausibly a
-  SHARED resource across tenants (only runtime state needs isolating), and
-  no existing evidence in `lib/*.sh` establishes how that split should
-  work, so this was not invented speculatively. This is the one remaining
-  open item for a resuming session to pick up, if directed to.
+- **Honest scope boundary, now closed — see §10b below**: `internal/isolation.TenantStateDir`
+  (Clarification 18's per-tenant KV-cache/WAL directory half) has since
+  been wired into a real model-data path decision (`T072-FU2`,
+  2026-09-15). Kept here unedited as the accurate historical record of
+  what was true at the time §10a was written.
+
+## 10b. Follow-up: T072-FU2 — TenantStateDir wired into a real model-data path decision (closed 2026-09-15)
+
+Closes §10a's remaining open item. Full evidence is in
+`specs/001-llmctl-completion/tasks.md`'s "Follow-up Work" section and
+`progress.yml`'s `follow_up_work` key; this is the resumption-relevant
+summary.
+
+- **Root-cause investigation performed before any code was written**
+  (Constitution §11.4.102): dispatched a subagent to determine, with
+  file:line citations, what "KV cache/WAL storage" (Clarification 18/
+  FR-049, Clarification 20/FR-051) actually refers to in THIS codebase,
+  rather than assuming it meant llama.cpp's own attention-KV-cache.
+  Findings: `lib/*.sh` has no KV-cache/WAL notion at all; `llama-server`
+  DOES have a real, currently-unwired disk-backed session mechanism
+  (`--slot-save-path`) but this project's own `internal/replication/
+  wal.go` doc comment already disclosed that as a separate, investigated,
+  deliberately-out-of-scope question; `internal/tenancy/key.go`'s own
+  PRE-EXISTING doc comment already identified `internal/replication`'s
+  bbolt-backed `Store` (the WAL/checkpoint pair) as the real thing
+  Clarification 18/20 mean by "KV cache checkpoints and WAL entries...
+  persist actual conversation content"; and `LLMCTL_MODELS_DIR` is
+  confirmed (via grep) to be written only by the download path — a
+  shared, read-only-thereafter resource, exactly as §10a's disclosed
+  assumption held.
+- **The real wiring decision**: `internal/replication.Store` was, before
+  this task, opened exactly ONCE per node (`cmd/llmctld/main.go`'s two
+  `replication.OpenStore(stateDir, ...)` call sites), shared across every
+  tenant that node might ever serve — a real Clarification-18 violation
+  waiting to happen. New `internal/replication/registry.go`:
+  `StoreRegistry` lazily opens/caches one `*Store` PER TENANT, routing
+  every non-empty tenant ID through `internal/isolation.TenantStateDir`
+  (the SAME allow-list + verified-0700 mechanism T072/T072-FU1 already
+  established); `Get("")` opens `baseDir` directly, byte-identical to the
+  pre-existing single-store-per-node behavior. 6/6 new
+  `registry_test.go` tests, TDD RED (`undefined: NewStoreRegistry`) then
+  GREEN.
+- **HTTP layer**: `internal/api/routes_replication.go`'s
+  `RegisterReplicationRoutes` now takes a `*replication.StoreRegistry`;
+  a request's optional `X-Tenant-ID` header resolves which tenant's
+  `Store` it operates against (absent → the empty/default tenant). New
+  real-HTTP/3+mTLS test proves two callers distinguished only by that
+  header never see each other's appended tokens. The pre-existing
+  round-trip test was updated to construct a `StoreRegistry` (a genuine
+  compile-time RED from the signature change, fixed) and, sending no
+  header, now doubles as regression coverage for the untenanted default
+  path. `cmd/llmctld/main.go`'s two wiring sites (bootstrap/join) updated
+  symmetrically.
+- **Disclosed behavior-change note**: `StoreRegistry.Get` opens each
+  tenant's Store LAZILY (on first request) rather than eagerly at node
+  startup, so a per-tenant Store-open failure now surfaces on that
+  tenant's first `/v1/replication/*` request instead of at startup —
+  `stateDir`'s own creation is still verified eagerly exactly as before,
+  and no existing test depended on the old eager-open-at-startup
+  behavior (confirmed via grep before making the change).
+- **Full verification** (fresh, `go clean -testcache` first): `gofmt -l .`
+  clean, `go vet ./...` clean, `go build ./...` clean,
+  `go test ./... -race` (all 12 packages) zero regressions/zero races —
+  explicitly re-confirmed by name: both new/updated replication tests
+  PASS, `TestClusterFailover_KillingLeaderElectsNewRealLeaderAmongSurvivors`
+  PASS, `TestFailoverState_KVCacheSurvivesPrimaryKill` PASS (the real
+  3-node failover test, exercising the untenanted default path,
+  unchanged). `bash tests/run_tests.sh` **22/22 PASS** (unaffected — this
+  task touches Go only).
+- **Honest scope boundary, still open**: `StoreRegistry.Get` always opens
+  a PLAINTEXT `Store`, never `OpenEncryptedStore` — Clarification 20's
+  per-tenant encryption-at-rest is a DISTINCT threat model (filesystem-
+  level compromise/backup exposure) from Clarification 18's per-tenant-
+  directory requirement this task closes. `OpenEncryptedStore`/
+  `internal/tenancy.DeriveKey` both already exist and are independently
+  tested but remain otherwise unwired — needs its own decision about
+  where a master encryption secret is sourced from (mirroring
+  `LLMCTLD_JWT_SIGNING_KEY`'s env-var convention). This is the one
+  remaining open item for a resuming session to pick up, if directed to.
 
 ## 11. Binding constraints (unchanged, restated per §12.10)
 

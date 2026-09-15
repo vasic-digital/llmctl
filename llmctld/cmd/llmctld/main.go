@@ -228,13 +228,18 @@ func runClusterBootstrap(args []string) {
 		fmt.Fprintln(os.Stderr, "llmctld: cluster bootstrap: create state dir:", err)
 		os.Exit(1)
 	}
-	store, err := replication.OpenStore(stateDir, replication.CheckpointConfig{})
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "llmctld: cluster bootstrap: replication.OpenStore:", err)
-		os.Exit(1)
-	}
-	defer func() { _ = store.Close() }()
-	api.RegisterReplicationRoutes(srv.Router(), store)
+	// StoreRegistry (T072-FU2) lazily opens one *replication.Store PER
+	// TENANT rooted under stateDir, closing Clarification 18/FR-049's
+	// disclosed gap - see internal/replication/registry.go's doc comment.
+	// Unlike the single eager replication.OpenStore call this replaces,
+	// no Store is opened here; the first genuine per-tenant open failure
+	// (e.g. a permission problem specific to one tenant's subdirectory)
+	// now surfaces on that tenant's first /v1/replication/* request
+	// rather than at node startup - stateDir's own creation is still
+	// verified eagerly above, exactly as before.
+	storeRegistry := replication.NewStoreRegistry(stateDir, replication.CheckpointConfig{})
+	defer func() { _ = storeRegistry.Close() }()
+	api.RegisterReplicationRoutes(srv.Router(), storeRegistry)
 
 	signingKey := os.Getenv(jwtSigningKeyEnvVar)
 	if signingKey == "" {
@@ -354,13 +359,11 @@ func runClusterJoinReal(args []string) int {
 		fmt.Fprintln(os.Stderr, "llmctld: cluster join: create state dir:", err)
 		return 1
 	}
-	store, err := replication.OpenStore(resolvedStateDir, replication.CheckpointConfig{})
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "llmctld: cluster join: replication.OpenStore:", err)
-		return 1
-	}
-	defer func() { _ = store.Close() }()
-	api.RegisterReplicationRoutes(srv.Router(), store)
+	// See runClusterBootstrap's identical StoreRegistry wiring comment
+	// above (T072-FU2) - kept symmetric across both subcommands.
+	storeRegistry := replication.NewStoreRegistry(resolvedStateDir, replication.CheckpointConfig{})
+	defer func() { _ = storeRegistry.Close() }()
+	api.RegisterReplicationRoutes(srv.Router(), storeRegistry)
 
 	signingKey := os.Getenv(jwtSigningKeyEnvVar)
 	if signingKey == "" {

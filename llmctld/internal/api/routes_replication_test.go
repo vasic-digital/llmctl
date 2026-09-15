@@ -43,14 +43,11 @@ func TestReplicationRoutes_AppendCheckpointStateRealHTTP3RoundTrip(t *testing.T)
 	defer func() { _ = node.Shutdown() }()
 	waitForRealLeader(t, node, 3*time.Second)
 
-	store, err := replication.OpenStore(t.TempDir(), replication.CheckpointConfig{})
-	if err != nil {
-		t.Fatalf("replication.OpenStore: %v", err)
-	}
-	defer func() { _ = store.Close() }()
+	registry := replication.NewStoreRegistry(t.TempDir(), replication.CheckpointConfig{})
+	defer func() { _ = registry.Close() }()
 
 	srv := NewServer(node, buildTestTLSConfig(t, ca, "node-a-api"))
-	RegisterReplicationRoutes(srv.Router(), store)
+	RegisterReplicationRoutes(srv.Router(), registry)
 	if err := srv.Listen("127.0.0.1:0"); err != nil {
 		t.Fatalf("Listen: %v", err)
 	}
@@ -174,5 +171,119 @@ func TestReplicationRoutes_AppendCheckpointStateRealHTTP3RoundTrip(t *testing.T)
 		if got2.Tokens[i] != int32(100+i) || got2.Positions[i] != int32(i) {
 			t.Fatalf("GET /v1/replication/state entry %d (post-checkpoint) = (token=%d,pos=%d), want (token=%d,pos=%d)", i, got2.Tokens[i], got2.Positions[i], 100+i, i)
 		}
+	}
+}
+
+// TestReplicationRoutes_DifferentTenantHeaders_AreIsolatedRealHTTP3RoundTrip
+// is the direct HTTP-layer proof that RegisterReplicationRoutes' switch
+// to *replication.StoreRegistry (T072-FU2) genuinely isolates tenants:
+// two callers of the SAME running node, distinguished only by their
+// X-Tenant-ID request header, must never observe each other's appended
+// tokens - real requests, real HTTP/3+mTLS, real per-tenant
+// internal/isolation.TenantStateDir subdirectories on disk, no mocks.
+func TestReplicationRoutes_DifferentTenantHeaders_AreIsolatedRealHTTP3RoundTrip(t *testing.T) {
+	ca, err := mtls.GenerateCA()
+	if err != nil {
+		t.Fatalf("GenerateCA: %v", err)
+	}
+
+	node, err := raft.Bootstrap(raft.Config{
+		NodeID:    "node-a",
+		BindAddr:  "127.0.0.1:0",
+		TLSConfig: buildTestTLSConfig(t, ca, "node-a"),
+	})
+	if err != nil {
+		t.Fatalf("raft.Bootstrap: %v", err)
+	}
+	defer func() { _ = node.Shutdown() }()
+	waitForRealLeader(t, node, 3*time.Second)
+
+	registry := replication.NewStoreRegistry(t.TempDir(), replication.CheckpointConfig{})
+	defer func() { _ = registry.Close() }()
+
+	srv := NewServer(node, buildTestTLSConfig(t, ca, "node-a-api"))
+	RegisterReplicationRoutes(srv.Router(), registry)
+	if err := srv.Listen("127.0.0.1:0"); err != nil {
+		t.Fatalf("Listen: %v", err)
+	}
+	defer func() { _ = srv.Close() }()
+
+	client := newTestClient(buildTestTLSConfig(t, ca, "test-client"))
+
+	appendForTenant := func(tenantID string, seq uint64, tokenID int32) {
+		body, err := json.Marshal(map[string]any{
+			"entries": []map[string]any{
+				{"seq": seq, "token_id": tokenID, "position": 0},
+			},
+		})
+		if err != nil {
+			t.Fatalf("marshal append body for tenant %q: %v", tenantID, err)
+		}
+		req, err := http.NewRequest(http.MethodPost, "https://"+srv.Addr+"/v1/replication/append", bytes.NewReader(body))
+		if err != nil {
+			t.Fatalf("new request for tenant %q: %v", tenantID, err)
+		}
+		req.Header.Set("Content-Type", "application/json")
+		if tenantID != "" {
+			req.Header.Set("X-Tenant-ID", tenantID)
+		}
+		resp, err := client.Do(req)
+		if err != nil {
+			t.Fatalf("POST /v1/replication/append for tenant %q: %v", tenantID, err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		if resp.StatusCode != http.StatusOK {
+			respBody, _ := io.ReadAll(resp.Body)
+			t.Fatalf("POST /v1/replication/append for tenant %q: status = %d, body = %s", tenantID, resp.StatusCode, respBody)
+		}
+	}
+
+	stateForTenant := func(tenantID string) struct {
+		Tokens    []int32 `json:"tokens"`
+		Positions []int32 `json:"positions"`
+	} {
+		req, err := http.NewRequest(http.MethodGet, "https://"+srv.Addr+"/v1/replication/state", nil)
+		if err != nil {
+			t.Fatalf("new state request for tenant %q: %v", tenantID, err)
+		}
+		if tenantID != "" {
+			req.Header.Set("X-Tenant-ID", tenantID)
+		}
+		resp, err := client.Do(req)
+		if err != nil {
+			t.Fatalf("GET /v1/replication/state for tenant %q: %v", tenantID, err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		var got struct {
+			Tokens    []int32 `json:"tokens"`
+			Positions []int32 `json:"positions"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+			t.Fatalf("decode state response for tenant %q: %v", tenantID, err)
+		}
+		return got
+	}
+
+	// tenant-a appends token 111, tenant-b appends a DIFFERENT token 222 -
+	// via the real HTTP layer of the SAME running node, distinguished
+	// only by the X-Tenant-ID header.
+	appendForTenant("tenant-a", 1, 111)
+	appendForTenant("tenant-b", 1, 222)
+
+	gotA := stateForTenant("tenant-a")
+	if len(gotA.Tokens) != 1 || gotA.Tokens[0] != 111 {
+		t.Fatalf("tenant-a GET /v1/replication/state = %+v, want exactly [111] (never tenant-b's 222)", gotA)
+	}
+
+	gotB := stateForTenant("tenant-b")
+	if len(gotB.Tokens) != 1 || gotB.Tokens[0] != 222 {
+		t.Fatalf("tenant-b GET /v1/replication/state = %+v, want exactly [222] (never tenant-a's 111)", gotB)
+	}
+
+	// The default (no header) tenant is its own SEPARATE store, still
+	// empty - proving the two named tenants never leaked into it either.
+	gotDefault := stateForTenant("")
+	if len(gotDefault.Tokens) != 0 {
+		t.Fatalf("default (no X-Tenant-ID header) GET /v1/replication/state = %+v, want empty (tenant-a/tenant-b traffic must never reach the default tenant's store)", gotDefault)
 	}
 }

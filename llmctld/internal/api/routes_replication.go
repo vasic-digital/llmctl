@@ -1,10 +1,24 @@
 // Package api (routes_replication.go): the KV-cache replication HTTP
 // routes (T062, FR-026/FR-028) - POST /v1/replication/append, POST
 // /v1/replication/checkpoint, GET /v1/replication/state - backed by a
-// real *replication.Store, one per running node. This does not attempt
-// per-model multiplexing (a single default/test model's Store per node is
-// sufficient for T062's scope - see cmd/llmctld's wiring comment for the
-// full honest boundary).
+// real *replication.StoreRegistry (T072-FU2), one per running node,
+// lazily opening one *replication.Store PER TENANT rather than one
+// shared Store for the whole node (see registry.go's own doc comment
+// for why: Clarification 18/FR-049 requires this replicated-conversation
+// state to live in per-tenant directories). This does not attempt
+// per-model multiplexing within a tenant (a single default/test model's
+// Store per tenant is sufficient for this scope - see cmd/llmctld's
+// wiring comment for the full honest boundary).
+//
+// Tenant resolution: the optional X-Tenant-ID request header, read once
+// per request via resolveStore below. An absent header resolves to the
+// empty tenant ID, which StoreRegistry.Get documents as opening baseDir
+// directly - byte-identical to this file's pre-registry behavior, so an
+// existing caller that never sends the header (every test/integration
+// caller today) observes no change at all. This mirrors
+// routes_cluster.go's peer_id/peer_addr JSON-field convention in spirit
+// but uses a header rather than a body field, since GET /v1/replication/
+// state has no request body to carry one in.
 package api
 
 import (
@@ -52,14 +66,41 @@ type stateResponse struct {
 	Positions []int32 `json:"positions"`
 }
 
+// tenantIDHeader is the optional per-request tenant identifier these
+// routes read to resolve which tenant's Store a request operates
+// against. Absent (or empty) resolves to the empty tenant ID.
+const tenantIDHeader = "X-Tenant-ID"
+
+// resolveStore resolves c's real *replication.Store from registry via
+// the request's X-Tenant-ID header, writing a 400 response and
+// returning ok=false if the tenant ID registry rejects (e.g. a
+// malicious/malformed tenant ID internal/isolation.TenantStateDir's
+// allow-list refuses) - callers return immediately on ok=false without
+// writing any further response.
+func resolveStore(c *gin.Context, registry *replication.StoreRegistry) (store *replication.Store, ok bool) {
+	tenantID := c.GetHeader(tenantIDHeader)
+	store, err := registry.Get(tenantID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return nil, false
+	}
+	return store, true
+}
+
 // RegisterReplicationRoutes wires the KV-cache replication routes onto r,
-// backed by store. mTLS enforcement for these routes is the caller's
-// route-group choice (applied by wrapping r in a group that already runs
-// RequireMTLS, exactly as NewServer does for RegisterClusterRoutes) -
-// never re-checked inside an individual handler here, matching
-// routes_cluster.go's own documented enforcement-seam discipline.
-func RegisterReplicationRoutes(r gin.IRoutes, store *replication.Store) {
+// backed by registry (one *replication.Store per tenant, see this file's
+// package doc comment). mTLS enforcement for these routes is the
+// caller's route-group choice (applied by wrapping r in a group that
+// already runs RequireMTLS, exactly as NewServer does for
+// RegisterClusterRoutes) - never re-checked inside an individual handler
+// here, matching routes_cluster.go's own documented enforcement-seam
+// discipline.
+func RegisterReplicationRoutes(r gin.IRoutes, registry *replication.StoreRegistry) {
 	r.POST("/v1/replication/append", func(c *gin.Context) {
+		store, ok := resolveStore(c, registry)
+		if !ok {
+			return
+		}
 		var req appendRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -76,6 +117,10 @@ func RegisterReplicationRoutes(r gin.IRoutes, store *replication.Store) {
 	})
 
 	r.POST("/v1/replication/checkpoint", func(c *gin.Context) {
+		store, ok := resolveStore(c, registry)
+		if !ok {
+			return
+		}
 		var req checkpointRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -89,6 +134,10 @@ func RegisterReplicationRoutes(r gin.IRoutes, store *replication.Store) {
 	})
 
 	r.GET("/v1/replication/state", func(c *gin.Context) {
+		store, ok := resolveStore(c, registry)
+		if !ok {
+			return
+		}
 		state, err := store.Restore()
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
