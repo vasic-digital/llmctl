@@ -202,3 +202,75 @@ var errPlacementRefusedFixture = &placementRefusedFixtureError{}
 type placementRefusedFixtureError struct{}
 
 func (*placementRefusedFixtureError) Error() string { return "fixture: no capacity" }
+
+// TestMonitor_PeriodicTick_SubmitsResourceUpdate is T008's RED-then-GREEN
+// test: it proves Monitor's EXISTING Start() ticker (never a second one)
+// periodically submits this node's own current resource-source reading
+// via the injected ResourceSubmitter - the resource-freshness heartbeat
+// (002-cluster-model-scheduler's FR the T007 CommandUpdateResources
+// command exists to serve) that keeps ClusterState.Nodes[selfID].Resources
+// from going stale the moment ANY model starts/stops consuming budget on
+// this node. Uses the SAME fake-injection pattern as StatusChecker/
+// Rescheduler/Placer above: internal/cluster cannot import internal/raft
+// or internal/api (an import cycle - internal/raft already imports
+// internal/cluster) to call a concrete Apply/HTTP-forward directly, so a
+// function type is the correct decoupling here too.
+func TestMonitor_PeriodicTick_SubmitsResourceUpdate(t *testing.T) {
+	var mu sync.Mutex
+	var submittedNodeID string
+	var submittedResources Resources
+	submitCount := 0
+
+	wantResources := Resources{CPUCores: 8, RAMTotalMB: 16384, RAMAvailMB: 12000, VRAMTotalMB: 4096, VRAMAvailMB: 4096}
+	source := func() (Resources, error) {
+		return wantResources, nil
+	}
+	submit := func(nodeID string, r Resources) error {
+		mu.Lock()
+		defer mu.Unlock()
+		submittedNodeID = nodeID
+		submittedResources = r
+		submitCount++
+		return nil
+	}
+
+	m := NewMonitor(func(string) bool { return true }, nil, 20*time.Millisecond)
+	m.SetResourceReporting("node-self", source, submit)
+	m.Start()
+	defer m.Stop()
+
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		mu.Lock()
+		count := submitCount
+		mu.Unlock()
+		if count > 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("Monitor's periodic tick never invoked the injected ResourceSubmitter within the timeout")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if submittedNodeID != "node-self" {
+		t.Fatalf("submitted nodeID = %q, want %q", submittedNodeID, "node-self")
+	}
+	if submittedResources != wantResources {
+		t.Fatalf("submitted resources = %+v, want %+v", submittedResources, wantResources)
+	}
+}
+
+// TestMonitor_PeriodicTick_NoResourceReportingConfigured_NeverPanics
+// proves a Monitor with no SetResourceReporting call (the common case for
+// any Monitor used only for CheckOnce/Reconcile, matching NewMonitor's own
+// nil-checker/nil-reschedule doc comment) runs its ticker without ever
+// invoking a nil ResourceSubmitter.
+func TestMonitor_PeriodicTick_NoResourceReportingConfigured_NeverPanics(t *testing.T) {
+	m := NewMonitor(func(string) bool { return true }, nil, 10*time.Millisecond)
+	m.Start()
+	defer m.Stop()
+	time.Sleep(50 * time.Millisecond)
+}

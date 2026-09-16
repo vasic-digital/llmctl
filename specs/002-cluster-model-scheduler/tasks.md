@@ -122,7 +122,7 @@ passes.
       before implementation. Extend
       `TestApply_DeterministicGivenSameLogSequence` to include this new
       command type in its replay sequence.
-- [ ] T008 [TDD] [P] Extend `internal/cluster/health.go`'s `Monitor`: on
+- [x] T008 [TDD] [P] Extend `internal/cluster/health.go`'s `Monitor`: on
       each existing 10s tick (the SAME ticker `Start()` already runs — no
       second ticker introduced), each node submits its own current
       hardware-probe-derived `cluster.Resources` via
