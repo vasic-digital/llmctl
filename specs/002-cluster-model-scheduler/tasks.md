@@ -198,7 +198,7 @@ cluster.
 
 ### Tests for User Story 1
 
-- [ ] T012 [P] [TDD] [US1] Contract test for the extended
+- [x] T012 [P] [TDD] [US1] Contract test for the extended
       `POST /v1/tenants/:id/models/:model/start` (no `node` field) in
       `internal/api/routes_models_test.go`: real HTTP request, real
       single-process `LocalExecutor` under `LLMCTL_DRY_RUN=1` — asserts
@@ -206,7 +206,7 @@ cluster.
       (extending T072-FU4's own established real-subprocess test pattern,
       never a mock). Confirmed failing (route does not yet accept an
       absent `node` field) before implementation.
-- [ ] T013 [P] [TDD] [US1] Real multi-process integration test in
+- [x] T013 [P] [TDD] [US1] Real multi-process integration test in
       `test/integration/cluster_placement_test.go`:
       `TestClusterPlacement_StartWithoutNode_LandsOnNodeWithCapacity`
       (quickstart.md Scenario 1 — 3 real bootstrapped+joined processes,
@@ -214,7 +214,7 @@ cluster.
       request with no `node` field, assert the response names that exact
       node and that node's own real `bin/llmctl status` under dry-run
       shows the profile). Confirmed failing before implementation.
-- [ ] T014 [P] [TDD] [US1] Real multi-process integration test:
+- [x] T014 [P] [TDD] [US1] Real multi-process integration test:
       `TestClusterPlacement_NoNodeHasCapacity_RefusedWithExactShortfall`
       (quickstart.md Scenario 2 — every node's fixture capacity is smaller
       than the request; assert `insufficient_capacity` with a `considered`
@@ -223,7 +223,7 @@ cluster.
 
 ### Implementation for User Story 1
 
-- [ ] T015 [US1] Add a `Placer` abstraction call site in
+- [x] T015 [US1] Add a `Placer` abstraction call site in
       `internal/api/routes_models.go`'s start handler: when the request
       body's `node` field is absent, call `cluster.Place(candidates,
       req)` against the CURRENT `raft.Node.State().Nodes` (converted to
@@ -236,13 +236,13 @@ cluster.
       `placement.go` — prefer NOT modifying `placement.go`'s tested logic
       per plan.md's Constraints; expose the considered-set from the
       caller's own already-available `candidates` slice instead).
-- [ ] T016 [US1] On a successful `Place()` result, submit
+- [x] T016 [US1] On a successful `Place()` result, submit
       `CommandRecordRunningProfile` (T010) for the chosen node BEFORE
       dispatching the actual start. If the reservation is refused (lost
       the race per T010's concurrency guarantee), retry `Place()` once
       against a freshly-read `State()` (excluding the now-known-full
       node) before giving up with `insufficient_capacity`.
-- [ ] T017 [US1] Implement cross-node forwarding: add a new function to
+- [x] T017 [US1] Implement cross-node forwarding: add a new function to
       `internal/api/client.go` (contracts/cluster-model-api.md's
       forwarding client), structurally parallel to `RequestJoin` (same
       `http3.Transport` + mTLS pattern, same narrow-and-explicit retry
@@ -256,12 +256,12 @@ cluster.
       and either retry against a different node or fail with
       `placement_delivery_failed` (spec.md FR-010) — never silently
       report success.
-- [ ] T018 [US1] [SUBAGENT] Record a `PlacementDecision` audit entry
+- [x] T018 [US1] [SUBAGENT] Record a `PlacementDecision` audit entry
       (data-model.md) via `internal/audit/log.go`'s existing mechanism for
       every automatic placement outcome (success or refusal), including
       every considered node's capacity at decision time and a
       human-readable reason.
-- [ ] T019 [US1] Preserve the explicit-`node` path byte-identically:
+- [x] T019 [US1] Preserve the explicit-`node` path byte-identically:
       confirm (via the ALREADY-PASSING T072-FU4 tests, re-run unmodified)
       that a request naming a specific `node` never enters the `Place()`
       path at all.

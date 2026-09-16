@@ -1,0 +1,16 @@
+{
+  "os": "linux",
+  "arch": "x86_64",
+  "cpu": {
+    "cores": 2,
+    "model": "Generic Low-Power CPU",
+    "arch": "x86_64",
+    "simd": ["sse4_2"],
+    "apple_silicon": false,
+    "apple_chip": null
+  },
+  "memory": {"total_mb": 4096, "available_mb": 1500},
+  "gpus": [],
+  "gpu_total_vram_mb": 0,
+  "storage": {"path": "/home/user/.local/share/llmctl/models", "free_mb": 20000, "type": "ssd"}
+}

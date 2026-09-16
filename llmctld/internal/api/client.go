@@ -176,3 +176,57 @@ func ForwardModelStart(clientTLS *tls.Config, targetAPIAddr, targetNodeID, tenan
 		return fmt.Errorf("api: ForwardModelStart: target %s at %s returned %d: %s", targetNodeID, targetAPIAddr, resp.StatusCode, respBody)
 	}
 }
+
+// ForwardAutoPlaceStart forwards an auto-placement start request (one
+// naming NO "node" field) from a FOLLOWER node to leaderAPIAddr - found
+// necessary as a real, previously-undiscovered gap
+// (002-cluster-model-scheduler T013's own real 3-node integration test):
+// dispatchAutoPlacedStart's own reservation step (node.RecordRunningProfile)
+// is a real Raft write, which can only ever succeed on the CURRENT LEADER
+// (see internal/raft.Node.LeaderAddr's own doc comment) - a follower
+// receiving a no-node start request cannot run cluster.Place()+reserve
+// locally no matter which node it would choose, and must instead forward
+// the WHOLE decision to the leader, unlike ForwardModelStart (which
+// forwards an ALREADY-DECIDED, explicit-node request to whichever node
+// cluster.Place() chose - that node need not be the leader at all).
+//
+// Unlike ForwardModelStart, the caller needs the leader's EXACT response
+// (status code + body) relayed back verbatim - the leader is the one that
+// actually ran cluster.Place() and knows which node was chosen, or the
+// exact "insufficient_capacity"/"considered" shortfall - so this function
+// returns the real observed status code + body rather than a bare error,
+// and the caller (routes_models.go) copies both directly onto its own
+// gin.Context response, never re-deciding or re-wrapping them.
+func ForwardAutoPlaceStart(clientTLS *tls.Config, leaderAPIAddr, tenantID, model, authorizationHeader string) (statusCode int, body []byte, err error) {
+	client := &http.Client{
+		Transport: &http3.Transport{TLSClientConfig: clientTLS},
+		Timeout:   10 * time.Second,
+	}
+
+	reqBody, err := json.Marshal(startModelRequest{})
+	if err != nil {
+		return 0, nil, fmt.Errorf("api: ForwardAutoPlaceStart: marshal request: %w", err)
+	}
+	url := "https://" + leaderAPIAddr + "/v1/tenants/" + tenantID + "/models/" + model + "/start"
+
+	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(reqBody))
+	if err != nil {
+		return 0, nil, fmt.Errorf("api: ForwardAutoPlaceStart: build request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if authorizationHeader != "" {
+		req.Header.Set("Authorization", authorizationHeader)
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return 0, nil, fmt.Errorf("api: ForwardAutoPlaceStart: leader at %s: %w", leaderAPIAddr, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return resp.StatusCode, nil, fmt.Errorf("api: ForwardAutoPlaceStart: read leader response from %s: %w", leaderAPIAddr, err)
+	}
+	return resp.StatusCode, respBody, nil
+}

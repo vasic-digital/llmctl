@@ -192,6 +192,20 @@ func RegisterModelRoutes(r gin.IRoutes, decider *authz.Decider, base *executor.L
 // node that genuinely has capacity, or is refused with the exact
 // shortfall - every outcome recorded as a PlacementDecision audit entry.
 func dispatchAutoPlacedStart(c *gin.Context, decider *authz.Decider, base *executor.LocalExecutor, node *raft.Node, forwardTLS *tls.Config, tenantID, model string) {
+	// T013's own real 3-node integration test found this as a genuine,
+	// previously-undiscovered gap: node.RecordRunningProfile below is a
+	// real Raft write, which can only ever succeed on the CURRENT
+	// LEADER - a follower receiving a no-node start request cannot run
+	// cluster.Place()+reserve locally no matter which node it would
+	// choose (internal/raft.Node.LeaderAddr's own doc comment explains
+	// why), so it must forward the WHOLE auto-placement decision to the
+	// leader and relay the leader's exact response back verbatim, never
+	// attempting Place()/RecordRunningProfile against its own state.
+	if !node.IsLeader() {
+		forwardAutoPlaceToLeader(c, node, forwardTLS, tenantID, model)
+		return
+	}
+
 	ramMB, vramMB, err := base.Footprint(model)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "resolve resource footprint for profile " + model + ": " + err.Error()})
@@ -291,6 +305,51 @@ func dispatchAutoPlacedStart(c *gin.Context, decider *authz.Decider, base *execu
 	// returns) - kept only because Go's compiler cannot itself prove that
 	// and requires a terminating statement after the loop.
 	c.JSON(http.StatusServiceUnavailable, gin.H{"error": "insufficient_capacity", "reason": "placement retry exhausted"})
+}
+
+// forwardAutoPlaceToLeader resolves the cluster's current real Raft
+// leader from node's own replicated ClusterState (matching
+// node.LeaderAddr()'s real transport address against each known
+// cluster.Node's own Addr field - the same field Join/RegisterSelf set
+// from that node's own real Node.Addr()), forwards this no-node start
+// request to that leader's real cluster API via ForwardAutoPlaceStart,
+// and relays the leader's exact observed status code + body back onto c
+// verbatim - the leader is the one that actually decided placement (or
+// the exact refusal), so this node never re-wraps or re-decides it.
+func forwardAutoPlaceToLeader(c *gin.Context, node *raft.Node, forwardTLS *tls.Config, tenantID, model string) {
+	leaderAddr := node.LeaderAddr()
+	if leaderAddr == "" {
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"error":  "insufficient_capacity",
+			"reason": "no known cluster raft leader to place against",
+		})
+		return
+	}
+
+	var leaderAPIAddr string
+	for _, n := range node.State().Nodes {
+		if n.Addr == leaderAddr {
+			leaderAPIAddr = n.APIAddr
+			break
+		}
+	}
+	if leaderAPIAddr == "" {
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"error":  "insufficient_capacity",
+			"reason": "the cluster raft leader's own cluster API address is not yet known to this node",
+		})
+		return
+	}
+
+	status, body, err := ForwardAutoPlaceStart(forwardTLS, leaderAPIAddr, tenantID, model, c.GetHeader("Authorization"))
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{
+			"error":  "placement_delivery_failed",
+			"reason": err.Error(),
+		})
+		return
+	}
+	c.Data(status, "application/json; charset=utf-8", body)
 }
 
 // nodeCapacitySnapshots converts nodes into a deterministically-ordered

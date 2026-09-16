@@ -284,6 +284,29 @@ func (n *Node) IsLeader() bool {
 	return n.raft.State() == hraft.Leader
 }
 
+// LeaderAddr returns n's real, current view of the cluster's Raft leader's
+// TRANSPORT address (the same value each cluster.Node.Addr carries, set
+// from Node.Addr() at Join/RegisterSelf time) - "" when n does not
+// currently know of a leader (mid-election, or a genuine partition).
+//
+// Found necessary as a real, previously-undiscovered gap
+// (002-cluster-model-scheduler T013's own real 3-node integration test):
+// a Raft write (n.raft.Apply, which CommandRecordRunningProfile's
+// RecordRunningProfile needs) can ONLY ever succeed on the current
+// leader - a FOLLOWER node's own /start HTTP handler cannot record a
+// running-profile reservation locally no matter which cluster node
+// cluster.Place() chooses, and must instead forward the WHOLE
+// auto-placement decision to the leader (routes_models.go's
+// dispatchAutoPlacedStart), exactly mirroring the pre-existing
+// RequestJoin/Join split for cluster membership changes (node.go's own
+// Join doc comment: "hraft.ErrNotLeader otherwise, so Join is a thin,
+// honestly-erroring [wrapper]" - the SAME "writes only work on the
+// leader" constraint this method exists to let a caller route around by
+// address rather than by trial-and-error).
+func (n *Node) LeaderAddr() string {
+	return string(n.raft.Leader())
+}
+
 // LastContact returns the time n (as a follower) last heard from a
 // leader - exposed for cluster.PartitionWatcher's LastContactFunc, which
 // cannot reach n's private *hraft.Raft field directly (internal/cluster

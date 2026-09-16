@@ -12,6 +12,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"syscall"
+	"time"
 
 	"github.com/vasic-digital/llmctl/llmctld/internal/api"
 	"github.com/vasic-digital/llmctl/llmctld/internal/audit"
@@ -222,6 +223,27 @@ func waitForShutdownSignal() {
 	<-sigCh
 }
 
+// waitForSelfLeadership polls node.IsLeader() until it reports true or
+// timeout elapses (found via a genuine RED on a real 3-node integration
+// test, 002-cluster-model-scheduler T013 - see this function's own call
+// site in runClusterBootstrap for the full root-cause explanation): a
+// single-node Bootstrap() genuinely self-elects almost immediately, but
+// not synchronously within Bootstrap()'s own return, so a caller that
+// needs n to already be leader (RegisterSelf's n.raft.Apply) must poll
+// rather than assume. Bounded + fails loud on genuine non-election,
+// never a blind sleep (Constitution §11.4.6 - "should be elected by
+// now" is a guess, not a determination).
+func waitForSelfLeadership(node *raft.Node, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if node.IsLeader() {
+			return nil
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	return fmt.Errorf("node %q never became its own single-node Raft leader within %s", node.ID(), timeout)
+}
+
 func runClusterBootstrap(args []string) {
 	fs := flag.NewFlagSet("cluster bootstrap", flag.ExitOnError)
 	f := parseClusterFlags(fs, args)
@@ -324,6 +346,25 @@ func runClusterBootstrap(args []string) {
 		os.Exit(1)
 	}
 	defer func() { _ = srv.Close() }()
+
+	// waitForSelfLeadership (found via a genuine RED on a real 3-node
+	// integration test, 002-cluster-model-scheduler T013): a freshly
+	// Bootstrap()-ed node's single-node Raft leader election is NOT
+	// instantaneous - node.raft.State() can still read Follower for a
+	// handful of milliseconds after Bootstrap() returns, exactly as
+	// internal/raft's own waitForLeader test helper documents ("a
+	// single-node bootstrap can elect before the test ever reaches the
+	// channel receive"). RegisterSelf immediately below calls
+	// n.raft.Apply, which requires n to already be leader - calling it
+	// before that election completes fails hard with "node is not the
+	// leader" and the whole process exits before ever printing READY.
+	// Bounded poll, not a blind sleep, and fails loud+fast (never a
+	// silently-guessed "should be fine by now" delay - Constitution
+	// §11.4.6) if a bootstrapping node somehow never self-elects.
+	if err := waitForSelfLeadership(node, 10*time.Second); err != nil {
+		fmt.Fprintln(os.Stderr, "llmctld: cluster bootstrap:", err)
+		os.Exit(1)
+	}
 
 	// RegisterSelf (002-cluster-model-scheduler T017's prerequisite): a
 	// freshly-bootstrapped leader is otherwise NEVER present in its own
