@@ -15,6 +15,7 @@ import (
 	"encoding/pem"
 	"io"
 	"net/http"
+	"net/http/httptrace"
 	"testing"
 	"time"
 
@@ -495,5 +496,269 @@ func TestMTLSRotation_UnreachableNode_LearnsRevocationOnReconnect(t *testing.T) 
 	waitForRevocationReplicated(t, observer, nodeB.apiAddr, token, victimSerial, 5*time.Second)
 	if _, err := tc.getStatus(victimClient, nodeB.apiAddr); err == nil {
 		t.Fatalf("node-b (which joined AFTER the revocation event) still accepted the revoked identity - its own TrustStore did not converge via log replication")
+	}
+}
+
+// renewResponse mirrors internal/api/routes_mtls.go's POST
+// /v1/cluster/mtls/renew JSON response shape (T016) - duplicated here as a
+// plain, decoupled local type matching only the JSON contract, exactly as
+// this file's other response types (revocationsResponse) already do.
+type renewResponse struct {
+	Status           string `json:"status"`
+	RaftSerialNumber string `json:"raft_serial_number"`
+	APISerialNumber  string `json:"api_serial_number"`
+}
+
+// renewCertificate POSTs a real renew request (T016, spec.md FR-005/FR-006,
+// User Story 2) to apiAddr's real POST /v1/cluster/mtls/renew route -
+// TARGETING THAT SPECIFIC NODE'S OWN PROCESS, since renewal is a LOCAL,
+// per-process TrustStore.UpdateNodeCert action (research.md/data-model.md's
+// documented design: unlike revocation, renewal is never Raft-replicated -
+// there is nothing to coordinate, since only the renewed node's own
+// transports ever need to start presenting the fresh certificate). Bears
+// token as an "Authorization: Bearer" header, mirroring revokeCertificate's
+// identical RBAC-gated-action pattern, and fails the test loudly (never a
+// silent skip) if the real HTTP response is not 200 OK.
+func renewCertificate(t *testing.T, client *http.Client, apiAddr, token string) renewResponse {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodPost, "https://"+apiAddr+"/v1/cluster/mtls/renew", nil)
+	if err != nil {
+		t.Fatalf("new renew request to %s: %v", apiAddr, err)
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("POST /v1/cluster/mtls/renew to %s: %v", apiAddr, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		respBody, _ := io.ReadAll(resp.Body)
+		t.Fatalf("POST /v1/cluster/mtls/renew to %s: status = %d, body = %s", apiAddr, resp.StatusCode, respBody)
+	}
+	var got renewResponse
+	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+		t.Fatalf("decode /v1/cluster/mtls/renew response from %s: %v", apiAddr, err)
+	}
+	return got
+}
+
+// tracedGetResult carries everything doTracedGet observes about ONE real
+// HTTP/3+mTLS request/response pair - both the ordinary response and the
+// REAL connection-level facts httptrace.ClientTrace exposes, which is what
+// lets T014/T015 below prove "the same underlying connection" or "a
+// genuinely fresh connection" as CAPTURED EVIDENCE (Constitution
+// §11.4.107/§11.4.5) rather than merely asserting "no error was returned".
+type tracedGetResult struct {
+	statusCode int
+	// reused is httptrace.GotConnInfo.Reused - quic-go's http3.Transport
+	// (confirmed against its real source, http3/transport.go's dial/
+	// getConn and http3/trace.go's traceGotConn) sets this true ONLY when
+	// an EXISTING, already-handshaked *quic.Conn from its own per-hostname
+	// connection cache is reused for this request, and false when a
+	// genuinely NEW dial+TLS-handshake occurred - the exact real signal
+	// (never a guess) this file's own
+	// TestMTLSRotation_RevokedCertificate_RejectedClusterWide already
+	// relies on existing (its CloseIdleConnections() comment documents the
+	// same underlying cache).
+	reused bool
+	// localAddr is the real local (client-side) address httptrace reports
+	// for the connection this specific request used - a SEPARATE,
+	// corroborating signal from reused: the SAME underlying QUIC
+	// connection keeps the SAME local ephemeral UDP port for its entire
+	// lifetime, while a fresh dial always gets a new one, so two requests
+	// reporting the SAME localAddr is independent proof (not merely
+	// trusting one boolean field) that no new connection was ever made.
+	localAddr string
+	// peerLeaf is the REAL x509 leaf certificate the SERVER actually
+	// presented during this connection's TLS handshake (Go's own
+	// tls.ConnectionState.PeerCertificates, populated by quic-go's http3
+	// client - confirmed against its real source, http3/client.go's
+	// `res.TLS = &connState` assignment) - inspected directly, never
+	// inferred from what a JSON response body merely claims, per this
+	// project's anti-bluff discipline and the task's explicit "inspect the
+	// real serial/validity, not merely no error" requirement.
+	peerLeaf *x509.Certificate
+}
+
+// doTracedGet issues a real GET to url over client, attaching a
+// httptrace.ClientTrace to the request's own context so the REAL,
+// connection-level facts above are captured for THIS specific request -
+// never assumed from the surrounding test's own bookkeeping.
+func doTracedGet(t *testing.T, client *http.Client, url string) tracedGetResult {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		t.Fatalf("new traced GET request to %s: %v", url, err)
+	}
+	var result tracedGetResult
+	trace := &httptrace.ClientTrace{
+		GotConn: func(info httptrace.GotConnInfo) {
+			result.reused = info.Reused
+			if info.Conn != nil {
+				result.localAddr = info.Conn.LocalAddr().String()
+			}
+		},
+	}
+	req = req.WithContext(httptrace.WithClientTrace(req.Context(), trace))
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("traced GET %s: %v", url, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	_, _ = io.ReadAll(resp.Body) // drain fully so the connection is genuinely reusable for a subsequent request
+	result.statusCode = resp.StatusCode
+	if resp.TLS != nil && len(resp.TLS.PeerCertificates) > 0 {
+		result.peerLeaf = resp.TLS.PeerCertificates[0]
+	}
+	return result
+}
+
+// TestMTLSRotation_LiveRenewal_ExistingConnectionSurvives is T014 (spec.md
+// User Story 2, Acceptance Scenario 2, quickstart.md Scenario 2 steps 1-3;
+// FR-006): a real, already-established connection to a node is NOT
+// abruptly severed by that SAME node's own certificate renewal.
+//
+// Proof strategy (never merely "the second request returned no error" -
+// that alone would pass even if the http3.Transport silently redialed a
+// brand-new connection behind the scenes, which would prove NOTHING about
+// whether the EXISTING connection specifically survived): the held
+// client's SECOND request, made after renewal with NO
+// CloseIdleConnections() call in between, must report
+// httptrace.GotConnInfo.Reused == true AND the SAME real local address as
+// the first request - two independent, real, connection-level signals
+// that the underlying *quic.Conn from before renewal is the EXACT one
+// still being used, never a fresh one.
+func TestMTLSRotation_LiveRenewal_ExistingConnectionSurvives(t *testing.T) {
+	tc := newTestCluster(t)
+
+	nodeA := tc.bootstrap("node-a")
+	nodeB := tc.join("node-b", nodeA)
+
+	observer := tc.httpClient()
+	token := tc.adminToken()
+
+	// holder is a DEDICATED client whose own cached connection to node-b
+	// this test tracks end to end - kept separate from observer (which
+	// issues the renew request itself) so the act of TRIGGERING renewal
+	// can never be confused with the connection being tested for survival.
+	holder := tc.httpClient()
+
+	statusURL := "https://" + nodeB.apiAddr + "/v1/cluster/status"
+
+	// First request: establishes (and caches, per quic-go's documented
+	// per-hostname connection pooling) a real QUIC connection to node-b.
+	before := doTracedGet(t, holder, statusURL)
+	if before.statusCode != http.StatusOK {
+		t.Fatalf("initial request to node-b: status = %d", before.statusCode)
+	}
+	if before.reused {
+		t.Fatalf("initial request unexpectedly reported Reused=true - holder should not have any prior connection to node-b yet")
+	}
+	if before.localAddr == "" {
+		t.Fatalf("initial request reported no local address - httptrace.GotConnInfo was never observed, cannot prove connection identity")
+	}
+
+	// Renew node-b's own certificate(s) - a LOCAL action against node-b's
+	// own process (T016), triggered here via observer, a SEPARATE client
+	// from holder, so holder's cached connection is never touched by the
+	// act of making this renew call itself.
+	renewCertificate(t, observer, nodeB.apiAddr, token)
+
+	// The core assertion: a SECOND request over holder - the SAME
+	// http.Client, with NO CloseIdleConnections() call - succeeds AND
+	// genuinely reuses the identical pre-renewal connection.
+	after := doTracedGet(t, holder, statusURL)
+	if after.statusCode != http.StatusOK {
+		t.Fatalf("existing connection's request AFTER renewal: status = %d - the renewal severed it", after.statusCode)
+	}
+	if !after.reused {
+		t.Fatalf("existing connection was NOT reused after renewal (httptrace reported Reused=false) - the renewal replaced it with a new connection instead of leaving it alone, violating FR-006's zero-downtime requirement")
+	}
+	if after.localAddr != before.localAddr {
+		t.Fatalf("existing connection's local address changed after renewal (%q -> %q) - this is a DIFFERENT underlying connection, not the one that survived, violating FR-006", before.localAddr, after.localAddr)
+	}
+}
+
+// TestMTLSRotation_LiveRenewal_NewConnectionsUseFreshCert is T015 (spec.md
+// User Story 2, Acceptance Scenario 1/3, quickstart.md Scenario 2 step 4;
+// FR-005): after a real renewal, a genuinely NEW connection attempt to
+// that node presents the FRESH certificate - proven by inspecting the real
+// x509 serial number and validity window Go's own tls.ConnectionState
+// reports for the server's ACTUAL presented leaf certificate on that new
+// connection, cross-checked against BOTH the pre-renewal serial (must
+// differ) AND the renew action's own claimed new serial (must match) -
+// never merely "the request succeeded with no error".
+func TestMTLSRotation_LiveRenewal_NewConnectionsUseFreshCert(t *testing.T) {
+	tc := newTestCluster(t)
+
+	nodeA := tc.bootstrap("node-a")
+	nodeB := tc.join("node-b", nodeA)
+
+	observer := tc.httpClient()
+	token := tc.adminToken()
+
+	statusURL := "https://" + nodeB.apiAddr + "/v1/cluster/status"
+
+	// BEFORE renewal: a real connection's real presented certificate -
+	// captured as the "old" identity this test proves is retired for NEW
+	// connections going forward.
+	before := doTracedGet(t, tc.httpClient(), statusURL)
+	if before.statusCode != http.StatusOK {
+		t.Fatalf("before-renewal request to node-b: status = %d", before.statusCode)
+	}
+	if before.peerLeaf == nil {
+		t.Fatalf("before-renewal request presented no peer certificate - cannot establish a baseline serial to compare against")
+	}
+	oldSerial := before.peerLeaf.SerialNumber.String()
+
+	// Renew node-b's own certificate(s), capturing the renew action's OWN
+	// claimed new API-transport serial number as one independent fact this
+	// test will cross-check the ACTUALLY-PRESENTED certificate against.
+	renewed := renewCertificate(t, observer, nodeB.apiAddr, token)
+	if renewed.APISerialNumber == "" {
+		t.Fatalf("renew response carried no api_serial_number - cannot verify what the fresh certificate's real identity should be")
+	}
+	if renewed.APISerialNumber == oldSerial {
+		t.Fatalf("renew response's claimed new api_serial_number (%s) is IDENTICAL to the pre-renewal serial - the renewal did not actually issue a fresh certificate", renewed.APISerialNumber)
+	}
+
+	// AFTER renewal: a BRAND NEW http.Client (a fresh *http3.Transport with
+	// its own empty connection cache, never sharing any state with
+	// `before`'s client) forces a genuinely NEW TLS handshake - the exact
+	// real-world shape of "a new connection attempt" this test must prove
+	// presents the fresh certificate.
+	after := doTracedGet(t, tc.httpClient(), statusURL)
+	if after.statusCode != http.StatusOK {
+		t.Fatalf("after-renewal new-connection request to node-b: status = %d", after.statusCode)
+	}
+	if after.peerLeaf == nil {
+		t.Fatalf("after-renewal new-connection request presented no peer certificate")
+	}
+
+	newSerial := after.peerLeaf.SerialNumber.String()
+	if newSerial == oldSerial {
+		t.Fatalf("a NEW connection AFTER renewal still presented the OLD pre-renewal serial %s - node-b did not begin presenting the fresh certificate for new connections (FR-005 violated)", oldSerial)
+	}
+	if newSerial != renewed.APISerialNumber {
+		t.Fatalf("a NEW connection's ACTUALLY-PRESENTED certificate serial (%s) does not match the renew action's OWN claimed new serial (%s) - the server is presenting a certificate other than the one it just issued", newSerial, renewed.APISerialNumber)
+	}
+
+	// Validity-window inspection (the task's explicit "...and validity"
+	// requirement, not merely the serial number): certs.go's IssueNodeCert
+	// always sets NotBefore = issuance-time-minus-1h (clock-skew
+	// tolerance) and NotAfter = issuance-time-plus-365d (certValidity),
+	// so NotAfter-NotBefore is an EXACT, non-guessed invariant of every
+	// certificate this CA ever issues - proving `after.peerLeaf` really is
+	// a certificate this CA freshly issued (not, say, some stale fixture
+	// smuggled in), independent of wall-clock skew on the machine running
+	// this test.
+	const wantValidityWindow = 365*24*time.Hour + time.Hour
+	gotValidityWindow := after.peerLeaf.NotAfter.Sub(after.peerLeaf.NotBefore)
+	const tolerance = 5 * time.Second
+	if diff := gotValidityWindow - wantValidityWindow; diff > tolerance || diff < -tolerance {
+		t.Fatalf("fresh certificate's validity window (NotAfter-NotBefore = %s) does not match this CA's own IssueNodeCert invariant (want %s +/- %s)", gotValidityWindow, wantValidityWindow, tolerance)
+	}
+	if time.Until(after.peerLeaf.NotAfter) < 300*24*time.Hour {
+		t.Fatalf("fresh certificate's NotAfter (%s) is less than 300 days from now - does not look like a freshly-issued 365-day certificate", after.peerLeaf.NotAfter)
 	}
 }
