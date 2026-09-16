@@ -206,6 +206,32 @@ func (n *Node) RegisterSelf(apiAddr string, resources cluster.Resources) error {
 	return n.raft.Apply(data, applyTimeout).Error()
 }
 
+// UpdateResources refreshes nodeID's already-known Resources in the
+// cluster's Raft-replicated state (fsm.go's CommandUpdateResources,
+// 002-cluster-model-scheduler's resource-freshness heartbeat) - the
+// Node-level proposer T072-FU6 wires cluster.Monitor.SetResourceReporting
+// against (cmd/llmctld's main.go's wireHealthMonitor), closing this
+// project's own disclosed gap that the heartbeat mechanism had zero
+// non-test callers repo-wide (docs/CONTINUATION.md §10f).
+//
+// Uses the shared applyCommand helper (replication_commands.go) rather
+// than Join/RegisterSelf's own inline marshal+Apply, matching
+// AssignReplicationRole/ReassignReplicationRole's identical "decide
+// elsewhere, durably commit here" shape - fsm.go's own Apply case
+// additionally refuses an unknown nodeID (errUpdateResourcesUnknownNode)
+// rather than silently creating a new, incomplete Nodes entry, so a
+// caller updating resources for a node that has not yet completed
+// Join/RegisterSelf gets an honest error, never a partial record.
+//
+// Like every other Apply-backed method in this package, this MUST run
+// against the current Raft leader - hashicorp/raft's own Apply enforces
+// that itself (hraft.ErrNotLeader otherwise); a caller on a follower node
+// forwards the SAME update to the leader instead (internal/api's
+// ForwardUpdateResources).
+func (n *Node) UpdateResources(nodeID string, resources cluster.Resources) error {
+	return n.applyCommand(Command{Type: CommandUpdateResources, NodeID: nodeID, Resources: resources})
+}
+
 // Leave removes n's own node from its Raft cluster (RemoveServer against
 // n's own localID), AND applies a real CommandLeaveNode log entry so
 // ClusterState.Nodes no longer carries n's own entry after it leaves

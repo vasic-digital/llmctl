@@ -61,6 +61,7 @@ package replication
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -99,6 +100,29 @@ type forwardCheckpointRequest struct {
 // budget is deliberately short. A replica down longer than this shows up
 // as real, growing lag (User Story 3's lag.go, T018) rather than as a
 // hung caller request.
+//
+// forwardRequestTimeout bounds EACH INDIVIDUAL attempt inside that
+// budget (postWithRetry, below) via a real per-request context.Context
+// deadline - independent of whatever Timeout the CALLER's own
+// f.httpClient happens to carry (production: cmd/llmctld/main.go's
+// newForwardingHTTPClient, 10s; forwarder_test.go's own tests, anywhere
+// from 500ms to unset/default). Found as a genuine, previously-latent
+// bug via 001-llmctl-completion's T072-FU7 real 3-node integration test
+// (a genuinely-crashed replica's real QUIC/UDP dial attempt has no
+// ICMP-equivalent fast failure the way a closed TCP port does, so it
+// blocks for the full CLIENT Timeout, not forwardRetryBudget) - this
+// constant was declared with exactly this intent but was never actually
+// wired into a request, so forwardRetryBudget's own "bounded, never
+// indefinite" promise silently depended on every caller happening to
+// supply a short enough client Timeout, which production's own real
+// http.Client does not. Each attempt is bounded to
+// min(forwardRequestTimeout, time remaining in the retry budget) - since
+// forwardRequestTimeout (5s) is itself LARGER than forwardRetryBudget
+// (2s), the remaining-budget bound is what actually governs at today's
+// values (a single attempt can never exceed ~forwardRetryBudget total),
+// while forwardRequestTimeout still defends against a future
+// forwardRetryBudget increase making one attempt alone exceed a sane
+// upper bound.
 const (
 	forwardRetryBudget    = 2 * time.Second
 	forwardRetryInterval  = 100 * time.Millisecond
@@ -259,33 +283,28 @@ const forwardTenantIDHeader = "X-Tenant-ID"
 
 // postWithRetry POSTs body to baseURL+path, retrying a failure for up to
 // forwardRetryBudget (FR-004: bounded, never indefinite) before
-// returning the last observed error.
+// returning the last observed error. Each individual attempt is bounded
+// by postOnce's own per-request context deadline (see forwardRequestTimeout's
+// doc comment above for why this is load-bearing, not merely defensive) -
+// the retry loop's own between-attempts deadline check below is no longer
+// the ONLY bound, closing the gap where a single slow-to-fail attempt
+// could alone exceed the whole documented budget.
 func (f *Forwarder) postWithRetry(baseURL, path, tenantID, bearerToken string, body []byte) error {
 	deadline := time.Now().Add(forwardRetryBudget)
 	var lastErr error
 	for {
-		req, err := http.NewRequest(http.MethodPost, baseURL+path, bytes.NewReader(body))
-		if err != nil {
-			return fmt.Errorf("build forward request: %w", err)
+		remaining := time.Until(deadline)
+		if remaining <= 0 {
+			return lastErr
 		}
-		req.Header.Set("Content-Type", "application/json")
-		if bearerToken != "" {
-			req.Header.Set("Authorization", "Bearer "+bearerToken)
-		}
-		if tenantID != "" {
-			req.Header.Set(forwardTenantIDHeader, tenantID)
+		attemptTimeout := remaining
+		if forwardRequestTimeout < attemptTimeout {
+			attemptTimeout = forwardRequestTimeout
 		}
 
-		resp, doErr := f.httpClient.Do(req)
-		if doErr == nil {
-			respBody, _ := io.ReadAll(resp.Body)
-			_ = resp.Body.Close()
-			if resp.StatusCode == http.StatusOK {
-				return nil
-			}
-			lastErr = fmt.Errorf("status %d: %s", resp.StatusCode, respBody)
-		} else {
-			lastErr = doErr
+		lastErr = f.postOnce(baseURL, path, tenantID, bearerToken, body, attemptTimeout)
+		if lastErr == nil {
+			return nil
 		}
 
 		if time.Now().After(deadline) {
@@ -293,4 +312,39 @@ func (f *Forwarder) postWithRetry(baseURL, path, tenantID, bearerToken string, b
 		}
 		time.Sleep(forwardRetryInterval)
 	}
+}
+
+// postOnce performs exactly ONE POST attempt, bounded by timeout via a
+// real context.Context deadline - independent of whatever Timeout the
+// caller's own f.httpClient happens to carry (see forwardRequestTimeout's
+// doc comment above). cancel is deferred so it fires only after the
+// response body has been fully read+closed below, never mid-read (which
+// would surface as a spurious read error rather than this attempt's real
+// outcome).
+func (f *Forwarder) postOnce(baseURL, path, tenantID, bearerToken string, body []byte, timeout time.Duration) error {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL+path, bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("build forward request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if bearerToken != "" {
+		req.Header.Set("Authorization", "Bearer "+bearerToken)
+	}
+	if tenantID != "" {
+		req.Header.Set(forwardTenantIDHeader, tenantID)
+	}
+
+	resp, err := f.httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	respBody, _ := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("status %d: %s", resp.StatusCode, respBody)
+	}
+	return nil
 }

@@ -5,9 +5,16 @@
 package api
 
 import (
+	"bytes"
+	"crypto/tls"
+	"encoding/json"
+	"fmt"
+	"io"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/quic-go/quic-go/http3"
 
 	"github.com/vasic-digital/llmctl/llmctld/internal/cluster"
 	"github.com/vasic-digital/llmctl/llmctld/internal/raft"
@@ -53,6 +60,50 @@ type joinRequest struct {
 	Resources cluster.Resources `json:"resources"`
 }
 
+// updateResourcesRequest is POST /v1/cluster/resources/update's JSON
+// request body - the internal, peer-to-peer forwarding target
+// ForwardUpdateResources (below) calls, naming which node's Resources to
+// refresh (T072-FU6's resource-freshness heartbeat leader-forwarding
+// fallback, cluster.Monitor.SetResourceReporting's ResourceSubmitter,
+// cmd/llmctld's main.go wireHealthMonitor).
+type updateResourcesRequest struct {
+	NodeID    string            `json:"node_id" binding:"required"`
+	Resources cluster.Resources `json:"resources"`
+}
+
+// ForwardUpdateResources is the cross-process half of the resource-
+// heartbeat's leader-forwarding fallback (T072-FU6) - a real HTTP/3+mTLS
+// POST to leaderAPIAddr's own /v1/cluster/resources/update route,
+// mirroring ForwardCARotationTransition's (routes_mtls.go) and
+// client.go's ForwardAutoPlaceStart's identical established shape for
+// this "this write can only durably commit on the current Raft leader,
+// but the caller (a Monitor tick running on ANY node) may not itself be
+// the leader" constraint.
+func ForwardUpdateResources(clientTLS *tls.Config, leaderAPIAddr, nodeID string, resources cluster.Resources) error {
+	client := &http.Client{Transport: &http3.Transport{TLSClientConfig: clientTLS}, Timeout: 10 * time.Second}
+
+	body, err := json.Marshal(updateResourcesRequest{NodeID: nodeID, Resources: resources})
+	if err != nil {
+		return fmt.Errorf("api: ForwardUpdateResources: marshal request: %w", err)
+	}
+	req, err := http.NewRequest(http.MethodPost, "https://"+leaderAPIAddr+"/v1/cluster/resources/update", bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("api: ForwardUpdateResources: build request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("api: ForwardUpdateResources: leader at %s: %w", leaderAPIAddr, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		respBody, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("api: ForwardUpdateResources: leader at %s: status = %d, body = %s", leaderAPIAddr, resp.StatusCode, respBody)
+	}
+	return nil
+}
+
 // RegisterClusterRoutes wires the cluster routes onto r, backed by node.
 // mTLS enforcement for node routes is RequireMTLS (middleware_auth.go),
 // applied by the caller on the route group these handlers are registered
@@ -84,6 +135,41 @@ func RegisterClusterRoutes(r gin.IRoutes, node *raft.Node) {
 		// investigation found in RegisterNode itself, independently of
 		// this call site).
 		c.JSON(http.StatusOK, gin.H{"status": "joined", "peer_id": req.PeerID, "peer_addr": req.PeerAddr})
+	})
+
+	// POST /v1/cluster/resources/update (T072-FU6): the internal,
+	// peer-to-peer forwarding TARGET the resource-heartbeat's own
+	// leader-forwarding fallback calls via ForwardUpdateResources when a
+	// FOLLOWER node's own local node.UpdateResources attempt fails
+	// because it is not the leader (main.go's wireHealthMonitor). A
+	// caller (another cluster node's own Monitor tick, never an
+	// operator) asks WHICHEVER node it believes is currently the leader
+	// to refresh nodeID's Resources on its behalf - genuinely succeeds
+	// ONLY when this node really is the leader
+	// (node.UpdateResources's own FSM-enforced constraint), so a
+	// stale/incorrect belief about who the leader is fails safely with a
+	// 409, exactly like every other leader-only write in this codebase
+	// (mirroring POST /v1/cluster/mtls/rotate/transition's identical
+	// shape, routes_mtls.go).
+	//
+	// No RequireJWT/RBAC gate - this is a NODE-TO-NODE call, gated by the
+	// SAME real mTLS handshake every connection to this server already
+	// requires, exactly like /v1/cluster/join and /v1/cluster/leave
+	// above (this file's own package doc comment already names those as
+	// the node-to-node route set this file registers) and mirroring
+	// routes_mtls.go's /v1/cluster/mtls/rotate/transition peer-forwarding
+	// target's identical no-JWT rationale.
+	r.POST("/v1/cluster/resources/update", func(c *gin.Context) {
+		var req updateResourcesRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		if err := node.UpdateResources(req.NodeID, req.Resources); err != nil {
+			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"status": "updated"})
 	})
 
 	r.POST("/v1/cluster/leave", func(c *gin.Context) {

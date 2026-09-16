@@ -297,3 +297,69 @@ func TestForwarder_UnreachableReplica_BoundedNotIndefinite(t *testing.T) {
 		t.Fatalf("ForwardAppend against an unreachable replica took %s, want well under 5s (FR-004 bounded, not indefinite)", elapsed)
 	}
 }
+
+// TestForwarder_UnreachableReplica_RetryBudgetEnforcedRegardlessOfClientTimeout
+// is the RED-first regression test for a genuine, independently-found
+// latent bug (root-caused via 001-llmctl-completion's T072-FU7 real
+// 3-node integration test): postWithRetry's forwardRetryBudget doc
+// comment promises "retrying a failure for up to forwardRetryBudget...
+// before returning" (FR-004: forwarding "must not block the primary's
+// own ability to keep serving the conversation... indefinitely"), but the
+// retry loop only ever checked its deadline BETWEEN attempts - a single
+// attempt against a target that ACCEPTS the TCP connection but never
+// responds (the real shape of a dead QUIC/UDP peer's handshake attempt:
+// no ICMP-equivalent fast failure the way a closed TCP port produces)
+// blocks for however long the CALLER's own http.Client.Timeout happens to
+// be, which in production (cmd/llmctld/main.go's newForwardingHTTPClient)
+// is 10 seconds - far exceeding forwardRetryBudget's documented 2-second
+// bound. The pre-existing TestForwarder_UnreachableReplica_BoundedNotIndefinite
+// above never caught this: it deliberately uses a SHORT 500ms client
+// Timeout (masking the bug) against a FAST-failing real "connection
+// refused" target (a real TCP RST) - neither property matches this
+// test's own realistic reproduction (a genuine hang, a realistic 10s
+// client Timeout matching production exactly).
+func TestForwarder_UnreachableReplica_RetryBudgetEnforcedRegardlessOfClientTimeout(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("net.Listen: %v", err)
+	}
+	t.Cleanup(func() { _ = ln.Close() })
+	go func() {
+		for {
+			_, err := ln.Accept()
+			if err != nil {
+				return // listener closed by t.Cleanup
+			}
+			// Accept the TCP connection but never read/write anything -
+			// the real shape of a dead QUIC/UDP peer's handshake attempt
+			// (the connection itself never fails fast), reproduced here
+			// over plain TCP since this package's own httpClient
+			// parameter is caller-injected precisely so a plain
+			// http.Client/httptest.Server can exercise this file's
+			// forwarding logic without a real QUIC transport (this
+			// file's own package doc comment). The accepted connection
+			// is deliberately never closed here (process exit / listener
+			// close at test end reclaims it) - closing it would let the
+			// client observe a fast EOF, defeating the "hang" this test
+			// exists to reproduce.
+		}
+	}()
+	hangingAddr := "http://" + ln.Addr().String()
+
+	roles := RoleResolver(func(tenantID string) (string, []string, bool) {
+		return "node-a", []string{"node-b"}, true
+	})
+	addrs := AddrResolver(func(nodeID string) (string, bool) { return hangingAddr, true })
+
+	// A REALISTIC client Timeout, matching production's
+	// cmd/llmctld/main.go newForwardingHTTPClient exactly (10s) - not the
+	// pre-existing test's own artificially-short 500ms, which is what let
+	// this bug go undetected.
+	fwd := NewForwarder("node-a", roles, addrs, &http.Client{Timeout: 10 * time.Second})
+	start := time.Now()
+	_ = fwd.ForwardAppend("tenant-a", fixtureAuthToken, []WALEntry{{Seq: 1}})
+	elapsed := time.Since(start)
+	if elapsed > forwardRetryBudget+2*time.Second {
+		t.Fatalf("ForwardAppend against a hanging (connection-accepted-but-never-responding) replica took %s with a realistic 10s client Timeout, want close to forwardRetryBudget (%s) - FR-004's bounded-retry promise must not depend on the caller's own client Timeout being coincidentally short", elapsed, forwardRetryBudget)
+	}
+}

@@ -672,3 +672,326 @@ func TestFailoverState_AppendLostBeforeForwarding_IsReportedNotHidden(t *testing
 	}
 	t.Logf("new primary %q honestly reports %d/%d tokens after the doomed append raced the primary's own death (gap reported, zero corruption, zero fabricated completeness)", newPrimary.nodeID, len(newState.Tokens), baseTokens+doomedTokens)
 }
+
+// clusterStatusReplicationRoles mirrors GET /v1/cluster/status's real JSON
+// response closely enough for this test to read
+// state.replication_roles[tenantID].primary_node_id - a plain, decoupled
+// local type extending statusResponse's (cluster_bootstrap_test.go) bare
+// IsLeader field with exactly the nested path this test needs, matching
+// this package's own established duplication-over-shared-type-mutation
+// discipline (replAppendEntry/replKVState's doc comment above).
+type clusterStatusReplicationRoles struct {
+	IsLeader bool `json:"is_leader"`
+	State    struct {
+		ReplicationRoles map[string]struct {
+			PrimaryNodeID  string   `json:"primary_node_id"`
+			ReplicaNodeIDs []string `json:"replica_node_ids"`
+		} `json:"replication_roles"`
+	} `json:"state"`
+}
+
+// getReplicationRoleStatus GETs apiAddr's real /v1/cluster/status route
+// (no JWT required - see routes_cluster.go's own package doc comment:
+// this route is mTLS-only) and decodes the tenantID's current
+// ReplicationRole out of it, or ok=false if no role is recorded yet.
+func getReplicationRoleStatus(t *testing.T, client *http.Client, apiAddr, tenantID string) (primaryNodeID string, replicaNodeIDs []string, ok bool) {
+	t.Helper()
+	var resp clusterStatusReplicationRoles
+	status := doJSON(t, client, http.MethodGet, apiAddr, "/v1/cluster/status", "", nil, &resp)
+	if status != http.StatusOK {
+		return "", nil, false
+	}
+	role, ok := resp.State.ReplicationRoles[tenantID]
+	if !ok {
+		return "", nil, false
+	}
+	return role.PrimaryNodeID, role.ReplicaNodeIDs, true
+}
+
+// findByNodeID returns the *spawnedNode in nodes whose nodeID matches, or
+// nil if none does.
+func findByNodeID(nodes []*spawnedNode, nodeID string) *spawnedNode {
+	for _, n := range nodes {
+		if n.nodeID == nodeID {
+			return n
+		}
+	}
+	return nil
+}
+
+// replicationRoleReassignmentTimeout bounds how long this test waits for
+// a real cluster.Monitor health-check tick to detect the killed primary
+// and durably commit a real CommandReassignReplicationRole - generous
+// relative to the real cadence this proof depends on
+// (cmd/llmctld's main.go wireHealthMonitor: a nodeRegistrySyncInterval
+// (1s) freshness bound plus at most one full
+// cluster.DefaultHealthCheckInterval (10s) health-check tick before the
+// failure is even detected, plus the Raft Apply itself, which is
+// sub-second) - matching this file's own established "generous but
+// bounded" convention (SC-019's 30s recovery bound above).
+const replicationRoleReassignmentTimeout = 30 * time.Second
+
+// TestFailoverState_ReplicationRoleReassignedOnCrash_NewPrimaryForwardsOnward
+// is T072-FU7's own real end-to-end proof: a real SIGKILL of the
+// ReplicationRole primary is genuinely detected by cluster.Monitor's real
+// HTTP health check against the dead node's /v1/cluster/status (never a
+// Raft-configuration-shrink signal, which a plain crash never produces -
+// this is the EXACT gap docs/CONTINUATION.md §10g/§10h and
+// specs/001-llmctl-completion/tasks.md's T072-FU7 entry disclosed:
+// ensureReplicationRole's own failover-detection previously always passed
+// nil deadNodeIDs, so a crashed primary was never treated as dead), and
+// the resulting real CommandReassignReplicationRole - proposed by
+// cmd/llmctld's wireHealthMonitor Rescheduler through
+// cluster.ReconcileReplicationRoles (health.go) and applied through the
+// SAME already-tested node.ReassignReplicationRole Raft path
+// routes_replication.go's own ensureReplicationRole already uses - is
+// genuinely committed and cluster-wide visible, and (the load-bearing
+// assertion T072-FU7's disclosed gap named explicitly) a SUBSEQUENT
+// append/checkpoint for that tenant sent directly to the NEW primary is
+// now correctly forwarded onward to the OTHER surviving replica, rather
+// than accepted+persisted only locally and never forwarded anywhere (the
+// exact previously-broken behavior).
+func TestFailoverState_ReplicationRoleReassignedOnCrash_NewPrimaryForwardsOnward(t *testing.T) {
+	tc := newTestCluster(t)
+
+	nodeA := tc.bootstrap("node-a")
+	nodeB := tc.join("node-b", nodeA)
+	nodeC := tc.join("node-c", nodeA)
+	allNodes := []*spawnedNode{nodeA, nodeB, nodeC}
+
+	client := tc.httpClient()
+
+	token, err := auth.IssueToken(auth.Claims{}, []byte(tc.jwtSigningKey))
+	if err != nil {
+		t.Fatalf("issue test jwt: %v", err)
+	}
+
+	deadline := time.Now().Add(5 * time.Second)
+	for _, n := range allNodes {
+		for {
+			nodes, err := tc.getNodes(client, n.apiAddr)
+			if err == nil && len(nodes.Servers) == 3 {
+				break
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("precondition failed: node %q never observed the full 3-node configuration before the test began", n.nodeID)
+			}
+			time.Sleep(50 * time.Millisecond)
+		}
+	}
+
+	// Resolve the current Raft leader and send the FIRST append directly
+	// to it, so ensureReplicationRole's own "!had" fresh-assignment branch
+	// (routes_replication.go) durably commits with PrimaryNodeID ==
+	// primary.nodeID on the first try - a request landing on a follower
+	// would propose the SAME role but silently fail to commit
+	// (hraft.ErrNotLeader), leaving the role unestablished until some
+	// later request happened to land on the leader instead. Targeting the
+	// leader directly makes this test's baseline deterministic rather
+	// than depending on that race.
+	primary := waitForRealLeaderAmong(t, tc, client, allNodes, 5*time.Second)
+	if primary == nil {
+		t.Fatalf("no node reported itself as the Raft leader within 5s")
+	}
+	t.Logf("primary (current Raft leader, and about to become the ReplicationRole primary) is %q", primary.nodeID)
+
+	const baseTokens = 50
+	baseEntries := make([]replAppendEntry, baseTokens)
+	for i := 0; i < baseTokens; i++ {
+		seq := uint64(i + 1)
+		baseEntries[i] = replAppendEntry{Seq: seq, TokenID: int32((seq * 7) % 50000), Position: int32(i)}
+	}
+	replicationAppend(t, client, primary.apiAddr, token, baseEntries)
+	baseState := replKVState{Tokens: make([]int32, baseTokens), Positions: make([]int32, baseTokens)}
+	for i := 0; i < baseTokens; i++ {
+		baseState.Tokens[i] = baseEntries[i].TokenID
+		baseState.Positions[i] = baseEntries[i].Position
+	}
+	replicationCheckpoint(t, client, primary.apiAddr, token, uint64(baseTokens), baseState)
+
+	// Confirm the ReplicationRole genuinely established naming primary as
+	// PrimaryNodeID BEFORE proceeding - the precondition this test's own
+	// later "reassigned away from it" assertion depends on.
+	roleDeadline := time.Now().Add(5 * time.Second)
+	for {
+		primaryID, _, ok := getReplicationRoleStatus(t, client, primary.apiAddr, "")
+		if ok && primaryID == primary.nodeID {
+			break
+		}
+		if time.Now().After(roleDeadline) {
+			t.Fatalf("precondition failed: the default tenant's ReplicationRole never established naming %q as primary within 5s", primary.nodeID)
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+
+	// Verify the base state genuinely forwarded to BOTH other nodes before
+	// destroying anything - the same "verify before destroy" discipline
+	// this file's other tests already establish.
+	baseForwardDeadline := time.Now().Add(10 * time.Second)
+	for _, n := range allNodes {
+		if n.nodeID == primary.nodeID {
+			continue
+		}
+		for {
+			got := replicationState(t, client, n.apiAddr, token)
+			if len(got.Tokens) == baseTokens {
+				break
+			}
+			if time.Now().After(baseForwardDeadline) {
+				t.Fatalf("node %q never observed the base %d-token forwarded state within 10s", n.nodeID, baseTokens)
+			}
+			time.Sleep(50 * time.Millisecond)
+		}
+	}
+	t.Logf("base %d-token state established with %q as ReplicationRole primary and forwarded to both other real nodes", baseTokens, primary.nodeID)
+
+	// Real SIGKILL - the exact failure class this test proves is now
+	// detected: a plain crash never shrinks Raft's own voter configuration
+	// (node.Servers()), which is precisely why ensureReplicationRole's
+	// OWN failover-detection (fed only by that signal, with deadNodeIDs
+	// always nil) could never see this as a failure on its own. Detection
+	// here comes exclusively from cluster.Monitor's real HTTP health
+	// check against primary's own /v1/cluster/status.
+	killTime := time.Now()
+	if err := primary.cmd.Process.Kill(); err != nil {
+		t.Fatalf("kill primary %q: %v", primary.nodeID, err)
+	}
+	_, _ = primary.cmd.Process.Wait()
+	delete(tc.nodes, primary.nodeID)
+
+	survivors := make([]*spawnedNode, 0, 2)
+	for _, n := range allNodes {
+		if n.nodeID != primary.nodeID {
+			survivors = append(survivors, n)
+		}
+	}
+
+	// A new Raft LEADER is elected quickly (seconds) - but T072-FU7's own
+	// design point 4 deliberately passes preferredPrimary="" to
+	// cluster.ReconcileReplicationRoles (main.go's wireHealthMonitor), so
+	// the REASSIGNED REPLICATION-ROLE PRIMARY is whichever survivor sorts
+	// first alphabetically (health.go's firstOtherLiveNode) - NOT
+	// necessarily the same node that wins Raft leader election. This test
+	// deliberately does not assume they coincide; it discovers the real
+	// reassigned primary from the cluster's own replicated state.
+	newLeader := waitForRealLeaderAmong(t, tc, client, survivors, 10*time.Second)
+	if newLeader == nil {
+		t.Fatalf("no new leader was elected among the surviving real processes within 10s of killing the primary %q", primary.nodeID)
+	}
+	t.Logf("new Raft leader (may or may not be the reassigned ReplicationRole primary) is %q, %s after killing %q", newLeader.nodeID, time.Since(killTime), primary.nodeID)
+
+	// The load-bearing wait: poll every survivor's own real
+	// /v1/cluster/status until the default tenant's ReplicationRole
+	// PrimaryNodeID has genuinely changed away from the killed node - the
+	// real, Raft-committed CommandReassignReplicationRole this test
+	// exists to prove now happens automatically.
+	var newPrimaryID string
+	reassignDeadline := time.Now().Add(replicationRoleReassignmentTimeout)
+	for {
+		found := false
+		for _, n := range survivors {
+			primaryID, _, ok := getReplicationRoleStatus(t, client, n.apiAddr, "")
+			if ok && primaryID != "" && primaryID != primary.nodeID {
+				newPrimaryID = primaryID
+				found = true
+				break
+			}
+		}
+		if found {
+			break
+		}
+		if time.Now().After(reassignDeadline) {
+			t.Fatalf("T072-FU7 REGRESSION: the default tenant's ReplicationRole was never reassigned away from the killed primary %q within %s of the kill - cluster.Monitor's health-driven failover wiring did not fire (or did not commit)", primary.nodeID, replicationRoleReassignmentTimeout)
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	reassignElapsed := time.Since(killTime)
+	t.Logf("ReplicationRole reassigned: new primary is %q, %s after killing %q (cluster.Monitor's real health-check-driven Rescheduler -> cluster.ReconcileReplicationRoles -> node.ReassignReplicationRole)", newPrimaryID, reassignElapsed, primary.nodeID)
+
+	newPrimary := findByNodeID(survivors, newPrimaryID)
+	if newPrimary == nil {
+		t.Fatalf("reassigned ReplicationRole names primary %q, which is not one of the real surviving processes %v - a fabricated/unreachable primary would itself be a defect", newPrimaryID, survivors)
+	}
+	other := survivors[0]
+	if other.nodeID == newPrimary.nodeID {
+		other = survivors[1]
+	}
+
+	// The reassignment above was observed via WHICHEVER survivor happened
+	// to answer first (possibly newPrimary itself, possibly the OTHER
+	// one) - real Raft log replication from committer to follower is not
+	// instantaneous (real, if typically small, propagation lag), so
+	// newPrimary's OWN local ReplicationRoles view may not have caught up
+	// to the SAME committed entry yet at this exact instant. Confirm
+	// newPrimary's own /v1/cluster/status ALSO reports itself as primary
+	// before writing to it directly below - writing to a node whose own
+	// local state has not yet caught up would make ensureReplicationRole
+	// see the OLD (dead) primary there instead, so ForwardAppend's own
+	// "primaryID != f.selfID -> no-op" gate would correctly (but
+	// misleadingly, for this test) forward nothing at all - a real
+	// replication-propagation race in THIS TEST's own read-then-write
+	// sequencing, never a claim that production's underlying commit
+	// itself is anything but atomic (T005's own analysis, cited in this
+	// test's Rescheduler-side doc comment, still holds).
+	selfCaughtUpDeadline := time.Now().Add(5 * time.Second)
+	for {
+		selfPrimaryID, _, ok := getReplicationRoleStatus(t, client, newPrimary.apiAddr, "")
+		if ok && selfPrimaryID == newPrimaryID {
+			break
+		}
+		if time.Now().After(selfCaughtUpDeadline) {
+			t.Fatalf("reassigned primary %q never observed itself as primary on its OWN /v1/cluster/status within 5s of the reassignment being observed elsewhere - real Raft replication lag exceeded this generous bound", newPrimaryID)
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+
+	// The load-bearing assertion: a SUBSEQUENT append/checkpoint sent
+	// directly to the NEW primary must now be forwarded onward to the
+	// OTHER surviving replica - proving ensureReplicationRole's own
+	// "existing primary is live, no reassignment needed" fast path now
+	// correctly recognizes newPrimary (via the SAME liveNodeIDs/
+	// node.Servers() it already reads) as the authoritative primary, and
+	// Forwarder.ForwardAppend/ForwardCheckpoint's own primaryID ==
+	// f.selfID gate (internal/replication/forwarder.go) now passes on
+	// newPrimary, where it never could before this fix (the role would
+	// have stayed pinned to the dead node forever).
+	const postFailoverTokens = 25
+	postEntries := make([]replAppendEntry, postFailoverTokens)
+	for i := 0; i < postFailoverTokens; i++ {
+		seq := uint64(baseTokens + i + 1)
+		postEntries[i] = replAppendEntry{Seq: seq, TokenID: int32((seq * 11) % 50000), Position: int32(baseTokens + i)}
+	}
+	replicationAppend(t, client, newPrimary.apiAddr, token, postEntries)
+	postState := replKVState{
+		Tokens:    append(append([]int32{}, baseState.Tokens...), make([]int32, postFailoverTokens)...),
+		Positions: append(append([]int32{}, baseState.Positions...), make([]int32, postFailoverTokens)...),
+	}
+	for i := range postEntries {
+		postState.Tokens[baseTokens+i] = postEntries[i].TokenID
+		postState.Positions[baseTokens+i] = postEntries[i].Position
+	}
+	replicationCheckpoint(t, client, newPrimary.apiAddr, token, uint64(baseTokens+postFailoverTokens), postState)
+
+	forwardOnwardDeadline := time.Now().Add(10 * time.Second)
+	for {
+		got := replicationState(t, client, other.apiAddr, token)
+		if len(got.Tokens) == baseTokens+postFailoverTokens {
+			match := true
+			for i := range got.Tokens {
+				if got.Tokens[i] != postState.Tokens[i] || got.Positions[i] != postState.Positions[i] {
+					match = false
+					break
+				}
+			}
+			if match {
+				break
+			}
+		}
+		if time.Now().After(forwardOnwardDeadline) {
+			got := replicationState(t, client, other.apiAddr, token)
+			t.Fatalf("T072-FU7 REGRESSION: the post-failover append/checkpoint sent to the new primary %q was never forwarded onward to the other survivor %q within 10s (it reports %d/%d tokens) - the new primary accepted+persisted the write locally but did not forward it, the exact previously-broken behavior this test exists to catch", newPrimary.nodeID, other.nodeID, len(got.Tokens), baseTokens+postFailoverTokens)
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	t.Logf("SUCCESS: post-failover append/checkpoint sent to the reassigned primary %q was genuinely forwarded onward to the other survivor %q - T072-FU7's disclosed gap is closed", newPrimary.nodeID, other.nodeID)
+}
