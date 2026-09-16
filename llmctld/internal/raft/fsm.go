@@ -25,6 +25,16 @@ const (
 	CommandLeaveNode   CommandType = "leave_node"
 	CommandAcquireLock CommandType = "acquire_lock"
 	CommandReleaseLock CommandType = "release_lock"
+	// CommandAssignReplicationRole and CommandReassignReplicationRole
+	// both write cluster.ClusterState.ReplicationRoles[tenantID] via the
+	// SAME atomic map-replace-in-place code path as CommandJoinNode's own
+	// Nodes map write (003-kv-cache-replication data-model.md,
+	// replication_roles.go's ReconcileTenantRole doc comment) - two
+	// distinct CommandTypes exist only for semantic/audit clarity
+	// (a fresh/refreshed assignment vs. a failover taking over from a
+	// dead primary), never because the FSM treats them differently.
+	CommandAssignReplicationRole   CommandType = "assign_replication_role"
+	CommandReassignReplicationRole CommandType = "reassign_replication_role"
 )
 
 // Command is the structure serialized into every Raft log entry's Data.
@@ -53,13 +63,23 @@ type Command struct {
 	// uses the same reference instant - never each node's own local
 	// clock, for the identical determinism reason as LockExpiresAt.
 	LockNow time.Time `json:"lock_now,omitempty"`
+
+	// ReplicationRole carries the full role assignment for
+	// CommandAssignReplicationRole/CommandReassignReplicationRole -
+	// computed ONCE by the proposer (cluster.ReconcileTenantRole,
+	// including its own AssignedAt) and replicated verbatim, matching
+	// LockExpiresAt/LockNow's determinism discipline above: FSM.Apply
+	// must produce identical state on every replica given the same log
+	// entry, so this value is never recomputed locally by Apply itself.
+	ReplicationRole *cluster.ReplicationRole `json:"replication_role,omitempty"`
 }
 
 var (
-	errCommandMissingNode = errors.New("raft: join_node command missing Node")
-	errUnknownCommand     = errors.New("raft: unknown command type")
-	errLockHeldByAnother  = errors.New("raft: acquire_lock refused: key is held by another holder and its lease has not yet expired")
-	errNotLockHolder      = errors.New("raft: release_lock refused: caller is not the current holder of this lock")
+	errCommandMissingNode            = errors.New("raft: join_node command missing Node")
+	errUnknownCommand                = errors.New("raft: unknown command type")
+	errLockHeldByAnother             = errors.New("raft: acquire_lock refused: key is held by another holder and its lease has not yet expired")
+	errNotLockHolder                 = errors.New("raft: release_lock refused: caller is not the current holder of this lock")
+	errCommandMissingReplicationRole = errors.New("raft: assign_replication_role/reassign_replication_role command missing ReplicationRole")
 )
 
 // ClusterFSM implements hashicorp/raft's FSM interface, applying replicated
@@ -133,6 +153,17 @@ func (f *ClusterFSM) Apply(log *hraft.Log) interface{} {
 			return errNotLockHolder
 		}
 		delete(f.state.Locks, cmd.LockKey)
+	case CommandAssignReplicationRole, CommandReassignReplicationRole:
+		if cmd.ReplicationRole == nil {
+			return errCommandMissingReplicationRole
+		}
+		// Atomic map-replace-in-place, exactly like CommandJoinNode's own
+		// f.state.Nodes[cmd.Node.ID] = *cmd.Node write above: a single
+		// map-entry assignment can never leave two ReplicationRole
+		// entries for the same tenant momentarily visible, so
+		// spec.md FR-011's "exactly one primary at any time" holds
+		// structurally, not merely by convention.
+		f.state.ReplicationRoles[cmd.ReplicationRole.TenantID] = *cmd.ReplicationRole
 	default:
 		return errUnknownCommand
 	}
@@ -158,6 +189,9 @@ func (f *ClusterFSM) Restore(rc io.ReadCloser) error {
 	}
 	if state.Locks == nil {
 		state.Locks = make(map[string]cluster.LockEntry)
+	}
+	if state.ReplicationRoles == nil {
+		state.ReplicationRoles = make(map[string]cluster.ReplicationRole)
 	}
 
 	f.mu.Lock()
