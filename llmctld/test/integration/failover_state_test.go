@@ -382,3 +382,29 @@ func TestFailoverState_KVCacheSurvivesPrimaryKill(t *testing.T) {
 		t.Fatalf("SC-019 violated: %.2f%% token loss exceeds the 5%% bound", lossPct)
 	}
 }
+
+// TestFailoverState_AutomaticForwarding_NoManualFanOut is T006 (spec.md
+// 003-kv-cache-replication, US1 Acceptance Scenario 1/2): the direct
+// replacement/extension of TestFailoverState_KVCacheSurvivesPrimaryKill's
+// own scenario above, this time WITHOUT the test itself calling every
+// node's HTTP replication routes to fan out state - only real client
+// calls against the resolved PRIMARY, then a real kill, then a real
+// assertion the new primary already has everything because the DAEMON
+// itself forwarded it automatically. Scaffolded here (Phase 1, T002) as
+// an explicit placeholder; T006 fills in the real body, run FIRST
+// against the current, un-forwarded daemon to observe a genuine RED
+// before Phase 3's forwarder (T008) exists to make it GREEN.
+func TestFailoverState_AutomaticForwarding_NoManualFanOut(t *testing.T) {
+	t.Skip("T002 scaffold - real body lands with T006")
+}
+
+// TestFailoverState_AppendLostBeforeForwarding_IsReportedNotHidden is
+// T007 (spec.md Edge Case / FR-005): kill the primary in the exact
+// instant after an append lands only locally (before automatic
+// forwarding could complete); assert the resulting gap is reported
+// honestly by the new primary's own state, never silently presented as
+// a complete conversation. Scaffolded here (Phase 1, T002); T007 fills
+// in the real body.
+func TestFailoverState_AppendLostBeforeForwarding_IsReportedNotHidden(t *testing.T) {
+	t.Skip("T002 scaffold - real body lands with T007")
+}
