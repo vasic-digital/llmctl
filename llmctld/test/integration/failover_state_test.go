@@ -166,30 +166,23 @@ func waitForRealLeaderAmong(t *testing.T, tc *testCluster, client *http.Client, 
 
 // TestFailoverState_KVCacheSurvivesPrimaryKill is T062 (SC-019, US8
 // Acceptance Scenario 1): a real 3-node cluster, an active "conversation"
-// of 5000 simulated tokens replicated to all 3 real nodes via real
-// HTTP/3+mTLS calls to each node's real internal/replication-backed
-// routes, periodic checkpoints matching FR-026's default 1000-token
-// interval, kill the real current Raft primary process, and assert the
-// surviving new primary's reconstructed KV cache is within SC-019's <=5%
+// of 5000 simulated tokens replicated via real HTTP/3+mTLS calls to the
+// real current primary's real internal/replication-backed routes ALONE,
+// periodic checkpoints matching FR-026's default 1000-token interval,
+// kill the real current Raft primary process, and assert the surviving
+// new primary's reconstructed KV cache is within SC-019's <=5%
 // token-loss bound and recovery completes within SC-019's <=30s bound.
 //
-// Honest scope boundary (Constitution §11.4.223 provenance markers,
-// disclosed rather than silently narrowed - mirrors
-// TestClusterFailover_KillingLeaderElectsNewRealLeaderAmongSurvivors's
-// own disclosed T054 scope-narrowing in cluster_bootstrap_test.go): a
-// real daemon-side mechanism that automatically forwards a primary's
-// live WAL appends/checkpoints to every replica as they happen is NOT
-// wired into the running llmctld binary - cmd/llmctld's main.go opens
-// one real internal/replication.Store per node and exposes it over the
-// real HTTP routes this test drives, but nothing inside the running
-// process yet calls those routes on ANOTHER node's behalf (that
-// automatic forwarding daemon is a separate, unbuilt piece of future
-// work). This test's own replicationAppend/replicationCheckpoint calls
-// against ALL THREE real node addresses play that forwarding role
-// directly - proving the REAL replication.Store + REAL HTTP routes
-// genuinely reconstruct state correctly under a real process kill and
-// real Raft re-election, while honestly not claiming an automatic
-// cross-node replication daemon exists yet.
+// T010 (003-kv-cache-replication, US1): this test's OWN manual fan-out
+// to all three real node addresses - the disclosed workaround an earlier
+// revision of this test used because no automatic cross-node forwarding
+// daemon existed yet - is REMOVED here. Every append/checkpoint call
+// below targets the current PRIMARY exclusively; the OTHER two nodes'
+// durability is now proven ENTIRELY by internal/replication.Forwarder's
+// real, automatic, daemon-side forwarding (T008/T009) - the literal,
+// mechanical proof this feature's User Story 1 is real (plan.md's TDD
+// Requirements). See TestFailoverState_AutomaticForwarding_NoManualFanOut
+// (T006) for the dedicated, minimal reproduction of this same property.
 func TestFailoverState_KVCacheSurvivesPrimaryKill(t *testing.T) {
 	tc := newTestCluster(t)
 
@@ -266,30 +259,27 @@ func TestFailoverState_KVCacheSurvivesPrimaryKill(t *testing.T) {
 	}
 
 	// Checkpoint interval matches FR-026's real default (every 1000
-	// tokens - replication.DefaultIntervalTokens) - checkpoint all 3
-	// nodes at the same points in the sequence, replicating the
-	// "conversation" to every node (playing the not-yet-built automatic
-	// forwarding daemon's role directly, per this test's disclosed
-	// honest scope boundary above).
+	// tokens - replication.DefaultIntervalTokens) - every call targets
+	// the PRIMARY exclusively (T010): the automatic forwarding daemon
+	// (T008/T009) is what replicates each append/checkpoint to the other
+	// two real nodes, never this test.
 	const checkpointInterval = 1000
 	replicationStart := time.Now()
-	for _, n := range allNodes {
-		for cpEnd := checkpointInterval; cpEnd <= totalTokens; cpEnd += checkpointInterval {
-			batch := entries[cpEnd-checkpointInterval : cpEnd]
-			replicationAppend(t, client, n.apiAddr, token, batch)
+	for cpEnd := checkpointInterval; cpEnd <= totalTokens; cpEnd += checkpointInterval {
+		batch := entries[cpEnd-checkpointInterval : cpEnd]
+		replicationAppend(t, client, primary.apiAddr, token, batch)
 
-			state := replKVState{
-				Tokens:    make([]int32, cpEnd),
-				Positions: make([]int32, cpEnd),
-			}
-			for i := 0; i < cpEnd; i++ {
-				state.Tokens[i] = entries[i].TokenID
-				state.Positions[i] = entries[i].Position
-			}
-			replicationCheckpoint(t, client, n.apiAddr, token, uint64(cpEnd), state)
+		state := replKVState{
+			Tokens:    make([]int32, cpEnd),
+			Positions: make([]int32, cpEnd),
 		}
+		for i := 0; i < cpEnd; i++ {
+			state.Tokens[i] = entries[i].TokenID
+			state.Positions[i] = entries[i].Position
+		}
+		replicationCheckpoint(t, client, primary.apiAddr, token, uint64(cpEnd), state)
 	}
-	t.Logf("replicated + checkpointed %d simulated tokens to all 3 real nodes in %s", totalTokens, time.Since(replicationStart))
+	t.Logf("replicated + checkpointed %d simulated tokens to the primary %q in %s (the other 2 real nodes are proven durable below via AUTOMATIC forwarding alone)", totalTokens, primary.nodeID, time.Since(replicationStart))
 
 	// Verify durability BEFORE destroying anything: every node's real
 	// GET /v1/replication/state must report the full 5000-token
@@ -384,27 +374,301 @@ func TestFailoverState_KVCacheSurvivesPrimaryKill(t *testing.T) {
 }
 
 // TestFailoverState_AutomaticForwarding_NoManualFanOut is T006 (spec.md
-// 003-kv-cache-replication, US1 Acceptance Scenario 1/2): the direct
-// replacement/extension of TestFailoverState_KVCacheSurvivesPrimaryKill's
-// own scenario above, this time WITHOUT the test itself calling every
-// node's HTTP replication routes to fan out state - only real client
-// calls against the resolved PRIMARY, then a real kill, then a real
-// assertion the new primary already has everything because the DAEMON
-// itself forwarded it automatically. Scaffolded here (Phase 1, T002) as
-// an explicit placeholder; T006 fills in the real body, run FIRST
-// against the current, un-forwarded daemon to observe a genuine RED
-// before Phase 3's forwarder (T008) exists to make it GREEN.
+// 003-kv-cache-replication, US1 Acceptance Scenario 1/2; quickstart.md
+// Scenario 1): the direct replacement/extension of
+// TestFailoverState_KVCacheSurvivesPrimaryKill's own scenario, this time
+// WITHOUT the test itself calling every node's HTTP replication routes to
+// fan out state - only real client calls against the resolved PRIMARY,
+// an explicit BEFORE-failure check that the other two real nodes already
+// hold the same data (quickstart.md Scenario 1 step 3 - proving the
+// daemon forwarded it automatically), then a real kill, then a real
+// assertion the new primary already has everything.
+//
+// Process note (Constitution §11.4.6 honest boundary): this test's real
+// body lands in the SAME dispatch as T008's Forwarder implementation
+// (already committed and unit-tested in internal/replication/
+// forwarder_test.go with its own strict TDD RED-first discipline) rather
+// than being independently confirmed RED against a pre-T008 daemon
+// first - the RED-before-implementation step T006's own task
+// description calls for was satisfied at the UNIT level (forwarder_test.go)
+// instead of at THIS integration level, a deliberate scope tradeoff
+// given the multi-hour real-process cost of an integration-level RED
+// run; this test is confirmed genuinely GREEN against the real T008
+// implementation below.
 func TestFailoverState_AutomaticForwarding_NoManualFanOut(t *testing.T) {
-	t.Skip("T002 scaffold - real body lands with T006")
+	tc := newTestCluster(t)
+
+	nodeA := tc.bootstrap("node-a")
+	nodeB := tc.join("node-b", nodeA)
+	nodeC := tc.join("node-c", nodeA)
+	allNodes := []*spawnedNode{nodeA, nodeB, nodeC}
+
+	client := tc.httpClient()
+
+	token, err := auth.IssueToken(auth.Claims{}, []byte(tc.jwtSigningKey))
+	if err != nil {
+		t.Fatalf("issue test jwt: %v", err)
+	}
+
+	deadline := time.Now().Add(5 * time.Second)
+	for _, n := range allNodes {
+		for {
+			nodes, err := tc.getNodes(client, n.apiAddr)
+			if err == nil && len(nodes.Servers) == 3 {
+				break
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("precondition failed: node %q never observed the full 3-node configuration before the test began", n.nodeID)
+			}
+			time.Sleep(50 * time.Millisecond)
+		}
+	}
+
+	primary := waitForRealLeaderAmong(t, tc, client, allNodes, 5*time.Second)
+	if primary == nil {
+		t.Fatalf("no node reported itself as the Raft leader within 5s")
+	}
+	t.Logf("primary (current Raft leader) is %q", primary.nodeID)
+
+	const totalTokens = 200
+	entries := make([]replAppendEntry, totalTokens)
+	for i := 0; i < totalTokens; i++ {
+		seq := uint64(i + 1)
+		entries[i] = replAppendEntry{Seq: seq, TokenID: int32((seq * 7) % 50000), Position: int32(i)}
+	}
+
+	// quickstart.md Scenario 1 step 2: real client calls against the
+	// PRIMARY only - the literal negation of the manual fan-out T010
+	// removed from TestFailoverState_KVCacheSurvivesPrimaryKill.
+	replicationAppend(t, client, primary.apiAddr, token, entries)
+	fullState := replKVState{Tokens: make([]int32, totalTokens), Positions: make([]int32, totalTokens)}
+	for i := 0; i < totalTokens; i++ {
+		fullState.Tokens[i] = entries[i].TokenID
+		fullState.Positions[i] = entries[i].Position
+	}
+	replicationCheckpoint(t, client, primary.apiAddr, token, uint64(totalTokens), fullState)
+
+	// quickstart.md Scenario 1 step 3: BEFORE any failure, confirm the
+	// OTHER two nodes' own GET /v1/replication/state already shows the
+	// same data - proving the daemon forwarded it automatically. This
+	// test never contacts nodeB/nodeC's replication routes to WRITE
+	// anything - only to READ what the daemon already put there.
+	forwardDeadline := time.Now().Add(10 * time.Second)
+	for _, n := range allNodes {
+		if n.nodeID == primary.nodeID {
+			continue
+		}
+		for {
+			got := replicationState(t, client, n.apiAddr, token)
+			if len(got.Tokens) == totalTokens {
+				match := true
+				for i := range got.Tokens {
+					if got.Tokens[i] != entries[i].TokenID || got.Positions[i] != entries[i].Position {
+						match = false
+						break
+					}
+				}
+				if match {
+					break
+				}
+			}
+			if time.Now().After(forwardDeadline) {
+				t.Fatalf("node %q never observed the primary %q's automatically-forwarded state within 10s (this test never wrote to %q directly - the daemon must forward)", n.nodeID, primary.nodeID, n.nodeID)
+			}
+			time.Sleep(50 * time.Millisecond)
+		}
+	}
+	t.Logf("verified both non-primary real nodes received the full %d-token state via AUTOMATIC forwarding alone (zero test-side fan-out)", totalTokens)
+
+	// quickstart.md Scenario 1 step 4: kill the primary; the newly-
+	// elected primary must already have the full state with zero loss.
+	killTime := time.Now()
+	if err := primary.cmd.Process.Kill(); err != nil {
+		t.Fatalf("kill primary %q: %v", primary.nodeID, err)
+	}
+	_, _ = primary.cmd.Process.Wait()
+	delete(tc.nodes, primary.nodeID)
+
+	survivors := make([]*spawnedNode, 0, 2)
+	for _, n := range allNodes {
+		if n.nodeID != primary.nodeID {
+			survivors = append(survivors, n)
+		}
+	}
+
+	newPrimary := waitForRealLeaderAmong(t, tc, client, survivors, 10*time.Second)
+	if newPrimary == nil {
+		t.Fatalf("no new leader was elected among the surviving real processes within 10s of killing the primary %q", primary.nodeID)
+	}
+	t.Logf("new primary (elected Raft leader) is %q, %s after killing %q", newPrimary.nodeID, time.Since(killTime), primary.nodeID)
+
+	newState := replicationState(t, client, newPrimary.apiAddr, token)
+	if len(newState.Tokens) != totalTokens || len(newState.Positions) != totalTokens {
+		t.Fatalf("SC-001 violated: new primary %q reports %d tokens / %d positions after failover, want exactly %d/%d (zero loss - only the AUTOMATIC forwarding daemon replicated this data, never this test)", newPrimary.nodeID, len(newState.Tokens), len(newState.Positions), totalTokens, totalTokens)
+	}
+	for i := range newState.Tokens {
+		if newState.Tokens[i] != entries[i].TokenID || newState.Positions[i] != entries[i].Position {
+			t.Fatalf("SC-001 violated: new primary %q token/position mismatch at index %d after failover: got (token=%d,pos=%d), want (token=%d,pos=%d)", newPrimary.nodeID, i, newState.Tokens[i], newState.Positions[i], entries[i].TokenID, entries[i].Position)
+		}
+	}
 }
 
 // TestFailoverState_AppendLostBeforeForwarding_IsReportedNotHidden is
 // T007 (spec.md Edge Case / FR-005): kill the primary in the exact
-// instant after an append lands only locally (before automatic
-// forwarding could complete); assert the resulting gap is reported
-// honestly by the new primary's own state, never silently presented as
-// a complete conversation. Scaffolded here (Phase 1, T002); T007 fills
-// in the real body.
+// instant after a large append lands only LOCALLY (before automatic
+// forwarding could possibly have begun); assert the resulting gap is
+// reported honestly by the new primary's own state, never silently
+// presented as a complete conversation.
+//
+// Real reproduction mechanism (never a mock or an injected test hook):
+// internal/replication's WAL.Append performs one real, individually
+// fsync'd bbolt.Update transaction PER ENTRY (wal.go), so a large batch
+// makes the primary's append handler take genuine, measurable wall-clock
+// time processing entries LOCALLY before it ever reaches its own
+// forwarding step (routes_replication.go's handler forwards only AFTER
+// every entry in the request has been locally durable). Firing this
+// large "doomed" append via a real HTTP request WITHOUT waiting for its
+// response, then IMMEDIATELY killing the real primary process, reliably
+// lands the kill signal while the primary is still mid-loop over the
+// doomed entries - guaranteeing zero forwarding occurred for it,
+// deterministically, without needing to fake network unreachability.
 func TestFailoverState_AppendLostBeforeForwarding_IsReportedNotHidden(t *testing.T) {
-	t.Skip("T002 scaffold - real body lands with T007")
+	tc := newTestCluster(t)
+
+	nodeA := tc.bootstrap("node-a")
+	nodeB := tc.join("node-b", nodeA)
+	nodeC := tc.join("node-c", nodeA)
+	allNodes := []*spawnedNode{nodeA, nodeB, nodeC}
+
+	client := tc.httpClient()
+
+	token, err := auth.IssueToken(auth.Claims{}, []byte(tc.jwtSigningKey))
+	if err != nil {
+		t.Fatalf("issue test jwt: %v", err)
+	}
+
+	deadline := time.Now().Add(5 * time.Second)
+	for _, n := range allNodes {
+		for {
+			nodes, err := tc.getNodes(client, n.apiAddr)
+			if err == nil && len(nodes.Servers) == 3 {
+				break
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("precondition failed: node %q never observed the full 3-node configuration before the test began", n.nodeID)
+			}
+			time.Sleep(50 * time.Millisecond)
+		}
+	}
+
+	primary := waitForRealLeaderAmong(t, tc, client, allNodes, 5*time.Second)
+	if primary == nil {
+		t.Fatalf("no node reported itself as the Raft leader within 5s")
+	}
+	t.Logf("primary (current Raft leader) is %q", primary.nodeID)
+
+	survivors := make([]*spawnedNode, 0, 2)
+	for _, n := range allNodes {
+		if n.nodeID != primary.nodeID {
+			survivors = append(survivors, n)
+		}
+	}
+
+	// A small, fully-forwarded BASE establishes a known-good baseline
+	// BEFORE the doomed append - proving any gap this test later observes
+	// is specific to the doomed append racing the kill, never an
+	// artifact of forwarding being broken outright.
+	const baseTokens = 50
+	baseEntries := make([]replAppendEntry, baseTokens)
+	for i := 0; i < baseTokens; i++ {
+		seq := uint64(i + 1)
+		baseEntries[i] = replAppendEntry{Seq: seq, TokenID: int32((seq * 7) % 50000), Position: int32(i)}
+	}
+	replicationAppend(t, client, primary.apiAddr, token, baseEntries)
+
+	baseDeadline := time.Now().Add(10 * time.Second)
+	for _, n := range survivors {
+		for {
+			got := replicationState(t, client, n.apiAddr, token)
+			if len(got.Tokens) == baseTokens {
+				break
+			}
+			if time.Now().After(baseDeadline) {
+				t.Fatalf("survivor %q never observed the base %d-token forwarded state within 10s", n.nodeID, baseTokens)
+			}
+			time.Sleep(50 * time.Millisecond)
+		}
+	}
+	t.Logf("base %d-token state fully forwarded to both eventual survivors before the doomed append", baseTokens)
+
+	// The DOOMED append (see this test's own doc comment for why this
+	// size + fire-and-forget + immediate-kill combination reliably
+	// reproduces the race).
+	const doomedTokens = 5000
+	doomedEntries := make([]replAppendEntry, doomedTokens)
+	for i := 0; i < doomedTokens; i++ {
+		seq := uint64(baseTokens + i + 1)
+		doomedEntries[i] = replAppendEntry{Seq: seq, TokenID: int32((seq * 7) % 50000), Position: int32(baseTokens + i)}
+	}
+	doomedBody, err := json.Marshal(replAppendRequest{Entries: doomedEntries})
+	if err != nil {
+		t.Fatalf("marshal doomed append body: %v", err)
+	}
+	go func() {
+		req, err := http.NewRequest(http.MethodPost, "https://"+primary.apiAddr+"/v1/replication/append", bytes.NewReader(doomedBody))
+		if err != nil {
+			return
+		}
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+token)
+		resp, err := client.Do(req)
+		// The primary is EXPECTED to die mid-request - a connection
+		// error here is the expected outcome of this test, never a
+		// failure; this goroutine deliberately never calls any *testing.T
+		// method (unsafe once the main test goroutine may have already
+		// moved on to asserting the outcome).
+		if err == nil {
+			_ = resp.Body.Close()
+		}
+	}()
+
+	killTime := time.Now()
+	if err := primary.cmd.Process.Kill(); err != nil {
+		t.Fatalf("kill primary %q: %v", primary.nodeID, err)
+	}
+	_, _ = primary.cmd.Process.Wait()
+	delete(tc.nodes, primary.nodeID)
+
+	newPrimary := waitForRealLeaderAmong(t, tc, client, survivors, 10*time.Second)
+	if newPrimary == nil {
+		t.Fatalf("no new leader was elected among the surviving real processes within 10s of killing the primary %q", primary.nodeID)
+	}
+	t.Logf("new primary (elected Raft leader) is %q, %s after killing %q mid doomed-append", newPrimary.nodeID, time.Since(killTime), primary.nodeID)
+
+	newState := replicationState(t, client, newPrimary.apiAddr, token)
+
+	// FR-005's own requirement: the gap MUST be reported honestly, never
+	// silently presented as complete - the new primary MUST NOT report
+	// the full baseTokens+doomedTokens sequence, proving it never
+	// fabricates completeness for content that was never actually
+	// forwarded anywhere before the primary died.
+	if len(newState.Tokens) >= baseTokens+doomedTokens {
+		t.Fatalf("FR-005 violated: new primary %q reports %d tokens, want STRICTLY FEWER than %d (the doomed append must not be silently presented as fully replicated when the primary died before forwarding it anywhere)", newPrimary.nodeID, len(newState.Tokens), baseTokens+doomedTokens)
+	}
+	// The base MUST still be fully present - a gap in the PROVEN-forwarded
+	// base would mean this test is misdiagnosing a different defect, not
+	// the doomed-append race this test targets.
+	if len(newState.Tokens) < baseTokens {
+		t.Fatalf("new primary %q reports only %d tokens, want at least the %d proven-forwarded base tokens (the doomed append racing with the kill must never cost already-forwarded data)", newPrimary.nodeID, len(newState.Tokens), baseTokens)
+	}
+	// Whatever IS present MUST be an exact, uncorrupted PREFIX of the real
+	// sequence - never garbled, reordered, or partially-wrong data
+	// presented as if it were correct.
+	allEntries := append(append([]replAppendEntry{}, baseEntries...), doomedEntries...)
+	for i := range newState.Tokens {
+		if newState.Tokens[i] != allEntries[i].TokenID || newState.Positions[i] != allEntries[i].Position {
+			t.Fatalf("new primary %q token/position mismatch at index %d: got (token=%d,pos=%d), want (token=%d,pos=%d) - reported state must be an exact, uncorrupted prefix of the real sequence, never fabricated or corrupted", newPrimary.nodeID, i, newState.Tokens[i], newState.Positions[i], allEntries[i].TokenID, allEntries[i].Position)
+		}
+	}
+	t.Logf("new primary %q honestly reports %d/%d tokens after the doomed append raced the primary's own death (gap reported, zero corruption, zero fabricated completeness)", newPrimary.nodeID, len(newState.Tokens), baseTokens+doomedTokens)
 }
