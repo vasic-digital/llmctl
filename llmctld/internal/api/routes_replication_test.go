@@ -145,6 +145,82 @@ func TestReplicationRoutes_RequireJWTAndTenantOwnership(t *testing.T) {
 	}
 }
 
+// TestReplicationRoutes_LagEndpoint_RequiresJWTAndTenantOwnership is
+// T019's own authorization proof, mirroring
+// TestReplicationRoutes_RequireJWTAndTenantOwnership EXACTLY (same 3
+// assertions, same real *raft.Node + real HTTP/3+mTLS round trip) for
+// the NEW GET /v1/replication/lag route (User Story 3, spec.md FR-010) -
+// proving it follows the identical RequireJWT + tenant-ownership pattern
+// every other route in this file already enforces, rather than a
+// differently-scoped endpoint.
+func TestReplicationRoutes_LagEndpoint_RequiresJWTAndTenantOwnership(t *testing.T) {
+	ca, err := mtls.GenerateCA()
+	if err != nil {
+		t.Fatalf("GenerateCA: %v", err)
+	}
+	node, err := raft.Bootstrap(raft.Config{
+		NodeID:    "node-a",
+		BindAddr:  "127.0.0.1:0",
+		TLSConfig: buildTestTLSConfig(t, ca, "node-a"),
+	})
+	if err != nil {
+		t.Fatalf("raft.Bootstrap: %v", err)
+	}
+	defer func() { _ = node.Shutdown() }()
+	waitForRealLeader(t, node, 3*time.Second)
+
+	registry := replication.NewStoreRegistry(t.TempDir(), replication.CheckpointConfig{})
+	defer func() { _ = registry.Close() }()
+	decider := newReplicationTestDecider()
+
+	srv := NewServer(node, buildTestTLSConfig(t, ca, "node-a-api"))
+	RegisterReplicationRoutes(srv.Router(), registry, decider, node, NewNodeForwarder(node, http.DefaultClient))
+	if err := srv.Listen("127.0.0.1:0"); err != nil {
+		t.Fatalf("Listen: %v", err)
+	}
+	defer func() { _ = srv.Close() }()
+
+	client := newTestClient(buildTestTLSConfig(t, ca, "test-client"))
+
+	// (1) No bearer token at all -> 401.
+	resp := doAuthedReplicationRequest(t, client, http.MethodGet, srv.Addr, "/v1/replication/lag", "", "tenant-a", nil)
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("no-token GET /v1/replication/lag (X-Tenant-ID: tenant-a): status = %d, want 401", resp.StatusCode)
+	}
+
+	// (2) A valid tenant-b token attempting to view tenant-a's lag via
+	// the header -> 403, never 200 (T011's tenant-scoping discipline
+	// applied identically to this new observability route).
+	tenantBToken := issueReplicationTestJWT(t, decider, "tenant-b")
+	resp2 := doAuthedReplicationRequest(t, client, http.MethodGet, srv.Addr, "/v1/replication/lag", tenantBToken, "tenant-a", nil)
+	_ = resp2.Body.Close()
+	if resp2.StatusCode != http.StatusForbidden {
+		t.Fatalf("tenant-b token viewing tenant-a's lag: status = %d, want 403 (cross-tenant lag visibility must be denied)", resp2.StatusCode)
+	}
+
+	// (3) tenant-a's own token viewing its own lag -> 200, with an empty
+	// (never null, never fabricated) replica list: this single-node
+	// harness has never forwarded anything anywhere.
+	tenantAToken := issueReplicationTestJWT(t, decider, "tenant-a")
+	resp3 := doAuthedReplicationRequest(t, client, http.MethodGet, srv.Addr, "/v1/replication/lag", tenantAToken, "tenant-a", nil)
+	body3, _ := io.ReadAll(resp3.Body)
+	_ = resp3.Body.Close()
+	if resp3.StatusCode != http.StatusOK {
+		t.Fatalf("tenant-a token viewing its own lag: status = %d, want 200, body = %s", resp3.StatusCode, body3)
+	}
+	var got lagResponse
+	if err := json.Unmarshal(body3, &got); err != nil {
+		t.Fatalf("decode lag response: %v, body = %s", err, body3)
+	}
+	if got.TenantID != "tenant-a" {
+		t.Fatalf("lag response TenantID = %q, want %q", got.TenantID, "tenant-a")
+	}
+	if got.Replicas == nil || len(got.Replicas) != 0 {
+		t.Fatalf("lag response Replicas = %+v, want a non-nil empty slice (no forwarding has ever occurred in this single-node harness)", got.Replicas)
+	}
+}
+
 // TestReplicationRoutes_AppendCheckpointStateRealHTTP3RoundTrip proves
 // POST /v1/replication/append, POST /v1/replication/checkpoint, and
 // GET /v1/replication/state genuinely drive a real *replication.Store
