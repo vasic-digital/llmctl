@@ -21,6 +21,7 @@ import (
 	"github.com/vasic-digital/llmctl/llmctld/internal/audit"
 	"github.com/vasic-digital/llmctl/llmctld/internal/auth"
 	"github.com/vasic-digital/llmctl/llmctld/internal/authz"
+	"github.com/vasic-digital/llmctl/llmctld/internal/cluster"
 	"github.com/vasic-digital/llmctl/llmctld/internal/executor"
 	"github.com/vasic-digital/llmctl/llmctld/internal/mtls"
 	"github.com/vasic-digital/llmctl/llmctld/internal/raft"
@@ -389,6 +390,238 @@ func wireRevocationHandler(node *raft.Node, rotationHolder *mtls.RotationCAHolde
 	})
 }
 
+// wireHealthMonitor constructs, wires, and starts T072-FU6/T072-FU7's
+// cluster.Monitor - closing this project's own two disclosed follow-up
+// gaps (docs/CONTINUATION.md §10f/§10g, the shared "Honest scope note" in
+// §10h): (1) the resource-freshness heartbeat (Monitor.SetResourceReporting,
+// 002-cluster-model-scheduler T008) was fully implemented and unit-tested
+// but had ZERO non-test callers anywhere in this binary - selfID/
+// resourceSource/resourceSubmit are wired here so every real cluster node
+// now periodically re-probes its own real hardware capacity and durably
+// refreshes it cluster-wide; (2) crash-triggered ReplicationRole failover
+// was not reliably automatic - internal/cluster.ReconcileReplicationRoles
+// (health.go, itself the per-tenant fan-out layer over the pure
+// cluster.ReconcileTenantRole decision function replication_roles.go's
+// own package doc comment names) is now genuinely invoked from a REAL
+// failure signal (this Monitor's own Rescheduler callback, fed by a real
+// HTTP health check against every other node's /v1/cluster/status)
+// rather than never at all - closing the gap routes_replication.go's
+// ensureReplicationRole left open by always passing nil deadNodeIDs (that
+// function's own doc comment names this SAME Monitor+Rescheduler pair as
+// one of the two intended real-liveness feeds for exactly this decision).
+//
+// healthCheckTLS is THIS node's own DEDICATED mTLS client identity for
+// polling every OTHER node's /v1/cluster/status (a NEW per-purpose cert -
+// mirroring this file's established one-cert-per-forwarding-purpose
+// discipline; see mtlsForwardTLS/forwardClientTLS/forwardTLS's own doc
+// comments for why a purpose never reuses another purpose's client
+// identity - never a second, ad-hoc HTTP-client-construction pattern:
+// the transport below is the SAME http3.Transport+TLSClientConfig shape
+// newForwardingHTTPClient/client.go's ForwardModelStart already use).
+// resourceForwardTLS is the EXISTING 002-cluster-model-scheduler
+// auto-placement-forwarding client identity (this file's own forwardTLS)
+// reused here, never a new cert - a resource-update forward to the
+// leader is the SAME kind of node-to-node cluster-state write forwardTLS
+// already exists for.
+//
+// llmctlPath is forwarded to probeLocalResources exactly as this
+// function's caller's own initial join/bootstrap-time probe call already
+// does, so every re-probe on every tick shells out to the SAME real
+// hardware-probe binary, never a second, independently-resolved path.
+//
+// The returned stop func MUST be deferred by the caller (mirroring this
+// file's own node.Shutdown()/srv.Close()/storeRegistry.Close() deferred-
+// cleanup pattern, the only "shutdown hook mechanism" this binary has -
+// there is no separate hook registry to wire into) - it halts both this
+// Monitor's own background loop (Monitor.Stop(), health.go) AND the
+// node-registry-freshening goroutine below, so neither leaks past this
+// process's real shutdown.
+//
+// Excludes THIS node's own ID from the set Monitor.SetNodes checks
+// (self-health-checking over the network is redundant - a node that can
+// run its own health-check loop at all is, by construction, up - and a
+// transient self-check failure would otherwise make this node propose
+// reassigning its OWN ReplicationRole primaries away from itself, a
+// spurious self-inflicted failover this design deliberately rules out
+// rather than merely hoping never happens).
+func wireHealthMonitor(node *raft.Node, llmctlPath string, healthCheckTLS, resourceForwardTLS *tls.Config) (monitor *cluster.Monitor, stop func()) {
+	// healthCheckClientTimeout is deliberately SHORT and DEDICATED -
+	// never forwardClientRequestTimeout (10s), which is tuned for
+	// forwarding real replication data to a LIVE node and would be
+	// actively harmful reused here: a genuinely dead node's QUIC/UDP
+	// handshake produces no ICMP-equivalent fast failure the way a closed
+	// TCP port does, so a health check against it blocks for the FULL
+	// client timeout before failing. Monitor.CheckOnce (health.go) checks
+	// every registered node SEQUENTIALLY, so a single slow-to-fail check
+	// stalls every other node's check behind it for that same duration -
+	// and, found as a genuine RED during this task's own real 3-node
+	// crash test, ties up real per-node network/CPU resources for that
+	// whole window at PRECISELY the moment a real crash has already put
+	// Raft's own heartbeats under stress, destabilizing leader election
+	// on the SURVIVING nodes (observed: a survivor's own Raft heartbeat
+	// to another LIVE survivor missed its window and the leader stepped
+	// down mid-recovery, purely as a side effect of this health check's
+	// own timeout being far longer than it needed to be for its actual
+	// job of detecting a dead node quickly). 2s is generous for a live
+	// node's real response time while bounding a dead node's detection
+	// cost to a small fraction of cluster.DefaultHealthCheckInterval
+	// (10s), so even N-1 sequential dead-node checks in one CheckOnce
+	// pass complete well before the next tick.
+	const healthCheckClientTimeout = 2 * time.Second
+	healthClient := &http.Client{
+		Transport: &http3.Transport{TLSClientConfig: healthCheckTLS},
+		Timeout:   healthCheckClientTimeout,
+	}
+	checker := func(addr string) bool {
+		resp, err := healthClient.Get("https://" + addr + "/v1/cluster/status")
+		if err != nil {
+			return false
+		}
+		_ = resp.Body.Close()
+		return resp.StatusCode >= http.StatusOK && resp.StatusCode < http.StatusMultipleChoices
+	}
+
+	// rescheduler is T072-FU7's fix: the ONE place a real health-check
+	// failure signal now reaches cluster.ReconcileReplicationRoles - see
+	// this function's own doc comment above for the full gap this
+	// closes. Runs on EVERY node's own Monitor (each node health-checks
+	// every OTHER node), but only the current Raft leader's
+	// ReassignReplicationRole Apply can durably commit
+	// (hraft.ErrNotLeader on a follower, silently ignored here - the
+	// SAME best-effort-and-honest discipline routes_replication.go's own
+	// ensureReplicationRole already establishes for this identical
+	// class of write); the leader's OWN health check against the SAME
+	// failed node fires this identical callback and succeeds, so
+	// convergence never depends on which node's tick "wins" the race.
+	//
+	// Two-primaries-at-once race, ruled out (Constitution §11.4.6 - not
+	// merely assumed safe): internal/replication/forwarder.go's own T005
+	// race-condition analysis already establishes that
+	// cluster.ClusterState.ReplicationRoles is Raft-replicated COMMITTED
+	// state - CommandAssignReplicationRole/CommandReassignReplicationRole
+	// both apply as a single atomic map-replace-in-place write
+	// (fsm.go's own doc comment), so at any given committed log index
+	// EXACTLY ONE ReplicationRole record exists per tenant. This
+	// Rescheduler introduces NO second commit mechanism - every
+	// candidate role it computes is proposed through the SAME
+	// already-tested node.ReassignReplicationRole -> applyCommand ->
+	// n.raft.Apply path routes_replication.go's own ensureReplicationRole
+	// already uses, so it inherits that path's existing safety property
+	// rather than needing a new one. Multiple nodes' Monitors firing this
+	// callback concurrently for the same failedNodeID is harmless: every
+	// call recomputes newPrimary deterministically from the SAME
+	// Raft-replicated inputs (cluster.ReconcileReplicationRoles's own
+	// sorted firstOtherLiveNode selection over node.Servers()'s
+	// replicated voter configuration), so every proposal - whichever one
+	// actually reaches a leader's Apply - names the IDENTICAL
+	// PrimaryNodeID/ReplicaNodeIDs; a second Apply of an
+	// already-identical role (possible only across a leadership change
+	// mid-episode) is an idempotent overwrite, never a conflicting one.
+	// What this rescheduler does NOT solve, deliberately, matching
+	// forwarder.go's own disclosed scope boundary: which node accepts a
+	// NEW inbound client request for a tenant is a request-routing
+	// decision outside 003-kv-cache-replication's ReplicationRole
+	// tracking entirely - unchanged by this wiring.
+	rescheduler := func(failedNodeID string) {
+		state := node.State()
+		servers, err := node.Servers()
+		if err != nil {
+			return
+		}
+		liveNodeIDs := make([]string, 0, len(servers))
+		for _, s := range servers {
+			liveNodeIDs = append(liveNodeIDs, s.ID)
+		}
+		changed := cluster.ReconcileReplicationRoles(state.ReplicationRoles, failedNodeID, liveNodeIDs, "", time.Now())
+		for _, role := range changed {
+			_ = node.ReassignReplicationRole(role)
+		}
+	}
+
+	monitor = cluster.NewMonitor(checker, rescheduler, cluster.DefaultHealthCheckInterval)
+
+	resourceSource := func() (cluster.Resources, error) {
+		return probeLocalResources(llmctlPath)
+	}
+	resourceSubmit := func(nodeID string, r cluster.Resources) error {
+		if node.IsLeader() {
+			return node.UpdateResources(nodeID, r)
+		}
+		leaderAddr := node.LeaderAddr()
+		if leaderAddr == "" {
+			return fmt.Errorf("update resources for %q: no known cluster leader", nodeID)
+		}
+		var leaderAPIAddr string
+		for _, peer := range node.State().Nodes {
+			if peer.Addr == leaderAddr {
+				leaderAPIAddr = peer.APIAddr
+				break
+			}
+		}
+		if leaderAPIAddr == "" {
+			return fmt.Errorf("update resources for %q: leader %q has no registered API address", nodeID, leaderAddr)
+		}
+		return api.ForwardUpdateResources(resourceForwardTLS, leaderAPIAddr, nodeID, r)
+	}
+	monitor.SetResourceReporting(node.ID(), resourceSource, resourceSubmit)
+
+	// healthCheckAddrs re-reads node.State().Nodes fresh every call
+	// (never cached) - matching forwarder.go's own T005-documented
+	// "never cache replicated state across calls" discipline.
+	healthCheckAddrs := func() map[string]string {
+		addrs := make(map[string]string, len(node.State().Nodes))
+		selfID := node.ID()
+		for id, n := range node.State().Nodes {
+			if id == selfID || n.APIAddr == "" {
+				continue
+			}
+			addrs[id] = n.APIAddr
+		}
+		return addrs
+	}
+	monitor.SetNodes(healthCheckAddrs())
+
+	// nodeSyncStopCh stops the goroutine below, which keeps Monitor.SetNodes
+	// current with real cluster membership changes (T072-FU6's design
+	// point 5: "at minimum on your own periodic tick, reading
+	// node.State().Nodes" - health.go's Monitor deliberately has no
+	// membership-change notification of its own to hook into, so this is
+	// a genuinely separate, minimal periodic sync, not a modification to
+	// the already-implemented-and-tested Monitor type). A dedicated
+	// nodeRegistrySyncInterval - deliberately SHORTER than
+	// cluster.DefaultHealthCheckInterval - rather than reusing the same
+	// constant: refreshing the registry is a purely local, cheap
+	// operation (one map copy from this node's own already-replicated
+	// state, zero network I/O), so ticking it faster than the network
+	// health-check cadence bounds how long a newly-joined node can go
+	// un-monitored, and how long a node that just crashed can go
+	// un-DETECTED-as-a-monitoring-target, to (at most) one
+	// nodeRegistrySyncInterval rather than a full
+	// DefaultHealthCheckInterval on top of it - the disclosed, deliberate
+	// choice this function's own doc comment's "nice-to-have, not
+	// required" real-time-push alternative was weighed against.
+	nodeSyncStopCh := make(chan struct{})
+	go func() {
+		ticker := time.NewTicker(nodeRegistrySyncInterval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				monitor.SetNodes(healthCheckAddrs())
+			case <-nodeSyncStopCh:
+				return
+			}
+		}
+	}()
+
+	monitor.Start()
+
+	return monitor, func() {
+		close(nodeSyncStopCh)
+		monitor.Stop()
+	}
+}
+
 // forwardClientRequestTimeout bounds the http.Client-level timeout for
 // one forwarded HTTP/3+mTLS request (internal/api's NewNodeForwarder,
 // T008) - distinct from internal/replication's own forwardRetryBudget
@@ -397,6 +630,13 @@ func wireRevocationHandler(node *raft.Node, rotationHolder *mtls.RotationCAHolde
 // budget so this client-level timeout is never what actually fires
 // first for a healthy replica.
 const forwardClientRequestTimeout = 10 * time.Second
+
+// nodeRegistrySyncInterval bounds how stale wireHealthMonitor's own
+// Monitor.SetNodes registry can be relative to real cluster membership
+// (T072-FU6's design point 5) - see that function's own doc comment for
+// why this is a dedicated, shorter interval than
+// cluster.DefaultHealthCheckInterval rather than reusing it.
+const nodeRegistrySyncInterval = 1 * time.Second
 
 // newForwardingHTTPClient builds the real HTTP/3+mTLS client
 // internal/replication.Forwarder posts forwarded appends/checkpoints
@@ -575,6 +815,18 @@ func runClusterBootstrap(args []string) {
 		os.Exit(1)
 	}
 	registerAuthzRoutes(srv, decider, keys, modelExecutor, node, forwardTLS, rotationHolder, mtlsForwardTLS, mtlsForwardStore, raftTrustStore, apiTrustStore)
+
+	// healthCheckTLS (T072-FU6/T072-FU7) is THIS node's own DEDICATED mTLS
+	// client identity for wireHealthMonitor's real HTTP health checks
+	// against every other node - see that function's own doc comment for
+	// why this purpose gets its own cert rather than reusing forwardTLS.
+	healthCheckTLS, _, err := buildNodeTLSConfig(ca, f.nodeID+"-health-client")
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "llmctld: cluster bootstrap:", err)
+		os.Exit(1)
+	}
+	_, stopHealthMonitor := wireHealthMonitor(node, f.llmctlPath, healthCheckTLS, forwardTLS)
+	defer stopHealthMonitor()
 
 	if f.bootstrapAdmin {
 		adminKeyID, adminKeySecret, err := keys.Create(bootstrapAdminOwnerID, []string{auth.RoleAdmin}, 0)
@@ -779,6 +1031,19 @@ func runClusterJoinReal(args []string) int {
 		return 1
 	}
 	registerAuthzRoutes(srv, decider, keys, modelExecutor, node, forwardTLS, rotationHolder, mtlsForwardTLS, mtlsForwardStore, raftTrustStore, apiTrustStore)
+
+	// See runClusterBootstrap's identical healthCheckTLS/wireHealthMonitor
+	// comment above (T072-FU6/T072-FU7) - kept symmetric across both
+	// subcommands, so a joined follower node runs the SAME resource-
+	// heartbeat + health-driven replication-role-failover mechanism a
+	// bootstrap leader does.
+	healthCheckTLS, _, err := buildNodeTLSConfig(ca, nodeID+"-health-client")
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "llmctld: cluster join:", err)
+		return 1
+	}
+	_, stopHealthMonitor := wireHealthMonitor(node, llmctlPath, healthCheckTLS, forwardTLS)
+	defer stopHealthMonitor()
 
 	if err := srv.Listen(apiBind); err != nil {
 		fmt.Fprintln(os.Stderr, "llmctld: cluster join: api.Listen:", err)
