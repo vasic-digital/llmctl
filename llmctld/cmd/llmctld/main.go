@@ -148,12 +148,18 @@ func newAuthzDecider(signingKey string) (*authz.Decider, *auth.Store) {
 // RegisterModelRoutes's auto-placement path on POST .../start - see that
 // function's own doc comment for the full contract. node is also reused
 // (004-mtls-cert-rotation) by RegisterMTLSRoutes's revoke/status actions.
-func registerAuthzRoutes(srv *api.Server, decider *authz.Decider, keys *auth.Store, modelExecutor *executor.LocalExecutor, node *raft.Node, forwardTLS *tls.Config) {
+// ca, raftTrustStore, and apiTrustStore (004-mtls-cert-rotation Phase 4,
+// T016) are THIS node's own shared CA and the exact same two
+// *mtls.TrustStore instances buildNodeTLSConfig already constructed for
+// this node's Raft-transport and HTTP-API tls.Config - passed through so
+// RegisterMTLSRoutes's renew action can issue and swap in fresh
+// certificates for both live transports.
+func registerAuthzRoutes(srv *api.Server, decider *authz.Decider, keys *auth.Store, modelExecutor *executor.LocalExecutor, node *raft.Node, forwardTLS *tls.Config, ca *mtls.CA, raftTrustStore, apiTrustStore *mtls.TrustStore) {
 	api.RegisterAuthRoutes(srv.Router(), decider, keys)
 	api.RegisterTenantRoutes(srv.Router(), decider)
 	api.RegisterAuditRoutes(srv.Router(), decider)
 	api.RegisterModelRoutes(srv.Router(), decider, modelExecutor, node, forwardTLS)
-	api.RegisterMTLSRoutes(srv.Router(), node, decider)
+	api.RegisterMTLSRoutes(srv.Router(), node, decider, ca, raftTrustStore, apiTrustStore)
 }
 
 // version is the llmctld build version. It is bumped alongside the bash
@@ -466,7 +472,7 @@ func runClusterBootstrap(args []string) {
 		fmt.Fprintln(os.Stderr, "llmctld: cluster bootstrap:", err)
 		os.Exit(1)
 	}
-	registerAuthzRoutes(srv, decider, keys, modelExecutor, node, forwardTLS)
+	registerAuthzRoutes(srv, decider, keys, modelExecutor, node, forwardTLS, ca, raftTrustStore, apiTrustStore)
 
 	if f.bootstrapAdmin {
 		adminKeyID, adminKeySecret, err := keys.Create(bootstrapAdminOwnerID, []string{auth.RoleAdmin}, 0)
@@ -661,7 +667,7 @@ func runClusterJoinReal(args []string) int {
 		fmt.Fprintln(os.Stderr, "llmctld: cluster join:", err)
 		return 1
 	}
-	registerAuthzRoutes(srv, decider, keys, modelExecutor, node, forwardTLS)
+	registerAuthzRoutes(srv, decider, keys, modelExecutor, node, forwardTLS, ca, raftTrustStore, apiTrustStore)
 
 	if err := srv.Listen(apiBind); err != nil {
 		fmt.Fprintln(os.Stderr, "llmctld: cluster join: api.Listen:", err)
