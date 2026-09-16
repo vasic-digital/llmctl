@@ -283,23 +283,23 @@ cluster-wide status view lists every running profile.
 
 ### Tests for User Story 2
 
-- [ ] T020 [P] [TDD] [US2] Real multi-process integration test:
+- [x] T020 [P] [TDD] [US2] Real multi-process integration test:
       `TestClusterPlacement_NameOnlyStatusAndStop_ResolveToRealNode`
       (quickstart.md Scenario 3) in `cluster_placement_test.go`. Confirmed
       failing before implementation.
-- [ ] T021 [P] [TDD] [US2] Real multi-process integration test:
+- [x] T021 [P] [TDD] [US2] Real multi-process integration test:
       `TestClusterPlacement_SameProfileOnMultipleNodes_StopActsOnAll` —
       covers spec.md's Edge Case (a profile name found on more than one
       node must never be silently limited to one). Confirmed failing
       before implementation.
-- [ ] T022 [P] [TDD] [US2] Test for the extended `GET /v1/cluster/status`
+- [x] T022 [P] [TDD] [US2] Test for the extended `GET /v1/cluster/status`
       in `internal/api/routes_cluster_test.go`: asserts the
       `running_profiles` field reflects `ClusterState.RunningProfiles`
       accurately. Confirmed failing before implementation.
 
 ### Implementation for User Story 2
 
-- [ ] T023 [US2] Extend `routes_models.go`'s status/stop handlers: when
+- [x] T023 [US2] Extend `routes_models.go`'s status/stop handlers: when
       `node` is absent, read `ClusterState.RunningProfiles` for every
       entry matching `(Profile, TenantID)`; for status, forward a query
       to (or aggregate cached state from) every matching `NodeID` via the
@@ -307,10 +307,10 @@ cluster-wide status view lists every running profile.
       forward a stop to EVERY matching `NodeID` (never just the first),
       and on each real success submit `CommandClearRunningProfile` for
       that entry.
-- [ ] T024 [US2] Extend `routes_cluster.go`'s `GET /v1/cluster/status`
+- [x] T024 [US2] Extend `routes_cluster.go`'s `GET /v1/cluster/status`
       handler to include `running_profiles` from `node.State().RunningProfiles`
       alongside the existing `is_leader`/`state` fields.
-- [ ] T025 [US2] [REVIEW] Authorization-parity review specifically for
+- [x] T025 [US2] [REVIEW] Authorization-parity review specifically for
       T023's name-only resolution path — confirm every forwarded
       status/stop call still passes through the SAME
       `authorizeTenantOwnership`/`CheckRBAC`/`CheckTenantBoundary` chain

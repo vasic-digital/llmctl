@@ -104,9 +104,20 @@ func RegisterClusterRoutes(r gin.IRoutes, node *raft.Node) {
 	})
 
 	r.GET("/v1/cluster/status", func(c *gin.Context) {
+		state := node.State()
 		c.JSON(http.StatusOK, gin.H{
 			"is_leader": node.IsLeader(),
-			"state":     node.State(),
+			"state":     state,
+			// running_profiles (002-cluster-model-scheduler T024,
+			// contracts/cluster-model-api.md: "Response gains a
+			// running_profiles field ... in addition to the existing
+			// is_leader/state fields") - the SAME real,
+			// Raft-replicated ClusterState.RunningProfiles slice
+			// already nested inside "state" above, surfaced ALSO at
+			// the top level per the contract's explicit requirement
+			// (the cluster-wide status view spec.md FR-009 names),
+			// never a second, independently-derived copy.
+			"running_profiles": state.RunningProfiles,
 		})
 	})
 }
