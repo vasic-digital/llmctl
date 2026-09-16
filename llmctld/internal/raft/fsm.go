@@ -25,6 +25,23 @@ const (
 	CommandLeaveNode   CommandType = "leave_node"
 	CommandAcquireLock CommandType = "acquire_lock"
 	CommandReleaseLock CommandType = "release_lock"
+
+	// CommandUpdateResources refreshes an already-known node's Resources
+	// in place (002-cluster-model-scheduler's resource-heartbeat) -
+	// keeps placement.go's candidate-capacity view from going stale the
+	// moment any model starts/stops consuming budget on that node.
+	CommandUpdateResources CommandType = "update_resources"
+	// CommandRecordRunningProfile records one profile instance as running
+	// on one node, AFTER re-validating (inside Apply, never trusting the
+	// proposer's own pre-check) that the footprint still genuinely fits
+	// the node's currently-uncommitted capacity - the mechanism that
+	// closes 002-cluster-model-scheduler's FR-005/SC-004 TOCTOU race,
+	// mirroring CommandAcquireLock's own re-validation pattern exactly.
+	CommandRecordRunningProfile CommandType = "record_running_profile"
+	// CommandClearRunningProfile removes one (Profile, TenantID, NodeID)
+	// RunningProfile entry - idempotent no-op if already absent, matching
+	// CommandReleaseLock's own established idempotent-release pattern.
+	CommandClearRunningProfile CommandType = "clear_running_profile"
 )
 
 // Command is the structure serialized into every Raft log entry's Data.
@@ -53,13 +70,31 @@ type Command struct {
 	// uses the same reference instant - never each node's own local
 	// clock, for the identical determinism reason as LockExpiresAt.
 	LockNow time.Time `json:"lock_now,omitempty"`
+
+	// Resources carries the payload for CommandUpdateResources (a node's
+	// freshly re-probed capacity).
+	Resources cluster.Resources `json:"resources,omitempty"`
+
+	// Profile/TenantID/StartedAt/Footprint carry
+	// CommandRecordRunningProfile/CommandClearRunningProfile's payload.
+	// NodeID (declared above, shared with join/leave) names which node
+	// the entry belongs to. StartedAt, like LockExpiresAt/LockNow above,
+	// is computed ONCE by the proposer and carried in the log entry - Apply
+	// never reads time.Now() (the identical determinism requirement).
+	Profile   string                   `json:"profile,omitempty"`
+	TenantID  string                   `json:"tenant_id,omitempty"`
+	StartedAt time.Time                `json:"started_at,omitempty"`
+	Footprint cluster.PlacementRequest `json:"footprint,omitempty"`
 }
 
 var (
-	errCommandMissingNode = errors.New("raft: join_node command missing Node")
-	errUnknownCommand     = errors.New("raft: unknown command type")
-	errLockHeldByAnother  = errors.New("raft: acquire_lock refused: key is held by another holder and its lease has not yet expired")
-	errNotLockHolder      = errors.New("raft: release_lock refused: caller is not the current holder of this lock")
+	errCommandMissingNode                       = errors.New("raft: join_node command missing Node")
+	errUnknownCommand                           = errors.New("raft: unknown command type")
+	errLockHeldByAnother                        = errors.New("raft: acquire_lock refused: key is held by another holder and its lease has not yet expired")
+	errNotLockHolder                            = errors.New("raft: release_lock refused: caller is not the current holder of this lock")
+	errUpdateResourcesUnknownNode               = errors.New("raft: update_resources refused: node is not currently a cluster member")
+	errRecordRunningProfileUnknownNode          = errors.New("raft: record_running_profile refused: node is not currently a cluster member")
+	errRecordRunningProfileInsufficientCapacity = errors.New("raft: record_running_profile refused: node no longer has sufficient uncommitted capacity for this footprint")
 )
 
 // ClusterFSM implements hashicorp/raft's FSM interface, applying replicated
@@ -133,6 +168,56 @@ func (f *ClusterFSM) Apply(log *hraft.Log) interface{} {
 			return errNotLockHolder
 		}
 		delete(f.state.Locks, cmd.LockKey)
+	case CommandUpdateResources:
+		existing, known := f.state.Nodes[cmd.NodeID]
+		if !known {
+			return errUpdateResourcesUnknownNode
+		}
+		existing.Resources = cmd.Resources
+		f.state.Nodes[cmd.NodeID] = existing
+	case CommandRecordRunningProfile:
+		node, known := f.state.Nodes[cmd.NodeID]
+		if !known {
+			return errRecordRunningProfileUnknownNode
+		}
+		// Re-derive the node's CURRENTLY-uncommitted capacity purely from
+		// already-committed log state (never from the proposer's own
+		// pre-check) - the exact mechanism that closes the FR-005/SC-004
+		// TOCTOU race: two concurrent proposers may both have observed
+		// "node fits" against a stale snapshot, but hashicorp/raft applies
+		// log entries strictly one at a time, so the SECOND Apply to run
+		// here always sees the FIRST one's committed reservation.
+		var usedRAM, usedVRAM int64
+		var usedCPU, usedNetwork int
+		for _, rp := range f.state.RunningProfiles {
+			if rp.NodeID != cmd.NodeID {
+				continue
+			}
+			usedRAM += rp.Footprint.RAMMB
+			usedVRAM += rp.Footprint.VRAMMB
+			usedCPU += rp.Footprint.CPUCores
+			usedNetwork += rp.Footprint.NetworkMbps
+		}
+		availRAM := node.Resources.RAMAvailMB - usedRAM
+		availVRAM := node.Resources.VRAMAvailMB - usedVRAM
+		availCPU := node.Resources.CPUCores - usedCPU
+		availNetwork := node.Resources.NetworkMbps - usedNetwork
+		if availRAM < cmd.Footprint.RAMMB || availVRAM < cmd.Footprint.VRAMMB || availCPU < cmd.Footprint.CPUCores || availNetwork < cmd.Footprint.NetworkMbps {
+			return errRecordRunningProfileInsufficientCapacity
+		}
+		f.state.RunningProfiles = append(f.state.RunningProfiles, cluster.RunningProfile{
+			Profile: cmd.Profile, TenantID: cmd.TenantID, NodeID: cmd.NodeID,
+			StartedAt: cmd.StartedAt, Footprint: cmd.Footprint,
+		})
+	case CommandClearRunningProfile:
+		filtered := f.state.RunningProfiles[:0:0]
+		for _, rp := range f.state.RunningProfiles {
+			if rp.Profile == cmd.Profile && rp.TenantID == cmd.TenantID && rp.NodeID == cmd.NodeID {
+				continue
+			}
+			filtered = append(filtered, rp)
+		}
+		f.state.RunningProfiles = filtered
 	default:
 		return errUnknownCommand
 	}
@@ -158,6 +243,9 @@ func (f *ClusterFSM) Restore(rc io.ReadCloser) error {
 	}
 	if state.Locks == nil {
 		state.Locks = make(map[string]cluster.LockEntry)
+	}
+	if state.RunningProfiles == nil {
+		state.RunningProfiles = []cluster.RunningProfile{}
 	}
 
 	f.mu.Lock()

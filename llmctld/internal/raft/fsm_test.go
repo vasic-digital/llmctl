@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sync"
 	"testing"
+	"time"
 
 	hraft "github.com/hashicorp/raft"
 
@@ -49,9 +50,12 @@ func TestApply_JoinThenLeave(t *testing.T) {
 // to the same state without further coordination.
 func TestApply_DeterministicGivenSameLogSequence(t *testing.T) {
 	entries := []Command{
-		{Type: CommandJoinNode, Node: &cluster.Node{ID: "n1", Addr: "10.0.0.1:9443", Health: "healthy"}},
-		{Type: CommandJoinNode, Node: &cluster.Node{ID: "n2", Addr: "10.0.0.2:9443", Health: "healthy"}},
+		{Type: CommandJoinNode, Node: &cluster.Node{ID: "n1", Addr: "10.0.0.1:9443", Health: "healthy", Resources: cluster.Resources{RAMAvailMB: 1000, VRAMAvailMB: 1000, CPUCores: 4, NetworkMbps: 1000}}},
+		{Type: CommandJoinNode, Node: &cluster.Node{ID: "n2", Addr: "10.0.0.2:9443", Health: "healthy", Resources: cluster.Resources{RAMAvailMB: 2000, VRAMAvailMB: 2000, CPUCores: 8, NetworkMbps: 1000}}},
+		{Type: CommandUpdateResources, NodeID: "n2", Resources: cluster.Resources{RAMAvailMB: 1500, VRAMAvailMB: 1500, CPUCores: 8, NetworkMbps: 1000}},
+		{Type: CommandRecordRunningProfile, Profile: "small", TenantID: "tenant-a", NodeID: "n2", StartedAt: time.Unix(1000, 0), Footprint: cluster.PlacementRequest{RAMMB: 500, VRAMMB: 500, CPUCores: 2, NetworkMbps: 100}},
 		{Type: CommandLeaveNode, NodeID: "n1"},
+		{Type: CommandClearRunningProfile, Profile: "small", TenantID: "tenant-a", NodeID: "n2"},
 	}
 
 	replay := func() *cluster.ClusterState {
@@ -78,6 +82,222 @@ func TestApply_DeterministicGivenSameLogSequence(t *testing.T) {
 	}
 	if _, ok := s1.Nodes["n2"]; !ok {
 		t.Fatalf("expected n2 present in final state")
+	}
+}
+
+// TestApply_JoinNode_PopulatesClusterStateNodes is 002-cluster-model-
+// scheduler's T003 verification task: confirms CommandJoinNode's Apply
+// case already correctly populates ClusterState.Nodes (it does - this is
+// a pre-existing, already-passing FSM behavior; the real gap this
+// feature closes is that node.go's Join/Leave never actually SUBMIT this
+// command against a real running cluster, not that Apply mishandles it
+// when submitted). Named to match the task's own literal deliverable
+// rather than only relying on the pre-existing TestApply_JoinThenLeave.
+func TestApply_JoinNode_PopulatesClusterStateNodes(t *testing.T) {
+	fsm := NewClusterFSM()
+	data := mustCommand(t, Command{Type: CommandJoinNode, Node: &cluster.Node{ID: "n1", Addr: "127.0.0.1:9443", APIAddr: "127.0.0.1:8443", Health: "healthy"}})
+	if resp := fsm.Apply(&hraft.Log{Data: data}); resp != nil {
+		t.Fatalf("apply join_node: unexpected error %v", resp)
+	}
+	got, ok := fsm.State().Nodes["n1"]
+	if !ok {
+		t.Fatalf("expected node n1 present in ClusterState.Nodes after CommandJoinNode")
+	}
+	if got.APIAddr != "127.0.0.1:8443" {
+		t.Fatalf("APIAddr = %q, want %q", got.APIAddr, "127.0.0.1:8443")
+	}
+}
+
+// TestApply_LeaveNode_RemovesFromClusterStateNodes is T003's sibling
+// verification test for CommandLeaveNode.
+func TestApply_LeaveNode_RemovesFromClusterStateNodes(t *testing.T) {
+	fsm := NewClusterFSM()
+	joinData := mustCommand(t, Command{Type: CommandJoinNode, Node: &cluster.Node{ID: "n1", Addr: "127.0.0.1:9443", Health: "healthy"}})
+	if resp := fsm.Apply(&hraft.Log{Data: joinData}); resp != nil {
+		t.Fatalf("apply join_node: unexpected error %v", resp)
+	}
+	leaveData := mustCommand(t, Command{Type: CommandLeaveNode, NodeID: "n1"})
+	if resp := fsm.Apply(&hraft.Log{Data: leaveData}); resp != nil {
+		t.Fatalf("apply leave_node: unexpected error %v", resp)
+	}
+	if _, ok := fsm.State().Nodes["n1"]; ok {
+		t.Fatalf("expected node n1 absent from ClusterState.Nodes after CommandLeaveNode")
+	}
+}
+
+// TestApply_UpdateResources_RefreshesExistingNode is T007's RED test:
+// CommandUpdateResources must replace an already-known node's Resources
+// in place, leaving every other field (ID/Addr/APIAddr/Health)
+// untouched.
+func TestApply_UpdateResources_RefreshesExistingNode(t *testing.T) {
+	fsm := NewClusterFSM()
+	joinData := mustCommand(t, Command{Type: CommandJoinNode, Node: &cluster.Node{
+		ID: "n1", Addr: "127.0.0.1:9443", APIAddr: "127.0.0.1:8443", Health: "healthy",
+		Resources: cluster.Resources{RAMAvailMB: 1000},
+	}})
+	if resp := fsm.Apply(&hraft.Log{Data: joinData}); resp != nil {
+		t.Fatalf("apply join_node: unexpected error %v", resp)
+	}
+
+	updateData := mustCommand(t, Command{Type: CommandUpdateResources, NodeID: "n1", Resources: cluster.Resources{RAMAvailMB: 500, VRAMAvailMB: 200, CPUCores: 4, NetworkMbps: 1000}})
+	if resp := fsm.Apply(&hraft.Log{Data: updateData}); resp != nil {
+		t.Fatalf("apply update_resources: unexpected error %v", resp)
+	}
+
+	got := fsm.State().Nodes["n1"]
+	if got.Resources.RAMAvailMB != 500 || got.Resources.VRAMAvailMB != 200 || got.Resources.CPUCores != 4 || got.Resources.NetworkMbps != 1000 {
+		t.Fatalf("Resources not refreshed: got %+v", got.Resources)
+	}
+	if got.APIAddr != "127.0.0.1:8443" || got.Addr != "127.0.0.1:9443" || got.Health != "healthy" {
+		t.Fatalf("CommandUpdateResources must not touch ID/Addr/APIAddr/Health, got %+v", got)
+	}
+}
+
+// TestApply_UpdateResources_UnknownNodeRefused is T007's second RED
+// test: a resource update for a node that is not currently a cluster
+// member is a real error condition, never silently accepted (a stale or
+// mistargeted update must not fabricate a node entry).
+func TestApply_UpdateResources_UnknownNodeRefused(t *testing.T) {
+	fsm := NewClusterFSM()
+	data := mustCommand(t, Command{Type: CommandUpdateResources, NodeID: "ghost", Resources: cluster.Resources{RAMAvailMB: 1}})
+	resp := fsm.Apply(&hraft.Log{Data: data})
+	if resp == nil {
+		t.Fatalf("expected an error applying CommandUpdateResources for a node that was never joined, got nil")
+	}
+	if _, ok := fsm.State().Nodes["ghost"]; ok {
+		t.Fatalf("CommandUpdateResources must never fabricate a node entry for an unknown NodeID")
+	}
+}
+
+// TestApply_RecordRunningProfile_RefusedWhenNoLongerFits is T010's
+// load-bearing race-closing RED test (FR-005/SC-004): a node at exactly
+// its remaining capacity records one profile that fully consumes it;
+// a second profile requesting ANY additional capacity on the SAME node
+// must be refused - proving CommandRecordRunningProfile's Apply
+// re-derives currently-uncommitted capacity from the log itself
+// (existing RunningProfiles), never trusting the proposer's own
+// pre-check, exactly mirroring CommandAcquireLock's re-validation
+// pattern.
+func TestApply_RecordRunningProfile_RefusedWhenNoLongerFits(t *testing.T) {
+	fsm := NewClusterFSM()
+	joinData := mustCommand(t, Command{Type: CommandJoinNode, Node: &cluster.Node{
+		ID: "n1", Health: "healthy",
+		Resources: cluster.Resources{RAMAvailMB: 1000, VRAMAvailMB: 1000, CPUCores: 4, NetworkMbps: 1000},
+	}})
+	if resp := fsm.Apply(&hraft.Log{Data: joinData}); resp != nil {
+		t.Fatalf("apply join_node: unexpected error %v", resp)
+	}
+
+	first := mustCommand(t, Command{
+		Type: CommandRecordRunningProfile, Profile: "small", TenantID: "tenant-a", NodeID: "n1",
+		StartedAt: time.Unix(1000, 0),
+		Footprint: cluster.PlacementRequest{RAMMB: 1000, VRAMMB: 1000, CPUCores: 4, NetworkMbps: 1000},
+	})
+	if resp := fsm.Apply(&hraft.Log{Data: first}); resp != nil {
+		t.Fatalf("apply first record_running_profile (exact fit): unexpected error %v", resp)
+	}
+
+	second := mustCommand(t, Command{
+		Type: CommandRecordRunningProfile, Profile: "large", TenantID: "tenant-a", NodeID: "n1",
+		StartedAt: time.Unix(1001, 0),
+		Footprint: cluster.PlacementRequest{RAMMB: 1, VRAMMB: 0, CPUCores: 0, NetworkMbps: 0},
+	})
+	resp := fsm.Apply(&hraft.Log{Data: second})
+	if resp == nil {
+		t.Fatalf("expected the second record_running_profile to be refused (node n1 has zero capacity left), got nil")
+	}
+
+	state := fsm.State()
+	if len(state.RunningProfiles) != 1 {
+		t.Fatalf("expected exactly 1 RunningProfile entry after the refused second attempt, got %d", len(state.RunningProfiles))
+	}
+}
+
+// TestApply_RecordRunningProfile_MultipleDistinctNodesSucceed proves the
+// refusal above is genuinely capacity-based, not a blanket "second
+// record always fails" bug: two profiles on two DIFFERENT nodes, each
+// individually fitting its own node, must both succeed.
+func TestApply_RecordRunningProfile_MultipleDistinctNodesSucceed(t *testing.T) {
+	fsm := NewClusterFSM()
+	for _, id := range []string{"n1", "n2"} {
+		data := mustCommand(t, Command{Type: CommandJoinNode, Node: &cluster.Node{
+			ID: id, Health: "healthy",
+			Resources: cluster.Resources{RAMAvailMB: 1000, VRAMAvailMB: 1000, CPUCores: 4, NetworkMbps: 1000},
+		}})
+		if resp := fsm.Apply(&hraft.Log{Data: data}); resp != nil {
+			t.Fatalf("apply join_node(%s): unexpected error %v", id, resp)
+		}
+	}
+
+	for i, id := range []string{"n1", "n2"} {
+		cmd := mustCommand(t, Command{
+			Type: CommandRecordRunningProfile, Profile: "small", TenantID: "tenant-a", NodeID: id,
+			StartedAt: time.Unix(int64(1000+i), 0),
+			Footprint: cluster.PlacementRequest{RAMMB: 500, VRAMMB: 500, CPUCores: 2, NetworkMbps: 100},
+		})
+		if resp := fsm.Apply(&hraft.Log{Data: cmd}); resp != nil {
+			t.Fatalf("apply record_running_profile(%s): unexpected error %v", id, resp)
+		}
+	}
+
+	if got := len(fsm.State().RunningProfiles); got != 2 {
+		t.Fatalf("expected 2 RunningProfile entries (one per node), got %d", got)
+	}
+}
+
+// TestApply_ClearRunningProfile_IdempotentOnAbsent proves
+// CommandClearRunningProfile removing an entry that is already absent
+// (or never existed) is a safe no-op - matching CommandReleaseLock's
+// own already-established idempotent-release pattern, never an error a
+// caller racing its own clear against a concurrent clear would be
+// punished for.
+func TestApply_ClearRunningProfile_IdempotentOnAbsent(t *testing.T) {
+	fsm := NewClusterFSM()
+	data := mustCommand(t, Command{Type: CommandClearRunningProfile, Profile: "ghost", TenantID: "tenant-a", NodeID: "n1"})
+	if resp := fsm.Apply(&hraft.Log{Data: data}); resp != nil {
+		t.Fatalf("clearing an absent RunningProfile must be a safe no-op, got error %v", resp)
+	}
+}
+
+// TestApply_ClearRunningProfile_RemovesExactEntry proves a real,
+// present entry is genuinely removed, and clearing frees capacity for a
+// subsequent CommandRecordRunningProfile that would otherwise refuse.
+func TestApply_ClearRunningProfile_RemovesExactEntry(t *testing.T) {
+	fsm := NewClusterFSM()
+	joinData := mustCommand(t, Command{Type: CommandJoinNode, Node: &cluster.Node{
+		ID: "n1", Health: "healthy",
+		Resources: cluster.Resources{RAMAvailMB: 1000, VRAMAvailMB: 1000, CPUCores: 4, NetworkMbps: 1000},
+	}})
+	if resp := fsm.Apply(&hraft.Log{Data: joinData}); resp != nil {
+		t.Fatalf("apply join_node: unexpected error %v", resp)
+	}
+
+	record := mustCommand(t, Command{
+		Type: CommandRecordRunningProfile, Profile: "small", TenantID: "tenant-a", NodeID: "n1",
+		StartedAt: time.Unix(1000, 0),
+		Footprint: cluster.PlacementRequest{RAMMB: 1000, VRAMMB: 1000, CPUCores: 4, NetworkMbps: 1000},
+	})
+	if resp := fsm.Apply(&hraft.Log{Data: record}); resp != nil {
+		t.Fatalf("apply record_running_profile: unexpected error %v", resp)
+	}
+
+	clear := mustCommand(t, Command{Type: CommandClearRunningProfile, Profile: "small", TenantID: "tenant-a", NodeID: "n1"})
+	if resp := fsm.Apply(&hraft.Log{Data: clear}); resp != nil {
+		t.Fatalf("apply clear_running_profile: unexpected error %v", resp)
+	}
+	if got := len(fsm.State().RunningProfiles); got != 0 {
+		t.Fatalf("expected 0 RunningProfile entries after clear, got %d", got)
+	}
+
+	// Capacity is genuinely freed: the exact same footprint that
+	// previously fit (and was then cleared) must fit again.
+	again := mustCommand(t, Command{
+		Type: CommandRecordRunningProfile, Profile: "small", TenantID: "tenant-a", NodeID: "n1",
+		StartedAt: time.Unix(1001, 0),
+		Footprint: cluster.PlacementRequest{RAMMB: 1000, VRAMMB: 1000, CPUCores: 4, NetworkMbps: 1000},
+	})
+	if resp := fsm.Apply(&hraft.Log{Data: again}); resp != nil {
+		t.Fatalf("re-recording after clear should succeed (capacity was freed), got error %v", resp)
 	}
 }
 
