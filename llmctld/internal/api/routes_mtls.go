@@ -40,7 +40,13 @@
 // trust) rotation actions - POST /v1/cluster/mtls/rotate/begin, GET
 // /v1/cluster/mtls/rotate/status, POST /v1/cluster/mtls/rotate/finalize -
 // and the FR-010 quorum-protection refusal check shared by both the
-// revoke and the finalize actions (quorumWouldBeStranded, written once).
+// revoke and the finalize actions (quorumWouldBeStrandedLive, written
+// once - T072-FU8 follow-up: this now REALLY confirms every other voter
+// is live and currently trusting via a real bounded-timeout mTLS
+// handshake, not merely still-listed in Raft's own voter configuration;
+// see quorumWouldBeStrandedLive's own doc comment for the full design
+// and its disclosed honest boundary, and quorumWouldBeStranded's for the
+// pure quorum-arithmetic it still delegates to).
 //
 // "begin" is deliberately DESIGNED to be called against EVERY node
 // individually (each call carrying the operator's new CA cert+key PEM
@@ -230,6 +236,192 @@ func quorumWouldBeStranded(voters []raft.ServerInfo, untrustedNodeIDs map[string
 	return remaining < quorum
 }
 
+// liveVoterCheckTimeout bounds ONE voter's own real, live mTLS-handshake
+// reachability+trust confirmation inside quorumWouldBeStrandedLive below
+// (T072-FU8 follow-up, closing this file's own previously-disclosed
+// FR-010 honest-scope-boundary above, on quorumWouldBeStranded) - the
+// SAME 10-second value this codebase's every other real cross-node
+// HTTP/3+mTLS client already uses for exactly this purpose
+// (cmd/llmctld/main.go's forwardClientRequestTimeout; this file's own
+// ForwardCARotationTransition above; api/client.go's
+// RequestJoin/ForwardModelStart) - reused, never reinvented, per
+// Constitution §11.4.74. A genuinely live, currently-trusting peer
+// answers its own GET /v1/cluster/status well within this; a peer that
+// does not is exactly the "not currently live and trusting" signal
+// quorumWouldBeStrandedLive needs, whether that peer is merely slow or
+// genuinely unreachable.
+const liveVoterCheckTimeout = 10 * time.Second
+
+// voterIsLiveAndTrusting performs ONE real, bounded-timeout HTTP/3+mTLS
+// GET against voterAPIAddr's own GET /v1/cluster/status
+// (routes_cluster.go's RegisterClusterRoutes) - confirmed the right
+// target for this purpose: it is gated ONLY by the real mTLS handshake
+// this check exists to exercise (RequireMTLS at the route-group level,
+// no JWT - routes_cluster.go's own package doc comment: "gated by
+// RequireMTLS only ... since those are peer-node calls", exactly this
+// call's own shape), it is already wired and answered by every real node
+// in every running cluster today (no new endpoint to add, version, or
+// keep in sync across nodes), and it is among the lightest handlers this
+// codebase exposes (one State() snapshot read, zero Raft Apply).
+//
+// clientTLS MUST be a real mTLS client identity signed by a CA this
+// cluster's target voters currently trust - callers pass THIS node's own
+// existing "forward client" identity (RegisterMTLSRoutes's own forwardTLS
+// parameter, already backing every other cross-node call made from this
+// file: ForwardCARotationTransition above), reused rather than a second,
+// purpose-built client identity (Constitution §11.4.74 extend-don't-
+// reimplement). A non-nil return means voterAPIAddr did NOT just prove
+// itself live-and-currently-trusted RIGHT NOW: a network-level error
+// (unreachable, connection refused, timed out) OR a TLS handshake
+// failure means the peer's own presented certificate is revoked or does
+// not chain to any CA clientTLS currently trusts - via clientTLS's own
+// VerifyPeerCertificate callback (raft.VerifyPeerCertificateAgainstCA,
+// wired once at construction time in cmd/llmctld/main.go's
+// buildNodeTLSConfig) this is the SAME real x509 chain+revocation check
+// (mtls.TrustStore.Verify) every genuine handshake in this codebase
+// already performs - NEVER reimplemented here - or, less commonly, a
+// non-200 HTTP response from a peer that IS reachable and trusted but
+// answered abnormally.
+func voterIsLiveAndTrusting(clientTLS *tls.Config, voterAPIAddr string) error {
+	if voterAPIAddr == "" {
+		return fmt.Errorf("mtls: live-trust check: no known API address for this voter")
+	}
+	client := &http.Client{Transport: &http3.Transport{TLSClientConfig: clientTLS}, Timeout: liveVoterCheckTimeout}
+	resp, err := client.Get("https://" + voterAPIAddr + "/v1/cluster/status")
+	if err != nil {
+		return fmt.Errorf("mtls: live-trust check: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("mtls: live-trust check: peer returned status %d", resp.StatusCode)
+	}
+	return nil
+}
+
+// quorumWouldBeStrandedLive is FR-010's REAL, live-trust-confirming
+// entry point (T072-FU8 follow-up - closes this file's own previously-
+// disclosed honest scope boundary: "trusted" was approximated from what
+// a call CAN reliably determine WITHOUT a live per-voter mTLS handshake;
+// this function performs that handshake). The revoke and finalize
+// handlers below call THIS, and only this, function for their FR-010
+// check - quorumWouldBeStranded above remains the shared, pure quorum-
+// ARITHMETIC helper this function itself delegates to, so there is still
+// exactly ONE function deciding "would this leave fewer than a quorum of
+// trusted voters", per this file's own original package-doc-comment
+// discipline (revoke and finalize sharing ONE check, never two
+// independently-maintained copies), and quorumWouldBeStranded's own
+// arithmetic stays independently correct/testable/unchanged.
+//
+// configUntrusted is EXACTLY what each caller already computes today
+// (revoke's already-revoked-plus-the-one-being-revoked-now set;
+// finalize's not-yet-transitioned set) - the pre-existing,
+// CONFIGURATION-based approximation, left entirely as-is. This
+// function's addition: every OTHER current voter (from voters,
+// raft.Node.Servers()'s own real output) not already in configUntrusted
+// must ALSO prove itself LIVE AND CURRENTLY TRUSTING right now, via a
+// real bounded-timeout HTTP/3+mTLS handshake against its own
+// GET /v1/cluster/status (voterIsLiveAndTrusting above) - run
+// CONCURRENTLY across every such voter, so the total added latency this
+// adds to the revoke/finalize handler is bounded by
+// liveVoterCheckTimeout regardless of cluster size, never
+// (number of voters) * liveVoterCheckTimeout. THIS node (node.ID()) is
+// never itself dialled over the network - it is, by construction, the
+// very process currently executing this check (the Raft Apply call both
+// revoke and finalize make immediately after this check passes only
+// ever succeeds on the current leader - applyCommand's own doc comment -
+// so the process running this code IS a live, reachable, trusted
+// cluster member by definition); dialling itself would add nothing but
+// latency and a spurious self-loop failure mode.
+//
+// Honest, DELIBERATE design decision (Constitution
+// §11.4.6/§11.4.101/§11.4.201 - point 4 of this follow-up's own design
+// brief, stated here rather than silently assumed): a voter whose live
+// check TIMES OUT, ERRORS for any reason, or cannot even be attempted
+// (no known APIAddr) is treated IDENTICALLY to a config-untrusted voter
+// - excluded from "remaining" - NEVER as "the live-check mechanism
+// itself is broken, silently fall back to the config-only count". This
+// is a fail-CLOSED choice: FR-010's own requirement text is "trusted,
+// REACHABLE nodes", so an unreachable voter is squarely inside what this
+// check exists to refuse on, and quorumWouldBeStranded's own
+// pre-existing doc comment already commits this whole mechanism to "can
+// only ever OVER-refuse, never under-refuse, a genuinely safe action" -
+// this function extends that SAME discipline to the live-reachability
+// axis; it does not introduce a new one.
+//
+// The disclosed cost of this choice: approving an action that silently
+// strands the cluster's REAL quorum (the exact defect this whole
+// follow-up closes) leaves the cluster non-functional and requires
+// manual, out-of-band recovery; refusing an action that was actually
+// safe merely costs the operator a retry (the SAME "confirm each
+// not_yet_transitioned node's own GET .../rotate/status directly before
+// retrying" recovery path the finalize handler's own pre-existing doc
+// comment already prescribes for its own, narrower config-based
+// over-refusal case, below). That asymmetry is why this function fails
+// closed rather than falling back.
+//
+// A SEPARATE, narrower, genuinely disclosed limitation this decision
+// does NOT paper over: clientTLS itself (this node's own "forward
+// client" identity) is never reissued by ANY handler in this file across
+// a CA rotation - the SAME pre-existing gap the renew handler's own
+// ForwardCARotationTransition fallback above has always silently
+// carried - so a revoke/finalize action attempted after a FULLY
+// COMPLETED prior CA rotation could find clientTLS's own certificate no
+// longer trusted by peers that already dropped the CA that signed it,
+// making every OTHER voter's live check spuriously fail. This is a
+// real, pre-existing limitation of this node's own forward-client
+// certificate lifecycle, not newly introduced here (mtlsForwardStore's
+// own currentNodeCert is never touched by UpdateNodeCert anywhere in
+// this codebase); fixing it is out of this specific follow-up's scope
+// and is tracked as further follow-up work.
+//
+// Returns (stranded, liveUntrusted): stranded is quorumWouldBeStranded's
+// own verdict computed against liveUntrusted; liveUntrusted is the FULL
+// augmented set (configUntrusted plus every voter this call's own live
+// check additionally excluded) - the finalize handler below uses it to
+// report a distinct "not_currently_reachable" list to the operator
+// alongside its own pre-existing, narrower "not_yet_transitioned" list
+// (configUntrusted), rather than silently conflating "never transitioned"
+// with "transitioned but not reachable right now" under one label.
+func quorumWouldBeStrandedLive(node *raft.Node, voters []raft.ServerInfo, configUntrusted map[string]struct{}, clientTLS *tls.Config) (bool, map[string]struct{}) {
+	liveUntrusted := make(map[string]struct{}, len(configUntrusted))
+	for id := range configUntrusted {
+		liveUntrusted[id] = struct{}{}
+	}
+
+	selfID := node.ID()
+	state := node.State()
+
+	var toCheck []raft.ServerInfo
+	for _, v := range voters {
+		if v.Suffrage != "Voter" || v.ID == selfID {
+			continue
+		}
+		if _, already := liveUntrusted[v.ID]; already {
+			continue
+		}
+		toCheck = append(toCheck, v)
+	}
+
+	type liveCheckResult struct {
+		id  string
+		err error
+	}
+	results := make(chan liveCheckResult, len(toCheck))
+	for _, v := range toCheck {
+		go func(v raft.ServerInfo) {
+			results <- liveCheckResult{id: v.ID, err: voterIsLiveAndTrusting(clientTLS, state.Nodes[v.ID].APIAddr)}
+		}(v)
+	}
+	for range toCheck {
+		r := <-results
+		if r.err != nil {
+			liveUntrusted[r.id] = struct{}{}
+		}
+	}
+
+	return quorumWouldBeStranded(voters, liveUntrusted), liveUntrusted
+}
+
 // recordCARotationTransitionRequest is POST
 // /v1/cluster/mtls/rotate/transition's JSON request body - the internal,
 // peer-to-peer forwarding target ForwardCARotationTransition (below)
@@ -319,11 +511,11 @@ func RegisterMTLSRoutes(r gin.IRoutes, node *raft.Node, decider *authz.Decider, 
 		}
 
 		// FR-010 quorum-protection refusal check (shared with finalize,
-		// see quorumWouldBeStranded's own doc comment) - only meaningful
-		// when the request names a NodeID (revocation is keyed by serial
-		// per research.md Decision 4; NodeID is the audit/display field
-		// this heuristic reuses to identify which VOTER, if any, this
-		// action is about).
+		// see quorumWouldBeStrandedLive's own doc comment) - only
+		// meaningful when the request names a NodeID (revocation is
+		// keyed by serial per research.md Decision 4; NodeID is the
+		// audit/display field this heuristic reuses to identify which
+		// VOTER, if any, this action is about).
 		if req.NodeID != "" {
 			voters, err := node.Servers()
 			if err != nil {
@@ -336,8 +528,8 @@ func RegisterMTLSRoutes(r gin.IRoutes, node *raft.Node, decider *authz.Decider, 
 					untrusted[existing.NodeID] = struct{}{}
 				}
 			}
-			if quorumWouldBeStranded(voters, untrusted) {
-				c.JSON(http.StatusConflict, gin.H{"error": "refusing to revoke: this would leave fewer than a quorum of trusted voters (spec.md FR-010)"})
+			if stranded, _ := quorumWouldBeStrandedLive(node, voters, untrusted, forwardTLS); stranded {
+				c.JSON(http.StatusConflict, gin.H{"error": "refusing to revoke: this would leave fewer than a quorum of trusted, reachable voters (spec.md FR-010)"})
 				return
 			}
 		}
@@ -624,16 +816,18 @@ func RegisterMTLSRoutes(r gin.IRoutes, node *raft.Node, decider *authz.Decider, 
 	// POST /v1/cluster/mtls/rotate/finalize (Feature 004 Phase 5, T024,
 	// spec.md FR-009/FR-010): explicit, operator-triggered completion of
 	// an in-progress CA rotation - refused (per FR-010) when finalizing
-	// would leave fewer than a quorum of voters trusted (every voter that
-	// has NOT yet transitioned under the incoming CA would become
-	// untrusted the instant the outgoing CA is retired). Unlike begin,
-	// this call needs no new material and durably records ONCE via Raft
-	// (must be called against the current leader, mirroring revoke's own
-	// leader-only write pattern above); every OTHER node that already
-	// locally loaded the incoming CA (via its own prior "begin" call)
-	// converges automatically via wireRevocationHandler's SAME
-	// FSM-notify mechanism (T023) - see this file's own package doc
-	// comment.
+	// would leave fewer than a quorum of voters trusted AND currently
+	// reachable (every voter that has NOT yet transitioned under the
+	// incoming CA would become untrusted the instant the outgoing CA is
+	// retired; T072-FU8 follow-up: every voter that HAS transitioned
+	// must ALSO prove itself live right now, quorumWouldBeStrandedLive's
+	// own doc comment above). Unlike begin, this call needs no new
+	// material and durably records ONCE via Raft (must be called against
+	// the current leader, mirroring revoke's own leader-only write
+	// pattern above); every OTHER node that already locally loaded the
+	// incoming CA (via its own prior "begin" call) converges
+	// automatically via wireRevocationHandler's SAME FSM-notify
+	// mechanism (T023) - see this file's own package doc comment.
 	//
 	// Honest scope boundary (mirrors the renew handler's own identical
 	// disclosure above): TransitionedNodeIDs is only as complete as POST
@@ -648,10 +842,15 @@ func RegisterMTLSRoutes(r gin.IRoutes, node *raft.Node, decider *authz.Decider, 
 	// not-yet-durably-visible) transition state in that rare case - it
 	// can only ever OVER-refuse a genuinely-safe finalize, never
 	// under-refuse an unsafe one (Constitution §11.4.101
-	// reversible-safe-default). An operator whose finalize is refused
-	// despite believing every node has transitioned should confirm each
+	// reversible-safe-default) - a property quorumWouldBeStrandedLive's
+	// own added live-reachability check preserves and extends, never
+	// weakens. An operator whose finalize is refused despite believing
+	// every node has transitioned should confirm each
 	// "not_yet_transitioned" node's own GET /v1/cluster/mtls/rotate/status
-	// directly before retrying.
+	// directly before retrying, and each "not_currently_reachable" node's
+	// own liveness independently (T072-FU8: a node reported here HAS
+	// transitioned per the replicated record but did not answer this
+	// call's own live check just now).
 	r.POST("/v1/cluster/mtls/rotate/finalize", RequireJWT(decider), func(c *gin.Context) {
 		claims := ClaimsFromContext(c)
 		if !decider.CheckRBAC(claims.Subject, claims.Roles, auth.ActionMTLSManage, "mtls") {
@@ -683,14 +882,33 @@ func RegisterMTLSRoutes(r gin.IRoutes, node *raft.Node, decider *authz.Decider, 
 				untrusted[v.ID] = struct{}{}
 			}
 		}
-		if quorumWouldBeStranded(voters, untrusted) {
+		if stranded, liveUntrusted := quorumWouldBeStrandedLive(node, voters, untrusted, forwardTLS); stranded {
 			notYet := make([]string, 0, len(untrusted))
 			for id := range untrusted {
 				notYet = append(notYet, id)
 			}
+			// notCurrentlyReachable (T072-FU8 follow-up) is DISTINCT from
+			// notYet above: it names every voter this call's OWN live
+			// mTLS-handshake check additionally excluded RIGHT NOW - a
+			// voter that HAS durably recorded its own transition
+			// (present in st.CARotation.TransitionedNodeIDs, so absent
+			// from notYet) but did not answer a real, bounded-timeout
+			// GET /v1/cluster/status just now (quorumWouldBeStrandedLive's
+			// own doc comment: dead, partitioned, or its certificate no
+			// longer trusted). Reported separately rather than merged
+			// into notYet so an operator is never told a genuinely
+			// transitioned node "has not yet transitioned" when the real
+			// problem is that it is not currently reachable.
+			var notCurrentlyReachable []string
+			for id := range liveUntrusted {
+				if _, alreadyConfigUntrusted := untrusted[id]; !alreadyConfigUntrusted {
+					notCurrentlyReachable = append(notCurrentlyReachable, id)
+				}
+			}
 			c.JSON(http.StatusConflict, gin.H{
-				"error":                "refusing to finalize: this would leave fewer than a quorum of trusted voters (spec.md FR-010)",
-				"not_yet_transitioned": notYet,
+				"error":                   "refusing to finalize: this would leave fewer than a quorum of trusted, reachable voters (spec.md FR-010)",
+				"not_yet_transitioned":    notYet,
+				"not_currently_reachable": notCurrentlyReachable,
 			})
 			return
 		}
