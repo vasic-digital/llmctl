@@ -228,11 +228,15 @@ func (tc *testCluster) httpClient() *http.Client {
 	if !pool.AppendCertsFromPEM(tc.ca.CertPEM) {
 		tc.t.Fatalf("add CA cert to observer pool")
 	}
+	store, err := mtls.NewTrustStore(pool, &cert)
+	if err != nil {
+		tc.t.Fatalf("NewTrustStore(observer): %v", err)
+	}
 	tlsConf := &tls.Config{
-		Certificates:          []tls.Certificate{cert},
+		GetClientCertificate:  store.GetClientCertificate,
 		RootCAs:               pool,
 		InsecureSkipVerify:    true,
-		VerifyPeerCertificate: raft.VerifyPeerCertificateAgainstCA(pool),
+		VerifyPeerCertificate: raft.VerifyPeerCertificateAgainstCA(store),
 	}
 	return &http.Client{Transport: &http3.Transport{TLSClientConfig: tlsConf}, Timeout: 5 * time.Second}
 }

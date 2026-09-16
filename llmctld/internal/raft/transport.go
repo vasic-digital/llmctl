@@ -25,6 +25,8 @@ import (
 
 	hraft "github.com/hashicorp/raft"
 	"github.com/quic-go/quic-go"
+
+	"github.com/vasic-digital/llmctl/llmctld/internal/mtls"
 )
 
 // quicRaftALPN identifies this connection as carrying raft's own RPC
@@ -35,46 +37,45 @@ import (
 const quicRaftALPN = "llmctld-raft/1"
 
 // VerifyPeerCertificateAgainstCA returns a tls.Config.VerifyPeerCertificate
-// callback that verifies the presented peer certificate chains to a CA in
-// pool - WITHOUT checking any DNS/IP hostname against a SAN.
+// callback that delegates to store.Verify - checking the presented peer
+// certificate's serial number against store's LIVE revoked-serial set
+// FIRST, then verifying the chain against ANY of store's currently-trusted
+// CA pools - WITHOUT checking any DNS/IP hostname against a SAN.
 //
-// This is required, not merely convenient: mtls.IssueNodeCert issues certs
-// identified by raft node ID (CommonName only, no SAN), while raft peers are
-// dialed by their current network address, which is unrelated to - and, in
-// a real cluster, can change independently of - that identity. Go's
-// certificate verification (since Go 1.15, when CommonName-based hostname
-// fallback was removed) REQUIRES a matching SAN for standard verification,
-// so a standard tls.Config here would fail every real (non-loopback-lucky)
-// connection with "certificate relies on legacy Common Name field" or
-// "doesn't contain any IP SANs" - confirmed by actually driving the
+// Refactored for Feature 004 (mTLS certificate and CA rotation with
+// revocation): this closure used to close over a fixed *x509.CertPool
+// captured once at tls.Config construction time, with no way for a running
+// process to react to a cluster-wide revocation event without a full
+// listener rebuild. It now closes over a *mtls.TrustStore instead - since
+// Go's crypto/tls re-invokes VerifyPeerCertificate on EVERY real handshake
+// (confirmed against the real package source, exactly as this file already
+// relied on for its own CA-pool check before this refactor), reading
+// store's revoked-serial set / trusted-CA-pool set fresh on every call
+// makes an mtls.TrustStore.UpdateRevoked/UpdateTrustedCAs call take effect
+// for the very next connection attempt on EVERY node, with zero process
+// restart (research.md Decision 2, data-model.md).
+//
+// Chain-validation behavior is UNCHANGED by this refactor (verified by the
+// pre-existing TestTransport_TwoNodesExchangeRealRaftRPCOverLoopback and
+// TestTransport_RejectsConnectionFromUntrustedCA continuing to pass
+// unmodified): mtls.IssueNodeCert issues certs identified by raft node ID
+// (CommonName only, no SAN), while raft peers are dialed by their current
+// network address, which is unrelated to - and, in a real cluster, can
+// change independently of - that identity. Go's certificate verification
+// (since Go 1.15, when CommonName-based hostname fallback was removed)
+// REQUIRES a matching SAN for standard verification, so a standard
+// tls.Config here would fail every real (non-loopback-lucky) connection
+// with "certificate relies on legacy Common Name field" or "doesn't
+// contain any IP SANs" - confirmed by actually driving the
 // TwoNodesExchangeRealRaftRPCOverLoopback test with the standard
-// verification path before writing this function: it failed with exactly
-// that x509 error. Node identity here is established by the CA chain (a
-// node's cert must be signed by the cluster's CA), not by DNS/IP naming.
-func VerifyPeerCertificateAgainstCA(pool *x509.CertPool) func(rawCerts [][]byte, _ [][]*x509.Certificate) error {
+// verification path before writing this function originally: it failed
+// with exactly that x509 error. Node identity here is established by the
+// CA chain (a node's cert must be signed by the cluster's CA), not by
+// DNS/IP naming.
+func VerifyPeerCertificateAgainstCA(store *mtls.TrustStore) func(rawCerts [][]byte, _ [][]*x509.Certificate) error {
 	return func(rawCerts [][]byte, _ [][]*x509.Certificate) error {
-		if len(rawCerts) == 0 {
-			return fmt.Errorf("raft: no peer certificate presented")
-		}
-		leaf, err := x509.ParseCertificate(rawCerts[0])
-		if err != nil {
-			return fmt.Errorf("raft: parse peer certificate: %w", err)
-		}
-		intermediates := x509.NewCertPool()
-		for _, raw := range rawCerts[1:] {
-			cert, err := x509.ParseCertificate(raw)
-			if err != nil {
-				return fmt.Errorf("raft: parse peer intermediate certificate: %w", err)
-			}
-			intermediates.AddCert(cert)
-		}
-		_, err = leaf.Verify(x509.VerifyOptions{
-			Roots:         pool,
-			Intermediates: intermediates,
-			KeyUsages:     []x509.ExtKeyUsage{x509.ExtKeyUsageAny},
-		})
-		if err != nil {
-			return fmt.Errorf("raft: peer certificate does not chain to a trusted CA: %w", err)
+		if err := store.Verify(rawCerts); err != nil {
+			return fmt.Errorf("raft: %w", err)
 		}
 		return nil
 	}

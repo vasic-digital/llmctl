@@ -60,13 +60,18 @@ func buildTestTLSConfig(t *testing.T, ca *mtls.CA, nodeID string) *tls.Config {
 	if !pool.AppendCertsFromPEM(ca.CertPEM) {
 		t.Fatalf("failed to add CA cert to pool")
 	}
+	store, err := mtls.NewTrustStore(pool, &cert)
+	if err != nil {
+		t.Fatalf("NewTrustStore(%q): %v", nodeID, err)
+	}
 	return &tls.Config{
-		Certificates:          []tls.Certificate{cert},
+		GetCertificate:        store.GetCertificate,
+		GetClientCertificate:  store.GetClientCertificate,
 		RootCAs:               pool,
 		ClientCAs:             pool,
 		ClientAuth:            tls.RequireAndVerifyClientCert,
 		InsecureSkipVerify:    true,
-		VerifyPeerCertificate: raft.VerifyPeerCertificateAgainstCA(pool),
+		VerifyPeerCertificate: raft.VerifyPeerCertificateAgainstCA(store),
 	}
 }
 

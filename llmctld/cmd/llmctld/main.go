@@ -185,27 +185,44 @@ func resolveStateDir(stateDir, caCertPath, nodeID string) string {
 // whatever address happens to be dialed - the same real bug (and fix)
 // T049 found and fixed, applied identically here rather than
 // reintroducing it in a third place.
-func buildNodeTLSConfig(ca *mtls.CA, nodeID string) (*tls.Config, error) {
+//
+// Refactored for Feature 004 (T006): the certificate + trust data now
+// live in a *mtls.TrustStore, wired into tls.Config via
+// GetCertificate/GetClientCertificate (live-swap, per research.md
+// Decision 2) instead of a static Certificates field, and the returned
+// *mtls.TrustStore is handed back to the caller so a later revocation
+// event (T011) can call UpdateRevoked on the SAME store this tls.Config's
+// handshakes read from - for a node that never triggers
+// revocation/renewal/rotation, every existing CLI flag and the READY
+// line stay behavior-identical (proven by test/integration's existing
+// real multi-process bootstrap/failover tests continuing to pass
+// unmodified).
+func buildNodeTLSConfig(ca *mtls.CA, nodeID string) (*tls.Config, *mtls.TrustStore, error) {
 	nodeCert, err := ca.IssueNodeCert(nodeID)
 	if err != nil {
-		return nil, fmt.Errorf("issue node cert for %q: %w", nodeID, err)
+		return nil, nil, fmt.Errorf("issue node cert for %q: %w", nodeID, err)
 	}
 	cert, err := mtls.LoadTLSCertificate(nodeCert.CertPEM, nodeCert.KeyPEM)
 	if err != nil {
-		return nil, fmt.Errorf("load node cert for %q: %w", nodeID, err)
+		return nil, nil, fmt.Errorf("load node cert for %q: %w", nodeID, err)
 	}
 	pool := x509.NewCertPool()
 	if !pool.AppendCertsFromPEM(ca.CertPEM) {
-		return nil, fmt.Errorf("add CA cert to pool for %q", nodeID)
+		return nil, nil, fmt.Errorf("add CA cert to pool for %q", nodeID)
+	}
+	store, err := mtls.NewTrustStore(pool, &cert)
+	if err != nil {
+		return nil, nil, fmt.Errorf("new trust store for %q: %w", nodeID, err)
 	}
 	return &tls.Config{
-		Certificates:          []tls.Certificate{cert},
+		GetCertificate:        store.GetCertificate,
+		GetClientCertificate:  store.GetClientCertificate,
 		RootCAs:               pool,
 		ClientCAs:             pool,
 		ClientAuth:            tls.RequireAndVerifyClientCert,
 		InsecureSkipVerify:    true,
-		VerifyPeerCertificate: raft.VerifyPeerCertificateAgainstCA(pool),
-	}, nil
+		VerifyPeerCertificate: raft.VerifyPeerCertificateAgainstCA(store),
+	}, store, nil
 }
 
 // waitForShutdownSignal blocks until SIGINT or SIGTERM, so a
@@ -236,7 +253,7 @@ func runClusterBootstrap(args []string) {
 		os.Exit(1)
 	}
 
-	raftTLS, err := buildNodeTLSConfig(ca, f.nodeID)
+	raftTLS, _, err := buildNodeTLSConfig(ca, f.nodeID)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "llmctld: cluster bootstrap:", err)
 		os.Exit(1)
@@ -248,7 +265,7 @@ func runClusterBootstrap(args []string) {
 	}
 	defer func() { _ = node.Shutdown() }()
 
-	apiTLS, err := buildNodeTLSConfig(ca, f.nodeID+"-api")
+	apiTLS, _, err := buildNodeTLSConfig(ca, f.nodeID+"-api")
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "llmctld: cluster bootstrap:", err)
 		os.Exit(1)
@@ -375,7 +392,7 @@ func runClusterJoinReal(args []string) int {
 		return 1
 	}
 
-	raftTLS, err := buildNodeTLSConfig(ca, nodeID)
+	raftTLS, _, err := buildNodeTLSConfig(ca, nodeID)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "llmctld: cluster join:", err)
 		return 1
@@ -387,7 +404,7 @@ func runClusterJoinReal(args []string) int {
 	}
 	defer func() { _ = node.Shutdown() }()
 
-	apiTLS, err := buildNodeTLSConfig(ca, nodeID+"-api")
+	apiTLS, _, err := buildNodeTLSConfig(ca, nodeID+"-api")
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "llmctld: cluster join:", err)
 		return 1
@@ -420,7 +437,7 @@ func runClusterJoinReal(args []string) int {
 	}
 	defer func() { _ = srv.Close() }()
 
-	joinClientTLS, err := buildNodeTLSConfig(ca, nodeID+"-join-client")
+	joinClientTLS, _, err := buildNodeTLSConfig(ca, nodeID+"-join-client")
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "llmctld: cluster join:", err)
 		return 1
