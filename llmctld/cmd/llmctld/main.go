@@ -94,11 +94,15 @@ func newAuthzDecider(signingKey string) (*authz.Decider, *auth.Store) {
 // by decider, keys, and modelExecutor - the one call site both
 // runClusterBootstrap and runClusterJoinReal use, so the two subcommands'
 // wiring can never drift apart.
-func registerAuthzRoutes(srv *api.Server, decider *authz.Decider, keys *auth.Store, modelExecutor *executor.LocalExecutor) {
+//
+// node and forwardTLS (002-cluster-model-scheduler Phase 3) enable
+// RegisterModelRoutes's auto-placement path on POST .../start - see that
+// function's own doc comment for the full contract.
+func registerAuthzRoutes(srv *api.Server, decider *authz.Decider, keys *auth.Store, modelExecutor *executor.LocalExecutor, node *raft.Node, forwardTLS *tls.Config) {
 	api.RegisterAuthRoutes(srv.Router(), decider, keys)
 	api.RegisterTenantRoutes(srv.Router(), decider)
 	api.RegisterAuditRoutes(srv.Router(), decider)
-	api.RegisterModelRoutes(srv.Router(), decider, modelExecutor)
+	api.RegisterModelRoutes(srv.Router(), decider, modelExecutor, node, forwardTLS)
 }
 
 // version is the llmctld build version. It is bumped alongside the bash
@@ -285,7 +289,18 @@ func runClusterBootstrap(args []string) {
 	api.RegisterReplicationRoutes(srv.Router(), storeRegistry, decider)
 
 	modelExecutor := executor.New(executor.Config{LLMCtlPath: f.llmctlPath})
-	registerAuthzRoutes(srv, decider, keys, modelExecutor)
+	// forwardTLS (002-cluster-model-scheduler T017) is the real mTLS
+	// client configuration this node's own auto-placement handler uses
+	// to forward a start request to a DIFFERENT chosen node's cluster
+	// API - a distinct cert from this node's own server-side apiTLS
+	// (client vs. server role), mirroring joinClientTLS's identical
+	// "-join-client"-suffixed cert pattern below.
+	forwardTLS, err := buildNodeTLSConfig(ca, f.nodeID+"-forward-client")
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "llmctld: cluster bootstrap:", err)
+		os.Exit(1)
+	}
+	registerAuthzRoutes(srv, decider, keys, modelExecutor, node, forwardTLS)
 
 	if f.bootstrapAdmin {
 		adminKeyID, adminKeySecret, err := keys.Create(bootstrapAdminOwnerID, []string{auth.RoleAdmin}, 0)
@@ -432,7 +447,15 @@ func runClusterJoinReal(args []string) int {
 	defer func() { _ = storeRegistry.Close() }()
 	api.RegisterReplicationRoutes(srv.Router(), storeRegistry, decider)
 	modelExecutor := executor.New(executor.Config{LLMCtlPath: llmctlPath})
-	registerAuthzRoutes(srv, decider, keys, modelExecutor)
+	// See runClusterBootstrap's identical forwardTLS comment above
+	// (002-cluster-model-scheduler T017) - kept symmetric across both
+	// subcommands.
+	forwardTLS, err := buildNodeTLSConfig(ca, nodeID+"-forward-client")
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "llmctld: cluster join:", err)
+		return 1
+	}
+	registerAuthzRoutes(srv, decider, keys, modelExecutor, node, forwardTLS)
 
 	if err := srv.Listen(apiBind); err != nil {
 		fmt.Fprintln(os.Stderr, "llmctld: cluster join: api.Listen:", err)

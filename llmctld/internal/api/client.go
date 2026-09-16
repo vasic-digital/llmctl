@@ -98,3 +98,81 @@ func RequestJoin(clientTLS *tls.Config, leaderAPIAddr, peerID, peerAddr, apiAddr
 		time.Sleep(requestJoinRetryInterval)
 	}
 }
+
+// forwardModelStartRetryBudget/forwardModelStartRetryInterval bound
+// ForwardModelStart's narrow, explicit retry for the SPECIFIC "target
+// briefly unreachable" case spec.md's Edge Cases names (a connection
+// refused/timeout in the brief window right after this cluster's own
+// membership view chose a node - e.g. it is mid-restart) - deliberately
+// NOT a generic unbounded retry (spec.md's own explicit constraint,
+// mirroring requestJoinRetryBudget's identical narrow-retry discipline
+// but on network-level errors rather than a specific HTTP status, since
+// the receiving node's own handler never has a reason to return 409 for
+// this route the way a not-yet-elected leader does for /v1/cluster/join).
+const (
+	forwardModelStartRetryBudget   = 5 * time.Second
+	forwardModelStartRetryInterval = 100 * time.Millisecond
+)
+
+// ForwardModelStart forwards a model-start request that THIS node's own
+// cluster.Place() chose for a DIFFERENT node (targetAPIAddr,
+// targetNodeID) to that node's real cluster HTTP API - a real HTTP/3+mTLS
+// POST to the SAME /v1/tenants/:id/models/:model/start route a
+// directly-addressed caller would use, structurally parallel to
+// RequestJoin (same http3.Transport+mTLS pattern).
+//
+// The request body names targetNodeID as the request's own "node" field,
+// so the receiving node's handler takes the explicit-node LOCAL-dispatch
+// path (routes_models.go's own T019 guarantee: a request naming a node
+// never enters Place() itself) rather than re-running its own placement
+// decision against a request this cluster already decided.
+//
+// authorizationHeader is the ORIGINAL caller's own, verbatim
+// "Authorization: Bearer <token>" header value, forwarded unchanged as
+// the receiving node's own Authorization header - the receiving node
+// re-runs its OWN full RequireJWT + authorizeTenantOwnership + CheckRBAC
+// + CheckTenantBoundary gate chain against it (never trusting "the
+// sending node already authorized this"), exactly matching every other
+// per-request authorization check already established across this
+// cluster.
+func ForwardModelStart(clientTLS *tls.Config, targetAPIAddr, targetNodeID, tenantID, model, authorizationHeader string) error {
+	client := &http.Client{
+		Transport: &http3.Transport{TLSClientConfig: clientTLS},
+		Timeout:   10 * time.Second,
+	}
+
+	body, err := json.Marshal(startModelRequest{Node: targetNodeID})
+	if err != nil {
+		return fmt.Errorf("api: ForwardModelStart: marshal request: %w", err)
+	}
+	url := "https://" + targetAPIAddr + "/v1/tenants/" + tenantID + "/models/" + model + "/start"
+
+	deadline := time.Now().Add(forwardModelStartRetryBudget)
+	for {
+		req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(body))
+		if err != nil {
+			return fmt.Errorf("api: ForwardModelStart: build request: %w", err)
+		}
+		req.Header.Set("Content-Type", "application/json")
+		if authorizationHeader != "" {
+			req.Header.Set("Authorization", authorizationHeader)
+		}
+
+		resp, err := client.Do(req)
+		if err != nil {
+			if time.Now().After(deadline) {
+				return fmt.Errorf("api: ForwardModelStart: target %s at %s: %w", targetNodeID, targetAPIAddr, err)
+			}
+			time.Sleep(forwardModelStartRetryInterval)
+			continue
+		}
+
+		if resp.StatusCode == http.StatusOK {
+			_ = resp.Body.Close()
+			return nil
+		}
+		respBody, _ := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		return fmt.Errorf("api: ForwardModelStart: target %s at %s returned %d: %s", targetNodeID, targetAPIAddr, resp.StatusCode, respBody)
+	}
+}

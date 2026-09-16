@@ -92,7 +92,10 @@ func newModelRoutesTestEngine(t *testing.T) (engine *gin.Engine, decider *authz.
 	engine, decider = newDeciderAndEngine()
 	RegisterTenantRoutes(engine, decider)
 	base := executor.New(executor.Config{LLMCtlPath: modelRoutesLlmctlBinPath(t)})
-	RegisterModelRoutes(engine, decider, base)
+	// node=nil, forwardTLS=nil: no cluster wiring for these tests - T019's
+	// own guarantee is that this preserves the exact pre-Phase-3
+	// local-only behavior every assertion below already depends on.
+	RegisterModelRoutes(engine, decider, base, nil, nil)
 	return engine, decider, servicesDir
 }
 
