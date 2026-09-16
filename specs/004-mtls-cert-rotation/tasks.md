@@ -177,37 +177,87 @@ without ever dropping below quorum.
 
 ### Tests for User Story 3
 
-- [ ] T018 [TDD] [US3] Real test:
+- [x] T018 [TDD] [US3] Real test:
       `TestMTLSRotation_DualTrust_AcceptsBothOldAndNewCA` during an
-      in-progress rotation.
-- [ ] T019 [TDD] [US3] Real test:
+      in-progress rotation. GREEN (2/2 consecutive full runs) - found and
+      fixed a real production defect en route: `buildNodeTLSConfig`'s
+      `ClientAuth: tls.RequireAndVerifyClientCert` made Go's own stdlib
+      verify incoming client certs against a STATIC, construction-time
+      `ClientCAs` pool never touched by `TrustStore.UpdateTrustedCAs` -
+      fixed to `tls.RequireAnyClientCert` (Go's own documented mechanism
+      for deferring 100% of verification to `VerifyPeerCertificate`,
+      which already correctly reads the LIVE store).
+- [x] T019 [TDD] [US3] Real test:
       `TestMTLSRotation_FullRotation_NeverDropsQuorum` — re-issue every
       node's cert one at a time on a real cluster, asserting real leader
       election/quorum health is checked and holds after EACH individual
-      re-issuance step, not only at the very end.
-- [ ] T020 [TDD] [US3] Real test:
-      `TestMTLSRotation_Finalize_OldCARejectedAfterward`.
-- [ ] T021 [TDD] [US3] Real test:
+      re-issuance step, not only at the very end. GREEN (2/2 consecutive
+      full runs).
+- [x] T020 [TDD] [US3] Real test:
+      `TestMTLSRotation_Finalize_OldCARejectedAfterward`. GREEN (2/2
+      consecutive full runs) - found and fixed a real gap en route: a
+      FOLLOWER's own renewal could not durably record its CA-rotation
+      transition (`node.RecordCARotationTransition` requires the Raft
+      leader); added a leader-forwarding fallback
+      (`ForwardCARotationTransition` + peer-only POST
+      `/v1/cluster/mtls/rotate/transition`) mirroring
+      `routes_models.go`'s established `forwardAutoPlaceToLeader`
+      pattern, backed by a NEW dedicated `mtlsForwardTLS`/
+      `mtlsForwardStore` client identity kept in lockstep with
+      `raftTrustStore`/`apiTrustStore` (distinct from
+      002-cluster-model-scheduler's own unrelated `forwardTLS`).
+- [x] T021 [TDD] [US3] Real test:
       `TestMTLSRotation_QuorumProtection_RefusesStrandingAction`
-      (quickstart.md Scenario 4 / FR-010).
+      (quickstart.md Scenario 4 / FR-010) - exercised via the revoke path
+      (a negative control proving the check does not always refuse, then
+      the core stranding-refused assertion). GREEN (2/2 consecutive full
+      runs).
 
 ### Implementation for User Story 3
 
-- [ ] T022 [US3] Add `CommandBeginCARotation`/`CommandFinalizeCARotation`
-      to `fsm.go` + `cluster.CARotationEvent` to `state.go`.
-- [ ] T023 [US3] Wire the same event-handler pattern (T011) to call
+- [x] T022 [US3] Add `CommandBeginCARotation`/`CommandFinalizeCARotation`
+      to `fsm.go` + `cluster.CARotationEvent` to `state.go`. Also added
+      `CommandRecordCARotationTransition` (a natural, minimal third
+      command beyond this task's literal two-name list - required to
+      honestly satisfy FR-009's "which nodes have transitioned"
+      visibility and FR-010's finalize quorum-protection check, neither
+      of which the two literally-named commands alone can provide; see
+      this feature's final report for the full reasoning).
+- [x] T023 [US3] Wire the same event-handler pattern (T011) to call
       `TrustStore.UpdateTrustedCAs` with BOTH pools during
       `"in_progress"` and drop to the single new pool on `"finalized"`.
-- [ ] T024 [US3] Add begin/transition-status/finalize operator actions to
+      `"in_progress"`'s dual-trust activation happens directly inside the
+      `begin` handler (the incoming CA's actual material - a fingerprint
+      HASH only ever travels through Raft, per `CARotationEvent`'s own
+      security note - is loaded out-of-band, per-node); `"finalized"`'s
+      drop-to-single-pool is the event-handler-driven half, extending
+      `wireRevocationHandler`'s existing `onRevocationApplied` notify
+      mechanism exactly as that type's own doc comment already
+      anticipated ("forward-compatible with Phase 5's future CA-rotation
+      event without a second handler mechanism").
+- [x] T024 [US3] Add begin/transition-status/finalize operator actions to
       `routes_mtls.go`, including the FR-010 quorum-protection refusal
       check on the finalize path (and on the revoke path from Phase 3,
-      per spec.md's shared Edge Case).
-- [ ] T025 [US3] [REVIEW] Concurrency review: two rotation/revocation
+      per spec.md's shared Edge Case) - `quorumWouldBeStranded` written
+      once, used by both.
+- [x] T025 [US3] [REVIEW] Concurrency review: two rotation/revocation
       events issued near-simultaneously (spec.md Edge Case/FR-011) —
       confirm the Raft log's own total ordering (the same guarantee every
       other FSM command already relies on) is what resolves this, and
       that no code path in this feature accidentally bypasses it (e.g. by
-      applying an effect locally before the FSM confirms it).
+      applying an effect locally before the FSM confirms it). Found a
+      real gap: a non-leader node's local "begin" dual-trust activation
+      was NOT itself gated on Raft confirmation, so two concurrent
+      "begin" calls naming DIFFERENT incoming CAs against different nodes
+      could locally diverge before Raft's own total ordering resolved
+      which one wins. Closed the common case with a pre-check against the
+      currently-replicated `cluster.CARotation` (refusing a request whose
+      fingerprints conflict with an already-in-progress rotation, on
+      EVERY node, not only the leader); the residual true-simultaneous
+      window (both requests reading `node.State()` before either's Raft
+      entry replicates) is honestly documented as bounded by Raft's own
+      total ordering, not eliminated. Revoke/finalize themselves apply NO
+      local effect before their own Raft Apply confirms it.
 
 **Checkpoint**: All three user stories independently verified. **Get
 human approval before Polish.**

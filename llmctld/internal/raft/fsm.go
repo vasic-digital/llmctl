@@ -59,6 +59,30 @@ const (
 	// doc comment for why revocation is keyed by certificate serial
 	// number, never by NodeID.
 	CommandRevokeCertificate CommandType = "revoke_certificate"
+
+	// CommandBeginCARotation and CommandFinalizeCARotation record the
+	// start and the operator-explicit completion of a CA (root-of-trust)
+	// rotation (Feature 004 Phase 5, User Story 3, data-model.md's
+	// CARotationEvent) - see cluster.CARotationEvent's own doc comment
+	// for why only a FINGERPRINT hash of each CA's certificate travels
+	// through this replicated log, never the certificate or key material
+	// itself.
+	CommandBeginCARotation    CommandType = "begin_ca_rotation"
+	CommandFinalizeCARotation CommandType = "finalize_ca_rotation"
+
+	// CommandRecordCARotationTransition records that ONE node (cmd.NodeID
+	// - the same field CommandJoinNode/CommandLeaveNode already use, no
+	// new Command field needed) has confirmed re-issuance under the
+	// currently in_progress rotation's incoming CA (spec.md FR-009/SC-004
+	// visibility) - submitted by that node's own POST
+	// /v1/cluster/mtls/renew handler (internal/api/routes_mtls.go) the
+	// moment its local renewal completes while a rotation is in progress.
+	// This is the mechanism that makes POST /v1/cluster/mtls/rotate/
+	// finalize's FR-010 quorum-protection check possible: without a
+	// durable, cluster-wide-agreed record of which voters have already
+	// transitioned, finalize could not distinguish "safe to retire the
+	// outgoing CA" from "would strand every not-yet-transitioned voter."
+	CommandRecordCARotationTransition CommandType = "record_ca_rotation_transition"
 )
 
 // Command is the structure serialized into every Raft log entry's Data.
@@ -119,6 +143,16 @@ type Command struct {
 	// reason LockExpiresAt/LockNow are carried above rather than computed
 	// independently by each node.
 	Revocation *cluster.RevocationRecord `json:"revocation,omitempty"`
+
+	// CARotation carries the full record for
+	// CommandBeginCARotation/CommandFinalizeCARotation (Feature 004 Phase
+	// 5) - computed ONCE by the proposer (BegunAt/FinalizedAt, matching
+	// LockExpiresAt/LockNow/RevokedAt's identical determinism discipline
+	// above) and replicated verbatim. CommandRecordCARotationTransition
+	// does NOT use this field - it reuses the NodeID field already
+	// declared above (shared with join/leave), naming which node has
+	// transitioned.
+	CARotation *cluster.CARotationEvent `json:"ca_rotation,omitempty"`
 }
 
 var (
@@ -130,6 +164,10 @@ var (
 	errRecordRunningProfileUnknownNode = errors.New("raft: record_running_profile refused: node is not currently a cluster member")
 	errCommandMissingReplicationRole   = errors.New("raft: assign_replication_role/reassign_replication_role command missing ReplicationRole")
 	errCommandMissingRevocation        = errors.New("raft: revoke_certificate command missing Revocation")
+	errCommandMissingCARotation        = errors.New("raft: begin_ca_rotation/finalize_ca_rotation command missing CARotation")
+	errCARotationAlreadyInProgress     = errors.New("raft: begin_ca_rotation refused: a DIFFERENT rotation is already in progress - finalize it first")
+	errCARotationNotInProgress         = errors.New("raft: finalize_ca_rotation refused: no CA rotation is currently in progress")
+	errCARotationFingerprintMismatch   = errors.New("raft: finalize_ca_rotation refused: fingerprints do not match the currently in-progress rotation")
 
 	// ErrInsufficientCapacity is CommandRecordRunningProfile's Apply-time
 	// re-validation refusal (FR-005/SC-004's TOCTOU-closing mechanism) -
@@ -182,6 +220,14 @@ type ClusterFSM struct {
 	// generic "state changed" signal is both sufficient and, unlike a
 	// per-record signature, forward-compatible with Phase 5's future
 	// CA-rotation event without a second handler mechanism.
+	//
+	// Feature 004 Phase 5 (T023) exercises exactly that forward
+	// compatibility: CommandBeginCARotation and CommandFinalizeCARotation
+	// ALSO set notifyRevocation below, firing this SAME handler - the
+	// registered closure (cmd/llmctld/main.go's wireRevocationHandler)
+	// re-reads node.State().CARotation in addition to .Revocations, so
+	// one handler mechanism, not two, keeps both revocation state AND
+	// CA-rotation state synchronized on every node.
 	//
 	// CRITICAL (root-caused via Constitution §11.4.102 systematic
 	// debugging while investigating an indefinitely-hanging integration
@@ -344,6 +390,72 @@ func (f *ClusterFSM) Apply(log *hraft.Log) interface{} {
 		}
 		f.state.Revocations[cmd.Revocation.SerialNumber] = *cmd.Revocation
 		notifyRevocation = true
+	case CommandBeginCARotation:
+		if cmd.CARotation == nil {
+			return errCommandMissingCARotation
+		}
+		if existing := f.state.CARotation; existing != nil && existing.Status == "in_progress" {
+			if existing.OutgoingCAFingerprint == cmd.CARotation.OutgoingCAFingerprint &&
+				existing.IncomingCAFingerprint == cmd.CARotation.IncomingCAFingerprint {
+				// Idempotent no-op (TestApply_BeginCARotation_
+				// IdempotentOnMatchingFingerprints): a DIFFERENT node's
+				// own local "begin rotation" API call submitting the
+				// SAME rotation that is already in progress - the
+				// canonical record (including its original BegunAt) is
+				// left untouched.
+				return nil
+			}
+			return errCARotationAlreadyInProgress
+		}
+		rec := *cmd.CARotation
+		rec.TransitionedNodeIDs = append([]string(nil), cmd.CARotation.TransitionedNodeIDs...)
+		f.state.CARotation = &rec
+		notifyRevocation = true
+	case CommandFinalizeCARotation:
+		if cmd.CARotation == nil {
+			return errCommandMissingCARotation
+		}
+		existing := f.state.CARotation
+		if existing == nil || existing.Status != "in_progress" {
+			return errCARotationNotInProgress
+		}
+		if existing.OutgoingCAFingerprint != cmd.CARotation.OutgoingCAFingerprint ||
+			existing.IncomingCAFingerprint != cmd.CARotation.IncomingCAFingerprint {
+			return errCARotationFingerprintMismatch
+		}
+		finalized := *existing
+		finalized.TransitionedNodeIDs = append([]string(nil), existing.TransitionedNodeIDs...)
+		finalized.Status = "finalized"
+		finalized.FinalizedAt = cmd.CARotation.FinalizedAt
+		f.state.CARotation = &finalized
+		notifyRevocation = true
+	case CommandRecordCARotationTransition:
+		existing := f.state.CARotation
+		if existing == nil || existing.Status != "in_progress" {
+			// Idempotent no-op (TestApply_RecordCARotationTransition_
+			// NoOpWhenNoneInProgress), mirroring CommandReleaseLock's own
+			// idempotent-no-op-on-already-gone precedent above: a
+			// renewal reporting a transition after the rotation already
+			// finalized (or one that was never begun, e.g. a stale
+			// retry) has nothing to record.
+			return nil
+		}
+		already := false
+		for _, id := range existing.TransitionedNodeIDs {
+			if id == cmd.NodeID {
+				already = true
+				break
+			}
+		}
+		if !already {
+			updated := *existing
+			updated.TransitionedNodeIDs = append(append([]string(nil), existing.TransitionedNodeIDs...), cmd.NodeID)
+			f.state.CARotation = &updated
+		}
+		// No notify: TrustStore pool contents depend only on Status/
+		// fingerprints (both unchanged by this command), never on
+		// TransitionedNodeIDs - see wireRevocationHandler's own doc
+		// comment for exactly which fields drive a pool update.
 	default:
 		return errUnknownCommand
 	}

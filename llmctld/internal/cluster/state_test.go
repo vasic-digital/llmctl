@@ -86,3 +86,47 @@ func TestClone_ReplicationRolesIsIndependentCopy(t *testing.T) {
 		t.Fatalf("mutating the clone's ReplicaNodeIDs slice must not affect the original: got %q, want node-b", got)
 	}
 }
+
+// TestClone_CARotationIsNilByDefault proves a freshly-constructed
+// ClusterState (and its clone) both start with CARotation == nil - "no
+// rotation has ever been begun" (Feature 004 Phase 5, data-model.md).
+func TestClone_CARotationIsNilByDefault(t *testing.T) {
+	original := NewClusterState()
+	if original.CARotation != nil {
+		t.Fatalf("NewClusterState must start with CARotation == nil, got %+v", original.CARotation)
+	}
+	clone := original.Clone()
+	if clone.CARotation != nil {
+		t.Fatalf("Clone of a CARotation-nil state must also be nil, got %+v", clone.CARotation)
+	}
+}
+
+// TestClone_CARotationIsIndependentCopy proves CARotation (Feature 004
+// Phase 5) gets the SAME deep-copy guarantee ReplicationRoles/
+// RunningProfiles already have: mutating a clone's CARotation pointer, or
+// its TransitionedNodeIDs slice, must never affect the original.
+func TestClone_CARotationIsIndependentCopy(t *testing.T) {
+	original := NewClusterState()
+	original.CARotation = &CARotationEvent{
+		OutgoingCAFingerprint: "fp-old",
+		IncomingCAFingerprint: "fp-new",
+		TransitionedNodeIDs:   []string{"node-a"},
+		Status:                "in_progress",
+		BegunAt:               time.Unix(1000, 0),
+	}
+
+	clone := original.Clone()
+	clone.CARotation.Status = "finalized"
+	clone.CARotation.TransitionedNodeIDs[0] = "mutated"
+	clone.CARotation.TransitionedNodeIDs = append(clone.CARotation.TransitionedNodeIDs, "node-b")
+
+	if got := original.CARotation.Status; got != "in_progress" {
+		t.Fatalf("mutating the clone's CARotation must not affect the original: original Status = %q, want in_progress", got)
+	}
+	if got := original.CARotation.TransitionedNodeIDs[0]; got != "node-a" {
+		t.Fatalf("mutating the clone's TransitionedNodeIDs slice must not affect the original: got %q, want node-a", got)
+	}
+	if got := len(original.CARotation.TransitionedNodeIDs); got != 1 {
+		t.Fatalf("appending to the clone's TransitionedNodeIDs must not affect the original: original has %d entries, want 1", got)
+	}
+}

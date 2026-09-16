@@ -148,18 +148,28 @@ func newAuthzDecider(signingKey string) (*authz.Decider, *auth.Store) {
 // RegisterModelRoutes's auto-placement path on POST .../start - see that
 // function's own doc comment for the full contract. node is also reused
 // (004-mtls-cert-rotation) by RegisterMTLSRoutes's revoke/status actions.
-// ca, raftTrustStore, and apiTrustStore (004-mtls-cert-rotation Phase 4,
-// T016) are THIS node's own shared CA and the exact same two
-// *mtls.TrustStore instances buildNodeTLSConfig already constructed for
-// this node's Raft-transport and HTTP-API tls.Config - passed through so
-// RegisterMTLSRoutes's renew action can issue and swap in fresh
-// certificates for both live transports.
-func registerAuthzRoutes(srv *api.Server, decider *authz.Decider, keys *auth.Store, modelExecutor *executor.LocalExecutor, node *raft.Node, forwardTLS *tls.Config, ca *mtls.CA, raftTrustStore, apiTrustStore *mtls.TrustStore) {
+// rotationHolder, raftTrustStore, and apiTrustStore (004-mtls-cert-rotation
+// Phase 4 T016, extended Phase 5) are THIS node's own local CA-issuance
+// holder (mtls.RotationCAHolder, constructed from this node's shared CA -
+// see buildNodeTLSConfig/RegisterMTLSRoutes's own doc comments) and the
+// exact same two *mtls.TrustStore instances buildNodeTLSConfig already
+// constructed for this node's Raft-transport and HTTP-API tls.Config -
+// passed through so RegisterMTLSRoutes's renew/begin/finalize actions can
+// issue and swap in fresh certificates, and activate/retire dual CA
+// trust, for both live transports.
+// mtlsForwardTLS/mtlsForwardStore (004-mtls-cert-rotation Phase 5) are
+// THIS node's own DEDICATED client identity + TrustStore for
+// RegisterMTLSRoutes's leader-forwarding fallback - see that call's own
+// doc comment and mtlsForwardStore's construction site (main.go's
+// runClusterBootstrap/runClusterJoinReal) for why this must be separate
+// from forwardTLS (002-cluster-model-scheduler's own, unrelated
+// auto-placement forwarding).
+func registerAuthzRoutes(srv *api.Server, decider *authz.Decider, keys *auth.Store, modelExecutor *executor.LocalExecutor, node *raft.Node, forwardTLS *tls.Config, rotationHolder *mtls.RotationCAHolder, mtlsForwardTLS *tls.Config, mtlsForwardStore, raftTrustStore, apiTrustStore *mtls.TrustStore) {
 	api.RegisterAuthRoutes(srv.Router(), decider, keys)
 	api.RegisterTenantRoutes(srv.Router(), decider)
 	api.RegisterAuditRoutes(srv.Router(), decider)
 	api.RegisterModelRoutes(srv.Router(), decider, modelExecutor, node, forwardTLS)
-	api.RegisterMTLSRoutes(srv.Router(), node, decider, ca, raftTrustStore, apiTrustStore)
+	api.RegisterMTLSRoutes(srv.Router(), node, decider, rotationHolder, mtlsForwardTLS, raftTrustStore, apiTrustStore, mtlsForwardStore)
 }
 
 // version is the llmctld build version. It is bumped alongside the bash
@@ -258,6 +268,39 @@ func resolveStateDir(stateDir, caCertPath, nodeID string) string {
 // line stay behavior-identical (proven by test/integration's existing
 // real multi-process bootstrap/failover tests continuing to pass
 // unmodified).
+//
+// ClientAuth: tls.RequireAnyClientCert (Feature 004 Phase 5 fix, T018) -
+// deliberately NOT tls.RequireAndVerifyClientCert. Root-caused via
+// Constitution §11.4.102 systematic debugging against a genuine RED
+// (TestMTLSRotation_DualTrust_AcceptsBothOldAndNewCA: a real node
+// rejected a client certificate signed by a freshly-added incoming CA
+// with "tls: unknown certificate authority", DESPITE
+// TrustStore.UpdateTrustedCAs having already been called with both
+// pools). Confirmed by reading Go's own crypto/tls server source
+// (handshake_server.go's processCertsFromClient): when ClientAuth >=
+// VerifyClientCertIfGiven, Go's stdlib ALWAYS performs its OWN built-in
+// chain verification against c.config.ClientCAs - the tls.Config STRUCT
+// FIELD below, a snapshot captured ONCE at construction time - BEFORE
+// (and independently of) VerifyPeerCertificate ever runs, and
+// UNCONDITIONALLY (InsecureSkipVerify has no effect on this SERVER-side
+// check; that field only ever affects a CLIENT verifying a SERVER's
+// certificate, per its own doc comment). TrustStore.UpdateTrustedCAs
+// mutates ONLY the *mtls.TrustStore's own internal pool slice, never
+// this tls.Config's ClientCAs field, so the built-in check kept using
+// the STALE, CA-1-only pool forever - invisible until this feature's
+// widen-trust (dual-CA) need actually exercised it (revocation only ever
+// NARROWS trust within the SAME already-trusted CA, so this gap was
+// never triggered by Phase 3's own real multi-process tests).
+// tls.RequireAnyClientCert is Go's own documented escape hatch for
+// exactly this shape (VerifyPeerCertificate's doc comment: "for a
+// server, when ClientAuth is RequestClientCert or RequireAnyClientCert,
+// then this callback will be considered but the verifiedChains argument
+// will always be nil") - it still REQUIRES the client to present at
+// least one certificate, but defers 100% of the real chain+revocation
+// verification to VerifyPeerCertificate below (raft.
+// VerifyPeerCertificateAgainstCA, which already correctly loops over
+// TrustStore's LIVE, dynamically-updatable pool set) - identical
+// security guarantee, zero stale-static-pool surface.
 func buildNodeTLSConfig(ca *mtls.CA, nodeID string) (*tls.Config, *mtls.TrustStore, error) {
 	nodeCert, err := ca.IssueNodeCert(nodeID)
 	if err != nil {
@@ -280,7 +323,7 @@ func buildNodeTLSConfig(ca *mtls.CA, nodeID string) (*tls.Config, *mtls.TrustSto
 		GetClientCertificate:  store.GetClientCertificate,
 		RootCAs:               pool,
 		ClientCAs:             pool,
-		ClientAuth:            tls.RequireAndVerifyClientCert,
+		ClientAuth:            tls.RequireAnyClientCert,
 		InsecureSkipVerify:    true,
 		VerifyPeerCertificate: raft.VerifyPeerCertificateAgainstCA(store),
 	}, store, nil
@@ -300,15 +343,49 @@ func buildNodeTLSConfig(ca *mtls.CA, nodeID string) (*tls.Config, *mtls.TrustSto
 // truth. Shared by both runClusterBootstrap and runClusterJoinReal so the
 // two subcommands' wiring can never drift apart, matching this file's
 // registerAuthzRoutes/newAuthzDecider sharing pattern.
-func wireRevocationHandler(node *raft.Node, raftTrustStore, apiTrustStore *mtls.TrustStore) {
+//
+// Feature 004 Phase 5 (T023) extends the SAME registered closure (fsm.go's
+// onRevocationApplied notify mechanism now ALSO fires for
+// CommandBeginCARotation/CommandFinalizeCARotation, per that type's own
+// doc comment - "forward-compatible with Phase 5's future CA-rotation
+// event without a second handler mechanism") to ALSO keep CA-rotation
+// state synchronized: the moment node.State().CARotation.Status flips to
+// "finalized" (durably, cluster-wide, via a SINGLE Raft Apply anywhere -
+// see internal/api/routes_mtls.go's own package doc comment), rotationHolder
+// drops its own locally-tracked outgoing CA and both TrustStores follow
+// suit, PROVIDED this node had already locally loaded the incoming CA via
+// its own prior "begin rotation" API call (rotationHolder.
+// FinalizeLocalRotation's own doc comment: an honest no-op otherwise - a
+// node never told the incoming CA's material out-of-band cannot be made
+// to trust it merely by this status flip). "begin"'s OWN dual-trust
+// activation is intentionally NOT re-derived here: it happens directly
+// and synchronously inside the "begin rotation" handler at the moment it
+// loads the incoming CA's actual material (which this notify-only handler
+// never receives - only a fingerprint HASH ever travels through Raft).
+// trustStores is variadic (Feature 004 Phase 5) so every one of THIS
+// node's live *mtls.TrustStore instances - Raft-transport, HTTP-API, and
+// the dedicated mtls-forward-client store (main.go's own
+// mtlsForwardTLS/mtlsForwardStore, backing RegisterMTLSRoutes's
+// leader-forwarding fallback) - stays synchronized identically, without
+// this function's own body needing to enumerate them by name.
+func wireRevocationHandler(node *raft.Node, rotationHolder *mtls.RotationCAHolder, trustStores ...*mtls.TrustStore) {
 	node.SetRevocationHandler(func() {
 		state := node.State()
 		revoked := make(map[string]struct{}, len(state.Revocations))
 		for serial := range state.Revocations {
 			revoked[serial] = struct{}{}
 		}
-		raftTrustStore.UpdateRevoked(revoked)
-		apiTrustStore.UpdateRevoked(revoked)
+		for _, store := range trustStores {
+			store.UpdateRevoked(revoked)
+		}
+
+		if state.CARotation != nil && state.CARotation.Status == "finalized" {
+			rotationHolder.FinalizeLocalRotation()
+			pools := rotationHolder.Pools()
+			for _, store := range trustStores {
+				store.UpdateTrustedCAs(pools)
+			}
+		}
 	})
 }
 
@@ -417,7 +494,32 @@ func runClusterBootstrap(args []string) {
 		fmt.Fprintln(os.Stderr, "llmctld: cluster bootstrap:", err)
 		os.Exit(1)
 	}
-	wireRevocationHandler(node, raftTrustStore, apiTrustStore)
+	// rotationHolder (004-mtls-cert-rotation Phase 5) is THIS node's own
+	// local holder of which CA it currently issues fresh certificates
+	// from - see buildNodeTLSConfig/RegisterMTLSRoutes's own doc
+	// comments. Constructed once, shared by wireRevocationHandler (the
+	// FSM-notify-driven finalize sync) and registerAuthzRoutes's
+	// RegisterMTLSRoutes call (the begin/renew handlers).
+	rotationHolder := mtls.NewRotationCAHolder(ca)
+	// mtlsForwardTLS/mtlsForwardStore (004-mtls-cert-rotation Phase 5)
+	// back RegisterMTLSRoutes's OWN leader-forwarding fallback (POST
+	// /v1/cluster/mtls/rotate/transition) - a DEDICATED client identity
+	// + TrustStore, DISTINCT from the pre-existing forwardTLS built below
+	// (002-cluster-model-scheduler's auto-placement forwarding, an
+	// UNRELATED concern this feature deliberately does not touch).
+	// mtlsForwardStore's own pools are kept in lockstep with
+	// raftTrustStore/apiTrustStore below - without this, a FOLLOWER
+	// forwarding its own CA-rotation transition to a leader that has
+	// ALREADY renewed under the incoming CA would reject the leader's
+	// now-incoming-CA-signed certificate on THIS client's own (otherwise
+	// stale, CA-1-only) verification - a genuine RED found via this
+	// exact scenario in T020's real multi-process test.
+	mtlsForwardTLS, mtlsForwardStore, err := buildNodeTLSConfig(ca, f.nodeID+"-mtls-forward-client")
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "llmctld: cluster bootstrap:", err)
+		os.Exit(1)
+	}
+	wireRevocationHandler(node, rotationHolder, raftTrustStore, apiTrustStore, mtlsForwardStore)
 	srv := api.NewServer(node, apiTLS)
 
 	signingKey := os.Getenv(jwtSigningKeyEnvVar)
@@ -472,7 +574,7 @@ func runClusterBootstrap(args []string) {
 		fmt.Fprintln(os.Stderr, "llmctld: cluster bootstrap:", err)
 		os.Exit(1)
 	}
-	registerAuthzRoutes(srv, decider, keys, modelExecutor, node, forwardTLS, ca, raftTrustStore, apiTrustStore)
+	registerAuthzRoutes(srv, decider, keys, modelExecutor, node, forwardTLS, rotationHolder, mtlsForwardTLS, mtlsForwardStore, raftTrustStore, apiTrustStore)
 
 	if f.bootstrapAdmin {
 		adminKeyID, adminKeySecret, err := keys.Create(bootstrapAdminOwnerID, []string{auth.RoleAdmin}, 0)
@@ -629,7 +731,16 @@ func runClusterJoinReal(args []string) int {
 		fmt.Fprintln(os.Stderr, "llmctld: cluster join:", err)
 		return 1
 	}
-	wireRevocationHandler(node, raftTrustStore, apiTrustStore)
+	// See runClusterBootstrap's identical rotationHolder/mtlsForwardTLS
+	// comments above (004-mtls-cert-rotation Phase 5) - kept symmetric
+	// across both subcommands.
+	rotationHolder := mtls.NewRotationCAHolder(ca)
+	mtlsForwardTLS, mtlsForwardStore, err := buildNodeTLSConfig(ca, nodeID+"-mtls-forward-client")
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "llmctld: cluster join:", err)
+		return 1
+	}
+	wireRevocationHandler(node, rotationHolder, raftTrustStore, apiTrustStore, mtlsForwardStore)
 	srv := api.NewServer(node, apiTLS)
 
 	signingKey := os.Getenv(jwtSigningKeyEnvVar)
@@ -667,7 +778,7 @@ func runClusterJoinReal(args []string) int {
 		fmt.Fprintln(os.Stderr, "llmctld: cluster join:", err)
 		return 1
 	}
-	registerAuthzRoutes(srv, decider, keys, modelExecutor, node, forwardTLS, ca, raftTrustStore, apiTrustStore)
+	registerAuthzRoutes(srv, decider, keys, modelExecutor, node, forwardTLS, rotationHolder, mtlsForwardTLS, mtlsForwardStore, raftTrustStore, apiTrustStore)
 
 	if err := srv.Listen(apiBind); err != nil {
 		fmt.Fprintln(os.Stderr, "llmctld: cluster join: api.Listen:", err)

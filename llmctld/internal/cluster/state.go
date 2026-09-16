@@ -152,6 +152,51 @@ type RevocationRecord struct {
 	RevokedAt time.Time `json:"revoked_at"`
 }
 
+// CARotationEvent is Feature 004 Phase 5 (User Story 3)'s durable,
+// Raft-replicated record of an in-progress or completed CA (root-of-
+// trust) rotation - data-model.md's "CA Rotation Event" entity. Unlike
+// RevocationRecord (a map keyed by serial, since many certificates can be
+// independently revoked), a cluster has at most ONE current-or-most-
+// recent CARotationEvent at a time, so ClusterState holds a single
+// nullable pointer rather than a collection: nil means "no rotation has
+// ever been begun."
+//
+// Security note (data-model.md, verbatim): the CA's own PRIVATE KEY
+// material - and, by this struct's own field shapes below, its
+// certificate PEM too - is deliberately NEVER placed here or in any
+// other Raft log entry. Only a stable FINGERPRINT (a hash of each CA's
+// certificate) travels through the replicated log; the actual CA
+// cert+key material is distributed to each node out-of-band, via the
+// SAME mechanism -ca-cert/-ca-key already uses at bootstrap (see
+// internal/mtls.RotationCAHolder's own doc comment for how a node uses
+// this out-of-band material locally).
+type CARotationEvent struct {
+	// OutgoingCAFingerprint identifies the CA being retired - a stable
+	// hash of its certificate (internal/mtls.Fingerprint), never the full
+	// PEM (data-model.md).
+	OutgoingCAFingerprint string `json:"outgoing_ca_fingerprint"`
+	// IncomingCAFingerprint identifies the new CA, by the same hash.
+	IncomingCAFingerprint string `json:"incoming_ca_fingerprint"`
+	// TransitionedNodeIDs is which nodes have confirmed re-issuance under
+	// the incoming CA so far (spec.md FR-009/SC-004 visibility) - grown
+	// one entry at a time (idempotently) as each node's own renewal
+	// completes while this rotation is "in_progress"
+	// (raft.CommandRecordCARotationTransition's Apply case).
+	TransitionedNodeIDs []string `json:"transitioned_node_ids"`
+	// Status is "in_progress" or "finalized" (data-model.md's closed
+	// set) - "finalized" means the outgoing CA is no longer trusted
+	// anywhere, an operator-explicit action (spec.md FR-009), never an
+	// automatic timeout.
+	Status string `json:"status"`
+	// BegunAt/FinalizedAt are computed ONCE by the proposer (mirroring
+	// RevocationRecord.RevokedAt/LockEntry.ExpiresAt's identical
+	// determinism discipline in internal/raft/fsm.go) and carried inside
+	// the replicated log entry - FinalizedAt is the zero value until
+	// finalized.
+	BegunAt     time.Time `json:"begun_at"`
+	FinalizedAt time.Time `json:"finalized_at"`
+}
+
 // ClusterState is the FSM-applied cluster state, replicated identically
 // across every Raft node via the log.
 type ClusterState struct {
@@ -170,6 +215,11 @@ type ClusterState struct {
 	// Revocations is Feature 004's revoked-certificate set, keyed by real
 	// x509 serial number.
 	Revocations map[string]RevocationRecord `json:"revocations"`
+
+	// CARotation is Feature 004 Phase 5's current-or-most-recent CA
+	// rotation record - nil until an operator's first "begin rotation"
+	// action is durably applied (see CARotationEvent's own doc comment).
+	CARotation *CARotationEvent `json:"ca_rotation,omitempty"`
 }
 
 // NewClusterState returns an empty, ready-to-use ClusterState.
@@ -180,6 +230,7 @@ func NewClusterState() *ClusterState {
 		RunningProfiles:  []RunningProfile{},
 		ReplicationRoles: make(map[string]ReplicationRole),
 		Revocations:      make(map[string]RevocationRecord),
+		CARotation:       nil,
 	}
 }
 
@@ -202,6 +253,11 @@ func (s *ClusterState) Clone() *ClusterState {
 	}
 	for serial, rec := range s.Revocations {
 		clone.Revocations[serial] = rec
+	}
+	if s.CARotation != nil {
+		rotation := *s.CARotation
+		rotation.TransitionedNodeIDs = append([]string(nil), s.CARotation.TransitionedNodeIDs...)
+		clone.CARotation = &rotation
 	}
 	return clone
 }
