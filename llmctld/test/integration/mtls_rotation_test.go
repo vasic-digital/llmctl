@@ -1512,3 +1512,134 @@ func TestMTLSRotation_QuorumProtection_LiveHandshakeDetectsSIGKilledVoter(t *tes
 		}
 	}
 }
+
+// TestMTLSRotation_QuorumProtection_SurvivesFullPriorCARotation is
+// T072-FU9's own disclosed-but-not-fixed follow-up (docs/CONTINUATION.md
+// §10i, specs/001-llmctl-completion/tasks.md's T072-FU9 entry): "the
+// forward-client mTLS identity (mtlsForwardTLS/mtlsForwardStore) is never
+// reissued by any handler in [routes_mtls.go] across a completed CA
+// rotation, so a revoke/finalize attempted after a full prior rotation
+// could see every OTHER voter's live check spuriously fail (peers would
+// have dropped trust in the CA that signed this node's own forward-client
+// cert)". This test reproduces exactly that: a REAL 3-node cluster runs a
+// REAL full CA rotation to completion (begin on every node, renew every
+// node under the new CA - leader first, exactly mirroring
+// TestMTLSRotation_Finalize_OldCARejectedAfterward's own established
+// sequence - then finalize), so every node's TrustStore(s) (Raft-
+// transport, HTTP-API, AND each node's own dedicated forward-client store)
+// have dropped to single, newCA-only trust. ONLY THEN does this test
+// attempt a SECOND, SUBSEQUENT quorum-protected action (a revoke, with a
+// NodeID set so FR-010's live-per-voter-trust check -
+// quorumWouldBeStrandedLive - genuinely runs) on the leader, and asserts
+// it is APPROVED - never spuriously refused.
+//
+// Root cause this proves, pre-fix: quorumWouldBeStrandedLive dials every
+// OTHER real voter using the LEADER's own forwardTLS (mtlsForwardTLS)
+// client identity (voterIsLiveAndTrusting's own doc comment). If that
+// identity's certificate is still signed by the now-retired outgoing CA
+// (because nothing ever reissues it), every OTHER voter - which has
+// ALREADY dropped trust in that CA via the finalize step above - genuinely
+// rejects the leader's own outbound handshake at the mutual-TLS layer,
+// exactly as TestMTLSRotation_Finalize_OldCARejectedAfterward proves for
+// an ordinary client connection. quorumWouldBeStrandedLive then counts
+// BOTH other real voters as untrusted, leaving only the leader itself (1
+// of 3) "trusted" - genuinely below this 3-node cluster's quorum(2) - and
+// wrongly refuses a revocation that is, in reality, completely safe: every
+// voter is genuinely live and the cluster's real quorum is intact.
+//
+// This test's OWN observer client (dualObserver) is unaffected by, and
+// proves nothing about, this bug: its calls into the leader all reuse
+// QUIC/HTTP-3 connections already established earlier in this same test
+// (during begin/renew/finalize, back when dual trust was still active -
+// TestMTLSRotation_LiveRenewal_ExistingConnectionSurvives's own documented
+// mechanism), so they succeed identically whether or not this bug is
+// fixed. The bug is entirely SERVER-SIDE, inside the leader's own handler,
+// on a BRAND-NEW outbound connection dialled fresh on every
+// quorumWouldBeStrandedLive call - which is exactly what this test's core
+// assertion (the revoke's real HTTP status code) observes.
+func TestMTLSRotation_QuorumProtection_SurvivesFullPriorCARotation(t *testing.T) {
+	tc := newTestCluster(t)
+	nodeA := tc.bootstrap("node-a")
+	nodeB := tc.join("node-b", nodeA)
+	nodeC := tc.join("node-c", nodeA)
+	nodes := []*spawnedNode{nodeA, nodeB, nodeC}
+
+	observer := tc.httpClient()
+	token := tc.adminToken()
+
+	waitForFullConfig(t, tc, observer, nodes, 3, 5*time.Second)
+	leader := waitAndFindLeader(t, tc, observer, nodes, 5*time.Second)
+
+	newCA, err := mtls.GenerateCA()
+	if err != nil {
+		t.Fatalf("GenerateCA (incoming): %v", err)
+	}
+
+	// Begin the rotation on every node - dual trust active everywhere,
+	// mirroring TestMTLSRotation_FullRotation_NeverDropsQuorum's and
+	// TestMTLSRotation_Finalize_OldCARejectedAfterward's own identical
+	// setup sequence.
+	beginCARotation(t, observer, leader.apiAddr, token, newCA)
+	for _, n := range nodes {
+		if n == leader {
+			continue
+		}
+		beginCARotation(t, observer, n.apiAddr, token, newCA)
+	}
+	for _, n := range nodes {
+		waitForRotationStatus(t, observer, n.apiAddr, token, "in_progress", 5*time.Second)
+	}
+
+	dualObserver := tc.httpClientTrustingCAs(tc.ca, newCA)
+	waitForQuorumHealthy(t, tc, dualObserver, nodes, 5*time.Second)
+
+	// Renew EVERY node's certificate under the new CA - leader first, so
+	// its own transition is guaranteed durably recorded (renewCertificateDual's
+	// real HTTP response proves this) - exactly
+	// TestMTLSRotation_Finalize_OldCARejectedAfterward's own established
+	// sequence. This is the step that, post-fix, ALSO reissues each
+	// renewing node's own forward-client identity under the new CA.
+	renewed := renewCertificateDual(t, dualObserver, leader.apiAddr, token)
+	if !renewed.CARotationTransitionRecorded {
+		t.Fatalf("leader %q's own renewal did not durably record its transition", leader.nodeID)
+	}
+	for _, n := range nodes {
+		if n == leader {
+			continue
+		}
+		renewCertificateDual(t, dualObserver, n.apiAddr, token)
+	}
+
+	// Finalize completes the rotation cluster-wide - every node's own
+	// TrustStore(s) drop to single, newCA-only trust (T023's FSM-notify
+	// mechanism on followers; the finalize handler itself on the leader).
+	finalizeCARotation(t, dualObserver, leader.apiAddr, token)
+	for _, n := range nodes {
+		waitForRotationStatus(t, dualObserver, n.apiAddr, token, "finalized", 5*time.Second)
+	}
+
+	// The core assertion: a genuinely-safe, SUBSEQUENT revoke (with a
+	// NodeID set, so FR-010's live-per-voter-trust check runs) issued
+	// AFTER the CA rotation has FULLY completed must be APPROVED. The
+	// NodeID named here ("post-rotation-revoke-target") deliberately does
+	// NOT match any real voter's ID - the point of this test is the LIVE
+	// CHECK against the two OTHER real voters (nodeB/nodeC from the
+	// leader's own perspective), which quorumWouldBeStrandedLive performs
+	// unconditionally regardless of what NodeID the request names, not
+	// the configuration-based approximation any single named voter would
+	// also exercise.
+	victimCert, err := newCA.IssueNodeCert("post-rotation-revoke-target")
+	if err != nil {
+		t.Fatalf("issue post-rotation revoke-target cert: %v", err)
+	}
+	serial := certSerialNumber(t, victimCert.CertPEM)
+	status, body := attemptRevoke(t, dualObserver, leader.apiAddr, token, serial, "post-rotation-revoke-target", "test: forward-client-identity-must-survive-a-full-prior-rotation")
+	if status != http.StatusOK {
+		t.Fatalf("revoking a certificate (NodeID set, so FR-010's live-per-voter-trust check genuinely runs) AFTER a fully completed CA rotation was refused (status = %d, body = %s) - the leader's own forward-client identity (mtlsForwardTLS/mtlsForwardStore) was not reissued across the rotation, so its live-check dial against every OTHER real voter spuriously failed at the mutual-TLS layer, wrongly reporting this cluster as quorum-stranded when every voter is genuinely live and the real quorum is intact", status, body)
+	}
+
+	// The approved revocation must have genuinely, durably applied -
+	// mirrors every other test in this file's own post-action replication
+	// check.
+	waitForRevocationReplicated(t, dualObserver, leader.apiAddr, token, serial, 5*time.Second)
+}
