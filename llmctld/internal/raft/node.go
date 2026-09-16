@@ -5,6 +5,7 @@ package raft
 
 import (
 	"crypto/tls"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -18,6 +19,12 @@ const (
 	transportTimeout = 10 * time.Second
 	joinTimeout      = 10 * time.Second
 	leaveTimeout     = 10 * time.Second
+	// raftApplyTimeout bounds RevokeCertificate's Raft Apply call - a
+	// dedicated constant (rather than reusing lock.go's lockApplyTimeout)
+	// since revocation and distributed-lock commands are unrelated
+	// concerns that happen to share the same reasonable default timeout
+	// value, not the same semantic deadline.
+	raftApplyTimeout = 5 * time.Second
 )
 
 // Config configures one cluster Node.
@@ -197,6 +204,49 @@ func (n *Node) IsLeader() bool {
 // cannot import internal/raft without an import cycle).
 func (n *Node) LastContact() time.Time {
 	return n.raft.LastContact()
+}
+
+// RevokeCertificate submits rec as a real, linearized CommandRevokeCertificate
+// Raft log entry (Feature 004, T011) - the same Apply-and-check-the-
+// response pattern lock.go's Acquire/Release already establish for this
+// package's other FSM commands. Because hashicorp/raft's log commit order
+// is total across the whole cluster, once this call returns nil every
+// node's ClusterFSM.Apply (or, for a node still catching up via snapshot,
+// its Restore) will - now or the moment it replays/restores past this
+// entry - invoke the registered revocation handler (SetRevocationHandler)
+// with the FSM's mu held, so no node ever observes a torn or
+// partially-applied revocation set.
+func (n *Node) RevokeCertificate(rec cluster.RevocationRecord) error {
+	cmd := Command{Type: CommandRevokeCertificate, Revocation: &rec}
+	data, err := json.Marshal(cmd)
+	if err != nil {
+		return fmt.Errorf("raft: revoke certificate %q: marshal command: %w", rec.SerialNumber, err)
+	}
+
+	future := n.raft.Apply(data, raftApplyTimeout)
+	if err := future.Error(); err != nil {
+		return fmt.Errorf("raft: revoke certificate %q: %w", rec.SerialNumber, err)
+	}
+	if resp := future.Response(); resp != nil {
+		if respErr, isErr := resp.(error); isErr {
+			return fmt.Errorf("raft: revoke certificate %q: %w", rec.SerialNumber, respErr)
+		}
+		// A non-nil, non-error Response would be a fsm.go contract
+		// violation (CommandRevokeCertificate only ever returns nil or an
+		// error - see fsm.go's Apply) - treat it as a hard failure rather
+		// than silently proceeding as if it were success, matching
+		// lock.go's Acquire/Release's own identical defensive check.
+		return fmt.Errorf("raft: revoke certificate %q: unexpected FSM response type %T", rec.SerialNumber, resp)
+	}
+	return nil
+}
+
+// SetRevocationHandler registers fn to be called on THIS node whenever its
+// ClusterFSM applies (or restores) revocation-replicated state (Feature
+// 004, T011) - see fsm.go's ClusterFSM.onRevocationApplied doc comment
+// for the exact firing points and why fn takes no arguments.
+func (n *Node) SetRevocationHandler(fn func()) {
+	n.fsm.SetRevocationHandler(fn)
 }
 
 // ServerInfo describes one member of n's Raft cluster configuration - a

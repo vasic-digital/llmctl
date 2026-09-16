@@ -90,15 +90,17 @@ func newAuthzDecider(signingKey string) (*authz.Decider, *auth.Store) {
 }
 
 // registerAuthzRoutes wires T074's auth/tenant/audit route sets, plus
-// T072-FU4's model-lifecycle dispatch routes, onto srv's router, backed
-// by decider, keys, and modelExecutor - the one call site both
+// T072-FU4's model-lifecycle dispatch routes and Feature 004's mTLS
+// management routes (routes_mtls.go), onto srv's router, backed by
+// decider, keys, node, and modelExecutor - the one call site both
 // runClusterBootstrap and runClusterJoinReal use, so the two subcommands'
 // wiring can never drift apart.
-func registerAuthzRoutes(srv *api.Server, decider *authz.Decider, keys *auth.Store, modelExecutor *executor.LocalExecutor) {
+func registerAuthzRoutes(srv *api.Server, decider *authz.Decider, keys *auth.Store, node *raft.Node, modelExecutor *executor.LocalExecutor) {
 	api.RegisterAuthRoutes(srv.Router(), decider, keys)
 	api.RegisterTenantRoutes(srv.Router(), decider)
 	api.RegisterAuditRoutes(srv.Router(), decider)
 	api.RegisterModelRoutes(srv.Router(), decider, modelExecutor)
+	api.RegisterMTLSRoutes(srv.Router(), node, decider)
 }
 
 // version is the llmctld build version. It is bumped alongside the bash
@@ -225,6 +227,32 @@ func buildNodeTLSConfig(ca *mtls.CA, nodeID string) (*tls.Config, *mtls.TrustSto
 	}, store, nil
 }
 
+// wireRevocationHandler registers node's revocation-event handler
+// (Feature 004, T011) so raftTrustStore and apiTrustStore - the two
+// *mtls.TrustStore instances backing THIS node's raft-transport and
+// HTTP-API tls.Config respectively (buildNodeTLSConfig's two per-node
+// calls) - stay synchronized with the cluster's Raft-replicated
+// revocation state on EVERY node, with zero polling and zero process
+// restart. The handler re-reads node.State().Revocations in full and
+// REPLACES both stores' revoked-serial sets (TrustStore.UpdateRevoked's
+// documented full-set-replace contract) rather than applying an
+// incremental delta, so a lost or duplicated firing of this handler can
+// never leave either store out of sync with the replicated source of
+// truth. Shared by both runClusterBootstrap and runClusterJoinReal so the
+// two subcommands' wiring can never drift apart, matching this file's
+// registerAuthzRoutes/newAuthzDecider sharing pattern.
+func wireRevocationHandler(node *raft.Node, raftTrustStore, apiTrustStore *mtls.TrustStore) {
+	node.SetRevocationHandler(func() {
+		state := node.State()
+		revoked := make(map[string]struct{}, len(state.Revocations))
+		for serial := range state.Revocations {
+			revoked[serial] = struct{}{}
+		}
+		raftTrustStore.UpdateRevoked(revoked)
+		apiTrustStore.UpdateRevoked(revoked)
+	})
+}
+
 // waitForShutdownSignal blocks until SIGINT or SIGTERM, so a
 // llmctld cluster process stays up (serving Raft + the HTTP API) until
 // explicitly told to stop - the real, killable-by-a-test-harness process
@@ -253,7 +281,7 @@ func runClusterBootstrap(args []string) {
 		os.Exit(1)
 	}
 
-	raftTLS, _, err := buildNodeTLSConfig(ca, f.nodeID)
+	raftTLS, raftTrustStore, err := buildNodeTLSConfig(ca, f.nodeID)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "llmctld: cluster bootstrap:", err)
 		os.Exit(1)
@@ -265,11 +293,12 @@ func runClusterBootstrap(args []string) {
 	}
 	defer func() { _ = node.Shutdown() }()
 
-	apiTLS, _, err := buildNodeTLSConfig(ca, f.nodeID+"-api")
+	apiTLS, apiTrustStore, err := buildNodeTLSConfig(ca, f.nodeID+"-api")
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "llmctld: cluster bootstrap:", err)
 		os.Exit(1)
 	}
+	wireRevocationHandler(node, raftTrustStore, apiTrustStore)
 	srv := api.NewServer(node, apiTLS)
 
 	signingKey := os.Getenv(jwtSigningKeyEnvVar)
@@ -302,7 +331,7 @@ func runClusterBootstrap(args []string) {
 	api.RegisterReplicationRoutes(srv.Router(), storeRegistry, decider)
 
 	modelExecutor := executor.New(executor.Config{LLMCtlPath: f.llmctlPath})
-	registerAuthzRoutes(srv, decider, keys, modelExecutor)
+	registerAuthzRoutes(srv, decider, keys, node, modelExecutor)
 
 	if f.bootstrapAdmin {
 		adminKeyID, adminKeySecret, err := keys.Create(bootstrapAdminOwnerID, []string{auth.RoleAdmin}, 0)
@@ -392,7 +421,7 @@ func runClusterJoinReal(args []string) int {
 		return 1
 	}
 
-	raftTLS, _, err := buildNodeTLSConfig(ca, nodeID)
+	raftTLS, raftTrustStore, err := buildNodeTLSConfig(ca, nodeID)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "llmctld: cluster join:", err)
 		return 1
@@ -404,11 +433,12 @@ func runClusterJoinReal(args []string) int {
 	}
 	defer func() { _ = node.Shutdown() }()
 
-	apiTLS, _, err := buildNodeTLSConfig(ca, nodeID+"-api")
+	apiTLS, apiTrustStore, err := buildNodeTLSConfig(ca, nodeID+"-api")
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "llmctld: cluster join:", err)
 		return 1
 	}
+	wireRevocationHandler(node, raftTrustStore, apiTrustStore)
 	srv := api.NewServer(node, apiTLS)
 
 	signingKey := os.Getenv(jwtSigningKeyEnvVar)
@@ -429,7 +459,7 @@ func runClusterJoinReal(args []string) int {
 	defer func() { _ = storeRegistry.Close() }()
 	api.RegisterReplicationRoutes(srv.Router(), storeRegistry, decider)
 	modelExecutor := executor.New(executor.Config{LLMCtlPath: llmctlPath})
-	registerAuthzRoutes(srv, decider, keys, modelExecutor)
+	registerAuthzRoutes(srv, decider, keys, node, modelExecutor)
 
 	if err := srv.Listen(apiBind); err != nil {
 		fmt.Fprintln(os.Stderr, "llmctld: cluster join: api.Listen:", err)

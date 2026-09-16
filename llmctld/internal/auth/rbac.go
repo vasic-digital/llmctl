@@ -13,8 +13,8 @@ const (
 
 // Action identifies a single permission-checkable operation this
 // daemon exposes over its cluster API: model lifecycle management,
-// model visibility, and tenant administration (docs/api-reference.md's
-// cluster API surface).
+// model visibility, tenant administration, and mTLS certificate/CA
+// management (docs/api-reference.md's cluster API surface).
 type Action string
 
 const (
@@ -23,6 +23,14 @@ const (
 	ActionModelDelete  Action = "model:delete"
 	ActionModelView    Action = "model:view"
 	ActionTenantManage Action = "tenant:manage"
+	// ActionMTLSManage gates Feature 004's operator-facing mTLS actions
+	// (routes_mtls.go: revoke a certificate, query revocation status) -
+	// a high-privilege, cluster-wide-effect action deliberately granted
+	// ONLY to admin (unlike model/tenant actions, no dedicated
+	// "mtls-operator" role exists, since spec.md names no such role and
+	// inventing one here would be an unrequested constraint, Constitution
+	// §11.4.6).
+	ActionMTLSManage Action = "mtls:manage"
 )
 
 // predefinedRoles is the role -> allowed-actions table for the four
@@ -40,6 +48,7 @@ var predefinedRoles = map[string]map[Action]bool{
 		ActionModelDelete:  true,
 		ActionModelView:    true,
 		ActionTenantManage: true,
+		ActionMTLSManage:   true,
 	},
 	RoleModelOperator: {
 		ActionModelStart:  true,

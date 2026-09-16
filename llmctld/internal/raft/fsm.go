@@ -21,10 +21,11 @@ import (
 type CommandType string
 
 const (
-	CommandJoinNode    CommandType = "join_node"
-	CommandLeaveNode   CommandType = "leave_node"
-	CommandAcquireLock CommandType = "acquire_lock"
-	CommandReleaseLock CommandType = "release_lock"
+	CommandJoinNode          CommandType = "join_node"
+	CommandLeaveNode         CommandType = "leave_node"
+	CommandAcquireLock       CommandType = "acquire_lock"
+	CommandReleaseLock       CommandType = "release_lock"
+	CommandRevokeCertificate CommandType = "revoke_certificate"
 )
 
 // Command is the structure serialized into every Raft log entry's Data.
@@ -53,13 +54,22 @@ type Command struct {
 	// uses the same reference instant - never each node's own local
 	// clock, for the identical determinism reason as LockExpiresAt.
 	LockNow time.Time `json:"lock_now,omitempty"`
+
+	// Revocation is used only by CommandRevokeCertificate (Feature 004) -
+	// the full record is carried inside the log entry itself (rather than
+	// just a bare serial number) so every replica applies the IDENTICAL
+	// RevokedAt/RevokedBy/Reason audit fields, for the same determinism
+	// reason LockExpiresAt/LockNow are carried above rather than computed
+	// independently by each node.
+	Revocation *cluster.RevocationRecord `json:"revocation,omitempty"`
 }
 
 var (
-	errCommandMissingNode = errors.New("raft: join_node command missing Node")
-	errUnknownCommand     = errors.New("raft: unknown command type")
-	errLockHeldByAnother  = errors.New("raft: acquire_lock refused: key is held by another holder and its lease has not yet expired")
-	errNotLockHolder      = errors.New("raft: release_lock refused: caller is not the current holder of this lock")
+	errCommandMissingNode       = errors.New("raft: join_node command missing Node")
+	errUnknownCommand           = errors.New("raft: unknown command type")
+	errLockHeldByAnother        = errors.New("raft: acquire_lock refused: key is held by another holder and its lease has not yet expired")
+	errNotLockHolder            = errors.New("raft: release_lock refused: caller is not the current holder of this lock")
+	errCommandMissingRevocation = errors.New("raft: revoke_certificate command missing Revocation")
 )
 
 // ClusterFSM implements hashicorp/raft's FSM interface, applying replicated
@@ -87,11 +97,62 @@ var (
 type ClusterFSM struct {
 	mu    sync.Mutex
 	state *cluster.ClusterState
+
+	// onRevocationApplied, when non-nil, is invoked every time a
+	// CommandRevokeCertificate entry is applied OR a Restore replaces
+	// f.state wholesale (Feature 004, T011) - the mechanism that keeps
+	// every node's own live *mtls.TrustStore(s) synchronized with the
+	// cluster's Raft-replicated revocation state, on EVERY node, with
+	// zero polling. It takes no arguments (rather than the specific
+	// RevocationRecord just applied) deliberately: the registered
+	// handler's job is "go re-read node.State().Revocations and push the
+	// FULL current set into TrustStore.UpdateRevoked" (see node.go's
+	// SetRevocationHandler + cmd/llmctld/main.go's wiring) - a
+	// REPLACE-with-the-full-set operation, not an incremental one, so a
+	// generic "state changed" signal is both sufficient and, unlike a
+	// per-record signature, forward-compatible with Phase 5's future
+	// CA-rotation event without a second handler mechanism.
+	//
+	// CRITICAL (root-caused via Constitution §11.4.102 systematic
+	// debugging while investigating an indefinitely-hanging integration
+	// test, Feature 004 T007-T009): this handler MUST be invoked ONLY
+	// AFTER f.mu has been released - see notifyRevocationApplied below,
+	// which both Apply and Restore call for exactly this reason. An
+	// earlier version of this code (and this doc comment) invoked the
+	// handler while STILL HOLDING f.mu, on the theory that the callback
+	// "observes a state that cannot change underneath it mid-callback."
+	// That was a genuine, previously-undiscovered self-deadlock, not a
+	// race: the ONLY handler this codebase registers
+	// (cmd/llmctld/main.go's wireRevocationHandler) calls node.State(),
+	// which calls ClusterFSM.State(), which itself calls f.mu.Lock() - on
+	// the SAME goroutine (hashicorp/raft's single FSM-apply goroutine)
+	// that was still holding f.mu when it invoked the handler. Go's
+	// sync.Mutex is not reentrant, so every single revocation
+	// deterministically deadlocked the FSM-apply goroutine forever, which
+	// in turn meant Raft's Apply future for that log entry never
+	// resolved, which in turn meant RevokeCertificate's future.Error()
+	// blocked forever - manifesting as an indefinitely-hanging `go test`
+	// process with no panic, no log line, and no timeout (the 5s
+	// raftApplyTimeout in node.go bounds only the FSM's enqueue phase,
+	// not waiting for its already-enqueued response).
+	onRevocationApplied func()
 }
 
 // NewClusterFSM returns a ClusterFSM starting from empty cluster state.
 func NewClusterFSM() *ClusterFSM {
 	return &ClusterFSM{state: cluster.NewClusterState()}
+}
+
+// SetRevocationHandler registers fn to be invoked whenever this FSM's
+// revocation-replicated state changes (see onRevocationApplied's doc
+// comment for exactly when). Safe to call at any time - a nil fn is a
+// valid "no handler registered" state (the zero value already means
+// this), so tests / callers with no revocation-consuming logic (e.g.
+// every pre-existing fsm_test.go test) are unaffected.
+func (f *ClusterFSM) SetRevocationHandler(fn func()) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.onRevocationApplied = fn
 }
 
 // Apply implements hraft.FSM. It returns an error (never panics) on a
@@ -102,6 +163,20 @@ func (f *ClusterFSM) Apply(log *hraft.Log) interface{} {
 	if err := json.Unmarshal(log.Data, &cmd); err != nil {
 		return err
 	}
+
+	// notifyRevocation is set inside the locked switch below and consumed
+	// by this deferred call - which, by Go's LIFO defer-execution order,
+	// runs BEFORE the "defer f.mu.Unlock()" registered further down (that
+	// defer is registered SECOND, so it executes FIRST). This guarantees
+	// f.mu is already released by the time notifyRevocationApplied - and
+	// therefore any registered handler - actually runs, closing the
+	// self-deadlock documented on ClusterFSM.onRevocationApplied above.
+	var notifyRevocation bool
+	defer func() {
+		if notifyRevocation {
+			f.notifyRevocationApplied()
+		}
+	}()
 
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -133,10 +208,32 @@ func (f *ClusterFSM) Apply(log *hraft.Log) interface{} {
 			return errNotLockHolder
 		}
 		delete(f.state.Locks, cmd.LockKey)
+	case CommandRevokeCertificate:
+		if cmd.Revocation == nil {
+			return errCommandMissingRevocation
+		}
+		f.state.Revocations[cmd.Revocation.SerialNumber] = *cmd.Revocation
+		notifyRevocation = true
 	default:
 		return errUnknownCommand
 	}
 	return nil
+}
+
+// notifyRevocationApplied safely invokes the currently-registered
+// onRevocationApplied handler (if any) WITHOUT holding f.mu while the
+// handler itself runs - see onRevocationApplied's doc comment for the
+// self-deadlock this specifically avoids. It briefly re-acquires f.mu
+// only to copy the handler pointer (so a concurrent SetRevocationHandler
+// call can never race the read of f.onRevocationApplied under -race),
+// then releases f.mu before calling the copied handler.
+func (f *ClusterFSM) notifyRevocationApplied() {
+	f.mu.Lock()
+	handler := f.onRevocationApplied
+	f.mu.Unlock()
+	if handler != nil {
+		handler()
+	}
 }
 
 // Snapshot implements hraft.FSM.
@@ -159,10 +256,28 @@ func (f *ClusterFSM) Restore(rc io.ReadCloser) error {
 	if state.Locks == nil {
 		state.Locks = make(map[string]cluster.LockEntry)
 	}
+	if state.Revocations == nil {
+		state.Revocations = make(map[string]cluster.RevocationRecord)
+	}
 
 	f.mu.Lock()
-	defer f.mu.Unlock()
 	f.state = &state
+	f.mu.Unlock()
+	// A node catching up via a Raft SNAPSHOT (rather than replaying every
+	// individual log entry) never goes through Apply's
+	// CommandRevokeCertificate case at all - Restore is the ONLY point at
+	// which such a node's revocation-replicated state changes, so the
+	// handler MUST also fire here (Feature 004, T011) or a
+	// snapshot-catch-up node's own TrustStore would silently never learn
+	// about a revocation that happened before it caught up - exactly the
+	// T009 "previously-unreachable node learns the revocation on
+	// reconnect" property.
+	//
+	// f.mu is deliberately released (above) BEFORE this call - see
+	// onRevocationApplied's doc comment for the self-deadlock this
+	// avoids; notifyRevocationApplied re-acquires f.mu only briefly to
+	// safely read the handler pointer.
+	f.notifyRevocationApplied()
 	return nil
 }
 
