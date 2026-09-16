@@ -88,13 +88,22 @@ type Command struct {
 }
 
 var (
-	errCommandMissingNode                       = errors.New("raft: join_node command missing Node")
-	errUnknownCommand                           = errors.New("raft: unknown command type")
-	errLockHeldByAnother                        = errors.New("raft: acquire_lock refused: key is held by another holder and its lease has not yet expired")
-	errNotLockHolder                            = errors.New("raft: release_lock refused: caller is not the current holder of this lock")
-	errUpdateResourcesUnknownNode               = errors.New("raft: update_resources refused: node is not currently a cluster member")
-	errRecordRunningProfileUnknownNode          = errors.New("raft: record_running_profile refused: node is not currently a cluster member")
-	errRecordRunningProfileInsufficientCapacity = errors.New("raft: record_running_profile refused: node no longer has sufficient uncommitted capacity for this footprint")
+	errCommandMissingNode              = errors.New("raft: join_node command missing Node")
+	errUnknownCommand                  = errors.New("raft: unknown command type")
+	errLockHeldByAnother               = errors.New("raft: acquire_lock refused: key is held by another holder and its lease has not yet expired")
+	errNotLockHolder                   = errors.New("raft: release_lock refused: caller is not the current holder of this lock")
+	errUpdateResourcesUnknownNode      = errors.New("raft: update_resources refused: node is not currently a cluster member")
+	errRecordRunningProfileUnknownNode = errors.New("raft: record_running_profile refused: node is not currently a cluster member")
+
+	// ErrInsufficientCapacity is CommandRecordRunningProfile's Apply-time
+	// re-validation refusal (FR-005/SC-004's TOCTOU-closing mechanism) -
+	// exported (unlike its sibling errRecordRunningProfileUnknownNode) so
+	// callers outside this package (running_profile.go's
+	// Node.RecordRunningProfile, and in turn 002-cluster-model-scheduler
+	// T016's placement-retry logic in internal/api) can distinguish "the
+	// reservation lost a capacity race, re-place against fresh state" from
+	// any other, genuinely unexpected failure via errors.Is.
+	ErrInsufficientCapacity = errors.New("raft: record_running_profile refused: node no longer has sufficient uncommitted capacity for this footprint")
 )
 
 // ClusterFSM implements hashicorp/raft's FSM interface, applying replicated
@@ -203,7 +212,7 @@ func (f *ClusterFSM) Apply(log *hraft.Log) interface{} {
 		availCPU := node.Resources.CPUCores - usedCPU
 		availNetwork := node.Resources.NetworkMbps - usedNetwork
 		if availRAM < cmd.Footprint.RAMMB || availVRAM < cmd.Footprint.VRAMMB || availCPU < cmd.Footprint.CPUCores || availNetwork < cmd.Footprint.NetworkMbps {
-			return errRecordRunningProfileInsufficientCapacity
+			return ErrInsufficientCapacity
 		}
 		f.state.RunningProfiles = append(f.state.RunningProfiles, cluster.RunningProfile{
 			Profile: cmd.Profile, TenantID: cmd.TenantID, NodeID: cmd.NodeID,
