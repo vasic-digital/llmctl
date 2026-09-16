@@ -148,12 +148,24 @@ func (tc *testCluster) bootstrap(nodeID string) *spawnedNode {
 	caCert := filepath.Join(tc.dir, "ca.crt")
 	caKey := filepath.Join(tc.dir, "ca.key")
 
-	n := tc.spawn(nodeID, "bootstrap",
+	n := tc.spawn(nodeID, "bootstrap", nil,
 		"-node-id="+nodeID,
 		"-raft-bind=127.0.0.1:0",
 		"-api-bind=127.0.0.1:0",
 		"-ca-cert="+caCert,
 		"-ca-key="+caKey,
+		// -llmctl-path (002-cluster-model-scheduler T017's RegisterSelf
+		// prerequisite, c68ae5d): a real "cluster bootstrap" process now
+		// ALWAYS probes real local hardware via bin/llmctl before it can
+		// print its READY line - a bare, PATH-resolved "llmctl" is not
+		// guaranteed to exist on the host running this test suite (a
+		// genuine, previously-undiscovered regression this exact gap
+		// caused: every test in this file failed with "executable file
+		// not found in $PATH" the moment RegisterSelf's own
+		// probeLocalResources call landed), so every spawned bootstrap
+		// process needs the REAL repo-root bin/llmctl's path explicitly,
+		// exactly like cluster_placement_test.go's own bootstrapWithHW.
+		"-llmctl-path="+llmctlBinPath(tc.t),
 	)
 
 	certPEM, err := os.ReadFile(caCert)
@@ -177,21 +189,36 @@ func (tc *testCluster) bootstrap(nodeID string) *spawnedNode {
 // pointing it at leader's real, already-bound api_addr.
 func (tc *testCluster) join(nodeID string, leader *spawnedNode) *spawnedNode {
 	tc.t.Helper()
-	return tc.spawn(nodeID, "join",
+	return tc.spawn(nodeID, "join", nil,
 		"-node-id="+nodeID,
 		"-raft-bind=127.0.0.1:0",
 		"-api-bind=127.0.0.1:0",
 		"-ca-cert="+filepath.Join(tc.dir, "ca.crt"),
 		"-ca-key="+filepath.Join(tc.dir, "ca.key"),
 		"-leader-api="+leader.apiAddr,
+		// -llmctl-path: a "cluster join" process ALSO probes real local
+		// hardware (its own resources, forwarded via RequestJoin) before
+		// printing READY - the same bare-PATH-resolution gap bootstrap()
+		// above has, fixed identically.
+		"-llmctl-path="+llmctlBinPath(tc.t),
 	)
 }
 
-func (tc *testCluster) spawn(nodeID, subcommand string, extraArgs ...string) *spawnedNode {
+// extraEnv (002-cluster-model-scheduler T013/T014's own prerequisite) is
+// appended after this process's ambient environment + the mandatory
+// LLMCTLD_JWT_SIGNING_KEY - additional "KEY=value" pairs a caller needs
+// set on the spawned process (e.g. LLMCTL_DRY_RUN=1 +
+// LLMCTL_FAKE_HW=<per-node fixture path>, so each real node's real
+// bin/llmctl subprocess reports a DIFFERENT real hardware capacity - the
+// exact mechanism a cluster-placement test needs to make only one node
+// genuinely fit a workload). nil for every pre-existing caller
+// (bootstrap/join/bootstrapWithAdmin), which need no additional env.
+func (tc *testCluster) spawn(nodeID, subcommand string, extraEnv []string, extraArgs ...string) *spawnedNode {
 	tc.t.Helper()
 	args := append([]string{"cluster", subcommand}, extraArgs...)
 	cmd := exec.Command(tc.binPath, args...)
 	cmd.Env = append(os.Environ(), "LLMCTLD_JWT_SIGNING_KEY="+tc.jwtSigningKey)
+	cmd.Env = append(cmd.Env, extraEnv...)
 
 	stdoutPipe, err := cmd.StdoutPipe()
 	if err != nil {

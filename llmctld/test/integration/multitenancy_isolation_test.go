@@ -113,13 +113,18 @@ func (tc *testCluster) bootstrapWithAdmin(nodeID string) (n *spawnedNode, adminK
 	caCert := filepath.Join(tc.dir, "ca.crt")
 	caKey := filepath.Join(tc.dir, "ca.key")
 
-	n = tc.spawn(nodeID, "bootstrap",
+	n = tc.spawn(nodeID, "bootstrap", nil,
 		"-node-id="+nodeID,
 		"-raft-bind=127.0.0.1:0",
 		"-api-bind=127.0.0.1:0",
 		"-ca-cert="+caCert,
 		"-ca-key="+caKey,
 		"-bootstrap-admin",
+		// -llmctl-path: see cluster_bootstrap_test.go's identical
+		// bootstrap() comment - RegisterSelf's real hardware probe needs
+		// the real repo-root bin/llmctl's path explicitly, a bare
+		// PATH-resolved "llmctl" is not guaranteed present.
+		"-llmctl-path="+llmctlBinPath(tc.t),
 	)
 
 	certPEM, err := os.ReadFile(caCert)

@@ -33,6 +33,27 @@ type Rescheduler func(failedNodeID string)
 // production, callers pass Place itself.
 type Placer func(candidates []Node, req PlacementRequest) (Node, error)
 
+// ResourceSource returns this node's own current hardware-probe-derived
+// capacity (002-cluster-model-scheduler T008's resource-freshness
+// heartbeat). The real implementation shells out to the real hardware
+// probe (mirroring cmd/llmctld's own probeLocalResources); tests inject a
+// fake so Monitor's periodic-tick wiring is exercised without a real
+// bin/llmctl subprocess.
+type ResourceSource func() (Resources, error)
+
+// ResourceSubmitter submits nodeID's current resources into the cluster's
+// replicated state via a real CommandUpdateResources Apply. The real
+// implementation resolves whether THIS node is the current Raft leader
+// (internal/raft.Node.IsLeader) - applying locally if so, forwarding the
+// SAME update to the leader over the existing HTTP/3+mTLS channel
+// otherwise (T058's routes), since only the leader's Apply is
+// authoritative. internal/cluster cannot import internal/raft or
+// internal/api to call either directly without an import cycle
+// (internal/raft already imports internal/cluster via fsm.go) - a
+// function type is the correct decoupling, matching StatusChecker/
+// Rescheduler/Placer's identical constraint above.
+type ResourceSubmitter func(nodeID string, r Resources) error
+
 // DefaultHealthCheckInterval is FR-025's health-check cadence (10s).
 const DefaultHealthCheckInterval = 10 * time.Second
 
@@ -49,6 +70,15 @@ type Monitor struct {
 	checker    StatusChecker
 	reschedule Rescheduler
 	interval   time.Duration
+
+	// selfID/resourceSource/resourceSubmit are T008's resource-freshness
+	// heartbeat wiring - all three are nil until SetResourceReporting is
+	// called, and CheckOnce/Start's tick never invokes a nil
+	// resourceSubmit (a Monitor used only for CheckOnce/Reconcile, per
+	// NewMonitor's own doc comment, never needs this configured at all).
+	selfID         string
+	resourceSource ResourceSource
+	resourceSubmit ResourceSubmitter
 
 	stopCh chan struct{}
 	doneCh chan struct{}
@@ -81,6 +111,52 @@ func (m *Monitor) SetNodes(nodes map[string]string) {
 	for id, addr := range nodes {
 		m.nodes[id] = addr
 	}
+}
+
+// SetResourceReporting configures Monitor's T008 resource-freshness
+// heartbeat: selfID names this node's own cluster identity, source
+// returns this node's own current capacity, and submit delivers it into
+// the cluster's replicated state. Safe to call before or after Start();
+// an unconfigured Monitor (SetResourceReporting never called) simply
+// never reports resources, exactly as an unconfigured checker/reschedule
+// simply never checks/reschedules.
+func (m *Monitor) SetResourceReporting(selfID string, source ResourceSource, submit ResourceSubmitter) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.selfID = selfID
+	m.resourceSource = source
+	m.resourceSubmit = submit
+}
+
+// reportResources runs one resource-freshness heartbeat pass: reads this
+// node's own current capacity via resourceSource and submits it via
+// resourceSubmit. A no-op when SetResourceReporting was never called
+// (either function still nil) - never a panic, and never a report with a
+// half-configured pair (both are read/checked together under the SAME
+// lock acquisition SetResourceReporting wrote them under, so a
+// concurrent SetResourceReporting call can never be observed
+// half-applied).
+func (m *Monitor) reportResources() {
+	m.mu.Lock()
+	selfID := m.selfID
+	source := m.resourceSource
+	submit := m.resourceSubmit
+	m.mu.Unlock()
+
+	if source == nil || submit == nil {
+		return
+	}
+
+	resources, err := source()
+	if err != nil {
+		// Honest skip: a probe failure this tick is not this node's own
+		// resources going to zero - the PREVIOUS successfully-submitted
+		// reading (or the join-time value T004/T006 already populated)
+		// stays authoritative until the NEXT successful probe, rather
+		// than this Monitor overwriting it with a fabricated zero value.
+		return
+	}
+	_ = submit(selfID, resources)
 }
 
 // CheckOnce runs a single health-check pass over every currently
@@ -130,6 +206,7 @@ func (m *Monitor) Start() {
 			select {
 			case <-ticker.C:
 				m.CheckOnce()
+				m.reportResources()
 			case <-stopCh:
 				return
 			}

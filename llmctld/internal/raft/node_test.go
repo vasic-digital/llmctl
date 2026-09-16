@@ -82,7 +82,7 @@ func TestJoin_SecondNodeReplicatesRealAppliedCommand(t *testing.T) {
 	defer func() { _ = nodeB.Shutdown() }()
 
 	peerAddr := string(nodeB.transport.LocalAddr())
-	if err := nodeA.Join("node-b", peerAddr); err != nil {
+	if err := nodeA.Join("node-b", peerAddr, "", cluster.Resources{}); err != nil {
 		t.Fatalf("nodeA.Join(%q, %q): %v", "node-b", peerAddr, err)
 	}
 
@@ -139,7 +139,7 @@ func TestLeave_LeaderRemovesItselfFromConfiguration(t *testing.T) {
 	defer func() { _ = nodeB.Shutdown() }()
 
 	peerAddr := string(nodeB.transport.LocalAddr())
-	if err := nodeA.Join("node-b", peerAddr); err != nil {
+	if err := nodeA.Join("node-b", peerAddr, "", cluster.Resources{}); err != nil {
 		t.Fatalf("nodeA.Join(%q, %q): %v", "node-b", peerAddr, err)
 	}
 
@@ -260,7 +260,7 @@ func TestJoin_SurvivingFollowerBecomesLeaderAfterOriginalLeaderShutsDown(t *test
 		t.Fatalf("New(node-b): %v", err)
 	}
 	defer func() { _ = followerB.Shutdown() }()
-	if err := leader.Join("node-b", followerB.Addr()); err != nil {
+	if err := leader.Join("node-b", followerB.Addr(), "", cluster.Resources{}); err != nil {
 		t.Fatalf("Join(node-b): %v", err)
 	}
 
@@ -273,7 +273,7 @@ func TestJoin_SurvivingFollowerBecomesLeaderAfterOriginalLeaderShutsDown(t *test
 		t.Fatalf("New(node-c): %v", err)
 	}
 	defer func() { _ = followerC.Shutdown() }()
-	if err := leader.Join("node-c", followerC.Addr()); err != nil {
+	if err := leader.Join("node-c", followerC.Addr(), "", cluster.Resources{}); err != nil {
 		t.Fatalf("Join(node-c): %v", err)
 	}
 
@@ -308,4 +308,139 @@ func TestJoin_SurvivingFollowerBecomesLeaderAfterOriginalLeaderShutsDown(t *test
 		time.Sleep(10 * time.Millisecond)
 	}
 	t.Fatalf("neither surviving follower became leader within 10s of the original leader shutting down")
+}
+
+// TestJoin_PopulatesRealClusterStateNodesEntry is T004's RED-then-GREEN
+// test: it asserts that AFTER a real Join call on a real bootstrapped
+// node, node.State().Nodes[peerID] is genuinely present with the exact
+// resources passed in - proving Join reaches the FSM via a real
+// CommandJoinNode Apply, not merely hashicorp/raft's own AddVoter
+// membership-only change. This FAILS against the pre-T004 Join (which
+// never called n.raft.Apply at all, so ClusterState.Nodes stayed empty
+// forever regardless of how many peers had joined).
+func TestJoin_PopulatesRealClusterStateNodesEntry(t *testing.T) {
+	ca, err := mtls.GenerateCA()
+	if err != nil {
+		t.Fatalf("GenerateCA: %v", err)
+	}
+
+	nodeA, err := Bootstrap(Config{
+		NodeID:    "node-a",
+		BindAddr:  "127.0.0.1:0",
+		TLSConfig: buildNodeTLSConfig(t, ca, "node-a"),
+	})
+	if err != nil {
+		t.Fatalf("Bootstrap(node-a): %v", err)
+	}
+	defer func() { _ = nodeA.Shutdown() }()
+	waitForLeader(t, nodeA, 3*time.Second)
+
+	nodeB, err := New(Config{
+		NodeID:    "node-b",
+		BindAddr:  "127.0.0.1:0",
+		TLSConfig: buildNodeTLSConfig(t, ca, "node-b"),
+	})
+	if err != nil {
+		t.Fatalf("New(node-b): %v", err)
+	}
+	defer func() { _ = nodeB.Shutdown() }()
+
+	peerAddr := string(nodeB.transport.LocalAddr())
+	wantResources := cluster.Resources{CPUCores: 8, RAMTotalMB: 16384, RAMAvailMB: 12000, VRAMTotalMB: 4096, VRAMAvailMB: 4096, NetworkMbps: 1000}
+	if err := nodeA.Join("node-b", peerAddr, "", wantResources); err != nil {
+		t.Fatalf("nodeA.Join(%q, %q, resources): %v", "node-b", peerAddr, err)
+	}
+
+	deadline := time.Now().Add(3 * time.Second)
+	for {
+		state := nodeA.State()
+		if n, ok := state.Nodes["node-b"]; ok {
+			if n.Resources != wantResources {
+				t.Fatalf("node-b's Resources = %+v, want %+v", n.Resources, wantResources)
+			}
+			if n.Addr != peerAddr {
+				t.Fatalf("node-b's Addr = %q, want %q", n.Addr, peerAddr)
+			}
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("nodeA.State().Nodes never contained node-b within the timeout - Join did not reach the FSM")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+// TestLeave_RemovesRealClusterStateNodesEntry is T005's RED-then-GREEN
+// test: given a leader whose OWN FSM already carries a ClusterState.Nodes
+// entry for itself (seeded the same way T004's Join seeds a peer's entry -
+// a real Apply'd CommandJoinNode), a real Leave() call on that leader
+// (removing itself, matching Leave's own doc-comment contract and the
+// pre-existing TestLeave_LeaderRemovesItselfFromConfiguration's calling
+// pattern) MUST remove that exact FSM entry too - proving Leave reaches
+// the FSM via a real CommandLeaveNode Apply, not merely hashicorp/raft's
+// own RemoveServer membership-only change. This FAILS against the
+// pre-T005 Leave (which never called n.raft.Apply at all, so the entry
+// stayed in ClusterState.Nodes forever).
+func TestLeave_RemovesRealClusterStateNodesEntry(t *testing.T) {
+	ca, err := mtls.GenerateCA()
+	if err != nil {
+		t.Fatalf("GenerateCA: %v", err)
+	}
+
+	nodeA, err := Bootstrap(Config{
+		NodeID:    "node-a",
+		BindAddr:  "127.0.0.1:0",
+		TLSConfig: buildNodeTLSConfig(t, ca, "node-a"),
+	})
+	if err != nil {
+		t.Fatalf("Bootstrap(node-a): %v", err)
+	}
+	defer func() { _ = nodeA.Shutdown() }()
+	waitForLeader(t, nodeA, 3*time.Second)
+
+	// A second voter is required so nodeA removing ITSELF (below) leaves a
+	// live quorum-of-one behind - matching the pre-existing
+	// TestLeave_LeaderRemovesItselfFromConfiguration's identical setup,
+	// and avoiding the degenerate single-voter-removes-itself edge case
+	// this test is not about.
+	nodeB, err := New(Config{
+		NodeID:    "node-b",
+		BindAddr:  "127.0.0.1:0",
+		TLSConfig: buildNodeTLSConfig(t, ca, "node-b"),
+	})
+	if err != nil {
+		t.Fatalf("New(node-b): %v", err)
+	}
+	defer func() { _ = nodeB.Shutdown() }()
+	if err := nodeA.Join("node-b", string(nodeB.transport.LocalAddr()), "", cluster.Resources{}); err != nil {
+		t.Fatalf("nodeA.Join(node-b): %v", err)
+	}
+
+	selfEntry := cluster.Node{ID: "node-a", Addr: nodeA.Addr(), Health: "healthy"}
+	cmd := Command{Type: CommandJoinNode, Node: &selfEntry}
+	data, err := json.Marshal(cmd)
+	if err != nil {
+		t.Fatalf("json.Marshal: %v", err)
+	}
+	if err := nodeA.raft.Apply(data, 3*time.Second).Error(); err != nil {
+		t.Fatalf("seed self-join Apply: %v", err)
+	}
+	if _, ok := nodeA.State().Nodes["node-a"]; !ok {
+		t.Fatalf("seed self-join did not populate ClusterState.Nodes[node-a]")
+	}
+
+	if err := nodeA.Leave(); err != nil {
+		t.Fatalf("nodeA.Leave(): %v", err)
+	}
+
+	deadline := time.Now().Add(3 * time.Second)
+	for {
+		if _, ok := nodeA.State().Nodes["node-a"]; !ok {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("nodeA.State().Nodes still contains node-a after it left")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 }

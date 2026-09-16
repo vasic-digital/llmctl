@@ -15,6 +15,8 @@ import (
 	"time"
 
 	"github.com/quic-go/quic-go/http3"
+
+	"github.com/vasic-digital/llmctl/llmctld/internal/cluster"
 )
 
 // requestJoinRetryBudget bounds how long RequestJoin retries a 409
@@ -47,13 +49,28 @@ const requestJoinRetryInterval = 100 * time.Millisecond
 // yet. Any OTHER failure (a malformed request, a network error, a
 // timeout) is NOT retried and surfaces immediately - only the specific,
 // expected "not yet the leader" race is tolerated.
-func RequestJoin(clientTLS *tls.Config, leaderAPIAddr, peerID, peerAddr string) error {
+//
+// resources (002-cluster-model-scheduler T006, contracts/cluster-model-
+// api.md) is the joining node's own real hardware-probe-derived capacity,
+// forwarded verbatim as joinRequest's own required Resources field - the
+// caller (cmd/llmctld's "cluster join" subcommand) is responsible for
+// sourcing it from the real local hardware probe; RequestJoin itself
+// never probes hardware, it only transports whatever resources it is
+// given.
+//
+// apiAddr (002-cluster-model-scheduler T017's prerequisite) is the
+// joining node's own real HTTP/3+mTLS cluster-API bind address (its own
+// internal/api.Server's bound address, obtained AFTER that server has
+// started listening - never a placeholder), forwarded as joinRequest's
+// optional APIAddr field so cross-node model-lifecycle forwarding can
+// later dial this node directly.
+func RequestJoin(clientTLS *tls.Config, leaderAPIAddr, peerID, peerAddr, apiAddr string, resources cluster.Resources) error {
 	client := &http.Client{
 		Transport: &http3.Transport{TLSClientConfig: clientTLS},
 		Timeout:   10 * time.Second,
 	}
 
-	body, err := json.Marshal(joinRequest{PeerID: peerID, PeerAddr: peerAddr})
+	body, err := json.Marshal(joinRequest{PeerID: peerID, PeerAddr: peerAddr, APIAddr: apiAddr, Resources: resources})
 	if err != nil {
 		return fmt.Errorf("api: RequestJoin: marshal request: %w", err)
 	}
@@ -80,4 +97,136 @@ func RequestJoin(clientTLS *tls.Config, leaderAPIAddr, peerID, peerAddr string) 
 		}
 		time.Sleep(requestJoinRetryInterval)
 	}
+}
+
+// forwardModelStartRetryBudget/forwardModelStartRetryInterval bound
+// ForwardModelStart's narrow, explicit retry for the SPECIFIC "target
+// briefly unreachable" case spec.md's Edge Cases names (a connection
+// refused/timeout in the brief window right after this cluster's own
+// membership view chose a node - e.g. it is mid-restart) - deliberately
+// NOT a generic unbounded retry (spec.md's own explicit constraint,
+// mirroring requestJoinRetryBudget's identical narrow-retry discipline
+// but on network-level errors rather than a specific HTTP status, since
+// the receiving node's own handler never has a reason to return 409 for
+// this route the way a not-yet-elected leader does for /v1/cluster/join).
+const (
+	forwardModelStartRetryBudget   = 5 * time.Second
+	forwardModelStartRetryInterval = 100 * time.Millisecond
+)
+
+// ForwardModelStart forwards a model-start request that THIS node's own
+// cluster.Place() chose for a DIFFERENT node (targetAPIAddr,
+// targetNodeID) to that node's real cluster HTTP API - a real HTTP/3+mTLS
+// POST to the SAME /v1/tenants/:id/models/:model/start route a
+// directly-addressed caller would use, structurally parallel to
+// RequestJoin (same http3.Transport+mTLS pattern).
+//
+// The request body names targetNodeID as the request's own "node" field,
+// so the receiving node's handler takes the explicit-node LOCAL-dispatch
+// path (routes_models.go's own T019 guarantee: a request naming a node
+// never enters Place() itself) rather than re-running its own placement
+// decision against a request this cluster already decided.
+//
+// authorizationHeader is the ORIGINAL caller's own, verbatim
+// "Authorization: Bearer <token>" header value, forwarded unchanged as
+// the receiving node's own Authorization header - the receiving node
+// re-runs its OWN full RequireJWT + authorizeTenantOwnership + CheckRBAC
+// + CheckTenantBoundary gate chain against it (never trusting "the
+// sending node already authorized this"), exactly matching every other
+// per-request authorization check already established across this
+// cluster.
+func ForwardModelStart(clientTLS *tls.Config, targetAPIAddr, targetNodeID, tenantID, model, authorizationHeader string) error {
+	client := &http.Client{
+		Transport: &http3.Transport{TLSClientConfig: clientTLS},
+		Timeout:   10 * time.Second,
+	}
+
+	body, err := json.Marshal(startModelRequest{Node: targetNodeID})
+	if err != nil {
+		return fmt.Errorf("api: ForwardModelStart: marshal request: %w", err)
+	}
+	url := "https://" + targetAPIAddr + "/v1/tenants/" + tenantID + "/models/" + model + "/start"
+
+	deadline := time.Now().Add(forwardModelStartRetryBudget)
+	for {
+		req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(body))
+		if err != nil {
+			return fmt.Errorf("api: ForwardModelStart: build request: %w", err)
+		}
+		req.Header.Set("Content-Type", "application/json")
+		if authorizationHeader != "" {
+			req.Header.Set("Authorization", authorizationHeader)
+		}
+
+		resp, err := client.Do(req)
+		if err != nil {
+			if time.Now().After(deadline) {
+				return fmt.Errorf("api: ForwardModelStart: target %s at %s: %w", targetNodeID, targetAPIAddr, err)
+			}
+			time.Sleep(forwardModelStartRetryInterval)
+			continue
+		}
+
+		if resp.StatusCode == http.StatusOK {
+			_ = resp.Body.Close()
+			return nil
+		}
+		respBody, _ := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		return fmt.Errorf("api: ForwardModelStart: target %s at %s returned %d: %s", targetNodeID, targetAPIAddr, resp.StatusCode, respBody)
+	}
+}
+
+// ForwardAutoPlaceStart forwards an auto-placement start request (one
+// naming NO "node" field) from a FOLLOWER node to leaderAPIAddr - found
+// necessary as a real, previously-undiscovered gap
+// (002-cluster-model-scheduler T013's own real 3-node integration test):
+// dispatchAutoPlacedStart's own reservation step (node.RecordRunningProfile)
+// is a real Raft write, which can only ever succeed on the CURRENT LEADER
+// (see internal/raft.Node.LeaderAddr's own doc comment) - a follower
+// receiving a no-node start request cannot run cluster.Place()+reserve
+// locally no matter which node it would choose, and must instead forward
+// the WHOLE decision to the leader, unlike ForwardModelStart (which
+// forwards an ALREADY-DECIDED, explicit-node request to whichever node
+// cluster.Place() chose - that node need not be the leader at all).
+//
+// Unlike ForwardModelStart, the caller needs the leader's EXACT response
+// (status code + body) relayed back verbatim - the leader is the one that
+// actually ran cluster.Place() and knows which node was chosen, or the
+// exact "insufficient_capacity"/"considered" shortfall - so this function
+// returns the real observed status code + body rather than a bare error,
+// and the caller (routes_models.go) copies both directly onto its own
+// gin.Context response, never re-deciding or re-wrapping them.
+func ForwardAutoPlaceStart(clientTLS *tls.Config, leaderAPIAddr, tenantID, model, authorizationHeader string) (statusCode int, body []byte, err error) {
+	client := &http.Client{
+		Transport: &http3.Transport{TLSClientConfig: clientTLS},
+		Timeout:   10 * time.Second,
+	}
+
+	reqBody, err := json.Marshal(startModelRequest{})
+	if err != nil {
+		return 0, nil, fmt.Errorf("api: ForwardAutoPlaceStart: marshal request: %w", err)
+	}
+	url := "https://" + leaderAPIAddr + "/v1/tenants/" + tenantID + "/models/" + model + "/start"
+
+	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(reqBody))
+	if err != nil {
+		return 0, nil, fmt.Errorf("api: ForwardAutoPlaceStart: build request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if authorizationHeader != "" {
+		req.Header.Set("Authorization", authorizationHeader)
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return 0, nil, fmt.Errorf("api: ForwardAutoPlaceStart: leader at %s: %w", leaderAPIAddr, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return resp.StatusCode, nil, fmt.Errorf("api: ForwardAutoPlaceStart: read leader response from %s: %w", leaderAPIAddr, err)
+	}
+	return resp.StatusCode, respBody, nil
 }

@@ -12,6 +12,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"syscall"
+	"time"
 
 	"github.com/vasic-digital/llmctl/llmctld/internal/api"
 	"github.com/vasic-digital/llmctl/llmctld/internal/audit"
@@ -94,11 +95,15 @@ func newAuthzDecider(signingKey string) (*authz.Decider, *auth.Store) {
 // by decider, keys, and modelExecutor - the one call site both
 // runClusterBootstrap and runClusterJoinReal use, so the two subcommands'
 // wiring can never drift apart.
-func registerAuthzRoutes(srv *api.Server, decider *authz.Decider, keys *auth.Store, modelExecutor *executor.LocalExecutor) {
+//
+// node and forwardTLS (002-cluster-model-scheduler Phase 3) enable
+// RegisterModelRoutes's auto-placement path on POST .../start - see that
+// function's own doc comment for the full contract.
+func registerAuthzRoutes(srv *api.Server, decider *authz.Decider, keys *auth.Store, modelExecutor *executor.LocalExecutor, node *raft.Node, forwardTLS *tls.Config) {
 	api.RegisterAuthRoutes(srv.Router(), decider, keys)
 	api.RegisterTenantRoutes(srv.Router(), decider)
 	api.RegisterAuditRoutes(srv.Router(), decider)
-	api.RegisterModelRoutes(srv.Router(), decider, modelExecutor)
+	api.RegisterModelRoutes(srv.Router(), decider, modelExecutor, node, forwardTLS)
 }
 
 // version is the llmctld build version. It is bumped alongside the bash
@@ -218,6 +223,27 @@ func waitForShutdownSignal() {
 	<-sigCh
 }
 
+// waitForSelfLeadership polls node.IsLeader() until it reports true or
+// timeout elapses (found via a genuine RED on a real 3-node integration
+// test, 002-cluster-model-scheduler T013 - see this function's own call
+// site in runClusterBootstrap for the full root-cause explanation): a
+// single-node Bootstrap() genuinely self-elects almost immediately, but
+// not synchronously within Bootstrap()'s own return, so a caller that
+// needs n to already be leader (RegisterSelf's n.raft.Apply) must poll
+// rather than assume. Bounded + fails loud on genuine non-election,
+// never a blind sleep (Constitution §11.4.6 - "should be elected by
+// now" is a guess, not a determination).
+func waitForSelfLeadership(node *raft.Node, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if node.IsLeader() {
+			return nil
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	return fmt.Errorf("node %q never became its own single-node Raft leader within %s", node.ID(), timeout)
+}
+
 func runClusterBootstrap(args []string) {
 	fs := flag.NewFlagSet("cluster bootstrap", flag.ExitOnError)
 	f := parseClusterFlags(fs, args)
@@ -285,7 +311,18 @@ func runClusterBootstrap(args []string) {
 	api.RegisterReplicationRoutes(srv.Router(), storeRegistry, decider)
 
 	modelExecutor := executor.New(executor.Config{LLMCtlPath: f.llmctlPath})
-	registerAuthzRoutes(srv, decider, keys, modelExecutor)
+	// forwardTLS (002-cluster-model-scheduler T017) is the real mTLS
+	// client configuration this node's own auto-placement handler uses
+	// to forward a start request to a DIFFERENT chosen node's cluster
+	// API - a distinct cert from this node's own server-side apiTLS
+	// (client vs. server role), mirroring joinClientTLS's identical
+	// "-join-client"-suffixed cert pattern below.
+	forwardTLS, err := buildNodeTLSConfig(ca, f.nodeID+"-forward-client")
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "llmctld: cluster bootstrap:", err)
+		os.Exit(1)
+	}
+	registerAuthzRoutes(srv, decider, keys, modelExecutor, node, forwardTLS)
 
 	if f.bootstrapAdmin {
 		adminKeyID, adminKeySecret, err := keys.Create(bootstrapAdminOwnerID, []string{auth.RoleAdmin}, 0)
@@ -309,6 +346,45 @@ func runClusterBootstrap(args []string) {
 		os.Exit(1)
 	}
 	defer func() { _ = srv.Close() }()
+
+	// waitForSelfLeadership (found via a genuine RED on a real 3-node
+	// integration test, 002-cluster-model-scheduler T013): a freshly
+	// Bootstrap()-ed node's single-node Raft leader election is NOT
+	// instantaneous - node.raft.State() can still read Follower for a
+	// handful of milliseconds after Bootstrap() returns, exactly as
+	// internal/raft's own waitForLeader test helper documents ("a
+	// single-node bootstrap can elect before the test ever reaches the
+	// channel receive"). RegisterSelf immediately below calls
+	// n.raft.Apply, which requires n to already be leader - calling it
+	// before that election completes fails hard with "node is not the
+	// leader" and the whole process exits before ever printing READY.
+	// Bounded poll, not a blind sleep, and fails loud+fast (never a
+	// silently-guessed "should be fine by now" delay - Constitution
+	// §11.4.6) if a bootstrapping node somehow never self-elects.
+	if err := waitForSelfLeadership(node, 10*time.Second); err != nil {
+		fmt.Fprintln(os.Stderr, "llmctld: cluster bootstrap:", err)
+		os.Exit(1)
+	}
+
+	// RegisterSelf (002-cluster-model-scheduler T017's prerequisite): a
+	// freshly-bootstrapped leader is otherwise NEVER present in its own
+	// ClusterState.Nodes (Bootstrap only ever makes it a Raft VOTER, never
+	// applies a CommandJoinNode for its own ID - a real, found gap) - so
+	// without this, the bootstrap leader itself is invisible to
+	// cluster.Place's candidate list, and to every other node's
+	// cross-node-forwarding dial target. Sourced from the SAME real
+	// hardware probe -join uses (never a zero-value placeholder), and
+	// from srv's own real bound address (never the requested -api-bind,
+	// which may be an ephemeral ":0" the OS has since resolved).
+	selfResources, err := probeLocalResources(f.llmctlPath)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "llmctld: cluster bootstrap: probeLocalResources:", err)
+		os.Exit(1)
+	}
+	if err := node.RegisterSelf(srv.Addr, selfResources); err != nil {
+		fmt.Fprintln(os.Stderr, "llmctld: cluster bootstrap: RegisterSelf:", err)
+		os.Exit(1)
+	}
 
 	// A single machine-readable READY line, emitted once and flushed, is
 	// how a test harness spawning this as a real subprocess learns the
@@ -412,7 +488,15 @@ func runClusterJoinReal(args []string) int {
 	defer func() { _ = storeRegistry.Close() }()
 	api.RegisterReplicationRoutes(srv.Router(), storeRegistry, decider)
 	modelExecutor := executor.New(executor.Config{LLMCtlPath: llmctlPath})
-	registerAuthzRoutes(srv, decider, keys, modelExecutor)
+	// See runClusterBootstrap's identical forwardTLS comment above
+	// (002-cluster-model-scheduler T017) - kept symmetric across both
+	// subcommands.
+	forwardTLS, err := buildNodeTLSConfig(ca, nodeID+"-forward-client")
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "llmctld: cluster join:", err)
+		return 1
+	}
+	registerAuthzRoutes(srv, decider, keys, modelExecutor, node, forwardTLS)
 
 	if err := srv.Listen(apiBind); err != nil {
 		fmt.Fprintln(os.Stderr, "llmctld: cluster join: api.Listen:", err)
@@ -425,7 +509,19 @@ func runClusterJoinReal(args []string) int {
 		fmt.Fprintln(os.Stderr, "llmctld: cluster join:", err)
 		return 1
 	}
-	if err := api.RequestJoin(joinClientTLS, leaderAPI, nodeID, node.Addr()); err != nil {
+	resources, err := probeLocalResources(llmctlPath)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "llmctld: cluster join: probeLocalResources:", err)
+		return 1
+	}
+	// srv.Addr (this node's own real bound cluster-API address, known only
+	// after srv.Listen above) is forwarded as RequestJoin's apiAddr so the
+	// leader's own Join call populates ClusterState.Nodes[nodeID].APIAddr -
+	// the cross-node-forwarding dial target 002-cluster-model-scheduler
+	// T017 needs (see internal/raft/node.go's Join doc comment for the
+	// distinction between this and node.Addr(), the Raft transport
+	// address).
+	if err := api.RequestJoin(joinClientTLS, leaderAPI, nodeID, node.Addr(), srv.Addr, resources); err != nil {
 		fmt.Fprintln(os.Stderr, "llmctld: cluster join: RequestJoin:", err)
 		return 1
 	}

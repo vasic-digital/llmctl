@@ -5,6 +5,7 @@ package raft
 
 import (
 	"crypto/tls"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -18,6 +19,13 @@ const (
 	transportTimeout = 10 * time.Second
 	joinTimeout      = 10 * time.Second
 	leaveTimeout     = 10 * time.Second
+	// applyTimeout bounds Join/Leave's own post-membership-change
+	// n.raft.Apply call (002-cluster-model-scheduler T004/T005) - the log
+	// entry that actually populates/removes the joined/leaving node's
+	// ClusterState.Nodes entry, distinct from joinTimeout/leaveTimeout
+	// which bound hashicorp/raft's own AddVoter/RemoveServer membership
+	// change.
+	applyTimeout = 10 * time.Second
 )
 
 // Config configures one cluster Node.
@@ -117,11 +125,18 @@ func New(cfg Config) (*Node, error) {
 }
 
 // Join adds peerID, reachable at peerAddr, as a voting member of n's Raft
-// cluster. n must currently be the cluster leader - hashicorp/raft's
-// AddVoter enforces that itself (returns hraft.ErrNotLeader otherwise), so
-// Join is a thin, honestly-erroring wrapper around it; forwarding a Join
-// request to the real leader over the network is a T058 HTTP-layer
-// concern, not this package's.
+// cluster, AND applies a real CommandJoinNode log entry so
+// ClusterState.Nodes[peerID] genuinely reflects the join with resources as
+// its Resources (002-cluster-model-scheduler T004) - before this, Join
+// only ever changed hashicorp/raft's own membership configuration, and
+// ClusterState.Nodes (the map cluster.Place's own candidate-selection
+// reads) never observed ANY join, no matter how many peers had joined; a
+// start request naming no node had zero real candidates to place onto
+// regardless of cluster size. n must currently be the cluster leader -
+// hashicorp/raft's AddVoter enforces that itself (returns
+// hraft.ErrNotLeader otherwise), so Join is a thin, honestly-erroring
+// wrapper around it; forwarding a Join request to the real leader over the
+// network is a T058 HTTP-layer concern, not this package's.
 //
 // peerID MUST be the joining node's own real Config.NodeID (the same
 // value it set as its own raft.Config.LocalID) - NOT derived from
@@ -139,19 +154,88 @@ func New(cfg Config) (*Node, error) {
 // actually died and a follower needed to take over, at which point every
 // survivor logged "not part of stable configuration, aborting election"
 // forever. Fixed by requiring the caller to supply the peer's real ID.
-func (n *Node) Join(peerID, peerAddr string) error {
+// apiAddr (002-cluster-model-scheduler T017's prerequisite) is the joining
+// peer's own real HTTP/3+mTLS cluster-API bind address (internal/
+// api.Server's bound address on that peer, NOT peerAddr - a distinct
+// listener/port entirely, see cluster.Node.APIAddr's own doc comment) -
+// stored into ClusterState.Nodes[peerID].APIAddr so cross-node
+// model-lifecycle forwarding (routes_models.go) knows where to dial a
+// chosen node that is not the one that received the original HTTP
+// request. Before this, APIAddr was declared but never populated by
+// anything - a real, found gap (every ClusterState.Nodes entry's APIAddr
+// was silently "").
+func (n *Node) Join(peerID, peerAddr, apiAddr string, resources cluster.Resources) error {
 	future := n.raft.AddVoter(hraft.ServerID(peerID), hraft.ServerAddress(peerAddr), 0, joinTimeout)
-	return future.Error()
+	if err := future.Error(); err != nil {
+		return err
+	}
+
+	cmd := Command{Type: CommandJoinNode, Node: &cluster.Node{ID: peerID, Addr: peerAddr, APIAddr: apiAddr, Health: "healthy", Resources: resources}}
+	data, err := json.Marshal(cmd)
+	if err != nil {
+		return fmt.Errorf("raft: join %q: marshal CommandJoinNode: %w", peerID, err)
+	}
+	return n.raft.Apply(data, applyTimeout).Error()
+}
+
+// RegisterSelf applies a real CommandJoinNode log entry for n's OWN
+// localID, carrying apiAddr and resources - the bootstrap-leader
+// equivalent of Join's peer-registration (002-cluster-model-scheduler
+// T017's prerequisite). This is required because Bootstrap's own
+// single-node hraft.BootstrapCluster call only ever establishes n as a
+// Raft VOTER; it never applies a CommandJoinNode entry for n's own ID, so
+// a freshly-bootstrapped leader was genuinely, silently absent from its
+// own ClusterState.Nodes - invisible to cluster.Place's candidate list
+// (which reads State().Nodes directly) even though it is a perfectly
+// legitimate placement target. Callers invoke this exactly once, after
+// their own real API server has bound its real address (so apiAddr is
+// never a placeholder) and their own real hardware probe has run (so
+// resources is never a zero value).
+func (n *Node) RegisterSelf(apiAddr string, resources cluster.Resources) error {
+	cmd := Command{Type: CommandJoinNode, Node: &cluster.Node{ID: string(n.localID), Addr: n.Addr(), APIAddr: apiAddr, Health: "healthy", Resources: resources}}
+	data, err := json.Marshal(cmd)
+	if err != nil {
+		return fmt.Errorf("raft: register self %q: marshal CommandJoinNode: %w", n.localID, err)
+	}
+	return n.raft.Apply(data, applyTimeout).Error()
 }
 
 // Leave removes n's own node from its Raft cluster (RemoveServer against
-// n's own localID). Like Join, this must run against the leader - a
-// follower calling Leave on itself gets hraft.ErrNotLeader back, honestly;
-// a follower wanting to leave gracefully asks the leader to remove it via
-// the T058 HTTP layer instead of calling this locally.
+// n's own localID), AND applies a real CommandLeaveNode log entry so
+// ClusterState.Nodes no longer carries n's own entry after it leaves
+// (002-cluster-model-scheduler T005 - the removal-side mirror of Join's
+// T004 fix; before this, a left node's stale entry stayed in
+// ClusterState.Nodes forever, so cluster.Place could still choose a node
+// that had genuinely left). Like Join, this must run against the leader -
+// a follower calling Leave on itself gets hraft.ErrNotLeader back,
+// honestly; a follower wanting to leave gracefully asks the leader to
+// remove it via the T058 HTTP layer instead of calling this locally.
+//
+// The CommandLeaveNode Apply runs BEFORE RemoveServer, deliberately the
+// REVERSE of Join's Apply-after-AddVoter order: hashicorp/raft's own
+// RemoveServer, when the target IS the calling leader itself (exactly
+// Leave's only case - n always removes n.localID), triggers that
+// leader's IMMEDIATE self-shutdown the instant the configuration-removal
+// entry commits ("removed ourself, shutting down" - raft.go's
+// leaderLoop). Discovered as a genuine RED via this exact TDD cycle
+// (T005): the literal "Apply after RemoveServer" order this task
+// initially specified reproducibly failed with "raft is already
+// shutdown" on every run, because by the time Apply ran, n's own raft
+// instance had already torn itself down. Applying first, while n is
+// still the fully-operational leader, then removing the voter (whose
+// resulting self-shutdown is now harmless because the state mutation
+// already committed) is the only ordering that can succeed.
 func (n *Node) Leave() error {
-	future := n.raft.RemoveServer(n.localID, 0, leaveTimeout)
-	return future.Error()
+	cmd := Command{Type: CommandLeaveNode, NodeID: string(n.localID)}
+	data, err := json.Marshal(cmd)
+	if err != nil {
+		return fmt.Errorf("raft: leave %q: marshal CommandLeaveNode: %w", n.localID, err)
+	}
+	if err := n.raft.Apply(data, applyTimeout).Error(); err != nil {
+		return err
+	}
+
+	return n.raft.RemoveServer(n.localID, 0, leaveTimeout).Error()
 }
 
 // LeaderCh reports true when n becomes leader and false when it steps
@@ -184,11 +268,43 @@ func (n *Node) Addr() string {
 	return string(n.transport.LocalAddr())
 }
 
+// ID returns n's own stable cluster identity (the same value passed as
+// Config.NodeID) - callers outside this package (002-cluster-model-
+// scheduler T015/T016's auto-placement handler) need this to tell whether
+// a chosen cluster.Node IS this process, or a different node the start
+// request must be forwarded to (client.go's ForwardModelStart).
+func (n *Node) ID() string {
+	return string(n.localID)
+}
+
 // IsLeader reports whether n is currently the Raft leader - the real
 // underlying hraft.Raft.State(), for callers outside this package (T058's
 // HTTP layer) that cannot reach n's private *hraft.Raft field directly.
 func (n *Node) IsLeader() bool {
 	return n.raft.State() == hraft.Leader
+}
+
+// LeaderAddr returns n's real, current view of the cluster's Raft leader's
+// TRANSPORT address (the same value each cluster.Node.Addr carries, set
+// from Node.Addr() at Join/RegisterSelf time) - "" when n does not
+// currently know of a leader (mid-election, or a genuine partition).
+//
+// Found necessary as a real, previously-undiscovered gap
+// (002-cluster-model-scheduler T013's own real 3-node integration test):
+// a Raft write (n.raft.Apply, which CommandRecordRunningProfile's
+// RecordRunningProfile needs) can ONLY ever succeed on the current
+// leader - a FOLLOWER node's own /start HTTP handler cannot record a
+// running-profile reservation locally no matter which cluster node
+// cluster.Place() chooses, and must instead forward the WHOLE
+// auto-placement decision to the leader (routes_models.go's
+// dispatchAutoPlacedStart), exactly mirroring the pre-existing
+// RequestJoin/Join split for cluster membership changes (node.go's own
+// Join doc comment: "hraft.ErrNotLeader otherwise, so Join is a thin,
+// honestly-erroring [wrapper]" - the SAME "writes only work on the
+// leader" constraint this method exists to let a caller route around by
+// address rather than by trial-and-error).
+func (n *Node) LeaderAddr() string {
+	return string(n.raft.Leader())
 }
 
 // LastContact returns the time n (as a follower) last heard from a

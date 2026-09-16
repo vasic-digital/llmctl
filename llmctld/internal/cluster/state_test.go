@@ -1,6 +1,9 @@
 package cluster
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 func TestClone_IsIndependentCopy(t *testing.T) {
 	original := NewClusterState()
@@ -18,6 +21,33 @@ func TestClone_IsIndependentCopy(t *testing.T) {
 	}
 	if len(clone.Nodes) != 2 {
 		t.Fatalf("clone should have 2 nodes, got %d", len(clone.Nodes))
+	}
+}
+
+// TestClone_RunningProfilesIsIndependentCopy is 002-cluster-model-
+// scheduler's T009 RED test: mutating a clone's RunningProfiles slice
+// (append) must never affect the original - the exact independent-copy
+// guarantee Clone already provides for Nodes/Locks, extended to the new
+// field.
+func TestClone_RunningProfilesIsIndependentCopy(t *testing.T) {
+	original := NewClusterState()
+	original.RunningProfiles = append(original.RunningProfiles, RunningProfile{
+		Profile: "small", TenantID: "tenant-a", NodeID: "node-a",
+		StartedAt: time.Unix(1000, 0),
+		Footprint: PlacementRequest{RAMMB: 2048, VRAMMB: 4096, CPUCores: 2, NetworkMbps: 100},
+	})
+
+	clone := original.Clone()
+	clone.RunningProfiles = append(clone.RunningProfiles, RunningProfile{Profile: "large", TenantID: "tenant-b", NodeID: "node-b"})
+
+	if len(original.RunningProfiles) != 1 {
+		t.Fatalf("appending to the clone must not affect the original: original has %d entries, want 1", len(original.RunningProfiles))
+	}
+	if len(clone.RunningProfiles) != 2 {
+		t.Fatalf("clone should have 2 entries after its own append, got %d", len(clone.RunningProfiles))
+	}
+	if got := original.RunningProfiles[0]; got.Profile != "small" || got.NodeID != "node-a" || got.Footprint.RAMMB != 2048 {
+		t.Fatalf("original's own entry was corrupted: %+v", got)
 	}
 }
 

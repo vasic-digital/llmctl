@@ -9,6 +9,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/vasic-digital/llmctl/llmctld/internal/cluster"
 	"github.com/vasic-digital/llmctl/llmctld/internal/raft"
 )
 
@@ -20,9 +21,30 @@ import (
 // check compares the configuration entry's ID against the node's real
 // LocalID, so a mismatched ID makes a joined follower NEVER recognize
 // itself as having a vote.
+//
+// Resources (002-cluster-model-scheduler T006, contracts/cluster-model-
+// api.md) mirrors cluster.Resources's own JSON field names exactly and is
+// REQUIRED - it is the joining node's own real hardware-probe-derived
+// capacity, the exact payload internal/raft.Node.Join's own T004 fix now
+// carries into a real CommandJoinNode Apply so ClusterState.Nodes[PeerID]
+// is never left at Resources's zero value (which cluster.Place would then
+// read as "this node has zero of everything", excluding it from every
+// real placement decision it should have been eligible for).
+// APIAddr (002-cluster-model-scheduler T017's prerequisite) is the
+// joining peer's own real HTTP/3+mTLS cluster-API bind address (its
+// internal/api.Server's bound address - NOT PeerAddr, which is the
+// peer's Raft transport address, a distinct listener/port entirely) -
+// carried into Node.Join so cluster.Node.APIAddr is genuinely populated,
+// letting cross-node model-lifecycle forwarding dial this peer. Optional
+// (empty string when the caller does not intend the peer to ever be a
+// forwarding target - e.g. a node that never serves the cluster HTTP
+// API) rather than required, unlike Resources/PeerID/PeerAddr, since no
+// existing behavior depends on it and no test fixture supplies it.
 type joinRequest struct {
-	PeerID   string `json:"peer_id" binding:"required"`
-	PeerAddr string `json:"peer_addr" binding:"required"`
+	PeerID    string            `json:"peer_id" binding:"required"`
+	PeerAddr  string            `json:"peer_addr" binding:"required"`
+	APIAddr   string            `json:"api_addr"`
+	Resources cluster.Resources `json:"resources"`
 }
 
 // RegisterClusterRoutes wires the cluster routes onto r, backed by node.
@@ -37,7 +59,7 @@ func RegisterClusterRoutes(r gin.IRoutes, node *raft.Node) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
-		if err := node.Join(req.PeerID, req.PeerAddr); err != nil {
+		if err := node.Join(req.PeerID, req.PeerAddr, req.APIAddr, req.Resources); err != nil {
 			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
 			return
 		}

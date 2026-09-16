@@ -316,3 +316,42 @@ func TestNew_DefaultsLLMCtlPath(t *testing.T) {
 		t.Errorf("New(Config{}) llmctlPath = %q, want %q", exec.llmctlPath, "llmctl")
 	}
 }
+
+// TestLocalExecutor_Footprint_RealDryRunSubprocess is 002-cluster-model-
+// scheduler T012-T019's own footprint-lookup RED-then-GREEN test: it
+// drives the REAL `bin/llmctl plan --json` (lib/catalog.sh's
+// catalog_plan_json, confirmed by hand before writing this test:
+// `LLMCTL_FAKE_HW=tests/fixtures/hw-baseline.json ./bin/llmctl plan
+// --json` reports profiles.small = {"mode":"gpu","ram_mb":2048,
+// "vram_mb":3973,...}, matching this same fixture's own already-documented
+// "reserved 2048 MiB RAM + 3973 MiB VRAM" start-time reservation for
+// "small" above) and asserts Footprint returns those REAL bytes the real
+// subprocess produced - the source cluster.Place() needs a model's
+// resource DEMAND from, since llmctl's catalog has no Go-side
+// reimplementation of per-profile sizing.
+func TestLocalExecutor_Footprint_RealDryRunSubprocess(t *testing.T) {
+	e := newDryRunExecutor(t)
+
+	ramMB, vramMB, err := e.Footprint("small")
+	if err != nil {
+		t.Fatalf("Footprint(small): %v", err)
+	}
+	if ramMB != 2048 {
+		t.Errorf("Footprint(small) ramMB = %d, want 2048", ramMB)
+	}
+	if vramMB != 3973 {
+		t.Errorf("Footprint(small) vramMB = %d, want 3973", vramMB)
+	}
+}
+
+// TestLocalExecutor_Footprint_UnknownProfile proves an unknown profile
+// name surfaces a real, informative error rather than a silent zero
+// footprint (which cluster.Place() would otherwise treat as "needs
+// nothing", trivially fitting ANY candidate - a placement-safety bluff).
+func TestLocalExecutor_Footprint_UnknownProfile(t *testing.T) {
+	e := newDryRunExecutor(t)
+
+	if _, _, err := e.Footprint("does-not-exist"); err == nil {
+		t.Fatal("Footprint(does-not-exist) returned nil error, want a real error for an unknown profile")
+	}
+}
