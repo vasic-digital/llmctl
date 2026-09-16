@@ -1,7 +1,7 @@
 # CONTINUATION
 
-**Revision:** 13
-**Last modified:** 2026-09-16T00:00:00Z
+**Revision:** 14
+**Last modified:** 2026-09-16T01:00:00Z
 
 Per Constitution §12.10: this file reflects the live state of work on the
 `001-llmctl-completion` feature so any agent can resume exactly where the
@@ -52,26 +52,28 @@ genuinely correct by an independent run). Every phase's merge is a real
 touched adjacent section boundaries) were resolved by hand, preserving every
 feature's real content, never by discarding one side.
 
-**Two genuinely open items are tracked, not silently closed** (see the
-honest-scope note at the end of §10h): (1) `internal/cluster/health.go`'s
-`Monitor` (the resource-freshness heartbeat AND the mechanism the Raft-
-voter-configuration-based replication-role-failover gap in §10g needs) is
-implemented + unit-tested but has ZERO non-test callers — `cmd/llmctld/
-main.go` never constructs one; (2) 004's FR-010 quorum-protection check
-approximates trust from Raft voter configuration rather than a live
-per-voter mTLS handshake confirmation. Neither is a regression or a spec.md
-MUST violation for any of the three features; both are real, disclosed,
-open follow-up work for whichever session picks them up next.
+**Both items disclosed as open above were CLOSED later the same session
+(2026-09-16) — see §10i.** `internal/cluster/health.go`'s `Monitor` is now
+genuinely wired into `cmd/llmctld/main.go` (both subcommands), closing the
+resource-freshness heartbeat AND the crash-triggered replication-role
+failover gap together (the same root cause); 004's FR-010 quorum-protection
+check now performs a real live per-voter mTLS handshake confirmation instead
+of approximating from Raft voter configuration. Both closures were
+independently re-verified by the conductor (build/vet/gofmt/full-suite-under-
+`-race`/bash-suite/submodule-drift) before merging, and each dispatch found
+and fixed at least one further genuinely separate real defect along the way
+(never invented scope) — full detail in §10i.
 
-There is no next phase and no next follow-up item currently queued beyond
-those two open items. The immediate next action for a resuming session is:
-**present the current project state to the operator** (this file, plus
-`specs/001-llmctl-completion/tasks.md` and `progress.yml`, plus each of
-`specs/002-cluster-model-scheduler/`, `specs/003-kv-cache-replication/`,
-`specs/004-mtls-cert-rotation/`'s own tasks.md, are the complete record) and
-await further instruction — e.g. whether to wire the health.Monitor gap,
-address FR-010's live-trust-confirmation boundary, start a new feature, or
-actually cut a real release (see the standing constraint below).
+**Zero disclosed open items remain across 002-cluster-model-scheduler,
+003-kv-cache-replication, or 004-mtls-cert-rotation.** There is no next
+phase and no follow-up item currently queued. The immediate next action for
+a resuming session is: **present the current project state to the operator**
+(this file, plus `specs/001-llmctl-completion/tasks.md` and `progress.yml`,
+plus each of `specs/002-cluster-model-scheduler/`,
+`specs/003-kv-cache-replication/`, `specs/004-mtls-cert-rotation/`'s own
+tasks.md, are the complete record) and await further instruction — e.g.
+start a new feature, or actually cut a real release (see the standing
+constraint below).
 
 **Important standing constraint carried forward:** `scripts/release/create_release.sh`
 in NON-dry-run mode creates a real, public, irreversible GitHub+GitLab
@@ -814,7 +816,16 @@ Feature 004-mtls-cert-rotation (`specs/004-mtls-cert-rotation/`) closed the disc
 - **Merge-time finding (conductor).** A real merge conflict in `docs/cluster-architecture.md` (all three Phase 6 branches touching the same file at adjacent section boundaries) was resolved by hand, preserving every feature's real content. The conductor's own pre-merge review of Phase 5's `RequireAnyClientCert` fix additionally found and corrected 3 now-stale doc comments (`internal/api/server.go`, `internal/raft/transport.go`) still describing the old, broken `RequireAndVerifyClientCert` contract — cosmetic, not functional, but the exact kind of staleness that could mislead a future reader into reintroducing the fixed bug.
 - **Branch:** `004-mtls-cert-rotation-phase6` (from `main` `4b62a96`), commits `cb87c4e` (feature work) + `92b1674` (doc-comment fix, applied during Phase 5 merge review).
 
-**Honest scope note:** two genuinely open items are now tracked (not silently implied closed) from the three features above — §10f/§10g's shared health-monitor-wiring gap (`cluster.Monitor` never constructed in `cmd/llmctld/main.go`, blocking both live resource-heartbeat AND automatic replication-role failover-on-crash) and §10h's FR-010 live-per-voter-trust-confirmation boundary. Neither is a regression or a violation of any of these three features' own spec.md MUST requirements; both are recorded here so a future session picks them up rather than rediscovering them.
+**Update (2026-09-16, later same session):** both items below were CLOSED the same day — see §10i. Nothing from §10f/§10g/§10h remains open.
+
+## 10i. Follow-up: close-out of T072-FU6/FU7/FU8's disclosed open items — zero disclosed gaps remain (T072-FU9, closed 2026-09-16)
+
+Both items §10f/§10g/§10h had honestly left open were closed this session, via two parallel subagent dispatches, each independently re-verified by the conductor before merging (build/vet/gofmt/full-suite-under-`-race`/bash-suite/submodule-drift, never merely trusted from the dispatched agent's own report).
+
+- **FR-010 live-per-voter-trust-confirmation (004-mtls-cert-rotation).** `internal/api/routes_mtls.go`'s `quorumWouldBeStranded` replaced its Raft-voter-configuration approximation with a REAL concurrent mTLS handshake check per voter (`quorumWouldBeStrandedLive`/`voterIsLiveAndTrusting`), reusing the existing `mtlsForwardTLS` client (whose `VerifyPeerCertificate` already delegates to `raft.VerifyPeerCertificateAgainstCA`) rather than reimplementing verification. **Design decision, documented in code**: fails CLOSED per-voter with NO fallback — a voter whose live check times out/errors counts as untrusted exactly like a config-untrusted one, extending this codebase's own "can only over-refuse, never under-refuse, a safe action" philosophy. New real multi-node test (`TestMTLSRotation_QuorumProtection_LiveHandshakeDetectsSIGKilledVoter`) proves a genuinely `SIGKILL`'d, never-gracefully-removed voter — invisible to the OLD config-count check — is now correctly detected and the unsafe action correctly refused; the pre-existing T021 regression test still passes for the identical real reason as before. **A new, separate, honestly-disclosed-but-NOT-fixed boundary was found**: the forward-client mTLS identity is never reissued across a completed CA rotation, so a revoke/finalize attempted after a full prior rotation could see every other voter's live check spuriously fail — a pre-existing latent gap the OLD check never exercised, now synchronously reachable via the new one, tracked as further follow-up (not fixed here — out of this task's scope, and not exercised by either new test).
+- **`cluster.Monitor` wiring (002-cluster-model-scheduler + 003-kv-cache-replication, the SAME shared root cause).** `cmd/llmctld/main.go`'s new `wireHealthMonitor` (called identically from both `runClusterBootstrap`/`runClusterJoinReal`) constructs and starts a real `*cluster.Monitor` with a real `StatusChecker`, a real `ResourceSource`/`ResourceSubmitter` pair (closing the resource-freshness-heartbeat gap), and a real `Rescheduler` that calls the already-implemented-and-unit-tested `cluster.ReconcileReplicationRoles` on a genuine health-check failure, with the failed node passed as an EXPLICIT dead-node override — closing the crash-triggered-replication-role-failover gap (a plain crash never shrinks Raft's own voter configuration, so this explicit override is exactly what was missing). **The two-primaries-at-once race both prior independent reviews (T072-FU6/FU7) flagged as their reason for not rushing a fix was RULED OUT, not merely assumed** — the Rescheduler introduces no second commit mechanism; every candidate role is proposed through the identical already-tested Raft-Apply path `ensureReplicationRole` already uses, and concurrent nodes' Monitors compute the identical deterministic candidate, so a duplicate Apply is an idempotent overwrite, never a conflict. Two REAL 3-node tests (RED-then-GREEN, re-confirmed non-flaky by the conductor across additional independent reruns) prove both gaps are genuinely closed. **Two further genuinely separate defects were found and fixed along the way** (neither is the two-primaries-at-once race): a wrong timeout on the new health-check client that was observed destabilizing a survivor's own Raft heartbeat during crash recovery (fixed with a dedicated shorter timeout); and a genuine PRE-EXISTING latent bug in `internal/replication/forwarder.go` where a documented 2-second retry budget was never actually enforced against a single slow-to-fail attempt, silently depending on the caller's own (much longer, 10s in production) HTTP client timeout instead — newly exercised for the first time by this fix, closed with a real fix + a real regression test the conductor independently re-ran and confirmed. A model-workload-rescheduling mechanism (mentioned only in a doc comment) was investigated and confirmed to not exist anywhere in this codebase — honestly left unimplemented rather than invented as unplanned scope, since it was never one of the two disclosed open items.
+
+**Zero disclosed open items remain across 002-cluster-model-scheduler, 003-kv-cache-replication, or 004-mtls-cert-rotation.**
 
 ## 11. Binding constraints (unchanged, restated per §12.10)
 
