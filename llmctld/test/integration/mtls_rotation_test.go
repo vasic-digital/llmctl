@@ -762,3 +762,598 @@ func TestMTLSRotation_LiveRenewal_NewConnectionsUseFreshCert(t *testing.T) {
 		t.Fatalf("fresh certificate's NotAfter (%s) is less than 300 days from now - does not look like a freshly-issued 365-day certificate", after.peerLeaf.NotAfter)
 	}
 }
+
+// --- Feature 004 Phase 5 (User Story 3): CA rotation - T018-T021 ---
+
+// httpClientForCertTrustingCAs is httpClientForCert generalized to trust
+// MULTIPLE CAs at once - needed for CA-rotation tests, where a real node
+// may legitimately present a certificate signed by EITHER the outgoing
+// or the incoming CA depending on whether it has renewed yet (FR-008
+// dual trust), so a test client verifying that node's presented
+// certificate must itself trust both.
+func (tc *testCluster) httpClientForCertTrustingCAs(nodeCert *mtls.NodeCert, cas ...*mtls.CA) *http.Client {
+	tc.t.Helper()
+	cert, err := mtls.LoadTLSCertificate(nodeCert.CertPEM, nodeCert.KeyPEM)
+	if err != nil {
+		tc.t.Fatalf("load cert: %v", err)
+	}
+	pool := x509.NewCertPool()
+	for _, ca := range cas {
+		if !pool.AppendCertsFromPEM(ca.CertPEM) {
+			tc.t.Fatalf("add CA cert to pool")
+		}
+	}
+	store, err := mtls.NewTrustStore(pool, &cert)
+	if err != nil {
+		tc.t.Fatalf("NewTrustStore: %v", err)
+	}
+	tlsConf := &tls.Config{
+		GetClientCertificate:  store.GetClientCertificate,
+		RootCAs:               pool,
+		InsecureSkipVerify:    true,
+		VerifyPeerCertificate: raft.VerifyPeerCertificateAgainstCA(store),
+	}
+	return &http.Client{Transport: &http3.Transport{TLSClientConfig: tlsConf}, Timeout: 5 * time.Second}
+}
+
+// httpClientTrustingCAs builds a dual (or multi)-CA-trusting client
+// presenting a fresh "test-observer-dual" identity signed by the FIRST
+// named CA - used as this test's own driving/observing client once a CA
+// rotation is in progress, since dual trust means a client presenting
+// EITHER CA's identity is accepted by every real node's own server-side
+// mutual-TLS verification throughout the transition (steady-state
+// tc.httpClient() alone stops working the moment a node it talks to has
+// renewed under the incoming CA, per FR-008's OWN symmetry: trust is
+// mutual, not merely server-to-client).
+func (tc *testCluster) httpClientTrustingCAs(cas ...*mtls.CA) *http.Client {
+	tc.t.Helper()
+	nodeCert, err := cas[0].IssueNodeCert("test-observer-dual")
+	if err != nil {
+		tc.t.Fatalf("issue dual-trust observer cert: %v", err)
+	}
+	return tc.httpClientForCertTrustingCAs(nodeCert, cas...)
+}
+
+// beginCARotationRequestJSON/caRotationResponseJSON/caRotationEventJSON/
+// caRotationStatusResponseJSON mirror internal/api/routes_mtls.go's JSON
+// wire shapes for the begin/status/finalize actions - duplicated here as
+// plain, decoupled local types (matching only the JSON contract), exactly
+// as this file's other request/response types already do.
+type beginCARotationRequestJSON struct {
+	IncomingCACertPEM string `json:"incoming_ca_cert_pem"`
+	IncomingCAKeyPEM  string `json:"incoming_ca_key_pem"`
+}
+
+type caRotationResponseJSON struct {
+	Status                string `json:"status"`
+	OutgoingCAFingerprint string `json:"outgoing_ca_fingerprint"`
+	IncomingCAFingerprint string `json:"incoming_ca_fingerprint"`
+}
+
+type caRotationEventJSON struct {
+	OutgoingCAFingerprint string    `json:"outgoing_ca_fingerprint"`
+	IncomingCAFingerprint string    `json:"incoming_ca_fingerprint"`
+	TransitionedNodeIDs   []string  `json:"transitioned_node_ids"`
+	Status                string    `json:"status"`
+	BegunAt               time.Time `json:"begun_at"`
+	FinalizedAt           time.Time `json:"finalized_at"`
+}
+
+type caRotationStatusResponseJSON struct {
+	Rotation      *caRotationEventJSON `json:"rotation"`
+	LocallyLoaded bool                 `json:"locally_loaded"`
+}
+
+// beginCARotation POSTs a real begin-rotation request (T024, spec.md
+// FR-007/FR-008) to apiAddr, carrying incomingCA's real cert+key PEM -
+// fails the test loudly (never a silent skip) on a non-200 response.
+func beginCARotation(t *testing.T, client *http.Client, apiAddr, token string, incomingCA *mtls.CA) caRotationResponseJSON {
+	t.Helper()
+	body, err := json.Marshal(beginCARotationRequestJSON{
+		IncomingCACertPEM: string(incomingCA.CertPEM),
+		IncomingCAKeyPEM:  string(incomingCA.KeyPEM),
+	})
+	if err != nil {
+		t.Fatalf("marshal begin rotation request: %v", err)
+	}
+	req, err := http.NewRequest(http.MethodPost, "https://"+apiAddr+"/v1/cluster/mtls/rotate/begin", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("new begin rotation request to %s: %v", apiAddr, err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("POST /v1/cluster/mtls/rotate/begin to %s: %v", apiAddr, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		respBody, _ := io.ReadAll(resp.Body)
+		t.Fatalf("POST /v1/cluster/mtls/rotate/begin to %s: status = %d, body = %s", apiAddr, resp.StatusCode, respBody)
+	}
+	var got caRotationResponseJSON
+	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+		t.Fatalf("decode begin rotation response from %s: %v", apiAddr, err)
+	}
+	return got
+}
+
+// caRotationStatus GETs apiAddr's real rotate/status route.
+func caRotationStatus(t *testing.T, client *http.Client, apiAddr, token string) caRotationStatusResponseJSON {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodGet, "https://"+apiAddr+"/v1/cluster/mtls/rotate/status", nil)
+	if err != nil {
+		t.Fatalf("new rotate status request to %s: %v", apiAddr, err)
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("GET /v1/cluster/mtls/rotate/status to %s: %v", apiAddr, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	var got caRotationStatusResponseJSON
+	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+		t.Fatalf("decode rotate status response from %s: %v", apiAddr, err)
+	}
+	return got
+}
+
+// waitForRotationStatus polls apiAddr's real rotate/status route until
+// its Rotation.Status equals wantStatus (tolerating real Raft-replication
+// lag, matching waitForRevocationReplicated's identical polling pattern
+// above), or fails the test if it never converges within timeout.
+func waitForRotationStatus(t *testing.T, client *http.Client, apiAddr, token, wantStatus string, timeout time.Duration) caRotationStatusResponseJSON {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	var last caRotationStatusResponseJSON
+	for time.Now().Before(deadline) {
+		last = caRotationStatus(t, client, apiAddr, token)
+		if last.Rotation != nil && last.Rotation.Status == wantStatus {
+			return last
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	t.Fatalf("%s never observed rotation status %q within %s (last: %+v)", apiAddr, wantStatus, timeout, last.Rotation)
+	return last
+}
+
+// finalizeCARotationAttempt POSTs a real finalize request and returns the
+// raw status/body WITHOUT failing the test on a non-200 response -
+// callers decide whether success or refusal is the expected outcome
+// (T021's stranding test expects refusal; T020 expects success via the
+// finalizeCARotation wrapper below).
+func finalizeCARotationAttempt(t *testing.T, client *http.Client, apiAddr, token string) (int, []byte) {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodPost, "https://"+apiAddr+"/v1/cluster/mtls/rotate/finalize", nil)
+	if err != nil {
+		t.Fatalf("new finalize request to %s: %v", apiAddr, err)
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("POST /v1/cluster/mtls/rotate/finalize to %s: %v", apiAddr, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	body, _ := io.ReadAll(resp.Body)
+	return resp.StatusCode, body
+}
+
+// finalizeCARotation is finalizeCARotationAttempt's fail-loudly-on-refusal
+// counterpart, mirroring revokeCertificate's identical convention above.
+func finalizeCARotation(t *testing.T, client *http.Client, apiAddr, token string) caRotationResponseJSON {
+	t.Helper()
+	status, body := finalizeCARotationAttempt(t, client, apiAddr, token)
+	if status != http.StatusOK {
+		t.Fatalf("POST /v1/cluster/mtls/rotate/finalize to %s: status = %d, body = %s", apiAddr, status, body)
+	}
+	var got caRotationResponseJSON
+	if err := json.Unmarshal(body, &got); err != nil {
+		t.Fatalf("decode finalize response from %s: %v", apiAddr, err)
+	}
+	return got
+}
+
+// attemptRevoke is revokeCertificate's non-fatal-on-refusal counterpart
+// (T021): returns the raw status/body instead of failing the test, so a
+// test can assert a REFUSAL (FR-010) is the correct outcome.
+func attemptRevoke(t *testing.T, client *http.Client, apiAddr, token, serialNumber, nodeID, reason string) (int, []byte) {
+	t.Helper()
+	body, err := json.Marshal(revokeRequest{SerialNumber: serialNumber, NodeID: nodeID, Reason: reason})
+	if err != nil {
+		t.Fatalf("marshal revoke request: %v", err)
+	}
+	req, err := http.NewRequest(http.MethodPost, "https://"+apiAddr+"/v1/cluster/mtls/revoke", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("new revoke request to %s: %v", apiAddr, err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("POST /v1/cluster/mtls/revoke to %s: %v", apiAddr, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	respBody, _ := io.ReadAll(resp.Body)
+	return resp.StatusCode, respBody
+}
+
+// waitAndFindLeader polls every node's real GET /v1/cluster/status until
+// exactly one reports IsLeader == true, returning that node - the same
+// precondition TestMTLSRotation_RevokedNode_CannotRejoin's own comment
+// documents as load-bearing for any leader-only write (begin/finalize/
+// revoke's real hashicorp/raft Apply calls all require it).
+func waitAndFindLeader(t *testing.T, tc *testCluster, client *http.Client, nodes []*spawnedNode, timeout time.Duration) *spawnedNode {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	var lastErr error
+	for time.Now().Before(deadline) {
+		for _, n := range nodes {
+			status, err := tc.getStatus(client, n.apiAddr)
+			if err != nil {
+				lastErr = err
+				continue
+			}
+			if status.IsLeader {
+				return n
+			}
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	t.Fatalf("no leader elected among %d real nodes within %s (last error: %v)", len(nodes), timeout, lastErr)
+	return nil
+}
+
+// waitForQuorumHealthy asserts EVERY node in nodes is reachable via
+// client AND reports a CONSISTENT view of leadership (exactly one node
+// among them currently believes it is the real Raft leader) - the
+// concrete, real, observable signal T019 needs "leader election/quorum
+// health is checked and holds" to mean, proven fresh at each call site
+// (never assumed to still hold from an earlier check).
+func waitForQuorumHealthy(t *testing.T, tc *testCluster, client *http.Client, nodes []*spawnedNode, timeout time.Duration) {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	var lastErr error
+	for time.Now().Before(deadline) {
+		leaders := 0
+		allReachable := true
+		for _, n := range nodes {
+			status, err := tc.getStatus(client, n.apiAddr)
+			if err != nil {
+				allReachable = false
+				lastErr = err
+				break
+			}
+			if status.IsLeader {
+				leaders++
+			}
+		}
+		if allReachable && leaders == 1 {
+			return
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	t.Fatalf("quorum not healthy (every node reachable + exactly one leader) within %s (last error: %v)", timeout, lastErr)
+}
+
+// waitForFullConfig is the "all N nodes durably observe the full
+// configuration" precondition several existing tests in this package
+// already establish inline (TestClusterBootstrap_*,
+// TestMTLSRotation_RevokedCertificate_RejectedClusterWide) - factored out
+// here since every T018-T021 test needs it identically.
+func waitForFullConfig(t *testing.T, tc *testCluster, client *http.Client, nodes []*spawnedNode, want int, timeout time.Duration) {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	for _, n := range nodes {
+		for {
+			got, err := tc.getNodes(client, n.apiAddr)
+			if err == nil && len(got.Servers) == want {
+				break
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("precondition failed: node %q never observed the full %d-node configuration", n.nodeID, want)
+			}
+			time.Sleep(50 * time.Millisecond)
+		}
+	}
+}
+
+// TestMTLSRotation_DualTrust_AcceptsBothOldAndNewCA is T018 (spec.md User
+// Story 3, Acceptance Scenario 1, quickstart.md Scenario 3 step 2;
+// FR-008): during an in-progress CA rotation, EVERY real node accepts a
+// connection presenting a certificate signed by EITHER the outgoing CA-1
+// or the incoming CA-2.
+func TestMTLSRotation_DualTrust_AcceptsBothOldAndNewCA(t *testing.T) {
+	tc := newTestCluster(t)
+	nodeA := tc.bootstrap("node-a")
+	nodeB := tc.join("node-b", nodeA)
+	nodeC := tc.join("node-c", nodeA)
+	nodes := []*spawnedNode{nodeA, nodeB, nodeC}
+
+	observer := tc.httpClient()
+	token := tc.adminToken()
+
+	waitForFullConfig(t, tc, observer, nodes, 3, 5*time.Second)
+	leader := waitAndFindLeader(t, tc, observer, nodes, 5*time.Second)
+
+	newCA, err := mtls.GenerateCA()
+	if err != nil {
+		t.Fatalf("GenerateCA (incoming): %v", err)
+	}
+
+	// Begin against the real leader FIRST (the durable, Raft-replicated
+	// record), then against the two followers (pure local dual-trust
+	// activation, per routes_mtls.go's own documented per-node
+	// out-of-band distribution design) - the SAME operational recipe
+	// quickstart.md Scenario 3 step 2 describes.
+	beginCARotation(t, observer, leader.apiAddr, token, newCA)
+	for _, n := range nodes {
+		if n == leader {
+			continue
+		}
+		beginCARotation(t, observer, n.apiAddr, token, newCA)
+	}
+
+	for _, n := range nodes {
+		st := waitForRotationStatus(t, observer, n.apiAddr, token, "in_progress", 5*time.Second)
+		if !st.LocallyLoaded {
+			t.Fatalf("node %q: LocallyLoaded = false after this test called begin against it directly", n.nodeID)
+		}
+	}
+
+	oldCert, err := tc.ca.IssueNodeCert("node-old-identity-during-rotation")
+	if err != nil {
+		t.Fatalf("issue old-CA cert: %v", err)
+	}
+	newCert, err := newCA.IssueNodeCert("node-new-identity-during-rotation")
+	if err != nil {
+		t.Fatalf("issue new-CA cert: %v", err)
+	}
+	oldClient := tc.httpClientForCertTrustingCAs(oldCert, tc.ca, newCA)
+	newClient := tc.httpClientForCertTrustingCAs(newCert, tc.ca, newCA)
+
+	for _, n := range nodes {
+		if _, err := tc.getStatus(oldClient, n.apiAddr); err != nil {
+			t.Fatalf("node %q rejected an OLD (CA-1)-signed identity during the dual-trust transition window - FR-008 violated: %v", n.nodeID, err)
+		}
+		if _, err := tc.getStatus(newClient, n.apiAddr); err != nil {
+			t.Fatalf("node %q rejected a NEW (CA-2)-signed identity during the dual-trust transition window - FR-008 violated: %v", n.nodeID, err)
+		}
+	}
+}
+
+// TestMTLSRotation_FullRotation_NeverDropsQuorum is T019 (spec.md User
+// Story 3, Acceptance Scenario 2, quickstart.md Scenario 3 step 3): every
+// node's certificate is re-issued under the incoming CA ONE AT A TIME on
+// a real 3-node cluster, with real leader-election/quorum health checked
+// and proven to hold AFTER EACH INDIVIDUAL re-issuance step - the
+// load-bearing test for this whole feature's "no availability-impacting
+// outage" promise (SC-003).
+func TestMTLSRotation_FullRotation_NeverDropsQuorum(t *testing.T) {
+	tc := newTestCluster(t)
+	nodeA := tc.bootstrap("node-a")
+	nodeB := tc.join("node-b", nodeA)
+	nodeC := tc.join("node-c", nodeA)
+	nodes := []*spawnedNode{nodeA, nodeB, nodeC}
+
+	observer := tc.httpClient()
+	token := tc.adminToken()
+
+	waitForFullConfig(t, tc, observer, nodes, 3, 5*time.Second)
+	leader := waitAndFindLeader(t, tc, observer, nodes, 5*time.Second)
+	waitForQuorumHealthy(t, tc, observer, nodes, 5*time.Second)
+
+	newCA, err := mtls.GenerateCA()
+	if err != nil {
+		t.Fatalf("GenerateCA (incoming): %v", err)
+	}
+
+	beginCARotation(t, observer, leader.apiAddr, token, newCA)
+	for _, n := range nodes {
+		if n == leader {
+			continue
+		}
+		beginCARotation(t, observer, n.apiAddr, token, newCA)
+	}
+	for _, n := range nodes {
+		waitForRotationStatus(t, observer, n.apiAddr, token, "in_progress", 5*time.Second)
+	}
+
+	// dualObserver trusts BOTH CAs - required from this point forward
+	// since a renewed node's own presented certificate will chain to
+	// CA-2, which the steady-state observer (CA-1 only) cannot verify
+	// (see httpClientTrustingCAs's own doc comment).
+	dualObserver := tc.httpClientTrustingCAs(tc.ca, newCA)
+
+	// Quorum must already hold the instant dual trust is active
+	// everywhere, BEFORE any certificate is actually re-issued.
+	waitForQuorumHealthy(t, tc, dualObserver, nodes, 5*time.Second)
+
+	// The load-bearing assertion (T019): re-issue EACH node's certificate
+	// ONE AT A TIME, checking real leader-election/quorum health after
+	// EVERY individual step - never only at the very end.
+	for _, n := range nodes {
+		renewed := renewCertificateDual(t, dualObserver, n.apiAddr, token)
+		if n == leader && !renewed.CARotationTransitionRecorded {
+			t.Fatalf("node %q (the real Raft leader) renewed but did NOT durably record its own CA-rotation transition - this write should always succeed when performed on the leader itself", n.nodeID)
+		}
+		waitForQuorumHealthy(t, tc, dualObserver, nodes, 5*time.Second)
+	}
+}
+
+// renewCertificateDual is renewCertificate's own JSON-decoding logic,
+// duplicated here (rather than reused) ONLY because it must decode the
+// newly-added CARotationTransitionRecorded field this test needs to
+// assert on - renewResponse (defined above, alongside renewCertificate)
+// is left unchanged so TestMTLSRotation_LiveRenewal_* above keep
+// decoding exactly the fields they already assert on, unaffected by this
+// Phase 5 addition.
+type renewResponseWithRotation struct {
+	Status                       string `json:"status"`
+	RaftSerialNumber             string `json:"raft_serial_number"`
+	APISerialNumber              string `json:"api_serial_number"`
+	CARotationTransitionRecorded bool   `json:"ca_rotation_transition_recorded"`
+}
+
+func renewCertificateDual(t *testing.T, client *http.Client, apiAddr, token string) renewResponseWithRotation {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodPost, "https://"+apiAddr+"/v1/cluster/mtls/renew", nil)
+	if err != nil {
+		t.Fatalf("new renew request to %s: %v", apiAddr, err)
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("POST /v1/cluster/mtls/renew to %s: %v", apiAddr, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		respBody, _ := io.ReadAll(resp.Body)
+		t.Fatalf("POST /v1/cluster/mtls/renew to %s: status = %d, body = %s", apiAddr, resp.StatusCode, respBody)
+	}
+	var got renewResponseWithRotation
+	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+		t.Fatalf("decode /v1/cluster/mtls/renew response from %s: %v", apiAddr, err)
+	}
+	return got
+}
+
+// TestMTLSRotation_Finalize_OldCARejectedAfterward is T020 (spec.md User
+// Story 3, Acceptance Scenario 3, quickstart.md Scenario 3 step 4): after
+// every node has transitioned and an operator finalizes the rotation, a
+// connection attempt presenting a certificate signed by the now-retired
+// CA-1 is genuinely rejected everywhere.
+func TestMTLSRotation_Finalize_OldCARejectedAfterward(t *testing.T) {
+	tc := newTestCluster(t)
+	nodeA := tc.bootstrap("node-a")
+	nodeB := tc.join("node-b", nodeA)
+	nodeC := tc.join("node-c", nodeA)
+	nodes := []*spawnedNode{nodeA, nodeB, nodeC}
+
+	observer := tc.httpClient()
+	token := tc.adminToken()
+
+	waitForFullConfig(t, tc, observer, nodes, 3, 5*time.Second)
+	leader := waitAndFindLeader(t, tc, observer, nodes, 5*time.Second)
+
+	newCA, err := mtls.GenerateCA()
+	if err != nil {
+		t.Fatalf("GenerateCA (incoming): %v", err)
+	}
+
+	beginCARotation(t, observer, leader.apiAddr, token, newCA)
+	for _, n := range nodes {
+		if n == leader {
+			continue
+		}
+		beginCARotation(t, observer, n.apiAddr, token, newCA)
+	}
+	for _, n := range nodes {
+		waitForRotationStatus(t, observer, n.apiAddr, token, "in_progress", 5*time.Second)
+	}
+
+	dualObserver := tc.httpClientTrustingCAs(tc.ca, newCA)
+
+	// Renew every node under the new CA - performed against the LEADER
+	// FIRST so its own transition is guaranteed durably recorded
+	// (renewCertificateDual's real HTTP response proves this), then the
+	// two followers (their certs are renewed identically; see this
+	// file's own documented honest scope boundary on
+	// CARotationTransitionRecorded for followers).
+	renewed := renewCertificateDual(t, dualObserver, leader.apiAddr, token)
+	if !renewed.CARotationTransitionRecorded {
+		t.Fatalf("leader %q's own renewal did not durably record its transition", leader.nodeID)
+	}
+	for _, n := range nodes {
+		if n == leader {
+			continue
+		}
+		renewCertificateDual(t, dualObserver, n.apiAddr, token)
+	}
+
+	finalizeCARotation(t, dualObserver, leader.apiAddr, token)
+	for _, n := range nodes {
+		waitForRotationStatus(t, dualObserver, n.apiAddr, token, "finalized", 5*time.Second)
+	}
+
+	// Force fresh connections (quic-go's http3.Transport per-hostname
+	// connection cache - see TestMTLSRotation_RevokedCertificate_
+	// RejectedClusterWide's identical CloseIdleConnections() call for the
+	// full root-cause explanation) before the core AFTER-finalize
+	// rejection assertion.
+	oldCert, err := tc.ca.IssueNodeCert("node-old-after-finalize")
+	if err != nil {
+		t.Fatalf("issue post-finalize old-CA cert: %v", err)
+	}
+	// Trusts ONLY the incoming CA (newCA) - so a connection FAILURE below
+	// is unambiguously the SERVER rejecting this OLD-CA-signed CLIENT
+	// identity (mutual TLS), never this client itself failing to verify
+	// the server's own (now CA-2-only) certificate.
+	oldClient := tc.httpClientForCertTrustingCAs(oldCert, newCA)
+
+	for _, n := range nodes {
+		if _, err := tc.getStatus(oldClient, n.apiAddr); err == nil {
+			t.Fatalf("AFTER finalize, node %q still accepted a certificate signed by the retired outgoing CA - FR-008/Acceptance Scenario 3 violated", n.nodeID)
+		}
+	}
+}
+
+// TestMTLSRotation_QuorumProtection_RefusesStrandingAction is T021
+// (quickstart.md Scenario 4, spec.md FR-010's shared Edge Case): an
+// action that would leave the cluster without enough trusted, reachable
+// voters to maintain its own operational quorum is refused, not silently
+// executed. Exercised via the revoke path (quorumWouldBeStranded's own
+// doc comment in routes_mtls.go: this is the SAME shared check finalize
+// also uses) - deterministic and independent of any CA-rotation state.
+func TestMTLSRotation_QuorumProtection_RefusesStrandingAction(t *testing.T) {
+	tc := newTestCluster(t)
+	nodeA := tc.bootstrap("node-a")
+	nodeB := tc.join("node-b", nodeA)
+	nodeC := tc.join("node-c", nodeA)
+	nodes := []*spawnedNode{nodeA, nodeB, nodeC}
+
+	observer := tc.httpClient()
+	token := tc.adminToken()
+
+	waitForFullConfig(t, tc, observer, nodes, 3, 5*time.Second)
+	leader := waitAndFindLeader(t, tc, observer, nodes, 5*time.Second)
+
+	// Negative control (proves the check does not ALWAYS refuse): revoke
+	// node-b, ONE of 3 voters - remaining 2/3 STILL meets quorum(2) -
+	// must SUCCEED.
+	victimCertB, err := tc.ca.IssueNodeCert("node-b")
+	if err != nil {
+		t.Fatalf("issue node-b cert: %v", err)
+	}
+	serialB := certSerialNumber(t, victimCertB.CertPEM)
+	revokeCertificate(t, observer, leader.apiAddr, token, serialB, "node-b", "test: still-quorum-safe")
+	waitForRevocationReplicated(t, observer, leader.apiAddr, token, serialB, 5*time.Second)
+
+	// The core assertion (T021/FR-010): attempting to ALSO revoke node-c
+	// (a SECOND of the 3 voters) would leave only 1/3 trusted voters -
+	// below the quorum(2) this 3-node cluster needs - and MUST be
+	// refused.
+	victimCertC, err := tc.ca.IssueNodeCert("node-c")
+	if err != nil {
+		t.Fatalf("issue node-c cert: %v", err)
+	}
+	serialC := certSerialNumber(t, victimCertC.CertPEM)
+	status, body := attemptRevoke(t, observer, leader.apiAddr, token, serialC, "node-c", "test: would-strand-cluster")
+	if status == http.StatusOK {
+		t.Fatalf("revoking node-c (after node-b was already revoked) SUCCEEDED - this would leave only 1/3 trusted voters, below the quorum this 3-node cluster needs; FR-010 requires refusal. response body = %s", body)
+	}
+
+	// FR-012 (revocation is independent of membership eviction, already
+	// proven for a SINGLE revocation by T013/TestMTLSRotation_
+	// RevokedCertificate_RejectedClusterWide) still holds after a
+	// REFUSED second revocation attempt: the refused action must not
+	// have partially applied.
+	for _, n := range nodes {
+		got, err := tc.getNodes(observer, n.apiAddr)
+		if err != nil {
+			t.Fatalf("GET /v1/cluster/nodes on %q after the refused revocation: %v", n.nodeID, err)
+		}
+		if len(got.Servers) != 3 {
+			t.Fatalf("node %q reports %d cluster members after a REFUSED revocation (want 3, unchanged)", n.nodeID, len(got.Servers))
+		}
+	}
+}

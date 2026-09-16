@@ -361,9 +361,99 @@ func (n *Node) RevokeCertificate(rec cluster.RevocationRecord) error {
 // SetRevocationHandler registers fn to be called on THIS node whenever its
 // ClusterFSM applies (or restores) revocation-replicated state (Feature
 // 004, T011) - see fsm.go's ClusterFSM.onRevocationApplied doc comment
-// for the exact firing points and why fn takes no arguments.
+// for the exact firing points and why fn takes no arguments. Feature 004
+// Phase 5 (T023) extends the SAME firing points to
+// CommandBeginCARotation/CommandFinalizeCARotation too.
 func (n *Node) SetRevocationHandler(fn func()) {
 	n.fsm.SetRevocationHandler(fn)
+}
+
+// BeginCARotation submits rec as a real, linearized
+// CommandBeginCARotation Raft log entry (Feature 004 Phase 5, User Story
+// 3, T022) - the SAME Apply-and-check-the-response pattern
+// RevokeCertificate above already establishes. Refused by the FSM
+// (fsm.go's errCARotationAlreadyInProgress) if a DIFFERENT rotation is
+// already in progress; a repeated call carrying the IDENTICAL outgoing/
+// incoming fingerprints as an already-in-progress rotation succeeds
+// idempotently (fsm.go's own doc comment on that Apply case) - the
+// mechanism that lets every node in the cluster call its own local
+// "begin rotation" API action without a second/third caller's own Raft
+// submission being treated as a conflict.
+func (n *Node) BeginCARotation(rec cluster.CARotationEvent) error {
+	cmd := Command{Type: CommandBeginCARotation, CARotation: &rec}
+	data, err := json.Marshal(cmd)
+	if err != nil {
+		return fmt.Errorf("raft: begin CA rotation: marshal command: %w", err)
+	}
+	future := n.raft.Apply(data, raftApplyTimeout)
+	if err := future.Error(); err != nil {
+		return fmt.Errorf("raft: begin CA rotation: %w", err)
+	}
+	if resp := future.Response(); resp != nil {
+		if respErr, isErr := resp.(error); isErr {
+			return fmt.Errorf("raft: begin CA rotation: %w", respErr)
+		}
+		return fmt.Errorf("raft: begin CA rotation: unexpected FSM response type %T", resp)
+	}
+	return nil
+}
+
+// FinalizeCARotation submits rec as a real CommandFinalizeCARotation
+// Raft log entry (Feature 004 Phase 5, T022) - refused by the FSM unless
+// a rotation carrying the IDENTICAL outgoing/incoming fingerprints is
+// currently in_progress (fsm.go's errCARotationNotInProgress/
+// errCARotationFingerprintMismatch). Callers (internal/api/
+// routes_mtls.go's POST /v1/cluster/mtls/rotate/finalize) MUST perform
+// the FR-010 quorum-protection refusal check BEFORE calling this - the
+// FSM itself has no visibility into the current Raft voter configuration
+// (that lives in n.raft.GetConfiguration, orthogonal to ClusterState),
+// so it cannot perform that check on its own.
+func (n *Node) FinalizeCARotation(rec cluster.CARotationEvent) error {
+	cmd := Command{Type: CommandFinalizeCARotation, CARotation: &rec}
+	data, err := json.Marshal(cmd)
+	if err != nil {
+		return fmt.Errorf("raft: finalize CA rotation: marshal command: %w", err)
+	}
+	future := n.raft.Apply(data, raftApplyTimeout)
+	if err := future.Error(); err != nil {
+		return fmt.Errorf("raft: finalize CA rotation: %w", err)
+	}
+	if resp := future.Response(); resp != nil {
+		if respErr, isErr := resp.(error); isErr {
+			return fmt.Errorf("raft: finalize CA rotation: %w", respErr)
+		}
+		return fmt.Errorf("raft: finalize CA rotation: unexpected FSM response type %T", resp)
+	}
+	return nil
+}
+
+// RecordCARotationTransition submits a real CommandRecordCARotationTransition
+// Raft log entry naming nodeID as having confirmed re-issuance under the
+// currently in_progress rotation's incoming CA (Feature 004 Phase 5,
+// T022/FR-009) - submitted by internal/api/routes_mtls.go's POST
+// /v1/cluster/mtls/renew handler the moment ITS OWN local renewal
+// completes while this node's own RotationCAHolder shows a rotation is
+// locally in progress. A no-op (never an error) if no rotation is
+// currently in_progress on whichever node's Raft log this Apply lands on
+// (fsm.go's own doc comment) - a stale/late-arriving transition report
+// after finalize has nothing left to record.
+func (n *Node) RecordCARotationTransition(nodeID string) error {
+	cmd := Command{Type: CommandRecordCARotationTransition, NodeID: nodeID}
+	data, err := json.Marshal(cmd)
+	if err != nil {
+		return fmt.Errorf("raft: record CA rotation transition %q: marshal command: %w", nodeID, err)
+	}
+	future := n.raft.Apply(data, raftApplyTimeout)
+	if err := future.Error(); err != nil {
+		return fmt.Errorf("raft: record CA rotation transition %q: %w", nodeID, err)
+	}
+	if resp := future.Response(); resp != nil {
+		if respErr, isErr := resp.(error); isErr {
+			return fmt.Errorf("raft: record CA rotation transition %q: %w", nodeID, respErr)
+		}
+		return fmt.Errorf("raft: record CA rotation transition %q: unexpected FSM response type %T", nodeID, resp)
+	}
+	return nil
 }
 
 // ServerInfo describes one member of n's Raft cluster configuration - a
