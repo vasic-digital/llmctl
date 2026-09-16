@@ -8,10 +8,14 @@ import (
 	"crypto/x509"
 	"flag"
 	"fmt"
+	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"syscall"
+	"time"
+
+	"github.com/quic-go/quic-go/http3"
 
 	"github.com/vasic-digital/llmctl/llmctld/internal/api"
 	"github.com/vasic-digital/llmctl/llmctld/internal/audit"
@@ -208,6 +212,68 @@ func buildNodeTLSConfig(ca *mtls.CA, nodeID string) (*tls.Config, error) {
 	}, nil
 }
 
+// forwardClientRequestTimeout bounds the http.Client-level timeout for
+// one forwarded HTTP/3+mTLS request (internal/api's NewNodeForwarder,
+// T008) - distinct from internal/replication's own forwardRetryBudget
+// (that one bounds the forwarder's OWN retry loop across potentially
+// several attempts to one replica); kept generous relative to that
+// budget so this client-level timeout is never what actually fires
+// first for a healthy replica.
+const forwardClientRequestTimeout = 10 * time.Second
+
+// newForwardingHTTPClient builds the real HTTP/3+mTLS client
+// internal/replication.Forwarder posts forwarded appends/checkpoints
+// over (T008) - the SAME quic-go/http3 transport + mTLS discipline every
+// other node-to-node call in this codebase uses (api/client.go's own
+// RequestJoin).
+func newForwardingHTTPClient(clientTLS *tls.Config) *http.Client {
+	return &http.Client{
+		Transport: &http3.Transport{TLSClientConfig: clientTLS},
+		Timeout:   forwardClientRequestTimeout,
+	}
+}
+
+// selfRegisterRetryInterval/selfRegisterRetryBudget bound
+// selfRegisterOwnAPIAddr's background retry loop - see its own doc
+// comment for why a bootstrap node needs this at all.
+const (
+	selfRegisterRetryInterval = 100 * time.Millisecond
+	selfRegisterRetryBudget   = 10 * time.Second
+)
+
+// selfRegisterOwnAPIAddr registers node's own real HTTP API address
+// (apiAddr) into the cluster's Raft-replicated node registry under
+// node's own ID, once node has become its own Raft leader (T008,
+// 003-kv-cache-replication): a freshly-bootstrapped single-node cluster
+// is NOT its own leader instantly (the same real hashicorp/raft
+// randomized election-timeout race api/client.go's RequestJoin doc
+// comment already documents for a JOINING node), so a naive immediate
+// RegisterNode call would fail with hraft.ErrNotLeader on every real
+// bootstrap. Unlike a joining node - whose registration is driven by the
+// EXISTING leader's own /v1/cluster/join handler
+// (routes_cluster.go) - the BOOTSTRAP node has no other leader to
+// register it, so it must register itself the moment it becomes leader.
+// Callers run this in the background (a goroutine) so it never blocks
+// runClusterBootstrap's own startup - the election race is bounded but
+// not instant, and this node's own append/checkpoint routes already work
+// (against its own local Store) before this completes; only cross-node
+// forwarding depends on it.
+func selfRegisterOwnAPIAddr(node *raft.Node, apiAddr string) {
+	deadline := time.Now().Add(selfRegisterRetryBudget)
+	for {
+		if node.IsLeader() {
+			if err := node.RegisterNode(node.ID(), apiAddr); err == nil {
+				return
+			}
+		}
+		if time.Now().After(deadline) {
+			fmt.Fprintf(os.Stderr, "llmctld: cluster bootstrap: self-register own API address %q: gave up after %s\n", apiAddr, selfRegisterRetryBudget)
+			return
+		}
+		time.Sleep(selfRegisterRetryInterval)
+	}
+}
+
 // waitForShutdownSignal blocks until SIGINT or SIGTERM, so a
 // llmctld cluster process stays up (serving Raft + the HTTP API) until
 // explicitly told to stop - the real, killable-by-a-test-harness process
@@ -282,7 +348,17 @@ func runClusterBootstrap(args []string) {
 	// diff - see routes_replication.go's package doc comment.
 	storeRegistry := newStoreRegistry(stateDir, replication.CheckpointConfig{})
 	defer func() { _ = storeRegistry.Close() }()
-	api.RegisterReplicationRoutes(srv.Router(), storeRegistry, decider)
+	// T008 (003-kv-cache-replication): the automatic cross-node forwarding
+	// daemon - posts this node's own real appends/checkpoints to every
+	// current replica's real /v1/replication/* routes over a real
+	// HTTP/3+mTLS client, the moment they land locally.
+	forwardClientTLS, err := buildNodeTLSConfig(ca, f.nodeID+"-forward-client")
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "llmctld: cluster bootstrap:", err)
+		os.Exit(1)
+	}
+	forwarder := api.NewNodeForwarder(node, newForwardingHTTPClient(forwardClientTLS))
+	api.RegisterReplicationRoutes(srv.Router(), storeRegistry, decider, node, forwarder)
 
 	modelExecutor := executor.New(executor.Config{LLMCtlPath: f.llmctlPath})
 	registerAuthzRoutes(srv, decider, keys, modelExecutor)
@@ -309,6 +385,14 @@ func runClusterBootstrap(args []string) {
 		os.Exit(1)
 	}
 	defer func() { _ = srv.Close() }()
+
+	// T008: a bootstrap node has no other leader to register it into the
+	// node registry (unlike a joining node - routes_cluster.go's own
+	// /v1/cluster/join handler does that for it) - it must register
+	// itself, once it becomes its own Raft leader (selfRegisterOwnAPIAddr's
+	// own doc comment). Backgrounded so it never blocks this process's own
+	// startup/READY line.
+	go selfRegisterOwnAPIAddr(node, srv.Addr)
 
 	// A single machine-readable READY line, emitted once and flushed, is
 	// how a test harness spawning this as a real subprocess learns the
@@ -410,7 +494,15 @@ func runClusterJoinReal(args []string) int {
 	// above (T072-FU2/T072-FU5) - kept symmetric across both subcommands.
 	storeRegistry := newStoreRegistry(resolvedStateDir, replication.CheckpointConfig{})
 	defer func() { _ = storeRegistry.Close() }()
-	api.RegisterReplicationRoutes(srv.Router(), storeRegistry, decider)
+	// See runClusterBootstrap's identical Forwarder wiring comment above
+	// (T008) - kept symmetric across both subcommands.
+	forwardClientTLS, err := buildNodeTLSConfig(ca, nodeID+"-forward-client")
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "llmctld: cluster join:", err)
+		return 1
+	}
+	forwarder := api.NewNodeForwarder(node, newForwardingHTTPClient(forwardClientTLS))
+	api.RegisterReplicationRoutes(srv.Router(), storeRegistry, decider, node, forwarder)
 	modelExecutor := executor.New(executor.Config{LLMCtlPath: llmctlPath})
 	registerAuthzRoutes(srv, decider, keys, modelExecutor)
 
@@ -425,7 +517,7 @@ func runClusterJoinReal(args []string) int {
 		fmt.Fprintln(os.Stderr, "llmctld: cluster join:", err)
 		return 1
 	}
-	if err := api.RequestJoin(joinClientTLS, leaderAPI, nodeID, node.Addr()); err != nil {
+	if err := api.RequestJoin(joinClientTLS, leaderAPI, nodeID, node.Addr(), srv.Addr); err != nil {
 		fmt.Fprintln(os.Stderr, "llmctld: cluster join: RequestJoin:", err)
 		return 1
 	}

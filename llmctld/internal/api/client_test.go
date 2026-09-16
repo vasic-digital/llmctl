@@ -46,7 +46,7 @@ func TestRequestJoin_RealCrossProcessJoinOverHTTP3(t *testing.T) {
 	}
 	defer func() { _ = follower.Shutdown() }()
 
-	if err := RequestJoin(buildTestTLSConfig(t, ca, "node-b-api-client"), srv.Addr, "node-b", follower.Addr()); err != nil {
+	if err := RequestJoin(buildTestTLSConfig(t, ca, "node-b-api-client"), srv.Addr, "node-b", follower.Addr(), "127.0.0.1:9100"); err != nil {
 		t.Fatalf("RequestJoin: %v", err)
 	}
 
@@ -106,7 +106,7 @@ func TestRequestJoin_RetriesUntilLeaderElectionCompletes(t *testing.T) {
 	defer func() { _ = follower.Shutdown() }()
 
 	start := time.Now()
-	if err := RequestJoin(buildTestTLSConfig(t, ca, "node-b-api-client"), srv.Addr, "node-b", follower.Addr()); err != nil {
+	if err := RequestJoin(buildTestTLSConfig(t, ca, "node-b-api-client"), srv.Addr, "node-b", follower.Addr(), "127.0.0.1:9100"); err != nil {
 		t.Fatalf("RequestJoin did not retry through the leader-election race and eventually succeed: %v", err)
 	}
 	if elapsed := time.Since(start); elapsed < 100*time.Millisecond {
@@ -153,7 +153,7 @@ func TestRequestJoin_SurfacesLeaderRefusal(t *testing.T) {
 
 	// An empty peerAddr fails joinRequest's "required" binding - real
 	// server-side refusal, not a client-fabricated one.
-	if err := RequestJoin(buildTestTLSConfig(t, ca, "node-b-api-client"), srv.Addr, "node-b", ""); err == nil {
+	if err := RequestJoin(buildTestTLSConfig(t, ca, "node-b-api-client"), srv.Addr, "node-b", "", "127.0.0.1:9100"); err == nil {
 		t.Fatalf("RequestJoin with an empty peerAddr must surface the server's refusal, got nil error")
 	}
 }

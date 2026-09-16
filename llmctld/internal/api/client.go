@@ -40,6 +40,16 @@ const requestJoinRetryInterval = 100 * time.Millisecond
 // node's own real NodeID (see internal/raft/node.go's Join doc comment
 // for why this matters - an address-derived ID is a real, found bug).
 //
+// peerAPIAddr is the joining node's own real HTTP API address (T008,
+// 003-kv-cache-replication) - propagated into joinRequest.APIAddr so the
+// leader can durably record it in the cluster's node registry
+// (raft.Node.RegisterNode, CommandJoinNode) the moment the join succeeds,
+// which is what internal/replication.Forwarder's AddrResolver needs to
+// find a replica's real address to forward appends/checkpoints to. Unlike
+// peerAddr (the Raft transport address), peerAPIAddr is never used by
+// hashicorp/raft itself - it exists purely for this cross-node HTTP
+// forwarding concern.
+//
 // A 409 response (node.Join's own real failure, almost always
 // hraft.ErrNotLeader wrapped by routes_cluster.go - see its own handler)
 // is retried for up to requestJoinRetryBudget before RequestJoin gives
@@ -47,13 +57,13 @@ const requestJoinRetryInterval = 100 * time.Millisecond
 // yet. Any OTHER failure (a malformed request, a network error, a
 // timeout) is NOT retried and surfaces immediately - only the specific,
 // expected "not yet the leader" race is tolerated.
-func RequestJoin(clientTLS *tls.Config, leaderAPIAddr, peerID, peerAddr string) error {
+func RequestJoin(clientTLS *tls.Config, leaderAPIAddr, peerID, peerAddr, peerAPIAddr string) error {
 	client := &http.Client{
 		Transport: &http3.Transport{TLSClientConfig: clientTLS},
 		Timeout:   10 * time.Second,
 	}
 
-	body, err := json.Marshal(joinRequest{PeerID: peerID, PeerAddr: peerAddr})
+	body, err := json.Marshal(joinRequest{PeerID: peerID, PeerAddr: peerAddr, APIAddr: peerAPIAddr})
 	if err != nil {
 		return fmt.Errorf("api: RequestJoin: marshal request: %w", err)
 	}

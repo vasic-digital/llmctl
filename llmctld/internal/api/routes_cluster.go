@@ -5,7 +5,9 @@
 package api
 
 import (
+	"fmt"
 	"net/http"
+	"os"
 
 	"github.com/gin-gonic/gin"
 
@@ -23,6 +25,14 @@ import (
 type joinRequest struct {
 	PeerID   string `json:"peer_id" binding:"required"`
 	PeerAddr string `json:"peer_addr" binding:"required"`
+	// APIAddr is the joining node's own real HTTP API address (T008,
+	// 003-kv-cache-replication) - recorded into the cluster's Raft-
+	// replicated node registry (raft.Node.RegisterNode) the moment this
+	// join succeeds, so internal/replication.Forwarder's AddrResolver can
+	// later find this node's real address to forward appends/checkpoints
+	// to it as a replica. See client.go's RequestJoin doc comment for the
+	// caller side of this field.
+	APIAddr string `json:"api_addr" binding:"required"`
 }
 
 // RegisterClusterRoutes wires the cluster routes onto r, backed by node.
@@ -40,6 +50,19 @@ func RegisterClusterRoutes(r gin.IRoutes, node *raft.Node) {
 		if err := node.Join(req.PeerID, req.PeerAddr); err != nil {
 			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
 			return
+		}
+		// Best-effort + honest (T008, 003-kv-cache-replication): the join
+		// itself already succeeded (the joining node IS a real Raft voter
+		// now) - a registration failure here (e.g. a transient Apply
+		// timeout) is logged to stderr rather than turning an otherwise-
+		// successful join into a reported failure, matching this file's
+		// own "join succeeded" as the operative outcome. An unregistered
+		// node's Forwarder.AddrResolver simply skips it (FR-004: an
+		// unresolvable replica is skipped, never blocking) until a later
+		// successful registration (e.g. cmd/llmctld's own bootstrap/join
+		// self-registration retry) catches up.
+		if err := node.RegisterNode(req.PeerID, req.APIAddr); err != nil {
+			fmt.Fprintf(os.Stderr, "llmctld: cluster join: register node %q's API address: %v\n", req.PeerID, err)
 		}
 		c.JSON(http.StatusOK, gin.H{"status": "joined", "peer_id": req.PeerID, "peer_addr": req.PeerAddr})
 	})
