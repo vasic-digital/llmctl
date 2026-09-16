@@ -1,7 +1,7 @@
 # Cluster Architecture (`llmctld`)
 
-**Revision:** 3
-**Last modified:** 2026-09-15T00:00:00Z
+**Revision:** 4
+**Last modified:** 2026-09-16T00:00:00Z
 
 `llmctld` is an **opt-in** Go daemon (Gin Gonic, HTTP/3/QUIC, Brotli
 compression) that will provide distributed multi-host scheduler
@@ -63,41 +63,171 @@ flowchart TB
     end
 ```
 
-## 2. Node-to-node mTLS + client JWT auth flow — ✅ IMPLEMENTED (mTLS primitive) / 📋 PLANNED (JWT, wired transport)
+## 2. Node-to-node mTLS + client JWT auth flow — ✅ IMPLEMENTED (mTLS primitive, wired transport, JWT/RBAC, revocation, zero-downtime renewal, coordinated CA rotation) / 📋 OPEN (per-voter live-handshake trust confirmation for the FR-010 quorum check — see honest scope note below)
 
-What's real today: `internal/mtls.CA` is a self-signed internal certificate
-authority (ECDSA P-256) that issues per-node leaf certificates
-(`IssueNodeCert`); a node's certificate validates against its own CA and is
-correctly rejected by a different CA's pool (proven by test);
-`LoadTLSCertificate` loads a cert+key pair as a real `tls.Certificate`.
-Certificate validity is deliberately long-lived (365 days) for this first
-implementation — rotation is a tracked follow-up, not yet wired into any
-node lifecycle. What's planned: actually using these certificates to
-authenticate real HTTP/3 (QUIC) connections between nodes (Clarification
-11), and the entire client-facing JWT bearer-token auth path (FR-030,
-FR-041) — no JWT issuance, validation, or RBAC code exists yet.
+What's real today (Feature 004, Phases 1–5, full task list:
+`specs/004-mtls-cert-rotation/tasks.md`): `internal/mtls.CA` is a
+self-signed internal certificate authority (ECDSA P-256) that issues
+per-node leaf certificates (`IssueNodeCert`); `internal/mtls.TrustStore` is
+the live, mutex-protected verification data source both node-to-node Raft
+transport (`internal/raft/transport.go`) and the HTTP/3 API server
+(`internal/api/server.go`) read from on **every real TLS handshake** via
+`GetCertificate`/`GetClientCertificate`/`VerifyPeerCertificate` — no static
+`tls.Config` anywhere, so a revocation/renewal/CA-rotation update takes
+effect for the very next connection attempt with zero process restart.
+Client-facing auth is genuinely wired: every operator-facing route in
+`internal/api/routes_mtls.go` (revoke, renew, rotate/begin,
+rotate/status, rotate/finalize) is gated by `RequireJWT` +
+`authz.Decider.CheckRBAC(..., auth.ActionMTLSManage, "mtls")`
+(admin-only — `internal/auth/rbac.go`), reusing the SAME JWT/RBAC
+mechanism `routes_tenants.go`/`routes_models.go` already established — this
+is proven by a dedicated unit test
+(`internal/api/routes_mtls_test.go`,
+`TestMTLSRoutes_RequireAdminMTLSManageRole`) added during this feature's
+own Phase 6 code review (T029) to close a coverage gap: every OTHER
+RBAC-gated route family already had such a test, this one did not. The one
+internal, peer-to-peer route (`POST /v1/cluster/mtls/rotate/transition`,
+used only by the leader-forwarding fallback below) deliberately carries NO
+JWT/RBAC gate — mirroring `routes_cluster.go`'s `join`/`leave` peer routes,
+authenticated by the real mTLS handshake alone
+(`TestMTLSRoutes_RotateTransition_IsPeerOnlyNotJWTGated`).
+
+Certificate **revocation** (User Story 1, MVP) is a Raft-replicated,
+cluster-wide fact: `CommandRevokeCertificate` is applied through the SAME
+`hashicorp/raft` log every other command uses, and an event-handler
+mechanism (`ClusterFSM.onRevocationApplied`, fired only AFTER `f.mu` is
+released — a genuine self-deadlock was found and fixed here during Phase 3,
+see `fsm.go`'s own doc comment) pushes the full current revoked-serial set
+into every node's own `TrustStore.UpdateRevoked` — on EVERY node, including
+one that was unreachable during the original `Apply` and only learns of it
+via a Raft snapshot `Restore` on reconnect (T009). Revocation is
+independent of cluster-membership eviction (T013/FR-012): a revoked node's
+Raft-voter/membership entry is untouched.
+
+**Zero-downtime renewal** (User Story 2) is answered entirely locally — no
+Raft write at all, since there is nothing for the rest of the cluster to
+durably agree on: `POST /v1/cluster/mtls/renew` issues two fresh certs from
+the existing, unmodified `ca.IssueNodeCert` and swaps them into that node's
+own two `TrustStore`s via `UpdateNodeCert`. Because `GetCertificate`/
+`GetClientCertificate` are re-invoked fresh on every NEW handshake only, an
+already-established `*tls.Conn`/HTTP-3 stream is structurally never torn
+down by a renewal — proven empirically, not merely by code inspection, by
+`TestMTLSRotation_LiveRenewal_ExistingConnectionSurvives` (a held
+connection's `httptrace` reports `Reused=true` and an unchanged local
+address across a real renewal).
+
+**Coordinated CA rotation** (User Story 3) replaces the cluster's root of
+trust without ever dropping below quorum, via dual trust
+(`internal/mtls.RotationCAHolder`): `CommandBeginCARotation` /
+`CommandFinalizeCARotation` durably record only a SHA-256 **fingerprint
+hash** of each CA through Raft (never the certificate or key material — see
+`data-model.md`'s `CARotationEvent` security note); the incoming CA's real
+material is loaded per-node, out-of-band, via that node's own
+`POST /rotate/begin` call — mirroring how `-ca-cert`/`-ca-key` are already
+distributed at bootstrap. The SAME `onRevocationApplied` notify mechanism
+T011 built for revocation is reused, forward-compatibly, for
+`"finalized"` convergence (T023) — one handler mechanism, not two.
+`quorumWouldBeStranded` (FR-010) is written once and shared by BOTH the
+revoke action and the finalize action, refusing either one if it would
+leave fewer than a strict majority of voters trusted. A genuine
+find-and-fix concurrency defect from this feature's own T025 review is
+disclosed here rather than smoothed over: a non-leader node's local
+dual-trust activation on `begin` was not itself gated on Raft confirmation,
+so two concurrent `begin` calls naming DIFFERENT incoming CAs could
+locally diverge before Raft's own total ordering resolved which one wins;
+this is narrowed (a pre-check against the currently-replicated
+`CARotation` refuses an obviously-conflicting request on every node) but
+NOT eliminated — a truly-simultaneous pair of requests, both reading
+`node.State()` before either's Raft entry replicates, is resolved only by
+Raft's own log ordering once replication catches up, per Constitution
+§11.4.6's honest-boundary discipline.
+
+**📋 OPEN (honest scope, disclosed rather than silently narrowed):**
+`quorumWouldBeStranded`'s "which voters are currently trusted" input is
+approximated from Raft voter configuration + the replicated
+revocation/transition record, never from a live per-voter mTLS handshake —
+a voter whose certificate was revoked and has SINCE been re-issued under a
+different serial is not distinguished from a genuinely still-revoked
+voter. This is conservative (it can only ever OVER-refuse a safe action,
+never UNDER-refuse an unsafe one, per §11.4.101's reversible-safe-default
+discipline) and is disclosed in `routes_mtls.go`'s own doc comments; a live
+per-voter confirmation mechanism is not part of this feature's scope.
 
 ```mermaid
 sequenceDiagram
-    participant CA as ✅ mtls.CA<br/>(self-signed, ECDSA P-256)
-    participant N1 as 📋 llmctld node 1
-    participant N2 as 📋 llmctld node 2
-    participant Client as 📋 CLI agent / admin client
+    participant Op as Operator<br/>(admin JWT, mtls:manage)
+    participant NA as Node A (Raft leader)
+    participant Log as Raft log<br/>(hashicorp/raft, replicated)
+    participant NB as Node B (follower)
+    participant NC as Node C<br/>(previously partitioned/unreachable)
 
-    Note over CA,N2: ✅ Implemented: certificate issuance + validation
-    CA->>N1: IssueNodeCert(node1) -> NodeCert{CertPEM, KeyPEM}
-    CA->>N2: IssueNodeCert(node2) -> NodeCert{CertPEM, KeyPEM}
-    N1->>N1: LoadTLSCertificate(CertPEM, KeyPEM) -> tls.Certificate
+    Note over Op,NA: T012 - POST /v1/cluster/mtls/revoke
+    Op->>NA: revoke(serial_number, node_id, reason)
+    NA->>NA: RequireJWT + CheckRBAC(mtls:manage)
+    NA->>NA: quorumWouldBeStranded? (FR-010, shared w/ finalize)
+    NA->>Log: Apply(CommandRevokeCertificate)
 
-    Note over N1,N2: 📋 Planned: mTLS-authenticated node traffic over HTTP/3 (QUIC, TLS 1.3)
-    N1-->>N2: Raft heartbeat / replication (mTLS, both present a cert signed by the SAME CA)
-    N2-->>N1: ack (mTLS)
+    Note over Log,NC: single-threaded FSM.Apply, ClusterState.Revocations[serial]=rec
+    Log-->>NA: committed + replicated
+    Log-->>NB: committed + replicated
 
-    Note over Client,N1: 📋 Planned: JWT bearer-token client auth (FR-030/FR-041) - no code yet
-    Client->>N1: HTTP/3 request + Authorization: Bearer <JWT>
-    N1->>N1: validate JWT signature + claims (RBAC role check)
-    N1-->>Client: response (or 401/403)
+    Note over NA,NB: T011 - notify AFTER f.mu released (self-deadlock fix)
+    NA->>NA: onRevocationApplied() -> TrustStore.UpdateRevoked (raft+api stores)
+    NB->>NB: onRevocationApplied() -> TrustStore.UpdateRevoked (raft+api stores)
+
+    Note over NC: T009 - NC was unreachable during the Apply above
+    NC-->>Log: rejoins, catches up via Raft Snapshot Restore
+    NC->>NC: Restore() ALSO fires onRevocationApplied (same handler, no polling)
+    NC->>NC: TrustStore.UpdateRevoked - now current before NC serves any traffic
+
+    Note over NA,NC: Every node's TrustStore.Verify now rejects the revoked serial<br/>cluster-wide, zero restart, independent of membership eviction (T013/FR-012)
 ```
+
+```mermaid
+sequenceDiagram
+    participant Op as Operator<br/>(admin JWT, mtls:manage)
+    participant NA as Node A (Raft leader)
+    participant Log as Raft log<br/>(replicated ClusterState.CARotation)
+    participant NB as Node B (follower)
+
+    Note over Op,NA: T024 - POST /v1/cluster/mtls/rotate/begin (out-of-band CA material, per node)
+    Op->>NA: begin(incoming_ca_cert_pem, incoming_ca_key_pem)
+    NA->>NA: RequireJWT + CheckRBAC(mtls:manage)
+    NA->>NA: T025 pre-check vs currently-replicated CARotation (narrows, does not eliminate, the concurrent-begin race)
+    NA->>Log: Apply(CommandBeginCARotation) [leader-only write]
+    Log-->>NB: replicated: CARotation{Status: in_progress, fingerprints}
+    NA->>NA: rotationHolder.BeginLocalRotation(incomingCA) [outgoingCA kept]
+    NA->>NA: TrustStore.UpdateTrustedCAs([outgoing, incoming]) - dual trust ACTIVE on Node A
+
+    Note over Op,NB: Operator separately distributes the SAME incoming CA to Node B (out-of-band, mirrors -ca-cert/-ca-key bootstrap distribution)
+    Op->>NB: begin(incoming_ca_cert_pem, incoming_ca_key_pem)
+    NB->>NB: RequireJWT + CheckRBAC(mtls:manage)
+    NB->>NB: not leader -> skips Raft Apply, cross-checks matching fingerprints already replicated
+    NB->>NB: rotationHolder.BeginLocalRotation(incomingCA)
+    NB->>NB: TrustStore.UpdateTrustedCAs([outgoing, incoming]) - dual trust ACTIVE on Node B
+
+    Note over NA,NB: T016/Phase 5 - renewals during the transition issue under the INCOMING CA
+    NB->>NB: POST /v1/cluster/mtls/renew -> IssueNodeCert via rotationHolder.IssuingCA() (= incoming)
+    NB->>Log: RecordCARotationTransition(node-b) [forwarded to leader if NB is a follower, T020]
+    Log-->>NA: CARotation.TransitionedNodeIDs += node-b
+
+    Note over Op,NA: T024 - POST /v1/cluster/mtls/rotate/finalize (leader-only, FR-010 quorum-protection)
+    Op->>NA: finalize()
+    NA->>NA: RequireJWT + CheckRBAC(mtls:manage)
+    NA->>NA: quorumWouldBeStranded(voters, not-yet-transitioned)? refuse (409) if so
+    NA->>Log: Apply(CommandFinalizeCARotation) -> CARotation.Status = finalized
+    Log-->>NB: replicated: CARotation.Status = finalized
+
+    Note over NA,NB: T023 - onRevocationApplied fires on EVERY node (forward-compatible reuse of T011's mechanism)
+    NA->>NA: rotationHolder.FinalizeLocalRotation() -> TrustStore.UpdateTrustedCAs([incoming]) - outgoing CA dropped
+    NB->>NB: rotationHolder.FinalizeLocalRotation() -> TrustStore.UpdateTrustedCAs([incoming]) - outgoing CA dropped
+```
+
+Both diagrams above are real `mmdc`-rendered Mermaid sequence diagrams
+(verified via `mmdc -i <file>.mmd -o <file>.svg`, exit 0, non-degenerate
+SVG output cross-checked for the real function/type names each diagram
+cites — Constitution §11.4.107(10)/§11.4.170) — not merely hand-typed
+prose that looks plausible.
 
 ## 3. KV-cache WAL/checkpoint replication sequence — ✅ IMPLEMENTED (WAL + checkpoint + LoRA replication library) / 📋 OPEN (real engine-state integration + automatic daemon-side fan-out)
 

@@ -143,26 +143,40 @@ existing connections.
 
 ### Tests for User Story 2
 
-- [ ] T014 [P] [TDD] [US2] Real test:
+- [x] T014 [P] [TDD] [US2] Real test:
       `TestMTLSRotation_LiveRenewal_ExistingConnectionSurvives` — a
       long-held real connection stays alive across a real renewal.
-- [ ] T015 [P] [TDD] [US2] Real test:
+      Checkbox corrected during Phase 6's T029 full-feature review
+      (2026-09-16): the test genuinely exists and passes
+      (`go test -race ./test/integration/... -run TestMTLSRotation` —
+      GREEN) but this box had never been checked off despite the
+      implementation landing with Phase 5's merge; documentation-lag, not
+      a code gap.
+- [x] T015 [P] [TDD] [US2] Real test:
       `TestMTLSRotation_LiveRenewal_NewConnectionsUseFreshCert` — a NEW
       connection attempt after renewal presents the fresh certificate
-      (inspect the real serial/validity, not merely "no error").
+      (inspect the real serial/validity, not merely "no error"). Checkbox
+      corrected 2026-09-16 (see T014's own note — same documentation-lag,
+      independently confirmed GREEN under `-race`).
 
 ### Implementation for User Story 2
 
-- [ ] T016 [US2] Add the operator-facing renew action to
+- [x] T016 [US2] Add the operator-facing renew action to
       `internal/api/routes_mtls.go`: issues a fresh `NodeCert` via the
       EXISTING, unmodified `ca.IssueNodeCert` (research.md's "issuance
       logic itself is untouched"), then calls `TrustStore.UpdateNodeCert`
-      on the target node.
-- [ ] T017 [US2] [REVIEW] Confirm no existing in-flight
+      on the target node. Checkbox corrected 2026-09-16 (see T014's own
+      note) — the handler is present, fully wired, and independently
+      re-reviewed during Phase 6's T029 (see this file's Phase 6 section).
+- [x] T017 [US2] [REVIEW] Confirm no existing in-flight
       `*tls.Conn`/`http3` stream is torn down as a side effect of
       `UpdateNodeCert` (the callback-based design in T005 should already
       guarantee this structurally — this review confirms it empirically,
-      not merely by code inspection).
+      not merely by code inspection). Checkbox corrected 2026-09-16 (see
+      T014's own note) — the empirical proof
+      (`TestMTLSRotation_LiveRenewal_ExistingConnectionSurvives`'s
+      `httptrace.GotConnInfo.Reused == true` + unchanged local-address
+      assertions) independently re-confirmed during Phase 6's T029.
 
 **Checkpoint**: User Stories 1 AND 2 both verified. **Get human approval
 before starting User Story 3.**
@@ -266,21 +280,72 @@ human approval before Polish.**
 
 ## Phase 6: Polish & Cross-Cutting Concerns
 
-- [ ] T026 [P] Update `docs/cluster-architecture.md`'s mTLS section with a
+- [x] T026 [P] Update `docs/cluster-architecture.md`'s mTLS section with a
       real `mmdc`-rendered sequence diagram for revocation propagation
       and for the dual-trust CA-rotation transition, flipping from 📋 to
-      ✅ for the parts genuinely implemented.
+      ✅ for the parts genuinely implemented. Both diagrams verified with
+      a REAL `mmdc -i <file>.mmd -o <file>.svg` render (exit 0,
+      non-degenerate SVG cross-checked for real function/type-name
+      content) extracted DIRECTLY from the committed doc (not a
+      hand-typed copy that could have drifted) before being accepted.
+      §2's heading + prose flipped to ✅ for revocation, zero-downtime
+      renewal, JWT/RBAC gating, and coordinated CA rotation; one genuine
+      📋 OPEN scope boundary disclosed (live per-voter trust confirmation
+      for the FR-010 quorum check is approximated, never live-handshake
+      confirmed — documented, not silently narrowed). Doc revision
+      bumped 3 -> 4 (Constitution §11.4.44).
 - [ ] T027 [P] Append this feature to `specs/001-llmctl-completion/tasks.md`'s
       Follow-up Work section (next free `T072-FU<N>`) and update
-      `progress.yml`.
-- [ ] T028 Full-suite verification: `go vet ./...`, `gofmt -l .`, `go test
+      `progress.yml`. **Deliberately left unchecked/undone by the Phase 6
+      agent that closed T026/T028/T029/T030-content below**: this
+      feature was implemented in parallel with 002-cluster-model-scheduler
+      and 003-kv-cache-replication's own Phase 6 work in three separate
+      worktrees, all three of which would otherwise write to these SAME
+      shared files simultaneously (a three-way merge conflict + FU-number
+      collision risk) — the coordinating session consolidates all three
+      features' Follow-up entries into the shared files itself, using
+      this feature's pre-assigned `T072-FU8` number. See this feature's
+      own Phase 6 agent report for the ready-to-insert entry text.
+- [x] T028 Full-suite verification: `go vet ./...`, `gofmt -l .`, `go test
       -race ./...` (the `-race` flag is load-bearing here specifically,
       per T003/T073's own precedent) clean, zero regressions to every
       pre-existing `internal/mtls`/`internal/raft`/`internal/api` test.
-- [ ] T029 [REVIEW] Independent code review of the complete feature
+      Re-run 2026-09-16 on branch `004-mtls-cert-rotation-phase6`
+      (branched from local `main` at `4b62a96`, not this worktree's own
+      stale checked-out HEAD `8f0a645` — confirmed via `git log main -1`
+      before branching, per this task's own operator-flagged precedent):
+      `go vet ./...` clean, `gofmt -l .` clean (zero output), `go test
+      -race ./...` — every package `ok` (`cmd/llmctld` no test files;
+      `internal/api` 36.4s; `internal/audit` 1.3s; `internal/auth` 1.1s;
+      `internal/authz` 1.0s; `internal/cluster` 1.3s; `internal/executor`
+      6.1s; `internal/isolation` 1.1s; `internal/mtls` 1.1s;
+      `internal/raft` 49.1s; `internal/replication` 10.2s;
+      `internal/tenancy` 1.0s; `test/integration` 178.5s) — zero `FAIL`,
+      zero `DATA RACE` anywhere in the full log; all 9 pre-existing
+      `TestMTLSRotation_*` integration tests independently re-run `-v`
+      and confirmed individually PASS (no silent skips).
+- [x] T029 [REVIEW] Independent code review of the complete feature
       (Constitution §11.4.125/§11.4.142) — specifically covering
-      authorization on every new `routes_mtls.go` action.
-- [ ] T030 Update `docs/CONTINUATION.md`.
+      authorization on every new `routes_mtls.go` action. Found ONE real
+      finding (a missing-coverage gap, not a broken-code defect) and
+      closed it via TDD with a paired-mutation confirmation — see this
+      feature's own Phase 6 agent report for the full disclosure,
+      including exactly what was checked and how each conclusion was
+      confirmed (authorization on all 6 operator actions + the 1
+      intentionally-unauthenticated peer route; the shared
+      `quorumWouldBeStranded` check on both revoke and finalize; the
+      self-deadlock-avoidance notify-after-unlock pattern's correct
+      extension to `CommandBeginCARotation`/`CommandFinalizeCARotation`;
+      independent re-verification of T025's disclosed residual-race
+      scope). New test: `internal/api/routes_mtls_test.go`
+      (`TestMTLSRoutes_RequireAdminMTLSManageRole`,
+      `TestMTLSRoutes_RotateTransition_IsPeerOnlyNotJWTGated`).
+- [ ] T030 Update `docs/CONTINUATION.md`. **Deliberately left as a draft in
+      the Phase 6 agent's own report, not applied directly** — same
+      shared-file/parallel-worktree reason as T027 above (see that box's
+      own note); the coordinating session inserts the drafted section
+      under its own `## 10f/10g/10h.` prefix once all three sibling
+      features' Phase 6 work has landed.
 
 ---
 
