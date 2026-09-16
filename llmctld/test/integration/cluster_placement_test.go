@@ -19,11 +19,14 @@
 package integration
 
 import (
+	"encoding/json"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/vasic-digital/llmctl/llmctld/internal/mtls"
 )
@@ -666,6 +669,286 @@ func sortStringsAsc(s []string) {
 	for i := 1; i < len(s); i++ {
 		for j := i; j > 0 && s[j-1] > s[j]; j-- {
 			s[j-1], s[j] = s[j], s[j-1]
+		}
+	}
+}
+
+// --- 002-cluster-model-scheduler Phase 5 (User Story 3, T026/T027) ---
+//
+// This phase reuses multitenancy_isolation_test.go's own
+// auditEntry/auditEntries helpers (this package's ALREADY-ESTABLISHED
+// GET /v1/audit/entries envelope + fetch helper) rather than redefining
+// a second, duplicate audit-entry mirror type here.
+
+// placementDecisionNodeSnapshotEnv mirrors ONE entry of
+// cluster.PlacementDecision's ConsideredNodes field -
+// cluster.NodeCapacitySnapshot's real JSON shape (data-model.md's
+// NodeCapacitySnapshot entity, "a point-in-time copy ... of exactly what
+// was true when the decision was made").
+type placementDecisionNodeSnapshotEnv struct {
+	NodeID    string `json:"node_id"`
+	Resources struct {
+		RAMAvailMB  int64 `json:"ram_avail_mb"`
+		VRAMAvailMB int64 `json:"vram_avail_mb"`
+	} `json:"resources"`
+}
+
+// placementDecisionEnv mirrors cluster.PlacementDecision's real JSON
+// shape in full (data-model.md's PlacementDecision entity: Profile,
+// ChosenNodeID, ConsideredNodes, Reason, DecidedAt) - the value T027
+// decodes internal/audit.Entry's own Decision field (itself a raw,
+// pre-serialized JSON string per routes_models.go's
+// recordPlacementDecision) into.
+type placementDecisionEnv struct {
+	Profile         string                             `json:"profile"`
+	ChosenNodeID    string                             `json:"chosen_node_id"`
+	ConsideredNodes []placementDecisionNodeSnapshotEnv `json:"considered_nodes"`
+	Reason          string                             `json:"reason"`
+	DecidedAt       time.Time                          `json:"decided_at"`
+}
+
+// fetchLastPlacementDecision fetches GET /v1/audit/entries from apiAddr
+// (admin-only, routes_audit.go) via this package's own established
+// auditEntries helper (multitenancy_isolation_test.go), authenticated as
+// adminBearerToken, and decodes the LAST "placement_decision" audit
+// entry recorded for profile - internal/audit/log.go's existing,
+// already-wired read path (T018's own recordPlacementDecision write
+// path, T074's pre-existing admin-only GET /v1/audit/entries read
+// route) - fatally failing the test if none is found or the entry's own
+// Decision field does not decode as a real, well-formed
+// cluster.PlacementDecision.
+func fetchLastPlacementDecision(t *testing.T, client *http.Client, apiAddr, adminBearerToken, profile string) placementDecisionEnv {
+	t.Helper()
+
+	entries := auditEntries(t, client, apiAddr, adminBearerToken)
+	for i := len(entries) - 1; i >= 0; i-- {
+		e := entries[i]
+		if e.Action != "placement_decision" || e.Resource != profile {
+			continue
+		}
+		var decision placementDecisionEnv
+		if err := json.Unmarshal([]byte(e.Decision), &decision); err != nil {
+			t.Fatalf("decode placement_decision audit entry's Decision field %q for profile %q: %v", e.Decision, profile, err)
+		}
+		return decision
+	}
+	t.Fatalf("no placement_decision audit entry for profile %q found among %d real audit entries on %s", profile, len(entries), apiAddr)
+	return placementDecisionEnv{} // unreachable - t.Fatalf calls runtime.Goexit()
+}
+
+// TestClusterPlacement_ConcurrentStarts_NeverDoubleBookANode is T026
+// (quickstart.md Scenario 4): two DIFFERENT profiles are sized, via
+// three real, deliberately non-overlapping hardware fixtures, so
+// exactly ONE real node has room for each and NEITHER fits on the
+// third - "small" (a GPU-mode profile; real footprint per
+// `bin/llmctl plan --json` against node-a's own hw-baseline.json,
+// hand-verified: ram_mb=2048 vram_mb=3973) only fits on node-b
+// (tests/fixtures/hw-small-exact.json: real raw memory.available_mb=
+// 8192, gpu_total_vram_mb=5000, per `bin/llmctl hw --json`), and
+// "moe-fast" (a CPU-mode profile EVEN on a GPU-having node - hand-
+// verified via the same real `plan --json` call: ram_mb=15644
+// vram_mb=0) only fits on node-c (tests/fixtures/hw-cpu-heavy.json,
+// this task's own new fixture: real raw memory.available_mb=20000,
+// gpu_total_vram_mb=0). Both profiles' resource footprints are always
+// computed against node-a's OWN real hardware (routes_models.go's
+// dispatchAutoPlacedStart calls base.Footprint on whichever node is the
+// real Raft leader, and node-a is bootstrapped as leader here), so both
+// footprints stay fixed for the whole test regardless of which real
+// node a request is sent to.
+//
+// node-a itself (hw-baseline.json: raw available_mb=30000,
+// gpu_total_vram_mb=12288) DOES have enough raw capacity for BOTH
+// profiles too, but cluster.Place's best-fit bin-packing policy
+// (placement.go's leftoverScore doc comment: "packs workloads into
+// nodes that already have the least slack") always prefers node-b's/
+// node-c's much tighter real fit over node-a's much looser one -
+// hand-verified by computing leftoverScore for all three real
+// candidates against both real footprints before writing this test,
+// never invented numbers. Neither profile ever fits node-b's/node-c's
+// OWN insufficient dimension (node-b's real VRAM budget is
+// insufficient for "moe-fast"'s RAM need; node-c's real zero VRAM is
+// insufficient for "small"'s VRAM need), so this is a genuine,
+// hardware-real 3-way exclusion, not a coincidence of best-fit scoring
+// alone.
+//
+// Two real goroutines fire real concurrent HTTP start requests DIRECTLY
+// at node-a (the real Raft leader) - so both requests genuinely race
+// INSIDE the same leader process's dispatchAutoPlacedStart / cluster.
+// Place / node.RecordRunningProfile call path, the exact FR-005/SC-004
+// TOCTOU surface T009/T010 (already merged, Phase 2) close. Repeated for
+// 10 iterations (Constitution Â§11.4.50's deterministic-consistency
+// discipline for a concurrency-sensitive test - ruling out a lucky
+// single pass), each iteration starting both profiles concurrently,
+// asserting both land on their correct respective real node and never
+// both on the same one, confirming two REAL independent dry-run
+// subprocess dispatches genuinely happened (not merely reported), then
+// stopping both (freeing each real node's reservation) before the next
+// iteration's concurrent pair fires.
+func TestClusterPlacement_ConcurrentStarts_NeverDoubleBookANode(t *testing.T) {
+	tc := newTestCluster(t)
+	nodeA, adminKeyID, adminKeySecret := tc.bootstrapWithHW("node-a", fixturePath(t, "hw-baseline.json"))
+	nodeB, _ := tc.joinWithHW("node-b", nodeA, fixturePath(t, "hw-small-exact.json"))
+	nodeC, _ := tc.joinWithHW("node-c", nodeA, fixturePath(t, "hw-cpu-heavy.json"))
+	allNodes := []*spawnedNode{nodeA, nodeB, nodeC}
+
+	client := tc.httpClient()
+	tenantJWT := setUpTenantAndModelOnEveryNode(t, client, nodeA, adminKeyID, adminKeySecret, allNodes)
+	for _, n := range allNodes {
+		if s := registerModel(t, client, n.apiAddr, tenantJWT, "tenant-a", "moe-fast"); s != http.StatusOK {
+			t.Fatalf("POST /v1/tenants/tenant-a/models(moe-fast) on node %q: status=%d", n.nodeID, s)
+		}
+	}
+
+	const iterations = 10
+	for iter := 0; iter < iterations; iter++ {
+		var wg sync.WaitGroup
+		var smallResp, moeResp startModelResp
+		var smallStatus, moeStatus int
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			smallResp, smallStatus = startModelAutoPlaced(t, client, nodeA.apiAddr, tenantJWT, "tenant-a", "small")
+		}()
+		go func() {
+			defer wg.Done()
+			moeResp, moeStatus = startModelAutoPlaced(t, client, nodeA.apiAddr, tenantJWT, "tenant-a", "moe-fast")
+		}()
+		wg.Wait()
+
+		if smallStatus != http.StatusOK {
+			t.Fatalf("iteration %d: concurrent auto-placed start of \"small\": status=%d, body=%+v", iter, smallStatus, smallResp)
+		}
+		if moeStatus != http.StatusOK {
+			t.Fatalf("iteration %d: concurrent auto-placed start of \"moe-fast\": status=%d, body=%+v", iter, moeStatus, moeResp)
+		}
+		if smallResp.Node != "node-b" {
+			t.Fatalf("iteration %d: \"small\" landed on %q, want node-b (the only real node with room for it)", iter, smallResp.Node)
+		}
+		if moeResp.Node != "node-c" {
+			t.Fatalf("iteration %d: \"moe-fast\" landed on %q, want node-c (the only real node with room for it)", iter, moeResp.Node)
+		}
+		if smallResp.Node == moeResp.Node {
+			t.Fatalf("iteration %d: both profiles landed on the SAME real node %q - double-booked", iter, smallResp.Node)
+		}
+
+		// Both real nodes' own dry-run env files genuinely exist - proving
+		// two REAL, independent subprocess dispatches actually happened
+		// THIS iteration, never merely a reported success.
+		_, svcDirB := nodeDryRunEnv(tc.dir, "node-b", "")
+		if _, err := os.Stat(filepath.Join(svcDirB, "tenant-a--small.env")); err != nil {
+			t.Fatalf("iteration %d: expected node-b's real tenant-scoped env file to exist (proves a real start genuinely dispatched ON NODE-B): %v", iter, err)
+		}
+		_, svcDirC := nodeDryRunEnv(tc.dir, "node-c", "")
+		if _, err := os.Stat(filepath.Join(svcDirC, "tenant-a--moe-fast.env")); err != nil {
+			t.Fatalf("iteration %d: expected node-c's real tenant-scoped env file to exist (proves a real start genuinely dispatched ON NODE-C): %v", iter, err)
+		}
+
+		// Free both real reservations before the next iteration's
+		// concurrent pair fires - this file's established name-only stop
+		// path (T023, already exercised sequentially by T020/T021).
+		stopSmall, s := stopModelByName(t, client, nodeA.apiAddr, tenantJWT, "tenant-a", "small")
+		if s != http.StatusOK || len(stopSmall.Nodes) != 1 || stopSmall.Nodes[0] != "node-b" {
+			t.Fatalf("iteration %d: stop \"small\": status=%d, body=%+v", iter, s, stopSmall)
+		}
+		stopMoe, s := stopModelByName(t, client, nodeA.apiAddr, tenantJWT, "tenant-a", "moe-fast")
+		if s != http.StatusOK || len(stopMoe.Nodes) != 1 || stopMoe.Nodes[0] != "node-c" {
+			t.Fatalf("iteration %d: stop \"moe-fast\": status=%d, body=%+v", iter, s, stopMoe)
+		}
+	}
+}
+
+// TestClusterPlacement_DecisionIsReconstructableAfterTheFact is T027
+// (quickstart.md Scenario 5): after a real automatic placement (reusing
+// Scenario 1's exact setup - only node-a genuinely has room for
+// "small"), the resulting PlacementDecision audit record - fetched via
+// internal/audit/log.go's EXISTING GET /v1/audit/entries read path
+// (routes_audit.go, admin-only; already wired into every real node
+// process via cmd/llmctld/main.go's api.RegisterAuditRoutes call) on
+// node-a specifically (the real Raft leader that actually made the
+// decision - audit.Log is per-process, NEVER Raft-replicated, per
+// data-model.md's own "Concurrency-safety note (FR-005, SC-004)"
+// section: "PlacementDecision records are NOT part of the Raft-
+// replicated ClusterState") - names the real chosen node, every real
+// considered node's real advertised capacity AT DECISION TIME, and a
+// human-readable reason: fully reconstructable purely from this ONE
+// audit record, without querying any node's LIVE state (quickstart.md
+// Scenario 5's own expected result).
+func TestClusterPlacement_DecisionIsReconstructableAfterTheFact(t *testing.T) {
+	tc := newTestCluster(t)
+	nodeA, adminKeyID, adminKeySecret := tc.bootstrapWithHW("node-a", fixturePath(t, "hw-baseline.json"))
+	nodeB, _ := tc.joinWithHW("node-b", nodeA, fixturePath(t, "hw-tiny.json"))
+	nodeC, _ := tc.joinWithHW("node-c", nodeA, fixturePath(t, "hw-tiny.json"))
+	allNodes := []*spawnedNode{nodeA, nodeB, nodeC}
+
+	client := tc.httpClient()
+	tenantJWT := setUpTenantAndModelOnEveryNode(t, client, nodeA, adminKeyID, adminKeySecret, allNodes)
+
+	decideBefore := time.Now()
+	startResp, status := startModelAutoPlaced(t, client, nodeB.apiAddr, tenantJWT, "tenant-a", "small")
+	if status != http.StatusOK {
+		t.Fatalf("auto-placed start: status=%d, body=%+v", status, startResp)
+	}
+	if startResp.Node != "node-a" {
+		t.Fatalf("start landed on %q, want node-a (the only real node with sufficient capacity)", startResp.Node)
+	}
+	decideAfter := time.Now()
+
+	// The decision was made ON node-a (the real leader) - audit.Log is
+	// per-process, so the audit trail for THIS decision exists only on
+	// node-a; a real admin JWT is required (routes_audit.go's
+	// requireAuditAccess: ActionTenantManage, granted by RoleAdmin).
+	adminJWT, status := exchangeToken(t, client, nodeA.apiAddr, adminKeyID, adminKeySecret)
+	if status != http.StatusOK || adminJWT == "" {
+		t.Fatalf("exchange bootstrap admin key for JWT: status=%d, empty=%v", status, adminJWT == "")
+	}
+
+	decision := fetchLastPlacementDecision(t, client, nodeA.apiAddr, adminJWT, "small")
+
+	// Every field data-model.md's PlacementDecision entity specifies -
+	// reconstructed purely from this ONE audit record.
+	if decision.Profile != "small" {
+		t.Fatalf("decision.Profile = %q, want \"small\"", decision.Profile)
+	}
+	if decision.ChosenNodeID != "node-a" {
+		t.Fatalf("decision.ChosenNodeID = %q, want \"node-a\" (the real chosen node)", decision.ChosenNodeID)
+	}
+	if decision.Reason != "placed" {
+		t.Fatalf("decision.Reason = %q, want \"placed\" (the real success reason routes_models.go's recordPlacementDecision records)", decision.Reason)
+	}
+	if decision.DecidedAt.Before(decideBefore) || decision.DecidedAt.After(decideAfter) {
+		t.Fatalf("decision.DecidedAt = %v, want between %v and %v (the real wall-clock window the placement actually happened in)", decision.DecidedAt, decideBefore, decideAfter)
+	}
+
+	// Every real candidate node's real advertised capacity AT DECISION
+	// TIME - hw-baseline.json's/hw-tiny.json's own real, hand-verified
+	// raw memory.available_mb/gpu_total_vram_mb values (cmd/llmctld/
+	// hardware_probe.go maps those RAW hw-probe fields directly onto
+	// cluster.Resources, never `bin/llmctl plan --json`'s separately-
+	// computed per-profile "budget" figure - confirmed by reading
+	// probeLocalResources's own doc comment before writing this
+	// assertion), sorted by ascending NodeID (routes_models.go's
+	// nodeCapacitySnapshots).
+	wantByNode := map[string]struct{ ram, vram int64 }{
+		"node-a": {30000, 12288}, // hw-baseline.json: available_mb=30000, gpu_total_vram_mb=12288
+		"node-b": {1500, 0},      // hw-tiny.json: available_mb=1500, gpu_total_vram_mb=0
+		"node-c": {1500, 0},      // hw-tiny.json (same fixture as node-b)
+	}
+	if len(decision.ConsideredNodes) != 3 {
+		t.Fatalf("decision.ConsideredNodes = %+v, want exactly 3 entries (every real cluster node)", decision.ConsideredNodes)
+	}
+	prevNodeID := ""
+	for _, cn := range decision.ConsideredNodes {
+		if cn.NodeID <= prevNodeID {
+			t.Fatalf("decision.ConsideredNodes not sorted by ascending NodeID: %+v", decision.ConsideredNodes)
+		}
+		prevNodeID = cn.NodeID
+		want, known := wantByNode[cn.NodeID]
+		if !known {
+			t.Fatalf("decision.ConsideredNodes has unexpected NodeID %q", cn.NodeID)
+		}
+		if cn.Resources.RAMAvailMB != want.ram || cn.Resources.VRAMAvailMB != want.vram {
+			t.Fatalf("decision.ConsideredNodes[%q] = ram=%d vram=%d, want ram=%d vram=%d (the real advertised capacity at decision time)",
+				cn.NodeID, cn.Resources.RAMAvailMB, cn.Resources.VRAMAvailMB, want.ram, want.vram)
 		}
 	}
 }
