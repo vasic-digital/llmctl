@@ -56,6 +56,42 @@ func (tc *testCluster) httpClientForCert(nodeCert *mtls.NodeCert) *http.Client {
 	return &http.Client{Transport: &http3.Transport{TLSClientConfig: tlsConf}, Timeout: 5 * time.Second}
 }
 
+// httpClientForTimeout builds a real HTTP/3+mTLS "test-observer" client
+// identical to cluster_bootstrap_test.go's testCluster.httpClient()
+// EXCEPT for its own Client.Timeout, which callers supply explicitly -
+// needed by any test whose real call can legitimately take longer than
+// httpClient()'s own fixed 5s (e.g.
+// TestMTLSRotation_QuorumProtection_LiveHandshakeDetectsSIGKilledVoter's
+// revoke call, which can take up to routes_mtls.go's own real
+// liveVoterCheckTimeout while the leader's handler live-checks a
+// SIGKILL'd voter before refusing).
+func (tc *testCluster) httpClientForTimeout(timeout time.Duration) *http.Client {
+	tc.t.Helper()
+	nodeCert, err := tc.ca.IssueNodeCert("test-observer-long-timeout")
+	if err != nil {
+		tc.t.Fatalf("issue observer cert: %v", err)
+	}
+	cert, err := mtls.LoadTLSCertificate(nodeCert.CertPEM, nodeCert.KeyPEM)
+	if err != nil {
+		tc.t.Fatalf("load observer cert: %v", err)
+	}
+	pool := x509.NewCertPool()
+	if !pool.AppendCertsFromPEM(tc.ca.CertPEM) {
+		tc.t.Fatalf("add CA cert to observer pool")
+	}
+	store, err := mtls.NewTrustStore(pool, &cert)
+	if err != nil {
+		tc.t.Fatalf("NewTrustStore(observer): %v", err)
+	}
+	tlsConf := &tls.Config{
+		GetClientCertificate:  store.GetClientCertificate,
+		RootCAs:               pool,
+		InsecureSkipVerify:    true,
+		VerifyPeerCertificate: raft.VerifyPeerCertificateAgainstCA(store),
+	}
+	return &http.Client{Transport: &http3.Transport{TLSClientConfig: tlsConf}, Timeout: timeout}
+}
+
 // certSerialNumber parses certPEM (a real x509 leaf certificate, PEM
 // encoded, as returned by mtls.NodeCert.CertPEM) and returns its real
 // serial number as a decimal string - the exact key data-model.md's
@@ -1391,6 +1427,20 @@ func TestMTLSRotation_QuorumProtection_LiveHandshakeDetectsSIGKilledVoter(t *tes
 	observer := tc.httpClient()
 	token := tc.adminToken()
 
+	// longObserver is a SECOND observer client, identical to observer
+	// EXCEPT for its own Client.Timeout: this test's revoke call below
+	// can legitimately take up to routes_mtls.go's own
+	// liveVoterCheckTimeout (10s, T072-FU8's own disclosed real added
+	// latency - quorumWouldBeStrandedLive's own doc comment) while the
+	// leader's handler live-checks the just-SIGKILL'd voter before
+	// refusing, which exceeds observer's own fixed 5s
+	// (cluster_bootstrap_test.go's httpClient(), correctly sized for
+	// every OTHER call in this file that never exercises this new
+	// live-check path) - used ONLY for the one call genuinely expected
+	// to take that long, never for this test's other, fast polling
+	// calls.
+	longObserver := tc.httpClientForTimeout(20 * time.Second)
+
 	waitForFullConfig(t, tc, observer, nodes, 3, 5*time.Second)
 	leader := waitAndFindLeader(t, tc, observer, nodes, 5*time.Second)
 
@@ -1444,7 +1494,7 @@ func TestMTLSRotation_QuorumProtection_LiveHandshakeDetectsSIGKilledVoter(t *tes
 		t.Fatalf("issue %s cert: %v", target.nodeID, err)
 	}
 	serial := certSerialNumber(t, victimCert.CertPEM)
-	status, body := attemptRevoke(t, observer, leader.apiAddr, token, serial, target.nodeID, "test: SIGKILLed-voter-still-raft-configured")
+	status, body := attemptRevoke(t, longObserver, leader.apiAddr, token, serial, target.nodeID, "test: SIGKILLed-voter-still-raft-configured")
 	if status == http.StatusOK {
 		t.Fatalf("revoking %q SUCCEEDED despite %q being genuinely SIGKILL'd (still Raft-voter-configured, never gracefully removed) - this leaves only 1 real live/trusted voter (the leader), below the quorum(2) this 3-node cluster needs; FR-010's live-trust-confirmation (T072-FU8) MUST have refused this. response body = %s", target.nodeID, victim.nodeID, body)
 	}
