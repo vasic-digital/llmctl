@@ -60,11 +60,30 @@
 //     placement outcome (success or refusal) is recorded as a
 //     PlacementDecision audit entry (T018).
 //
-// Stop/status remain THIS NODE ONLY for now (Phase 4/US2's own,
-// not-yet-implemented scope per tasks.md - multi-node resolution via the
-// RunningProfile index) - an operator targets a specific node's API to
-// stop/query a model instance, exactly as this package's routes always
-// have.
+// Dispatch (002-cluster-model-scheduler Phase 4, US2): POST .../stop and
+// GET .../status gain the IDENTICAL "node" request-body extension:
+//   - node present and non-empty, OR node absent but no *raft.Node is
+//     wired -> BYTE-IDENTICAL to this route's pre-Phase-4 behavior:
+//     dispatched directly against THIS process's own real bin/llmctl,
+//     never consulting the cluster-wide running-profile index at all -
+//     the caller (or a forwarding node per the next bullet) has already
+//     routed the request to the node meant to handle it.
+//   - node absent, and a *raft.Node IS wired -> NEW: resolves EVERY
+//     matching (Profile, TenantID) entry in
+//     ClusterState.RunningProfiles (never limited to one, spec.md's Edge
+//     Case/FR-008), and for EACH matched NodeID: stop is forwarded (or
+//     dispatched locally) to that real node, and on real success a
+//     CommandClearRunningProfile Apply removes that index entry
+//     (dispatchNameOnlyStop); status is queried live from that real node
+//     (dispatchNameOnlyStatus) and every result is returned as its own
+//     entry naming its source node, never collapsed to a single value.
+//     Because CommandClearRunningProfile - like T016's
+//     CommandRecordRunningProfile - is a real Raft write only ever valid
+//     on the current LEADER, a follower receiving a name-only stop
+//     forwards the WHOLE decision to the leader first (mirroring
+//     dispatchAutoPlacedStart's own forwardAutoPlaceToLeader exactly);
+//     status needs no such forwarding, since it performs no Raft write
+//     and any node's own locally-replicated State() is a valid read.
 package api
 
 import (
@@ -74,6 +93,7 @@ import (
 	"fmt"
 	"net/http"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -85,11 +105,17 @@ import (
 	"github.com/vasic-digital/llmctl/llmctld/internal/raft"
 )
 
-// startModelRequest is POST .../start's optional JSON request body
-// (002-cluster-model-scheduler, contracts/cluster-model-api.md). An
-// absent or empty body is valid and equivalent to Node == "" (Go's zero
-// value) - the pre-Phase-3 caller shape, which never sent a body at all.
-type startModelRequest struct {
+// nodeOptionalRequest is the optional JSON request body shared by all
+// three model-lifecycle routes' node-optional extension
+// (002-cluster-model-scheduler, contracts/cluster-model-api.md: "Same
+// node-optional extension" for stop/status as start's own POST
+// .../start body) - an absent or empty body is valid and equivalent to
+// Node == "" (Go's zero value), the pre-Phase-3/pre-Phase-4 caller
+// shape, which never sent a body at all. Renamed from the Phase-3-only
+// "startModelRequest" (Phase 4, T023) now that stop/status bind the
+// identical shape too - the type was never start-specific, only its old
+// name was.
+type nodeOptionalRequest struct {
 	Node string `json:"node"`
 }
 
@@ -138,7 +164,7 @@ func RegisterModelRoutes(r gin.IRoutes, decider *authz.Decider, base *executor.L
 			return
 		}
 
-		var req startModelRequest
+		var req nodeOptionalRequest
 		if c.Request.ContentLength != 0 {
 			if err := c.ShouldBindJSON(&req); err != nil {
 				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body: " + err.Error()})
@@ -166,11 +192,32 @@ func RegisterModelRoutes(r gin.IRoutes, decider *authz.Decider, base *executor.L
 		if !ok {
 			return
 		}
-		if err := base.WithTenant(tenantID).Stop(model); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+
+		var req nodeOptionalRequest
+		if c.Request.ContentLength != 0 {
+			if err := c.ShouldBindJSON(&req); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body: " + err.Error()})
+				return
+			}
+		}
+
+		if req.Node != "" || node == nil {
+			// Explicit-node (or no-cluster-wiring) path: BYTE-IDENTICAL
+			// to this route's pre-Phase-4 behavior - never consults the
+			// running-profile index at all (mirrors POST .../start's
+			// own T019 guarantee for the identical reason: the caller,
+			// or a forwarding node per T023/dispatchNameOnlyStop below,
+			// has already routed this exact request to the node meant
+			// to handle it).
+			if err := base.WithTenant(tenantID).Stop(model); err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			c.JSON(http.StatusOK, gin.H{"status": "stopped", "model": model, "node": req.Node})
 			return
 		}
-		c.JSON(http.StatusOK, gin.H{"status": "stopped", "model": model})
+
+		dispatchNameOnlyStop(c, base, node, forwardTLS, tenantID, model)
 	})
 
 	r.GET("/v1/tenants/:id/models/:model/status", RequireJWT(decider), func(c *gin.Context) {
@@ -178,12 +225,28 @@ func RegisterModelRoutes(r gin.IRoutes, decider *authz.Decider, base *executor.L
 		if !ok {
 			return
 		}
-		status, err := base.WithTenant(tenantID).Status(model)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+
+		var req nodeOptionalRequest
+		if c.Request.ContentLength != 0 {
+			if err := c.ShouldBindJSON(&req); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body: " + err.Error()})
+				return
+			}
+		}
+
+		if req.Node != "" || node == nil {
+			// Explicit-node (or no-cluster-wiring) path: BYTE-IDENTICAL
+			// to this route's pre-Phase-4 behavior.
+			status, err := base.WithTenant(tenantID).Status(model)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			c.JSON(http.StatusOK, gin.H{"status": status})
 			return
 		}
-		c.JSON(http.StatusOK, gin.H{"status": status})
+
+		dispatchNameOnlyStatus(c, base, node, forwardTLS, tenantID, model)
 	})
 }
 
@@ -350,6 +413,207 @@ func forwardAutoPlaceToLeader(c *gin.Context, node *raft.Node, forwardTLS *tls.C
 		return
 	}
 	c.Data(status, "application/json; charset=utf-8", body)
+}
+
+// runningProfileMatches filters entries down to exactly those matching
+// (profile, tenantID) - spec.md's Cluster-Wide Running-Profile Index
+// resolution step every name-only status/stop request needs (FR-006/
+// FR-007), sorted by ascending NodeID so a caller (and this file's own
+// tests) never depends on ClusterState.RunningProfiles's own append
+// order or on any map-iteration-derived ordering upstream of it. NEVER
+// limited to the first match (spec.md's Edge Case/FR-008): a
+// (profile, tenantID) pair genuinely CAN map to more than one NodeID
+// simultaneously (cluster.RunningProfile's own doc comment), and both
+// dispatchNameOnlyStop and dispatchNameOnlyStatus below iterate every
+// entry this returns, never just entries[0].
+func runningProfileMatches(entries []cluster.RunningProfile, profile, tenantID string) []cluster.RunningProfile {
+	matches := make([]cluster.RunningProfile, 0, len(entries))
+	for _, e := range entries {
+		if e.Profile == profile && e.TenantID == tenantID {
+			matches = append(matches, e)
+		}
+	}
+	sort.Slice(matches, func(i, j int) bool { return matches[i].NodeID < matches[j].NodeID })
+	return matches
+}
+
+// dispatchNameOnlyStop is T023's stop-side implementation
+// (contracts/cluster-model-api.md: "When node is absent, resolves via
+// the RunningProfile index ... if more than one node is running the
+// named profile for this tenant, the stop is delivered to every one of
+// them"). Every real per-node CommandClearRunningProfile Apply below is,
+// like T016/T017's CommandRecordRunningProfile, ONLY ever valid on the
+// current real Raft LEADER (internal/raft.Node.LeaderAddr's own doc
+// comment) - so exactly like dispatchAutoPlacedStart's own
+// forwardAutoPlaceToLeader, a follower receiving a name-only stop
+// request cannot resolve+clear locally no matter which real node(s) it
+// would find, and must instead forward the WHOLE decision to the
+// leader, whose own (necessarily most-current) State() is what actually
+// gets consulted and cleared.
+func dispatchNameOnlyStop(c *gin.Context, base *executor.LocalExecutor, node *raft.Node, forwardTLS *tls.Config, tenantID, model string) {
+	if !node.IsLeader() {
+		forwardNameOnlyStopToLeader(c, node, forwardTLS, tenantID, model)
+		return
+	}
+
+	state := node.State()
+	matches := runningProfileMatches(state.RunningProfiles, model, tenantID)
+	if len(matches) == 0 {
+		c.JSON(http.StatusNotFound, gin.H{
+			"error":  "profile_not_running",
+			"reason": "no cluster node reports profile " + model + " running for this tenant",
+		})
+		return
+	}
+
+	stopped := make([]string, 0, len(matches))
+	var failures []string
+	for _, m := range matches {
+		var dispatchErr error
+		switch {
+		case m.NodeID == node.ID():
+			// This leader IS the real host - dispatch locally, exactly
+			// like dispatchAutoPlacedStart's own local-dispatch branch.
+			dispatchErr = base.WithTenant(tenantID).Stop(model)
+		default:
+			apiAddr := state.Nodes[m.NodeID].APIAddr
+			if apiAddr == "" {
+				dispatchErr = fmt.Errorf("node %q has no known cluster API address to forward stop to", m.NodeID)
+			} else {
+				dispatchErr = ForwardModelStop(forwardTLS, apiAddr, m.NodeID, tenantID, model, c.GetHeader("Authorization"))
+			}
+		}
+
+		if dispatchErr != nil {
+			failures = append(failures, m.NodeID+": "+dispatchErr.Error())
+			continue
+		}
+
+		// T023: "on each real success submit CommandClearRunningProfile
+		// for that entry" - only after the real stop genuinely
+		// succeeded, never speculatively before it, so a failed
+		// dispatch never leaves a stale index entry silently cleared
+		// out from under a model that is, in fact, still running.
+		if clearErr := node.ClearRunningProfile(model, tenantID, m.NodeID); clearErr != nil {
+			failures = append(failures, m.NodeID+": stopped but failed to clear the running-profile index entry: "+clearErr.Error())
+			continue
+		}
+		stopped = append(stopped, m.NodeID)
+	}
+
+	if len(stopped) == 0 {
+		c.JSON(http.StatusBadGateway, gin.H{
+			"error":  "stop_delivery_failed",
+			"reason": strings.Join(failures, "; "),
+		})
+		return
+	}
+
+	resp := gin.H{"status": "stopped", "model": model, "nodes": stopped}
+	if len(failures) > 0 {
+		// Never silently drop a partial failure (spec.md's Edge Case:
+		// "must not silently act on only one of them and hide the
+		// other") - a caller sees BOTH which nodes were genuinely
+		// stopped AND which ones were not, rather than a bare success.
+		resp["partial_failures"] = failures
+	}
+	c.JSON(http.StatusOK, resp)
+}
+
+// forwardNameOnlyStopToLeader mirrors forwardAutoPlaceToLeader exactly
+// (same real leader-address-to-API-address resolution via node's own
+// replicated ClusterState, same "relay the leader's exact observed
+// status code + body back onto c verbatim" discipline) - the leader is
+// the one that actually resolves the running-profile index and clears
+// it, so this node never re-wraps or re-decides its response.
+func forwardNameOnlyStopToLeader(c *gin.Context, node *raft.Node, forwardTLS *tls.Config, tenantID, model string) {
+	leaderAddr := node.LeaderAddr()
+	if leaderAddr == "" {
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"error":  "cluster_unreachable",
+			"reason": "no known cluster raft leader to resolve the name-only stop against",
+		})
+		return
+	}
+
+	var leaderAPIAddr string
+	for _, n := range node.State().Nodes {
+		if n.Addr == leaderAddr {
+			leaderAPIAddr = n.APIAddr
+			break
+		}
+	}
+	if leaderAPIAddr == "" {
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"error":  "cluster_unreachable",
+			"reason": "the cluster raft leader's own cluster API address is not yet known to this node",
+		})
+		return
+	}
+
+	status, body, err := ForwardNameOnlyStop(forwardTLS, leaderAPIAddr, tenantID, model, c.GetHeader("Authorization"))
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{
+			"error":  "stop_delivery_failed",
+			"reason": err.Error(),
+		})
+		return
+	}
+	c.Data(status, "application/json; charset=utf-8", body)
+}
+
+// dispatchNameOnlyStatus is T023's status-side implementation
+// (contracts/cluster-model-api.md: "multi-node results are returned as a
+// list, each entry naming its source node"). Unlike stop, resolving AND
+// serving this request needs no Raft write at all - reading this node's
+// OWN locally-replicated State() is the exact same eventually-consistent
+// read GET /v1/cluster/status already performs with no leader
+// requirement (routes_cluster.go) - so this runs on ANY node, leader or
+// follower, with no forward-the-whole-decision-to-leader step; only the
+// per-node LIVE status query itself is forwarded, to whichever real node
+// each matched entry names.
+func dispatchNameOnlyStatus(c *gin.Context, base *executor.LocalExecutor, node *raft.Node, forwardTLS *tls.Config, tenantID, model string) {
+	state := node.State()
+	matches := runningProfileMatches(state.RunningProfiles, model, tenantID)
+	if len(matches) == 0 {
+		c.JSON(http.StatusNotFound, gin.H{
+			"error":  "profile_not_running",
+			"reason": "no cluster node reports profile " + model + " running for this tenant",
+		})
+		return
+	}
+
+	instances := make([]gin.H, 0, len(matches))
+	for _, m := range matches {
+		var (
+			liveStatus string
+			queryErr   error
+		)
+		switch {
+		case m.NodeID == node.ID():
+			liveStatus, queryErr = base.WithTenant(tenantID).Status(model)
+		default:
+			apiAddr := state.Nodes[m.NodeID].APIAddr
+			if apiAddr == "" {
+				queryErr = fmt.Errorf("node %q has no known cluster API address to query status from", m.NodeID)
+			} else {
+				liveStatus, queryErr = ForwardModelStatus(forwardTLS, apiAddr, m.NodeID, tenantID, model, c.GetHeader("Authorization"))
+			}
+		}
+
+		if queryErr != nil {
+			// Never silently dropped (spec.md's Edge Case/FR-008): a
+			// node this cluster's own index says IS running the
+			// profile, but that this daemon could not reach right now,
+			// is reported as its own instance entry naming the real
+			// error, never quietly omitted from the list.
+			instances = append(instances, gin.H{"node": m.NodeID, "error": queryErr.Error()})
+			continue
+		}
+		instances = append(instances, gin.H{"node": m.NodeID, "status": liveStatus})
+	}
+
+	c.JSON(http.StatusOK, gin.H{"profile": model, "instances": instances})
 }
 
 // nodeCapacitySnapshots converts nodes into a deterministically-ordered

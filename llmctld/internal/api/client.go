@@ -153,7 +153,7 @@ func ForwardModelStart(clientTLS *tls.Config, targetAPIAddr, targetNodeID, tenan
 		Timeout:   10 * time.Second,
 	}
 
-	body, err := json.Marshal(startModelRequest{Node: targetNodeID})
+	body, err := json.Marshal(nodeOptionalRequest{Node: targetNodeID})
 	if err != nil {
 		return fmt.Errorf("api: ForwardModelStart: marshal request: %w", err)
 	}
@@ -215,7 +215,7 @@ func ForwardAutoPlaceStart(clientTLS *tls.Config, leaderAPIAddr, tenantID, model
 		Timeout:   10 * time.Second,
 	}
 
-	reqBody, err := json.Marshal(startModelRequest{})
+	reqBody, err := json.Marshal(nodeOptionalRequest{})
 	if err != nil {
 		return 0, nil, fmt.Errorf("api: ForwardAutoPlaceStart: marshal request: %w", err)
 	}
@@ -239,6 +239,182 @@ func ForwardAutoPlaceStart(clientTLS *tls.Config, leaderAPIAddr, tenantID, model
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return resp.StatusCode, nil, fmt.Errorf("api: ForwardAutoPlaceStart: read leader response from %s: %w", leaderAPIAddr, err)
+	}
+	return resp.StatusCode, respBody, nil
+}
+
+// ForwardModelStop forwards a model-stop request that THIS node's own
+// running-profile-index resolution (routes_models.go's
+// dispatchNameOnlyStop, 002-cluster-model-scheduler T023) found running
+// on a DIFFERENT node (targetAPIAddr, targetNodeID) to that node's real
+// cluster HTTP API - a real HTTP/3+mTLS POST to the SAME
+// /v1/tenants/:id/models/:model/stop route a directly-addressed caller
+// would use, structurally parallel to ForwardModelStart (same
+// http3.Transport+mTLS pattern, same narrow "target briefly unreachable"
+// retry discipline spec.md's Edge Cases name for cross-node model-
+// lifecycle forwarding generally, not merely the start case).
+//
+// The request body names targetNodeID as the request's own "node"
+// field, so the receiving node's handler takes the explicit-node LOCAL-
+// dispatch path (routes_models.go's own byte-identical-to-pre-Phase-4
+// guarantee for stop, mirroring T019's identical guarantee for start)
+// rather than re-resolving a decision this cluster's leader already
+// made.
+//
+// authorizationHeader is forwarded unchanged exactly as ForwardModelStart
+// documents: the receiving node re-runs its OWN full RequireJWT +
+// authorizeTenantOwnership + CheckRBAC + CheckTenantBoundary gate chain
+// against it, never trusting "the sending node already authorized this"
+// (T025's own authorization-parity review target).
+func ForwardModelStop(clientTLS *tls.Config, targetAPIAddr, targetNodeID, tenantID, model, authorizationHeader string) error {
+	client := &http.Client{
+		Transport: &http3.Transport{TLSClientConfig: clientTLS},
+		Timeout:   10 * time.Second,
+	}
+
+	body, err := json.Marshal(nodeOptionalRequest{Node: targetNodeID})
+	if err != nil {
+		return fmt.Errorf("api: ForwardModelStop: marshal request: %w", err)
+	}
+	url := "https://" + targetAPIAddr + "/v1/tenants/" + tenantID + "/models/" + model + "/stop"
+
+	deadline := time.Now().Add(forwardModelStartRetryBudget)
+	for {
+		req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(body))
+		if err != nil {
+			return fmt.Errorf("api: ForwardModelStop: build request: %w", err)
+		}
+		req.Header.Set("Content-Type", "application/json")
+		if authorizationHeader != "" {
+			req.Header.Set("Authorization", authorizationHeader)
+		}
+
+		resp, err := client.Do(req)
+		if err != nil {
+			if time.Now().After(deadline) {
+				return fmt.Errorf("api: ForwardModelStop: target %s at %s: %w", targetNodeID, targetAPIAddr, err)
+			}
+			time.Sleep(forwardModelStartRetryInterval)
+			continue
+		}
+
+		if resp.StatusCode == http.StatusOK {
+			_ = resp.Body.Close()
+			return nil
+		}
+		respBody, _ := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		return fmt.Errorf("api: ForwardModelStop: target %s at %s returned %d: %s", targetNodeID, targetAPIAddr, resp.StatusCode, respBody)
+	}
+}
+
+// ForwardModelStatus forwards a real, live status query for a profile
+// the calling node's own running-profile-index resolution
+// (dispatchNameOnlyStatus, T023) found running on a DIFFERENT node
+// (targetAPIAddr, targetNodeID), returning that node's OWN real,
+// currently-observed status string - structurally parallel to
+// ForwardModelStop/ForwardModelStart (same transport pattern), naming
+// targetNodeID in the request body for the identical reason (the
+// receiving node's explicit-node path dispatches locally, never
+// re-resolving).
+//
+// Unlike ForwardModelStop, the caller needs the DECODED status string
+// itself (not merely success/failure) to build its own per-node
+// instances list, so this returns (string, error) rather than a bare
+// error - a non-200 response, or a response this function cannot decode
+// as {"status": "..."}, is surfaced as an error the caller reports per
+// its own instance entry, never silently treated as an empty status.
+func ForwardModelStatus(clientTLS *tls.Config, targetAPIAddr, targetNodeID, tenantID, model, authorizationHeader string) (string, error) {
+	client := &http.Client{
+		Transport: &http3.Transport{TLSClientConfig: clientTLS},
+		Timeout:   10 * time.Second,
+	}
+
+	body, err := json.Marshal(nodeOptionalRequest{Node: targetNodeID})
+	if err != nil {
+		return "", fmt.Errorf("api: ForwardModelStatus: marshal request: %w", err)
+	}
+	url := "https://" + targetAPIAddr + "/v1/tenants/" + tenantID + "/models/" + model + "/status"
+
+	req, err := http.NewRequest(http.MethodGet, url, bytes.NewReader(body))
+	if err != nil {
+		return "", fmt.Errorf("api: ForwardModelStatus: build request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if authorizationHeader != "" {
+		req.Header.Set("Authorization", authorizationHeader)
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("api: ForwardModelStatus: target %s at %s: %w", targetNodeID, targetAPIAddr, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("api: ForwardModelStatus: read response from target %s at %s: %w", targetNodeID, targetAPIAddr, err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("api: ForwardModelStatus: target %s at %s returned %d: %s", targetNodeID, targetAPIAddr, resp.StatusCode, respBody)
+	}
+
+	var decoded struct {
+		Status string `json:"status"`
+	}
+	if err := json.Unmarshal(respBody, &decoded); err != nil {
+		return "", fmt.Errorf("api: ForwardModelStatus: decode response from target %s at %s: %w", targetNodeID, targetAPIAddr, err)
+	}
+	return decoded.Status, nil
+}
+
+// ForwardNameOnlyStop forwards a name-only stop request (one naming NO
+// "node" field) from a FOLLOWER node to leaderAPIAddr - the stop-side
+// analogue of ForwardAutoPlaceStart, needed for the identical structural
+// reason (002-cluster-model-scheduler T023's own real gap, found by
+// applying T013's exact lesson to the stop path before it could recur
+// there too): dispatchNameOnlyStop's own CommandClearRunningProfile
+// calls are real Raft writes, which can only ever succeed on the CURRENT
+// LEADER (internal/raft.Node.LeaderAddr's own doc comment) - a follower
+// receiving a name-only stop request cannot resolve+clear the running-
+// profile index locally no matter which real node(s) it would find, and
+// must instead forward the WHOLE decision to the leader.
+//
+// Exactly like ForwardAutoPlaceStart, the caller needs the leader's
+// EXACT response (status code + body) relayed back verbatim - the leader
+// is the one that actually resolved the index and cleared it, or hit the
+// exact "profile_not_running"/"stop_delivery_failed" failure - so this
+// returns the real observed status code + body rather than a bare error.
+func ForwardNameOnlyStop(clientTLS *tls.Config, leaderAPIAddr, tenantID, model, authorizationHeader string) (statusCode int, body []byte, err error) {
+	client := &http.Client{
+		Transport: &http3.Transport{TLSClientConfig: clientTLS},
+		Timeout:   10 * time.Second,
+	}
+
+	reqBody, err := json.Marshal(nodeOptionalRequest{})
+	if err != nil {
+		return 0, nil, fmt.Errorf("api: ForwardNameOnlyStop: marshal request: %w", err)
+	}
+	url := "https://" + leaderAPIAddr + "/v1/tenants/" + tenantID + "/models/" + model + "/stop"
+
+	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(reqBody))
+	if err != nil {
+		return 0, nil, fmt.Errorf("api: ForwardNameOnlyStop: build request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if authorizationHeader != "" {
+		req.Header.Set("Authorization", authorizationHeader)
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return 0, nil, fmt.Errorf("api: ForwardNameOnlyStop: leader at %s: %w", leaderAPIAddr, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return resp.StatusCode, nil, fmt.Errorf("api: ForwardNameOnlyStop: read leader response from %s: %w", leaderAPIAddr, err)
 	}
 	return resp.StatusCode, respBody, nil
 }
