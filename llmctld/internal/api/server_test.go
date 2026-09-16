@@ -271,7 +271,7 @@ func TestClusterLeave_RealHTTP3RequestActuallyLeavesRaft(t *testing.T) {
 	}
 	defer func() { _ = follower.Shutdown() }()
 
-	if err := leader.Join("node-b", follower.Addr(), cluster.Resources{}); err != nil {
+	if err := leader.Join("node-b", follower.Addr(), "", cluster.Resources{}); err != nil {
 		t.Fatalf("leader.Join: %v", err)
 	}
 

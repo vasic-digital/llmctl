@@ -71,7 +71,7 @@ func TestServers_ReflectsRealConfigurationAfterJoin(t *testing.T) {
 	defer func() { _ = follower.Shutdown() }()
 
 	peerAddr := string(follower.transport.LocalAddr())
-	if err := leader.Join("node-b", peerAddr, cluster.Resources{}); err != nil {
+	if err := leader.Join("node-b", peerAddr, "", cluster.Resources{}); err != nil {
 		t.Fatalf("Join: %v", err)
 	}
 

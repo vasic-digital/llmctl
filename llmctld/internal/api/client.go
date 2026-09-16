@@ -57,13 +57,20 @@ const requestJoinRetryInterval = 100 * time.Millisecond
 // sourcing it from the real local hardware probe; RequestJoin itself
 // never probes hardware, it only transports whatever resources it is
 // given.
-func RequestJoin(clientTLS *tls.Config, leaderAPIAddr, peerID, peerAddr string, resources cluster.Resources) error {
+//
+// apiAddr (002-cluster-model-scheduler T017's prerequisite) is the
+// joining node's own real HTTP/3+mTLS cluster-API bind address (its own
+// internal/api.Server's bound address, obtained AFTER that server has
+// started listening - never a placeholder), forwarded as joinRequest's
+// optional APIAddr field so cross-node model-lifecycle forwarding can
+// later dial this node directly.
+func RequestJoin(clientTLS *tls.Config, leaderAPIAddr, peerID, peerAddr, apiAddr string, resources cluster.Resources) error {
 	client := &http.Client{
 		Transport: &http3.Transport{TLSClientConfig: clientTLS},
 		Timeout:   10 * time.Second,
 	}
 
-	body, err := json.Marshal(joinRequest{PeerID: peerID, PeerAddr: peerAddr, Resources: resources})
+	body, err := json.Marshal(joinRequest{PeerID: peerID, PeerAddr: peerAddr, APIAddr: apiAddr, Resources: resources})
 	if err != nil {
 		return fmt.Errorf("api: RequestJoin: marshal request: %w", err)
 	}

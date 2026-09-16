@@ -310,6 +310,26 @@ func runClusterBootstrap(args []string) {
 	}
 	defer func() { _ = srv.Close() }()
 
+	// RegisterSelf (002-cluster-model-scheduler T017's prerequisite): a
+	// freshly-bootstrapped leader is otherwise NEVER present in its own
+	// ClusterState.Nodes (Bootstrap only ever makes it a Raft VOTER, never
+	// applies a CommandJoinNode for its own ID - a real, found gap) - so
+	// without this, the bootstrap leader itself is invisible to
+	// cluster.Place's candidate list, and to every other node's
+	// cross-node-forwarding dial target. Sourced from the SAME real
+	// hardware probe -join uses (never a zero-value placeholder), and
+	// from srv's own real bound address (never the requested -api-bind,
+	// which may be an ephemeral ":0" the OS has since resolved).
+	selfResources, err := probeLocalResources(f.llmctlPath)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "llmctld: cluster bootstrap: probeLocalResources:", err)
+		os.Exit(1)
+	}
+	if err := node.RegisterSelf(srv.Addr, selfResources); err != nil {
+		fmt.Fprintln(os.Stderr, "llmctld: cluster bootstrap: RegisterSelf:", err)
+		os.Exit(1)
+	}
+
 	// A single machine-readable READY line, emitted once and flushed, is
 	// how a test harness spawning this as a real subprocess learns the
 	// REAL bound addresses (both binds may use ":0" ephemeral ports) -
@@ -430,7 +450,14 @@ func runClusterJoinReal(args []string) int {
 		fmt.Fprintln(os.Stderr, "llmctld: cluster join: probeLocalResources:", err)
 		return 1
 	}
-	if err := api.RequestJoin(joinClientTLS, leaderAPI, nodeID, node.Addr(), resources); err != nil {
+	// srv.Addr (this node's own real bound cluster-API address, known only
+	// after srv.Listen above) is forwarded as RequestJoin's apiAddr so the
+	// leader's own Join call populates ClusterState.Nodes[nodeID].APIAddr -
+	// the cross-node-forwarding dial target 002-cluster-model-scheduler
+	// T017 needs (see internal/raft/node.go's Join doc comment for the
+	// distinction between this and node.Addr(), the Raft transport
+	// address).
+	if err := api.RequestJoin(joinClientTLS, leaderAPI, nodeID, node.Addr(), srv.Addr, resources); err != nil {
 		fmt.Fprintln(os.Stderr, "llmctld: cluster join: RequestJoin:", err)
 		return 1
 	}

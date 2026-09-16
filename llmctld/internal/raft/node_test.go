@@ -82,7 +82,7 @@ func TestJoin_SecondNodeReplicatesRealAppliedCommand(t *testing.T) {
 	defer func() { _ = nodeB.Shutdown() }()
 
 	peerAddr := string(nodeB.transport.LocalAddr())
-	if err := nodeA.Join("node-b", peerAddr, cluster.Resources{}); err != nil {
+	if err := nodeA.Join("node-b", peerAddr, "", cluster.Resources{}); err != nil {
 		t.Fatalf("nodeA.Join(%q, %q): %v", "node-b", peerAddr, err)
 	}
 
@@ -139,7 +139,7 @@ func TestLeave_LeaderRemovesItselfFromConfiguration(t *testing.T) {
 	defer func() { _ = nodeB.Shutdown() }()
 
 	peerAddr := string(nodeB.transport.LocalAddr())
-	if err := nodeA.Join("node-b", peerAddr, cluster.Resources{}); err != nil {
+	if err := nodeA.Join("node-b", peerAddr, "", cluster.Resources{}); err != nil {
 		t.Fatalf("nodeA.Join(%q, %q): %v", "node-b", peerAddr, err)
 	}
 
@@ -260,7 +260,7 @@ func TestJoin_SurvivingFollowerBecomesLeaderAfterOriginalLeaderShutsDown(t *test
 		t.Fatalf("New(node-b): %v", err)
 	}
 	defer func() { _ = followerB.Shutdown() }()
-	if err := leader.Join("node-b", followerB.Addr(), cluster.Resources{}); err != nil {
+	if err := leader.Join("node-b", followerB.Addr(), "", cluster.Resources{}); err != nil {
 		t.Fatalf("Join(node-b): %v", err)
 	}
 
@@ -273,7 +273,7 @@ func TestJoin_SurvivingFollowerBecomesLeaderAfterOriginalLeaderShutsDown(t *test
 		t.Fatalf("New(node-c): %v", err)
 	}
 	defer func() { _ = followerC.Shutdown() }()
-	if err := leader.Join("node-c", followerC.Addr(), cluster.Resources{}); err != nil {
+	if err := leader.Join("node-c", followerC.Addr(), "", cluster.Resources{}); err != nil {
 		t.Fatalf("Join(node-c): %v", err)
 	}
 
@@ -347,7 +347,7 @@ func TestJoin_PopulatesRealClusterStateNodesEntry(t *testing.T) {
 
 	peerAddr := string(nodeB.transport.LocalAddr())
 	wantResources := cluster.Resources{CPUCores: 8, RAMTotalMB: 16384, RAMAvailMB: 12000, VRAMTotalMB: 4096, VRAMAvailMB: 4096, NetworkMbps: 1000}
-	if err := nodeA.Join("node-b", peerAddr, wantResources); err != nil {
+	if err := nodeA.Join("node-b", peerAddr, "", wantResources); err != nil {
 		t.Fatalf("nodeA.Join(%q, %q, resources): %v", "node-b", peerAddr, err)
 	}
 
@@ -412,7 +412,7 @@ func TestLeave_RemovesRealClusterStateNodesEntry(t *testing.T) {
 		t.Fatalf("New(node-b): %v", err)
 	}
 	defer func() { _ = nodeB.Shutdown() }()
-	if err := nodeA.Join("node-b", string(nodeB.transport.LocalAddr()), cluster.Resources{}); err != nil {
+	if err := nodeA.Join("node-b", string(nodeB.transport.LocalAddr()), "", cluster.Resources{}); err != nil {
 		t.Fatalf("nodeA.Join(node-b): %v", err)
 	}
 

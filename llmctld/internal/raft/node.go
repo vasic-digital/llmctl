@@ -154,16 +154,48 @@ func New(cfg Config) (*Node, error) {
 // actually died and a follower needed to take over, at which point every
 // survivor logged "not part of stable configuration, aborting election"
 // forever. Fixed by requiring the caller to supply the peer's real ID.
-func (n *Node) Join(peerID, peerAddr string, resources cluster.Resources) error {
+// apiAddr (002-cluster-model-scheduler T017's prerequisite) is the joining
+// peer's own real HTTP/3+mTLS cluster-API bind address (internal/
+// api.Server's bound address on that peer, NOT peerAddr - a distinct
+// listener/port entirely, see cluster.Node.APIAddr's own doc comment) -
+// stored into ClusterState.Nodes[peerID].APIAddr so cross-node
+// model-lifecycle forwarding (routes_models.go) knows where to dial a
+// chosen node that is not the one that received the original HTTP
+// request. Before this, APIAddr was declared but never populated by
+// anything - a real, found gap (every ClusterState.Nodes entry's APIAddr
+// was silently "").
+func (n *Node) Join(peerID, peerAddr, apiAddr string, resources cluster.Resources) error {
 	future := n.raft.AddVoter(hraft.ServerID(peerID), hraft.ServerAddress(peerAddr), 0, joinTimeout)
 	if err := future.Error(); err != nil {
 		return err
 	}
 
-	cmd := Command{Type: CommandJoinNode, Node: &cluster.Node{ID: peerID, Addr: peerAddr, Health: "healthy", Resources: resources}}
+	cmd := Command{Type: CommandJoinNode, Node: &cluster.Node{ID: peerID, Addr: peerAddr, APIAddr: apiAddr, Health: "healthy", Resources: resources}}
 	data, err := json.Marshal(cmd)
 	if err != nil {
 		return fmt.Errorf("raft: join %q: marshal CommandJoinNode: %w", peerID, err)
+	}
+	return n.raft.Apply(data, applyTimeout).Error()
+}
+
+// RegisterSelf applies a real CommandJoinNode log entry for n's OWN
+// localID, carrying apiAddr and resources - the bootstrap-leader
+// equivalent of Join's peer-registration (002-cluster-model-scheduler
+// T017's prerequisite). This is required because Bootstrap's own
+// single-node hraft.BootstrapCluster call only ever establishes n as a
+// Raft VOTER; it never applies a CommandJoinNode entry for n's own ID, so
+// a freshly-bootstrapped leader was genuinely, silently absent from its
+// own ClusterState.Nodes - invisible to cluster.Place's candidate list
+// (which reads State().Nodes directly) even though it is a perfectly
+// legitimate placement target. Callers invoke this exactly once, after
+// their own real API server has bound its real address (so apiAddr is
+// never a placeholder) and their own real hardware probe has run (so
+// resources is never a zero value).
+func (n *Node) RegisterSelf(apiAddr string, resources cluster.Resources) error {
+	cmd := Command{Type: CommandJoinNode, Node: &cluster.Node{ID: string(n.localID), Addr: n.Addr(), APIAddr: apiAddr, Health: "healthy", Resources: resources}}
+	data, err := json.Marshal(cmd)
+	if err != nil {
+		return fmt.Errorf("raft: register self %q: marshal CommandJoinNode: %w", n.localID, err)
 	}
 	return n.raft.Apply(data, applyTimeout).Error()
 }
@@ -234,6 +266,15 @@ func (n *Node) State() *cluster.ClusterState {
 // is empty until a leader's AddVoter reaches it).
 func (n *Node) Addr() string {
 	return string(n.transport.LocalAddr())
+}
+
+// ID returns n's own stable cluster identity (the same value passed as
+// Config.NodeID) - callers outside this package (002-cluster-model-
+// scheduler T015/T016's auto-placement handler) need this to tell whether
+// a chosen cluster.Node IS this process, or a different node the start
+// request must be forwarded to (client.go's ForwardModelStart).
+func (n *Node) ID() string {
+	return string(n.localID)
 }
 
 // IsLeader reports whether n is currently the Raft leader - the real
