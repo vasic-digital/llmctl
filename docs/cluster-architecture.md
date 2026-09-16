@@ -398,7 +398,7 @@ sequenceDiagram
     N1-->>Client: response (or 401/403)
 ```
 
-## 3. KV-cache WAL/checkpoint replication sequence — ✅ IMPLEMENTED (WAL + checkpoint + LoRA replication library) / 📋 OPEN (real engine-state integration + automatic daemon-side fan-out)
+## 3. KV-cache WAL/checkpoint replication sequence — ✅ IMPLEMENTED (WAL + checkpoint + LoRA library, automatic cross-node forwarding, replication-lag visibility, initial-primary auto-establishment) / ⚠️ PARTIAL (engine-cache cross-node file transfer: the receiving route is wired, the save→transfer→restore orchestration is not) / 📋 OPEN (liveness-driven reassignment of an ALREADY-ASSIGNED primary after a genuine crash; real-engine end-to-end proof, environment-blocked)
 
 Per spec.md Clarification 7 / FR-026/FR-027/FR-028: KV cache replicates
 **asynchronously** via a write-ahead log, with periodic checkpoints (every
@@ -408,10 +408,97 @@ that point (target: ≤5% token loss, ≤30s recovery). LoRA adapters
 replicate synchronously on creation and are captured as part of each
 checkpoint.
 
-**Honest scope boundary (Constitution §11.4.223 provenance markers).**
-`internal/replication` (`wal.go`/`checkpoint.go`/`lora.go`) is real, TDD-tested
-library code implementing the WAL + checkpoint + LoRA-adapter-replication
-mechanics against a `KVState{Tokens, Positions []int32}` abstraction — the
+**Update (003-kv-cache-replication Phases 1-5, this session — Constitution
+§11.4.223 provenance markers): what moved from 📋 to ✅ since Revision 3.**
+`internal/replication.Forwarder` (T008/T009) is a real, wired mechanism —
+`cmd/llmctld/main.go` constructs one via `api.NewNodeForwarder` in BOTH the
+cluster-bootstrap AND cluster-join startup paths (`main.go:561-563` and
+`main.go:769-771`) and passes it into `api.RegisterReplicationRoutes`,
+which invokes `forwarder.ForwardAppend`/`ForwardCheckpoint` from inside the
+real `POST /v1/replication/append`/`checkpoint` handlers, AFTER each
+request's own local `store.WAL().Append`/`store.Checkpoint` has already
+durably succeeded (`routes_replication.go:282-298`, `:312-321`) — a
+forwarding failure is logged via an `X-Replication-Forward-Warning`
+response header, never turned into a failed local write (FR-004). The
+same handlers call `ensureReplicationRole` (`routes_replication.go:176-196`)
+before forwarding, which auto-establishes a tenant's FIRST primary via a
+real Raft-committed `CommandAssignReplicationRole`
+(`cluster.ReconcileTenantRole`'s `!had` branch, `replication_roles.go:72-79`)
+— this part of "reassign-on-failure" genuinely runs today, proven by
+`test/integration/failover_state_test.go`'s
+`TestFailoverState_AutomaticForwarding_NoManualFanOut` (T006) and
+`TestFailoverState_KVCacheSurvivesPrimaryKill` (T062), both of which
+replicate real HTTP/3+mTLS traffic through the automatic forwarder alone
+(no test-side manual fan-out). Replication-lag visibility (T018/T019,
+User Story 3) is likewise real: `internal/replication.LagTracker` is fed
+EXCLUSIVELY from `Forwarder.forwardToReplicas`'s own real per-replica
+attempt/confirm calls (`forwarder.go:236,245`) and exposed via
+`GET /v1/replication/lag` (`routes_replication.go:352-370`), proven live
+by `test/integration/replication_health_test.go`'s
+`TestReplicationHealth_LagVisibleThenClearsOnRecovery` (T020: blocks a
+replica, asserts real non-zero lag, restores it, asserts lag returns to
+zero).
+
+**Honest gap found during this session's independent review (Constitution
+§11.4.6/§11.4.125/§11.4.142/§11.4.194 — disclosed, not silently patched):
+genuine crash-triggered REASSIGNMENT of an ALREADY-ASSIGNED primary is not
+reliably automatic in the running daemon.** `ensureReplicationRole`'s
+failover branch (`cluster.ReconcileTenantRole`'s `!isLive(existing.
+PrimaryNodeID)` check, `replication_roles.go:81-91`) only fires when the
+recorded primary is ABSENT from the `liveNodeIDs` slice its caller
+supplies — but `ensureReplicationRole` derives that slice from
+`node.Servers()` (`routes_replication.go:179-186`), which returns
+`hashicorp/raft`'s own voter **configuration**
+(`internal/raft/node.go:469-480`, `n.raft.GetConfiguration()`), and a
+plain `hashicorp/raft` v1.7.3 configuration does NOT shrink automatically
+when a voter crashes — the only code path that ever calls `RemoveServer`
+is `Node.Leave()` (`internal/raft/node.go:209-244`), a voluntary,
+graceful self-removal a `SIGKILL`'d process never runs. `ensureReplicationRole`
+also always passes `nil` for `deadNodeIDs`
+(`routes_replication.go:187`), the one input `ReconcileTenantRole` treats
+as the STRONGER, more specific "known-dead" signal
+(`replication_roles.go:29-33,53-58`). The result: after a real crash, a
+killed tenant's `ReplicationRole.PrimaryNodeID` keeps naming the dead node
+indefinitely, so a NEW append/checkpoint later routed to a survivor (e.g.
+the newly-elected Raft leader) is accepted and persisted locally, but
+`Forwarder.ForwardAppend`/`ForwardCheckpoint` see `primaryID != f.selfID`
+and correctly (per THEIR OWN contract) forward nothing
+(`forwarder.go:168-172,190-194`) — the surviving replica set silently
+stops receiving new content for that tenant until something else commits
+a real `CommandReassignReplicationRole`. The passing failover tests do
+not exercise this: `TestFailoverState_KVCacheSurvivesPrimaryKill` and
+`TestFailoverState_AutomaticForwarding_NoManualFanOut` both replicate
+BEFORE killing the primary and only `GET /v1/replication/state` (a
+read, never an append) AFTER the kill — genuinely proving that
+already-forwarded data survives (because a replica already durably held
+it, and `hashicorp/raft`'s own, separate, always-automatic leader
+election — unrelated to `ReplicationRole` — lets a client reach that
+replica), never that replication CONTINUES to work for new content after
+a real crash. This is the same underlying gap `internal/cluster/health.go`'s
+own doc comments already flag as aspirational for a DIFFERENT reason
+(`replication_roles.go:8-11` names "a `cluster.Monitor` `Rescheduler`
+callback wired to real HTTP health checks" and "`internal/raft/node.go`'s
+`ReconcileReplicationRoles`" as the two intended real-liveness feeds for
+this exact decision function — neither exists: `cluster.NewMonitor` is
+never constructed anywhere in `cmd/llmctld/main.go` or any other
+production file, `cluster.ReconcileReplicationRoles` is called only from
+`internal/cluster/health_test.go`, and no `internal/raft/node.go` method
+of that name exists at all). No fix is applied in this session: closing
+it correctly needs a real liveness feed (a wired `health.Monitor` +
+`Rescheduler` calling `RemoveServer`/supplying real `deadNodeIDs`) — a
+substantial, cross-feature (002 scheduler health-check wiring + 003
+replication-role reassignment) design decision, not a safe one-line
+patch; a hasty heuristic here (e.g. "reassign to whoever an append
+happens to land on") would reintroduce exactly the two-primaries-at-once
+risk `forwarder.go`'s own race-condition analysis (T005) was careful to
+rule out. Tracked as an open item for a future phase, not silently
+implied solved.
+
+**Honest scope boundary (Constitution §11.4.223 provenance markers),
+carried forward from Revision 3.** `internal/replication`
+(`wal.go`/`checkpoint.go`/`lora.go`) is real, TDD-tested library code
+implementing the WAL + checkpoint + LoRA-adapter-replication mechanics
+against a `KVState{Tokens, Positions []int32}` abstraction — the
 REPLAYABLE TOKEN SEQUENCE, not raw engine-internal attention-weight bytes.
 This is a deliberate, documented choice, not an oversight: llmctld's
 control-plane/data-plane split means the real inference engine
@@ -419,60 +506,103 @@ control-plane/data-plane split means the real inference engine
 via its OpenAI-compatible HTTP API — never something llmctld can
 memory-snapshot directly.
 
-**A real, concrete future integration point exists and was found by
-reading the actual vendored source** (`submodules/llama.cpp`, pinned at
-`3f152073` / ~b10969): `llama-server` exposes a real HTTP endpoint,
-`GET /slots` + `POST /slots/:id_slot?action=save|restore` (registered in
-`tools/server/server.cpp:285-286`; handled by `handle_slots_save`/
-`handle_slots_restore` in `server-context.cpp:5288-5320`+, dispatching
-real `SERVER_TASK_TYPE_SLOT_SAVE`/`_RESTORE` tasks from a JSON body
-`{"filename": "..."}`). The underlying C API also genuinely exists
-(`llama_state_get_data`/`llama_state_set_data`/`llama_state_seq_save_file`/
-`llama_state_seq_load_file`, declared in `include/llama.h:814-898`), but
-those are C symbols in `libllama`, reachable only from a process linked
-against it (i.e. `llama-server` itself) — not from a separate Go process
-without cgo, which this project's architecture deliberately avoids.
-**The real constraint**: the HTTP slot-save/restore endpoint writes its
-artifact to `llama-server`'s OWN local disk (`--slot-save-path` must be
-set at server startup) — the HTTP response returns only metadata (slot
-id, filename, token counts), never the raw state bytes. Wiring this in
-for genuine cross-node replication would require llmctld to (a) start
-`llama-server` with `--slot-save-path` (an `internal/executor` extension),
-(b) call the real save/restore HTTP endpoint, AND (c) transfer the
-resulting local file to another node's disk out-of-band (rsync-class
-mechanism) — real, buildable, but additional scope beyond what T059-T064
-asked for. `submodules/colibri` (pinned `7a14d837` / v1.11.0+3) has no
-comparable generic mechanism — only a narrow, Kimi-K3-specific,
-single-process, single-host recurrent-state checkpoint feature
-(`COLI_K3_CKPT`), not a cross-node replication primitive.
+**Real engine-state integration (User Story 2, T012-T017): what's real,
+and what's still open.** `internal/executor.LocalExecutor.SaveSlot`/
+`RestoreSlot` call the real vendored `llama-server`'s own
+`POST /slots/:id_slot?action=save|restore` HTTP endpoint (registered in
+`tools/server/server.cpp:285-286` of the pinned `3f152073` submodule
+commit; handled by `handle_slots_save`/`handle_slots_restore` in
+`server-context.cpp:5288-5320`+). `lib/scheduler.sh`'s
+`sched_build_launch` (T015) passes the real engine a `--slot-save-path`
+flag when `LLMCTL_SLOT_SAVE_PATH` is set. `internal/replication`'s
+`EngineCacheRegistry`/`MaybeSaveEngineCache`/`RestoreOrFallback`/
+`TransferEngineCache`/`HTTPCacheSink` (T016, `enginecache.go`) are real,
+unit-TDD-tested orchestration primitives enforcing research.md Decision
+4's non-negotiable ordering (a real engine warm-restore is attempted ONLY
+when the transferred file is known "intact" AND genuinely present +
+non-empty on disk; ANY failure — missing file, corrupt file, unsupported
+engine — falls back to User Story 1's correctness-bearing WAL/checkpoint
+replay, and `MaybeSaveEngineCache`/`RestoreOrFallback` are designed so
+this optimization can NEVER block or fail that fallback path — see
+`enginecache.go`'s own package doc comment). The cross-node
+**receiving** side is wired into the running daemon: `main.go` registers
+`api.RegisterEngineCacheRoute` (`main.go:563,771`) against
+`slotSaveDirResolver()`, a real `POST /v1/replication/enginecache` route
+that writes an uploaded file to this node's own configured
+`--slot-save-path` directory. **Still 📋 open**: nothing in
+`cmd/llmctld/main.go` or `internal/api/routes_replication.go`'s
+checkpoint handler ever CALLS `MaybeSaveEngineCache`,
+`TransferEngineCache`, or `RestoreOrFallback` — the SENDING/orchestration
+half of User Story 2 (save the local engine's cache after a real
+checkpoint, ship it to replicas over `HTTPCacheSink`, and prefer a
+warm-restore over full WAL replay during a real failover) exists as
+correct, tested library code with no live caller in the running binary,
+matching the pre-existing honest-gap pattern this document's Revision 3
+already established for `internal/cluster/health.go`/`placement.go` —
+`main.go`'s own `slotSaveEnvVar` doc comment discloses this explicitly:
+"wiring the two together at the profile/tenant-mapping layer is a
+disclosed, deliberate scope boundary of this task ... since no existing
+tenant-to-running-profile resolution API exists yet to hook this into
+cleanly."
 
-**Also 📋 OPEN**: automatic daemon-side fan-out (a running `llmctld`
-process automatically forwarding its own WAL entries/checkpoints to
-replica nodes as tokens are generated) is not wired into `cmd/llmctld`'s
-`main.go` — `internal/replication`'s `Store`/`WAL` are correct, tested
-library primitives with no live caller in the running binary yet, the
-same honest-gap pattern already established for Phase 9's
-`internal/cluster/health.go`/`placement.go`.
+**Real-engine end-to-end proof — environment-blocked, re-confirmed this
+session.** `test/integration/enginecache_test.go`'s three tests
+(T012-T014: a real save produces a real inspected file; the real engine
+genuinely rejects a corrupt restore file; a genuine before/after
+warm-restore timing comparison) all require a real, already-built
+`llama-server` binary. `submodules/llama.cpp` is pinned to
+`3f152073d7949fe99229d90eae65c22bdf154cae`; this session independently
+re-ran the fetch (both transports) against the real upstream and
+reproduced the IDENTICAL failure the test file's own doc comment already
+recorded: `git fetch <either SSH or HTTPS URL> 3f152073d7949fe99229d90eae65c22bdf154cae`
+fails with `fatal: remote error: upload-pack: not our ref
+3f152073d7949fe99229d90eae65c22bdf154cae` — confirmed NOT a general
+network outage (`git ls-remote --heads` against the same repository
+succeeds and returns a real, different commit for `master`). All three
+tests still honestly `t.Skip` with this exact, specific reason
+(`resolveRealLlamaServerFixture`); none is faked, none is silently
+skipped without explanation.
+
+`submodules/colibri` (pinned `7a14d837` / v1.11.0+3) has no comparable
+generic mechanism — only a narrow, Kimi-K3-specific, single-process,
+single-host recurrent-state checkpoint feature (`COLI_K3_CKPT`), not a
+cross-node replication primitive.
 
 ```mermaid
 sequenceDiagram
     participant Client as CLI agent
-    participant Primary as 📋 primary replica
+    participant Primary as ✅ current primary<br/>(any node, auto-established on first append)
     participant WAL as ✅ WAL (internal/replication, per-tenant dir)
-    participant Replica as 📋 secondary replica
+    participant Replica as ✅ replica (real HTTP/3+mTLS forward target)
+    participant EngineP as 📋 llama-server (primary, --slot-save-path)
+    participant EngineR as 📋 llama-server (replica)
 
-    Client->>Primary: token generated
-    Primary->>WAL: ✅ Append(WALEntry{Seq, TokenID, Position})
-    Primary-->>Replica: 📋 async replicate WAL entry (daemon-side fan-out not yet wired)
-    Note over Primary,WAL: ✅ every N=1000 tokens OR T=30s (CheckpointConfig.ShouldCheckpoint)
-    Primary->>Primary: ✅ Store.Checkpoint(seq, KVState) - LoRA via ReplicateAdapter
-    Primary->>WAL: ✅ Truncate(uptoSeq) - bounded further by WAL.Size()/ShouldForceCheckpoint
+    Client->>Primary: POST /v1/replication/append (token generated)
+    Primary->>WAL: ✅ store.WAL().Append(WALEntry{Seq, TokenID, Position})
+    Primary->>Primary: ✅ ensureReplicationRole (auto-establish on FIRST append, Raft-committed)
+    Primary-->>Replica: ✅ Forwarder.ForwardAppend - real POST /v1/replication/append (T008/T009, after local append already durable)
+    Replica->>Replica: ✅ real local WAL.Append (idempotent, keyed by Seq)
+    Note over Primary,Replica: ✅ every N=1000 tokens OR T=30s (CheckpointConfig.ShouldCheckpoint)
+    Primary->>Primary: ✅ store.Checkpoint(seq, KVState) - LoRA via ReplicateAdapter
+    Primary-->>Replica: ✅ Forwarder.ForwardCheckpoint - real POST /v1/replication/checkpoint
+    Primary->>WAL: ✅ Truncate(uptoSeq)
+    Note over Primary,Replica: ✅ GET /v1/replication/lag - real per-replica lag (T018/T019), grows if a replica falls behind or is unreachable, never masked as caught up
+
+    opt User Story 2 (optional, per-tenant opt-in via LLMCTL_SLOT_SAVE_PATH)
+        Primary->>EngineP: 📋 not wired: MaybeSaveEngineCache -> real POST /slots/:id_slot?action=save
+        EngineP-->>Primary: 📋 not wired: real on-disk cache file
+        Primary-->>Replica: 📋 not wired: TransferEngineCache / HTTPCacheSink -> POST /v1/replication/enginecache (✅ RECEIVING route only)
+    end
 
     Note over Primary,Replica: failover scenario
-    Primary--xReplica: primary fails
-    Replica->>Replica: ✅ Store.Restore() - latest checkpoint
-    Replica->>WAL: ✅ replay WAL entries since that checkpoint (deterministic fold)
-    Replica->>Client: resume serving (target: <=5% token loss, <=30s recovery)
+    Primary--xReplica: primary process crashes (SIGKILL)
+    Note over Replica: ✅ hashicorp/raft's OWN, separate, always-automatic leader election<br/>(unrelated to ReplicationRole) lets a client reach this replica
+    Replica->>Replica: ✅ store.Restore() - latest checkpoint + WAL replay (deterministic fold)
+    Replica->>Client: ✅ resume serving ALREADY-forwarded content (target: <=5% token loss, <=30s recovery - proven, T062/T006)
+    Note over Replica: 📋 OPEN: a NEW append routed here after the crash is accepted +<br/>persisted locally, but ReplicationRole.PrimaryNodeID still names the<br/>dead node (node.Servers() does not shrink on crash, no health-monitor<br/>is wired to supply real deadNodeIDs) - Forwarder correctly sees itself<br/>as non-primary and forwards nothing further until something commits a<br/>real CommandReassignReplicationRole
+    opt User Story 2 (optional, if a real engine cache was transferred BEFORE the crash)
+        Replica->>Replica: 📋 not wired: RestoreOrFallback - would prefer a real warm-restore, else falls back to the WAL replay above (never blocks/fails it)
+    end
 ```
 
 ## 4. Control-plane / data-plane split (bash `llmctl` + Go `llmctld`) — ✅ IMPLEMENTED (the split + the hard-fail contract) / 📋 PLANNED (the data-plane operations themselves)
