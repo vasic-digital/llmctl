@@ -171,7 +171,7 @@ passes.
       `TestApply_ClearRunningProfile_IdempotentOnAbsent`, all confirmed
       failing before implementation. Extend the determinism replay test
       (T007) to also cover these two commands.
-- [ ] T011 [REVIEW] Review T003-T010 together before any HTTP-layer code
+- [x] T011 [REVIEW] Review T003-T010 together before any HTTP-layer code
       depends on them: confirm the reservation-refusal path is genuinely
       unreachable-to-bypass from `routes_models.go` (i.e., there is no code
       path that calls `LocalExecutor.Start` without a prior successful

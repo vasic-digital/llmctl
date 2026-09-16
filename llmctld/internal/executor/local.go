@@ -64,6 +64,7 @@ package executor
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -215,6 +216,57 @@ func (e *LocalExecutor) Start(profile string) error {
 func (e *LocalExecutor) Stop(profile string) error {
 	_, err := e.run("stop", profile)
 	return err
+}
+
+// planDoc is the subset of `bin/llmctl plan --json`'s real
+// lib/catalog.sh:catalog_plan_json schema this method needs -
+// confirmed by hand before writing this method:
+//
+//	$ LLMCTL_FAKE_HW=tests/fixtures/hw-baseline.json ./bin/llmctl plan --json
+//	{"profiles": {"small": {"mode": "gpu", "ram_mb": 2048,
+//	 "vram_mb": 3973, ...}, ...}, ...}
+type planDoc struct {
+	Profiles map[string]struct {
+		RAMMB  int64 `json:"ram_mb"`
+		VRAMMB int64 `json:"vram_mb"`
+	} `json:"profiles"`
+}
+
+// Footprint shells out to the real `bin/llmctl plan --json`
+// (lib/catalog.sh's catalog_plan_json) and returns profile's own real,
+// reported ram_mb/vram_mb - the resource DEMAND
+// 002-cluster-model-scheduler's cluster.Place() needs to bin-pack this
+// profile onto a candidate node, since this codebase has no separate
+// Go-side reimplementation of bin/llmctl's own per-profile sizing
+// (Constitution's control-plane/data-plane split this package's own
+// doc comment already documents - llmctld never reimplements catalog/
+// scheduler logic that already lives, tested, in bin/llmctl + lib/*.sh).
+//
+// Unlike Start/Stop/Status, Footprint is deliberately NOT tenant-scoped
+// (e.tenantID is never set on its subprocess environment): a profile's
+// resource footprint is a property of the profile + the querying node's
+// own hardware/catalog, never of which tenant is asking - the SAME
+// profile costs the SAME RAM/VRAM regardless of tenant.
+func (e *LocalExecutor) Footprint(profile string) (ramMB, vramMB int64, err error) {
+	cmd := exec.Command(e.llmctlPath, "plan", "--json")
+	cmd.Env = filterOutTenantIDEnv(os.Environ())
+	var out bytes.Buffer
+	cmd.Stdout = &out
+	cmd.Stderr = &out
+	if runErr := cmd.Run(); runErr != nil {
+		return 0, 0, fmt.Errorf("bin/llmctl plan --json: %w: %s", runErr, strings.TrimSpace(out.String()))
+	}
+
+	var doc planDoc
+	if jsonErr := json.Unmarshal(out.Bytes(), &doc); jsonErr != nil {
+		return 0, 0, fmt.Errorf("bin/llmctl plan --json: parse output: %w", jsonErr)
+	}
+
+	fp, known := doc.Profiles[profile]
+	if !known {
+		return 0, 0, fmt.Errorf("bin/llmctl plan --json: unknown profile %q", profile)
+	}
+	return fp.RAMMB, fp.VRAMMB, nil
 }
 
 // Status shells out to the real `bin/llmctl status`
