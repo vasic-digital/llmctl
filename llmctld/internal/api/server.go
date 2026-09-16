@@ -33,9 +33,12 @@ type Server struct {
 }
 
 // NewServer builds a Server backed by node, serving the cluster routes
-// through RequireMTLS. tlsConf MUST already carry
-// ClientAuth: tls.RequireAndVerifyClientCert (the same mTLS discipline as
-// internal/raft/transport.go's buildNodeTLSConfig reference shape) -
+// through RequireMTLS. tlsConf MUST already carry a client-cert-required
+// ClientAuth policy plus a VerifyPeerCertificate callback performing the
+// real chain+revocation check (cmd/llmctld/main.go's buildNodeTLSConfig
+// uses tls.RequireAnyClientCert + raft.VerifyPeerCertificateAgainstCA -
+// see that function's doc comment for why ClientAuth itself is
+// deliberately NOT tls.RequireAndVerifyClientCert, Feature 004 Phase 5) -
 // NewServer sets its own dedicated ALPN on tlsConf but does not itself
 // construct the certificate/CA-pool portion of tlsConf, since that is
 // exactly internal/mtls's job and re-deriving it here would duplicate

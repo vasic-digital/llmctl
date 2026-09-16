@@ -118,7 +118,8 @@ type quicStreamLayer struct {
 }
 
 // newQUICStreamLayer binds addr and starts listening for QUIC connections
-// authenticated per tlsConf (RequireAndVerifyClientCert - mutual TLS).
+// authenticated per tlsConf (mutual TLS - see NewTransport's doc comment
+// for the exact ClientAuth policy this project uses and why).
 func newQUICStreamLayer(addr string, tlsConf *tls.Config) (*quicStreamLayer, error) {
 	ln, err := quic.ListenAddr(addr, tlsConf, nil)
 	if err != nil {
@@ -163,10 +164,20 @@ func (q *quicStreamLayer) Dial(address hraft.ServerAddress, timeout time.Duratio
 
 // NewTransport builds a real hraft.NetworkTransport over QUIC+mTLS,
 // listening on addr. tlsConf MUST have NextProtos set (quic-go requires an
-// explicit ALPN protocol) and ClientAuth: tls.RequireAndVerifyClientCert
-// for the mutual-TLS guarantee Clarification 11 requires - callers
-// construct it from internal/mtls-issued certificates (see
-// transport_test.go's buildNodeTLSConfig for the reference shape).
+// explicit ALPN protocol) and a client-cert-required ClientAuth policy for
+// the mutual-TLS guarantee Clarification 11 requires. As of Feature 004
+// Phase 5 (T018), this project deliberately uses tls.RequireAnyClientCert
+// (never tls.RequireAndVerifyClientCert) paired with a
+// VerifyPeerCertificate callback (VerifyPeerCertificateAgainstCA below)
+// that performs the real chain+revocation check against a live,
+// dynamically-updatable *mtls.TrustStore - RequireAndVerifyClientCert
+// would instead make Go's stdlib verify against a STATIC ClientCAs pool
+// captured once at tls.Config construction time, which a TrustStore
+// mutation (e.g. UpdateTrustedCAs during a CA-rotation transition) can
+// never reach (see cmd/llmctld/main.go's buildNodeTLSConfig for the full
+// root-cause account of this exact bug and its fix) - callers construct
+// tlsConf from internal/mtls-issued certificates (see transport_test.go's
+// buildNodeTLSConfig for the reference shape).
 func NewTransport(addr string, tlsConf *tls.Config, maxPool int, timeout time.Duration) (*hraft.NetworkTransport, error) {
 	layer, err := newQUICStreamLayer(addr, tlsConf)
 	if err != nil {
