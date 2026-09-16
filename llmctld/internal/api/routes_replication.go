@@ -32,6 +32,7 @@
 package api
 
 import (
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -308,5 +309,80 @@ func RegisterReplicationRoutes(r gin.IRoutes, registry *replication.StoreRegistr
 			return
 		}
 		c.JSON(http.StatusOK, stateResponse{Tokens: state.Tokens, Positions: state.Positions})
+	})
+}
+
+// engineCacheFilenameHeader MUST match
+// internal/replication/enginecache.go's own engineCacheFilenameHeader
+// constant exactly - both packages independently define this literal
+// rather than one importing the other, matching this file's own
+// forwardTenantIDHeader-vs-tenantIDHeader precedent (T008's package doc
+// comment) for the identical decoupling reason.
+const engineCacheFilenameHeader = "X-Engine-Cache-Filename"
+
+// EngineCacheDirResolver returns the REAL local directory this node's
+// real engine's --slot-save-path currently points at for tenantID (T015:
+// lib/scheduler.sh's per-profile --slot-save-path wiring), or ok=false
+// if this node has no such directory configured for that tenant (the
+// feature is simply not enabled here) - RegisterEngineCacheRoute never
+// writes a received file anywhere when ok is false, refusing the upload
+// honestly (503) rather than inventing a directory to write into.
+type EngineCacheDirResolver func(tenantID string) (dir string, ok bool)
+
+// RegisterEngineCacheRoute wires 003-kv-cache-replication User Story 2's
+// cross-node engine-cache-file RECEIVING side (T016, spec.md FR-007/
+// FR-012): POST /v1/replication/enginecache, the exact wire contract
+// internal/replication.HTTPCacheSink's SENDING side already posts
+// against (that file's own doc comment). This is a SEPARATE, additive
+// registration function from RegisterReplicationRoutes (never a change
+// to that function's existing signature/behavior) precisely because the
+// engine-cache-file transfer is User Story 2's own strictly-optional,
+// non-blocking optimization layer (research.md Decision 4) - a caller
+// that never opts into --slot-save-path never calls this function at
+// all, and every existing RegisterReplicationRoutes call site (and every
+// existing test of it) is completely unaffected by this file's addition.
+//
+// Same authorization discipline as every other route in this file
+// (RequireJWT + authorizeTenantOwnership against the X-Tenant-ID header)
+// - a caller may only push a real engine-cache file into ITS OWN
+// tenant's --slot-save-path directory, never another tenant's (T011's
+// tenant-scoping discipline applied identically to this new transfer
+// surface). The real uploaded bytes are written to
+// filepath.Join(cacheDir(tenantID), <the caller-supplied filename via
+// X-Engine-Cache-Filename>) - a filename containing a path separator is
+// refused (400) BEFORE any write, mirroring
+// internal/executor.LocalExecutor's own SaveSlot/RestoreSlot filename
+// validation (Constitution §11.4.133 host-safety: never let an
+// untrusted, network-supplied string become an ambiguous filesystem
+// path).
+func RegisterEngineCacheRoute(r gin.IRoutes, decider *authz.Decider, cacheDir EngineCacheDirResolver) {
+	r.POST("/v1/replication/enginecache", RequireJWT(decider), func(c *gin.Context) {
+		claims := ClaimsFromContext(c)
+		tenantID := c.GetHeader(tenantIDHeader)
+		if !authorizeTenantOwnership(decider, claims, tenantID) {
+			c.JSON(http.StatusForbidden, gin.H{"error": "caller may only upload its own tenant's engine cache file"})
+			return
+		}
+		filename := c.GetHeader(engineCacheFilenameHeader)
+		if filename == "" || strings.ContainsAny(filename, "/\\") {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "missing or invalid " + engineCacheFilenameHeader + " header (must be a non-empty bare filename)"})
+			return
+		}
+		dir, ok := cacheDir(tenantID)
+		if !ok {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "this node has no engine-cache directory configured for this tenant"})
+			return
+		}
+		data, err := io.ReadAll(c.Request.Body)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		sink := replication.FileAdapterSink(dir)
+		if err := sink(filename, data); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"status": "received", "filename": filename, "bytes": len(data)})
 	})
 }

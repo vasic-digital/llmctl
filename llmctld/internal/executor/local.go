@@ -64,11 +64,15 @@ package executor
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 )
 
 // Config configures a LocalExecutor.
@@ -301,4 +305,134 @@ func (e *LocalExecutor) Status(profile string) (string, error) {
 		}
 	}
 	return strings.Join(filtered, "\n"), nil
+}
+
+// --- 003-kv-cache-replication User Story 2: real engine slot save/restore --
+//
+// EngineSlotAction is the closed set of the real llama-server
+// /slots/:id_slot HTTP endpoint's supported action query values
+// (save/restore) - confirmed present in the pinned vendored
+// submodules/llama.cpp source by this project's own T060 investigation
+// (tools/server/server.cpp:285-286 / server-context.cpp:5288-5320+,
+// gated behind --slot-save-path) and matching llama.cpp's own long-
+// standing, publicly documented server wire contract for this
+// capability (examples/server/README.md's "Save & Restore Slot"
+// section): POST http://<engine-host>:<port>/slots/{id_slot}?action=save
+// (or ?action=restore) with a JSON body {"filename": "<name>"} - the
+// filename names a file UNDER the engine's own --slot-save-path
+// directory, never an absolute/parent-escaping path.
+//
+// SaveSlot/RestoreSlot additionally refuse a filename containing a path
+// separator BEFORE ever sending it, as a second, our-own-side line of
+// defense (Constitution §11.4.133 host-safety: never hand the engine an
+// ambiguous path when this caller can trivially validate it is a bare
+// filename first) - independent of whatever validation the real engine
+// itself does.
+//
+// Honest boundary (Constitution §11.4.6): this wiring is built against
+// the well-established, publicly documented, and independently
+// T060-investigated wire contract. A genuine end-to-end round trip
+// against the real pinned llama-server binary is exercised by
+// test/integration's real-engine tests (T012/T014) - this environment
+// could not fetch the pinned submodule commit to build+boot that real
+// binary (see this feature's own final report for the confirmed,
+// investigated reason), so those tests honestly SKIP here rather than
+// run; SaveSlot/RestoreSlot's own request-construction/response-handling
+// logic is instead proven against a real HTTP server implementing this
+// SAME documented contract in local_test.go, matching this codebase's
+// established "decouple the transport/logic from the specific remote
+// implementation" testing convention (internal/replication/forwarder_test.go).
+const (
+	engineSlotActionSave    = "save"
+	engineSlotActionRestore = "restore"
+)
+
+// engineSlotRequestTimeout bounds a single real HTTP call to the local
+// engine's own /slots/:id_slot endpoint - a save/restore call that never
+// returns must not hang its caller indefinitely (the same FR-004-style
+// bounded-not-indefinite discipline internal/replication/forwarder.go
+// already applies to cross-node calls, applied here to this LOCAL
+// engine call).
+const engineSlotRequestTimeout = 30 * time.Second
+
+// engineSlotRequest is POST /slots/:id_slot?action=save|restore's real
+// JSON request body shape.
+type engineSlotRequest struct {
+	Filename string `json:"filename"`
+}
+
+// ErrEngineSlotFilenameInvalid is returned by SaveSlot/RestoreSlot when
+// filename is empty or contains a path separator - refused BEFORE any
+// HTTP call is made (see this section's doc comment for why).
+var ErrEngineSlotFilenameInvalid = errors.New("executor: engine slot filename must be a non-empty bare filename (no path separators)")
+
+func validEngineSlotFilename(filename string) bool {
+	return filename != "" && !strings.ContainsAny(filename, `/\`)
+}
+
+// SaveSlot calls the REAL local inference engine's own
+// POST /slots/{slotID}?action=save endpoint (llama-server, when started
+// with --slot-save-path - lib/scheduler.sh's opt-in wiring), asking it
+// to save its own real, in-process attention-weight KV cache for slotID
+// to filename under its --slot-save-path directory. engineBaseURL is
+// the running engine's own real base HTTP URL (e.g.
+// "http://127.0.0.1:8085") - LocalExecutor does not resolve this
+// itself; the port a profile is running on is the caller's already-
+// established concern (e.g. a real bin/llmctl status / a RunningProfile
+// record), never re-derived here, matching Start/Stop's own "the
+// caller names the target" convention. Returns
+// ErrEngineSlotFilenameInvalid without making any HTTP call if filename
+// is empty or path-like; returns the real HTTP/engine error otherwise
+// (a non-2xx response, connection failure, or a real timeout) -
+// 003-kv-cache-replication's internal/replication.EngineSaver is the
+// caller-facing adapter that turns this into the closed
+// intact/unavailable outcome (enginecache.go's own doc comment).
+func (e *LocalExecutor) SaveSlot(engineBaseURL string, slotID int, filename string) error {
+	return e.doEngineSlotAction(engineBaseURL, engineSlotActionSave, slotID, filename)
+}
+
+// RestoreSlot is SaveSlot's restore-side sibling: calls the real local
+// engine's POST /slots/{slotID}?action=restore endpoint, asking it to
+// load its real attention-weight KV cache for slotID FROM filename
+// under its --slot-save-path directory (a warm-restore, User Story 2).
+// The caller (internal/replication.EngineRestorer's real implementation)
+// is responsible for having already confirmed filename's real on-disk
+// presence/non-emptiness (enginecache.go's statFileNonEmpty) before
+// calling this - RestoreSlot itself only ever asks the ENGINE to
+// restore; a restore failure the engine itself reports (a corrupt file
+// its own parser rejects) surfaces here as a genuine error, which
+// internal/replication.RestoreOrFallback then correctly falls back from
+// (FR-008), never surfaced as a correctness failure by this method
+// itself.
+func (e *LocalExecutor) RestoreSlot(engineBaseURL string, slotID int, filename string) error {
+	return e.doEngineSlotAction(engineBaseURL, engineSlotActionRestore, slotID, filename)
+}
+
+func (e *LocalExecutor) doEngineSlotAction(engineBaseURL, action string, slotID int, filename string) error {
+	if !validEngineSlotFilename(filename) {
+		return ErrEngineSlotFilenameInvalid
+	}
+	body, err := json.Marshal(engineSlotRequest{Filename: filename})
+	if err != nil {
+		return fmt.Errorf("executor: marshal engine slot %s request: %w", action, err)
+	}
+	url := fmt.Sprintf("%s/slots/%d?action=%s", strings.TrimRight(engineBaseURL, "/"), slotID, action)
+	ctx, cancel := context.WithTimeout(context.Background(), engineSlotRequestTimeout)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("executor: build engine slot %s request: %w", action, err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("executor: engine slot %s request to %s: %w", action, url, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		var errBody bytes.Buffer
+		_, _ = errBody.ReadFrom(resp.Body)
+		return fmt.Errorf("executor: engine slot %s request to %s: status %d: %s", action, url, resp.StatusCode, strings.TrimSpace(errBody.String()))
+	}
+	return nil
 }
