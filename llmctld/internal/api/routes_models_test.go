@@ -9,17 +9,22 @@
 package api
 
 import (
+	"encoding/json"
 	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
 	"github.com/vasic-digital/llmctl/llmctld/internal/auth"
 	"github.com/vasic-digital/llmctl/llmctld/internal/authz"
+	"github.com/vasic-digital/llmctl/llmctld/internal/cluster"
 	"github.com/vasic-digital/llmctl/llmctld/internal/executor"
+	"github.com/vasic-digital/llmctl/llmctld/internal/mtls"
+	"github.com/vasic-digital/llmctl/llmctld/internal/raft"
 )
 
 // modelRoutesLlmctlBinPath / modelRoutesFakeHWFixture mirror
@@ -242,5 +247,112 @@ func TestModelStatus_ModelViewerCanQuery_ButTenantAdminOnlyAndUnauthenticatedCan
 	rec3 := doJSON(t, engine, http.MethodGet, "/v1/tenants/tenant-a/models/small/status", nil, "")
 	if rec3.Code != http.StatusUnauthorized {
 		t.Fatalf("expected 401 for a request with no bearer token at all, got %d: %s", rec3.Code, rec3.Body.String())
+	}
+}
+
+// newModelRoutesTestEngineWithNode is newModelRoutesTestEngine's
+// cluster-aware sibling (002-cluster-model-scheduler T012): a real
+// single-node Raft cluster (bootstrapped, self-registered with a REAL
+// capacity that fits the "small" profile's real footprint per
+// tests/fixtures/hw-baseline.json - hand-verified against bin/llmctl's
+// own real "plan --json" output, matching
+// internal/executor/local_test.go's identical fixture value) is wired
+// via RegisterModelRoutes's node parameter, so a start request naming no
+// node genuinely enters the auto-placement path (cluster.Place()) rather
+// than the explicit/no-wiring path newModelRoutesTestEngine's plain
+// (node=nil) engine takes.
+func newModelRoutesTestEngineWithNode(t *testing.T) (engine *gin.Engine, decider *authz.Decider, servicesDir string, node *raft.Node) {
+	t.Helper()
+	tmp := t.TempDir()
+	stateDir := filepath.Join(tmp, "state")
+	runtimeDir := filepath.Join(stateDir, "run")
+	servicesDir = filepath.Join(stateDir, "services")
+	env := map[string]string{
+		"LLMCTL_STATE_DIR":    stateDir,
+		"LLMCTL_RUNTIME_DIR":  runtimeDir,
+		"LLMCTL_CONFIG_DIR":   filepath.Join(tmp, "config"),
+		"LLMCTL_DATA_DIR":     filepath.Join(tmp, "data"),
+		"LLMCTL_MODELS_DIR":   filepath.Join(tmp, "models"),
+		"LLMCTL_LOG_DIR":      filepath.Join(stateDir, "logs"),
+		"LLMCTL_VERIFY_DIR":   filepath.Join(stateDir, "verify"),
+		"LLMCTL_SERVICES_DIR": servicesDir,
+		"LLMCTL_UNIT_DIR":     filepath.Join(tmp, "systemd-user"),
+		"LLMCTL_PLIST_DIR":    filepath.Join(tmp, "LaunchAgents"),
+		"NO_COLOR":            "1",
+		"LLMCTL_DRY_RUN":      "1",
+		"LLMCTL_FAKE_HW":      modelRoutesFakeHWFixture(t),
+	}
+	for k, v := range env {
+		t.Setenv(k, v)
+	}
+	if err := os.MkdirAll(runtimeDir, 0o755); err != nil {
+		t.Fatalf("mkdir runtime dir: %v", err)
+	}
+
+	ca, err := mtls.GenerateCA()
+	if err != nil {
+		t.Fatalf("GenerateCA: %v", err)
+	}
+	node, err = raft.Bootstrap(raft.Config{
+		NodeID:    "node-a",
+		BindAddr:  "127.0.0.1:0",
+		TLSConfig: buildTestTLSConfig(t, ca, "node-a"),
+	})
+	if err != nil {
+		t.Fatalf("raft.Bootstrap: %v", err)
+	}
+	t.Cleanup(func() { _ = node.Shutdown() })
+	waitForRealLeader(t, node, 3*time.Second)
+
+	// A capacity comfortably larger than "small"'s real footprint
+	// (2048MB RAM / 3973MB VRAM per hw-baseline.json - hand-verified
+	// against bin/llmctl's own real "plan --json" output) so Place()
+	// genuinely has a fitting candidate: this node itself.
+	if err := node.RegisterSelf("127.0.0.1:0", cluster.Resources{
+		CPUCores: 8, RAMTotalMB: 16384, RAMAvailMB: 8192,
+		VRAMTotalMB: 8192, VRAMAvailMB: 8192, NetworkMbps: 1000,
+	}); err != nil {
+		t.Fatalf("RegisterSelf: %v", err)
+	}
+
+	engine, decider = newDeciderAndEngine()
+	RegisterTenantRoutes(engine, decider)
+	base := executor.New(executor.Config{LLMCtlPath: modelRoutesLlmctlBinPath(t)})
+	RegisterModelRoutes(engine, decider, base, node, nil)
+	return engine, decider, servicesDir, node
+}
+
+// TestModelStart_AutoPlacement_NoNodeField_LandsOnRealNodeWithCapacity is
+// 002-cluster-model-scheduler T012's contract test: a start request with
+// no "node" field, against a real single-node cluster whose one real
+// node has real, sufficient capacity, genuinely enters the auto-placement
+// path (never the pre-Phase-3 local-only path - proven by asserting
+// against the SAME real dry-run env-file side-effect
+// TestModelStart_RealDryRunSubprocess_WritesTenantScopedEnvFile already
+// established as this codebase's real-dispatch proof), and the response
+// names the real node that accepted the work.
+func TestModelStart_AutoPlacement_NoNodeField_LandsOnRealNodeWithCapacity(t *testing.T) {
+	engine, decider, servicesDir, node := newModelRoutesTestEngineWithNode(t)
+	registerTenantAndModel(t, engine, decider, "tenant-a", "small")
+
+	operatorToken := issueTenantJWT(t, decider, "tenant-a", []string{auth.RoleModelOperator})
+	rec := doJSON(t, engine, http.MethodPost, "/v1/tenants/tenant-a/models/small/start", nil, operatorToken)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("POST start (no node field): expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var respBody struct {
+		Node string `json:"node"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &respBody); err != nil {
+		t.Fatalf("unmarshal response body %q: %v", rec.Body.String(), err)
+	}
+	if respBody.Node != node.ID() {
+		t.Fatalf("response node = %q, want the real chosen node %q", respBody.Node, node.ID())
+	}
+
+	tenantEnvFile := filepath.Join(servicesDir, "tenant-a--small.env")
+	if _, err := os.Stat(tenantEnvFile); err != nil {
+		t.Fatalf("expected tenant-scoped env file %s to exist (proves auto-placement genuinely dispatched a real, tenant-scoped bin/llmctl subprocess): %v", tenantEnvFile, err)
 	}
 }
