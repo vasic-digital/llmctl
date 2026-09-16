@@ -160,7 +160,7 @@ func (f *Forwarder) ForwardAppend(tenantID, bearerToken string, entries []WALEnt
 	if err != nil {
 		return fmt.Errorf("replication: forward append for tenant %q: %w", tenantID, err)
 	}
-	return f.forwardToReplicas(replicaIDs, "/v1/replication/append", bearerToken, body)
+	return f.forwardToReplicas(replicaIDs, "/v1/replication/append", tenantID, bearerToken, body)
 }
 
 // ForwardCheckpoint is ForwardAppend's checkpoint sibling - same
@@ -174,14 +174,26 @@ func (f *Forwarder) ForwardCheckpoint(tenantID, bearerToken string, seq uint64, 
 	if err != nil {
 		return fmt.Errorf("replication: forward checkpoint for tenant %q: %w", tenantID, err)
 	}
-	return f.forwardToReplicas(replicaIDs, "/v1/replication/checkpoint", bearerToken, body)
+	return f.forwardToReplicas(replicaIDs, "/v1/replication/checkpoint", tenantID, bearerToken, body)
 }
 
 // forwardToReplicas fans body out to every replicaID other than selfID,
 // skipping (never erroring on) any replica AddrResolver cannot resolve,
 // and collecting every genuine per-replica failure into one combined
 // error (a caller learns EVERY replica that failed, not just the first).
-func (f *Forwarder) forwardToReplicas(replicaIDs []string, path, bearerToken string, body []byte) error {
+//
+// tenantID is carried onto every forwarded request as an X-Tenant-ID
+// header (T011 tenant-scoping review) - EXACTLY the header
+// internal/api/routes_replication.go's resolveStore reads to pick which
+// tenant's Store a request operates against (T072-FU5): without this,
+// a non-default tenant's forwarded content would silently land in the
+// receiving node's DEFAULT tenant Store instead of the originating
+// tenant's, a real cross-tenant data-misrouting bug. The default ("")
+// tenant OMITS the header entirely rather than sending an empty value -
+// matching routes_replication.go's own "an absent header resolves to the
+// empty tenant ID" contract exactly (its doc comment), never relying on
+// an empty-string header value behaving identically by accident.
+func (f *Forwarder) forwardToReplicas(replicaIDs []string, path, tenantID, bearerToken string, body []byte) error {
 	var errs []error
 	for _, id := range replicaIDs {
 		if id == f.selfID {
@@ -191,7 +203,7 @@ func (f *Forwarder) forwardToReplicas(replicaIDs []string, path, bearerToken str
 		if !ok {
 			continue // FR-004: an unresolvable replica is skipped, never blocking.
 		}
-		if err := f.postWithRetry(baseURL, path, bearerToken, body); err != nil {
+		if err := f.postWithRetry(baseURL, path, tenantID, bearerToken, body); err != nil {
 			errs = append(errs, fmt.Errorf("replica %q (%s): %w", id, baseURL, err))
 		}
 	}
@@ -201,10 +213,17 @@ func (f *Forwarder) forwardToReplicas(replicaIDs []string, path, bearerToken str
 	return nil
 }
 
+// forwardTenantIDHeader is the header name forwarded requests carry
+// tenantID under - MUST match internal/api/routes_replication.go's
+// tenantIDHeader constant exactly (both packages independently define
+// this literal rather than one importing the other, matching this file's
+// own package doc comment on decoupling from internal/api).
+const forwardTenantIDHeader = "X-Tenant-ID"
+
 // postWithRetry POSTs body to baseURL+path, retrying a failure for up to
 // forwardRetryBudget (FR-004: bounded, never indefinite) before
 // returning the last observed error.
-func (f *Forwarder) postWithRetry(baseURL, path, bearerToken string, body []byte) error {
+func (f *Forwarder) postWithRetry(baseURL, path, tenantID, bearerToken string, body []byte) error {
 	deadline := time.Now().Add(forwardRetryBudget)
 	var lastErr error
 	for {
@@ -215,6 +234,9 @@ func (f *Forwarder) postWithRetry(baseURL, path, bearerToken string, body []byte
 		req.Header.Set("Content-Type", "application/json")
 		if bearerToken != "" {
 			req.Header.Set("Authorization", "Bearer "+bearerToken)
+		}
+		if tenantID != "" {
+			req.Header.Set(forwardTenantIDHeader, tenantID)
 		}
 
 		resp, doErr := f.httpClient.Do(req)

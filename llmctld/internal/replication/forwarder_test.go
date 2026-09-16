@@ -27,9 +27,11 @@ const fixtureAuthToken = "fixture-jwt-abc123"
 // this plain server's default client (matching this codebase's existing
 // "decouple the transport from the logic" convention).
 type recordedForwardRequest struct {
-	path  string
-	token string
-	body  []byte
+	path                  string
+	token                 string
+	body                  []byte
+	tenantIDHeader        string
+	tenantIDHeaderPresent bool
 }
 
 func startForwardTargetServer(t *testing.T) (baseURL string, requests *[]recordedForwardRequest, mu *sync.Mutex) {
@@ -39,8 +41,15 @@ func startForwardTargetServer(t *testing.T) (baseURL string, requests *[]recorde
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body := make([]byte, r.ContentLength)
 		_, _ = r.Body.Read(body)
+		_, tenantHeaderPresent := r.Header["X-Tenant-Id"]
 		m.Lock()
-		recorded = append(recorded, recordedForwardRequest{path: r.URL.Path, token: r.Header.Get("Authorization"), body: body})
+		recorded = append(recorded, recordedForwardRequest{
+			path:                  r.URL.Path,
+			token:                 r.Header.Get("Authorization"),
+			body:                  body,
+			tenantIDHeader:        r.Header.Get("X-Tenant-Id"),
+			tenantIDHeaderPresent: tenantHeaderPresent,
+		})
 		m.Unlock()
 		w.WriteHeader(http.StatusOK)
 	}))
@@ -154,6 +163,70 @@ func TestForwarder_ForwardCheckpoint_PostsRealRequest(t *testing.T) {
 	}
 	if body.Seq != 2 || len(body.State.Tokens) != 2 {
 		t.Fatalf("forwarded checkpoint body = %+v, want Seq=2 and 2 tokens", body)
+	}
+}
+
+// TestForwarder_ForwardAppend_PropagatesTenantIDHeader proves a
+// forwarded request for a NON-DEFAULT tenant carries that tenant's ID as
+// an X-Tenant-ID header, matching internal/api/routes_replication.go's
+// real authorizeTenantOwnership + resolveStore contract on the RECEIVING
+// side (T072-FU5) - without this header the receiving node's
+// resolveStore would silently resolve the forwarded content into ITS
+// OWN default-tenant Store instead of the originating tenant's Store, a
+// real cross-tenant data-misrouting bug this test catches directly
+// (T011's tenant-scoping review). The default ("") tenant is exempt by
+// construction: an absent X-Tenant-ID header already resolves to the
+// default tenant on the receiving side (routes_replication.go's own doc
+// comment), so omitting the header for "" is correct, not a gap.
+func TestForwarder_ForwardAppend_PropagatesTenantIDHeader(t *testing.T) {
+	baseURL, requests, mu := startForwardTargetServer(t)
+
+	roles := RoleResolver(func(tenantID string) (string, []string, bool) {
+		return "node-a", []string{"node-b"}, true
+	})
+	addrs := AddrResolver(func(nodeID string) (string, bool) { return baseURL, true })
+
+	fwd := NewForwarder("node-a", roles, addrs, http.DefaultClient)
+	if err := fwd.ForwardAppend("tenant-x", fixtureAuthToken, []WALEntry{{Seq: 1}}); err != nil {
+		t.Fatalf("ForwardAppend: %v", err)
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if len(*requests) != 1 {
+		t.Fatalf("forwarded %d request(s), want 1", len(*requests))
+	}
+	if got := (*requests)[0].tenantIDHeader; got != "tenant-x" {
+		t.Fatalf("forwarded X-Tenant-ID header = %q, want %q", got, "tenant-x")
+	}
+}
+
+// TestForwarder_ForwardAppend_DefaultTenantOmitsHeader proves the
+// default ("") tenant's forwarded requests carry NO X-Tenant-ID header at
+// all (never an empty-string header value) - matching
+// routes_replication.go's own "absent header resolves to the default
+// tenant" contract exactly, rather than relying on an empty header value
+// behaving identically by accident.
+func TestForwarder_ForwardAppend_DefaultTenantOmitsHeader(t *testing.T) {
+	baseURL, requests, mu := startForwardTargetServer(t)
+
+	roles := RoleResolver(func(tenantID string) (string, []string, bool) {
+		return "node-a", []string{"node-b"}, true
+	})
+	addrs := AddrResolver(func(nodeID string) (string, bool) { return baseURL, true })
+
+	fwd := NewForwarder("node-a", roles, addrs, http.DefaultClient)
+	if err := fwd.ForwardAppend("", fixtureAuthToken, []WALEntry{{Seq: 1}}); err != nil {
+		t.Fatalf("ForwardAppend: %v", err)
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if len(*requests) != 1 {
+		t.Fatalf("forwarded %d request(s), want 1", len(*requests))
+	}
+	if got := (*requests)[0].tenantIDHeaderPresent; got {
+		t.Fatalf("forwarded X-Tenant-ID header present for the default tenant, want absent (got value %q)", (*requests)[0].tenantIDHeader)
 	}
 }
 
