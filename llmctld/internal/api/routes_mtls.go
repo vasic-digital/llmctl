@@ -359,20 +359,25 @@ func voterIsLiveAndTrusting(clientTLS *tls.Config, voterAPIAddr string) error {
 // over-refusal case, below). That asymmetry is why this function fails
 // closed rather than falling back.
 //
-// A SEPARATE, narrower, genuinely disclosed limitation this decision
-// does NOT paper over: clientTLS itself (this node's own "forward
-// client" identity) is never reissued by ANY handler in this file across
-// a CA rotation - the SAME pre-existing gap the renew handler's own
-// ForwardCARotationTransition fallback above has always silently
-// carried - so a revoke/finalize action attempted after a FULLY
-// COMPLETED prior CA rotation could find clientTLS's own certificate no
-// longer trusted by peers that already dropped the CA that signed it,
-// making every OTHER voter's live check spuriously fail. This is a
-// real, pre-existing limitation of this node's own forward-client
-// certificate lifecycle, not newly introduced here (mtlsForwardStore's
-// own currentNodeCert is never touched by UpdateNodeCert anywhere in
-// this codebase); fixing it is out of this specific follow-up's scope
-// and is tracked as further follow-up work.
+// A SEPARATE, narrower limitation this decision does NOT paper over -
+// CLOSED by T072-FU9's follow-up fix, kept documented here rather than
+// silently dropped (this codebase's own doc-comment-hygiene discipline,
+// e.g. T072-FU8's merge-time stale-comment correction): clientTLS itself
+// (this node's own "forward client" identity) used to be reissued by NO
+// handler in this file across a CA rotation, so a revoke/finalize action
+// attempted after a FULLY COMPLETED prior CA rotation could find
+// clientTLS's own certificate no longer trusted by peers that already
+// dropped the CA that signed it, making every OTHER voter's live check
+// spuriously fail. The renew handler above now ALSO reissues this node's
+// own forward-client identity (mtlsForwardStore, one of
+// RegisterMTLSRoutes's additionalCATrustStores) under the same issuingCA
+// as its raft/api certs, in lockstep, so an operator who renews every
+// node during a rotation (the same operator action every existing
+// acceptance scenario already requires for the raft/api transports) keeps
+// this node's own outbound live-check identity valid too -
+// TestMTLSRotation_QuorumProtection_SurvivesFullPriorCARotation
+// (test/integration/mtls_rotation_test.go) proves this end-to-end on a
+// real 3-node cluster.
 //
 // Returns (stranded, liveUntrusted): stranded is quorumWouldBeStranded's
 // own verdict computed against liveUntrusted; liveUntrusted is the FULL
@@ -635,13 +640,49 @@ func RegisterMTLSRoutes(r gin.IRoutes, node *raft.Node, decider *authz.Decider, 
 			return
 		}
 
-		// Both fresh certs are fully issued and parsed successfully BEFORE
-		// either live TrustStore is touched - a failure above never leaves
-		// this node in a half-renewed state (one transport swapped, the
-		// other not), matching this codebase's existing fail-fast-before-
-		// mutating-shared-state discipline.
+		// T072-FU9 follow-up (closing this file's own previously-disclosed
+		// forward-client-identity boundary on quorumWouldBeStrandedLive's
+		// doc comment above): THIS node's own forward-client identity
+		// (main.go's mtlsForwardTLS, backed by one of additionalCATrustStores
+		// below - currently just mtlsForwardStore) is ALSO reissued here,
+		// under the exact SAME issuingCA as raftCert/apiCert above, using
+		// the exact SAME node.ID()-based naming convention
+		// buildNodeTLSConfig's own construction site
+		// (cmd/llmctld/main.go's "nodeID+\"-mtls-forward-client\"") already
+		// establishes - never a new issuance path. Before this, nothing in
+		// this codebase ever reissued this identity's certificate, so a
+		// revoke/finalize attempted on THIS node after a FULLY COMPLETED
+		// prior CA rotation would find every OTHER voter's own
+		// quorumWouldBeStrandedLive live-check spuriously failing: those
+		// peers have already dropped trust in the CA that signed this
+		// node's stale forward-client cert (finalize's own
+		// TrustStore.UpdateTrustedCAs call, mirrored cluster-wide by every
+		// other node's T023 FSM-notify handler), so THIS node's own
+		// outbound dial against them is rejected at the mutual-TLS layer
+		// regardless of how genuinely live and trusted those peers really
+		// are - the exact defect this addition closes.
+		forwardNodeCert, err := issuingCA.IssueNodeCert(node.ID() + "-mtls-forward-client")
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("issue renewed mtls-forward-client cert: %v", err)})
+			return
+		}
+		forwardCert, err := mtls.LoadTLSCertificate(forwardNodeCert.CertPEM, forwardNodeCert.KeyPEM)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("load renewed mtls-forward-client cert: %v", err)})
+			return
+		}
+
+		// Every fresh cert (raft, api, and the forward-client identity
+		// above) is fully issued and parsed successfully BEFORE any live
+		// TrustStore is touched - a failure above never leaves this node in
+		// a half-renewed state (some transports swapped, others not),
+		// matching this codebase's existing fail-fast-before-mutating-
+		// shared-state discipline.
 		raftTrustStore.UpdateNodeCert(&raftCert)
 		apiTrustStore.UpdateNodeCert(&apiCert)
+		for _, store := range additionalCATrustStores {
+			store.UpdateNodeCert(&forwardCert)
+		}
 
 		// Feature 004 Phase 5 (FR-009 visibility): if this node has a
 		// LOCALLY in-progress rotation, durably record that it has now
