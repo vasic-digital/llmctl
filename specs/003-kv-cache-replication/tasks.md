@@ -17,13 +17,13 @@ description: "Task list for Cross-Node KV-Cache Replication via Real File Transf
 
 ## Phase 1: Setup
 
-- [ ] T001 Confirm baseline: `go vet ./...`, `gofmt -l .`, `go test ./...`
+- [x] T001 Confirm baseline: `go vet ./...`, `gofmt -l .`, `go test ./...`
       clean before this feature's first commit (if 002 has already landed
       on `main`, this baseline includes 002's changes — read the real
       current `ClusterState`/FSM shape before designing this feature's own
       extension, never assume plan.md's description is still exactly
       current).
-- [ ] T002 [P] Create the empty test scaffolding for the new
+- [x] T002 [P] Create the empty test scaffolding for the new
       replication-forwarding assertions in
       `test/integration/failover_state_test.go` (a new test function
       alongside the existing one, not a rewrite yet).
@@ -36,7 +36,7 @@ description: "Task list for Cross-Node KV-Cache Replication via Real File Transf
 state — nothing in User Stories 1-3 is meaningful without knowing which
 node is authoritative for forwarding.
 
-- [ ] T003 [TDD] Add `ReplicationRole` (data-model.md) to
+- [x] T003 [TDD] Add `ReplicationRole` (data-model.md) to
       `internal/cluster/state.go` (or wherever 002's own `ClusterState`
       extension actually landed — read it fresh first, per T001) and new
       FSM commands `CommandAssignReplicationRole`/
@@ -46,7 +46,7 @@ node is authoritative for forwarding.
       `fsm_test.go`: `TestApply_AssignReplicationRole_ExactlyOnePrimary`,
       `TestApply_ReassignReplicationRole_ReplacesAtomically`. Extend the
       existing determinism replay test to cover these commands.
-- [ ] T004 [TDD] Wire `internal/cluster/health.go`'s existing unhealthy-node
+- [x] T004 [TDD] Wire `internal/cluster/health.go`'s existing unhealthy-node
       detection to trigger `CommandReassignReplicationRole` when the
       CURRENT primary for some tenant is the node detected unhealthy —
       reusing the SAME detection signal `Monitor` already has (per
@@ -57,7 +57,7 @@ node is authoritative for forwarding.
       shape fresh before wiring this, if 002 has landed). RED first:
       `TestMonitor_UnhealthyPrimary_TriggersReassignment` in
       `health_test.go`.
-- [ ] T005 [REVIEW] Review T003-T004 together for the exact race condition
+- [x] T005 [REVIEW] Review T003-T004 together for the exact race condition
       spec.md's Edge Cases names (reassignment in flight while forwarding
       is happening) before any forwarding code depends on this layer.
 
@@ -76,7 +76,7 @@ automatically; a killed primary's replacement already has the state.
 
 ### Tests for User Story 1
 
-- [ ] T006 [P] [TDD] [US1] Real multi-process test:
+- [x] T006 [P] [TDD] [US1] Real multi-process test:
       `TestFailoverState_AutomaticForwarding_NoManualFanOut` — the direct
       replacement/extension of `failover_state_test.go`'s existing
       scenario, this time WITHOUT the test calling every node's HTTP
@@ -84,7 +84,7 @@ automatically; a killed primary's replacement already has the state.
       real kill, then a real assertion the new primary already has
       everything. Confirmed failing (times out / shows missing data)
       against the current, un-forwarded daemon before implementation.
-- [ ] T007 [P] [TDD] [US1] Real test:
+- [x] T007 [P] [TDD] [US1] Real test:
       `TestFailoverState_AppendLostBeforeForwarding_IsReportedNotHidden`
       (spec.md Edge Case / FR-005) — kill the primary in the exact
       instant after an append lands only locally; assert the gap is
@@ -92,20 +92,20 @@ automatically; a killed primary's replacement already has the state.
 
 ### Implementation for User Story 1
 
-- [ ] T008 [US1] Implement `internal/replication/forwarder.go`: on every
+- [x] T008 [US1] Implement `internal/replication/forwarder.go`: on every
       real append/checkpoint the primary's own `replication.Store`
       receives, forward it to every current replica per the
       `ReplicationRole` (T003) via the existing HTTP/3+mTLS client
       pattern (reuse 002's forwarding function if it exists at
       implementation time, or build the sibling the same way).
-- [ ] T009 [US1] Bounded retry + non-blocking behavior for an unreachable
+- [x] T009 [US1] Bounded retry + non-blocking behavior for an unreachable
       replica (spec.md FR-004): forwarding to one replica's failure MUST
       NOT block the primary's own response to its caller.
-- [ ] T010 [US1] Update `failover_state_test.go`'s original test to remove
+- [x] T010 [US1] Update `failover_state_test.go`'s original test to remove
       its own manual fan-out calls, keeping its other assertions intact —
       this is the literal, mechanical proof this feature's User Story 1
       is real (per plan.md's TDD Requirements).
-- [ ] T011 [US1] [REVIEW] Tenant-scoping review (spec.md FR-013) — confirm
+- [x] T011 [US1] [REVIEW] Tenant-scoping review (spec.md FR-013) — confirm
       forwarding never crosses a tenant boundary, citing the T072-FU5
       cross-tenant finding as the exact defect class to guard against.
 
