@@ -65,6 +65,50 @@ func newStoreRegistry(stateDir string, cfg replication.CheckpointConfig) *replic
 	return replication.NewStoreRegistry(stateDir, cfg)
 }
 
+// slotSaveEnvVar is the daemon-side counterpart of
+// lib/scheduler.sh's own LLMCTL_SLOT_SAVE_PATH opt-in env var
+// (003-kv-cache-replication T015, User Story 2): when set, this node
+// resolves a per-tenant subdirectory under it as the REAL local
+// directory a received engine-cache file (api.RegisterEngineCacheRoute)
+// is written into. This MUST be the SAME base directory the real
+// engine's own --slot-save-path was launched with
+// (lib/scheduler.sh's sched_build_launch writes
+// "${LLMCTL_SLOT_SAVE_PATH}/${profile}" - see that file's own comment)
+// or a warm-restore attempt against a transferred file looks in the
+// wrong place; wiring the two together at the profile/tenant-mapping
+// layer is a disclosed, deliberate scope boundary of this task (see
+// this feature's own final report) since no existing tenant-to-running-
+// profile resolution API exists yet to hook this into cleanly.
+//
+// Left unset (the default), this node has User Story 2's cross-node
+// transfer RECEIVING side fully DISABLED - it never writes a received
+// file anywhere; RegisterEngineCacheRoute honestly refuses every upload
+// with 503 rather than inventing a directory (matching
+// tenantEncryptionKeyEnvVar's own opt-in-only, zero-means-unset
+// convention, Constitution §11.4.6).
+const slotSaveEnvVar = "LLMCTL_SLOT_SAVE_PATH"
+
+// slotSaveDirResolver returns an api.EngineCacheDirResolver reading
+// slotSaveEnvVar fresh, per call (this daemon has no live-reload use
+// case for this value - matching newStoreRegistry's own "resolve once
+// from an explicit input" simplicity). tenantID == "" (the default/
+// no-tenancy path) resolves to the base directory directly, mirroring
+// StoreRegistry.Get's own "" -> baseDir-directly convention exactly, so
+// a single-tenant deployment's engine-cache directory is byte-identical
+// to what it would be without any tenant concept at all.
+func slotSaveDirResolver() api.EngineCacheDirResolver {
+	return func(tenantID string) (string, bool) {
+		base := os.Getenv(slotSaveEnvVar)
+		if base == "" {
+			return "", false
+		}
+		if tenantID == "" {
+			return base, true
+		}
+		return filepath.Join(base, tenantID), true
+	}
+}
+
 // bootstrapAdminOwnerID is the OwnerID recorded on the API key
 // `-bootstrap-admin` seeds (main.go's runClusterBootstrap) - a fixed,
 // documented, non-secret label (the key's ID/secret are the real
@@ -408,6 +452,7 @@ func runClusterBootstrap(args []string) {
 	}
 	forwarder := api.NewNodeForwarder(node, newForwardingHTTPClient(forwardClientTLS))
 	api.RegisterReplicationRoutes(srv.Router(), storeRegistry, decider, node, forwarder)
+	api.RegisterEngineCacheRoute(srv.Router(), decider, slotSaveDirResolver())
 
 	modelExecutor := executor.New(executor.Config{LLMCtlPath: f.llmctlPath})
 	// forwardTLS (002-cluster-model-scheduler T017) is the real mTLS
@@ -606,6 +651,7 @@ func runClusterJoinReal(args []string) int {
 	}
 	forwarder := api.NewNodeForwarder(node, newForwardingHTTPClient(forwardClientTLS))
 	api.RegisterReplicationRoutes(srv.Router(), storeRegistry, decider, node, forwarder)
+	api.RegisterEngineCacheRoute(srv.Router(), decider, slotSaveDirResolver())
 	modelExecutor := executor.New(executor.Config{LLMCtlPath: llmctlPath})
 	// See runClusterBootstrap's identical forwardTLS comment above
 	// (002-cluster-model-scheduler T017) - kept symmetric across both

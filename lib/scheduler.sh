@@ -141,6 +141,41 @@ sched_build_launch() {
       # determinism to "live challenges", the release-gating procedure in
       # docs/quickstart.md, not everyday interactive use).
       [[ -n "${LLMCTL_SEED:-}" ]] && SCHED_ARGS+=(--seed "${LLMCTL_SEED}" --temp 0)
+      # 003-kv-cache-replication T015 (spec.md FR-006/User Story 2): the
+      # real llama-server --slot-save-path flag - confirmed present at
+      # tools/server/server.cpp:285-286/server-context.cpp:5288-5320+
+      # (T060's investigation) - enabling the engine's own real
+      # /slots/:id_slot?action=save|restore HTTP endpoint. OPT-IN via
+      # LLMCTL_SLOT_SAVE_PATH (matching LLMCTL_SEED's own opt-in-env-var
+      # idiom exactly), never baked into every default launch: an
+      # always-on engine cache write is an unbounded-disk-growth host-
+      # safety concern (Constitution §11.4.133/§12) a deployment must
+      # explicitly opt into, not something forced on every profile start.
+      #
+      # Path is a PER-PROFILE subdirectory of LLMCTL_SLOT_SAVE_PATH
+      # (never the bare base directory) so two different profiles'
+      # engine processes can never collide on the same slot-cache
+      # filename underneath one shared directory - and the directory is
+      # created (never assumed pre-existing) before the real engine
+      # process, which would otherwise itself fail to start on a missing
+      # directory, is ever launched. This is the SAME base directory
+      # llmctld's own daemon-side LLMCTL_SLOT_SAVE_PATH env var
+      # (cmd/llmctld/main.go's slotSaveDirResolver) resolves a received
+      # cross-node engine-cache file into - both sides MUST agree on
+      # this one env var for a real warm-restore to ever find the file
+      # the engine itself wrote (or received).
+      if [[ -n "${LLMCTL_SLOT_SAVE_PATH:-}" ]]; then
+        local slot_save_dir="${LLMCTL_SLOT_SAVE_PATH}/${profile}"
+        # Created unconditionally, even under LLMCTL_DRY_RUN=1 - unlike
+        # the model-file-existence check above (which skips touching the
+        # real, potentially-multi-gigabyte model download under dry-run),
+        # creating this directory is a cheap, idempotent `mkdir -p` with
+        # no meaningful host-safety cost, and doing it here means a
+        # dry-run genuinely validates the real path this flag resolves
+        # to, rather than only pretending to.
+        ensure_dir "${slot_save_dir}"
+        SCHED_ARGS+=(--slot-save-path "${slot_save_dir}")
+      fi
       SCHED_EXEC="${bin}"
       ;;
     colibri)

@@ -125,4 +125,27 @@ assert_contains "${SCHED_ARGS[*]}" "--seed 42" "LLMCTL_SEED=42: llama launch inc
 assert_contains "${SCHED_ARGS[*]}" "--temp 0" "LLMCTL_SEED set: llama launch includes --temp 0 (FR-012 fixed-seed + temperature-0 pair)"
 unset LLMCTL_SEED
 
+# --- 9. LLMCTL_SLOT_SAVE_PATH opt-in wires --slot-save-path on llama
+# launches (003-kv-cache-replication T015, spec.md FR-006/User Story 2:
+# the real llama-server engine's own --slot-save-path +
+# /slots/:id_slot?action=save|restore mechanism, T060's confirmed-real
+# finding). Opt-in via an env var (matching LLMCTL_SEED's own idiom)
+# rather than baked into every default launch - see scheduler.sh's own
+# comment for the Constitution §11.4.133 host-safety rationale
+# (unbounded engine-cache disk growth must be an explicit deployment
+# choice, never a forced-on default). ---------------------------------
+sched_build_launch fast cpu 8080 8192 99 1 auto
+slot_save_present=0
+for a in "${SCHED_ARGS[@]}"; do [[ "${a}" == "--slot-save-path" ]] && slot_save_present=1; done
+assert_eq 0 "${slot_save_present}" "LLMCTL_SLOT_SAVE_PATH unset: no --slot-save-path flag added (default launch unchanged)"
+
+slot_save_base="$(mktemp -d)"
+export LLMCTL_SLOT_SAVE_PATH="${slot_save_base}"
+sched_build_launch fast cpu 8080 8192 99 1 auto
+assert_contains "${SCHED_ARGS[*]}" "--slot-save-path ${slot_save_base}/fast" "LLMCTL_SLOT_SAVE_PATH set: llama launch includes a per-profile --slot-save-path subdirectory"
+dir_created=0; [[ -d "${slot_save_base}/fast" ]] && dir_created=1
+assert_eq 1 "${dir_created}" "the per-profile slot-save directory is created before the engine is launched"
+unset LLMCTL_SLOT_SAVE_PATH
+rm -rf "${slot_save_base}"
+
 test_finish
