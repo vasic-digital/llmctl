@@ -6,6 +6,7 @@
 package cluster
 
 import (
+	"sort"
 	"sync"
 	"time"
 )
@@ -228,6 +229,78 @@ func (m *Monitor) Stop() {
 	}
 	close(stopCh)
 	<-doneCh
+}
+
+// ReconcileReplicationRoles recomputes, per tenant, the ReplicationRole
+// for every tenant CURRENTLY primaried by failedNodeID - the node a
+// Monitor.Rescheduler callback just reported unhealthy (T004: this reuses
+// that SAME failure-detection signal, never a second, independently-
+// reasoned unhealthy-node check, per research.md Decision 2).
+//
+// preferredPrimary, when non-empty and present in liveNodeIDs, is used as
+// each affected tenant's new primary - research.md Decision 2's "natural
+// default": if 002's own placement decision already chose a new host for
+// that tenant's model instance, prefer that node. When preferredPrimary
+// is empty, or is itself not live, the first (sorted) remaining live node
+// other than failedNodeID is used instead, so a failure is never left
+// unresolved merely because no placement preference was supplied.
+//
+// The decision itself is delegated entirely to ReconcileTenantRole (this
+// package's own pure per-tenant reconciliation function) - this function
+// is purely the per-tenant fan-out + preferred-primary selection layer
+// over it, so there is exactly one place (ReconcileTenantRole) that
+// decides what a reassigned role looks like.
+//
+// Returns only the tenants whose role actually CHANGED (never re-returns
+// an unaffected tenant's untouched role) - the caller (internal/raft,
+// which alone can issue a real Raft log entry) applies each returned
+// role via CommandReassignReplicationRole.
+func ReconcileReplicationRoles(roles map[string]ReplicationRole, failedNodeID string, liveNodeIDs []string, preferredPrimary string, now time.Time) map[string]ReplicationRole {
+	changed := make(map[string]ReplicationRole)
+
+	newPrimary := preferredPrimary
+	if newPrimary == "" || !stringSliceContains(liveNodeIDs, newPrimary) {
+		newPrimary = firstOtherLiveNode(liveNodeIDs, failedNodeID)
+	}
+	if newPrimary == "" {
+		// No live candidate at all to take over - honestly report nothing
+		// reassignable rather than fabricating a primary (Constitution
+		// §11.4.6 no-guessing).
+		return changed
+	}
+
+	for tenantID, existing := range roles {
+		if existing.PrimaryNodeID != failedNodeID {
+			continue
+		}
+		role, wasChanged, _ := ReconcileTenantRole(existing, true, tenantID, newPrimary, liveNodeIDs, []string{failedNodeID}, now)
+		if wasChanged {
+			changed[tenantID] = role
+		}
+	}
+
+	return changed
+}
+
+func stringSliceContains(ids []string, target string) bool {
+	for _, id := range ids {
+		if id == target {
+			return true
+		}
+	}
+	return false
+}
+
+func firstOtherLiveNode(liveNodeIDs []string, exclude string) string {
+	sorted := make([]string, len(liveNodeIDs))
+	copy(sorted, liveNodeIDs)
+	sort.Strings(sorted)
+	for _, id := range sorted {
+		if id != exclude {
+			return id
+		}
+	}
+	return ""
 }
 
 // Reconcile inspects each ReplicaState and, for every model that

@@ -30,16 +30,22 @@ import (
 // is never left at Resources's zero value (which cluster.Place would then
 // read as "this node has zero of everything", excluding it from every
 // real placement decision it should have been eligible for).
-// APIAddr (002-cluster-model-scheduler T017's prerequisite) is the
-// joining peer's own real HTTP/3+mTLS cluster-API bind address (its
-// internal/api.Server's bound address - NOT PeerAddr, which is the
-// peer's Raft transport address, a distinct listener/port entirely) -
-// carried into Node.Join so cluster.Node.APIAddr is genuinely populated,
-// letting cross-node model-lifecycle forwarding dial this peer. Optional
-// (empty string when the caller does not intend the peer to ever be a
-// forwarding target - e.g. a node that never serves the cluster HTTP
-// API) rather than required, unlike Resources/PeerID/PeerAddr, since no
-// existing behavior depends on it and no test fixture supplies it.
+// APIAddr is the joining peer's own real HTTP/3+mTLS cluster-API bind
+// address (its internal/api.Server's bound address - NOT PeerAddr, which
+// is the peer's Raft transport address, a distinct listener/port
+// entirely). Two consumers depend on it: 002-cluster-model-scheduler's
+// T017 cross-node model-lifecycle forwarding dials this address to reach
+// a peer, and 003-kv-cache-replication's T008 recorded it into
+// raft.Node.RegisterNode so internal/replication.Forwarder's
+// AddrResolver can find a replica to forward appends/checkpoints to (see
+// client.go's RequestJoin doc comment for the caller side). Left OPTIONAL
+// (no `binding:"required"`) rather than mandatory like PeerID/PeerAddr:
+// RegisterNode's own call site below already treats a registration
+// failure as best-effort-and-logged rather than fatal (an unregistered
+// node is simply skipped by both consumers, FR-004's "an unresolvable
+// replica is skipped, never blocking"), so rejecting the whole join at
+// the JSON-binding layer for an empty APIAddr would be stricter than
+// either consumer's own actual tolerance for its absence.
 type joinRequest struct {
 	PeerID    string            `json:"peer_id" binding:"required"`
 	PeerAddr  string            `json:"peer_addr" binding:"required"`
@@ -63,6 +69,20 @@ func RegisterClusterRoutes(r gin.IRoutes, node *raft.Node) {
 			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
 			return
 		}
+		// Join above already applies ONE CommandJoinNode carrying the
+		// peer's real Addr, APIAddr, AND Resources - a separate
+		// node.RegisterNode call here (003-kv-cache-replication's original
+		// T008 wiring) is not merely redundant but actively harmful: found
+		// during the 002/003 merge that CommandJoinNode's Apply fully
+		// REPLACES a node's map entry rather than merging into it, so a
+		// second, partial registration call immediately after Join would
+		// silently wipe the Resources just recorded back to its zero
+		// value - excluding this peer from every real placement decision
+		// cluster.Place should have considered it eligible for. See
+		// replication_commands.go's RegisterNode doc comment for the full
+		// story (including the sibling Addr-vs-APIAddr field bug the same
+		// investigation found in RegisterNode itself, independently of
+		// this call site).
 		c.JSON(http.StatusOK, gin.H{"status": "joined", "peer_id": req.PeerID, "peer_addr": req.PeerAddr})
 	})
 

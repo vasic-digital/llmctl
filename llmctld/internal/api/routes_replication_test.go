@@ -111,7 +111,7 @@ func TestReplicationRoutes_RequireJWTAndTenantOwnership(t *testing.T) {
 	decider := newReplicationTestDecider()
 
 	srv := NewServer(node, buildTestTLSConfig(t, ca, "node-a-api"))
-	RegisterReplicationRoutes(srv.Router(), registry, decider)
+	RegisterReplicationRoutes(srv.Router(), registry, decider, node, NewNodeForwarder(node, http.DefaultClient))
 	if err := srv.Listen("127.0.0.1:0"); err != nil {
 		t.Fatalf("Listen: %v", err)
 	}
@@ -180,7 +180,7 @@ func TestReplicationRoutes_AppendCheckpointStateRealHTTP3RoundTrip(t *testing.T)
 	token := issueReplicationTestJWT(t, decider, "")
 
 	srv := NewServer(node, buildTestTLSConfig(t, ca, "node-a-api"))
-	RegisterReplicationRoutes(srv.Router(), registry, decider)
+	RegisterReplicationRoutes(srv.Router(), registry, decider, node, NewNodeForwarder(node, http.DefaultClient))
 	if err := srv.Listen("127.0.0.1:0"); err != nil {
 		t.Fatalf("Listen: %v", err)
 	}
@@ -321,7 +321,7 @@ func TestReplicationRoutes_DifferentTenantHeaders_AreIsolatedRealHTTP3RoundTrip(
 	decider := newReplicationTestDecider()
 
 	srv := NewServer(node, buildTestTLSConfig(t, ca, "node-a-api"))
-	RegisterReplicationRoutes(srv.Router(), registry, decider)
+	RegisterReplicationRoutes(srv.Router(), registry, decider, node, NewNodeForwarder(node, http.DefaultClient))
 	if err := srv.Listen("127.0.0.1:0"); err != nil {
 		t.Fatalf("Listen: %v", err)
 	}

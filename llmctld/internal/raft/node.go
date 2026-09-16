@@ -269,10 +269,12 @@ func (n *Node) Addr() string {
 }
 
 // ID returns n's own stable cluster identity (the same value passed as
-// Config.NodeID) - callers outside this package (002-cluster-model-
-// scheduler T015/T016's auto-placement handler) need this to tell whether
-// a chosen cluster.Node IS this process, or a different node the start
-// request must be forwarded to (client.go's ForwardModelStart).
+// Config.NodeID) - callers outside this package need this to tell
+// whether a chosen cluster.Node IS this process, or a different one work
+// must be forwarded to: 002-cluster-model-scheduler's T015/T016
+// auto-placement handler (client.go's ForwardModelStart) and
+// 003-kv-cache-replication's T008 forwarder wiring (replication_commands.go)
+// both depend on this exact method for the identical reason.
 func (n *Node) ID() string {
 	return string(n.localID)
 }

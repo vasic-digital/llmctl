@@ -213,7 +213,7 @@ func TestClusterJoin_RealHTTP3RequestActuallyJoinsRaft(t *testing.T) {
 	defer func() { _ = srv.Close() }()
 
 	client := newTestClient(buildTestTLSConfig(t, ca, "test-client"))
-	reqBody := []byte(`{"peer_id":"node-b","peer_addr":"` + follower.Addr() + `"}`)
+	reqBody := []byte(`{"peer_id":"node-b","peer_addr":"` + follower.Addr() + `","api_addr":"127.0.0.1:9100"}`)
 	resp, err := client.Post("https://"+srv.Addr+"/v1/cluster/join", "application/json", bytes.NewReader(reqBody))
 	if err != nil {
 		t.Fatalf("POST /v1/cluster/join: %v", err)

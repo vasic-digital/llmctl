@@ -8,11 +8,14 @@ import (
 	"crypto/x509"
 	"flag"
 	"fmt"
+	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"syscall"
 	"time"
+
+	"github.com/quic-go/quic-go/http3"
 
 	"github.com/vasic-digital/llmctl/llmctld/internal/api"
 	"github.com/vasic-digital/llmctl/llmctld/internal/audit"
@@ -213,6 +216,45 @@ func buildNodeTLSConfig(ca *mtls.CA, nodeID string) (*tls.Config, error) {
 	}, nil
 }
 
+// forwardClientRequestTimeout bounds the http.Client-level timeout for
+// one forwarded HTTP/3+mTLS request (internal/api's NewNodeForwarder,
+// T008) - distinct from internal/replication's own forwardRetryBudget
+// (that one bounds the forwarder's OWN retry loop across potentially
+// several attempts to one replica); kept generous relative to that
+// budget so this client-level timeout is never what actually fires
+// first for a healthy replica.
+const forwardClientRequestTimeout = 10 * time.Second
+
+// newForwardingHTTPClient builds the real HTTP/3+mTLS client
+// internal/replication.Forwarder posts forwarded appends/checkpoints
+// over (T008) - the SAME quic-go/http3 transport + mTLS discipline every
+// other node-to-node call in this codebase uses (api/client.go's own
+// RequestJoin).
+func newForwardingHTTPClient(clientTLS *tls.Config) *http.Client {
+	return &http.Client{
+		Transport: &http3.Transport{TLSClientConfig: clientTLS},
+		Timeout:   forwardClientRequestTimeout,
+	}
+}
+
+// selfRegisterOwnAPIAddr (003-kv-cache-replication's original T008
+// bootstrap-self-registration mechanism) was REMOVED during the 002/003
+// merge, not merely superseded in place: it solved the exact same
+// problem as 002-cluster-model-scheduler's node.RegisterSelf (a
+// bootstrap leader is otherwise absent from its own ClusterState.Nodes)
+// via a strictly weaker mechanism - backgrounded (a real race window
+// during which cluster.Place and internal/replication.Forwarder's
+// AddrResolver would both see this node as absent), and its own
+// RegisterNode(node.ID(), apiAddr) call carried NO Resources at all
+// (RegisterNode only ever sets APIAddr, never Resources - see
+// replication_commands.go's RegisterNode doc comment), which would have
+// left this node permanently invisible to cluster.Place's capacity-based
+// candidate filtering even once registration completed. RegisterSelf's
+// synchronous, full (Addr+APIAddr+Resources) registration - already
+// required by 002-cluster-model-scheduler and called immediately above -
+// makes this function's entire purpose redundant, so it is deleted
+// rather than kept as an unreachable alternative path.
+
 // waitForShutdownSignal blocks until SIGINT or SIGTERM, so a
 // llmctld cluster process stays up (serving Raft + the HTTP API) until
 // explicitly told to stop - the real, killable-by-a-test-harness process
@@ -308,7 +350,17 @@ func runClusterBootstrap(args []string) {
 	// diff - see routes_replication.go's package doc comment.
 	storeRegistry := newStoreRegistry(stateDir, replication.CheckpointConfig{})
 	defer func() { _ = storeRegistry.Close() }()
-	api.RegisterReplicationRoutes(srv.Router(), storeRegistry, decider)
+	// T008 (003-kv-cache-replication): the automatic cross-node forwarding
+	// daemon - posts this node's own real appends/checkpoints to every
+	// current replica's real /v1/replication/* routes over a real
+	// HTTP/3+mTLS client, the moment they land locally.
+	forwardClientTLS, err := buildNodeTLSConfig(ca, f.nodeID+"-forward-client")
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "llmctld: cluster bootstrap:", err)
+		os.Exit(1)
+	}
+	forwarder := api.NewNodeForwarder(node, newForwardingHTTPClient(forwardClientTLS))
+	api.RegisterReplicationRoutes(srv.Router(), storeRegistry, decider, node, forwarder)
 
 	modelExecutor := executor.New(executor.Config{LLMCtlPath: f.llmctlPath})
 	// forwardTLS (002-cluster-model-scheduler T017) is the real mTLS
@@ -366,16 +418,27 @@ func runClusterBootstrap(args []string) {
 		os.Exit(1)
 	}
 
-	// RegisterSelf (002-cluster-model-scheduler T017's prerequisite): a
-	// freshly-bootstrapped leader is otherwise NEVER present in its own
-	// ClusterState.Nodes (Bootstrap only ever makes it a Raft VOTER, never
-	// applies a CommandJoinNode for its own ID - a real, found gap) - so
-	// without this, the bootstrap leader itself is invisible to
-	// cluster.Place's candidate list, and to every other node's
-	// cross-node-forwarding dial target. Sourced from the SAME real
-	// hardware probe -join uses (never a zero-value placeholder), and
-	// from srv's own real bound address (never the requested -api-bind,
-	// which may be an ephemeral ":0" the OS has since resolved).
+	// RegisterSelf (002-cluster-model-scheduler T017's prerequisite; also
+	// satisfies 003-kv-cache-replication's T008 self-registration need -
+	// see this function's doc comment for why the two features' separate
+	// self-registration mechanisms were consolidated into this one during
+	// the 002/003 merge) - a freshly-bootstrapped leader is otherwise
+	// NEVER present in its own ClusterState.Nodes (Bootstrap only ever
+	// makes it a Raft VOTER, never applies a CommandJoinNode for its own
+	// ID - a real, found gap) - so without this, the bootstrap leader
+	// itself is invisible to cluster.Place's candidate list, and to every
+	// other node's cross-node-forwarding/replication-forwarding dial
+	// target. Sourced from the SAME real hardware probe -join uses (never
+	// a zero-value placeholder), and from srv's own real bound address
+	// (never the requested -api-bind, which may be an ephemeral ":0" the
+	// OS has since resolved). Run synchronously (unlike T008's original
+	// backgrounded selfRegisterOwnAPIAddr, superseded here): this call
+	// already fully sets Addr/APIAddr/Resources in one CommandJoinNode
+	// after leadership is confirmed, so there is no election race left to
+	// wait out in the background, and every consumer (cluster.Place AND
+	// internal/replication.Forwarder's AddrResolver) sees a complete,
+	// correct entry before READY prints - never a partial one a
+	// backgrounded retry might still be filling in.
 	selfResources, err := probeLocalResources(f.llmctlPath)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "llmctld: cluster bootstrap: probeLocalResources:", err)
@@ -486,7 +549,15 @@ func runClusterJoinReal(args []string) int {
 	// above (T072-FU2/T072-FU5) - kept symmetric across both subcommands.
 	storeRegistry := newStoreRegistry(resolvedStateDir, replication.CheckpointConfig{})
 	defer func() { _ = storeRegistry.Close() }()
-	api.RegisterReplicationRoutes(srv.Router(), storeRegistry, decider)
+	// See runClusterBootstrap's identical Forwarder wiring comment above
+	// (T008) - kept symmetric across both subcommands.
+	forwardClientTLS, err := buildNodeTLSConfig(ca, nodeID+"-forward-client")
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "llmctld: cluster join:", err)
+		return 1
+	}
+	forwarder := api.NewNodeForwarder(node, newForwardingHTTPClient(forwardClientTLS))
+	api.RegisterReplicationRoutes(srv.Router(), storeRegistry, decider, node, forwarder)
 	modelExecutor := executor.New(executor.Config{LLMCtlPath: llmctlPath})
 	// See runClusterBootstrap's identical forwardTLS comment above
 	// (002-cluster-model-scheduler T017) - kept symmetric across both
@@ -517,10 +588,11 @@ func runClusterJoinReal(args []string) int {
 	// srv.Addr (this node's own real bound cluster-API address, known only
 	// after srv.Listen above) is forwarded as RequestJoin's apiAddr so the
 	// leader's own Join call populates ClusterState.Nodes[nodeID].APIAddr -
-	// the cross-node-forwarding dial target 002-cluster-model-scheduler
-	// T017 needs (see internal/raft/node.go's Join doc comment for the
-	// distinction between this and node.Addr(), the Raft transport
-	// address).
+	// the cross-node-forwarding dial target 002-cluster-model-scheduler's
+	// T017 AND 003-kv-cache-replication's T008 (internal/replication.Forwarder's
+	// AddrResolver) both need (see internal/raft/node.go's Join doc
+	// comment for the distinction between this and node.Addr(), the Raft
+	// transport address).
 	if err := api.RequestJoin(joinClientTLS, leaderAPI, nodeID, node.Addr(), srv.Addr, resources); err != nil {
 		fmt.Fprintln(os.Stderr, "llmctld: cluster join: RequestJoin:", err)
 		return 1

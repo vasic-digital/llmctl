@@ -128,6 +128,102 @@ func TestMonitor_StartStop_RunsPeriodically(t *testing.T) {
 	}
 }
 
+// TestMonitor_UnhealthyPrimary_TriggersReassignment proves the SAME
+// unhealthy-node detection signal Monitor already produces (its
+// Rescheduler callback, fired exactly once per failure episode) is
+// sufficient to drive a per-tenant ReplicationRole reassignment - no
+// second, independently-reasoned detector is introduced
+// (research.md Decision 2, T004). The reschedule callback itself calls
+// ReconcileReplicationRoles, exactly the kind of real production wiring
+// a caller (internal/raft, which alone can issue the resulting
+// CommandReassignReplicationRole log entry) would install.
+func TestMonitor_UnhealthyPrimary_TriggersReassignment(t *testing.T) {
+	roles := map[string]ReplicationRole{
+		"tenant-a": {TenantID: "tenant-a", PrimaryNodeID: "node-a", ReplicaNodeIDs: []string{"node-b", "node-c"}, AssignedAt: time.Now()},
+	}
+
+	var mu sync.Mutex
+	var reassigned map[string]ReplicationRole
+
+	healthy := map[string]bool{"node-a": true}
+	checker := func(addr string) bool {
+		mu.Lock()
+		defer mu.Unlock()
+		return healthy[addr]
+	}
+	reschedule := func(failedNodeID string) {
+		mu.Lock()
+		defer mu.Unlock()
+		// research.md Decision 2's "natural default": prefer node-b, the
+		// node a hypothetical 002 placement decision already chose for
+		// this tenant's model instance.
+		reassigned = ReconcileReplicationRoles(roles, failedNodeID, []string{"node-b", "node-c"}, "node-b", time.Now())
+	}
+
+	m := NewMonitor(checker, reschedule, time.Hour)
+	m.SetNodes(map[string]string{"node-a": "node-a"})
+
+	m.CheckOnce() // node-a healthy -> no reschedule, no reassignment
+
+	mu.Lock()
+	if reassigned != nil {
+		mu.Unlock()
+		t.Fatalf("reassignment computed before node-a was ever detected unhealthy")
+	}
+	healthy["node-a"] = false
+	mu.Unlock()
+
+	m.CheckOnce() // node-a detected unhealthy -> reschedule fires -> reassignment computed
+
+	mu.Lock()
+	defer mu.Unlock()
+	role, ok := reassigned["tenant-a"]
+	if !ok {
+		t.Fatalf("expected tenant-a's role reassigned after its primary (node-a) was detected unhealthy")
+	}
+	if role.PrimaryNodeID != "node-b" {
+		t.Fatalf("PrimaryNodeID = %q, want node-b (the preferred/placement-chosen new primary)", role.PrimaryNodeID)
+	}
+	if got, want := role.ReplicaNodeIDs, []string{"node-c"}; !stringSlicesEqual(got, want) {
+		t.Fatalf("ReplicaNodeIDs = %v, want %v", got, want)
+	}
+}
+
+// TestReconcileReplicationRoles_UnaffectedTenantsUntouched proves a
+// tenant whose primary is NOT the failed node is never included in the
+// result (no spurious reassignment of healthy tenants).
+func TestReconcileReplicationRoles_UnaffectedTenantsUntouched(t *testing.T) {
+	roles := map[string]ReplicationRole{
+		"tenant-a": {TenantID: "tenant-a", PrimaryNodeID: "node-a", ReplicaNodeIDs: []string{"node-b"}, AssignedAt: time.Now()},
+		"tenant-b": {TenantID: "tenant-b", PrimaryNodeID: "node-c", ReplicaNodeIDs: []string{"node-b"}, AssignedAt: time.Now()},
+	}
+	result := ReconcileReplicationRoles(roles, "node-a", []string{"node-b", "node-c"}, "node-b", time.Now())
+	if _, present := result["tenant-b"]; present {
+		t.Fatalf("tenant-b's primary (node-c) never failed - it must not appear in the reassignment result")
+	}
+	if _, present := result["tenant-a"]; !present {
+		t.Fatalf("tenant-a's primary (node-a) failed - it MUST appear in the reassignment result")
+	}
+}
+
+// TestReconcileReplicationRoles_FallsBackWhenPreferredPrimaryNotLive
+// proves the preferred/placement-chosen primary is used only when it is
+// genuinely live - an empty or dead preference falls back to any other
+// live node rather than leaving the tenant unassigned.
+func TestReconcileReplicationRoles_FallsBackWhenPreferredPrimaryNotLive(t *testing.T) {
+	roles := map[string]ReplicationRole{
+		"tenant-a": {TenantID: "tenant-a", PrimaryNodeID: "node-a", ReplicaNodeIDs: []string{"node-b"}, AssignedAt: time.Now()},
+	}
+	result := ReconcileReplicationRoles(roles, "node-a", []string{"node-b"}, "" /* no preference */, time.Now())
+	role, ok := result["tenant-a"]
+	if !ok {
+		t.Fatalf("expected a fallback reassignment even with no preferred primary")
+	}
+	if role.PrimaryNodeID != "node-b" {
+		t.Fatalf("PrimaryNodeID = %q, want node-b (the only remaining live node)", role.PrimaryNodeID)
+	}
+}
+
 // TestReconcile_ReplacesUnderReplicatedModel proves the reconciliation
 // pass places exactly the deficit count of replacement replicas, on
 // healthy candidates not already hosting a live replica (SC-018: 1 of 3

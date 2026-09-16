@@ -33,10 +33,14 @@ package api
 
 import (
 	"net/http"
+	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
 	"github.com/vasic-digital/llmctl/llmctld/internal/authz"
+	"github.com/vasic-digital/llmctl/llmctld/internal/cluster"
+	"github.com/vasic-digital/llmctl/llmctld/internal/raft"
 	"github.com/vasic-digital/llmctl/llmctld/internal/replication"
 )
 
@@ -107,19 +111,137 @@ func resolveStore(c *gin.Context, registry *replication.StoreRegistry, decider *
 	return store, true
 }
 
+// bearerTokenFromRequest extracts the raw bearer token from c's
+// Authorization header (RequireJWT has already validated it by the time
+// a handler runs) - the SAME token this call's own local
+// append/checkpoint was authorized with is what gets forwarded onward
+// (T008/T011): the receiving replica's own RequireJWT +
+// authorizeTenantOwnership will independently re-validate it against its
+// own X-Tenant-ID header (forwarder.go's forwardTenantIDHeader), so a
+// caller entitled to write tenantID on this node is entitled to write
+// the SAME tenantID's forwarded content on the replica too - never a
+// separately-minted or elevated credential.
+func bearerTokenFromRequest(c *gin.Context) string {
+	return strings.TrimPrefix(c.GetHeader("Authorization"), "Bearer ")
+}
+
+// ensureReplicationRole makes sure tenantID has a current, Raft-
+// replicated ReplicationRole naming this node as primary BEFORE this
+// call's own forwarding decision is made (T008, 003-kv-cache-replication
+// User Story 1) - the auto-establishment path spec.md requires: there is
+// no separate "declare primary" API, so the first node to successfully
+// append/checkpoint a tenant's content becomes that tenant's primary,
+// exactly matching FR-011's "exactly one authoritative forwarding
+// source" applied to the moment a stream begins. Reuses
+// cluster.ReconcileTenantRole - the SAME pure decision function T004's
+// health-driven failover path already funnels through (research.md
+// Decision 2's "no second detector"), fed here by node.Servers() (n's
+// own current real Raft voter set) as liveNodeIDs - the authoritative
+// cluster-membership signal, never an independently-tracked view.
+//
+// Best-effort + honest: if this node is not currently the Raft leader,
+// AssignReplicationRole/ReassignReplicationRole fails (hraft.ErrNotLeader,
+// via applyCommand) and is silently ignored here - the append/checkpoint
+// this call is part of has ALREADY succeeded locally against this node's
+// own real Store by the time this runs, so a role-assignment failure
+// never turns a successful local write into a reported failure.
+// Forwarding simply does not begin from a non-leader node until a
+// genuine leader (which every write eventually reaches, since only the
+// leader can durably Apply) establishes the role itself - never a
+// fabricated forwarding success.
+func ensureReplicationRole(node *raft.Node, tenantID string) {
+	state := node.State()
+	existing, had := state.ReplicationRoles[tenantID]
+	servers, err := node.Servers()
+	if err != nil {
+		return
+	}
+	liveNodeIDs := make([]string, 0, len(servers))
+	for _, s := range servers {
+		liveNodeIDs = append(liveNodeIDs, s.ID)
+	}
+	role, changed, isReassignment := cluster.ReconcileTenantRole(existing, had, tenantID, node.ID(), liveNodeIDs, nil, time.Now())
+	if !changed {
+		return
+	}
+	if isReassignment {
+		_ = node.ReassignReplicationRole(role)
+	} else {
+		_ = node.AssignReplicationRole(role)
+	}
+}
+
+// nodeRoleResolver returns a replication.RoleResolver reading node's own
+// Raft-replicated ReplicationRoles map directly, fresh on every call -
+// re-reading rather than caching is load-bearing for T005's race-
+// condition analysis (forwarder.go's own package doc comment).
+func nodeRoleResolver(node *raft.Node) replication.RoleResolver {
+	return func(tenantID string) (primaryNodeID string, replicaNodeIDs []string, ok bool) {
+		role, ok := node.State().ReplicationRoles[tenantID]
+		if !ok {
+			return "", nil, false
+		}
+		return role.PrimaryNodeID, role.ReplicaNodeIDs, true
+	}
+}
+
+// nodeAddrResolver returns a replication.AddrResolver reading node's own
+// Raft-replicated node registry (ClusterState.Nodes, CommandJoinNode) -
+// the real HTTP API address every node registers for itself via
+// raft.Node.Join/RegisterSelf (002-cluster-model-scheduler's T004/T017,
+// cmd/llmctld's main.go). Reads n.APIAddr - NEVER n.Addr, which is a
+// DIFFERENT field carrying the node's Raft QUIC-transport address (a
+// separate listener with its own strict ALPN, internal/raft/transport.go's
+// quicRaftALPN). A real, previously-undiscovered bug found during the
+// 002/003 merge: an earlier version of this resolver read n.Addr,
+// which - since the Raft transport listener does NOT go through
+// quic-go/http3's client/server ALPN auto-coercion to "h3" the way this
+// package's own HTTP/3+mTLS API server does - made every forwarded
+// append/checkpoint dial the WRONG port and fail deterministically with
+// a real TLS handshake error ("tls: server did not select an ALPN
+// protocol"), never a silent misbehavior. See replication_commands.go's
+// RegisterNode doc comment for the sibling instance of this same
+// Addr-vs-APIAddr confusion, independently found in the same
+// investigation. A node with no registered API address (never joined via
+// the api_addr-carrying path, or a registration that has not yet
+// replicated) resolves ok=false - Forwarder.forwardToReplicas skips it
+// honestly (FR-004), never blocking on it.
+func nodeAddrResolver(node *raft.Node) replication.AddrResolver {
+	return func(nodeID string) (baseURL string, ok bool) {
+		n, ok := node.State().Nodes[nodeID]
+		if !ok || n.APIAddr == "" {
+			return "", false
+		}
+		return "https://" + n.APIAddr, true
+	}
+}
+
+// NewNodeForwarder builds a *replication.Forwarder wired against node's
+// own real Raft-replicated ReplicationRole + node-registry state (T008),
+// posting forwarded appends/checkpoints over httpClient - production
+// callers (cmd/llmctld's main.go) supply a real HTTP/3+mTLS client;
+// tests may supply any http.Client, since it is never actually dialed
+// when a node has no other live/registered replicas.
+func NewNodeForwarder(node *raft.Node, httpClient *http.Client) *replication.Forwarder {
+	return replication.NewForwarder(node.ID(), nodeRoleResolver(node), nodeAddrResolver(node), httpClient)
+}
+
 // RegisterReplicationRoutes wires the KV-cache replication routes onto r,
 // backed by registry (one *replication.Store per tenant, see this file's
-// package doc comment) and decider (the RequireJWT + tenant-ownership
+// package doc comment), decider (the RequireJWT + tenant-ownership
 // authorization every route now requires - see this file's package doc
-// comment for why). mTLS enforcement for these routes is the caller's
-// route-group choice (applied by wrapping r in a group that already runs
-// RequireMTLS, exactly as NewServer does for RegisterClusterRoutes) -
-// never re-checked inside an individual handler here, matching
-// routes_cluster.go's own documented enforcement-seam discipline. JWT
-// enforcement, unlike mTLS, IS applied per-route here (RequireJWT), not
-// left to the caller's route-group choice - every route in this file
-// requires one.
-func RegisterReplicationRoutes(r gin.IRoutes, registry *replication.StoreRegistry, decider *authz.Decider) {
+// comment for why), node (T008: this node's own real *raft.Node, used to
+// auto-establish + read each tenant's ReplicationRole), and forwarder
+// (T008: the daemon-side automatic cross-node forwarding mechanism,
+// typically constructed via NewNodeForwarder against the SAME node).
+// mTLS enforcement for these routes is the caller's route-group choice
+// (applied by wrapping r in a group that already runs RequireMTLS,
+// exactly as NewServer does for RegisterClusterRoutes) - never re-checked
+// inside an individual handler here, matching routes_cluster.go's own
+// documented enforcement-seam discipline. JWT enforcement, unlike mTLS,
+// IS applied per-route here (RequireJWT), not left to the caller's
+// route-group choice - every route in this file requires one.
+func RegisterReplicationRoutes(r gin.IRoutes, registry *replication.StoreRegistry, decider *authz.Decider, node *raft.Node, forwarder *replication.Forwarder) {
 	r.POST("/v1/replication/append", RequireJWT(decider), func(c *gin.Context) {
 		store, ok := resolveStore(c, registry, decider)
 		if !ok {
@@ -130,12 +252,25 @@ func RegisterReplicationRoutes(r gin.IRoutes, registry *replication.StoreRegistr
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
-		for _, e := range req.Entries {
-			entry := replication.WALEntry{Seq: e.Seq, TokenID: e.TokenID, Position: e.Position}
-			if err := store.WAL().Append(entry); err != nil {
+		entries := make([]replication.WALEntry, len(req.Entries))
+		for i, e := range req.Entries {
+			entries[i] = replication.WALEntry{Seq: e.Seq, TokenID: e.TokenID, Position: e.Position}
+			if err := store.WAL().Append(entries[i]); err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 				return
 			}
+		}
+		// T008/T009: forwarding runs AFTER this node's own local append has
+		// already durably succeeded (above) - a forwarding failure/timeout
+		// (bounded per FR-004) is never allowed to turn an already-durable
+		// local write into a reported failure; it is honestly logged, not
+		// surfaced as this request's own error, matching FR-004's "the
+		// primary's own ability to keep serving the conversation" being the
+		// thing that must never block.
+		tenantID := c.GetHeader(tenantIDHeader)
+		ensureReplicationRole(node, tenantID)
+		if err := forwarder.ForwardAppend(tenantID, bearerTokenFromRequest(c), entries); err != nil {
+			c.Header("X-Replication-Forward-Warning", err.Error())
 		}
 		c.JSON(http.StatusOK, gin.H{"status": "appended", "count": len(req.Entries)})
 	})
@@ -153,6 +288,11 @@ func RegisterReplicationRoutes(r gin.IRoutes, registry *replication.StoreRegistr
 		if err := store.Checkpoint(req.Seq, req.State); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
+		}
+		tenantID := c.GetHeader(tenantIDHeader)
+		ensureReplicationRole(node, tenantID)
+		if err := forwarder.ForwardCheckpoint(tenantID, bearerTokenFromRequest(c), req.Seq, req.State); err != nil {
+			c.Header("X-Replication-Forward-Warning", err.Error())
 		}
 		c.JSON(http.StatusOK, gin.H{"status": "checkpointed", "seq": req.Seq})
 	})

@@ -42,6 +42,16 @@ const requestJoinRetryInterval = 100 * time.Millisecond
 // node's own real NodeID (see internal/raft/node.go's Join doc comment
 // for why this matters - an address-derived ID is a real, found bug).
 //
+// peerAPIAddr is the joining node's own real HTTP API address (T008,
+// 003-kv-cache-replication) - propagated into joinRequest.APIAddr so the
+// leader can durably record it in the cluster's node registry
+// (raft.Node.RegisterNode, CommandJoinNode) the moment the join succeeds,
+// which is what internal/replication.Forwarder's AddrResolver needs to
+// find a replica's real address to forward appends/checkpoints to. Unlike
+// peerAddr (the Raft transport address), peerAPIAddr is never used by
+// hashicorp/raft itself - it exists purely for this cross-node HTTP
+// forwarding concern.
+//
 // A 409 response (node.Join's own real failure, almost always
 // hraft.ErrNotLeader wrapped by routes_cluster.go - see its own handler)
 // is retried for up to requestJoinRetryBudget before RequestJoin gives
@@ -58,12 +68,14 @@ const requestJoinRetryInterval = 100 * time.Millisecond
 // never probes hardware, it only transports whatever resources it is
 // given.
 //
-// apiAddr (002-cluster-model-scheduler T017's prerequisite) is the
-// joining node's own real HTTP/3+mTLS cluster-API bind address (its own
-// internal/api.Server's bound address, obtained AFTER that server has
-// started listening - never a placeholder), forwarded as joinRequest's
-// optional APIAddr field so cross-node model-lifecycle forwarding can
-// later dial this node directly.
+// apiAddr (002-cluster-model-scheduler T017's prerequisite; also
+// consumed by 003-kv-cache-replication's T008 via
+// raft.Node.RegisterNode) is the joining node's own real HTTP/3+mTLS
+// cluster-API bind address (its own internal/api.Server's bound address,
+// obtained AFTER that server has started listening - never a
+// placeholder), forwarded as joinRequest's optional APIAddr field so
+// cross-node model-lifecycle forwarding AND internal/replication.Forwarder's
+// AddrResolver can both later dial this node directly.
 func RequestJoin(clientTLS *tls.Config, leaderAPIAddr, peerID, peerAddr, apiAddr string, resources cluster.Resources) error {
 	client := &http.Client{
 		Transport: &http3.Transport{TLSClientConfig: clientTLS},

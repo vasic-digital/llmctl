@@ -42,6 +42,17 @@ const (
 	// RunningProfile entry - idempotent no-op if already absent, matching
 	// CommandReleaseLock's own established idempotent-release pattern.
 	CommandClearRunningProfile CommandType = "clear_running_profile"
+
+	// CommandAssignReplicationRole and CommandReassignReplicationRole
+	// both write cluster.ClusterState.ReplicationRoles[tenantID] via the
+	// SAME atomic map-replace-in-place code path as CommandJoinNode's own
+	// Nodes map write (003-kv-cache-replication data-model.md,
+	// replication_roles.go's ReconcileTenantRole doc comment) - two
+	// distinct CommandTypes exist only for semantic/audit clarity
+	// (a fresh/refreshed assignment vs. a failover taking over from a
+	// dead primary), never because the FSM treats them differently.
+	CommandAssignReplicationRole   CommandType = "assign_replication_role"
+	CommandReassignReplicationRole CommandType = "reassign_replication_role"
 )
 
 // Command is the structure serialized into every Raft log entry's Data.
@@ -85,6 +96,15 @@ type Command struct {
 	TenantID  string                   `json:"tenant_id,omitempty"`
 	StartedAt time.Time                `json:"started_at,omitempty"`
 	Footprint cluster.PlacementRequest `json:"footprint,omitempty"`
+
+	// ReplicationRole carries the full role assignment for
+	// CommandAssignReplicationRole/CommandReassignReplicationRole -
+	// computed ONCE by the proposer (cluster.ReconcileTenantRole,
+	// including its own AssignedAt) and replicated verbatim, matching
+	// LockExpiresAt/LockNow's determinism discipline above: FSM.Apply
+	// must produce identical state on every replica given the same log
+	// entry, so this value is never recomputed locally by Apply itself.
+	ReplicationRole *cluster.ReplicationRole `json:"replication_role,omitempty"`
 }
 
 var (
@@ -94,6 +114,7 @@ var (
 	errNotLockHolder                   = errors.New("raft: release_lock refused: caller is not the current holder of this lock")
 	errUpdateResourcesUnknownNode      = errors.New("raft: update_resources refused: node is not currently a cluster member")
 	errRecordRunningProfileUnknownNode = errors.New("raft: record_running_profile refused: node is not currently a cluster member")
+	errCommandMissingReplicationRole   = errors.New("raft: assign_replication_role/reassign_replication_role command missing ReplicationRole")
 
 	// ErrInsufficientCapacity is CommandRecordRunningProfile's Apply-time
 	// re-validation refusal (FR-005/SC-004's TOCTOU-closing mechanism) -
@@ -227,6 +248,17 @@ func (f *ClusterFSM) Apply(log *hraft.Log) interface{} {
 			filtered = append(filtered, rp)
 		}
 		f.state.RunningProfiles = filtered
+	case CommandAssignReplicationRole, CommandReassignReplicationRole:
+		if cmd.ReplicationRole == nil {
+			return errCommandMissingReplicationRole
+		}
+		// Atomic map-replace-in-place, exactly like CommandJoinNode's own
+		// f.state.Nodes[cmd.Node.ID] = *cmd.Node write above: a single
+		// map-entry assignment can never leave two ReplicationRole
+		// entries for the same tenant momentarily visible, so
+		// spec.md FR-011's "exactly one primary at any time" holds
+		// structurally, not merely by convention.
+		f.state.ReplicationRoles[cmd.ReplicationRole.TenantID] = *cmd.ReplicationRole
 	default:
 		return errUnknownCommand
 	}
@@ -255,6 +287,9 @@ func (f *ClusterFSM) Restore(rc io.ReadCloser) error {
 	}
 	if state.RunningProfiles == nil {
 		state.RunningProfiles = []cluster.RunningProfile{}
+	}
+	if state.ReplicationRoles == nil {
+		state.ReplicationRoles = make(map[string]cluster.ReplicationRole)
 	}
 
 	f.mu.Lock()
