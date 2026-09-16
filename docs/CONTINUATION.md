@@ -1,7 +1,7 @@
 # CONTINUATION
 
-**Revision:** 12
-**Last modified:** 2026-09-15T00:00:00Z
+**Revision:** 13
+**Last modified:** 2026-09-16T00:00:00Z
 
 Per Constitution §12.10: this file reflects the live state of work on the
 `001-llmctl-completion` feature so any agent can resume exactly where the
@@ -28,30 +28,50 @@ breakdown live under `specs/001-llmctl-completion/`:
 
 ## 2. Current phase / immediate next action
 
-**ALL 12 PHASES OF THE `001-llmctl-completion` FEATURE ARE COMPLETE, AND ITS
-ONE DISCLOSED FOLLOW-UP ITEM (T072-FU1, per-tenant cgroup isolation wiring)
-IS NOW ALSO CLOSED (2026-09-15) — see §10a below.**
-Phase 12 (Polish & Cross-Cutting Concerns), the final phase, finished all 8
-of its tasks (T076–T083) with zero blocking findings. Combined with Phases
-1–11 already being complete (Phases 1–10 approved at their own checkpoints;
-Phase 11 completed with a security review that found and fixed 4 genuine
-exploitable defects), **all 89 tasks across all 12 phases are done.** The
-operator directed the agent (mid-Phase-11) to proceed autonomously through
-every remaining phase without pausing for per-phase approval, committing and
-pushing via `commit_fully` along the way — this superseded the default
-mandatory-checkpoint-pause rule for the remainder of the run. After the
-89-task plan finished, the operator selected "wire cgroup isolation in" as
-explicitly-scoped follow-up work (via an `AskUserQuestion` clarification,
-since the 12-phase plan itself had nothing left); that follow-up (tracked as
-`T072-FU1` in `tasks.md`/`progress.yml`) is now done on both the bash and Go
-sides — see §10a. There is no next phase and no next follow-up item queued.
-The immediate next action for a resuming session is: **present the final
-project state to the operator** (this file, plus
-`specs/001-llmctl-completion/tasks.md` and `progress.yml`, are the complete
-record) and await further instruction — e.g. whether to actually cut a real
-release (see the standing constraint below), start a new feature, or address
-the one remaining honestly-disclosed boundary noted in §10a
-(`internal/isolation.TenantStateDir` still has no caller on either side).
+**ALL 12 PHASES OF THE `001-llmctl-completion` FEATURE ARE COMPLETE. All
+five of its disclosed follow-up items (T072-FU1..FU5, per-tenant isolation,
+model-lifecycle dispatch, and an independent security review) are closed —
+see §10a-10e. Three entirely new spec-kit features, each disclosed as
+follow-up boundaries from the original plan, have SINCE been fully designed
+(spec/plan/research/data-model/tasks) and fully implemented (all 6 phases
+each — Setup, Foundational, User Story 1 MVP, User Story 2, User Story 3,
+Polish) and merged to `main` this session (2026-09-16): `002-cluster-model-
+scheduler` (T072-FU6, §10f), `003-kv-cache-replication` (T072-FU7, §10g),
+and `004-mtls-cert-rotation` (T072-FU8, §10h).**
+
+All three features were planned and implemented via parallel subagent
+dispatch in isolated git worktrees per phase (Constitution §11.4.58/§11.4.70/
+§11.4.176/§11.4.230), with every agent's build/test/review claims
+INDEPENDENTLY RE-VERIFIED by the conductor before merging (never trusted at
+face value — one dispatch's self-reported test-output block did not match
+this repository's real package layout and was caught by this re-verification
+discipline, though the underlying code/doc changes it made were confirmed
+genuinely correct by an independent run). Every phase's merge is a real
+2-parent `git merge --no-ff` commit; two real merge conflicts (both in
+`docs/cluster-architecture.md`, where multiple features' Phase 6 branches
+touched adjacent section boundaries) were resolved by hand, preserving every
+feature's real content, never by discarding one side.
+
+**Two genuinely open items are tracked, not silently closed** (see the
+honest-scope note at the end of §10h): (1) `internal/cluster/health.go`'s
+`Monitor` (the resource-freshness heartbeat AND the mechanism the Raft-
+voter-configuration-based replication-role-failover gap in §10g needs) is
+implemented + unit-tested but has ZERO non-test callers — `cmd/llmctld/
+main.go` never constructs one; (2) 004's FR-010 quorum-protection check
+approximates trust from Raft voter configuration rather than a live
+per-voter mTLS handshake confirmation. Neither is a regression or a spec.md
+MUST violation for any of the three features; both are real, disclosed,
+open follow-up work for whichever session picks them up next.
+
+There is no next phase and no next follow-up item currently queued beyond
+those two open items. The immediate next action for a resuming session is:
+**present the current project state to the operator** (this file, plus
+`specs/001-llmctl-completion/tasks.md` and `progress.yml`, plus each of
+`specs/002-cluster-model-scheduler/`, `specs/003-kv-cache-replication/`,
+`specs/004-mtls-cert-rotation/`'s own tasks.md, are the complete record) and
+await further instruction — e.g. whether to wire the health.Monitor gap,
+address FR-010's live-trust-confirmation boundary, start a new feature, or
+actually cut a real release (see the standing constraint below).
 
 **Important standing constraint carried forward:** `scripts/release/create_release.sh`
 in NON-dry-run mode creates a real, public, irreversible GitHub+GitLab
@@ -762,7 +782,39 @@ Per `/speckit.superspec.review`, dispatched a structurally-independent reviewer 
 - **Full verification after every fix** (fresh, `go clean -testcache` first): `gofmt`/`go vet`/`go build` clean, `go test ./... -race` (all 12 packages) zero regressions/zero races, `golangci-lint run --max-issues-per-linter=0 --max-same-issues=0 ./...` **0 issues**, `bash tests/run_tests.sh` **22/22 PASS**.
 - **Result**: no further finding from this review remains open. Every disclosed cross-tenant-isolation claim across T072-FU1..FU4 is now genuinely accurate, not merely asserted.
 
-**No further disclosed gap remains anywhere in this feature.**
+## 10f. Follow-up: Feature 002 (Cluster-Wide Model-Placement Scheduling) — all six phases + Phase 6 polish (T072-FU6, closed 2026-09-16)
+
+Feature 002-cluster-model-scheduler (spec/plan/tasks under `specs/002-cluster-model-scheduler/`) closed a disclosed boundary from the original `001-llmctl-completion` feature: no cluster-wide model-placement scheduler existed anywhere — an operator had to target a specific node directly. All six phases (Setup, Foundational, User Story 1 name-based auto-placement MVP, User Story 2 name-only status/stop resolution + cluster-wide `running_profiles` index, User Story 3 concurrency-safety + audit-reconstructability proof, Phase 6 Polish) are merged to `main`.
+
+- **Phases 1–5** are covered by their own commits (`d64c20a`, `0f558d9`, `d70250d`, `66393cb` merges) and this file's earlier revisions; this entry covers **Phase 6** closeout.
+- **Documentation (T029).** `docs/cluster-architecture.md` §1 "Raft cluster topology" rewritten (Revision 3→4) with real file:line-cited evidence for the node-registry population fix, the reservation-based auto-placement flow (with a real `mmdc`-rendered sequence diagram), and the cluster-wide running-profile index. **Honestly discloses one open infrastructure-completeness gap**: the resource-freshness heartbeat mechanism (`internal/cluster/health.go`'s `Monitor`) is fully implemented and unit-tested but has **zero non-test callers anywhere in the codebase** — `cmd/llmctld/main.go` never constructs a `cluster.Monitor`. This does not violate this feature's own task acceptance criteria (which required only the unit-tested mechanism) or any spec.md MUST, but is a genuinely open item for a future phase to wire.
+- **Full verification (T032).** `go vet`/`gofmt`/`go build` clean, `go test ./... -race -count=1` all 12 packages green zero regressions, bash suite 22/22 PASS on the real checkout.
+- **Independent whole-feature review (T033).** Reviewed the complete merged Phases 1-5 against three angles — authorization consistency (clean, confirmed the new `running_profiles` field does not reintroduce a T072-FU5-class cross-tenant leak), TOCTOU-hazard reintroduction (none found, the Apply-time capacity re-check remains the sole authoritative guard), and whether the placement engine is genuinely exercised end-to-end (yes, via six real multi-process tests; the health-heartbeat gap above is the one confirmed unit-tested-only piece). **No code defect found; no TDD fix required.**
+- **Branch:** `002-cluster-model-scheduler-phase6` (from `main` `4b62a96`), commit `c25365b`, merged via `66393cb`(Phase 5)/Phase-6 merge commit.
+
+## 10g. Follow-up: Feature 003 (Cross-Node KV-Cache Replication) — all six phases + Phase 6 polish, one disclosed open architectural gap (T072-FU7, closed 2026-09-16)
+
+Feature 003-kv-cache-replication (`specs/003-kv-cache-replication/`) closed the disclosed boundary that KV-cache replication was WAL/checkpoint library primitives with no live cross-node fan-out. All six phases are merged to `main`: automatic cross-node forwarding (US1 MVP), real engine-cache warm-restore building blocks (US2), replication-lag visibility (US3), and Phase 6 polish.
+
+- **Phases 1–5** proven live by `TestFailoverState_AutomaticForwarding_NoManualFanOut` and `TestFailoverState_KVCacheSurvivesPrimaryKill` (real 3-node cluster, 5000 tokens, 0% loss) and `TestReplicationHealth_LagVisibleThenClearsOnRecovery`.
+- **Documentation (T021).** `docs/cluster-architecture.md` §3 rewritten (Revision 3→4) from a blanket "📋 OPEN" to an evidence-cited ✅/⚠️/📋 breakdown, with a new real `mmdc`-rendered sequence diagram for forward → reassign-on-failure → optional engine-cache-warm-restore.
+- **Full verification (T023).** `go vet`/`gofmt`/`go build` clean, `go test ./... -race -count=1` all 12 packages green (54 tests in `internal/replication` alone, above the 24+ baseline), `bash tests/test_scheduler.sh` 37/37, `bash tests/run_tests.sh` 22/22 on the real checkout.
+- **Independent review (T024) — three named concerns confirmed holding, plus one genuine BONUS finding disclosed and deliberately NOT fixed.** The async/never-gates-correctness boundary holds (and today holds vacuously, since the engine-cache orchestration functions are never called in production); the lag tracker cannot mask a genuinely-broken replica; the Phase 4 llama.cpp-submodule-fetch environment blocker was independently re-verified this session (fresh `git fetch` against both SSH and HTTPS reproduces the same upstream "not our ref" rejection, confirmed not a general network outage).
+- **Open architectural gap, tracked not fixed:** crash-triggered reassignment of an already-assigned `ReplicationRole` primary is **not reliably automatic** — `ensureReplicationRole`'s failover-detection derives node liveness from Raft's own voter configuration (which a plain crash never shrinks) and always passes `nil` `deadNodeIDs`, so a real `SIGKILL`'d primary is never detected as dead by this path. Root-caused to the SAME underlying gap as §10f's health-Monitor-wiring disclosure: the two intended real-liveness feeds (`cluster.Monitor`+`Rescheduler`, and a named `internal/raft/node.go` method) are named in `internal/cluster/replication_roles.go`'s own package doc comment but exist nowhere in production code. Deliberately not fixed — closing it correctly needs a real cross-feature (002+003) liveness-feed design; a hasty heuristic risks reintroducing the two-primaries-at-once race Phase 1's own T005 analysis was careful to rule out.
+- **Branch:** `003-kv-cache-replication-phase6` (from `main` `4b62a96`), commit `da27a09`.
+
+## 10h. Follow-up: Feature 004 (mTLS Certificate and CA Rotation with Revocation) — all six phases + Phase 6 polish, incl. a real security-relevant fix found during Phase 5 and confirmed during merge (T072-FU8, closed 2026-09-16)
+
+Feature 004-mtls-cert-rotation (`specs/004-mtls-cert-rotation/`) closed the disclosed boundary that certificates/CA had no rotation or revocation mechanism. All six phases are merged to `main`: immediate revocation via Raft-replicated `RevocationRecord` (US1 MVP), zero-downtime certificate renewal (US2), coordinated dual-trust CA rotation with quorum protection (US3), and Phase 6 polish — the highest-scrutiny of this session's three parallel Phase 6 reviews given its security-sensitive surface.
+
+- **A genuine security-relevant defect found and fixed during Phase 5 (T018).** `tls.RequireAndVerifyClientCert` verifies a client cert against a **static**, construction-time `ClientCAs` pool — a pool `TrustStore.UpdateTrustedCAs` can never reach, invisible until Phase 5's dual-CA widening actually exercised it. Fixed to `tls.RequireAnyClientCert` (still requires a client cert be presented) paired with the existing live-`TrustStore`-backed `VerifyPeerCertificate` callback that performs 100% of the real chain+revocation check — Go's own documented pattern for exactly this shape. Independently re-verified by the conductor before merging (read Go's real `ClientAuthType` ordering and `TrustStore.Verify`'s actual x509 chain-verification code) — a correct fix, not a verification bypass.
+- **Documentation (T026).** `docs/cluster-architecture.md` §2 rewritten with two real `mmdc`-rendered sequence diagrams (revocation propagation; dual-trust CA-rotation transition), flipped to ✅ for revocation/renewal/CA-rotation/JWT-RBAC, with one honest 📋 OPEN boundary (FR-010's quorum check approximates trust from Raft voter configuration, never a live per-voter handshake confirmation).
+- **Full verification (T028).** Fresh, non-cached: `go vet`/`gofmt` clean, `go test -race -count=1 ./...` fully green across all 12 packages, all 9 real multi-node `TestMTLSRotation_*` tests individually re-confirmed PASS.
+- **Independent review (T029) — found and closed a genuine RBAC test-coverage gap, load-bearing-confirmed.** Every sibling RBAC-gated route family had a dedicated test proving a non-admin caller gets 403; `routes_mtls.go`'s six operator actions had none. Closed via TDD (`internal/api/routes_mtls_test.go`), confirmed by a real paired mutation (temporarily neutered the revoke handler's own RBAC check, the new test went RED at exactly that subtest, reverted, re-ran GREEN). Also independently re-confirmed: `quorumWouldBeStranded` genuinely shared by revoke+finalize; the self-deadlock-avoidance notify-after-unlock pattern correctly extends to the two new CA-rotation FSM commands with no reentrant-mutex risk; T025's disclosed residual concurrency race is accurately described.
+- **Merge-time finding (conductor).** A real merge conflict in `docs/cluster-architecture.md` (all three Phase 6 branches touching the same file at adjacent section boundaries) was resolved by hand, preserving every feature's real content. The conductor's own pre-merge review of Phase 5's `RequireAnyClientCert` fix additionally found and corrected 3 now-stale doc comments (`internal/api/server.go`, `internal/raft/transport.go`) still describing the old, broken `RequireAndVerifyClientCert` contract — cosmetic, not functional, but the exact kind of staleness that could mislead a future reader into reintroducing the fixed bug.
+- **Branch:** `004-mtls-cert-rotation-phase6` (from `main` `4b62a96`), commits `cb87c4e` (feature work) + `92b1674` (doc-comment fix, applied during Phase 5 merge review).
+
+**Honest scope note:** two genuinely open items are now tracked (not silently implied closed) from the three features above — §10f/§10g's shared health-monitor-wiring gap (`cluster.Monitor` never constructed in `cmd/llmctld/main.go`, blocking both live resource-heartbeat AND automatic replication-role failover-on-crash) and §10h's FR-010 live-per-voter-trust-confirmation boundary. Neither is a regression or a violation of any of these three features' own spec.md MUST requirements; both are recorded here so a future session picks them up rather than rediscovering them.
 
 ## 11. Binding constraints (unchanged, restated per §12.10)
 
