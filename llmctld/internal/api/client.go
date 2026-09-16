@@ -15,6 +15,8 @@ import (
 	"time"
 
 	"github.com/quic-go/quic-go/http3"
+
+	"github.com/vasic-digital/llmctl/llmctld/internal/cluster"
 )
 
 // requestJoinRetryBudget bounds how long RequestJoin retries a 409
@@ -47,13 +49,21 @@ const requestJoinRetryInterval = 100 * time.Millisecond
 // yet. Any OTHER failure (a malformed request, a network error, a
 // timeout) is NOT retried and surfaces immediately - only the specific,
 // expected "not yet the leader" race is tolerated.
-func RequestJoin(clientTLS *tls.Config, leaderAPIAddr, peerID, peerAddr string) error {
+//
+// resources (002-cluster-model-scheduler T006, contracts/cluster-model-
+// api.md) is the joining node's own real hardware-probe-derived capacity,
+// forwarded verbatim as joinRequest's own required Resources field - the
+// caller (cmd/llmctld's "cluster join" subcommand) is responsible for
+// sourcing it from the real local hardware probe; RequestJoin itself
+// never probes hardware, it only transports whatever resources it is
+// given.
+func RequestJoin(clientTLS *tls.Config, leaderAPIAddr, peerID, peerAddr string, resources cluster.Resources) error {
 	client := &http.Client{
 		Transport: &http3.Transport{TLSClientConfig: clientTLS},
 		Timeout:   10 * time.Second,
 	}
 
-	body, err := json.Marshal(joinRequest{PeerID: peerID, PeerAddr: peerAddr})
+	body, err := json.Marshal(joinRequest{PeerID: peerID, PeerAddr: peerAddr, Resources: resources})
 	if err != nil {
 		return fmt.Errorf("api: RequestJoin: marshal request: %w", err)
 	}

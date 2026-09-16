@@ -9,6 +9,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/vasic-digital/llmctl/llmctld/internal/cluster"
 	"github.com/vasic-digital/llmctl/llmctld/internal/raft"
 )
 
@@ -20,9 +21,19 @@ import (
 // check compares the configuration entry's ID against the node's real
 // LocalID, so a mismatched ID makes a joined follower NEVER recognize
 // itself as having a vote.
+//
+// Resources (002-cluster-model-scheduler T006, contracts/cluster-model-
+// api.md) mirrors cluster.Resources's own JSON field names exactly and is
+// REQUIRED - it is the joining node's own real hardware-probe-derived
+// capacity, the exact payload internal/raft.Node.Join's own T004 fix now
+// carries into a real CommandJoinNode Apply so ClusterState.Nodes[PeerID]
+// is never left at Resources's zero value (which cluster.Place would then
+// read as "this node has zero of everything", excluding it from every
+// real placement decision it should have been eligible for).
 type joinRequest struct {
-	PeerID   string `json:"peer_id" binding:"required"`
-	PeerAddr string `json:"peer_addr" binding:"required"`
+	PeerID    string            `json:"peer_id" binding:"required"`
+	PeerAddr  string            `json:"peer_addr" binding:"required"`
+	Resources cluster.Resources `json:"resources"`
 }
 
 // RegisterClusterRoutes wires the cluster routes onto r, backed by node.
@@ -37,7 +48,7 @@ func RegisterClusterRoutes(r gin.IRoutes, node *raft.Node) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
-		if err := node.Join(req.PeerID, req.PeerAddr); err != nil {
+		if err := node.Join(req.PeerID, req.PeerAddr, req.Resources); err != nil {
 			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
 			return
 		}

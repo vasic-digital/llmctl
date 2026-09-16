@@ -73,7 +73,7 @@ passes.
       task**, not new code: it exists to prove the FSM layer itself is
       already correct so the next tasks can safely assume `Apply` is not
       the bug, only the fact that nothing ever calls it with real data is.
-- [ ] T004 [TDD] Modify `internal/raft/node.go`'s `Join(peerID, peerAddr
+- [x] T004 [TDD] Modify `internal/raft/node.go`'s `Join(peerID, peerAddr
       string) error` signature to `Join(peerID, peerAddr string, resources
       cluster.Resources) error`: after the existing `n.raft.AddVoter(...)`
       succeeds, additionally call
@@ -86,13 +86,13 @@ passes.
       genuinely present with the exact `resources` passed in — confirm
       this FAILS against the current (pre-change) `Join` (since it never
       calls `Apply`) before implementing.
-- [ ] T005 [TDD] Modify `internal/raft/node.go`'s `Leave() error`: after the
+- [x] T005 [TDD] Modify `internal/raft/node.go`'s `Leave() error`: after the
       existing `n.raft.RemoveServer(...)` succeeds, additionally call
       `n.raft.Apply(marshal(Command{Type: CommandLeaveNode, NodeID:
       n.localID}), applyTimeout)`. RED first:
       `TestLeave_RemovesRealClusterStateNodesEntry` in `node_test.go`,
       confirmed failing against current `Leave` before implementing.
-- [ ] T006 Update every existing call site of `Join`/`Leave` for the new
+- [x] T006 Update every existing call site of `Join`/`Leave` for the new
       signature: `internal/api/routes_cluster.go`'s `POST
       /v1/cluster/join` handler, `internal/api/client.go`'s
       `RequestJoin`/`joinRequest` (add a required `Resources

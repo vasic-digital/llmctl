@@ -425,7 +425,12 @@ func runClusterJoinReal(args []string) int {
 		fmt.Fprintln(os.Stderr, "llmctld: cluster join:", err)
 		return 1
 	}
-	if err := api.RequestJoin(joinClientTLS, leaderAPI, nodeID, node.Addr()); err != nil {
+	resources, err := probeLocalResources(llmctlPath)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "llmctld: cluster join: probeLocalResources:", err)
+		return 1
+	}
+	if err := api.RequestJoin(joinClientTLS, leaderAPI, nodeID, node.Addr(), resources); err != nil {
 		fmt.Fprintln(os.Stderr, "llmctld: cluster join: RequestJoin:", err)
 		return 1
 	}
