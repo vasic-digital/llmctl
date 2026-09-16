@@ -56,6 +56,42 @@ func (tc *testCluster) httpClientForCert(nodeCert *mtls.NodeCert) *http.Client {
 	return &http.Client{Transport: &http3.Transport{TLSClientConfig: tlsConf}, Timeout: 5 * time.Second}
 }
 
+// httpClientForTimeout builds a real HTTP/3+mTLS "test-observer" client
+// identical to cluster_bootstrap_test.go's testCluster.httpClient()
+// EXCEPT for its own Client.Timeout, which callers supply explicitly -
+// needed by any test whose real call can legitimately take longer than
+// httpClient()'s own fixed 5s (e.g.
+// TestMTLSRotation_QuorumProtection_LiveHandshakeDetectsSIGKilledVoter's
+// revoke call, which can take up to routes_mtls.go's own real
+// liveVoterCheckTimeout while the leader's handler live-checks a
+// SIGKILL'd voter before refusing).
+func (tc *testCluster) httpClientForTimeout(timeout time.Duration) *http.Client {
+	tc.t.Helper()
+	nodeCert, err := tc.ca.IssueNodeCert("test-observer-long-timeout")
+	if err != nil {
+		tc.t.Fatalf("issue observer cert: %v", err)
+	}
+	cert, err := mtls.LoadTLSCertificate(nodeCert.CertPEM, nodeCert.KeyPEM)
+	if err != nil {
+		tc.t.Fatalf("load observer cert: %v", err)
+	}
+	pool := x509.NewCertPool()
+	if !pool.AppendCertsFromPEM(tc.ca.CertPEM) {
+		tc.t.Fatalf("add CA cert to observer pool")
+	}
+	store, err := mtls.NewTrustStore(pool, &cert)
+	if err != nil {
+		tc.t.Fatalf("NewTrustStore(observer): %v", err)
+	}
+	tlsConf := &tls.Config{
+		GetClientCertificate:  store.GetClientCertificate,
+		RootCAs:               pool,
+		InsecureSkipVerify:    true,
+		VerifyPeerCertificate: raft.VerifyPeerCertificateAgainstCA(store),
+	}
+	return &http.Client{Transport: &http3.Transport{TLSClientConfig: tlsConf}, Timeout: timeout}
+}
+
 // certSerialNumber parses certPEM (a real x509 leaf certificate, PEM
 // encoded, as returned by mtls.NodeCert.CertPEM) and returns its real
 // serial number as a decimal string - the exact key data-model.md's
@@ -1354,6 +1390,125 @@ func TestMTLSRotation_QuorumProtection_RefusesStrandingAction(t *testing.T) {
 		}
 		if len(got.Servers) != 3 {
 			t.Fatalf("node %q reports %d cluster members after a REFUSED revocation (want 3, unchanged)", n.nodeID, len(got.Servers))
+		}
+	}
+}
+
+// TestMTLSRotation_QuorumProtection_LiveHandshakeDetectsSIGKilledVoter is
+// T072-FU8's own follow-up (spec.md FR-010, "trusted, REACHABLE nodes" -
+// docs/CONTINUATION.md §10h's disclosed boundary): quorumWouldBeStranded
+// (routes_mtls.go) used to approximate "trusted" ENTIRELY from Raft's own
+// voter CONFIGURATION (raft.Node.Servers()) - a voter that is genuinely
+// dead right now (crashed, partitioned) but has NOT been gracefully
+// removed via Node.Leave() (the only real RemoveServer caller) stays
+// listed as a configured voter forever, so the old check could approve
+// an action that actually strands the cluster's REAL, live quorum. This
+// test reproduces exactly that gap on a real 3-node cluster: a real,
+// genuine OS-level SIGKILL (never a graceful leave) of one non-leader
+// voter, still Raft-configured, then a revoke of a SECOND, different,
+// never-revoked voter's certificate that the OLD config-only arithmetic
+// alone would have counted as leaving 2 of 3 voters "trusted" - AT the
+// quorum(2) this 3-node cluster needs - but which the cluster's REAL,
+// live-right-now quorum (the leader ALONE, since the SIGKILL'd voter can
+// no longer complete any real mTLS handshake for any purpose) is
+// genuinely BELOW. quorumWouldBeStrandedLive's own real, bounded-timeout
+// HTTP/3+mTLS handshake against the SIGKILL'd voter's own
+// GET /v1/cluster/status (its real API port, now closed by the OS the
+// instant the process died) is what must catch this - the shared FR-010
+// check both revoke and finalize use, exercised here via revoke exactly
+// as T021 above does.
+func TestMTLSRotation_QuorumProtection_LiveHandshakeDetectsSIGKilledVoter(t *testing.T) {
+	tc := newTestCluster(t)
+	nodeA := tc.bootstrap("node-a")
+	nodeB := tc.join("node-b", nodeA)
+	nodeC := tc.join("node-c", nodeA)
+	nodes := []*spawnedNode{nodeA, nodeB, nodeC}
+
+	observer := tc.httpClient()
+	token := tc.adminToken()
+
+	// longObserver is a SECOND observer client, identical to observer
+	// EXCEPT for its own Client.Timeout: this test's revoke call below
+	// can legitimately take up to routes_mtls.go's own
+	// liveVoterCheckTimeout (10s, T072-FU8's own disclosed real added
+	// latency - quorumWouldBeStrandedLive's own doc comment) while the
+	// leader's handler live-checks the just-SIGKILL'd voter before
+	// refusing, which exceeds observer's own fixed 5s
+	// (cluster_bootstrap_test.go's httpClient(), correctly sized for
+	// every OTHER call in this file that never exercises this new
+	// live-check path) - used ONLY for the one call genuinely expected
+	// to take that long, never for this test's other, fast polling
+	// calls.
+	longObserver := tc.httpClientForTimeout(20 * time.Second)
+
+	waitForFullConfig(t, tc, observer, nodes, 3, 5*time.Second)
+	leader := waitAndFindLeader(t, tc, observer, nodes, 5*time.Second)
+
+	// Pick two DISTINCT non-leader survivors: victim (the one this test
+	// genuinely SIGKILLs) and target (the one this test then attempts to
+	// revoke - a certificate victim itself never held, so the ONLY thing
+	// that could refuse this specific revoke is victim's own real,
+	// live-right-now unreachability, never a config-based revocation
+	// count).
+	var victim, target *spawnedNode
+	for _, n := range nodes {
+		if n == leader {
+			continue
+		}
+		if victim == nil {
+			victim = n
+		} else {
+			target = n
+		}
+	}
+	if victim == nil || target == nil {
+		t.Fatalf("test setup: expected 2 non-leader survivors among 3 nodes, got victim=%v target=%v", victim, target)
+	}
+
+	// Genuine OS-level SIGKILL - the SAME real mechanism
+	// TestClusterFailover_KillingLeaderElectsNewRealLeaderAmongSurvivors
+	// (cluster_bootstrap_test.go) already uses to prove a real crash,
+	// never a graceful shutdown. victim's process is now genuinely dead;
+	// Raft's own configuration is UNCHANGED (only Node.Leave() calls
+	// RemoveServer, per quorumWouldBeStranded's own doc comment) - every
+	// node in this cluster, including the leader that will process this
+	// test's revoke request below, still lists victim as a Voter.
+	if err := victim.cmd.Process.Kill(); err != nil {
+		t.Fatalf("SIGKILL %q: %v", victim.nodeID, err)
+	}
+	_, _ = victim.cmd.Process.Wait()
+	delete(tc.nodes, victim.nodeID) // already dead; killAll's own cleanup must not try to signal it again
+
+	// The core assertion (T072-FU8/FR-010): revoking target's certificate
+	// is a SINGLE revocation, config-untrusted = {target} only. Raft's
+	// own configuration still reports 3 voters (leader, victim, target) -
+	// the OLD, config-only quorumWouldBeStranded arithmetic would compute
+	// remaining = 3 - 1 = 2, AT quorum(2), and APPROVE this action. The
+	// cluster's REAL live quorum right now is only 1 (the leader itself -
+	// victim is genuinely dead, target is the one being revoked) - BELOW
+	// quorum(2). quorumWouldBeStrandedLive's own real mTLS handshake
+	// against victim's (now-closed) API port must discover this and
+	// refuse.
+	victimCert, err := tc.ca.IssueNodeCert(target.nodeID)
+	if err != nil {
+		t.Fatalf("issue %s cert: %v", target.nodeID, err)
+	}
+	serial := certSerialNumber(t, victimCert.CertPEM)
+	status, body := attemptRevoke(t, longObserver, leader.apiAddr, token, serial, target.nodeID, "test: SIGKILLed-voter-still-raft-configured")
+	if status == http.StatusOK {
+		t.Fatalf("revoking %q SUCCEEDED despite %q being genuinely SIGKILL'd (still Raft-voter-configured, never gracefully removed) - this leaves only 1 real live/trusted voter (the leader), below the quorum(2) this 3-node cluster needs; FR-010's live-trust-confirmation (T072-FU8) MUST have refused this. response body = %s", target.nodeID, victim.nodeID, body)
+	}
+
+	// The refused action must not have partially applied (mirrors T021's
+	// own identical FR-012 check above): target's certificate is NOT
+	// revoked on the surviving, reachable nodes.
+	for _, n := range []*spawnedNode{leader, target} {
+		got, err := getRevocations(t, observer, n.apiAddr, token)
+		if err != nil {
+			t.Fatalf("GET /v1/cluster/mtls/revocations on %q after the refused revocation: %v", n.nodeID, err)
+		}
+		if _, revoked := got.Revocations[serial]; revoked {
+			t.Fatalf("node %q shows serial %s as revoked after a REFUSED revocation - the refused action partially applied", n.nodeID, serial)
 		}
 	}
 }
