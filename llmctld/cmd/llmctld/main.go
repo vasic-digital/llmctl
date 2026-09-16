@@ -94,19 +94,22 @@ func newAuthzDecider(signingKey string) (*authz.Decider, *auth.Store) {
 }
 
 // registerAuthzRoutes wires T074's auth/tenant/audit route sets, plus
-// T072-FU4's model-lifecycle dispatch routes, onto srv's router, backed
-// by decider, keys, and modelExecutor - the one call site both
+// T072-FU4's model-lifecycle dispatch routes and Feature 004's mTLS
+// management routes (routes_mtls.go), onto srv's router, backed by
+// decider, keys, node, and modelExecutor - the one call site both
 // runClusterBootstrap and runClusterJoinReal use, so the two subcommands'
 // wiring can never drift apart.
 //
 // node and forwardTLS (002-cluster-model-scheduler Phase 3) enable
 // RegisterModelRoutes's auto-placement path on POST .../start - see that
-// function's own doc comment for the full contract.
+// function's own doc comment for the full contract. node is also reused
+// (004-mtls-cert-rotation) by RegisterMTLSRoutes's revoke/status actions.
 func registerAuthzRoutes(srv *api.Server, decider *authz.Decider, keys *auth.Store, modelExecutor *executor.LocalExecutor, node *raft.Node, forwardTLS *tls.Config) {
 	api.RegisterAuthRoutes(srv.Router(), decider, keys)
 	api.RegisterTenantRoutes(srv.Router(), decider)
 	api.RegisterAuditRoutes(srv.Router(), decider)
 	api.RegisterModelRoutes(srv.Router(), decider, modelExecutor, node, forwardTLS)
+	api.RegisterMTLSRoutes(srv.Router(), node, decider)
 }
 
 // version is the llmctld build version. It is bumped alongside the bash
@@ -193,27 +196,70 @@ func resolveStateDir(stateDir, caCertPath, nodeID string) string {
 // whatever address happens to be dialed - the same real bug (and fix)
 // T049 found and fixed, applied identically here rather than
 // reintroducing it in a third place.
-func buildNodeTLSConfig(ca *mtls.CA, nodeID string) (*tls.Config, error) {
+//
+// Refactored for Feature 004 (T006): the certificate + trust data now
+// live in a *mtls.TrustStore, wired into tls.Config via
+// GetCertificate/GetClientCertificate (live-swap, per research.md
+// Decision 2) instead of a static Certificates field, and the returned
+// *mtls.TrustStore is handed back to the caller so a later revocation
+// event (T011) can call UpdateRevoked on the SAME store this tls.Config's
+// handshakes read from - for a node that never triggers
+// revocation/renewal/rotation, every existing CLI flag and the READY
+// line stay behavior-identical (proven by test/integration's existing
+// real multi-process bootstrap/failover tests continuing to pass
+// unmodified).
+func buildNodeTLSConfig(ca *mtls.CA, nodeID string) (*tls.Config, *mtls.TrustStore, error) {
 	nodeCert, err := ca.IssueNodeCert(nodeID)
 	if err != nil {
-		return nil, fmt.Errorf("issue node cert for %q: %w", nodeID, err)
+		return nil, nil, fmt.Errorf("issue node cert for %q: %w", nodeID, err)
 	}
 	cert, err := mtls.LoadTLSCertificate(nodeCert.CertPEM, nodeCert.KeyPEM)
 	if err != nil {
-		return nil, fmt.Errorf("load node cert for %q: %w", nodeID, err)
+		return nil, nil, fmt.Errorf("load node cert for %q: %w", nodeID, err)
 	}
 	pool := x509.NewCertPool()
 	if !pool.AppendCertsFromPEM(ca.CertPEM) {
-		return nil, fmt.Errorf("add CA cert to pool for %q", nodeID)
+		return nil, nil, fmt.Errorf("add CA cert to pool for %q", nodeID)
+	}
+	store, err := mtls.NewTrustStore(pool, &cert)
+	if err != nil {
+		return nil, nil, fmt.Errorf("new trust store for %q: %w", nodeID, err)
 	}
 	return &tls.Config{
-		Certificates:          []tls.Certificate{cert},
+		GetCertificate:        store.GetCertificate,
+		GetClientCertificate:  store.GetClientCertificate,
 		RootCAs:               pool,
 		ClientCAs:             pool,
 		ClientAuth:            tls.RequireAndVerifyClientCert,
 		InsecureSkipVerify:    true,
-		VerifyPeerCertificate: raft.VerifyPeerCertificateAgainstCA(pool),
-	}, nil
+		VerifyPeerCertificate: raft.VerifyPeerCertificateAgainstCA(store),
+	}, store, nil
+}
+
+// wireRevocationHandler registers node's revocation-event handler
+// (Feature 004, T011) so raftTrustStore and apiTrustStore - the two
+// *mtls.TrustStore instances backing THIS node's raft-transport and
+// HTTP-API tls.Config respectively (buildNodeTLSConfig's two per-node
+// calls) - stay synchronized with the cluster's Raft-replicated
+// revocation state on EVERY node, with zero polling and zero process
+// restart. The handler re-reads node.State().Revocations in full and
+// REPLACES both stores' revoked-serial sets (TrustStore.UpdateRevoked's
+// documented full-set-replace contract) rather than applying an
+// incremental delta, so a lost or duplicated firing of this handler can
+// never leave either store out of sync with the replicated source of
+// truth. Shared by both runClusterBootstrap and runClusterJoinReal so the
+// two subcommands' wiring can never drift apart, matching this file's
+// registerAuthzRoutes/newAuthzDecider sharing pattern.
+func wireRevocationHandler(node *raft.Node, raftTrustStore, apiTrustStore *mtls.TrustStore) {
+	node.SetRevocationHandler(func() {
+		state := node.State()
+		revoked := make(map[string]struct{}, len(state.Revocations))
+		for serial := range state.Revocations {
+			revoked[serial] = struct{}{}
+		}
+		raftTrustStore.UpdateRevoked(revoked)
+		apiTrustStore.UpdateRevoked(revoked)
+	})
 }
 
 // forwardClientRequestTimeout bounds the http.Client-level timeout for
@@ -304,7 +350,7 @@ func runClusterBootstrap(args []string) {
 		os.Exit(1)
 	}
 
-	raftTLS, err := buildNodeTLSConfig(ca, f.nodeID)
+	raftTLS, raftTrustStore, err := buildNodeTLSConfig(ca, f.nodeID)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "llmctld: cluster bootstrap:", err)
 		os.Exit(1)
@@ -316,11 +362,12 @@ func runClusterBootstrap(args []string) {
 	}
 	defer func() { _ = node.Shutdown() }()
 
-	apiTLS, err := buildNodeTLSConfig(ca, f.nodeID+"-api")
+	apiTLS, apiTrustStore, err := buildNodeTLSConfig(ca, f.nodeID+"-api")
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "llmctld: cluster bootstrap:", err)
 		os.Exit(1)
 	}
+	wireRevocationHandler(node, raftTrustStore, apiTrustStore)
 	srv := api.NewServer(node, apiTLS)
 
 	signingKey := os.Getenv(jwtSigningKeyEnvVar)
@@ -354,7 +401,7 @@ func runClusterBootstrap(args []string) {
 	// daemon - posts this node's own real appends/checkpoints to every
 	// current replica's real /v1/replication/* routes over a real
 	// HTTP/3+mTLS client, the moment they land locally.
-	forwardClientTLS, err := buildNodeTLSConfig(ca, f.nodeID+"-forward-client")
+	forwardClientTLS, _, err := buildNodeTLSConfig(ca, f.nodeID+"-forward-client")
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "llmctld: cluster bootstrap:", err)
 		os.Exit(1)
@@ -369,7 +416,7 @@ func runClusterBootstrap(args []string) {
 	// API - a distinct cert from this node's own server-side apiTLS
 	// (client vs. server role), mirroring joinClientTLS's identical
 	// "-join-client"-suffixed cert pattern below.
-	forwardTLS, err := buildNodeTLSConfig(ca, f.nodeID+"-forward-client")
+	forwardTLS, _, err := buildNodeTLSConfig(ca, f.nodeID+"-forward-client")
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "llmctld: cluster bootstrap:", err)
 		os.Exit(1)
@@ -514,7 +561,7 @@ func runClusterJoinReal(args []string) int {
 		return 1
 	}
 
-	raftTLS, err := buildNodeTLSConfig(ca, nodeID)
+	raftTLS, raftTrustStore, err := buildNodeTLSConfig(ca, nodeID)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "llmctld: cluster join:", err)
 		return 1
@@ -526,11 +573,12 @@ func runClusterJoinReal(args []string) int {
 	}
 	defer func() { _ = node.Shutdown() }()
 
-	apiTLS, err := buildNodeTLSConfig(ca, nodeID+"-api")
+	apiTLS, apiTrustStore, err := buildNodeTLSConfig(ca, nodeID+"-api")
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "llmctld: cluster join:", err)
 		return 1
 	}
+	wireRevocationHandler(node, raftTrustStore, apiTrustStore)
 	srv := api.NewServer(node, apiTLS)
 
 	signingKey := os.Getenv(jwtSigningKeyEnvVar)
@@ -551,7 +599,7 @@ func runClusterJoinReal(args []string) int {
 	defer func() { _ = storeRegistry.Close() }()
 	// See runClusterBootstrap's identical Forwarder wiring comment above
 	// (T008) - kept symmetric across both subcommands.
-	forwardClientTLS, err := buildNodeTLSConfig(ca, nodeID+"-forward-client")
+	forwardClientTLS, _, err := buildNodeTLSConfig(ca, nodeID+"-forward-client")
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "llmctld: cluster join:", err)
 		return 1
@@ -562,7 +610,7 @@ func runClusterJoinReal(args []string) int {
 	// See runClusterBootstrap's identical forwardTLS comment above
 	// (002-cluster-model-scheduler T017) - kept symmetric across both
 	// subcommands.
-	forwardTLS, err := buildNodeTLSConfig(ca, nodeID+"-forward-client")
+	forwardTLS, _, err := buildNodeTLSConfig(ca, nodeID+"-forward-client")
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "llmctld: cluster join:", err)
 		return 1
@@ -575,7 +623,7 @@ func runClusterJoinReal(args []string) int {
 	}
 	defer func() { _ = srv.Close() }()
 
-	joinClientTLS, err := buildNodeTLSConfig(ca, nodeID+"-join-client")
+	joinClientTLS, _, err := buildNodeTLSConfig(ca, nodeID+"-join-client")
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "llmctld: cluster join:", err)
 		return 1

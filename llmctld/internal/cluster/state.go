@@ -118,6 +118,40 @@ type ReplicationRole struct {
 	AssignedAt time.Time `json:"assigned_at"`
 }
 
+// RevocationRecord is one revoked mTLS certificate identity, replicated
+// via the FSM (Feature 004, data-model.md). Keyed by the certificate's
+// real x509 SERIAL NUMBER (research.md Decision 4) rather than by NodeID:
+// a node whose certificate is revoked and is later re-issued a FRESH
+// certificate (a new serial) is unaffected by this record - revocation
+// targets one specific compromised credential, never a node identity in
+// the abstract, and is deliberately independent of cluster-membership
+// eviction (spec.md FR-012).
+type RevocationRecord struct {
+	// SerialNumber is the revoked leaf certificate's real
+	// x509.Certificate.SerialNumber.String() - the ClusterState.Revocations
+	// map key, duplicated here so a RevocationRecord is self-describing
+	// when read out of that map or serialized on its own.
+	SerialNumber string `json:"serial_number"`
+	// NodeID is the node identity the revoked certificate was issued for
+	// (an audit/display label - revocation enforcement itself keys
+	// exclusively on SerialNumber, never on this field).
+	NodeID string `json:"node_id"`
+	// Reason is a free-text operator-supplied justification (e.g.
+	// "compromised") - never validated against a closed vocabulary, since
+	// spec.md does not define one and inventing one here would be an
+	// unrequested constraint (Constitution §11.4.6: no invented default).
+	Reason string `json:"reason"`
+	// RevokedBy is the authenticated caller (JWT claims.Subject) who
+	// issued the revoke action - an audit trail, not an enforcement input.
+	RevokedBy string `json:"revoked_by"`
+	// RevokedAt is the moment the revoke action was accepted, set ONCE by
+	// the proposing node (mirroring LockEntry/Command's own
+	// proposer-computes-the-timestamp discipline in internal/raft/fsm.go's
+	// Command.LockNow doc comment) and carried inside the replicated log
+	// entry, so every node's FSM applies the IDENTICAL timestamp.
+	RevokedAt time.Time `json:"revoked_at"`
+}
+
 // ClusterState is the FSM-applied cluster state, replicated identically
 // across every Raft node via the log.
 type ClusterState struct {
@@ -132,6 +166,10 @@ type ClusterState struct {
 	// ReplicationRoles is 003-kv-cache-replication's per-tenant
 	// KV-cache-replication forwarding-role assignment map.
 	ReplicationRoles map[string]ReplicationRole `json:"replication_roles"`
+
+	// Revocations is Feature 004's revoked-certificate set, keyed by real
+	// x509 serial number.
+	Revocations map[string]RevocationRecord `json:"revocations"`
 }
 
 // NewClusterState returns an empty, ready-to-use ClusterState.
@@ -141,6 +179,7 @@ func NewClusterState() *ClusterState {
 		Locks:            make(map[string]LockEntry),
 		RunningProfiles:  []RunningProfile{},
 		ReplicationRoles: make(map[string]ReplicationRole),
+		Revocations:      make(map[string]RevocationRecord),
 	}
 }
 
@@ -160,6 +199,9 @@ func (s *ClusterState) Clone() *ClusterState {
 		copy(replicas, role.ReplicaNodeIDs)
 		role.ReplicaNodeIDs = replicas
 		clone.ReplicationRoles[tenantID] = role
+	}
+	for serial, rec := range s.Revocations {
+		clone.Revocations[serial] = rec
 	}
 	return clone
 }

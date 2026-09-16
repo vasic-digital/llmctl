@@ -12,7 +12,9 @@ import (
 )
 
 // buildNodeTLSConfig issues a real leaf cert from the given CA for nodeID
-// and returns a *tls.Config presenting that cert and trusting only the CA -
+// and returns a *tls.Config presenting that cert (via a live
+// *mtls.TrustStore's GetCertificate/GetClientCertificate callbacks, per
+// Feature 004's revocation/rotation refactor) and trusting only the CA -
 // the exact mTLS shape Clarification 11 requires for node-to-node traffic.
 func buildNodeTLSConfig(t *testing.T, ca *mtls.CA, nodeID string) *tls.Config {
 	t.Helper()
@@ -28,18 +30,23 @@ func buildNodeTLSConfig(t *testing.T, ca *mtls.CA, nodeID string) *tls.Config {
 	if !pool.AppendCertsFromPEM(ca.CertPEM) {
 		t.Fatalf("failed to add CA cert to pool")
 	}
+	store, err := mtls.NewTrustStore(pool, &cert)
+	if err != nil {
+		t.Fatalf("NewTrustStore(%q): %v", nodeID, err)
+	}
 	return &tls.Config{
-		Certificates: []tls.Certificate{cert},
-		RootCAs:      pool,
-		ClientCAs:    pool,
-		ClientAuth:   tls.RequireAndVerifyClientCert,
-		NextProtos:   []string{quicRaftALPN},
+		GetCertificate:       store.GetCertificate,
+		GetClientCertificate: store.GetClientCertificate,
+		RootCAs:              pool,
+		ClientCAs:            pool,
+		ClientAuth:           tls.RequireAndVerifyClientCert,
+		NextProtos:           []string{quicRaftALPN},
 		// InsecureSkipVerify + VerifyPeerCertificate: node identity is
 		// established by the CA chain, never by a DNS/IP SAN matching the
 		// dial address (see VerifyPeerCertificateAgainstCA's doc comment
 		// for why the standard hostname-checking path fails here).
 		InsecureSkipVerify:    true,
-		VerifyPeerCertificate: VerifyPeerCertificateAgainstCA(pool),
+		VerifyPeerCertificate: VerifyPeerCertificateAgainstCA(store),
 	}
 }
 
