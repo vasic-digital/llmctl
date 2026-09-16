@@ -62,7 +62,7 @@ passes.
 
 ### Node registry: make Join/Leave genuinely reach the FSM
 
-- [ ] T003 [TDD] Extend `internal/raft/fsm.go`'s `Command` struct: no new
+- [x] T003 [TDD] Extend `internal/raft/fsm.go`'s `Command` struct: no new
       fields needed for `CommandJoinNode`/`CommandLeaveNode` (they already
       carry `Node`/`NodeID` per the existing schema) — write
       `TestApply_JoinNode_PopulatesClusterStateNodes` and
@@ -109,7 +109,7 @@ passes.
 
 ### Resource freshness: keep `Resources` current, not just join-time-stale
 
-- [ ] T007 [TDD] Add `CommandUpdateResources` to `internal/raft/fsm.go`'s
+- [x] T007 [TDD] Add `CommandUpdateResources` to `internal/raft/fsm.go`'s
       `CommandType` const block and `Command` struct (`NodeID string`,
       `Resources cluster.Resources`); `Apply` case replaces
       `f.state.Nodes[cmd.NodeID].Resources` in place (no-op, returning an
@@ -139,7 +139,7 @@ passes.
 
 ### Placement reservation: close the TOCTOU race (FR-005, SC-004)
 
-- [ ] T009 [TDD] Add `RunningProfile` to `internal/cluster/state.go`
+- [x] T009 [TDD] Add `RunningProfile` to `internal/cluster/state.go`
       (`Profile, TenantID, NodeID string`, `StartedAt time.Time`,
       `Footprint PlacementRequest`) and `ClusterState.RunningProfiles
       []RunningProfile`; extend `NewClusterState`/`Clone` for the new
@@ -147,7 +147,7 @@ passes.
       RED first: a `state_test.go` test asserting `Clone()` deep-copies
       `RunningProfiles` (mutating the clone must not affect the original),
       confirmed failing before implementation.
-- [ ] T010 [TDD] Add `CommandRecordRunningProfile` and
+- [x] T010 [TDD] Add `CommandRecordRunningProfile` and
       `CommandClearRunningProfile` to `internal/raft/fsm.go`. Per
       data-model.md's Concurrency-safety note:
       `CommandRecordRunningProfile`'s `Apply` computes the target node's
