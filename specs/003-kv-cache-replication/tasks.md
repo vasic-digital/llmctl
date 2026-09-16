@@ -169,13 +169,13 @@ human approval before starting User Story 3.**
 **Goal**: An operator can see real, accurate lag per tenant/replica.
 **Independent Test**: quickstart.md Scenario 4.
 
-- [ ] T018 [TDD] [US3] Implement `internal/replication/lag.go`
+- [x] T018 [TDD] [US3] Implement `internal/replication/lag.go`
       (`ReplicationLagRecord`, data-model.md), updated from real
       forwarding-acknowledgment traffic (T008). RED first:
       `TestLag_ZeroWhenCaughtUp`, `TestLag_ReflectsRealGapWhenBehind`.
-- [ ] T019 [US3] Add the read endpoint to `internal/api/routes_replication.go`
+- [x] T019 [US3] Add the read endpoint to `internal/api/routes_replication.go`
       exposing per-tenant lag.
-- [ ] T020 [TDD] [US3] Real multi-process test: quickstart.md Scenario 2 +
+- [x] T020 [TDD] [US3] Real multi-process test: quickstart.md Scenario 2 +
       Scenario 4 combined (block a replica, assert real non-zero lag,
       restore, assert lag returns to zero).
 

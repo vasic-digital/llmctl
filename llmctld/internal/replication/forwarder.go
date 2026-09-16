@@ -128,6 +128,13 @@ type Forwarder struct {
 	roles      RoleResolver
 	addrs      AddrResolver
 	httpClient *http.Client
+	// lag is T018's (User Story 3) replication-lag tracker - ALWAYS
+	// present (never nil), fed exclusively as a side effect of this
+	// Forwarder's own real per-replica forward attempts (forwardToReplicas
+	// below) rather than an optional/opt-in mechanism, since lag.go's own
+	// package doc comment requires it be fed from THIS existing
+	// forwarding-acknowledgment traffic, never a second parallel channel.
+	lag *LagTracker
 }
 
 // NewForwarder constructs a Forwarder identifying itself as selfID
@@ -138,7 +145,18 @@ type Forwarder struct {
 // forwarder_test.go's own doc comment for why the transport is
 // deliberately decoupled from this file's forwarding logic).
 func NewForwarder(selfID string, roles RoleResolver, addrs AddrResolver, httpClient *http.Client) *Forwarder {
-	return &Forwarder{selfID: selfID, roles: roles, addrs: addrs, httpClient: httpClient}
+	return &Forwarder{selfID: selfID, roles: roles, addrs: addrs, httpClient: httpClient, lag: NewLagTracker()}
+}
+
+// LagTracker returns f's own internal replication-lag tracker (T018,
+// User Story 3, spec.md FR-010) - the SAME tracker every
+// ForwardAppend/ForwardCheckpoint call below updates as a side effect of
+// its own real per-replica forward attempts, so a caller reading it
+// (internal/api's new GET /v1/replication/lag route, T019) always sees
+// state derived from real forwarding-acknowledgment traffic, never a
+// parallel/independently-fed signal.
+func (f *Forwarder) LagTracker() *LagTracker {
+	return f.lag
 }
 
 // ForwardAppend forwards entries to every current replica of tenantID
@@ -153,14 +171,18 @@ func (f *Forwarder) ForwardAppend(tenantID, bearerToken string, entries []WALEnt
 		return nil
 	}
 	wireEntries := make([]forwardWALEntry, len(entries))
+	var maxSeq uint64
 	for i, e := range entries {
 		wireEntries[i] = forwardWALEntry{Seq: e.Seq, TokenID: e.TokenID, Position: e.Position}
+		if e.Seq > maxSeq {
+			maxSeq = e.Seq
+		}
 	}
 	body, err := json.Marshal(forwardAppendRequest{Entries: wireEntries})
 	if err != nil {
 		return fmt.Errorf("replication: forward append for tenant %q: %w", tenantID, err)
 	}
-	return f.forwardToReplicas(replicaIDs, "/v1/replication/append", tenantID, bearerToken, body)
+	return f.forwardToReplicas(replicaIDs, "/v1/replication/append", tenantID, bearerToken, maxSeq, body)
 }
 
 // ForwardCheckpoint is ForwardAppend's checkpoint sibling - same
@@ -174,13 +196,25 @@ func (f *Forwarder) ForwardCheckpoint(tenantID, bearerToken string, seq uint64, 
 	if err != nil {
 		return fmt.Errorf("replication: forward checkpoint for tenant %q: %w", tenantID, err)
 	}
-	return f.forwardToReplicas(replicaIDs, "/v1/replication/checkpoint", tenantID, bearerToken, body)
+	return f.forwardToReplicas(replicaIDs, "/v1/replication/checkpoint", tenantID, bearerToken, seq, body)
 }
 
 // forwardToReplicas fans body out to every replicaID other than selfID,
 // skipping (never erroring on) any replica AddrResolver cannot resolve,
 // and collecting every genuine per-replica failure into one combined
 // error (a caller learns EVERY replica that failed, not just the first).
+//
+// seq is this forward call's own highest WAL Seq (the batch's max Seq for
+// an append, or the checkpoint's own Seq) - T018's LagTracker records it
+// against EVERY named replica BEFORE the per-replica attempt even begins
+// (f.lag.recordAttempt), so a replica this loop never manages to reach
+// (unresolvable address OR a genuine per-replica failure below) still
+// shows a real, growing lag rather than silently staying at its last-known
+// value (spec.md's Edge Cases: "the replica's lag must become visible ...
+// rather than silently dropped"). f.lag.recordConfirmed is called ONLY
+// after a real per-replica success (postWithRetry returning nil) - the
+// SAME real forwarding-acknowledgment traffic T008 already produces
+// (lag.go's own package doc comment), never an independently-fed signal.
 //
 // tenantID is carried onto every forwarded request as an X-Tenant-ID
 // header (T011 tenant-scoping review) - EXACTLY the header
@@ -193,19 +227,22 @@ func (f *Forwarder) ForwardCheckpoint(tenantID, bearerToken string, seq uint64, 
 // matching routes_replication.go's own "an absent header resolves to the
 // empty tenant ID" contract exactly (its doc comment), never relying on
 // an empty-string header value behaving identically by accident.
-func (f *Forwarder) forwardToReplicas(replicaIDs []string, path, tenantID, bearerToken string, body []byte) error {
+func (f *Forwarder) forwardToReplicas(replicaIDs []string, path, tenantID, bearerToken string, seq uint64, body []byte) error {
 	var errs []error
 	for _, id := range replicaIDs {
 		if id == f.selfID {
 			continue
 		}
+		f.lag.recordAttempt(tenantID, id, seq)
 		baseURL, ok := f.addrs(id)
 		if !ok {
 			continue // FR-004: an unresolvable replica is skipped, never blocking.
 		}
 		if err := f.postWithRetry(baseURL, path, tenantID, bearerToken, body); err != nil {
 			errs = append(errs, fmt.Errorf("replica %q (%s): %w", id, baseURL, err))
+			continue
 		}
+		f.lag.recordConfirmed(tenantID, id, seq)
 	}
 	if len(errs) > 0 {
 		return errors.Join(errs...)

@@ -82,6 +82,29 @@ type stateResponse struct {
 	Positions []int32 `json:"positions"`
 }
 
+// lagRecordJSON is one replica's entry in GET /v1/replication/lag's
+// JSON response (T019, User Story 3, spec.md FR-010) - mirrors
+// replication.ReplicationLagRecord field-for-field, omitting the
+// redundant TenantID (already this response's own top-level field).
+type lagRecordJSON struct {
+	ReplicaNodeID    string `json:"replica_node_id"`
+	LastConfirmedSeq uint64 `json:"last_confirmed_seq"`
+	PrimarySeq       uint64 `json:"primary_seq"`
+	Lag              uint64 `json:"lag"`
+}
+
+// lagResponse is GET /v1/replication/lag's JSON response - every replica
+// THIS node's Forwarder currently has a real lag record for, under
+// tenantID (T018's LagTracker, fed exclusively from real forwarding-
+// acknowledgment traffic - see internal/replication/lag.go's own package
+// doc comment). Replicas is an empty slice, never null, when this node
+// has never forwarded anything for tenantID (SC-002/SC-005: an unknown
+// replica is reported as unknown, never fabricated as caught up).
+type lagResponse struct {
+	TenantID string          `json:"tenant_id"`
+	Replicas []lagRecordJSON `json:"replicas"`
+}
+
 // tenantIDHeader is the optional per-request tenant identifier these
 // routes read to resolve which tenant's Store a request operates
 // against. Absent (or empty) resolves to the empty tenant ID.
@@ -309,6 +332,41 @@ func RegisterReplicationRoutes(r gin.IRoutes, registry *replication.StoreRegistr
 			return
 		}
 		c.JSON(http.StatusOK, stateResponse{Tokens: state.Tokens, Positions: state.Positions})
+	})
+
+	// GET /v1/replication/lag (T019, User Story 3, spec.md FR-010): the
+	// operator-facing replication-health read endpoint - exposes THIS
+	// node's own real, per-replica ReplicationLagRecord set for tenantID
+	// (T018's LagTracker, fed exclusively from real forwarding-
+	// acknowledgment traffic; see internal/replication/lag.go's own
+	// package doc comment). This route deliberately does NOT call
+	// resolveStore - unlike append/checkpoint/state, lag data is never
+	// stored in a per-tenant *replication.Store (it lives in forwarder's
+	// in-memory LagTracker regardless of whether a Store was ever opened
+	// for tenantID on this node) - but it applies the SAME authorization
+	// check resolveStore itself performs (RequireJWT + tenant ownership
+	// against the X-Tenant-ID header), so a caller may only view its own
+	// tenant's replication lag, exactly matching every other route in
+	// this file (T011's tenant-scoping discipline applied identically to
+	// this read-only observability surface).
+	r.GET("/v1/replication/lag", RequireJWT(decider), func(c *gin.Context) {
+		claims := ClaimsFromContext(c)
+		tenantID := c.GetHeader(tenantIDHeader)
+		if !authorizeTenantOwnership(decider, claims, tenantID) {
+			c.JSON(http.StatusForbidden, gin.H{"error": "caller may only view its own tenant's replication lag"})
+			return
+		}
+		records := forwarder.LagTracker().TenantLag(tenantID)
+		replicas := make([]lagRecordJSON, len(records))
+		for i, rec := range records {
+			replicas[i] = lagRecordJSON{
+				ReplicaNodeID:    rec.ReplicaNodeID,
+				LastConfirmedSeq: rec.LastConfirmedSeq,
+				PrimarySeq:       rec.PrimarySeq,
+				Lag:              rec.Lag,
+			}
+		}
+		c.JSON(http.StatusOK, lagResponse{TenantID: tenantID, Replicas: replicas})
 	})
 }
 
