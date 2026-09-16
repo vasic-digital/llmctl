@@ -1,7 +1,7 @@
 # CONTINUATION
 
-**Revision:** 14
-**Last modified:** 2026-09-16T01:00:00Z
+**Revision:** 15
+**Last modified:** 2026-09-16T02:00:00Z
 
 Per Constitution §12.10: this file reflects the live state of work on the
 `001-llmctl-completion` feature so any agent can resume exactly where the
@@ -62,14 +62,19 @@ of approximating from Raft voter configuration. Both closures were
 independently re-verified by the conductor (build/vet/gofmt/full-suite-under-
 `-race`/bash-suite/submodule-drift) before merging, and each dispatch found
 and fixed at least one further genuinely separate real defect along the way
-(never invented scope) — full detail in §10i.
+(never invented scope) — full detail in §10i. That same closure work
+honestly surfaced ONE brand-new real defect (the forward-client mTLS
+identity's own certificate never being reissued across a completed CA
+rotation, a genuine availability/self-lockout risk) — that too was found,
+root-caused, fixed, RED/GREEN-proven, and independently re-verified by the
+conductor the same session — see §10j.
 
-**Zero disclosed open items remain across 002-cluster-model-scheduler,
-003-kv-cache-replication, or 004-mtls-cert-rotation.** There is no next
-phase and no follow-up item currently queued. The immediate next action for
-a resuming session is: **present the current project state to the operator**
-(this file, plus `specs/001-llmctl-completion/tasks.md` and `progress.yml`,
-plus each of `specs/002-cluster-model-scheduler/`,
+**Zero disclosed open items remain — full stop — across 002-cluster-model-
+scheduler, 003-kv-cache-replication, or 004-mtls-cert-rotation.** There is
+no next phase and no follow-up item currently queued. The immediate next
+action for a resuming session is: **present the current project state to
+the operator** (this file, plus `specs/001-llmctl-completion/tasks.md` and
+`progress.yml`, plus each of `specs/002-cluster-model-scheduler/`,
 `specs/003-kv-cache-replication/`, `specs/004-mtls-cert-rotation/`'s own
 tasks.md, are the complete record) and await further instruction — e.g.
 start a new feature, or actually cut a real release (see the standing
@@ -825,7 +830,15 @@ Both items §10f/§10g/§10h had honestly left open were closed this session, vi
 - **FR-010 live-per-voter-trust-confirmation (004-mtls-cert-rotation).** `internal/api/routes_mtls.go`'s `quorumWouldBeStranded` replaced its Raft-voter-configuration approximation with a REAL concurrent mTLS handshake check per voter (`quorumWouldBeStrandedLive`/`voterIsLiveAndTrusting`), reusing the existing `mtlsForwardTLS` client (whose `VerifyPeerCertificate` already delegates to `raft.VerifyPeerCertificateAgainstCA`) rather than reimplementing verification. **Design decision, documented in code**: fails CLOSED per-voter with NO fallback — a voter whose live check times out/errors counts as untrusted exactly like a config-untrusted one, extending this codebase's own "can only over-refuse, never under-refuse, a safe action" philosophy. New real multi-node test (`TestMTLSRotation_QuorumProtection_LiveHandshakeDetectsSIGKilledVoter`) proves a genuinely `SIGKILL`'d, never-gracefully-removed voter — invisible to the OLD config-count check — is now correctly detected and the unsafe action correctly refused; the pre-existing T021 regression test still passes for the identical real reason as before. **A new, separate, honestly-disclosed-but-NOT-fixed boundary was found**: the forward-client mTLS identity is never reissued across a completed CA rotation, so a revoke/finalize attempted after a full prior rotation could see every other voter's live check spuriously fail — a pre-existing latent gap the OLD check never exercised, now synchronously reachable via the new one, tracked as further follow-up (not fixed here — out of this task's scope, and not exercised by either new test).
 - **`cluster.Monitor` wiring (002-cluster-model-scheduler + 003-kv-cache-replication, the SAME shared root cause).** `cmd/llmctld/main.go`'s new `wireHealthMonitor` (called identically from both `runClusterBootstrap`/`runClusterJoinReal`) constructs and starts a real `*cluster.Monitor` with a real `StatusChecker`, a real `ResourceSource`/`ResourceSubmitter` pair (closing the resource-freshness-heartbeat gap), and a real `Rescheduler` that calls the already-implemented-and-unit-tested `cluster.ReconcileReplicationRoles` on a genuine health-check failure, with the failed node passed as an EXPLICIT dead-node override — closing the crash-triggered-replication-role-failover gap (a plain crash never shrinks Raft's own voter configuration, so this explicit override is exactly what was missing). **The two-primaries-at-once race both prior independent reviews (T072-FU6/FU7) flagged as their reason for not rushing a fix was RULED OUT, not merely assumed** — the Rescheduler introduces no second commit mechanism; every candidate role is proposed through the identical already-tested Raft-Apply path `ensureReplicationRole` already uses, and concurrent nodes' Monitors compute the identical deterministic candidate, so a duplicate Apply is an idempotent overwrite, never a conflict. Two REAL 3-node tests (RED-then-GREEN, re-confirmed non-flaky by the conductor across additional independent reruns) prove both gaps are genuinely closed. **Two further genuinely separate defects were found and fixed along the way** (neither is the two-primaries-at-once race): a wrong timeout on the new health-check client that was observed destabilizing a survivor's own Raft heartbeat during crash recovery (fixed with a dedicated shorter timeout); and a genuine PRE-EXISTING latent bug in `internal/replication/forwarder.go` where a documented 2-second retry budget was never actually enforced against a single slow-to-fail attempt, silently depending on the caller's own (much longer, 10s in production) HTTP client timeout instead — newly exercised for the first time by this fix, closed with a real fix + a real regression test the conductor independently re-ran and confirmed. A model-workload-rescheduling mechanism (mentioned only in a doc comment) was investigated and confirmed to not exist anywhere in this codebase — honestly left unimplemented rather than invented as unplanned scope, since it was never one of the two disclosed open items.
 
-**Zero disclosed open items remain across 002-cluster-model-scheduler, 003-kv-cache-replication, or 004-mtls-cert-rotation.**
+**Correction (2026-09-16, same session, before this line was ever read by an operator):** the line above was imprecise — the two ORIGINAL disclosed items (§10f/§10g/§10h) were genuinely zero at this point, but this SAME entry's own paragraph above it honestly surfaced a brand-new one (the forward-client mTLS identity gap) in the course of closing them. See §10j — that new item was ALSO closed later the same session, so the "zero disclosed open items" claim is now actually true, just not for the reason this line originally implied.
+
+## 10j. Follow-up: forward-client mTLS identity never reissued across a completed CA rotation — the last remaining item, closed (T072-FU10, closed 2026-09-16)
+
+§10i's own T072-FU9 work honestly surfaced ONE new, real, previously-unknown defect while closing the two original disclosed items: `internal/api/routes_mtls.go`'s renew handler reissues exactly TWO fresh certs per rotation (raft transport, HTTP API) — never a third for the forward-client identity `cmd/llmctld/main.go` constructs at startup specifically for T072-FU9's own new live-per-voter-trust check. That identity's trusted-CA *pool* WAS correctly kept in lockstep by the existing begin/finalize handlers; its own node CERTIFICATE was not. After a fully-completed CA rotation, this node's forward-client cert stayed signed by the retired CA forever, so every other voter would correctly reject it — and because `quorumWouldBeStrandedLive` fails closed on any untrusted voter, EVERY subsequent revoke/finalize action on this node would be wrongly refused as quorum-stranded, even on a genuinely healthy cluster. A real availability/self-lockout regression, not a doc-only gap.
+
+**Fixed**: the renew handler now issues a third cert for the forward-client identity via the same `issuingCA`, calling `UpdateNodeCert` on every store in `additionalCATrustStores` — all three identities now reissue together. `quorumWouldBeStrandedLive`'s fail-closed design was correctly left untouched; the bug was stale data, never a wrong policy. New real 3-node test (`TestMTLSRotation_QuorumProtection_SurvivesFullPriorCARotation`) runs a full CA rotation to completion then a subsequent revoke, asserting it's approved. **RED independently re-confirmed by the conductor** (not merely trusted from the report) — checked out the pre-fix code, re-ran the test, got the IDENTICAL real HTTP 409 quorum-stranded refusal; restored the fix, re-ran GREEN. Runtime signature (~4.3s failing vs ~4.9-5.1s passing, both well under the 10s timeout a genuinely-dead peer legitimately hits at ~14.5s) confirms genuine correctness, not a weakened assertion. All 11 `TestMTLSRotation_*` tests pass together; full suite (`go build`/`go vet`/`gofmt`/`go test -race`/bash suite/submodule-drift) re-verified clean by the conductor both pre- and post-merge.
+
+**Zero disclosed open items remain — full stop — across 002-cluster-model-scheduler, 003-kv-cache-replication, or 004-mtls-cert-rotation.** No further follow-up item is queued.
 
 ## 11. Binding constraints (unchanged, restated per §12.10)
 
