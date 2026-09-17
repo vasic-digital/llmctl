@@ -219,9 +219,10 @@ sched_build_launch() {
 # sequence runs as ONE atomic locked unit instead of two separate acquisitions
 # with a gap between them - and so nested acquisition (which would deadlock
 # flock against itself) never happens.
-sched_start() { scheduler::with_lock _sched_start_impl "$@"; }
-sched_stop()  { scheduler::with_lock _sched_stop_impl "$@"; }
-sched_auto()  { scheduler::with_lock _sched_auto_impl "$@"; }
+sched_start()  { scheduler::with_lock _sched_start_impl "$@"; }
+sched_stop()   { scheduler::with_lock _sched_stop_impl "$@"; }
+sched_auto()   { scheduler::with_lock _sched_auto_impl "$@"; }
+sched_enable() { scheduler::with_lock _enable_impl "$@"; }
 
 # _sched_start_impl <profile...> - returns non-zero (with a clear message)
 # when the combined footprint does not fit. Call sched_start (above) from
@@ -313,6 +314,77 @@ _sched_start_impl() {
     info "started ${p} (mode=${mode}, port=${port}, reserved ${ram} MiB RAM + ${vram} MiB VRAM)"
   done
   rm -f "${plan_file}"
+}
+
+# _enable_impl <profile> - write env (from a fresh plan footprint) + enable +
+# start a PERSISTENT (systemd/launchd) service. Call sched_enable (below) from
+# outside this file; this unlocked form exists so the budget check below runs
+# under the SAME scheduler lock `start` already holds for the identical
+# read-budget-then-write-reservation sequence.
+#
+# Locking (independent review, 2026-09-17): the budget check this function
+# performs used to run directly in `bin/llmctl`'s `enable)` case with NO lock
+# held at all - a genuine TOCTOU: `scheduler::with_lock`'s own header comment
+# states the lock exists precisely "so two concurrent llmctl invocations …
+# never interleave their read-budgets-then-write-reservation sequence … it
+# never proceeds on a stale read" - and an unlocked check-then-act is exactly
+# that interleaving, unchanged by adding a check that itself races. Moving
+# this into an `_impl` dispatched via `scheduler::with_lock` (mirroring
+# `_sched_start_impl`) closes it the same way `start` is already closed.
+_enable_impl() {
+  local profile="$1"
+  catalog_exists "${profile}" || die "unknown profile: ${profile} (see: llmctl models list)"
+  sched_load_backend
+  local plan_file; plan_file="$(mktemp)"
+  hw_probe_json | catalog_plan_json > "${plan_file}"
+  local mode port ctx ngl parallel fa ram vram
+  mode="$(json_query "${plan_file}" "d[\"profiles\"][\"${profile}\"][\"mode\"]")"
+  port="$(json_query "${plan_file}" "d[\"profiles\"][\"${profile}\"][\"port\"]")"
+  ctx="$(json_query "${plan_file}" "d[\"profiles\"][\"${profile}\"][\"ctx\"]")"
+  ngl="$(json_query "${plan_file}" "d[\"profiles\"][\"${profile}\"][\"ngl\"]")"
+  parallel="$(json_query "${plan_file}" "d[\"profiles\"][\"${profile}\"][\"parallel\"]")"
+  fa="$(json_query "${plan_file}" "d[\"profiles\"][\"${profile}\"][\"flash_attn\"]")"
+  ram="$(json_query "${plan_file}" "d[\"profiles\"][\"${profile}\"][\"ram_mb\"]")"
+  vram="$(json_query "${plan_file}" "d[\"profiles\"][\"${profile}\"][\"vram_mb\"]")"
+  # Root-caused 2026-09-17 (real repro, not guessed): unlike `llmctl start`,
+  # which checks the combined RAM/VRAM footprint of every currently-reserved
+  # profile against the host's own computed budget (_sched_start_impl above)
+  # before starting anything, `enable` computed and wrote a reservation for
+  # the NEW profile completely unconditionally - it never looked at what was
+  # already reserved. Reproduced directly on this host (30974 MiB total RAM,
+  # plan's own stated safe budget 20897 MiB): sequentially `enable`-ing
+  # small+vision+vision-pro+moe-fast reserved/ran ~24.9 GiB combined RSS -
+  # already over the plan's own budget - and drove the host's 8 GiB swap to
+  # fully exhausted while `llmctl status`/`enable` kept reporting each step
+  # as a clean success. This check makes `enable` respect the SAME budget
+  # `start` already enforces, refusing (with the actual numbers, and without
+  # writing an env file, touching the systemd unit, or reserving anything)
+  # rather than silently overcommitting host memory.
+  if ! sched_is_running "${profile}"; then
+    local ram_budget vram_budget used_ram used_vram
+    ram_budget="$(json_query "${plan_file}" 'd["budgets"]["ram_mb"]')"
+    vram_budget="$(json_query "${plan_file}" 'd["budgets"]["vram_mb"]')"
+    used_ram="$(sched_reserved_field ram_mb)"
+    used_vram="$(sched_reserved_field vram_mb)"
+    if (( used_ram + ram > ram_budget )) || (( used_vram + vram > vram_budget )); then
+      rm -f "${plan_file}"
+      err "cannot enable '${profile}': needs ${ram} MiB RAM + ${vram} MiB VRAM, but only $(( ram_budget - used_ram )) MiB RAM + $(( vram_budget - used_vram )) MiB VRAM remain within the host budget (stop another enabled profile first, e.g. 'llmctl disable <profile>', or use 'llmctl start ${profile}' on demand instead of a persistent enable)"
+      return 1
+    fi
+  fi
+  rm -f "${plan_file}"
+  sched_build_launch "${profile}" "${mode}" "${port}" "${ctx}" "${ngl}" "${parallel}" "${fa}"
+  svc_write_env "${profile}" "$(catalog_engine "${profile}")" "${SCHED_EXEC}" "${SCHED_ARGS[@]}"
+  touch "${LLMCTL_SERVICES_DIR}/${profile}.enabled"
+  if ! svc_enable "${profile}"; then
+    err "failed to enable '${profile}': the service backend refused to enable/start it (see: llmctl logs ${profile})"
+    return 1
+  fi
+  # Record the reservation so the scheduler budgets correctly (enable
+  # implies start).
+  ensure_dir "${LLMCTL_RUNTIME_DIR}"
+  _sched_write_reservation "${profile}" "${mode}" "${port}" "${ram}" "${vram}"
+  info "enabled and started ${profile} (mode=${mode}, port=${port})"
 }
 
 _sched_stop_impl() {

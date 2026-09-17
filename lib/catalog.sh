@@ -14,6 +14,21 @@
 #     fixed conservative reservation, storage need is the full repo size.
 #   * Host tiers gate profiles via each profile's min_tier:
 #       below-minimum < baseline < workstation < datacenter
+#
+# Per-profile port override (opt-in, host-local):
+#   models/catalog.json's "port" field is meant to stay portable/host-
+#   independent - it is checked in and shared across every host that runs
+#   this catalog. When a catalog profile's default port collides with an
+#   unrelated process already bound to it on ONE specific host, that is a
+#   host-local fact, never a reason to edit the shared catalog file. Set
+#   LLMCTL_PORT_<PROFILE> (profile name upper-cased, '-' -> '_', e.g.
+#   LLMCTL_PORT_FAST=18080 for the "fast" profile) to rebind JUST that
+#   profile to a free port on JUST this host, following the same
+#   ${VAR:-default}-style opt-in-env-var convention as LLMCTL_LLAMA_SERVER
+#   / LLMCTL_COLI_BIN. Consulted by catalog_port() (display) and
+#   catalog_plan_json() (the actual launch-port every scheduler operation
+#   uses) - see catalog_port_override_env_name() below for the exact name
+#   derivation.
 set -euo pipefail
 
 _cat_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -48,8 +63,37 @@ catalog_field() {
   if [[ -z "${out}" && -n "${def}" ]]; then echo "${def}"; else echo "${out}"; fi
 }
 
+# catalog_port_override_env_name <profile> -> LLMCTL_PORT_<PROFILE>
+# Profile names are lowercase snake/kebab (e.g. "ws-dense-32b"); this maps
+# them to the upper-snake env-var suffix ("WS_DENSE_32B"). tr's two
+# argument character classes ([:lower:]- and [:upper:]_) are the same
+# length (27: 26 letters + one separator), so each maps position-for-
+# position: a-z -> A-Z and '-' -> '_'. Exposed as its own function (rather
+# than inlined) so both catalog_port() and any future caller derive the
+# override name identically - one source of truth for the naming rule.
+catalog_port_override_env_name() {
+  printf 'LLMCTL_PORT_%s' "$(printf '%s' "$1" | tr '[:lower:]-' '[:upper:]_')"
+}
+
 catalog_engine()     { catalog_field "$1" engine; }
-catalog_port()       { catalog_field "$1" port; }
+catalog_port() {
+  # Opt-in per-profile override (see the file-header comment above) takes
+  # precedence over the catalog's fixed value; still profile-validated
+  # (catalog_check + catalog_exists) exactly as the no-override path is via
+  # catalog_field, so an override for an unknown profile still dies with
+  # the same "unknown profile" message rather than silently returning the
+  # override for a profile that does not exist.
+  local p="$1" override_var override
+  override_var="$(catalog_port_override_env_name "${p}")"
+  override="${!override_var:-}"
+  if [[ -n "${override}" ]]; then
+    catalog_check
+    catalog_exists "${p}" || die "unknown profile: ${p} (see: llmctl models list)"
+    printf '%s\n' "${override}"
+  else
+    catalog_field "${p}" port
+  fi
+}
 catalog_min_tier()   { catalog_field "$1" min_tier baseline; }
 catalog_desc()       { catalog_field "$1" desc ""; }
 catalog_hf_repo()    { catalog_field "$1" hf_repo; }
@@ -157,6 +201,27 @@ def kv_mb(ctx, parallel):
     # Conservative f16 KV estimate: 1/8 MiB per token-slot.
     return int(math.ceil(ctx * parallel / 8.0))
 
+def resolve_port(name, default_port):
+    """Per-profile port override (see the file-header comment): opt-in
+    LLMCTL_PORT_<PROFILE> env var, same naming rule as the bash-side
+    catalog_port_override_env_name() (upper-cased profile name, '-' ->
+    '_'). This is the function every actual launch (llmctl start/enable/
+    switch/auto, via sched_build_launch's --port) resolves its port
+    through - overriding only catalog_port() (a display-only getter)
+    would NOT change what the scheduler actually binds to.
+    """
+    env_name = "LLMCTL_PORT_" + name.upper().replace("-", "_")
+    override = os.environ.get(env_name)
+    if not override:
+        return default_port
+    try:
+        return int(override)
+    except ValueError:
+        sys.stderr.write(
+            "catalog_plan_json: %s=%r is not a valid port number\n" % (env_name, override)
+        )
+        sys.exit(1)
+
 def footprint(name, p):
     """-> dict(mode, ram_mb, vram_mb, storage_mb, fits) or None when unfit."""
     size_mb = sum((f.get("size") or 0) for f in p["files"]) // 1048576
@@ -190,7 +255,7 @@ for name in sorted(catalog["profiles"].keys()):
     fp = footprint(name, p)
     min_tier = p.get("min_tier", "baseline")
     tier_ok = tier_rank[tier] >= tier_rank.get(min_tier, 1)
-    fp.update({"port": p["port"], "engine": p["engine"],
+    fp.update({"port": resolve_port(name, p["port"]), "engine": p["engine"],
                "capability": p["capability"], "min_tier": min_tier,
                "tier_ok": tier_ok, "recommended": bool(fp["fits"] and tier_ok)})
     profiles[name] = fp

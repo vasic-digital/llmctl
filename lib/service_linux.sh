@@ -157,7 +157,17 @@ EnvironmentFile=${LLMCTL_SERVICES_DIR}/%i.env
 # whose OWN path is a fixed, parse-time-resolvable literal, and let that
 # shell resolve the dynamic executable from its inherited environment at
 # RUN time - proven with the exact real form below before landing it here.
-ExecStart=/bin/bash -c 'exec "\$LLMCTL_EXEC" \$LLMCTL_ARGS'
+#
+# `set -f` (independent review, 2026-09-17): systemd's own \$VAR expansion
+# performs word-splitting but NEVER globbing - the fix above swaps that for
+# bash's \$LLMCTL_ARGS expansion, which DOES glob by default, verified live
+# with a real systemd unit + arg-printing target: a literal "a*b" argument
+# from a %q-escaped LLMCTL_ARGS was silently expanded into two separate
+# argv entries by pathname matches in the cwd. Reachable if any launch
+# argument (a model path, profile name, LLMCTL_MODELS_DIR, a save-path)
+# ever contains *, ?, or [...]. `set -f` disables that expansion for this
+# shell only, restoring systemd's own no-globbing behavior exactly.
+ExecStart=/bin/bash -c 'set -f; exec "\$LLMCTL_EXEC" \$LLMCTL_ARGS'
 Restart=always
 RestartSec=5
 StartLimitBurst=5
@@ -181,8 +191,9 @@ Wants=network-online.target
 Type=simple
 EnvironmentFile=${LLMCTL_SERVICES_DIR}/%i.env
 # See the matching note in the llmctl-llama@.service template above -
-# same systemd ExecStart= executable-path-expansion limitation, same fix.
-ExecStart=/bin/bash -c 'exec "\$LLMCTL_EXEC" \$LLMCTL_ARGS'
+# same systemd ExecStart= executable-path-expansion limitation, same fix
+# (including the set -f no-globbing restoration).
+ExecStart=/bin/bash -c 'set -f; exec "\$LLMCTL_EXEC" \$LLMCTL_ARGS'
 Restart=always
 RestartSec=5
 StartLimitBurst=5
@@ -243,8 +254,35 @@ svc_write_env() {
     printf 'LLMCTL_ENGINE=%q\n' "${engine}"
     printf 'LLMCTL_EXEC=%q\n' "${exec_bin}"
     if [[ "${engine}" == "llama" ]]; then
-      local exec_dir; exec_dir="$(cd "$(dirname "${exec_bin}")" && pwd)"
-      printf 'LD_LIBRARY_PATH=%q\n' "${exec_dir}${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
+      # Non-fatal directory resolution (independent review, 2026-09-17): the
+      # original `exec_dir="$(cd ... && pwd)"` form aborts this ENTIRE
+      # function under `set -e` when exec_bin's directory does not yet
+      # exist (e.g. `llmctl build llama` has not run yet) - reproduced live:
+      # `make test` regressed test_services.sh/test_tenant_service_
+      # isolation.sh, both failing with "No such file or directory" from
+      # this exact line, AND the abort happened mid-write inside the `{ }`
+      # redirect block, leaving a TRUNCATED .env file (LLMCTL_EXEC written,
+      # LLMCTL_ARGS never reached) that would launch a real service with no
+      # arguments at all. `if ... ; then ...; fi` makes the failure a no-op
+      # (no LD_LIBRARY_PATH line - the smoke-test/download path still works
+      # standalone) instead of aborting the whole write.
+      #
+      # Never inherits the CALLING shell's own LD_LIBRARY_PATH (independent
+      # review, 2026-09-17): the prior form appended
+      # "${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}", which bakes whatever
+      # ambient value the invoking shell happened to have into a
+      # PERSISTENT systemd unit at `enable`/`start` time - non-reproducible
+      # (the same `llmctl enable small` from two different shells writes
+      # two different unit environments) and, measured live on this host,
+      # the inherited suffix was literally "/usr/lib/x86_64-linux-gnu" -
+      # the EXACT stale-library directory this whole fix exists to rank
+      # BEHIND the correct sibling directory, now instead explicitly
+      # listed on the unit's own LD_LIBRARY_PATH ahead of the normal loader
+      # search order for every library the process loads, not only ggml.
+      local exec_dir
+      if exec_dir="$(cd "$(dirname "${exec_bin}")" 2>/dev/null && pwd)"; then
+        printf 'LD_LIBRARY_PATH=%q\n' "${exec_dir}"
+      fi
     fi
     printf 'LLMCTL_ARGS='
     printf '%q ' "$@"

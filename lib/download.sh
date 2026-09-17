@@ -60,9 +60,24 @@ llmctl_sha256() {
 # framing/`\0`-handling reimplementation - confirmed empirically before
 # using it: `git hash-object` on a freshly-downloaded config.hf.json
 # reproduced the exact blobId the HF API reported for that same file.
+#
+# --no-filters (independent review, 2026-09-17): a bare `git hash-object`
+# applies the CALLING repository's own clean/CRLF filters (core.autocrlf,
+# a `* text=auto` .gitattributes) before hashing - based on the process's
+# cwd repo, even for a target file living entirely outside it. Reproduced
+# directly: hashing an identical CRLF-containing file with core.autocrlf=
+# true on vs `--no-filters` produced two DIFFERENT hashes, and only the
+# `--no-filters` one matched the file's true raw-content blob hash
+# (independently cross-checked via `sha1("blob " <len> "\0" <content>)`).
+# Since `llmctl models download` is normally run from inside a git
+# checkout (including this project's own), any host with a global
+# core.autocrlf or a repo-level text=auto would otherwise get a WRONG hash
+# for these files and falsely refuse a genuinely-correct download - the
+# exact false-negative class this whole fallback exists to eliminate.
+# `--` guards against a path beginning with `-` being read as an option.
 llmctl_git_blob_sha1() {
   need_cmd git
-  git hash-object "$1"
+  git hash-object --no-filters -- "$1"
 }
 
 # --- evidence logging --------------------------------------------------------
@@ -112,6 +127,32 @@ for s in d.get("siblings", []):
 ' "${name}"
 }
 
+# Resolve the checksum to verify a file against: the catalog's own sha256
+# when it has one, else the HF-API fallback (independent review, 2026-09-17
+# / I5) - extracted so `_dl_download_file` and `verify_profile` share ONE
+# resolution path instead of `verify_profile` silently skipping the
+# fallback entirely (it previously handed `_dl_verify_file` the raw,
+# EMPTY catalog sha for config.hf.json/config.json, so `_dl_verify_file`'s
+# own `[[ -n "${sha}" ]]` guard skipped the checksum check altogether while
+# `llmctl models verify` still printed "passed checksum verification" -
+# a real, silent, no-verification-at-all gap for exactly the two files
+# `_dl_fetch_sha256_from_api`'s git-blob fallback exists to cover).
+# Echoes the resolved sha on success; returns 1 with nothing echoed when
+# no checksum can be obtained at all (caller decides how to fail).
+_dl_resolve_sha() {
+  local repo="$1" name="$2" sha="$3"
+  if [[ -n "${sha}" ]]; then
+    printf '%s' "${sha}"
+    return 0
+  fi
+  warn "catalog has no sha256 for ${name}; fetching from HF API"
+  local resolved
+  resolved="$(_dl_fetch_sha256_from_api "${repo}" "${name}")" || resolved=""
+  [[ -n "${resolved}" ]] || return 1
+  _dl_log "sha256 for ${name} resolved via HF API: ${resolved}"
+  printf '%s' "${resolved}"
+}
+
 _dl_verify_file() {
   # _dl_verify_file <path> <expected_size_or_0> <expected_sha256_or_empty>
   local path="$1" size="$2" sha="$3"
@@ -158,13 +199,10 @@ _dl_download_file() {
 
   ensure_dir "$(dirname "${dest}")"
 
-  # Fallback: catalog sha256 is null -> fetch it live from the HF API.
-  if [[ -z "${sha}" ]]; then
-    warn "catalog has no sha256 for ${name}; fetching from HF API"
-    sha="$(_dl_fetch_sha256_from_api "${repo}" "${name}")" || sha=""
-    [[ -n "${sha}" ]] || die "cannot obtain sha256 for ${name} from HF API - refusing unverified download"
-    _dl_log "sha256 for ${name} resolved via HF API: ${sha}"
-  fi
+  # Fallback: catalog sha256 is null -> fetch it live from the HF API
+  # (shared with verify_profile via _dl_resolve_sha, see its own header).
+  sha="$(_dl_resolve_sha "${repo}" "${name}" "${sha}")" \
+    || die "cannot obtain sha256 for ${name} from HF API - refusing unverified download"
 
   if [[ -f "${dest}" ]]; then
     log "verifying existing file: ${dest}"
@@ -305,12 +343,45 @@ _dl_smoke_test_gguf() {
 
   _dl_log "smoke request payload: ${payload}"
   _dl_log "smoke raw response: ${response}"
-  if printf '%s' "${response}" | grep -q "OK"; then
-    _dl_log "smoke PASSED: response contains 'OK'"
+  # Parse the actual answer field, never grep the raw body (independent
+  # review, 2026-09-17): a bare `grep -q "OK"` on the WHOLE response also
+  # matches "OK" appearing inside reasoning_content, and raising
+  # max_tokens above (8 -> 64) gives a reasoning-format model 8x more room
+  # to print "OK" while THINKING about the answer without ever emitting it
+  # as real content - reproduced directly against the raw evidence this
+  # anchor's own comment already captured: reasoning_content began
+  # 'The user says: "', on its way to quoting the instruction verbatim,
+  # which would satisfy a raw-body grep long before any genuine answer.
+  # Parsing message.content specifically, AND requiring finish_reason ==
+  # "stop" (never "length" - the harmony-model failure case had
+  # content="" + finish_reason="length", exactly what this must reject),
+  # closes that false-positive channel while keeping every already-passing
+  # profile passing (their own captured evidence already showed
+  # content="OK" + finish_reason="stop").
+  local content finish_reason
+  content="$(printf '%s' "${response}" | python3 -c '
+import json, sys
+try:
+    d = json.load(sys.stdin)
+    print(d["choices"][0]["message"].get("content") or "")
+except Exception:
+    print("")
+' 2>/dev/null)"
+  finish_reason="$(printf '%s' "${response}" | python3 -c '
+import json, sys
+try:
+    d = json.load(sys.stdin)
+    print(d["choices"][0].get("finish_reason") or "")
+except Exception:
+    print("")
+' 2>/dev/null)"
+  _dl_log "smoke parsed content: '${content}' finish_reason: ${finish_reason}"
+  if [[ "${content}" == *OK* && "${finish_reason}" == "stop" ]]; then
+    _dl_log "smoke PASSED: answer content contains 'OK' with finish_reason=stop"
     info "smoke test passed for ${profile} (deterministic prompt answered 'OK')"
     return 0
   fi
-  _dl_log "smoke FAILED: response did not contain 'OK'"
+  _dl_log "smoke FAILED: answer content did not contain 'OK' with finish_reason=stop"
   err "smoke test failed: model response did not contain 'OK'"
   return 1
 }
@@ -318,15 +389,27 @@ _dl_smoke_test_gguf() {
 _dl_validate_colibri() {
   # _dl_validate_colibri <profile> <dest_dir>
   local profile="$1" dest="$2"
-  if have_cmd coli; then
+  # Resolve the coli launcher via the SAME same-repo-first fallback
+  # lib/scheduler.sh's sched_build_launch already uses for the colibri
+  # engine (I6, independent review 2026-09-17): a bare `have_cmd coli` PATH
+  # lookup silently missed the real, already-executable in-repo `coli`
+  # script whenever it was not ALSO installed onto PATH, so this validator
+  # degraded to the weaker structural-only check even on a host where the
+  # stronger `coli doctor` check was fully available and already used to
+  # launch the service itself.
+  local coli_bin="${LLMCTL_COLI_BIN:-${LLMCTL_ROOT}/submodules/colibri/c/coli}"
+  if [[ ! -x "${coli_bin}" ]]; then
+    if have_cmd coli; then coli_bin="coli"; else coli_bin=""; fi
+  fi
+  if [[ -n "${coli_bin}" ]]; then
     log "running colibri validation via coli doctor"
-    if _dl_evidence_run env COLI_MODEL="${dest}" coli doctor; then
+    if _dl_evidence_run env COLI_MODEL="${dest}" "${coli_bin}" doctor; then
       info "coli doctor passed for ${profile}"
       return 0
     fi
     warn "coli doctor failed for ${profile}; falling back to structural check"
   else
-    _dl_log "coli launcher not installed; using structural validation"
+    _dl_log "coli launcher not found (same-repo or PATH); using structural validation"
   fi
   # Structural check: config + at least one non-empty safetensors shard.
   local shards
@@ -393,9 +476,18 @@ verify_profile() {
   ensure_state_dirs
   _DL_EVIDENCE="${LLMCTL_VERIFY_DIR}/${profile}.log"
   _dl_log "llmctl models verify ${profile}"
+  local repo; repo="$(catalog_hf_repo "${profile}")"
   local name size sha role
   while IFS='|' read -r name size sha role; do
-    _dl_evidence_run _dl_verify_file "${dest_dir}/${name}" "${size}" "${sha}" \
+    # I5 fix (independent review, 2026-09-17): resolve a null catalog
+    # sha256 via the same HF-API fallback _dl_download_file uses, instead
+    # of handing _dl_verify_file the raw empty sha - which made it skip
+    # the checksum check entirely for config.hf.json/config.json while
+    # this function still reported "passed checksum verification".
+    local resolved_sha
+    resolved_sha="$(_dl_resolve_sha "${repo}" "${name}" "${sha}")" \
+      || die "cannot obtain sha256 for ${name} from HF API - refusing unverifiable file"
+    _dl_evidence_run _dl_verify_file "${dest_dir}/${name}" "${size}" "${resolved_sha}" \
       || die "verification failed for ${name}"
   done < <(catalog_files "${profile}")
   info "profile '${profile}' passed checksum verification"

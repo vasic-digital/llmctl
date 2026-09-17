@@ -1,7 +1,7 @@
 # CONTINUATION
 
-**Revision:** 16
-**Last modified:** 2026-09-17T13:00:00Z
+**Revision:** 17
+**Last modified:** 2026-09-17T14:10:08Z
 
 Per Constitution §12.10: this file reflects the live state of work on the
 `001-llmctl-completion` feature so any agent can resume exactly where the
@@ -861,11 +861,124 @@ Following the operator's instruction to "boot up everything, all services and mo
 | `vision-pro` | yes | yes | verified working standalone; NOT co-resident with small+vision under the current VRAM-budget bookkeeping (see below) — start on demand: `llmctl start vision-pro` |
 | `moe-fast` (`gpt-oss-20b`) | yes | yes (`content:"OK"`, real completion) | NOT persistent — needs 15644 MiB RAM, exceeds this host's live budget alongside the other 3; start on demand: `llmctl start moe-fast` |
 | `colibri-qwen36` (Qwen3.6 35B-A3B, colibri engine) | yes (41 shards, incl. the two non-LFS config files via the new git-blob-sha1 path) | yes (`llmctl switch colibri-qwen36`; real `/v1/chat/completions` → `content:"OK"`, 11.4s) | NOT persistent — 8192 MiB RAM exceeds the live budget alongside small+vision; start on demand: `llmctl start colibri-qwen36` (or `llmctl switch colibri-qwen36` to run it exclusively) |
-| `fast` (`Llama-3.1-8B`) | yes | yes | **blocked** — catalog port 8080 collides with an unrelated already-running process (`helixcode`, a sibling project on this shared dev host) confirmed via `ss -ltnp`; llmctl has no port-override mechanism (`catalog_port` reads a fixed catalog field, no env override exists). Never attempted to touch the colliding process (not ours to kill). Genuinely usable once that port frees, or via a future catalog/override enhancement — tracked as an honest open item, not fixed this session. |
+| `fast` (`Llama-3.1-8B`) | yes | yes | **blocked at the time this row was written** — catalog port 8080 collides with an unrelated already-running process (`helixcode`, a sibling project on this shared dev host) confirmed via `ss -ltnp`; llmctl had no port-override mechanism at that point (`catalog_port` read a fixed catalog field, no env override existed). Never attempted to touch the colliding process (not ours to kill). **Superseded by §10l below**: `LLMCTL_PORT_FAST=<free-port>` now resolves this without ever editing the shared catalog. |
 
 **Honest, disclosed, NOT-fixed limitations** (real, not code bugs, left as-is): (a) no CUDA toolkit installed despite a real NVIDIA RTX 3060 + driver being present (`nvcc` absent) — `llmctl build llama`'s own documented auto-detection correctly fell back to a CPU-only build; every "GPU-mode" profile's actual VRAM/RAM split is therefore inaccurate (the full model lands in RAM instead of VRAM), which is *why* `vision-pro`'s VRAM-estimate-driven budget check conflicts with small+vision even though their REAL combined RSS was independently confirmed well within actual host RAM — installing CUDA toolkit is a substantial system-level change requiring explicit operator authorization, not performed unilaterally; (b) `fast`'s port-8080 collision, above.
 
 **Downstream work still in progress at the time this entry was written**: a subagent (worktree `agent-a2321b9b993597d24`, branch to be confirmed on completion) is implementing `detect_llmctl_records()` in the separate `/home/milosvasic/Projects/claude_toolkit` repository, mirroring the existing `detect_helixagent_record()` pattern, to register each running llmctl profile as a Claude Toolkit provider alias; its own new test file passes and it independently confirmed one pre-existing, unrelated test failure in that repo's suite is not caused by its diff. Not yet merged, verified, or synced. Full live-TUI Superpowers-challenge testing per model, machine-evidence collection, and the final `commit_fully` push across both repos (llmctl + claude_toolkit, all submodules, all upstreams) remain outstanding as of this entry.
+
+## 10l. Independent code review of §10k's fixes + per-profile port-override mechanism (2026-09-17)
+
+An independent code review of the §10k batch, dispatched per Constitution
+§11.4.125/§11.4.142, found 8 additional real findings (1 CRITICAL, 7
+IMPORTANT) in the fixes themselves — proving the review's own value: fixing
+real bugs can introduce new ones, and only a structurally-separated review
+catches them before they ship. All 8 are now fixed and verified:
+
+1. **C1 (CRITICAL) — `svc_write_env` aborted its entire function under
+   `set -e` on a fresh checkout (`lib/service_linux.sh`)** — `exec_dir="$(cd
+   "$(dirname "${exec_bin}")" && pwd)"` failed (and aborted the whole
+   function, mid-write, leaving a truncated `.env` file with `LLMCTL_EXEC`
+   written but `LLMCTL_ARGS` never reached) whenever `exec_bin`'s directory
+   did not yet exist — e.g. before `llmctl build llama` has ever run. The
+   reviewer reproduced this live: `make test` at the buggy commit failed
+   `test_services.sh`/`test_tenant_service_isolation.sh` (both citing this
+   exact line), and passed clean at the parent commit. Fixed: the directory
+   resolution is now non-fatal (`if exec_dir="$(cd ... 2>/dev/null && pwd)";
+   then ...; fi`) — a missing directory just means no `LD_LIBRARY_PATH` line
+   is written, never an aborted `.env` write.
+2. **I1 — `git hash-object` without `--no-filters` hashes the WRONG content
+   under CRLF/`core.autocrlf` settings (`lib/download.sh`)** — the calling
+   repo's own clean filters apply based on cwd, even for a target file
+   living outside that repo. I independently reproduced this myself in a
+   scratch `/tmp/hashtest` repo before applying the fix: unfiltered hash
+   `94954abd...` vs `--no-filters` hash `23eb407b...`, the latter matching a
+   manually-computed raw blob-hash exactly. Fixed: `git hash-object
+   --no-filters -- "$1"`.
+3. **I2 — the systemd env file baked in the CALLING shell's own inherited
+   `LD_LIBRARY_PATH` (`lib/service_linux.sh`)** — non-reproducible across
+   shells, and on this host the inherited value was literally
+   `/usr/lib/x86_64-linux-gnu`, the exact stale-library directory the whole
+   fix exists to rank behind the correct sibling directory. Fixed (folded
+   into the C1 fix): the unit's `LD_LIBRARY_PATH` now contains ONLY the
+   exec's own resolved directory, never any inherited value.
+4. **I3 — `llmctl enable`'s new RAM/VRAM budget check ran with no scheduler
+   lock (`bin/llmctl`, `lib/scheduler.sh`)** — reintroducing exactly the
+   read-budget-then-write-reservation TOCTOU race `scheduler::with_lock`
+   exists to prevent. Fixed: extracted into `_enable_impl()`, dispatched via
+   a new `sched_enable()` wrapper using the same `scheduler::with_lock`
+   pattern as `sched_start`/`_sched_start_impl`.
+5. **I7 — the new `ExecStart=/bin/bash -c 'exec "$LLMCTL_EXEC"
+   $LLMCTL_ARGS'` form let bash's DEFAULT PATHNAME GLOBBING act on
+   `$LLMCTL_ARGS` (`lib/service_linux.sh`)** — systemd's own `${VAR}`
+   expansion never globs; bash's does. The reviewer reproduced this live
+   with a real unit and a literal `a*b` argument that glob-expanded into
+   two separate argv entries. Fixed: `set -f;` added before the `exec` in
+   both the llama and colibri unit templates.
+6. **I4 — the smoke test's `grep -q "OK"` on the RAW response body can
+   false-positive on `reasoning_content` (`lib/download.sh`)** — worsened,
+   not fixed, by §10k's own `max_tokens` 8→64 raise (more room for a
+   reasoning-format model to print "OK" while thinking, before ever
+   emitting real `message.content`). Fixed: parse `.choices[0].message
+   .content` specifically via an inline `python3` snippet, and require
+   `finish_reason == "stop"` (never `"length"` — the exact harmony-model
+   failure signature §10k's own item 5 captured).
+7. **I5 — `llmctl models verify` never invoked the null-sha256 → HF-API
+   fallback `_dl_download_file` uses (`lib/download.sh`)** — so it silently
+   performed NO checksum verification at all for `config.hf.json`/
+   `config.json` (whose catalog `sha256` is null) while still printing
+   "passed checksum verification". Fixed: extracted the fallback into a
+   shared `_dl_resolve_sha()` helper, now called from both
+   `_dl_download_file` and `verify_profile`.
+8. **I6 — `_dl_validate_colibri` gated on bare `have_cmd coli`
+   (`lib/download.sh`)** — missing the real, already-executable, same-repo
+   `coli` script whenever it was not additionally installed onto PATH, so it
+   silently fell back to the weaker structural-only check even when the
+   stronger `coli doctor` check (the one `sched_build_launch` already uses
+   to launch the service) was fully available. Fixed: resolves
+   `${LLMCTL_COLI_BIN:-${LLMCTL_ROOT}/submodules/colibri/c/coli}` first,
+   falling back to bare-PATH `coli` only if that path is not executable.
+
+**Self-review catch**: my own first draft of the I4 fix used
+`${content!r}` (Python `repr()` syntax, not valid bash) in a log-only
+`_dl_log` line — caught via `bash -n` immediately after writing it and
+corrected to `'${content}'` before it ever reached a test run.
+
+**Per-profile port override (parallel work, reviewed and merged)**: a
+concurrently-dispatched subagent implemented `LLMCTL_PORT_<PROFILE>`
+(profile name upper-cased, `-`→`_`) resolving the `fast` profile's real
+port-8080 collision noted in §10k. Implemented at the correct functional
+layer — `catalog_plan_json()`'s python heredoc (`resolve_port(name,
+default_port)`), which is what every real scheduler launch actually
+consumes, not just the display-only `catalog_port()` getter (also updated,
+for `llmctl models list`'s own display consistency). 18 new assertions in
+`tests/test_port_override.sh`, all passing. I independently reviewed the
+diff: correct naming-convention symmetry between the bash (`tr
+'[:lower:]-' '[:upper:]_'`) and python (`.upper().replace("-", "_")`) sides,
+`catalog_check`/`catalog_exists` still enforced on the override path so an
+override for an unknown profile still dies correctly, and `os`/`sys` both
+already imported in the heredoc scope the new code runs in.
+
+**Full validation after all fixes combined**: `make test` — 23/23 PASS
+(including the two tests C1 had been silently breaking,
+`test_services.sh`/`test_tenant_service_isolation.sh`, now green; and the
+new `test_port_override.sh`). `make validate` — PASS. Constitution
+verification harness (`constitution/scripts/validation/run_verification.sh`)
+— 17/17 PASS. Constitution meta-test mutation harness
+(`constitution/scripts/validation/meta_test_verification.sh`) — both planted
+mutations correctly caught and FAILED the gate, proving it is not a bluff
+gate. `bash -n` clean on every modified file.
+
+**Still outstanding**: the still-pending "test larger-context config for
+Superpowers TUI pass" subagent (dispatched to determine whether a
+larger-context llama.cpp launch config lets any llmctl-hosted model pass
+Claude Toolkit's layer-4 Superpowers-TUI challenge) has not yet reported
+back; its findings must be independently re-verified, not trusted at face
+value, once it does. The `claude_toolkit` `detect_llmctl_records()` work
+noted at the end of §10k remains unmerged/unverified. Neither `llmctl` nor
+`claude_toolkit` has been committed/pushed yet for this round's work — that
+remains the next step, per the operator's original instruction to use
+`commit_fully` across both repos, all submodules, all upstreams.
 
 ## 11. Binding constraints (unchanged, restated per §12.10)
 
