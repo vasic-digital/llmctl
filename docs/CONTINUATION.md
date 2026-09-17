@@ -1,7 +1,7 @@
 # CONTINUATION
 
-**Revision:** 17
-**Last modified:** 2026-09-17T14:10:08Z
+**Revision:** 18
+**Last modified:** 2026-09-17T14:20:20Z
 
 Per Constitution §12.10: this file reflects the live state of work on the
 `001-llmctl-completion` feature so any agent can resume exactly where the
@@ -979,6 +979,87 @@ noted at the end of §10k remains unmerged/unverified. Neither `llmctl` nor
 `claude_toolkit` has been committed/pushed yet for this round's work — that
 remains the next step, per the operator's original instruction to use
 `commit_fully` across both repos, all submodules, all upstreams.
+
+## 10m. Superpowers-TUI layer-4 challenge: honest FAIL verdict for larger-context `moe-fast`, root cause is CPU inference speed not context size (2026-09-17)
+
+A dispatched subagent tested whether widening `moe-fast` (gpt-oss-20b)'s
+effective context from 8192 (the catalog default, `ctx-size 16384 /
+parallel 2`) to 32768 (`ctx-size 32768 / parallel 1`) would let it pass
+Claude Toolkit's layer-4 Superpowers-TUI challenge, which had previously
+failed with `"Prompt is too long"`. **Verdict: still FAIL — a different,
+deeper root cause.** I independently re-verified every claim in its report
+(host state, cleanup, git status) before recording this; all confirmed
+accurate.
+
+**What changed and what didn't**: the 4× larger context genuinely fixed the
+original "prompt too long" symptom (`n_ctx_slot = 32768` confirmed live via
+the server log and `/v1/models`), but exposed the REAL limiting factor:
+this host's `llama-server` build has NO CUDA backend at all (confirmed:
+`nvidia-smi` shows 0 MiB used by any llama-server PID regardless of
+`--n-gpu-layers`, and the build log warns "compiled without GPU support") —
+every model here runs CPU-only. A real Claude Code + Superpowers TUI
+session needs at least 4 sequential model round-trips (skill-invocation +
+tool-call + final-answer flow); across those 4 turns, CPU generation speed
+progressively degraded from ~11.75 tok/s down to ~2.9-3.0 tok/s (consistent
+with sustained CPU saturation/throttling), and the client's own per-request
+idle timeout (~180s of silent prompt-processing) repeatedly cancelled
+turns before they could stream. A patient 900s internal budget still timed
+out mid-generation on the 4th turn. This is a genuine host-capability
+limit, not a config or context-size bug — a real fix needs either a
+GPU-backed engine build or a much longer per-request client timeout so a
+slow-but-eventually-successful turn isn't cancelled and restarted from
+scratch.
+
+**Catalog-fit check for a faster/bigger alternative**: `coder`
+(Qwen3-Coder 30B), `ws-dense-32b` (Qwen2.5 32B), and `ws-moe-30b` (Qwen3
+30B MoE) all report `"fits": false` on this host's RAM budget per
+`llmctl plan --json` — none are viable candidates for a larger/faster
+attempt on this hardware. `colibri-qwen36` and a `vision-pro` retest were
+not attempted this round (judged too risky given the peak-memory incident
+below).
+
+**Real memory incident during the test (self-caught, correctly handled)**:
+loading the 32768-ctx model alongside the still-running `small`+`vision`
+persistent services drove swap to 100% full and free RAM to ~278 MiB — the
+exact overcommit class §10k item 4's `enable`-budget-check fix exists to
+prevent for the PERSISTENT-service path, but this was a manually-launched
+raw test process outside `llmctl`'s own scheduler/reservation bookkeeping,
+so that check does not (and structurally cannot) cover it. The subagent
+correctly stopped `small`+`vision` at that point rather than letting the
+host degrade further, then correctly restored both afterward.
+
+**Independently re-verified after the subagent's report (not trusted at
+face value)**: `small` (port 8085) and `vision` (port 8082) both
+`{"status":"ok"}` and `llmctl status` shows both `enabled ... running`;
+zero listeners remain on 8199/4333/3833; zero stray `llama-server`/`ccr`
+processes; the temporary provider files (`~/.local/share/claude-multi-
+account/providers/llmctl-bigctx-test.env`, `~/.claude-code-router/llmctl-
+bigctx-test/`, `~/.claude-prov-llmctl-bigctx-test/`) are all genuinely
+gone; `git status --short` clean in both `llmctl` and `claude_toolkit`;
+host memory recovering (5.6 GiB free / 21 GiB available, swap draining
+from 8.0/8.0 GiB full at the incident peak down to 7.1 GiB used).
+
+**Updated per-profile Superpowers-TUI layer-4 status** (supersedes the
+open question in §10k's downstream-work note):
+
+| profile | layer 1-3 (tool-calling) | layer 4 (Superpowers TUI) | root cause when failed |
+|---|---|---|---|
+| `small` | pass | FAIL | effective per-slot context too small for Claude Code's own system-prompt + Superpowers-plugin overhead |
+| `vision` (Gemma-3-4b) | **FAIL** | not reached | model made no tool call at all — genuine model-capability limitation, not infra |
+| `moe-fast` (default ctx) | pass | FAIL | "Prompt is too long" (effective ctx too small) |
+| `moe-fast` (32768 ctx, this entry) | pass | **FAIL (different cause)** | CPU-only inference too slow for a real multi-turn session within any practical per-request timeout |
+| `vision-pro` (Gemma-3-12b) | pass (tool-calling) | inconclusive (prior session, timed out); not retested this round | — |
+| `colibri-qwen36` | not tested for layer 4 | not tested | — |
+| `fast` | pass (once port-unblocked, §10l) | not tested | — |
+
+**Honest bottom line for the operator**: the original mandate ("All of
+them MUST fully work through Claude Code TUI and pass all possible
+challenges") is genuinely NOT met on this host for the profiles tested so
+far — not because of a software defect this session can fix, but because
+this host has no working GPU-backed inference path, and CPU-only
+inference is too slow to complete a real multi-turn Superpowers TUI
+session within Claude Code's own per-request timeout. This is disclosed
+here explicitly rather than glossed over, per the anti-bluff covenant.
 
 ## 11. Binding constraints (unchanged, restated per §12.10)
 
