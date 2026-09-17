@@ -18,21 +18,45 @@
 // identical "cannot construct a real measurement fixture in this
 // environment" situation.
 //
-// In the environment this feature was implemented in, BOTH resolution
-// paths below were exhausted and BOTH failed for a confirmed, real,
-// investigated reason (not assumed): the vendored submodules/llama.cpp
-// git submodule is pinned to commit 3f152073d7949fe99229d90eae65c22bdf154cae,
-// and a direct `git fetch` of that EXACT commit against the real
-// upstream (https://github.com/ggml-org/llama.cpp.git, and independently
-// against git@github.com:ggml-org/llama.cpp.git) fails with the git
-// server's own real error "remote error: upload-pack: not our ref
-// 3f152073d7949fe99229d90eae65c22bdf154cae" - the pinned commit is not
-// fetchable from the real upstream in this environment, so
-// submodules/llama.cpp cannot be checked out, so lib/engine.sh's
-// engine_build_llama cannot produce a real llama-server binary here,
-// so LLMCTL_LLAMA_SERVER/the default build path both resolve to nothing
-// real. This is disclosed here exactly as found - see this feature's
-// own final report for the full command transcript that confirmed it.
+// STATUS UPDATE (independent audit, 2026-09-17): the submodule-fetch
+// blocker described below was real WHEN THIS FILE WAS FIRST WRITTEN, but
+// is NO LONGER the current state of this environment - a real,
+// already-built llama-server binary now exists at the default path
+// (submodules/llama.cpp was since fetched/built successfully in a later
+// session) and real downloaded .gguf models exist under
+// LLMCTL_MODELS_DIR. Setting LLMCTL_TEST_GGUF_MODEL to one of them now
+// genuinely exercises these tests end-to-end (confirmed live:
+// TestEngineCache_RealSaveProducesARealInspectedFile and
+// TestEngineCache_LiveEngine_MissingOrCorruptFile_FallsBackCorrectly
+// both PASS against a real booted llama-server + real inference;
+// TestEngineCache_RealTimingComparison_WithVsWithoutWarmCache times out
+// on this specific host because it has no GPU-backed inference path, a
+// SEPARATE, already-documented finding - see docs/CONTINUATION.md §10m -
+// not a defect in this test or the code it exercises). The historical
+// blocker text is preserved below for context on why these tests were
+// originally written as SKIP-by-default rather than as evidence that the
+// blocker still applies today; a bare `git fetch`/build failure is a
+// point-in-time environmental fact, not a permanent one, and this
+// project's own §11.4.6/§11.4.7 discipline requires re-confirming rather
+// than assuming a prior negative result still holds.
+//
+// In the environment this feature was ORIGINALLY implemented in, BOTH
+// resolution paths below were exhausted and BOTH failed for a confirmed,
+// real, investigated reason (not assumed): the vendored
+// submodules/llama.cpp git submodule is pinned to commit
+// 3f152073d7949fe99229d90eae65c22bdf154cae, and a direct `git fetch` of
+// that EXACT commit against the real upstream
+// (https://github.com/ggml-org/llama.cpp.git, and independently against
+// git@github.com:ggml-org/llama.cpp.git) failed with the git server's own
+// real error "remote error: upload-pack: not our ref
+// 3f152073d7949fe99229d90eae65c22bdf154cae" - the pinned commit was not
+// fetchable from the real upstream in that environment, so
+// submodules/llama.cpp could not be checked out, so lib/engine.sh's
+// engine_build_llama could not produce a real llama-server binary there,
+// so LLMCTL_LLAMA_SERVER/the default build path both resolved to nothing
+// real at that time. This is disclosed here exactly as found - see this
+// feature's own final report for the full command transcript that
+// confirmed it.
 package integration
 
 import (
@@ -150,6 +174,27 @@ func bootRealLlamaServer(t *testing.T, fx realLlamaServerFixture, slotSaveDir st
 		"--ctx-size", "4096",
 		"--slot-save-path", slotSaveDir,
 	)
+	// LD_LIBRARY_PATH (found + fixed during an independent audit,
+	// 2026-09-17 - the SAME root cause as lib/download.sh's smoke test
+	// and lib/service_linux.sh's systemd EnvironmentFile, both already
+	// fixed this session, but never propagated here): a freshly-built
+	// llama-server's libggml.so.0/libllama.so.0 SONAME can resolve to a
+	// STALE, ABI-incompatible copy already on the dynamic linker's
+	// default search path instead of the correct sibling library sitting
+	// right next to the binary - confirmed live on this host, a bare
+	// exec.Command (which by default inherits the calling `go test`
+	// process's environment, where LD_LIBRARY_PATH is normally unset)
+	// crashed instantly with "undefined symbol:
+	// ggml_flash_attn_ext_set_n_kv_max" every time, and setting only
+	// this one variable made every one of these tests genuinely boot and
+	// pass. Prepending fx.bin's own directory ranks the correct sibling
+	// library ahead of any stale system-wide copy, exactly as the other
+	// two fixed call sites already do.
+	env := os.Environ()
+	if libDir := filepath.Dir(fx.bin); libDir != "." {
+		env = append(env, "LD_LIBRARY_PATH="+libDir+string(os.PathListSeparator)+os.Getenv("LD_LIBRARY_PATH"))
+	}
+	cmd.Env = env
 	cmd.Stdout = os.Stderr // surfaced under `go test -v`, never silently discarded
 	cmd.Stderr = os.Stderr
 	if err := cmd.Start(); err != nil {

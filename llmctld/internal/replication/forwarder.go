@@ -197,7 +197,7 @@ func (f *Forwarder) ForwardAppend(tenantID, bearerToken string, entries []WALEnt
 	wireEntries := make([]forwardWALEntry, len(entries))
 	var maxSeq uint64
 	for i, e := range entries {
-		wireEntries[i] = forwardWALEntry{Seq: e.Seq, TokenID: e.TokenID, Position: e.Position}
+		wireEntries[i] = forwardWALEntry(e)
 		if e.Seq > maxSeq {
 			maxSeq = e.Seq
 		}
