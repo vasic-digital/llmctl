@@ -178,24 +178,63 @@ func registerAuthzRoutes(srv *api.Server, decider *authz.Decider, keys *auth.Sto
 // two components ship on separate lifecycles (Constitution §11.4.264).
 const version = "0.1.0"
 
+// llmctldUsage is the accurate, current description of what `llmctld`'s
+// own CLI supports, printed on a bare or unrecognized invocation.
+// Updated 2026-09-17 (Constitution §11.4.6 - no stale claims): llmctld
+// is NOT a Phase-1 scaffold any more - real Raft consensus, mTLS
+// certificate/CA rotation with revocation, JWT/RBAC auth, per-tenant
+// isolation, cluster-wide model placement, and cross-node KV-cache
+// replication are all implemented and exercised by this project's own
+// test suite (see docs/cluster-architecture.md). The CLI surface itself
+// is intentionally narrow: `bootstrap` and `join` are the only two
+// subcommands this binary's own arg parser recognizes - everything else
+// this daemon does is reached through its real HTTP API
+// (internal/api/routes_*.go) once a node is running, not through
+// additional `llmctld cluster <verb>` subcommands (there is no
+// CLI-level `leave`/`status`/etc. here today). Separately, and
+// unrelated to this binary, the bash `bin/llmctl` CLI's own
+// `cluster`/`tenant`/`apikey` subcommands are honestly-labeled stubs
+// (bin/llmctl:186-211) - this message does not speak for that surface.
+const llmctldUsage = "usage: llmctld cluster <bootstrap|join> [flags]\n" +
+	"  bootstrap and join are the only two CLI subcommands this daemon\n" +
+	"  supports; once a node is running, its real HTTP API (Raft/mTLS/\n" +
+	"  auth/RBAC/tenancy/placement/replication) is reachable directly -\n" +
+	"  see docs/cluster-architecture.md and docs/api-reference.md."
+
 func main() {
 	if len(os.Args) > 1 && (os.Args[1] == "version" || os.Args[1] == "--version") {
 		fmt.Println("llmctld " + version)
 		return
 	}
 
-	if len(os.Args) > 2 && os.Args[1] == "cluster" {
-		switch os.Args[2] {
-		case "bootstrap":
-			runClusterBootstrap(os.Args[3:])
-			return
-		case "join":
-			runClusterJoin(os.Args[3:])
-			return
+	if len(os.Args) > 1 && os.Args[1] == "cluster" {
+		if len(os.Args) > 2 {
+			switch os.Args[2] {
+			case "bootstrap":
+				runClusterBootstrap(os.Args[3:])
+				return
+			case "join":
+				runClusterJoin(os.Args[3:])
+				return
+			}
+			// A genuinely unrecognized `cluster` subcommand (e.g. "leave",
+			// "status") - distinct from "no args at all": the operator DID
+			// ask for something specific, and this CLI does not implement
+			// it (the daemon's real HTTP API may still cover the same
+			// capability once the node is running - see llmctldUsage).
+			fmt.Fprintf(os.Stderr, "llmctld: cluster subcommand %q is not implemented at the CLI level "+
+				"(this binary's own arg parser only recognizes bootstrap/join)\n%s\n", os.Args[2], llmctldUsage)
+			os.Exit(1)
 		}
+		// `llmctld cluster` with no subcommand named at all.
+		fmt.Fprintln(os.Stderr, "llmctld: no cluster subcommand given\n"+llmctldUsage)
+		os.Exit(1)
 	}
 
-	fmt.Fprintln(os.Stderr, "llmctld: cluster mode is not yet implemented (Phase 1 scaffold only)")
+	// No args, or a first argument that is not "cluster"/"version" at
+	// all - plain usage, never an "unimplemented" claim (nothing
+	// specific was asked for that could be unimplemented).
+	fmt.Fprintln(os.Stderr, "llmctld: "+llmctldUsage)
 	os.Exit(1)
 }
 

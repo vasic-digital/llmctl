@@ -294,7 +294,7 @@ human approval before Polish.**
       for the FR-010 quorum check is approximated, never live-handshake
       confirmed — documented, not silently narrowed). Doc revision
       bumped 3 -> 4 (Constitution §11.4.44).
-- [ ] T027 [P] Append this feature to `specs/001-llmctl-completion/tasks.md`'s
+- [x] T027 [P] Append this feature to `specs/001-llmctl-completion/tasks.md`'s
       Follow-up Work section (next free `T072-FU<N>`) and update
       `progress.yml`. **Deliberately left unchecked/undone by the Phase 6
       agent that closed T026/T028/T029/T030-content below**: this
@@ -306,6 +306,17 @@ human approval before Polish.**
       features' Follow-up entries into the shared files itself, using
       this feature's pre-assigned `T072-FU8` number. See this feature's
       own Phase 6 agent report for the ready-to-insert entry text.
+      <!-- VERIFIED 2026-09-17: consolidated per progress.yml follow_up_work
+           - specs/001-llmctl-completion/tasks.md carries a checked
+           `- [x] T072-FU8 [TDD] [REVIEW] ...` entry (Phase 6 for
+           004-mtls-cert-rotation), and specs/001-llmctl-completion/
+           progress.yml's follow_up_work key carries a matching
+           `id: T072-FU8` entry with full evidence (including the
+           `specs/004-mtls-cert-rotation/tasks.md` note "T026/T028/T029
+           checked; T014-T017 documentation-lag corrected to [x]") - both
+           confirmed by direct read. The coordinating consolidation this
+           box describes genuinely happened; only this specific box (and
+           T030 below) were never subsequently flipped back to [x]. -->
 - [x] T028 Full-suite verification: `go vet ./...`, `gofmt -l .`, `go test
       -race ./...` (the `-race` flag is load-bearing here specifically,
       per T003/T073's own precedent) clean, zero regressions to every
@@ -340,12 +351,17 @@ human approval before Polish.**
       scope). New test: `internal/api/routes_mtls_test.go`
       (`TestMTLSRoutes_RequireAdminMTLSManageRole`,
       `TestMTLSRoutes_RotateTransition_IsPeerOnlyNotJWTGated`).
-- [ ] T030 Update `docs/CONTINUATION.md`. **Deliberately left as a draft in
+- [x] T030 Update `docs/CONTINUATION.md`. **Deliberately left as a draft in
       the Phase 6 agent's own report, not applied directly** — same
       shared-file/parallel-worktree reason as T027 above (see that box's
       own note); the coordinating session inserts the drafted section
       under its own `## 10f/10g/10h.` prefix once all three sibling
       features' Phase 6 work has landed.
+      <!-- VERIFIED 2026-09-17: consolidated per progress.yml follow_up_work
+           - docs/CONTINUATION.md §10h ("Follow-up: Feature 004 ...
+           T072-FU8, closed 2026-09-16") is this feature's completion
+           entry, inserted exactly as this box's own note anticipated,
+           confirmed by direct read. -->
 
 ---
 

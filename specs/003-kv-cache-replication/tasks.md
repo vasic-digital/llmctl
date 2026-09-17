@@ -122,42 +122,90 @@ recovery without ever being a correctness dependency.
 
 ### Tests for User Story 2
 
-- [ ] T012 [P] [TDD] [US2] Real test against a real booted `llama-server`
+- [x] T012 [P] [TDD] [US2] Real test against a real booted `llama-server`
       with `--slot-save-path` enabled: confirm a real save actually
       produces a real file (not merely that the HTTP call returned 200 —
       open and inspect the file, per this project's own established
       "verify the artifact, not just the API response" discipline).
-- [ ] T013 [P] [TDD] [US2] Real test:
+      <!-- VERIFIED 2026-09-17: `TestEngineCache_RealSaveProducesARealInspectedFile`
+           (test/integration/enginecache_test.go) re-run live this session
+           with LLMCTL_TEST_GGUF_MODEL pointed at a real downloaded
+           Llama-3.2-3B gguf and the real built llama-server binary - a
+           genuine engine boots, a real /completion runs, a real
+           /slots/0?action=save call is made, and the resulting file on
+           disk is opened+inspected directly. PASS in 5.90s. -->
+- [x] T013 [P] [TDD] [US2] Real test:
       `TestEngineCache_MissingOrCorruptFile_FallsBackCorrectly` (FR-008) —
       delete/corrupt the file, confirm recovery still succeeds via the
       token-sequence path, and confirm the outcome is reported as
       "fell back", never silently reported as either pure success or
       pure failure.
-- [ ] T014 [TDD] [US2] Real timing test comparing time-to-first-response
+      <!-- VERIFIED 2026-09-17: the real-engine variant of this test,
+           `TestEngineCache_LiveEngine_MissingOrCorruptFile_FallsBackCorrectly`
+           (test/integration/enginecache_test.go), re-run live - a real
+           engine genuinely rejects a corrupt slot file (real log line:
+           "Unable to restore slot: No available space in KV cache or
+           invalid slot save file") and the fallback path is exercised.
+           PASS in 3.27s. -->
+- [x] T014 [TDD] [US2] Real timing test comparing time-to-first-response
       with vs. without a real, intact engine cache file present on the
       new primary (SC-004) — a genuine measurement, captured and recorded
       in the test's own evidence output; if this environment genuinely
       cannot host a long-enough real conversation to make the difference
       measurable, this MUST be disclosed honestly (matching T057's own
       SC-017 precedent) rather than a fabricated number.
+      <!-- VERIFIED 2026-09-17: `TestEngineCache_RealTimingComparison_WithVsWithoutWarmCache`
+           re-run live this session against a real llama-server + real
+           model - PASS in 184.79s with a genuine captured measurement:
+           cold time-to-first-response=1m30.33s, warm(restored)=112.14ms.
+           NOTE: docs/CONTINUATION.md §10n (2026-09-17, earlier the same
+           day) recorded this same test as still timing out on this host,
+           attributing it to CPU-only inference speed - that finding does
+           NOT reproduce now; this run completed comfortably inside a
+           600s bound. Superseding, not contradicting, that entry: the
+           timing is host-load-dependent (this run also independently
+           reaped two orphaned llama-server processes left over from an
+           earlier crashed session that may have been contending for CPU
+           during the prior attempt). -->
 
 ### Implementation for User Story 2
 
-- [ ] T015 [US2] Wire an opt-in `--slot-save-path` launch parameter for
+- [x] T015 [US2] Wire an opt-in `--slot-save-path` launch parameter for
       GGUF profiles in `lib/scheduler.sh`/`lib/engine.sh` (exact file
       confirmed by reading the real current launch-flag assembly code
       before editing — never assumed from this plan alone).
-- [ ] T016 [US2] Implement `internal/executor/local.go` calls to the real
+      <!-- VERIFIED 2026-09-17: lib/scheduler.sh's sched_build_launch
+           genuinely wires `--slot-save-path "${slot_save_dir}"`, opt-in
+           via LLMCTL_SLOT_SAVE_PATH, per-profile subdirectory, directory
+           created before the real engine launches - confirmed by direct
+           read (lib/scheduler.sh:145-177). -->
+- [x] T016 [US2] Implement `internal/executor/local.go` calls to the real
       engine's `/slots/:id_slot?action=save` (on checkpoint) and
       `?action=restore` (on warm-start), and `internal/replication/enginecache.go`
       for tracking `EngineCacheFile` (data-model.md) + orchestrating its
       transfer to a new primary via the existing HTTP/3+mTLS channel —
       strictly asynchronous, never gating User Story 1's own recovery
       path (research.md Decision 4).
-- [ ] T017 [US2] [REVIEW] Host-safety review of the `--slot-save-path`
+      <!-- VERIFIED 2026-09-17: internal/executor/local.go's SaveSlot/
+           RestoreSlot (calling the real engine's action=save|restore
+           endpoints) and internal/replication/enginecache.go's
+           EngineCacheRegistry/MaybeSaveEngineCache/RestoreOrFallback/
+           TransferEngineCache/HTTPCacheSink confirmed present by direct
+           read; the package doc comment explicitly documents the
+           never-gates-User-Story-1 design (MaybeSaveEngineCache never
+           returns an error). T012/T013/T014 above are this claim's live,
+           passing, real-engine proof. -->
+- [x] T017 [US2] [REVIEW] Host-safety review of the `--slot-save-path`
       wiring (Constitution §11.4.133) — an engine flag that changes what
       gets written to disk, on which node, is exactly this mandate's
       concern.
+      <!-- VERIFIED 2026-09-17: lib/scheduler.sh's own inline comment
+           (lines ~145-160) explicitly cites Constitution §11.4.133/§12 and
+           documents the host-safety reasoning: opt-in only via an env var
+           (never an always-on unbounded-disk-growth default), per-profile
+           subdirectory to prevent filename collisions, directory created
+           before the engine process starts - this IS the review's
+           documented finding, confirmed present in-source. -->
 
 **Checkpoint**: User Stories 1 AND 2 both verified independently. **Get
 human approval before starting User Story 3.**
@@ -186,20 +234,43 @@ human approval before Polish.**
 
 ## Phase 6: Polish & Cross-Cutting Concerns
 
-- [ ] T021 [P] Update `docs/cluster-architecture.md`'s persistence section
+- [x] T021 [P] Update `docs/cluster-architecture.md`'s persistence section
       from 📋 to ✅ for the parts genuinely implemented here, with a real
       `mmdc`-rendered sequence diagram for the forward → reassign-on-
       failure → (optional) engine-cache-warm-restore flow.
-- [ ] T022 [P] Append this feature to `specs/001-llmctl-completion/tasks.md`'s
+      <!-- VERIFIED 2026-09-17: docs/cluster-architecture.md §3 ("KV-cache
+           WAL/checkpoint replication sequence") confirmed present with an
+           evidence-cited ✅/⚠️/📋 breakdown and a real embedded
+           ```mermaid``` sequence diagram, confirmed by direct read. -->
+- [x] T022 [P] Append this feature to `specs/001-llmctl-completion/tasks.md`'s
       Follow-up Work section (next free `T072-FU<N>`) and update
       `progress.yml`, matching the established format.
-- [ ] T023 Full-suite verification: `go vet ./...`, `gofmt -l .`,
+      <!-- VERIFIED 2026-09-17: `specs/001-llmctl-completion/tasks.md`
+           carries a checked `- [x] T072-FU7 [TDD] ...` entry (Phase 6 for
+           003-kv-cache-replication), and progress.yml carries a matching
+           `id: T072-FU7` entry with full evidence including the disclosed
+           open architectural gap - both confirmed by direct read. -->
+- [x] T023 Full-suite verification: `go vet ./...`, `gofmt -l .`,
       `go test ./...` clean, zero regressions (T059-T064's existing 24+
       `internal/replication` tests, T062's own updated test, and every
       Phase 9-11 test all still pass).
-- [ ] T024 [REVIEW] Independent code review of the complete feature
+      <!-- VERIFIED 2026-09-17: this session's own fresh run (Task 3) -
+           `go build ./...` clean, `go vet ./...` clean, `gofmt -l .`
+           clean (0 files), `go test ./... -race -count=1` all 12 packages
+           green including internal/replication and test/integration (see
+           this session's captured full-suite log). -->
+- [x] T024 [REVIEW] Independent code review of the complete feature
       (Constitution §11.4.125/§11.4.142).
-- [ ] T025 Update `docs/CONTINUATION.md`.
+      <!-- VERIFIED 2026-09-17: progress.yml's T072-FU7 entry documents this
+           review's three named concerns (async/never-gates-correctness
+           boundary, lag tracker cannot mask a broken replica, Phase 4
+           submodule-fetch blocker re-verified) plus a disclosed bonus
+           finding (replication-role failover gap), with file:line
+           citations, confirmed by direct read. -->
+- [x] T025 Update `docs/CONTINUATION.md`.
+      <!-- VERIFIED 2026-09-17: docs/CONTINUATION.md §10g
+           ("Follow-up: Feature 003 ... T072-FU7, closed 2026-09-16") is
+           this feature's completion entry, confirmed by direct read. -->
 
 ---
 

@@ -1,7 +1,7 @@
 # CONTINUATION
 
-**Revision:** 18
-**Last modified:** 2026-09-17T14:20:20Z
+**Revision:** 20
+**Last modified:** 2026-09-17T19:52:42Z
 
 Per Constitution §12.10: this file reflects the live state of work on the
 `001-llmctl-completion` feature so any agent can resume exactly where the
@@ -1060,6 +1060,246 @@ this host has no working GPU-backed inference path, and CPU-only
 inference is too slow to complete a real multi-turn Superpowers TUI
 session within Claude Code's own per-request timeout. This is disclosed
 here explicitly rather than glossed over, per the anti-bluff covenant.
+
+## 10n. Comprehensive deterministic-validation audit: "what is left unfinished, broken, or untested" (2026-09-17)
+
+Operator instruction: "CHECK what is left unfinished, broken, or untested
+and unconfirmed by deterministic validation and verification!!!" This
+section is the honest answer, built entirely from FRESH, independently
+re-run checks — never from trusting this file's own prior claims (per
+§11.4.226 evidence-class-at-closure: a prior "0 issues"/"22/22 PASS"
+claim is a historical record of what was true THEN, not proof of what is
+true NOW).
+
+**Fresh, currently-passing (re-verified, not assumed):** `go build ./...`
+clean; `go vet ./...` clean; `gofmt -l .` clean; `go test ./... -race
+-count=1` all 12 `llmctld` packages green, zero regressions, zero races;
+`golangci-lint run --max-issues-per-linter=0 --max-same-issues=0 ./...` →
+0 issues (after the fix below); `bash tests/run_tests.sh` 23/23 PASS;
+`bash constitution/scripts/validation/run_verification.sh` 17/17 PASS;
+every commit SHA cited across §10a-§10j's evidence trail (`c25365b`,
+`da27a09`, `cb87c4e`, `92b1674`, `66393cb`, `d64c20a`, `0f558d9`,
+`d70250d`) independently confirmed to genuinely exist with matching
+commit messages; the T075 CRITICAL RBAC-bypass fix on `POST
+/v1/auth/apikeys` spot-checked and confirmed still intact
+(`decider.CheckRBAC(... auth.ActionTenantManage, "apikeys")` present
+alongside `RequireJWT`).
+
+**Two real, currently-existing defects found and FIXED this pass**
+(commit `3b95df8`):
+
+1. **`test/integration/enginecache_test.go`'s `bootRealLlamaServer()`
+   never set `LD_LIBRARY_PATH`** — the exact same stale-system-library
+   SONAME collision root-caused and fixed twice already this session
+   (§10k item 1, in `lib/download.sh`'s smoke test and
+   `lib/service_linux.sh`'s systemd env file) was never propagated to
+   this Go test helper. Proven live: a real, already-downloaded model
+   (`models/small/Llama-3.2-3B-Instruct-Q4_K_M.gguf`) plus the real
+   built `llama-server` binary crashed instantly with `undefined symbol:
+   ggml_flash_attn_ext_set_n_kv_max` — reproducing the identical bug —
+   until `LD_LIBRARY_PATH` was set. **This closes a real, previously-
+   undiscovered gap**: `TestEngineCache_RealSaveProducesARealInspectedFile`
+   and `TestEngineCache_LiveEngine_MissingOrCorruptFile_FallsBackCorrectly`
+   — both honestly `t.Skip`'d since Phase 10 for lack of a configured
+   model, per the doc's own historical §8/progress.yml entries — now
+   genuinely PASS against a REAL booted engine with REAL inference (a
+   real corrupt-slot-file rejection from the actual engine correctly
+   triggering the fallback path, not a simulated one). Fixed by adding
+   `fx.bin`'s own directory to the subprocess's `LD_LIBRARY_PATH`,
+   mirroring the other two fixed call sites exactly. The file's header
+   comment (which claimed the llama.cpp submodule fetch was STILL
+   blocked) was also corrected — that was true when the comment was
+   originally written, but is stale relative to current reality: the
+   binary demonstrably exists and works today.
+2. **One real, currently-reproducible `golangci-lint` finding**
+   (`staticcheck` S1016 in `internal/replication/forwarder.go:200`) —
+   contradicts this file's own most-recent historical "0 lint issues"
+   claim (§10j). The flagged line had NOT changed since its commit
+   (`ca22b28`, 2026-09-16) — either a rule was added to a later
+   `golangci-lint`/`staticcheck` release, or this exact spot was never
+   re-run after that commit despite the "0 issues" claim; either way,
+   golangci-lint 2.13.2 (the version installed on this host right now)
+   genuinely reports it. Fixed: converted the flagged struct literal to
+   a direct struct conversion (`forwardWALEntry(e)`), confirmed
+   field-for-field identical between `WALEntry` and `forwardWALEntry`
+   before converting, behavior-unchanged per the full
+   `internal/replication` suite passing unchanged under `-race`.
+
+**CORRECTION (2026-09-17, later the same day) — the claim immediately
+above (that this test "still times out" from a permanent, unfixable
+no-GPU root cause) was WRONG and is retracted, not merely superseded.**
+A later, independent re-run of the exact same test — `LD_LIBRARY_PATH`
+fix unchanged, no code difference at all — genuinely PASSED with a real
+captured measurement: cold-boot restore 1m30.33s, warm-cache restore
+112.14ms (a real, large, correctly-directional speedup proving the
+engine-cache mechanism itself works). It passed AGAIN in the final
+full-`-race`-suite combined run immediately after (429.5s total for the
+whole `test/integration` package, zero failures, zero races). The
+difference between the FIRST run (timed out) and these two (passed) is
+host CPU contention: the first run happened while this session had
+several parallel subagents/background processes competing for CPU; the
+later runs happened with less concurrent load. **This test is
+genuinely host-load-sensitive (flaky under contention), NOT a
+permanently-broken, GPU-less-inference-limited test** — that
+characterization over-generalized the real §10m finding (which is about
+a DIFFERENT, more demanding workload: a full multi-turn Claude Code +
+Superpowers TUI conversation completing within a strict CLIENT-side
+timeout under sustained CPU-only generation) onto a single engine-cache
+save/restore benchmark that does not remotely approach that workload's
+duration or turn count. §10m's own finding — moe-fast/fast both timing
+out on real multi-turn Superpowers-TUI sessions — is UNCHANGED and not
+called into question by this correction; only the (wrong) inference that
+EVERY timing-sensitive test on this host is permanently unfixable for
+the same reason is retracted. The still-real, NOT-fixed observation
+about this test's OWN error-handling remains accurate on its own
+terms and is restated honestly: it has no internal bounded timeout /
+honest-skip path for "this run is too contended to get a clean
+measurement" — under contention it runs until the outer `go test
+-timeout` kills the whole process with a raw goroutine-dump panic (a
+crash, not a graceful, disclosed SKIP) rather than detecting the
+contention and reporting it honestly. Redesigning that error-handling
+remains out of this audit's scope; unlike the retracted GPU claim, this
+observation was never resolved by a re-run — it is still open.
+
+**Confirmed real, but NOT a functional defect — a task-tracking/checkbox-
+hygiene gap across all three follow-up features**: `specs/002-cluster-
+model-scheduler/tasks.md` (11 unchecked `- [ ]` boxes), `specs/003-kv-
+cache-replication/tasks.md` (11 unchecked), `specs/004-mtls-cert-
+rotation/tasks.md` (2 unchecked) — despite this file's own §10f/§10g/§10h
+claiming ALL SIX phases of each feature are complete and merged. Spot-
+checked THREE of these unchecked items directly against the real
+codebase, not assumed from the doc's narrative: (a) 003's US2 "engine-
+cache warm-restore" implementation tasks (T012-T017) — `internal/
+replication/enginecache.go` + `enginecache_test.go` genuinely exist,
+substantive, and pass (confirmed above); (b) 002's US3 concurrency tests
+(T026/T027) — `TestClusterPlacement_ConcurrentStarts_NeverDoubleBookANode`
+and `TestClusterPlacement_DecisionIsReconstructableAfterTheFact` both
+genuinely exist in `test/integration/cluster_placement_test.go` and PASS
+with real multi-node Raft activity in the logs (24.74s and 5.37s
+respectively); (c) 004's T027/T030 — explicitly, IN THE TASK TEXT ITSELF,
+deliberately left unchecked by design (three parallel Phase-6 worktrees
+writing to the SAME shared coordination files; a designated conductor
+session was to consolidate all three), and `specs/001-llmctl-completion/
+progress.yml`'s `follow_up_work` key DOES contain the full, substantive
+completion record for all three features (confirmed by direct read) —
+the coordinator's consolidation genuinely happened, the per-feature
+checkboxes for those specific "shared-file update" tasks were simply
+never subsequently flipped back to `[x]`. **Conclusion: the underlying
+WORK is genuinely done and independently re-verified; the tasks.md
+checkbox state in 002/003/004 is stale and would mislead a reader who
+trusts checkboxes alone without cross-referencing this file's prose or
+re-running the tests** — a real, disclosable doc-hygiene gap, not fixed
+this pass (67+ checkboxes across 3 files, out of this audit's scope; a
+future pass should mechanically sync them).
+
+**The single most significant genuinely-open, currently-existing
+integration gap (confirmed, not new — already honestly disclosed at
+T037-T039, restated here because it is the most consequential "left
+unfinished" item an operator needs to see up front):** the sophisticated,
+fully-tested `llmctld` Go daemon (real Raft consensus, mTLS rotation,
+JWT/RBAC auth, per-tenant isolation, cluster-wide model placement,
+cross-node KV-cache replication) is **NOT reachable through the actual
+`bin/llmctl` CLI end users invoke**. `llmctl cluster join/leave`, `llmctl
+tenant create/list/quota`, and `llmctl apikey create/rotate` all hard-
+`die` with "not yet implemented" (confirmed live, `bin/llmctl:186-211`)
+— by design, honestly labeled, never silently claimed working (matching
+T037-T039's own finding) — but the practical consequence is that ALL of
+002/003/004's real functionality is reachable ONLY by invoking the
+`llmctld` binary directly with its own CLI flags or hitting its HTTP API
+directly, never through the tool a user actually types `llmctl` to use.
+This is the largest "not wired end-to-end" gap in the whole project.
+
+**A separate, systemic, confirmed compliance gap against Constitution
+§11.4.18 (script documentation mandate)**: `docs/scripts/` does not exist
+at all. Zero of the 67 shell scripts in this project (excluding
+submodules/constitution) have the mandated external companion doc; the
+in-source documentation half is present but abbreviated (a purpose
+comment, not the full Purpose/Usage/Inputs/Outputs/Side-effects/
+Dependencies/Cross-references structure the anchor specifies). Confirmed
+via direct `ls`/`find`, not assumed. NOT fixed this pass (67 files of
+documentation is a large, separate undertaking, clearly out of a "check"
+task's scope) — disclosed honestly as a standing, currently-existing gap.
+
+**A minor, currently-existing, stale-text finding, NOT fixed**: `cmd/
+llmctld/main.go`'s fallback path (reached on no/unrecognized args or an
+unrecognized `cluster` sub-subcommand) prints "llmctld: cluster mode is
+not yet implemented (Phase 1 scaffold only)" — genuinely stale given
+everything built since (real Raft/replication/auth/mTLS all exist and
+work); the message undersells the daemon's real current capability and
+doesn't distinguish "no args given" from "you asked for something
+genuinely unimplemented" (e.g. `cluster leave`, still a real gap per the
+bash-CLI item above). Left unfixed this pass — cosmetic, not a
+correctness issue, and rewriting it well requires deciding the intended
+UX, an operator-facing product decision out of scope for a check-only
+pass.
+
+**Everything else audited and found consistent, no new findings**: the
+`Two honest, well-documented scope boundaries` disclosed at Phase 10
+(§8) were both independently confirmed CLOSED by feature 003 (§10g) —
+re-checked, still closed, no regression. The Phase 9 SC-017 throughput-
+benchmark boundary (§7 — "no multi-GPU hardware exists ... never
+fabricated numbers") remains an honest, permanent, unfixable environment
+limitation, not a new finding. `internal/isolation.WrapCommand`/
+`TenantStateDir` wiring (§10a/§10b) reconfirmed genuinely present at
+their claimed call sites via direct grep. §10m's Superpowers-TUI
+CPU-inference-speed finding is unchanged and remains valid on its own
+terms (real multi-turn TUI sessions, not the engine-cache benchmark) —
+see the correction above: the engine-cache timing test's OWN "still
+times out" claim was retracted, not confirmed, so it is no longer cited
+as a symptom of §10m's root cause.
+
+## 10o. Follow-up: checkbox-hygiene sync, §11.4.18 script docs, and the `cmd/llmctld/main.go` stale message — all three RESOLVED (2026-09-17)
+
+Three items §10n disclosed as "confirmed real, not fixed this pass" are
+now genuinely closed, each independently verified (never taken on the
+implementing agent's word alone):
+
+1. **Checkbox-hygiene.** §10n's own "67+ checkboxes" figure was itself
+   imprecise — the real count, verified by direct `grep -c "^- \[ \]"`
+   on all three files, was **24** (002=11, 003=11, 004=2), not 67+.
+   **23 of the 24 flipped to `[x]`**, each with a `<!-- VERIFIED
+   2026-09-17: ... -->` citation naming the exact real code/test
+   checked (several — 003's T012-T014, 002's T026/T027 — by actually
+   RUNNING the named test live and observing it pass, not by reading
+   the doc's narrative). **1 left honestly unchecked** with a `<!-- NOT
+   VERIFIED -->` note: 002's T001 ("confirm baseline clean before this
+   feature's first commit") is a claim about a past point in time with
+   no dated artifact tying today's clean `go vet`/`gofmt`/`go test` to
+   that specific moment — correctly left open rather than presumed.
+   004's T027/T030 (the deliberately-shared-coordination-file markers
+   §10n flagged) were confirmed via `progress.yml`'s `follow_up_work`
+   key and checked.
+2. **§11.4.18 script-documentation gap.** §10n's "67 shell scripts, zero
+   docs" was also imprecise — the real count (enumerated fresh,
+   excluding `submodules/`/`constitution/`) was **55**, not 67 (the
+   `~67` figure conflated in-scope and out-of-scope directories). **All
+   55 now have `docs/scripts/<name>.md`** with the mandated 7-heading
+   structure (Overview/Prerequisites/Usage examples/Edge cases/Internal
+   behaviour/Related scripts/Last verified date), verified by a strict
+   per-file bijection + per-file heading-order check: 0 missing, 0
+   extra, 0 heading mismatches across all 55.
+3. **`cmd/llmctld/main.go` stale message.** Rewritten into three
+   distinct paths (no-args/unrecognized-top-level-arg → plain usage; `
+   cluster` with no subcommand → says so + usage; `cluster <unrecognized
+   e.g. leave>` → names the specific subcommand, states it is not
+   implemented at the CLI level, notes the daemon's real HTTP API may
+   cover it) — verified against 5 real invocations of a throwaway build
+   before the test binary was deleted. Confirmed scoped correctly: does
+   NOT touch `bin/llmctl` (whose own `cluster`/`tenant`/`apikey` stubs
+   are the SEPARATE, still-genuinely-open bash-CLI↔Go-daemon gap
+   directly above — the two are not conflated).
+
+**Full re-verification after all three, independently confirmed**: `go
+build ./...` / `go vet ./...` / `gofmt -l .` all clean; `go test ./...
+-race -count=1` — **all 12 `llmctld` packages green, zero failures, zero
+races**, including the engine-cache timing test (see the correction
+above — it passed this run too); `bash tests/run_tests.sh` 23/23 PASS;
+`bash constitution/scripts/validation/run_verification.sh` 17/17 PASS;
+`make test`/`make validate` PASS (docs/scripts/ work only adds new
+files, confirmed zero `.sh` files touched by that pass). The bash-CLI↔
+Go-daemon integration gap (directly above, §10n) remains the one
+still-genuinely-open item from that list — correctly out of scope for
+both of these follow-up passes, not silently dropped.
 
 ## 11. Binding constraints (unchanged, restated per §12.10)
 

@@ -38,11 +38,24 @@ change lands.
       all clean on `main` before this feature's first commit (captures the
       "zero regressions" starting point every subsequent task's own
       "zero regressions" claim is measured against).
-- [ ] T002 [P] Create the empty test file
+      <!-- NOT VERIFIED 2026-09-17: this describes a historical, point-in-time
+           check ("before this feature's first commit") with no artifact
+           (dated log, commit citing the output) tying it to that exact
+           moment; re-running `go vet`/`gofmt -l`/`go test` NOW confirms the
+           repository is clean today (see Task 3's fresh run this session),
+           which is consistent with but not proof of the described ordering. -->
+- [x] T002 [P] Create the empty test file
       `test/integration/cluster_placement_test.go` with the package
       declaration and a `testCluster` harness reuse import from
       `cluster_bootstrap_test.go` (no test functions yet — those land per
       user-story phase below).
+      <!-- VERIFIED 2026-09-17: superseded by its own successor state - the
+           real file exists with the `package integration` declaration and
+           genuinely reuses this package's harness conventions (imports
+           internal/mtls, mirrors llmctlBinPath/buildLLMCtld patterns), now
+           carrying real T013/T014/T020/T021/T022/T026/T027 test functions
+           built on top of it (independently confirmed by direct read and
+           by running several of those tests live, see T026/T027 below). -->
 
 **Execution notes**: No special discipline required.
 
@@ -337,7 +350,7 @@ REAL concurrent HTTP load on a REAL multi-node cluster, and proving the
 audit trail (T018) is genuinely queryable, not merely that the mechanism
 exists in isolation.
 
-- [ ] T026 [TDD] [US3] Real multi-process integration test:
+- [x] T026 [TDD] [US3] Real multi-process integration test:
       `TestClusterPlacement_ConcurrentStarts_NeverDoubleBookANode`
       (quickstart.md Scenario 4 — two goroutines fire real concurrent
       HTTP start requests for two profiles that only jointly fit the
@@ -348,17 +361,31 @@ exists in isolation.
       after — run at least 10 iterations (matching Constitution
       §11.4.50's deterministic-consistency discipline for a
       concurrency-sensitive test) to rule out a lucky single pass.
-- [ ] T027 [TDD] [US3] Real integration test:
+      <!-- VERIFIED 2026-09-17: `go test ./test/integration/... -run
+           TestClusterPlacement_ConcurrentStarts_NeverDoubleBookANode -v
+           -count=1` re-run live, real 3-node Raft cluster boots, genuine
+           real concurrent HTTP requests, PASS in 24.63s. -->
+- [x] T027 [TDD] [US3] Real integration test:
       `TestClusterPlacement_DecisionIsReconstructableAfterTheFact`
       (quickstart.md Scenario 5 — after a real placement, retrieve the
       `PlacementDecision` audit record via `internal/audit/log.go`'s
       existing read path and assert every field data-model.md specifies
       is present and matches the real decision that was made).
-- [ ] T028 [US3] [REVIEW] Final review of the whole feature's concurrency
+      <!-- VERIFIED 2026-09-17: `go test ./test/integration/... -run
+           TestClusterPlacement_DecisionIsReconstructableAfterTheFact -v
+           -count=1` re-run live, real 3-node cluster, PASS in 5.09s. -->
+- [x] T028 [US3] [REVIEW] Final review of the whole feature's concurrency
       story: re-read `CommandRecordRunningProfile`'s `Apply` alongside
       `CommandAcquireLock`'s (T010's own stated mirroring) side by side,
       confirming no divergence was introduced that would reintroduce the
       TOCTOU hazard this phase exists to close.
+      <!-- VERIFIED 2026-09-17: independently re-read internal/raft/fsm.go
+           - `CommandRecordRunningProfile`'s own case/doc comment (line 39)
+           states it mirrors `CommandAcquireLock`'s re-validation pattern
+           exactly, and the mechanism (fresh-computed remaining capacity
+           inside `Apply`, never trusted from the proposer) is intact; T026
+           above is this claim's live, passing, empirical proof under real
+           concurrency. -->
 
 **Checkpoint**: All three user stories independently verified. **Get human
 approval before Polish.**
@@ -370,7 +397,7 @@ approval before Polish.**
 **Purpose**: Documentation, full-suite verification, and folding this
 feature into the project's existing follow-up-tracking convention.
 
-- [ ] T029 [P] Add a new section to `docs/cluster-architecture.md`
+- [x] T029 [P] Add a new section to `docs/cluster-architecture.md`
       (matching T041/T057's established real-`mmdc`-rendered-Mermaid,
       explicit ✅ IMPLEMENTED/📋 PLANNED-labeling discipline) documenting:
       the node-registry-population fix, the resource-heartbeat mechanism,
@@ -378,7 +405,12 @@ feature into the project's existing follow-up-tracking convention.
       for the reserve → forward → execute → confirm path, including the
       compensating-clear-on-forwarding-failure branch), and the
       cluster-wide running-profile index.
-- [ ] T030 [P] Append this feature to `specs/001-llmctl-completion/tasks.md`'s
+      <!-- VERIFIED 2026-09-17: docs/cluster-architecture.md §1 confirmed
+           present with subsections 1a/1b/1c/1d (node-registry fix,
+           resource-heartbeat, reservation-based placement flow, running-
+           profile index) and real embedded ```mermaid``` diagrams
+           (7 total in the file; §1c/§1d each carry one). -->
+- [x] T030 [P] Append this feature to `specs/001-llmctl-completion/tasks.md`'s
       "Follow-up Work" section as `T072-FU6` (or the next free FU number
       at execution time), matching the T072-FU1..FU5 entry format
       (evidence, file:line citations, TDD RED/GREEN confirmations, honest
@@ -386,18 +418,37 @@ feature into the project's existing follow-up-tracking convention.
       directory is retained for its detailed design record, but the
       project's single canonical follow-up ledger stays in sync per this
       project's own established documentation discipline.
-- [ ] T031 Update `specs/001-llmctl-completion/progress.yml` with a
+      <!-- VERIFIED 2026-09-17: `specs/001-llmctl-completion/tasks.md`
+           carries a checked `- [x] T072-FU6 [TDD] ...` entry (Phase 6 for
+           002-cluster-model-scheduler) with file:line citations and TDD
+           evidence, confirmed by direct grep. -->
+- [x] T031 Update `specs/001-llmctl-completion/progress.yml` with a
       matching entry.
-- [ ] T032 Full-suite verification: `go vet ./...`, `gofmt -l .`, `go test
+      <!-- VERIFIED 2026-09-17: progress.yml carries an `id: T072-FU6`
+           entry with full evidence (docs/cluster-architecture.md diffs,
+           T032/T033 verification+review detail), confirmed by direct
+           read. -->
+- [x] T032 Full-suite verification: `go vet ./...`, `gofmt -l .`, `go test
       ./...` (every package including `test/integration/`) clean, zero
       regressions to any pre-existing test (T001's baseline is the
       comparison point).
-- [ ] T033 [REVIEW] Independent code review of the complete feature
+      <!-- VERIFIED 2026-09-17: this session's own fresh run (Task 3) -
+           `go build ./...` clean, `go vet ./...` clean, `gofmt -l .`
+           clean (0 files), `go test ./... -race -count=1` all 12 packages
+           green (see this session's captured full-suite log). -->
+- [x] T033 [REVIEW] Independent code review of the complete feature
       (Constitution §11.4.125/§11.4.142) before this is considered done —
       not a substitute for the per-phase review gates above, the final
       whole-feature pass.
-- [ ] T034 Update `docs/CONTINUATION.md` with this feature's completion
+      <!-- VERIFIED 2026-09-17: progress.yml's T072-FU6 entry documents this
+           review's three angles (authorization consistency, TOCTOU-hazard
+           re-check, end-to-end engine exercise) with file:line citations
+           and its "no code defect found" conclusion. -->
+- [x] T034 Update `docs/CONTINUATION.md` with this feature's completion
       state, per Constitution §12.10.
+      <!-- VERIFIED 2026-09-17: docs/CONTINUATION.md §10f
+           ("Follow-up: Feature 002 ... T072-FU6, closed 2026-09-16") is
+           this feature's completion entry, confirmed by direct read. -->
 
 **Execution notes**: T029-T031 can run in parallel with T032 (docs vs.
 test verification touch disjoint files).
