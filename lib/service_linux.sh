@@ -143,7 +143,21 @@ Wants=network-online.target
 [Service]
 Type=simple
 EnvironmentFile=${LLMCTL_SERVICES_DIR}/%i.env
-ExecStart=\${LLMCTL_EXEC} \${LLMCTL_ARGS}
+# Root-caused 2026-09-17 (real repro on this host's systemd 259, not
+# guessed): systemd's \$VAR/\${VAR} expansion in ExecStart= applies ONLY to
+# the argument list, NEVER to the executable path itself (word 0) - it
+# needs that path resolvable at unit-parse time. A bare
+# "ExecStart=\${LLMCTL_EXEC} \${LLMCTL_ARGS}" therefore made systemd try to
+# literally exec a program named "\${LLMCTL_EXEC}", which always fails
+# with status=203/EXEC ("Unable to locate executable '\${LLMCTL_EXEC}'")
+# regardless of profile, host, or how correct the .env file's real values
+# are - reproduced directly with a minimal two-line test unit before this
+# fix, and confirmed the argument-position case (\${VAR} after a literal
+# executable path) DOES expand correctly. The fix: exec through a shell,
+# whose OWN path is a fixed, parse-time-resolvable literal, and let that
+# shell resolve the dynamic executable from its inherited environment at
+# RUN time - proven with the exact real form below before landing it here.
+ExecStart=/bin/bash -c 'exec "\$LLMCTL_EXEC" \$LLMCTL_ARGS'
 Restart=always
 RestartSec=5
 StartLimitBurst=5
@@ -166,7 +180,9 @@ Wants=network-online.target
 [Service]
 Type=simple
 EnvironmentFile=${LLMCTL_SERVICES_DIR}/%i.env
-ExecStart=\${LLMCTL_EXEC} \${LLMCTL_ARGS}
+# See the matching note in the llmctl-llama@.service template above -
+# same systemd ExecStart= executable-path-expansion limitation, same fix.
+ExecStart=/bin/bash -c 'exec "\$LLMCTL_EXEC" \$LLMCTL_ARGS'
 Restart=always
 RestartSec=5
 StartLimitBurst=5
@@ -197,6 +213,26 @@ EOF
 
 # --- per-profile environment -------------------------------------------------
 # svc_write_env <profile> <engine> <exec> <args...>
+#
+# LD_LIBRARY_PATH (llama engine only, root-caused 2026-09-17): a freshly
+# `llmctl build llama`-built llama-server links against libggml.so.0/
+# libggml-base.so.0/libggml-cpu.so.0 alongside it in submodules/llama.cpp/
+# build/bin/, but the built libllama.so.0 sets no RPATH covering those
+# sibling libs - so when a package with a COLLIDING SONAME is already
+# installed system-wide (confirmed on this host: an unrelated
+# /usr/lib/x86_64-linux-gnu/libggml.so.0 from a distro/other-tool package,
+# missing symbols the fresh build exports, e.g.
+# ggml_flash_attn_ext_set_n_kv_max), the dynamic linker silently prefers
+# the STALE system copy over the correct sibling in the exec's own
+# directory, and llama-server dies immediately with a symbol-lookup
+# error - reproduced directly via `ldd`, confirmed fixed by prepending
+# the exec's own directory to LD_LIBRARY_PATH (verified: a real /health
+# 200 in ~4s with the fix, a hard crash within milliseconds without it).
+# Derived from exec_bin's own directory (never a hardcoded path per
+# CONST-045/§11.4.111) so a custom LLMCTL_LLAMA_SERVER override is
+# honored automatically; colibri's engine is a single self-contained gcc
+# binary with no equivalent shared-lib dependency, so this is scoped to
+# engine=llama only, never applied unconditionally.
 svc_write_env() {
   local profile="$1" engine="$2" exec_bin="$3"; shift 3
   ensure_dir "${LLMCTL_SERVICES_DIR}"
@@ -206,6 +242,10 @@ svc_write_env() {
     printf 'LLMCTL_PROFILE=%q\n' "${profile}"
     printf 'LLMCTL_ENGINE=%q\n' "${engine}"
     printf 'LLMCTL_EXEC=%q\n' "${exec_bin}"
+    if [[ "${engine}" == "llama" ]]; then
+      local exec_dir; exec_dir="$(cd "$(dirname "${exec_bin}")" && pwd)"
+      printf 'LD_LIBRARY_PATH=%q\n' "${exec_dir}${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
+    fi
     printf 'LLMCTL_ARGS='
     printf '%q ' "$@"
     printf '\n'

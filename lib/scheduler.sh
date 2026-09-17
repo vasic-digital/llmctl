@@ -183,7 +183,29 @@ sched_build_launch() {
       if [[ "${LLMCTL_DRY_RUN}" != "1" && ! -d "${dir}" ]]; then
         die "model not downloaded: ${dir}. Run: llmctl models download ${profile}"
       fi
-      SCHED_EXEC="${LLMCTL_COLI_BIN:-coli}"
+      # Root-caused 2026-09-17 (real repro, not guessed): the bare command
+      # "coli" is only resolvable when its pip-installable launcher wrapper
+      # has actually been installed onto PATH - `llmctl build colibri`
+      # honestly warns "pip not found - skipping 'coli' launcher install"
+      # and continues (the two REAL C engines it builds, colibri/qwen36,
+      # are unaffected), but the scheduler still defaulted to the bare,
+      # now-unresolvable "coli" command with no same-repo fallback - unlike
+      # the llama engine, whose SCHED_EXEC already falls back to its own
+      # submodule's absolute build path when no override is set. Under
+      # systemd this fails LOUDLY (exit 127, "command not found",
+      # Restart=always looping every few seconds) rather than silently -
+      # but `llmctl start`/`switch`/`enable` still reported a clean
+      # "started" because systemd's own start-transition succeeds
+      # regardless of what the unit's Restart=always loop does next; only
+      # checking `systemctl status`/the real port caught it. The `coli`
+      # script itself is a plain, already-executable (shebang + +x) Python
+      # file living in the SAME submodule tree python3 can run directly
+      # with zero installation - confirmed empirically (`coli --help`
+      # printed real usage from the in-repo path before this default was
+      # wired in) - so it gets the identical same-repo-path fallback the
+      # llama engine already has, never requiring the pip install step at
+      # all for the common case.
+      SCHED_EXEC="${LLMCTL_COLI_BIN:-${LLMCTL_ROOT}/submodules/colibri/c/coli}"
       SCHED_ARGS=(serve --model "${dir}" --host 127.0.0.1 --port "${port}")
       ;;
     *) die "unknown engine for profile ${profile}: ${engine}" ;;
@@ -265,7 +287,28 @@ _sched_start_impl() {
     fa="$(json_query "${plan_file}" "d[\"profiles\"][\"${p}\"][\"flash_attn\"]")"
     sched_build_launch "${p}" "${mode}" "${port}" "${ctx}" "${ngl}" "${parallel}" "${fa}"
     svc_write_env "${p}" "$(catalog_engine "${p}")" "${SCHED_EXEC}" "${SCHED_ARGS[@]}"
-    svc_start "${p}"
+    # Root-caused 2026-09-17 (real repro, not guessed): this whole function
+    # runs as the `command` operand of `scheduler::with_lock`'s
+    # `"$@" || rc=$?`, and bash disables `set -e` propagation for the ENTIRE
+    # nested call tree of a command tested by `||`/`&&`/`if` - so a bare
+    # `svc_start "${p}"` here that fails (e.g. `systemctl --user start`
+    # reporting "Unit ... not found" because `llmctl install` was never run)
+    # was previously swallowed silently: execution fell through to
+    # `_sched_write_reservation` + the "started" info line regardless,
+    # so a profile with NO real running process/unit was reported as
+    # started and the scheduler's budget accounting reserved RAM/VRAM for
+    # nothing. Reproduced directly: `bash -c 'set -e; f(){ false; echo
+    # ok; }; f || rc=$?; echo "rc=$rc"'` prints "ok" and "rc=0" - `false`
+    # never halts `f`, and `f`'s own exit status is 0 because its LAST
+    # command (the echo) succeeded. The fix is an EXPLICIT exit-code
+    # check (which works correctly regardless of errexit context, because
+    # testing the status directly IS the point): a failed start is
+    # reported honestly and NEVER reserved as running.
+    if ! svc_start "${p}"; then
+      err "failed to start '${p}': the service backend refused to start it (see: llmctl logs ${p}; on Linux, check 'llmctl install' has been run and 'systemctl --user status llmctl-$(catalog_engine "${p}")@${p}.service')"
+      rm -f "${plan_file}"
+      return 1
+    fi
     _sched_write_reservation "${p}" "${mode}" "${port}" "${ram}" "${vram}"
     info "started ${p} (mode=${mode}, port=${port}, reserved ${ram} MiB RAM + ${vram} MiB VRAM)"
   done

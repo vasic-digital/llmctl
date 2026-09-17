@@ -43,6 +43,28 @@ llmctl_sha256() {
   fi
 }
 
+# Git blob hash (hex digest on stdout) of a local file - i.e. exactly what
+# `git hash-object <file>` / a Hugging Face API `blobId` field reports for
+# that file's exact content. Root-caused 2026-09-17 (real repro against
+# Kreuzzelg/qwen36-35b-a3b-colibri-i4's config.hf.json + config.json):
+# _dl_fetch_sha256_from_api's `?blobs=true` lookup only ever finds a hash
+# under a sibling's `.lfs.sha256` field, which Hugging Face populates ONLY
+# for Git-LFS-tracked files; small config/JSON files on HF are typically
+# committed as ORDINARY (non-LFS) git blobs and carry no `.lfs` object at
+# all, so the lookup silently found nothing and the download was correctly
+# (but too narrowly) refused as unverifiable. HF's API DOES report a
+# `blobId` for every file, LFS or not - it is git's own blob hash
+# (`sha1("blob " <size> "\0" <content>)`), a different but equally
+# authoritative content-identity algorithm from the sha256 used for LFS
+# blobs. `git hash-object` computes exactly this, so it needs no bespoke
+# framing/`\0`-handling reimplementation - confirmed empirically before
+# using it: `git hash-object` on a freshly-downloaded config.hf.json
+# reproduced the exact blobId the HF API reported for that same file.
+llmctl_git_blob_sha1() {
+  need_cmd git
+  git hash-object "$1"
+}
+
 # --- evidence logging --------------------------------------------------------
 _dl_log() { printf '[%s] %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*" >> "${_DL_EVIDENCE}"; }
 
@@ -62,8 +84,13 @@ _dl_evidence_run() {
 }
 
 # --- checksum helpers --------------------------------------------------------
-# Fetch the authoritative sha256 for a repo file from the HF API (fallback for
-# catalog entries whose sha256 is null).
+# Fetch the authoritative checksum for a repo file from the HF API (fallback
+# for catalog entries whose sha256 is null). Prints a bare hex sha256 for an
+# LFS-tracked file (the common case for large model weights), or
+# "gitblob1:<hex>" for an ordinary (non-LFS) git blob - typically small
+# config/JSON files, which HF's API reports a `blobId` for but never an
+# `.lfs.sha256` (there is no LFS object at all). Prints nothing (caller
+# refuses the download) when the repo/file cannot be resolved.
 _dl_fetch_sha256_from_api() {
   local repo="$1" name="$2"
   need_cmd curl
@@ -74,7 +101,13 @@ name = sys.argv[1]
 d = json.load(sys.stdin)
 for s in d.get("siblings", []):
     if s.get("rfilename") == name:
-        print((s.get("lfs") or {}).get("sha256") or "")
+        lfs_sha = (s.get("lfs") or {}).get("sha256") or ""
+        if lfs_sha:
+            print(lfs_sha)
+        else:
+            blob_id = s.get("blobId") or ""
+            if blob_id:
+                print("gitblob1:" + blob_id)
         break
 ' "${name}"
 }
@@ -92,11 +125,19 @@ _dl_verify_file() {
     fi
   fi
   if [[ -n "${sha}" ]]; then
-    local actual_sha
-    actual_sha="$(llmctl_sha256 "${path}")"
-    if [[ "${actual_sha}" != "${sha}" ]]; then
-      err "sha256 mismatch for ${path}"
-      err "  expected: ${sha}"
+    local actual_sha expected_sha algo
+    if [[ "${sha}" == gitblob1:* ]]; then
+      algo="git-blob-sha1"
+      expected_sha="${sha#gitblob1:}"
+      actual_sha="$(llmctl_git_blob_sha1 "${path}")"
+    else
+      algo="sha256"
+      expected_sha="${sha}"
+      actual_sha="$(llmctl_sha256 "${path}")"
+    fi
+    if [[ "${actual_sha}" != "${expected_sha}" ]]; then
+      err "${algo} mismatch for ${path}"
+      err "  expected: ${expected_sha}"
       err "  actual:   ${actual_sha}"
       return 1
     fi
@@ -201,7 +242,18 @@ _dl_smoke_test_gguf() {
   _dl_log "smoke: ${server} ${args[*]}"
   local server_log="${LLMCTL_LOG_DIR}/smoke-${profile}.log"
   ensure_dir "${LLMCTL_LOG_DIR}"
-  "${server}" "${args[@]}" > "${server_log}" 2>&1 &
+  # LD_LIBRARY_PATH (root-caused 2026-09-17): a freshly-built llama-server's
+  # libggml.so.0 SONAME can collide with a stale, ABI-incompatible copy
+  # already installed system-wide (confirmed via `ldd` on this host); the
+  # dynamic linker then silently prefers the stale system copy over the
+  # correct sibling library sitting right next to the binary, and
+  # llama-server dies with a symbol-lookup error instead of booting. See
+  # the matching note in lib/service_linux.sh's svc_write_env() for the
+  # full forensic detail - same fix, same rationale, applied here for the
+  # direct-launch smoke-test path.
+  local server_dir; server_dir="$(cd "$(dirname "${server}")" && pwd)"
+  LD_LIBRARY_PATH="${server_dir}${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}" \
+    "${server}" "${args[@]}" > "${server_log}" 2>&1 &
   local pid=$!
 
   local ready=0 i
@@ -224,7 +276,23 @@ _dl_smoke_test_gguf() {
   _dl_log "smoke: /health OK after ${i}s"
 
   local payload response
-  payload='{"messages":[{"role":"user","content":"Reply with exactly: OK"}],"max_tokens":8,"temperature":0}'
+  # max_tokens=64 (root-caused 2026-09-17, real repro against
+  # ggml-org/gpt-oss-20b-GGUF, the "moe-fast" catalog profile): a
+  # reasoning/"harmony"-format model emits its chain-of-thought as
+  # SEPARATE reasoning_content tokens BEFORE any answer content token, so
+  # the previous max_tokens=8 budget was consumed entirely by the
+  # reasoning preamble (observed raw response: content="",
+  # reasoning_content="The user says: \"", finish_reason="length") and
+  # the smoke test failed even though the model is genuinely correct -
+  # confirmed by manually re-running the identical prompt against the
+  # same downloaded model file with max_tokens=64: content="OK",
+  # finish_reason="stop", 41 total completion tokens (comfortably under
+  # 64, stops on its own EOS rather than hitting the raised budget). A
+  # plain instruction-following model (no separate reasoning channel)
+  # answers immediately and hits its own EOS in 1-2 tokens regardless of
+  # this budget, so raising it does not slow down or change the outcome
+  # for any non-reasoning profile already passing.
+  payload='{"messages":[{"role":"user","content":"Reply with exactly: OK"}],"max_tokens":64,"temperature":0}'
   response="$(curl -fsS -X POST "http://127.0.0.1:${LLMCTL_SMOKE_PORT}/v1/chat/completions" \
     -H 'Content-Type: application/json' -d "${payload}" 2>&1)" || {
     _dl_log "smoke FAILED: chat completion request errored"
