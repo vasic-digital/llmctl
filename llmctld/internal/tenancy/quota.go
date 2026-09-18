@@ -18,13 +18,18 @@ import (
 // hardware for current usage is out of scope for this task; Enforcer
 // only accounts caller-supplied "current usage" values against these
 // ceilings, exactly like a quota-accounting library would.
+// JSON tags added for 006-cli-daemon-wiring (FR-007, data-model.md's
+// wire shape for GET/PUT /v1/tenants/:id/quota) - Limits had no prior
+// JSON consumer anywhere in this codebase (confirmed by inspection), so
+// this is a purely additive change with no existing serialization to
+// break.
 type Limits struct {
-	RequestsPerSecond     float64
-	MaxConcurrentRequests int
-	MaxGPUBytes           int64
-	MaxCPUCores           int64
-	MaxRAMBytes           int64
-	MaxStorageBytes       int64
+	RequestsPerSecond     float64 `json:"requests_per_second"`
+	MaxConcurrentRequests int     `json:"max_concurrent_requests"`
+	MaxGPUBytes           int64   `json:"max_gpu_bytes"`
+	MaxCPUCores           int64   `json:"max_cpu_cores"`
+	MaxRAMBytes           int64   `json:"max_ram_bytes"`
+	MaxStorageBytes       int64   `json:"max_storage_bytes"`
 }
 
 // rateBucket is a token-bucket rate limiter's per-tenant state. Capacity

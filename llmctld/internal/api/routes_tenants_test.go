@@ -178,6 +178,172 @@ func TestCheckModelVisible_ExercisesTenantBoundaryCheck(t *testing.T) {
 	}
 }
 
+// TestListTenants is 006-cli-daemon-wiring's RED-before-GREEN proof for
+// FR-006 (GET /v1/tenants, T012): an empty registry returns
+// 200 {"tenants": []} (never a bare null or an omitted key), and after
+// creating two tenants the route returns both, matched by ID regardless
+// of order (data-model.md leaves order non-contractual). Gated by the
+// SAME ActionTenantManage bar as POST /v1/tenants (this route enumerates
+// EVERY tenant in the cluster, a cluster-wide admin view exactly like
+// tenant creation - never a per-tenant-scoped read an ordinary tenant
+// caller should reach, mirroring this file's own
+// authorizeTenantOwnership security posture rather than inventing a
+// laxer, unaudited check for a brand new route).
+func TestListTenants(t *testing.T) {
+	engine, decider := newTenantsTestEngine()
+	adminToken := issueTenantJWT(t, decider, "", []string{auth.RoleAdmin})
+
+	viewerToken := issueTenantJWT(t, decider, "", []string{auth.RoleModelViewer})
+	if rec := doJSON(t, engine, http.MethodGet, "/v1/tenants", nil, viewerToken); rec.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 for a non-admin caller, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	rec := doJSON(t, engine, http.MethodGet, "/v1/tenants", nil, adminToken)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 on an empty registry, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var listResp struct {
+		Tenants []struct {
+			ID   string `json:"id"`
+			Name string `json:"name"`
+		} `json:"tenants"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &listResp); err != nil {
+		t.Fatalf("decode empty list response: %v", err)
+	}
+	if listResp.Tenants == nil || len(listResp.Tenants) != 0 {
+		t.Fatalf("expected an empty (non-nil) tenants array on an empty registry, got %+v (raw: %s)", listResp.Tenants, rec.Body.String())
+	}
+
+	for _, id := range []string{"tenant-a", "tenant-b"} {
+		if rec := doJSON(t, engine, http.MethodPost, "/v1/tenants", map[string]string{"id": id, "name": "Tenant " + id}, adminToken); rec.Code != http.StatusOK {
+			t.Fatalf("create %s: expected 200, got %d: %s", id, rec.Code, rec.Body.String())
+		}
+	}
+
+	rec = doJSON(t, engine, http.MethodGet, "/v1/tenants", nil, adminToken)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 after creating 2 tenants, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &listResp); err != nil {
+		t.Fatalf("decode populated list response: %v", err)
+	}
+	if len(listResp.Tenants) != 2 {
+		t.Fatalf("expected 2 tenants, got %d: %+v", len(listResp.Tenants), listResp.Tenants)
+	}
+	seen := map[string]string{}
+	for _, tn := range listResp.Tenants {
+		seen[tn.ID] = tn.Name
+	}
+	if seen["tenant-a"] != "Tenant tenant-a" {
+		t.Fatalf("missing or wrong entry for tenant-a: %+v", listResp.Tenants)
+	}
+	if seen["tenant-b"] != "Tenant tenant-b" {
+		t.Fatalf("missing or wrong entry for tenant-b: %+v", listResp.Tenants)
+	}
+}
+
+// TestTenantQuota_ViewAndSet is 006-cli-daemon-wiring's RED-before-GREEN
+// proof for FR-007 (GET+PUT /v1/tenants/:id/quota, T014): a GET on an
+// existing tenant with no limits ever set returns 200 with an all-zero
+// Limits body (the package's own zero-means-unlimited convention, NEVER
+// a 404 - the tenant genuinely exists, it just has no configured
+// ceiling); a GET on a nonexistent tenant returns 404 (resolved against
+// decider.Tenants.Get, never decider.Quota, per data-model.md - a quota
+// view is meaningless for an unregistered tenant id); a PUT with a JSON
+// body sets limits and echoes them back 200, and a subsequent GET
+// reflects the set value (proving the view is sourced from the SAME
+// enforcement state PUT wrote, never a separately-tracked copy that
+// could drift, per FR-007); a non-owning, non-admin caller gets 403 on
+// both verbs (authorizeTenantOwnership, reused rather than a new check).
+func TestTenantQuota_ViewAndSet(t *testing.T) {
+	engine, decider := newTenantsTestEngine()
+	adminToken := issueTenantJWT(t, decider, "", []string{auth.RoleAdmin})
+	doJSON(t, engine, http.MethodPost, "/v1/tenants", map[string]string{"id": "tenant-a", "name": "Tenant A"}, adminToken)
+
+	tenantAToken := issueTenantJWT(t, decider, "tenant-a", []string{auth.RoleModelOperator})
+
+	// View before any limits are ever set: 200, all-zero Limits.
+	rec := doJSON(t, engine, http.MethodGet, "/v1/tenants/tenant-a/quota", nil, tenantAToken)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("view before any set: expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var limitsResp struct {
+		RequestsPerSecond     float64 `json:"requests_per_second"`
+		MaxConcurrentRequests int     `json:"max_concurrent_requests"`
+		MaxGPUBytes           int64   `json:"max_gpu_bytes"`
+		MaxCPUCores           int64   `json:"max_cpu_cores"`
+		MaxRAMBytes           int64   `json:"max_ram_bytes"`
+		MaxStorageBytes       int64   `json:"max_storage_bytes"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &limitsResp); err != nil {
+		t.Fatalf("decode pre-set quota response: %v", err)
+	}
+	if limitsResp != (struct {
+		RequestsPerSecond     float64 `json:"requests_per_second"`
+		MaxConcurrentRequests int     `json:"max_concurrent_requests"`
+		MaxGPUBytes           int64   `json:"max_gpu_bytes"`
+		MaxCPUCores           int64   `json:"max_cpu_cores"`
+		MaxRAMBytes           int64   `json:"max_ram_bytes"`
+		MaxStorageBytes       int64   `json:"max_storage_bytes"`
+	}{}) {
+		t.Fatalf("expected all-zero Limits before any PUT, got %+v", limitsResp)
+	}
+
+	// View on a nonexistent tenant: 404, never a default/zero value that
+	// could be mistaken for a real tenant with an all-unlimited quota
+	// (spec.md's own Edge Cases section names this exact confusion).
+	rec = doJSON(t, engine, http.MethodGet, "/v1/tenants/ghost/quota", nil, adminToken)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("view on a nonexistent tenant: expected 404, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	// Set via PUT, echoed back 200.
+	setBody := map[string]interface{}{
+		"requests_per_second":     5.0,
+		"max_concurrent_requests": 10,
+		"max_gpu_bytes":           int64(8589934592),
+		"max_cpu_cores":           int64(4),
+		"max_ram_bytes":           int64(17179869184),
+		"max_storage_bytes":       int64(107374182400),
+	}
+	rec = doJSON(t, engine, http.MethodPut, "/v1/tenants/tenant-a/quota", setBody, tenantAToken)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("PUT quota: expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &limitsResp); err != nil {
+		t.Fatalf("decode PUT response: %v", err)
+	}
+	if limitsResp.RequestsPerSecond != 5.0 || limitsResp.MaxConcurrentRequests != 10 ||
+		limitsResp.MaxGPUBytes != 8589934592 || limitsResp.MaxCPUCores != 4 ||
+		limitsResp.MaxRAMBytes != 17179869184 || limitsResp.MaxStorageBytes != 107374182400 {
+		t.Fatalf("PUT response did not echo the set limits: %+v", limitsResp)
+	}
+
+	// A subsequent GET reflects the SAME value PUT just wrote - proving
+	// the view is sourced from the real enforcement state, not a
+	// separate copy.
+	rec = doJSON(t, engine, http.MethodGet, "/v1/tenants/tenant-a/quota", nil, tenantAToken)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("view after set: expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &limitsResp); err != nil {
+		t.Fatalf("decode post-set quota response: %v", err)
+	}
+	if limitsResp.MaxConcurrentRequests != 10 {
+		t.Fatalf("GET after PUT did not reflect the set value: %+v", limitsResp)
+	}
+
+	// A non-owning, non-admin caller is denied on both verbs.
+	tenantBToken := issueTenantJWT(t, decider, "tenant-b", []string{auth.RoleModelViewer})
+	if rec := doJSON(t, engine, http.MethodGet, "/v1/tenants/tenant-a/quota", nil, tenantBToken); rec.Code != http.StatusForbidden {
+		t.Fatalf("cross-tenant GET: expected 403, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if rec := doJSON(t, engine, http.MethodPut, "/v1/tenants/tenant-a/quota", setBody, tenantBToken); rec.Code != http.StatusForbidden {
+		t.Fatalf("cross-tenant PUT: expected 403, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
 // TestCheckModelVisible_CrossTenantQueryDenied is T075's RED-before-GREEN
 // proof for a genuine cross-tenant information-disclosure vulnerability
 // found during this security review: GET /v1/tenants/:id/models/:model/

@@ -5,12 +5,14 @@
 package api
 
 import (
+	"fmt"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
 
 	"github.com/vasic-digital/llmctl/llmctld/internal/auth"
 	"github.com/vasic-digital/llmctl/llmctld/internal/authz"
+	"github.com/vasic-digital/llmctl/llmctld/internal/tenancy"
 )
 
 type createTenantRequest struct {
@@ -62,6 +64,84 @@ func RegisterTenantRoutes(r gin.IRoutes, decider *authz.Decider) {
 			return
 		}
 		c.JSON(http.StatusOK, gin.H{"id": tenant.ID, "name": tenant.Name})
+	})
+
+	// GET /v1/tenants (006-cli-daemon-wiring FR-006, T013): lists every
+	// tenant currently registered anywhere in the cluster. Gated behind
+	// the SAME ActionTenantManage bar as POST /v1/tenants above, rather
+	// than authorizeTenantOwnership (which only proves the caller may
+	// act on ONE named tenant) - enumerating every tenant's id/name is a
+	// cluster-wide admin view, exactly like tenant creation, and an
+	// ordinary tenant-scoped caller has no legitimate need to see every
+	// other tenant that exists (this file's own history, see
+	// TestCheckModelVisible_CrossTenantQueryDenied above, is a real
+	// cross-tenant information-disclosure vulnerability found in a
+	// route that skipped this kind of check).
+	r.GET("/v1/tenants", RequireJWT(decider), func(c *gin.Context) {
+		claims := ClaimsFromContext(c)
+		if !decider.CheckRBAC(claims.Subject, claims.Roles, auth.ActionTenantManage, "tenants") {
+			c.JSON(http.StatusForbidden, gin.H{"error": "requires a role granting tenant:manage"})
+			return
+		}
+		tenants := decider.Tenants.List()
+		out := make([]gin.H, 0, len(tenants))
+		for _, t := range tenants {
+			out = append(out, gin.H{"id": t.ID, "name": t.Name})
+		}
+		c.JSON(http.StatusOK, gin.H{"tenants": out})
+	})
+
+	// GET /v1/tenants/:id/quota (006-cli-daemon-wiring FR-007, T015):
+	// views tenantID's currently-enforced Limits, sourced directly from
+	// decider.Quota.GetLimits (T005) - the SAME Enforcer state
+	// decider.CheckQuota/AllowRequest applies to that tenant's real
+	// traffic, never a separately-tracked copy that could drift.
+	// Existence is resolved against decider.Tenants.Get, NOT
+	// decider.Quota, per data-model.md: a quota view is meaningless for
+	// an unregistered tenant id, so a nonexistent tenant reports 404
+	// rather than a default/zero Limits body that could be mistaken for
+	// a real, intentional all-unlimited quota (spec.md's Edge Cases).
+	r.GET("/v1/tenants/:id/quota", RequireJWT(decider), func(c *gin.Context) {
+		claims := ClaimsFromContext(c)
+		tenantID := c.Param("id")
+		if !authorizeTenantOwnership(decider, claims, tenantID) {
+			c.JSON(http.StatusForbidden, gin.H{"error": "caller may only view its own tenant's quota"})
+			return
+		}
+		if _, ok := decider.Tenants.Get(tenantID); !ok {
+			c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("tenant %q not found", tenantID)})
+			return
+		}
+		limits, _ := decider.Quota.GetLimits(tenantID)
+		c.JSON(http.StatusOK, limits)
+	})
+
+	// PUT /v1/tenants/:id/quota (006-cli-daemon-wiring FR-007, T015): the
+	// "set" half of tenant quota <name> [...]. Any field omitted from
+	// the request body defaults to 0 (unlimited) per Go's JSON-unmarshal
+	// zero-value behavior and Limits's own existing zero-means-unlimited
+	// convention - no new "partial update" semantics invented
+	// (data-model.md). Echoes the now-current Limits back on success,
+	// same shape as the GET above; same 404/403 checks as GET, reusing
+	// authorizeTenantOwnership rather than a second authorization path.
+	r.PUT("/v1/tenants/:id/quota", RequireJWT(decider), func(c *gin.Context) {
+		claims := ClaimsFromContext(c)
+		tenantID := c.Param("id")
+		if !authorizeTenantOwnership(decider, claims, tenantID) {
+			c.JSON(http.StatusForbidden, gin.H{"error": "caller may only set its own tenant's quota"})
+			return
+		}
+		if _, ok := decider.Tenants.Get(tenantID); !ok {
+			c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("tenant %q not found", tenantID)})
+			return
+		}
+		var limits tenancy.Limits
+		if err := c.ShouldBindJSON(&limits); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		decider.Quota.SetLimits(tenantID, limits)
+		c.JSON(http.StatusOK, limits)
 	})
 
 	r.GET("/v1/tenants/:id/models", RequireJWT(decider), func(c *gin.Context) {
