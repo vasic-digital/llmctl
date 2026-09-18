@@ -1,0 +1,2 @@
+Available devices:
+  CUDA0: NVIDIA GeForce RTX 3060 (11909 MiB, 11000 MiB free)

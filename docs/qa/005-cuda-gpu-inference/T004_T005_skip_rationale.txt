@@ -1,0 +1,50 @@
+005-cuda-gpu-inference: T004 and T005 SKIPPED (documented, not silently dropped)
+==================================================================================
+
+tasks.md T003 instructs: "Attempt an unmodified engine_build_llama rebuild
+... to establish whether research.md R2's host-compiler-compatibility flag
+is actually needed on THIS toolkit/gcc pairing ... If it succeeds, T004-T005
+are skipped (documented, not silently dropped) and the plan proceeds to T006
+with the unmodified lib/engine.sh. If it fails with an unsupported-host-
+compiler error, proceed to T004."
+
+Real result (see build_attempt_1_unmodified.log in this directory,
+captured this session, unmodified lib/engine.sh, real nvcc 12.4.131,
+real gcc 15.2.0):
+
+  The unmodified `engine_build_llama` (nvcc on PATH -> engine_detect_backend
+  returns "cuda" -> `cmake_args=(-DCMAKE_BUILD_TYPE=Release -DGGML_CUDA=ON)`,
+  no compiler-compatibility flag of any kind) built successfully end to end:
+  every ggml-cuda/*.cu object file compiled with zero nvcc errors or
+  warnings about an unsupported host compiler, the full C++ link succeeded,
+  and the built binary's own `--version` check
+  ("built with GNU 15.2.0 for Linux x86_64") and `--list-devices` check
+  ("CUDA0: NVIDIA GeForce RTX 3060 (11909 MiB, 11000 MiB free)") both
+  confirm a genuinely CUDA-capable build. Exit code 0.
+
+research.md R2's own text already flagged this as a HYPOTHESIS to be
+CONFIRMED (not asserted) by this exact build attempt: "this is a
+hypothesis to be CONFIRMED by the actual build attempt in Phase 4, not
+asserted as fact ahead of time -- if the flag alone is insufficient,
+install gcc-13/g++-13 ... as the documented fallback." The hypothesis
+(that CUDA 12.4's nvcc would reject gcc 15.2 as an unsupported host
+compiler, per its published support matrix) did NOT materialize on this
+specific host/toolchain pairing -- either nvcc 12.4.131's actual
+`__GNUC__` version-ceiling check is less strict in practice than the
+published support matrix documents, or llama.cpp's .cu sources are
+simple enough that no version-gated nvcc behavior was ever triggered.
+
+Consequence: no CMAKE_CUDA_FLAGS compiler-compatibility flag was added to
+lib/engine.sh's cuda) branch. lib/engine.sh is UNMODIFIED by this feature
+for the compiler-compatibility concern. tests/test_engine_cuda_build.sh
+(T004's failing-test-first artifact, which would have asserted the
+presence of a `-DCMAKE_CUDA_FLAGS=-allow-unsupported-compiler` entry) was
+therefore never written -- there is no such flag in the codebase for it
+to assert the presence of, and writing a test asserting a flag that does
+not exist and is not needed would itself be a fabricated requirement.
+
+This is an honest, evidence-based "the concern investigated by research.md
+R2 turned out not to apply on this host" finding, not a shortcut around
+the task. Per tasks.md's own explicit conditional branching, the plan
+proceeds directly to T006 (already confirmed above) with the unmodified
+engine.sh.
