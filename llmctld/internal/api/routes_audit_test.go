@@ -50,6 +50,24 @@ func TestAuditEntries_RequiresAdminRole(t *testing.T) {
 	}
 }
 
+// TestAuditVerify_RequiresAdminRole is 008-full-test-coverage T026
+// (spec.md FR-007's RBAC-route audit): GET /v1/audit/verify shares
+// RegisterAuditRoutes' own requireAuditAccess gate with GET
+// /v1/audit/entries (already proven by TestAuditEntries_RequiresAdminRole
+// above), but - before this test - had no adversarial test of its own
+// asserting that gate at the HTTP layer; TestAuditVerify_ReportsCleanChain
+// below only ever exercised the admin-caller path. Closes that specific,
+// confirmed gap by extending the exact existing pattern to this route.
+func TestAuditVerify_RequiresAdminRole(t *testing.T) {
+	engine, decider := newAuditTestEngine()
+	decider.Log.Append("someone", "rbac_check", "model-x", "allow")
+
+	viewerToken := issueTenantJWT(t, decider, "", []string{auth.RoleModelViewer})
+	if rec := doJSON(t, engine, http.MethodGet, "/v1/audit/verify", nil, viewerToken); rec.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 for a non-admin caller, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
 // TestAuditVerify_ReportsCleanChain proves GET /v1/audit/verify surfaces
 // the real audit.Log.VerifyChain result (Constitution §11.4.268's
 // tamper-evidence guarantee, exposed operationally).

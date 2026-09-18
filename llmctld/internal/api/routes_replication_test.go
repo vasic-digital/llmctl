@@ -221,6 +221,116 @@ func TestReplicationRoutes_LagEndpoint_RequiresJWTAndTenantOwnership(t *testing.
 	}
 }
 
+// TestReplicationRoutes_AppendEndpoint_RequiresJWTAndTenantOwnership is
+// 008-full-test-coverage T026 (spec.md FR-007's RBAC-route audit):
+// mirrors TestReplicationRoutes_LagEndpoint_RequiresJWTAndTenantOwnership
+// EXACTLY for POST /v1/replication/append - before this test, append's
+// happy-path + tenant-isolation behavior was proven
+// (TestReplicationRoutes_AppendCheckpointStateRealHTTP3RoundTrip,
+// TestReplicationRoutes_DifferentTenantHeaders_AreIsolatedRealHTTP3RoundTrip
+// below), but no test asserted the adversarial case directly: a valid
+// token for one tenant attempting to APPEND to a DIFFERENT tenant's log
+// via the X-Tenant-ID header must be refused with 403, never silently
+// accepted. resolveStore's own ownership check runs BEFORE JSON body
+// binding (routes_replication.go), so this adversarial case needs no
+// request body, exactly like the /state and /lag siblings above.
+func TestReplicationRoutes_AppendEndpoint_RequiresJWTAndTenantOwnership(t *testing.T) {
+	ca, err := mtls.GenerateCA()
+	if err != nil {
+		t.Fatalf("GenerateCA: %v", err)
+	}
+	node, err := raft.Bootstrap(raft.Config{
+		NodeID:    "node-a",
+		BindAddr:  "127.0.0.1:0",
+		TLSConfig: buildTestTLSConfig(t, ca, "node-a"),
+	})
+	if err != nil {
+		t.Fatalf("raft.Bootstrap: %v", err)
+	}
+	defer func() { _ = node.Shutdown() }()
+	waitForRealLeader(t, node, 3*time.Second)
+
+	registry := replication.NewStoreRegistry(t.TempDir(), replication.CheckpointConfig{})
+	defer func() { _ = registry.Close() }()
+	decider := newReplicationTestDecider()
+
+	srv := NewServer(node, buildTestTLSConfig(t, ca, "node-a-api"))
+	RegisterReplicationRoutes(srv.Router(), registry, decider, node, NewNodeForwarder(node, http.DefaultClient))
+	if err := srv.Listen("127.0.0.1:0"); err != nil {
+		t.Fatalf("Listen: %v", err)
+	}
+	defer func() { _ = srv.Close() }()
+
+	client := newTestClient(buildTestTLSConfig(t, ca, "test-client"))
+
+	// (1) No bearer token at all -> 401.
+	resp := doAuthedReplicationRequest(t, client, http.MethodPost, srv.Addr, "/v1/replication/append", "", "tenant-a", nil)
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("no-token POST /v1/replication/append (X-Tenant-ID: tenant-a): status = %d, want 401", resp.StatusCode)
+	}
+
+	// (2) A valid tenant-b token attempting to APPEND to tenant-a's log
+	// via the header -> 403, never 200.
+	tenantBToken := issueReplicationTestJWT(t, decider, "tenant-b")
+	resp2 := doAuthedReplicationRequest(t, client, http.MethodPost, srv.Addr, "/v1/replication/append", tenantBToken, "tenant-a", nil)
+	_ = resp2.Body.Close()
+	if resp2.StatusCode != http.StatusForbidden {
+		t.Fatalf("tenant-b token appending to tenant-a's log: status = %d, want 403 (cross-tenant append must be denied)", resp2.StatusCode)
+	}
+}
+
+// TestReplicationRoutes_CheckpointEndpoint_RequiresJWTAndTenantOwnership
+// is 008-full-test-coverage T026's sibling case for POST
+// /v1/replication/checkpoint, mirroring the append test above exactly -
+// a valid token for one tenant attempting to CHECKPOINT a DIFFERENT
+// tenant's store via the header must be refused with 403.
+func TestReplicationRoutes_CheckpointEndpoint_RequiresJWTAndTenantOwnership(t *testing.T) {
+	ca, err := mtls.GenerateCA()
+	if err != nil {
+		t.Fatalf("GenerateCA: %v", err)
+	}
+	node, err := raft.Bootstrap(raft.Config{
+		NodeID:    "node-a",
+		BindAddr:  "127.0.0.1:0",
+		TLSConfig: buildTestTLSConfig(t, ca, "node-a"),
+	})
+	if err != nil {
+		t.Fatalf("raft.Bootstrap: %v", err)
+	}
+	defer func() { _ = node.Shutdown() }()
+	waitForRealLeader(t, node, 3*time.Second)
+
+	registry := replication.NewStoreRegistry(t.TempDir(), replication.CheckpointConfig{})
+	defer func() { _ = registry.Close() }()
+	decider := newReplicationTestDecider()
+
+	srv := NewServer(node, buildTestTLSConfig(t, ca, "node-a-api"))
+	RegisterReplicationRoutes(srv.Router(), registry, decider, node, NewNodeForwarder(node, http.DefaultClient))
+	if err := srv.Listen("127.0.0.1:0"); err != nil {
+		t.Fatalf("Listen: %v", err)
+	}
+	defer func() { _ = srv.Close() }()
+
+	client := newTestClient(buildTestTLSConfig(t, ca, "test-client"))
+
+	// (1) No bearer token at all -> 401.
+	resp := doAuthedReplicationRequest(t, client, http.MethodPost, srv.Addr, "/v1/replication/checkpoint", "", "tenant-a", nil)
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("no-token POST /v1/replication/checkpoint (X-Tenant-ID: tenant-a): status = %d, want 401", resp.StatusCode)
+	}
+
+	// (2) A valid tenant-b token attempting to CHECKPOINT tenant-a's
+	// store via the header -> 403, never 200.
+	tenantBToken := issueReplicationTestJWT(t, decider, "tenant-b")
+	resp2 := doAuthedReplicationRequest(t, client, http.MethodPost, srv.Addr, "/v1/replication/checkpoint", tenantBToken, "tenant-a", nil)
+	_ = resp2.Body.Close()
+	if resp2.StatusCode != http.StatusForbidden {
+		t.Fatalf("tenant-b token checkpointing tenant-a's store: status = %d, want 403 (cross-tenant checkpoint must be denied)", resp2.StatusCode)
+	}
+}
+
 // TestReplicationRoutes_AppendCheckpointStateRealHTTP3RoundTrip proves
 // POST /v1/replication/append, POST /v1/replication/checkpoint, and
 // GET /v1/replication/state genuinely drive a real *replication.Store
