@@ -1,0 +1,1022 @@
+
+======================================================================
+TEST: test_apikey_lifecycle.sh
+CMD:  bash /home/milosvasic/Projects/llmctl/tests/test_apikey_lifecycle.sh
+----------------------------------------------------------------------
+OUTPUT:
+  ok: apikey create, no daemon at all: exits non-zero
+  ok: apikey create, no daemon at all: clear unreachable message
+  ok: apikey rotate, no daemon at all: exits non-zero
+  ok: apikey rotate, no daemon at all: clear unreachable message
+  ok: node: real READY line observed
+  ok: node: a real BOOTSTRAP_ADMIN_KEY_ID was printed (proves auth.Store is genuinely live)
+  ok: apikey create against a REAL running daemon: still exits non-zero, never hangs or crashes
+  ok: apikey create against a REAL running daemon: SAME unreachable message as no-daemon-at-all
+  ok: apikey rotate against a REAL running daemon: exits non-zero
+  ok: apikey rotate against a REAL running daemon: SAME unreachable message
+  SKIP: apikey create/rotate success path (US2 Acceptance Scenarios 1/2)
+    reason: this host's curl has no HTTP/3 support and llmctld's cluster API is HTTP/3-QUIC-only (UDP) - no curl-based request can complete a 2xx round trip in this environment, so US2 Acceptance Scenarios 1/2 (a real usable key issued, then genuinely rotated so the old key stops authenticating) cannot be exercised here
+RESULT: PASS
+EXIT: 0
+
+======================================================================
+TEST: test_archive_completeness.sh
+CMD:  bash /home/milosvasic/Projects/llmctl/tests/test_archive_completeness.sh
+----------------------------------------------------------------------
+OUTPUT:
+  ok: build_archive produces a real .tar.gz
+  ok: build_archive produces a real .zip
+  ok: extracted tree includes the superproject's own .git directory
+  ok: extracted tree includes the submodule's REAL file content (not an empty placeholder dir - the exact git-archive gap this task fixes)
+  ok: extracted tree includes ARBITRARILY-NESTED submodule content
+  ok: build-output directories are excluded from the archive (matches the project's existing */build/* exclusion convention)
+  ok: git status on the relocated submodule succeeds (relative .git gitdir pointer survived relocation)
+  ok: relocated submodule reports a clean status (no unexpected diff introduced by archiving)
+  ok: git log inside the relocated submodule succeeds (it is a genuinely functional git repo, not just copied files)
+  ok: relocated submodule's real commit history is intact
+  ok: a RELATIVE output-basename resolves against the caller's cwd, not build_archive's internal cd target
+  ok: the .zip counterpart also resolves correctly for a relative output-basename
+RESULT: PASS
+EXIT: 0
+
+======================================================================
+TEST: test_catalog_json.sh
+CMD:  bash /home/milosvasic/Projects/llmctl/tests/test_catalog_json.sh
+----------------------------------------------------------------------
+OUTPUT:
+  ok: catalog parses as JSON (python3 json.load)
+profiles: 10
+  ok: catalog cross-check (fields, unique ports, known profiles)
+  ok: all GGUF files carry a real sha256
+RESULT: PASS
+EXIT: 0
+
+======================================================================
+TEST: test_cli.sh
+CMD:  bash /home/milosvasic/Projects/llmctl/tests/test_cli.sh
+----------------------------------------------------------------------
+OUTPUT:
+  ok: help exit code
+  ok: help shows usage
+  ok: version exit code
+  ok: version string
+  ok: unknown command exit code
+  ok: unknown command message
+  ok: switch without profile exits 1
+  ok: switch without profile names the real usage error
+  ok: models download without profile exits 1
+  ok: models download without profile names the real usage error
+  ok: unknown models subcommand exits 1
+  ok: unknown models subcommand names the real bad input
+  ok: models list contains fast
+  ok: models list contains coder
+  ok: models list contains vision
+  ok: models list contains vision-pro
+  ok: models list contains moe-fast
+  ok: models list contains small
+  ok: models list contains ws-dense-32b
+  ok: models list contains ws-moe-30b
+  ok: models list contains colibri-glm
+  ok: models list contains colibri-qwen36
+  ok: hw --json returns fixture
+  ok: hw human output shows GPU
+  ok: plan tier line
+  ok: plan co-residency group 1
+  ok: start unknown profile exits 1
+  ok: unknown profile message
+RESULT: PASS
+EXIT: 0
+
+======================================================================
+TEST: test_cluster_join_leave.sh
+CMD:  bash /home/milosvasic/Projects/llmctl/tests/test_cluster_join_leave.sh
+----------------------------------------------------------------------
+OUTPUT:
+  ok: cluster join, no daemon at all: exits non-zero
+  ok: cluster join, no daemon at all: clear unreachable message
+  ok: cluster leave, no daemon at all: exits non-zero
+  ok: cluster leave, no daemon at all: clear unreachable message
+  ok: leader node: real READY line observed
+  ok: cluster join against a REAL running (but curl-unreachable) daemon: still exits non-zero, never hangs or crashes
+  ok: cluster join against a REAL running daemon: SAME unreachable message as no-daemon-at-all (no different, confusing failure mode)
+  ok: cluster leave against a REAL running daemon: exits non-zero
+  ok: cluster leave against a REAL running daemon: SAME unreachable message
+  SKIP: cluster join/leave success path (US1 Acceptance Scenarios 1/2)
+    reason: this host's curl has no HTTP/3 support and llmctld's cluster API is HTTP/3-QUIC-only (UDP), confirmed via ss+curl -v against the real node above - no curl-based request can complete a 2xx round trip in this environment, so US1 Acceptance Scenarios 1/2 (join genuinely reflected in the peer's node list, then genuinely removed) cannot be exercised here
+RESULT: PASS
+EXIT: 0
+
+======================================================================
+TEST: test_cluster_request_checked.sh
+CMD:  bash /home/milosvasic/Projects/llmctl/tests/test_cluster_request_checked.sh
+----------------------------------------------------------------------
+OUTPUT:
+  ok: request_checked: 2xx GET returns exit 0
+  ok: request_checked: 2xx GET prints the real response body
+  ok: request_checked: 2xx POST returns exit 0
+  ok: request_checked: 2xx POST prints the real response body
+  ok: request_checked: 403 GET returns exit 1 (never a transport-failure code, never 0)
+  ok: request_checked: 403 GET prints the daemon's real error body
+  ok: request_checked: 404 GET returns exit 1
+  ok: request_checked: 404 GET prints the daemon's real error body
+  ok: request_checked: unreachable daemon returns curl's own transport exit code (got 7), distinct from both HTTP-status outcomes (0/1)
+  ok: cluster::request (untouched): still exits 0 on a non-2xx HTTP response - unchanged pre-existing behavior
+  ok: cluster::request (untouched): still prints the response body regardless of status - unchanged pre-existing behavior
+RESULT: PASS
+EXIT: 0
+
+======================================================================
+TEST: test_constitution_inheritance.sh
+CMD:  bash /home/milosvasic/Projects/llmctl/tests/test_constitution_inheritance.sh
+----------------------------------------------------------------------
+OUTPUT:
+=== Constitution Inheritance Verification ===
+Project root: /home/milosvasic/Projects/llmctl
+Constitution dir: /home/milosvasic/Projects/llmctl/constitution
+
+Invariant 1: constitution/ directory exists
+  ✓ constitution/ directory exists
+
+Invariant 2: constitution/Constitution.md exists with §11.4 anchor
+  ✓ Constitution.md: /home/milosvasic/Projects/llmctl/constitution/Constitution.md
+  ✓ §11.4 End-user quality guarantee anchor found in /home/milosvasic/Projects/llmctl/constitution/Constitution.md
+
+Invariant 3: constitution/CLAUDE.md exists with MANDATORY ANTI-BLUFF COVENANT anchor
+  ✓ CLAUDE.md: /home/milosvasic/Projects/llmctl/constitution/CLAUDE.md
+  ✓ MANDATORY ANTI-BLUFF COVENANT anchor found in /home/milosvasic/Projects/llmctl/constitution/CLAUDE.md
+
+Invariant 4: constitution/AGENTS.md exists with Anti-bluff covenant anchor
+  ✓ AGENTS.md: /home/milosvasic/Projects/llmctl/constitution/AGENTS.md
+  ✓ Anti-bluff covenant anchor found in /home/milosvasic/Projects/llmctl/constitution/AGENTS.md
+
+Invariant 5: Parent CLAUDE.md references constitution submodule
+  ✓ Parent CLAUDE.md: /home/milosvasic/Projects/llmctl/CLAUDE.md
+  ✓ CLAUDE.md inheritance pointer found in /home/milosvasic/Projects/llmctl/CLAUDE.md
+
+Invariant 5b: Parent AGENTS.md references constitution submodule
+  ✓ Parent AGENTS.md: /home/milosvasic/Projects/llmctl/AGENTS.md
+  ✓ AGENTS.md inheritance pointer found in /home/milosvasic/Projects/llmctl/AGENTS.md
+
+Invariant 5c: Project Constitution references submodule
+  ✓ Project validation doc: /home/milosvasic/Projects/llmctl/docs/validation_and_verification.md
+
+Invariant 6: Nested submodules have inheritance pointers
+  Checking submodules/superspec...
+  ✓ submodules/superspec/CLAUDE.md inheritance pointer found in /home/milosvasic/Projects/llmctl/submodules/superspec/CLAUDE.md
+  Checking submodules/llama.cpp...
+  ✓ submodules/llama.cpp/CLAUDE.md inheritance pointer found in /home/milosvasic/Projects/llmctl/submodules/llama.cpp/CLAUDE.md
+  Checking submodules/colibri...
+  ✓ submodules/colibri/CLAUDE.md inheritance pointer found in /home/milosvasic/Projects/llmctl/submodules/colibri/CLAUDE.md
+
+Invariant 7: Constitution submodule has all required files
+  ✓ constitution/Constitution.md: /home/milosvasic/Projects/llmctl/constitution/Constitution.md
+  ✓ constitution/CLAUDE.md: /home/milosvasic/Projects/llmctl/constitution/CLAUDE.md
+  ✓ constitution/AGENTS.md: /home/milosvasic/Projects/llmctl/constitution/AGENTS.md
+  ✓ constitution/install_upstreams.sh: /home/milosvasic/Projects/llmctl/constitution/install_upstreams.sh
+  ✓ constitution/find_constitution.sh: /home/milosvasic/Projects/llmctl/constitution/find_constitution.sh
+
+Invariant 8: Constitution submodule has 4+ upstream remotes configured
+  Upstream remotes (excluding origin): 6
+  Origin push URLs: 6
+  ✓ At least 4 upstream remotes configured
+
+Invariant 9: Constitution verification harness executes successfully
+  ✓ Verification harness exists
+  ✓ Verification harness executes successfully
+
+Invariant 10: Meta-test mutation proves gate is not a bluff
+  ✓ Meta-test mutation script exists
+  ✓ Meta-test mutation passes (gate catches regressions)
+
+=== INHERITANCE VERIFICATION SUMMARY ===
+ALL INVARIANTS PASSED ✓
+EXIT: 0
+
+======================================================================
+TEST: test_create_release.sh
+CMD:  bash /home/milosvasic/Projects/llmctl/tests/test_create_release.sh
+----------------------------------------------------------------------
+OUTPUT:
+  ok: v1.0.0 is valid SemVer
+  ok: v1.0.0-rc.1 (pre-release) is valid SemVer
+  ok: 1.2.3 (no leading v) is valid SemVer
+  ok: v1.0 (missing PATCH) is rejected
+  ok: garbage string is rejected
+  ok: changelog includes the real feat commit
+  ok: changelog includes the real fix commit
+  ok: changelog includes the real docs commit
+  ok: changelog groups feat: commits under a Features heading
+  ok: changelog groups fix: commits under a Fixes heading
+  ok: a forge with no recorded state defaults to pending
+  ok: release_state_set persists real state, read back correctly
+  ok: a DIFFERENT forge's state is independent (not accidentally shared)
+  ok: release_publish_forge github invoked the real gh binary with 'release create'
+  ok: successful github publish is recorded as done
+  ok: fresh tag v9.9.10: github genuinely starts pending (sanity - proves the next failure is real)
+PASS gitlab: release v9.9.10 published
+  ok: whole release is treated as failed when github fails (even if gitlab succeeds)
+  ok: failed github publish is recorded as failed, not done
+  ok: gitlab's independent success is still recorded as done despite github's failure
+PASS github: release v9.9.10 published
+SKIP gitlab: already published (idempotent retry-only-the-failed-forge)
+  ok: github IS retried on re-run (1 failed attempt + 1 retry attempt = 2 real invocations total)
+  ok: retry after a github-only failure does NOT re-invoke glab (already succeeded, idempotent retry-only-the-failed-forge)
+  ok: retried github publish now recorded as done
+  ok: dry-run makes ZERO calls to gh
+  ok: dry-run makes ZERO calls to glab
+  ok: dry-run output announces itself as a dry run
+RESULT: PASS
+EXIT: 0
+
+======================================================================
+TEST: test_determinism.sh
+CMD:  bash /home/milosvasic/Projects/llmctl/tests/test_determinism.sh
+----------------------------------------------------------------------
+OUTPUT:
+  ok: hw --json run 1 == run 2 (byte-identical)
+  ok: hw --json run 2 == run 3 (byte-identical)
+  ok: hw --json output is not empty/degenerate (sanity - it is real hardware JSON)
+  ok: plan --json run 1 == run 2 (byte-identical)
+  ok: plan --json run 2 == run 3 (byte-identical)
+RESULT: PASS
+EXIT: 0
+
+======================================================================
+TEST: test_download_resume.sh
+CMD:  bash /home/milosvasic/Projects/llmctl/tests/test_download_resume.sh
+----------------------------------------------------------------------
+OUTPUT:
+  ok: resume against Range-capable server succeeds
+  ok: resumed file's sha256 matches the full payload
+  ok: no .part file left behind after successful resume
+  ok: server actually received a Range request starting at the pre-existing byte offset (genuine resume, not a from-scratch refetch)
+  ok: download succeeds even when the server does not support Range (falls back to full re-download)
+  ok: fallback-re-downloaded file's sha256 matches the full payload
+  ok: no .part file left behind after fallback re-download
+RESULT: PASS
+EXIT: 0
+
+======================================================================
+TEST: test_download.sh
+CMD:  bash /home/milosvasic/Projects/llmctl/tests/test_download.sh
+----------------------------------------------------------------------
+OUTPUT:
+  ok: download_profile toy exit code
+  [llmctl] downloading model.bin from toy/repo
+    % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                   Dload  Upload  Total   Spent   Left   Speed
+    0      0   0      0   0      0      0      0                              0100     52 100     52   0      0  15169      0                              0100     52 100     52   0      0  14964      0                              0100     52 100     52   0      0  14772      0                              0
+  verified: model.bin
+  WARN: smoke test disabled (LLMCTL_SMOKE=0)
+  profile 'toy' downloaded and verified. Evidence: /tmp/tmp.c5GBMJtMGi/state/verify/toy.log
+  ok: model.bin exists after download
+  ok: downloaded file sha256 matches
+  ok: evidence log records verification
+  ok: evidence log records exit code
+  ok: second download skips verified file
+  ok: no .part file left behind (atomic rename)
+  ok: re-download of corrupted file succeeds
+  ok: corruption detected before re-download
+  ok: re-downloaded file verified
+  ok: sha256 mismatch -> hard failure
+  ok: mismatch reported
+  ok: mismatched content never lands at the final path
+  ok: verify_profile exit code
+  ok: verify_profile success message
+RESULT: PASS
+EXIT: 0
+
+======================================================================
+TEST: test_engine_cpu_regression.sh
+CMD:  bash /home/milosvasic/Projects/llmctl/tests/test_engine_cpu_regression.sh
+----------------------------------------------------------------------
+OUTPUT:
+  ok: the shadow no-nvcc bin directory genuinely excludes nvcc
+  ok: engine_detect_backend returns 'cpu' when nvcc is absent from PATH
+  ok: cpu-only dry-run cmake invocation still contains -DGGML_NATIVE=ON
+  ok: cpu-only dry-run cmake invocation does NOT contain -DGGML_CUDA=ON
+  ok: cpu-only dry-run cmake invocation does NOT contain any CMAKE_CUDA_FLAGS entry (the T005 compiler-compatibility flag is cuda)-branch-only)
+  ok: engine_detect_backend on the real (unmodified) PATH still returns one of the known backends (got: cuda)
+RESULT: PASS
+EXIT: 0
+
+======================================================================
+TEST: test_engine.sh
+CMD:  bash /home/milosvasic/Projects/llmctl/tests/test_engine.sh
+----------------------------------------------------------------------
+OUTPUT:
+  ok: LLMCTL_LLAMA_SRC resolves to the real git submodule, not the un-pinned vendor/ copy
+  ok: LLMCTL_COLIBRI_SRC resolves to the real git submodule, not the un-pinned vendor/ copy
+  ok: engine_ensure_submodules exits 0 when submodules/{llama.cpp,colibri}/.git are present
+  ok: no 'not initialized' warning when the real submodule paths are present
+  ok: missing submodule is reported at its real path (submodules/colibri), not the old vendor/colibri
+  ok: engine_build_llama prints [dry-run] instead of invoking cmake
+  ok: engine_build_llama's dry-run output names the cmake command it would run
+  ok: engine_build_colibri prints [dry-run] instead of invoking make
+RESULT: PASS
+EXIT: 0
+
+======================================================================
+TEST: test_gpu_throughput_ratio.sh
+CMD:  bash /home/milosvasic/Projects/llmctl/tests/test_gpu_throughput_ratio.sh
+----------------------------------------------------------------------
+OUTPUT:
+profile: small
+model: /home/milosvasic/.local/share/llmctl/models/small/Llama-3.2-3B-Instruct-Q4_K_M.gguf
+prompt: {"messages":[{"role":"user","content":"Write a short paragraph (at least 100 words) explaining how photosynthesis works."}],"max_tokens":220,"temperature":0}
+
+CPU-forced run (--n-gpu-layers 0):
+  completion_tokens: 207
+  wall-clock elapsed: 15.4440s
+  tok/s: 13.4033
+  finish_reason: stop
+  content (truncated): Photosynthesis is the vital process by which plants, algae, and some bacteria convert light energy from the sun into chemical energy in the form of gl
+
+GPU-planned run (--n-gpu-layers 99, from hw_probe_json | catalog_plan_json):
+  completion_tokens: 204
+  wall-clock elapsed: 1.6506s
+  tok/s: 123.5914
+  finish_reason: stop
+  content (truncated): Photosynthesis is the vital process by which plants, algae, and some bacteria convert light energy from the sun into chemical energy in the form of gl
+
+ratio (GPU tok/s / CPU tok/s): 9.2210
+SC-003 threshold: >= 2.0x
+  ok: CPU-forced run produced real, non-empty completion content
+  ok: GPU-planned run produced real, non-empty completion content
+  ok: GPU/CPU throughput ratio (9.2210x) is >= 2.0x (SC-003) for profile small
+RESULT: PASS
+EXIT: 0
+
+======================================================================
+TEST: test_gpu_vram_delta.sh
+CMD:  bash /home/milosvasic/Projects/llmctl/tests/test_gpu_vram_delta.sh
+----------------------------------------------------------------------
+OUTPUT:
+profile: small
+model: /home/milosvasic/.local/share/llmctl/models/small/Llama-3.2-3B-Instruct-Q4_K_M.gguf
+planned ngl (from hw_probe_json | catalog_plan_json): 99
+nvidia-smi --query-gpu=memory.used --format=csv,noheader,nounits
+before (idle, no server running):  762 MiB
+after (during/just-after a real inference request): 3105 MiB
+delta: 2343 MiB
+SC-002 threshold: >= 500 MiB
+completion content (truncated): Photosynthesis is the vital process by which plants, algae, and some bacteria convert light energy from the sun into chemical energy in the form of glucose. This complex process occurs in specialized 
+  ok: VRAM delta (2343 MiB) is >= 500 MiB (SC-002) for profile small at ngl=99
+  ok: real completion response has non-empty content while VRAM was sampled
+RESULT: PASS
+EXIT: 0
+
+======================================================================
+TEST: test_hardware_probe.sh
+CMD:  bash /home/milosvasic/Projects/llmctl/tests/test_hardware_probe.sh
+----------------------------------------------------------------------
+OUTPUT:
+  ok: real probe exit code
+  ok: probe JSON top-level keys
+  ok: probe reports a sane core count (16)
+  ok: probe reports total memory (30974 MiB)
+  ok: human output has CPU line
+  ok: human output has RAM line
+  ok: human output has Storage line
+  ok: fake probe returns fixture model
+  ok: fake probe returns fixture VRAM
+  ok: missing fixture file -> probe fails
+  ok: missing fixture file fails for the real stated reason
+  ok: invalid fixture JSON -> probe fails
+  ok: invalid fixture JSON fails for the real stated reason
+RESULT: PASS
+EXIT: 0
+
+======================================================================
+TEST: test_normalize_agents.sh
+CMD:  bash /home/milosvasic/Projects/llmctl/tests/test_normalize_agents.sh
+----------------------------------------------------------------------
+OUTPUT:
+  ok: normalize_opencode.sh exists
+  ok: normalize_opencode.sh is syntactically valid
+  ok: opencode: run1 fixture exists
+  ok: opencode: run2 fixture exists
+  ok: opencode: expected_normalized fixture exists
+  ok: opencode: two runs differing only in non-deterministic fields normalize to byte-identical output
+  ok: opencode: normalized output matches the checked-in expected fixture
+  ok: normalize_pi.sh exists
+  ok: normalize_pi.sh is syntactically valid
+  ok: pi: run1 fixture exists
+  ok: pi: run2 fixture exists
+  ok: pi: expected_normalized fixture exists
+  ok: pi: two runs differing only in non-deterministic fields normalize to byte-identical output
+  ok: pi: normalized output matches the checked-in expected fixture
+  ok: normalize_crush.sh exists
+  ok: normalize_crush.sh is syntactically valid
+  ok: crush: run1 fixture exists
+  ok: crush: run2 fixture exists
+  ok: crush: expected_normalized fixture exists
+  ok: crush: two runs differing only in non-deterministic fields normalize to byte-identical output
+  ok: crush: normalized output matches the checked-in expected fixture
+  ok: normalize_claude_code.sh exists
+  ok: normalize_claude_code.sh is syntactically valid
+  ok: claude_code: run1 fixture exists
+  ok: claude_code: run2 fixture exists
+  ok: claude_code: expected_normalized fixture exists
+  ok: claude_code: two runs differing only in non-deterministic fields normalize to byte-identical output
+  ok: claude_code: normalized output matches the checked-in expected fixture
+  ok: normalize_aider.sh exists
+  ok: normalize_aider.sh is syntactically valid
+  ok: aider: run1 fixture exists
+  ok: aider: run2 fixture exists
+  ok: aider: expected_normalized fixture exists
+  ok: aider: two runs differing only in non-deterministic fields normalize to byte-identical output
+  ok: aider: normalized output matches the checked-in expected fixture
+  ok: normalize_continue.sh exists
+  ok: normalize_continue.sh is syntactically valid
+  ok: continue: run1 fixture exists
+  ok: continue: run2 fixture exists
+  ok: continue: expected_normalized fixture exists
+  ok: continue: two runs differing only in non-deterministic fields normalize to byte-identical output
+  ok: continue: normalized output matches the checked-in expected fixture
+  ok: normalize_cline.sh exists
+  ok: normalize_cline.sh is syntactically valid
+  ok: cline: run1 fixture exists
+  ok: cline: run2 fixture exists
+  ok: cline: expected_normalized fixture exists
+  ok: cline: two runs differing only in non-deterministic fields normalize to byte-identical output
+  ok: cline: normalized output matches the checked-in expected fixture
+RESULT: PASS
+EXIT: 0
+
+======================================================================
+TEST: test_normalize_common.sh
+CMD:  bash /home/milosvasic/Projects/llmctl/tests/test_normalize_common.sh
+----------------------------------------------------------------------
+OUTPUT:
+  ok: norm_strip_timestamps replaces ISO8601 + human-readable timestamps
+  ok: two DIFFERENT real timestamps normalize to the SAME placeholder (the actual determinism property under test)
+  ok: norm_strip_temp_paths replaces /tmp/... paths
+  ok: two DIFFERENT temp paths normalize to the SAME placeholder
+  ok: norm_strip_uuids replaces a v4-shaped UUID
+  ok: norm_strip_durations replaces elapsed-time reporting
+  ok: two runs differing ONLY in timestamp/temp-path/uuid/duration normalize to byte-identical output
+  ok: paired mutation: a filter that does not actually strip timestamps is correctly detected as different from the real one's output
+RESULT: PASS
+EXIT: 0
+
+======================================================================
+TEST: test_planner.sh
+CMD:  bash /home/milosvasic/Projects/llmctl/tests/test_planner.sh
+----------------------------------------------------------------------
+OUTPUT:
+  ok: baseline tier
+  ok: baseline RAM budget (30000-4096)
+  ok: baseline VRAM budget (12288*0.85)
+  ok: baseline recommended set
+  ok: baseline fast mode
+  ok: baseline coder mode (17.7GiB > 10444MiB VRAM)
+  ok: baseline fast VRAM footprint (4692 model + 1024 KV)
+  ok: baseline coder RAM footprint (17697 + 4096 KV)
+  ok: baseline gates ws-dense-32b by tier
+  ok: baseline co-residency groups
+  ok: workstation fixture tier
+  ok: workstation recommended set (all 10 profiles)
+  ok: ws-dense-32b fully offloaded
+  ok: colibri-glm mode
+  ok: workstation co-residency groups
+  ok: apple tier (64GB unified RAM)
+  ok: apple recommended set (colibri-glm gated to datacenter)
+  ok: apple gates colibri-glm
+  ok: apple fast uses unified-memory GPU
+  ok: human plan header
+  ok: human plan groups
+  ok: catalog_classify_tier: baseline fixture
+  ok: catalog_classify_tier: workstation fixture (actually computes datacenter, matching catalog_plan_json above)
+  ok: catalog_classify_tier: apple fixture
+  ok: catalog_classify_tier: constrained fixture (8 cores / 32768 MiB RAM sits exactly at the baseline threshold)
+RESULT: PASS
+EXIT: 0
+
+======================================================================
+TEST: test_port_override.sh
+CMD:  bash /home/milosvasic/Projects/llmctl/tests/test_port_override.sh
+----------------------------------------------------------------------
+OUTPUT:
+  ok: override env-var name for a simple profile
+  ok: override env-var name for a hyphenated profile (hyphens -> underscores, uppercased)
+  ok: override env-var name for another hyphenated profile
+  ok: catalog_port fast (no override) is the catalog default
+  ok: catalog_port fast honors LLMCTL_PORT_FAST
+  ok: LLMCTL_PORT_FAST does not leak into an unrelated profile (small unchanged)
+  ok: an override for an unknown profile still dies (die() exits 1), never silently returns the override
+  ok: die() message is the same as the no-override unknown-profile path
+  ok: no override: plan's fast port is still the catalog default (regression guard)
+  ok: LLMCTL_PORT_FAST=18080 plumbs into catalog_plan_json's fast port - the actual launch port
+  ok: plan: override is scoped to 'fast' only, 'small' keeps its catalog port
+  ok: plan: override is scoped to 'fast' only, 'coder' keeps its catalog port
+  ok: hyphenated profile name (ws-dense-32b) override plumbs through catalog_plan_json
+  ok: an invalid LLMCTL_PORT_FAST value fails the plan instead of silently using garbage
+  ok: invalid override reports a clear error naming the bad value
+  ok: llmctl models list shows the overridden port for fast
+  ok: llmctl plan --json without the override still shows the catalog default (regression guard)
+  ok: llmctl plan --json with LLMCTL_PORT_FAST=18080 shows the overridden port - this is the exact value 'llmctl start/enable fast' would bind to
+RESULT: PASS
+EXIT: 0
+
+======================================================================
+TEST: test_preflight_submodules.sh
+CMD:  bash /home/milosvasic/Projects/llmctl/tests/test_preflight_submodules.sh
+----------------------------------------------------------------------
+OUTPUT:
+  ok: a genuinely reachable pinned commit is detected as reachable
+  ok: fixture sanity: the orphaned commit is genuinely gone from upstream_bad after gc --prune
+  ok: a genuinely unreachable pinned commit is detected as unreachable
+  ok: preflight_run exits 1 when a submodule ref is unreachable
+  ok: failure message names the specific unreachable submodule
+  ok: failure message names the specific expected (unreachable) ref
+  ok: preflight_run exits 0 when the submodule ref is genuinely reachable
+  ok: preflight_check_ref returns 2 (could-not-verify) when the fetch itself fails, distinct from 1 (confirmed unreachable)
+  ok: preflight_run exits 2 (could-not-verify) when the fetch itself fails, never silently treated as reachable (rc 0) nor mis-reported as confirmed-unreachable (rc 1)
+  ok: could-not-verify case is reported with an honest UNKNOWN message, not a false FAIL/PASS claim
+RESULT: PASS
+EXIT: 0
+
+======================================================================
+TEST: test_run_tests_format.sh
+CMD:  bash /home/milosvasic/Projects/llmctl/tests/test_run_tests_format.sh
+----------------------------------------------------------------------
+OUTPUT:
+  ok: isolated harness exits 0 on an all-passing fake suite
+  ok: CMD: line names the real invoked command
+  ok: OUTPUT: label present (grep-parseable evidence marker, FR-002)
+  ok: raw subprocess output is captured
+  ok: EXIT: line present with the real captured exit code
+  ok: CMD: / OUTPUT: / EXIT: appear in that order for one test block
+RESULT: PASS
+EXIT: 0
+
+======================================================================
+TEST: test_scheduler_lock.sh
+CMD:  bash /home/milosvasic/Projects/llmctl/tests/test_scheduler_lock.sh
+----------------------------------------------------------------------
+OUTPUT:
+  ok: no lost updates across 200 concurrent flock-serialized increments
+  ok: second acquirer waits for the first to release before proceeding
+RESULT: PASS
+EXIT: 0
+
+======================================================================
+TEST: test_scheduler.sh
+CMD:  bash /home/milosvasic/Projects/llmctl/tests/test_scheduler.sh
+----------------------------------------------------------------------
+OUTPUT:
+  ok: start fast small (co-resident) exit code
+  ok: fast started
+  ok: small started
+  ok: fast reservation written
+  ok: small reservation written
+  ok: status lists fast
+  ok: status lists small
+  ok: start vision refused (exit 1)
+  ok: refusal message
+  ok: alternative suggested
+  ok: switch fallback suggested
+  ok: fast kept after refusal
+  ok: small kept after refusal
+  ok: vision not started after refusal
+  ok: auto vision exit code
+  ok: LRU eviction of fast announced
+  ok: fast reservation removed after eviction
+  ok: small kept after eviction
+  ok: vision running after eviction
+  ok: constrained: start fast
+  ok: constrained: auto vision fails (exit 1)
+  ok: protection message
+  ok: protected service untouched
+  ok: vision not started (protected)
+  ok: switch moe-fast exit code
+  ok: switch leaves exactly one service running
+  ok: stop is a dry-run action
+  ok: auto coder vision exit code (US1 Acceptance Scenario 3)
+  ok: co-residency computation: coder capability resolved to a profile
+  ok: co-residency computation: vision capability resolved to a profile
+  ok: at least one service started (budgets allow on this abundant fixture)
+  ok: no eviction needed - both profiles fit the abundant budget directly
+  ok: both resolved profiles (coder + vision capabilities) ended up running
+  ok: LLMCTL_SEED unset: no --seed flag added (default interactive behavior unchanged)
+  ok: LLMCTL_SEED=42: llama launch includes --seed 42
+  ok: LLMCTL_SEED set: llama launch includes --temp 0 (FR-012 fixed-seed + temperature-0 pair)
+  ok: LLMCTL_SLOT_SAVE_PATH unset: no --slot-save-path flag added (default launch unchanged)
+  ok: LLMCTL_SLOT_SAVE_PATH set: llama launch includes a per-profile --slot-save-path subdirectory
+  ok: the per-profile slot-save directory is created before the engine is launched
+RESULT: PASS
+EXIT: 0
+
+======================================================================
+TEST: test_services_crashloop.sh
+CMD:  bash /home/milosvasic/Projects/llmctl/tests/test_services_crashloop.sh
+----------------------------------------------------------------------
+OUTPUT:
+installed systemd user units into /tmp/tmp.8svbjTzVgz/systemd-user (MemoryHigh=32768M MemoryMax=32768M)
+[dry-run] systemctl --user daemon-reload
+[dry-run] loginctl enable-linger milosvasic
+  ok: llama unit: bounded restart burst (5 attempts)
+  ok: llama unit: bounded restart interval (60s window)
+  ok: colibri unit: bounded restart burst (5 attempts)
+  ok: colibri unit: bounded restart interval (60s window)
+[llmctl] wrote /tmp/tmp.8svbjTzVgz/LaunchAgents/com.llmctl.fast.plist
+  ok: plist: throttle widened to 60s (launchd has no native give-up-after-N; this bounds the RATE, not the total attempts)
+  ok: status lists the healthy profile
+  ok: healthy profile reported as running
+  ok: crash-looped profile reported as failed (crash-loop)
+  ok: crash-looped profile's last log line surfaced
+RESULT: PASS
+EXIT: 0
+
+======================================================================
+TEST: test_services.sh
+CMD:  bash /home/milosvasic/Projects/llmctl/tests/test_services.sh
+----------------------------------------------------------------------
+OUTPUT:
+installed systemd user units into /tmp/tmp.4O2EYKywWA/systemd-user (MemoryHigh=32768M MemoryMax=32768M)
+[dry-run] systemctl --user daemon-reload
+[dry-run] loginctl enable-linger milosvasic
+  ok: llama unit: Restart=always
+  ok: llama unit: RestartSec=5
+  ok: llama unit: StartLimitBurst=5 (bounded restarts, FR-044)
+  ok: llama unit: StartLimitIntervalSec=60 (bounded restarts, FR-044)
+  ok: llama unit: MemoryMax = full probed RAM, no artificial ceiling
+  ok: llama unit: MemoryHigh = MemoryMax (no soft-throttle zone below the max, for maximal performance)
+  ok: llama unit: per-profile EnvironmentFile
+  ok: llama unit: ExecStart from env file
+  ok: llama unit: log location
+  ok: colibri unit installed
+  ok: colibri unit: description
+[llmctl] wrote /tmp/tmp.4O2EYKywWA/state/services/fast.env
+  ok: env file: engine
+  ok: env file: port in args
+  ok: env file: ngl in args
+  ok: dry-run enable
+  ok: dry-run start
+  ok: plist: label
+  ok: plist: KeepAlive
+  ok: plist: ThrottleInterval
+  ok: plist: throttle 60s (bounded restart rate, FR-044)
+  ok: plist: arg present
+  ok: plist: port present
+  ok: plist: log path
+  ok: plist parses (plistlib)
+  ok: dry-run launchctl bootstrap
+RESULT: PASS
+EXIT: 0
+
+======================================================================
+TEST: test_setup_e2e.sh
+CMD:  bash /home/milosvasic/Projects/llmctl/tests/test_setup_e2e.sh
+----------------------------------------------------------------------
+OUTPUT:
+  [llmctl] llmctl setup: doctor -> build -> plan
+  llmctl doctor - environment self-diagnosis
+  PASS OS: linux (x86_64)
+  PASS command 'bash' -> /usr/bin/bash
+  PASS command 'curl' -> /usr/bin/curl
+  PASS command 'git' -> /usr/bin/git
+  PASS command 'python3' -> /usr/bin/python3
+  PASS command 'cmake' -> /usr/bin/cmake
+  PASS command 'make' -> /usr/bin/make
+  PASS C compiler available
+  PASS sha256 tool available
+  PASS submodule submodules/llama.cpp initialized (?)
+  PASS submodule submodules/colibri initialized (?)
+  PASS catalog valid JSON (10 profiles)
+  PASS state dir writable: /tmp/tmp.eMa9eq9fhT/state
+  PASS nvidia-smi present (NVIDIA GeForce RTX 3060)
+  PASS systemd --user session available
+  WARN llama-server not built yet (llmctl build llama)
+  WARN curl lacks HTTP/3 (Features: alt-svc AsynchDNS brotli GSS-API HSTS HTTP2 HTTPS-proxy IDN IPv6 Kerberos Largefile libz NTLM PSL SPNEGO SSL threadsafe TLS-SRP UnixSockets zstd) - llmctl cluster commands will use HTTP/2 against llmctld (llmctld itself always serves both)
+  PASS go toolchain available (go1.26.0) - can build llmctld from source (make llmctld-build)
+  
+  doctor: 0 failure(s), 2 warning(s)
+  [llmctl] CUDA toolkit detected -> GGML_CUDA=ON
+  [llmctl] [dry-run] cmake -S /tmp/tmp.eMa9eq9fhT/fresh-clone/submodules/llama.cpp -B /tmp/tmp.eMa9eq9fhT/fresh-clone/submodules/llama.cpp/build -DCMAKE_BUILD_TYPE=Release -DGGML_CUDA=ON
+  [llmctl] [dry-run] cmake --build /tmp/tmp.eMa9eq9fhT/fresh-clone/submodules/llama.cpp/build --config Release --target llama-server -j 16
+  [llmctl] [dry-run] make -C /tmp/tmp.eMa9eq9fhT/fresh-clone/submodules/colibri/c colibri
+  [llmctl] [dry-run] make -C /tmp/tmp.eMa9eq9fhT/fresh-clone/submodules/colibri/c qwen36
+  [llmctl] [dry-run] pip install -e /tmp/tmp.eMa9eq9fhT/fresh-clone/submodules/colibri
+  
+  Host tier:   baseline
+  Budgets:     RAM 25904 MiB (avail - 4GiB), VRAM 10444 MiB (total - 15%), storage 500000 MiB free
+  
+  profile          port   verdict   mode     RAM MiB  VRAM   ctx   ngl  why
+  fast             8080   FITS      gpu      2048     5716   8192  99   recommended
+  coder            8081   FITS      cpu      21793    0      32768 0    recommended
+  vision           8082   FITS      gpu      2048     4210   8192  99   recommended
+  vision-pro       8083   GATED     gpu      2048     9824   16384 99   needs min_tier=workstation
+  moe-fast         8084   FITS      cpu      15644    0      16384 0    recommended
+  small            8085   FITS      gpu      2048     3973   8192  99   recommended
+  ws-dense-32b     8086   GATED     cpu      23027    0      32768 0    needs min_tier=workstation
+  ws-moe-30b       8087   GATED     cpu      25889    0      32768 0    needs min_tier=workstation
+  colibri-glm      8090   GATED     colibri  24576    0      8192  0    needs min_tier=datacenter
+  colibri-qwen36   8091   GATED     colibri  8192     0      8192  0    needs min_tier=workstation
+  
+  Co-residency groups (profiles that can run at the same time):
+    group 1: fast, coder, vision  (RAM 25889 MiB, VRAM 9926 MiB)
+    group 2: moe-fast, small  (RAM 17692 MiB, VRAM 3973 MiB)
+  
+  setup complete. Next: llmctl models download <profile>, then llmctl start <profile>
+  ok: llmctl setup exit code (fresh-clone simulation)
+  ok: setup announces its own orchestration sequence
+  ok: doctor phase: hardware/OS probe ran
+  ok: doctor phase: real submodule path checked (not the removed vendor/ path)
+  ok: doctor phase: real submodule path checked (not the removed vendor/ path)
+  ok: doctor phase: model catalog validated
+  ok: build phase: llama.cpp engine build was invoked (dry-run)
+  ok: build phase: colibri engine build was invoked (dry-run)
+  ok: plan phase: catalog profiles considered
+  ok: setup reports completion
+RESULT: PASS
+EXIT: 0
+
+======================================================================
+TEST: test_syntax.sh
+CMD:  bash /home/milosvasic/Projects/llmctl/tests/test_syntax.sh
+----------------------------------------------------------------------
+OUTPUT:
+checking 62 scripts with bash -n
+  ok: bash -n bin/llmctl
+  ok: bash -n lib/catalog.sh
+  ok: bash -n lib/cluster.sh
+  ok: bash -n lib/common.sh
+  ok: bash -n lib/doctor.sh
+  ok: bash -n lib/download.sh
+  ok: bash -n lib/engine.sh
+  ok: bash -n lib/hardware.sh
+  ok: bash -n lib/os_detect.sh
+  ok: bash -n lib/scheduler.sh
+  ok: bash -n lib/service_linux.sh
+  ok: bash -n lib/service_macos.sh
+  ok: bash -n tests/helpers.sh
+  ok: bash -n tests/run_tests.sh
+  ok: bash -n tests/test_apikey_lifecycle.sh
+  ok: bash -n tests/test_archive_completeness.sh
+  ok: bash -n tests/test_catalog_json.sh
+  ok: bash -n tests/test_cli.sh
+  ok: bash -n tests/test_cluster_join_leave.sh
+  ok: bash -n tests/test_cluster_request_checked.sh
+  ok: bash -n tests/test_constitution_inheritance.sh
+  ok: bash -n tests/test_create_release.sh
+  ok: bash -n tests/test_determinism.sh
+  ok: bash -n tests/test_download_resume.sh
+  ok: bash -n tests/test_download.sh
+  ok: bash -n tests/test_engine_cpu_regression.sh
+  ok: bash -n tests/test_engine.sh
+  ok: bash -n tests/test_gpu_throughput_ratio.sh
+  ok: bash -n tests/test_gpu_vram_delta.sh
+  ok: bash -n tests/test_hardware_probe.sh
+  ok: bash -n tests/test_normalize_agents.sh
+  ok: bash -n tests/test_normalize_common.sh
+  ok: bash -n tests/test_planner.sh
+  ok: bash -n tests/test_port_override.sh
+  ok: bash -n tests/test_preflight_submodules.sh
+  ok: bash -n tests/test_run_tests_format.sh
+  ok: bash -n tests/test_scheduler_lock.sh
+  ok: bash -n tests/test_scheduler.sh
+  ok: bash -n tests/test_services_crashloop.sh
+  ok: bash -n tests/test_services.sh
+  ok: bash -n tests/test_setup_e2e.sh
+  ok: bash -n tests/test_syntax.sh
+  ok: bash -n tests/test_tenant_list_quota.sh
+  ok: bash -n tests/test_tenant_service_isolation.sh
+  ok: bash -n docs/integrations/install_aider.sh
+  ok: bash -n docs/integrations/install_claude_code.sh
+  ok: bash -n docs/integrations/install_cline.sh
+  ok: bash -n docs/integrations/install_continue.sh
+  ok: bash -n docs/integrations/install_crush.sh
+  ok: bash -n docs/integrations/install_opencode.sh
+  ok: bash -n docs/integrations/install_pi.sh
+  ok: bash -n docs/integrations/lib_normalize_common.sh
+  ok: bash -n docs/integrations/normalize_aider.sh
+  ok: bash -n docs/integrations/normalize_claude_code.sh
+  ok: bash -n docs/integrations/normalize_cline.sh
+  ok: bash -n docs/integrations/normalize_continue.sh
+  ok: bash -n docs/integrations/normalize_crush.sh
+  ok: bash -n docs/integrations/normalize_opencode.sh
+  ok: bash -n docs/integrations/normalize_pi.sh
+  ok: bash -n scripts/release/build_archive.sh
+  ok: bash -n scripts/release/create_release.sh
+  ok: bash -n scripts/release/preflight_submodules.sh
+  ok: shebang: bin/llmctl
+  ok: strict mode: bin/llmctl
+  ok: shebang: lib/catalog.sh
+  ok: strict mode: lib/catalog.sh
+  ok: shebang: lib/cluster.sh
+  ok: strict mode: lib/cluster.sh
+  ok: shebang: lib/common.sh
+  ok: strict mode: lib/common.sh
+  ok: shebang: lib/doctor.sh
+  ok: strict mode: lib/doctor.sh
+  ok: shebang: lib/download.sh
+  ok: strict mode: lib/download.sh
+  ok: shebang: lib/engine.sh
+  ok: strict mode: lib/engine.sh
+  ok: shebang: lib/hardware.sh
+  ok: strict mode: lib/hardware.sh
+  ok: shebang: lib/os_detect.sh
+  ok: strict mode: lib/os_detect.sh
+  ok: shebang: lib/scheduler.sh
+  ok: strict mode: lib/scheduler.sh
+  ok: shebang: lib/service_linux.sh
+  ok: strict mode: lib/service_linux.sh
+  ok: shebang: lib/service_macos.sh
+  ok: strict mode: lib/service_macos.sh
+  ok: shebang: tests/helpers.sh
+  ok: strict mode: tests/helpers.sh
+  ok: shebang: tests/run_tests.sh
+  ok: strict mode: tests/run_tests.sh
+  ok: shebang: tests/test_apikey_lifecycle.sh
+  ok: strict mode: tests/test_apikey_lifecycle.sh
+  ok: shebang: tests/test_archive_completeness.sh
+  ok: strict mode: tests/test_archive_completeness.sh
+  ok: shebang: tests/test_catalog_json.sh
+  ok: strict mode: tests/test_catalog_json.sh
+  ok: shebang: tests/test_cli.sh
+  ok: strict mode: tests/test_cli.sh
+  ok: shebang: tests/test_cluster_join_leave.sh
+  ok: strict mode: tests/test_cluster_join_leave.sh
+  ok: shebang: tests/test_cluster_request_checked.sh
+  ok: strict mode: tests/test_cluster_request_checked.sh
+  ok: shebang: tests/test_constitution_inheritance.sh
+  ok: strict mode: tests/test_constitution_inheritance.sh
+  ok: shebang: tests/test_create_release.sh
+  ok: strict mode: tests/test_create_release.sh
+  ok: shebang: tests/test_determinism.sh
+  ok: strict mode: tests/test_determinism.sh
+  ok: shebang: tests/test_download_resume.sh
+  ok: strict mode: tests/test_download_resume.sh
+  ok: shebang: tests/test_download.sh
+  ok: strict mode: tests/test_download.sh
+  ok: shebang: tests/test_engine_cpu_regression.sh
+  ok: strict mode: tests/test_engine_cpu_regression.sh
+  ok: shebang: tests/test_engine.sh
+  ok: strict mode: tests/test_engine.sh
+  ok: shebang: tests/test_gpu_throughput_ratio.sh
+  ok: strict mode: tests/test_gpu_throughput_ratio.sh
+  ok: shebang: tests/test_gpu_vram_delta.sh
+  ok: strict mode: tests/test_gpu_vram_delta.sh
+  ok: shebang: tests/test_hardware_probe.sh
+  ok: strict mode: tests/test_hardware_probe.sh
+  ok: shebang: tests/test_normalize_agents.sh
+  ok: strict mode: tests/test_normalize_agents.sh
+  ok: shebang: tests/test_normalize_common.sh
+  ok: strict mode: tests/test_normalize_common.sh
+  ok: shebang: tests/test_planner.sh
+  ok: strict mode: tests/test_planner.sh
+  ok: shebang: tests/test_port_override.sh
+  ok: strict mode: tests/test_port_override.sh
+  ok: shebang: tests/test_preflight_submodules.sh
+  ok: strict mode: tests/test_preflight_submodules.sh
+  ok: shebang: tests/test_run_tests_format.sh
+  ok: strict mode: tests/test_run_tests_format.sh
+  ok: shebang: tests/test_scheduler_lock.sh
+  ok: strict mode: tests/test_scheduler_lock.sh
+  ok: shebang: tests/test_scheduler.sh
+  ok: strict mode: tests/test_scheduler.sh
+  ok: shebang: tests/test_services_crashloop.sh
+  ok: strict mode: tests/test_services_crashloop.sh
+  ok: shebang: tests/test_services.sh
+  ok: strict mode: tests/test_services.sh
+  ok: shebang: tests/test_setup_e2e.sh
+  ok: strict mode: tests/test_setup_e2e.sh
+  ok: shebang: tests/test_syntax.sh
+  ok: strict mode: tests/test_syntax.sh
+  ok: shebang: tests/test_tenant_list_quota.sh
+  ok: strict mode: tests/test_tenant_list_quota.sh
+  ok: shebang: tests/test_tenant_service_isolation.sh
+  ok: strict mode: tests/test_tenant_service_isolation.sh
+  ok: shebang: docs/integrations/install_aider.sh
+  ok: strict mode: docs/integrations/install_aider.sh
+  ok: shebang: docs/integrations/install_claude_code.sh
+  ok: strict mode: docs/integrations/install_claude_code.sh
+  ok: shebang: docs/integrations/install_cline.sh
+  ok: strict mode: docs/integrations/install_cline.sh
+  ok: shebang: docs/integrations/install_continue.sh
+  ok: strict mode: docs/integrations/install_continue.sh
+  ok: shebang: docs/integrations/install_crush.sh
+  ok: strict mode: docs/integrations/install_crush.sh
+  ok: shebang: docs/integrations/install_opencode.sh
+  ok: strict mode: docs/integrations/install_opencode.sh
+  ok: shebang: docs/integrations/install_pi.sh
+  ok: strict mode: docs/integrations/install_pi.sh
+  ok: shebang: docs/integrations/lib_normalize_common.sh
+  ok: strict mode: docs/integrations/lib_normalize_common.sh
+  ok: shebang: docs/integrations/normalize_aider.sh
+  ok: strict mode: docs/integrations/normalize_aider.sh
+  ok: shebang: docs/integrations/normalize_claude_code.sh
+  ok: strict mode: docs/integrations/normalize_claude_code.sh
+  ok: shebang: docs/integrations/normalize_cline.sh
+  ok: strict mode: docs/integrations/normalize_cline.sh
+  ok: shebang: docs/integrations/normalize_continue.sh
+  ok: strict mode: docs/integrations/normalize_continue.sh
+  ok: shebang: docs/integrations/normalize_crush.sh
+  ok: strict mode: docs/integrations/normalize_crush.sh
+  ok: shebang: docs/integrations/normalize_opencode.sh
+  ok: strict mode: docs/integrations/normalize_opencode.sh
+  ok: shebang: docs/integrations/normalize_pi.sh
+  ok: strict mode: docs/integrations/normalize_pi.sh
+  ok: shebang: scripts/release/build_archive.sh
+  ok: strict mode: scripts/release/build_archive.sh
+  ok: shebang: scripts/release/create_release.sh
+  ok: strict mode: scripts/release/create_release.sh
+  ok: shebang: scripts/release/preflight_submodules.sh
+  ok: strict mode: scripts/release/preflight_submodules.sh
+RESULT: PASS
+EXIT: 0
+
+======================================================================
+TEST: test_tenant_list_quota.sh
+CMD:  bash /home/milosvasic/Projects/llmctl/tests/test_tenant_list_quota.sh
+----------------------------------------------------------------------
+OUTPUT:
+  ok: tenant create, no daemon at all: exits non-zero
+  ok: tenant create, no daemon at all: clear unreachable message
+  ok: tenant list, no daemon at all: exits non-zero
+  ok: tenant list, no daemon at all: clear unreachable message
+  ok: tenant quota (set), no daemon at all: exits non-zero
+  ok: tenant quota (set), no daemon at all: clear unreachable message
+  ok: tenant quota (view), no daemon at all: exits non-zero
+  ok: tenant quota (view), no daemon at all: clear unreachable message
+  ok: node: real READY line observed
+  ok: tenant create against a REAL running daemon: still exits non-zero, never hangs or crashes
+  ok: tenant create against a REAL running daemon: SAME unreachable message
+  ok: tenant list against a REAL running daemon: exits non-zero (the NEW GET /v1/tenants route reaches the same unreachable gate)
+  ok: tenant list against a REAL running daemon: SAME unreachable message
+  ok: tenant quota (set) against a REAL running daemon: exits non-zero (the NEW PUT /v1/tenants/:id/quota route reaches the same unreachable gate)
+  ok: tenant quota (set) against a REAL running daemon: SAME unreachable message
+  ok: tenant quota (view) against a REAL running daemon: exits non-zero (the NEW GET /v1/tenants/:id/quota route reaches the same unreachable gate)
+  ok: tenant quota (view) against a REAL running daemon: SAME unreachable message
+  SKIP: tenant create/list/quota success path (US3 Acceptance Scenarios 1/2/3)
+    reason: this host's curl has no HTTP/3 support and llmctld's cluster API is HTTP/3-QUIC-only (UDP) - no curl-based request can complete a 2xx round trip in this environment, so US3 Acceptance Scenarios 1/2/3 (create-then-list shows the tenant, quota view/set round-trips through the real enforcer state) cannot be exercised here. The underlying Go/HTTP-level behavior these routes implement IS proven for real by TestListTenants and TestTenantQuota_ViewAndSet in llmctld/internal/api/routes_tenants_test.go (real httptest round trips, no mocks, run and passing as of this commit).
+RESULT: PASS
+EXIT: 0
+
+======================================================================
+TEST: test_tenant_service_isolation.sh
+CMD:  bash /home/milosvasic/Projects/llmctl/tests/test_tenant_service_isolation.sh
+----------------------------------------------------------------------
+OUTPUT:
+[llmctl] wrote /tmp/tmp.m5ndt0dI3m/state/services/fast.env
+  ok: untenanted: env file uses the bare profile name
+  ok: untenanted: unit name unchanged (no LLMCTL_TENANT_ID)
+[llmctl] wrote /tmp/tmp.m5ndt0dI3m/state/services/tenant-a--fast.env
+  ok: tenant-a: env file is tenant-qualified, not a bare profile name
+  ok: tenant-a: env file carries its own real launch args
+[llmctl] wrote /tmp/tmp.m5ndt0dI3m/state/services/tenant-b--fast.env
+  ok: tenant-b: SAME profile name resolves to a DIFFERENT env file than tenant-a
+  ok: tenant-b: its own env file carries its own real launch args (not tenant-a's)
+  ok: tenant-a: env file still carries ITS OWN args after tenant-b registered the same profile name
+  ok: tenant-a: unit instance is tenant-qualified
+  ok: tenant-b: unit instance is tenant-qualified, distinct from tenant-a's
+  ok: tenant-a: dry-run enable targets the tenant-qualified unit
+  ok: tenant-a: dry-run start targets the tenant-qualified unit
+  ok: tenant-a: real systemd drop-in file was written for the tenant-qualified unit
+  ok: tenant-a: drop-in sets the real per-tenant Slice= property
+  ok: tenant-b: svc_start alone (not just svc_enable) also ensures the drop-in exists
+  ok: tenant-b: its own drop-in names its own slice, never tenant-a's
+  ok: malicious tenant ID (embedded ';') is rejected, not silently passed through (rc)
+  ok: malicious tenant ID (path traversal) is rejected (rc)
+  ok: malicious tenant ID (embedded '..' mid-string, not just a leading path-traversal) is rejected - same defense-in-depth internal/isolation/cgroup.go's Go-side validateTenantID applies beyond its charset check (rc)
+  ok: tenant ID containing '.' (accepted by Go's allow-list) is now ALSO accepted by bash's - the two languages' allow-lists genuinely match, not merely claimed to
+RESULT: PASS
+EXIT: 0
+
+======================================================================
+SUMMARY
+----------------------------------------------------------------------
+PASS  test_apikey_lifecycle.sh
+PASS  test_archive_completeness.sh
+PASS  test_catalog_json.sh
+PASS  test_cli.sh
+PASS  test_cluster_join_leave.sh
+PASS  test_cluster_request_checked.sh
+PASS  test_constitution_inheritance.sh
+PASS  test_create_release.sh
+PASS  test_determinism.sh
+PASS  test_download_resume.sh
+PASS  test_download.sh
+PASS  test_engine_cpu_regression.sh
+PASS  test_engine.sh
+PASS  test_gpu_throughput_ratio.sh
+PASS  test_gpu_vram_delta.sh
+PASS  test_hardware_probe.sh
+PASS  test_normalize_agents.sh
+PASS  test_normalize_common.sh
+PASS  test_planner.sh
+PASS  test_port_override.sh
+PASS  test_preflight_submodules.sh
+PASS  test_run_tests_format.sh
+PASS  test_scheduler_lock.sh
+PASS  test_scheduler.sh
+PASS  test_services_crashloop.sh
+PASS  test_services.sh
+PASS  test_setup_e2e.sh
+PASS  test_syntax.sh
+PASS  test_tenant_list_quota.sh
+PASS  test_tenant_service_isolation.sh
+----------------------------------------------------------------------
+PASS: 30  FAIL: 0
