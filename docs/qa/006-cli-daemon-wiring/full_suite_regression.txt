@@ -1,0 +1,50 @@
+?   	github.com/vasic-digital/llmctl/llmctld/cmd/llmctld	[no test files]
+ok  	github.com/vasic-digital/llmctl/llmctld/internal/api	55.052s
+ok  	github.com/vasic-digital/llmctl/llmctld/internal/audit	(cached)
+ok  	github.com/vasic-digital/llmctl/llmctld/internal/auth	(cached)
+ok  	github.com/vasic-digital/llmctl/llmctld/internal/authz	1.025s
+ok  	github.com/vasic-digital/llmctl/llmctld/internal/cluster	(cached)
+ok  	github.com/vasic-digital/llmctl/llmctld/internal/executor	(cached)
+ok  	github.com/vasic-digital/llmctl/llmctld/internal/isolation	(cached)
+ok  	github.com/vasic-digital/llmctl/llmctld/internal/mtls	(cached)
+ok  	github.com/vasic-digital/llmctl/llmctld/internal/raft	(cached)
+ok  	github.com/vasic-digital/llmctl/llmctld/internal/replication	12.163s
+ok  	github.com/vasic-digital/llmctl/llmctld/internal/tenancy	(cached)
+ok  	github.com/vasic-digital/llmctl/llmctld/test/integration	(cached)
+
+=== Full bash suite (tests/run_tests.sh) ===
+RESULT: PASS
+EXIT: 0
+
+======================================================================
+SUMMARY
+----------------------------------------------------------------------
+PASS  test_apikey_lifecycle.sh
+PASS  test_archive_completeness.sh
+PASS  test_catalog_json.sh
+PASS  test_cli.sh
+PASS  test_cluster_join_leave.sh
+PASS  test_cluster_request_checked.sh
+PASS  test_constitution_inheritance.sh
+PASS  test_create_release.sh
+PASS  test_determinism.sh
+PASS  test_download_resume.sh
+PASS  test_download.sh
+PASS  test_engine.sh
+PASS  test_hardware_probe.sh
+PASS  test_normalize_agents.sh
+PASS  test_normalize_common.sh
+PASS  test_planner.sh
+PASS  test_port_override.sh
+PASS  test_preflight_submodules.sh
+PASS  test_run_tests_format.sh
+PASS  test_scheduler_lock.sh
+PASS  test_scheduler.sh
+PASS  test_services_crashloop.sh
+PASS  test_services.sh
+PASS  test_setup_e2e.sh
+PASS  test_syntax.sh
+PASS  test_tenant_list_quota.sh
+PASS  test_tenant_service_isolation.sh
+----------------------------------------------------------------------
+PASS: 27  FAIL: 0
