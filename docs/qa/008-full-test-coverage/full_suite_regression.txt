@@ -1,0 +1,84 @@
+008-full-test-coverage T028: full pre-existing test-suite regression check
+Captured: 2026-09-18 (this session)
+
+IMPORTANT HONEST CAVEAT (read first): this session's git history shows a
+SEPARATE, concurrent agent session actively landing an unrelated feature
+(006-cli-daemon-wiring, commits c6cf518..1fede9b, 6 commits) in this SAME
+shared checkout WHILE this feature's work was in progress - including a
+mid-flight, then-committed security fix
+(1fede9b "security fix: PUT /v1/tenants/:id/quota must require
+tenant:manage, not self-ownership"). This feature (008) made ZERO changes
+to any file that concurrent session touched (confirmed: `git diff --stat`
+on every file this feature modified shows ONLY this feature's own
+additions - see the "Files this feature touched" list below). The
+raw before/after counts below therefore reflect the COMBINED state of
+the shared repository at each point in time, not an isolated view of
+only this feature's own changes - this is stated explicitly rather than
+silently implied as "regression caused/not-caused by feature 008 alone".
+
+=== llmctl (bash CLI) ===
+
+Before (this session's start, HEAD=aaea4be): `bash tests/run_tests.sh`
+-> PASS: 23  FAIL: 0  (23 files under tests/*.sh)
+
+After (this session's end, HEAD=1fede9b, +6 commits from the concurrent
+006-cli-daemon-wiring session): `make test` -> PASS: 27  FAIL: 0
+(27 files - the +4 new files, e.g. tests/test_tenant_list_quota.sh, were
+added by the CONCURRENT session's own committed work, not by this
+feature; this feature added ZERO new bash test files to llmctl/tests/).
+
+Verdict: zero regressions. Every test that passed before this session
+still passes; the 4 additional passing tests are pre-existing coverage
+from an unrelated, concurrently-landed feature.
+
+=== llmctld (Go daemon) ===
+
+Before (HEAD=aaea4be, before ANY of this feature's or the concurrent
+session's changes): `go test ./... -race` -> every package `ok`;
+`go test ./... -v -count=1` -> 341 PASS / 0 FAIL / 3 SKIP.
+
+After (final, this feature's additions + the concurrent session's
+006-cli-daemon-wiring commits, all committed): `go test ./... -race`
+-> every package `ok` (zero FAIL); `go test ./... -v -count=1`
+-> 352 PASS / 0 FAIL / 3 SKIP.
+
+Of the +11 newly-passing tests: 6 are THIS feature's own additions
+(TestStress_SustainedLoad_CapacityObservation,
+TestDDoS_FloodDuringLegitimateTraffic_BaselineObservation,
+TestRequireJWT_TamperedPayloadRejectedWith401,
+TestAuditVerify_RequiresAdminRole,
+TestReplicationRoutes_AppendEndpoint_RequiresJWTAndTenantOwnership,
+TestReplicationRoutes_CheckpointEndpoint_RequiresJWTAndTenantOwnership -
+all 6 verified passing individually this session, see this directory's
+other evidence files); the remaining 5
+(TestEnforcer_GetLimits, TestRegistry_List, TestListTenants,
+TestTenantQuota_ViewAndSet, TestSetTenantQuota_RequiresAdminRole) belong
+to the concurrent 006-cli-daemon-wiring session's own committed work,
+confirmed by `git diff --stat` showing this feature touched neither
+internal/tenancy/quota_test.go, internal/tenancy/tenant_test.go, nor
+internal/api/routes_tenants.go/routes_tenants_test.go.
+
+Verdict: zero regressions (0 FAIL in both the -race and -v runs, before
+and after).
+
+=== claude_toolkit (sibling toolkit, read-only for this feature) ===
+
+Two attempts this session to run `bash scripts/tests/run-all.sh`:
+attempt 1 (bounded 25-minute timeout) and attempt 2 (bounded 25-minute
+timeout, retried after attempt 1's wait expired) - BOTH refused by the
+suite's own concurrency guard (`.git/cma-suite-home-milosvasic-Projects-
+claude-toolkit-.lock`), held throughout by a genuinely live, unrelated
+process (PID 1370369, `bash scripts/tests/run-all.sh`, confirmed alive
+via `ps -p 1370369` at 11, 14, 16, 26, and 31 minutes elapsed across
+this session) that this feature correctly did NOT force past
+(Constitution's own concurrency-lock discipline: "concurrent suite runs
+are refused on purpose: a repo that mutates while its own tests execute
+cannot produce reproducible results").
+
+Verdict: NOT independently re-verified this session. This is a
+regression-check AVAILABILITY gap, not a regression RISK - this feature
+made ZERO changes to any file in claude_toolkit (it is explicitly
+read-only for this feature per the task scope), so there is nothing in
+claude_toolkit for this feature to have regressed. The concurrent
+session's own use of claude_toolkit's test suite is itself evidence the
+toolkit is in active, independent use during this session.

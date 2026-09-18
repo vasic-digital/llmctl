@@ -153,6 +153,8 @@ fastest path to a running model.
 | [`specs/001-llmctl-completion/spec.md`](specs/001-llmctl-completion/spec.md) | The current feature spec (functional requirements, success criteria, clarifications, edge cases) |
 | [`specs/001-llmctl-completion/tasks.md`](specs/001-llmctl-completion/tasks.md) | The phased task breakdown this spec is being executed against |
 | [`docs/qa/phase12-final-validation/README.md`](docs/qa/phase12-final-validation/README.md) | Captured evidence (Constitution §11.4.83) for Phase 12's final combined bash + Go test-suite run (T079) |
+| [`docs/testing/TEST_TYPE_CLASSIFICATION.md`](docs/testing/TEST_TYPE_CLASSIFICATION.md) | The honest, evidence-cited classification of this project (llmctl/llmctld/claude_toolkit) against the Constitution's 14-class test-type taxonomy — COVERED/PARTIAL/GENUINELY-INAPPLICABLE per class per component |
+| [`docs/testing/BENCHMARK_BASELINE.md`](docs/testing/BENCHMARK_BASELINE.md) | `llmctld`'s consolidated benchmark suite (`make bench-all`) and its documented, real-run baseline + acceptable-variance |
 
 ## License
 
