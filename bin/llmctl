@@ -6,7 +6,18 @@ set -euo pipefail
 
 LLMCTL_VERSION="0.1.0"
 
-_bin_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Resolve symlinks manually (portable across Linux + macOS/BSD, unlike
+# GNU-only `readlink -f` or a `realpath` that may not be installed) so
+# invoking this script via a PATH symlink (e.g. ~/.local/bin/llmctl ->
+# <repo>/bin/llmctl) still finds the real ../lib sibling directory,
+# instead of resolving against the symlink's own containing directory.
+_src="${BASH_SOURCE[0]}"
+while [ -h "${_src}" ]; do
+  _dir="$(cd -P "$(dirname "${_src}")" && pwd)"
+  _src="$(readlink "${_src}")"
+  [[ "${_src}" != /* ]] && _src="${_dir}/${_src}"
+done
+_bin_dir="$(cd -P "$(dirname "${_src}")" && pwd)"
 LLMCTL_ROOT="$(cd "${_bin_dir}/.." && pwd)"
 export LLMCTL_ROOT
 
