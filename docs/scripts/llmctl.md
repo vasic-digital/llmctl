@@ -70,6 +70,16 @@ LLMCTL_PORT_FAST=18080 bin/llmctl start fast
 
 # cluster (opt-in; every subcommand hard-fails if llmctld is unreachable)
 bin/llmctl cluster status
+bin/llmctl cluster join 10.0.0.5:9443
+bin/llmctl cluster leave
+
+# tenant/apikey (opt-in; same daemon-reachability guarantee as cluster)
+bin/llmctl tenant create demo
+bin/llmctl tenant list
+bin/llmctl tenant quota demo --max-concurrent-requests 5
+bin/llmctl tenant quota demo
+bin/llmctl apikey create model-viewer
+bin/llmctl apikey rotate <key-id>
 ```
 
 ## Edge cases
@@ -89,11 +99,63 @@ bin/llmctl cluster status
   `${1:-}`) and `shift`s only when `$# -gt 0`, so `llmctl models` with zero
   args does not error on an unbound `$1` — it falls through to the default
   sub-command instead.
-* **Cluster/tenant/apikey commands are stub-gated by daemon reachability**:
-  `cluster::require_daemon` (from `lib/cluster.sh`) is called before the
-  `case` on the sub-command, so an unreachable `llmctld` fails before any
-  "not yet implemented" message is even considered — single-host mode never
-  silently substitutes for the cluster daemon.
+* **Cluster/tenant/apikey commands are gated by daemon reachability, not
+  stubbed** (006-cli-daemon-wiring): `cluster::require_daemon` (from
+  `lib/cluster.sh`) is called before the `case` on the sub-command, so an
+  unreachable `llmctld` fails loudly, with a clear "llmctld unreachable"
+  message, before any of the seven real subcommands below is even
+  attempted — single-host mode never silently substitutes for the
+  cluster daemon. All seven subcommands (`cluster join/leave`,
+  `apikey create/rotate`, `tenant create/list/quota`) now make a real
+  HTTP request to `llmctld` and report its genuine response — none of
+  them `die`s with "not yet implemented" any more.
+  - `cluster join <peer-addr>` sends `{"peer_id": "$(hostname)",
+    "peer_addr": "<peer-addr>"}` to `POST /v1/cluster/join` — `peer_id`
+    is derived from this host's own hostname since the CLI documents a
+    single `<peer-addr>` argument while the daemon's real route requires
+    both fields.
+  - `apikey create <scope>` sends `{"owner_id": "<scope>", "scopes":
+    ["<scope>"]}` to `POST /v1/auth/apikeys` — the given value is used
+    as both the key's owner and its sole scope, since the CLI documents
+    a single `<scope>` argument while the daemon's real route requires
+    an `owner_id`.
+  - `tenant quota <name> [--flag value ...]` issues a `GET
+    /v1/tenants/<name>/quota` when no flags are given (view), or a `PUT`
+    with a JSON body built from whichever of `--requests-per-second`,
+    `--max-concurrent-requests`, `--max-gpu-bytes`, `--max-cpu-cores`,
+    `--max-ram-bytes`, `--max-storage-bytes` were passed (set) — any
+    flag not given defaults to `0` (unlimited) on the daemon side, per
+    `tenancy.Limits`'s own zero-means-unlimited convention.
+  - `tenant list` and `tenant quota` (both verbs) go through the new
+    `cluster::request_checked` (see below), never the original
+    `cluster::request`, so a non-2xx daemon response (e.g. a 404 for a
+    nonexistent tenant, a 403 for an unauthorized caller) is reported as
+    a distinct daemon-side error rather than silently treated the same
+    as a successful response.
+* **`cluster::request_checked` vs `cluster::request`** (`lib/cluster.sh`,
+  006-cli-daemon-wiring): `cluster::request` (unchanged, still the sole
+  function `cluster status` and every `POST`-only subcommand above uses)
+  prints the response body and its exit code is ALWAYS curl's own raw
+  exit code — 0 for any HTTP response received at all, reachable or not,
+  regardless of HTTP status. `cluster::request_checked` is an additive
+  sibling used ONLY by `tenant list`/`tenant quota`: it captures the real
+  HTTP status code and returns three distinguishable outcomes — exit 0
+  on a 2xx response (body on stdout), exit 1 on a non-2xx response (the
+  daemon's own `{"error": "..."}` body on stdout), or curl's own
+  transport-failure exit code unchanged (connection refused, timeout,
+  ...) when the daemon is genuinely unreachable — see
+  `tests/test_cluster_request_checked.sh` for the real, non-mocked proof
+  of all three outcomes.
+* **Environment-architecture finding (recorded, not a bug in this doc's
+  own commands)**: on a host whose `curl` build has no HTTP/3 support,
+  no cluster/tenant/apikey command above can complete a successful round
+  trip against a real `llmctld`, because `llmctld`'s cluster API serves
+  exclusively over HTTP/3 (QUIC/UDP) with mandatory mTLS — a plain
+  TCP-based `curl` request to it fails with "Connection refused",
+  identical to the daemon not running at all. Every command above still
+  correctly reports the genuine "llmctld unreachable" failure in that
+  case; see `docs/qa/006-cli-daemon-wiring/` for the full writeup and how
+  to verify HTTP/3 support locally (`curl --version | grep -i HTTP3`).
 * **`hw`/`plan` `--json` flag detection**: checked as `"${1:-}" == "--json"`
   (not getopt-style parsing), so `--json` must be the very next token after
   `hw`/`plan`; anything else (including no argument) falls through to the
