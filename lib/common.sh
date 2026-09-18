@@ -123,6 +123,53 @@ else:
 PYEOF
 }
 
+# json_body <key=value> [key=value ...] [key[]=value ...]
+# 006-cli-daemon-wiring: safely builds a single-level JSON object from
+# key=value pairs for the seven newly-wired cluster/tenant/apikey
+# subcommands' request bodies, via the SAME auditable python3 wrapper
+# json_query/json_stdin already use for JSON work in this codebase -
+# never raw string interpolation into a JSON literal, so a value
+# containing a quote or backslash (a peer address, a tenant name, ...)
+# can never break out of its JSON string context or inject a sibling
+# field. A value matching a bare integer or float is encoded as a JSON
+# number (the daemon's tenancy.Limits fields are numeric, per
+# data-model.md's wire shape); every other value is encoded as a JSON
+# string. A key written as "key[]" (e.g. "scopes[]=admin") is always
+# encoded as a JSON array, appending one element per occurrence - the
+# daemon's []string-typed fields (e.g. createAPIKeyRequest.Scopes)
+# reject a bare string, so a single-element array still needs the "[]"
+# marker even with only one value.
+json_body() {
+  need_cmd python3 "install python3 via your package manager"
+  python3 - "$@" <<'PYEOF'
+import json, re, sys
+
+_num_re = re.compile(r'^-?[0-9]+(\.[0-9]+)?$')
+
+def coerce(value):
+    if _num_re.match(value):
+        return float(value) if "." in value else int(value)
+    return value
+
+out = {}
+for arg in sys.argv[1:]:
+    key, sep, value = arg.partition("=")
+    if not sep:
+        sys.stderr.write("json_body: argument %r is not key=value\n" % arg)
+        sys.exit(2)
+    if key.endswith("[]"):
+        key = key[:-2]
+        out.setdefault(key, [])
+        if not isinstance(out[key], list):
+            sys.stderr.write("json_body: key %r used both as a scalar and as an array\n" % key)
+            sys.exit(2)
+        out[key].append(coerce(value))
+    else:
+        out[key] = coerce(value)
+print(json.dumps(out))
+PYEOF
+}
+
 # json_stdin <python-expression>  -- read JSON document from stdin as `d`.
 json_stdin() {
   need_cmd python3 "install python3 via your package manager"

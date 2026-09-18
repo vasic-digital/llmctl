@@ -94,6 +94,84 @@ test_teardown_env() {
   fi
 }
 
+# assert_skip <reason> <message>
+# 006-cli-daemon-wiring: an honest, printed, non-counted SKIP for an
+# assertion this test genuinely cannot make in the current environment
+# (Constitution §11.4.3: SKIP-with-reason is the correct fallback when
+# required topology is absent; silent omission or a fabricated PASS are
+# both forbidden). Never increments TEST_FAILS - a skip is neither a
+# pass nor a failure of THIS test run, but it MUST be loud, not silent.
+assert_skip() {
+  printf '  SKIP: %s\n    reason: %s\n' "$2" "$1" >&2
+}
+
+# llmctld_build
+# 006-cli-daemon-wiring: builds the REAL llmctld binary once into
+# TEST_TMP (never an in-process fake), printing its path on stdout.
+# Mirrors llmctld/test/integration/cluster_bootstrap_test.go's own
+# buildLLMCtld helper exactly (Constitution §11.4.27: every non-unit
+# test interacts with the real, fully implemented system).
+llmctld_build() {
+  need_cmd go "install Go via your package manager"
+  local bin_path="${TEST_TMP}/llmctld"
+  ( cd "${LLMCTL_ROOT}/llmctld" && go build -o "${bin_path}" ./cmd/llmctld ) 1>&2
+  echo "${bin_path}"
+}
+
+# llmctld_bootstrap <bin_path> <node_id> <api_port>
+# 006-cli-daemon-wiring: starts a REAL llmctld "cluster bootstrap" node
+# as a real OS process (never a mock), waits for its own real READY
+# line (never a fixed sleep guess), and registers its PID + CA/state
+# directory for the caller to use. Sets (via global vars, since bash has
+# no struct return): LLMCTLD_PID, LLMCTLD_CA_CERT, LLMCTLD_CA_KEY,
+# LLMCTLD_ADMIN_KEY_ID, LLMCTLD_ADMIN_KEY_SECRET, LLMCTLD_API_ADDR,
+# LLMCTLD_LOG. Caller MUST kill LLMCTLD_PID (e.g. via a trap) before
+# exiting - see test_teardown_env's sibling discipline.
+llmctld_bootstrap() {
+  local bin_path="$1" node_id="$2" api_port="$3"
+  local dir="${TEST_TMP}/${node_id}"
+  mkdir -p "${dir}"
+  LLMCTLD_CA_CERT="${dir}/ca.crt"
+  LLMCTLD_CA_KEY="${dir}/ca.key"
+  LLMCTLD_LOG="${dir}/node.log"
+
+  LLMCTLD_JWT_SIGNING_KEY="test-signing-key-006-cli-daemon-wiring" \
+    "${bin_path}" cluster bootstrap \
+      -node-id "${node_id}" \
+      -ca-cert "${LLMCTLD_CA_CERT}" \
+      -ca-key "${LLMCTLD_CA_KEY}" \
+      -raft-bind "127.0.0.1:0" \
+      -api-bind "127.0.0.1:${api_port}" \
+      -bootstrap-admin \
+      -llmctl-path "${LLMCTL_ROOT}/bin/llmctl" \
+      >"${LLMCTLD_LOG}" 2>&1 &
+  LLMCTLD_PID=$!
+
+  local waited=0
+  while [[ "${waited}" -lt 100 ]]; do
+    if grep -q '^READY ' "${LLMCTLD_LOG}" 2>/dev/null; then
+      break
+    fi
+    if ! kill -0 "${LLMCTLD_PID}" 2>/dev/null; then
+      printf 'llmctld_bootstrap: node %s exited before printing READY; log:\n' "${node_id}" >&2
+      cat "${LLMCTLD_LOG}" >&2
+      return 1
+    fi
+    sleep 0.1
+    waited=$((waited + 1))
+  done
+  if ! grep -q '^READY ' "${LLMCTLD_LOG}" 2>/dev/null; then
+    printf 'llmctld_bootstrap: node %s never printed READY within 10s; log:\n' "${node_id}" >&2
+    cat "${LLMCTLD_LOG}" >&2
+    return 1
+  fi
+
+  LLMCTLD_API_ADDR="$(grep -oP '(?<=api_addr=)\S+' "${LLMCTLD_LOG}" | head -1)"
+  LLMCTLD_ADMIN_KEY_ID="$(grep -oP '(?<=BOOTSTRAP_ADMIN_KEY_ID=)\S+' "${LLMCTLD_LOG}" | head -1)"
+  LLMCTLD_ADMIN_KEY_SECRET="$(grep -oP '(?<=BOOTSTRAP_ADMIN_KEY_SECRET=)\S+' "${LLMCTLD_LOG}" | head -1)"
+  export LLMCTLD_PID LLMCTLD_CA_CERT LLMCTLD_CA_KEY LLMCTLD_LOG LLMCTLD_API_ADDR LLMCTLD_ADMIN_KEY_ID LLMCTLD_ADMIN_KEY_SECRET
+}
+
 # Finish a test file: exit non-zero when any assertion failed.
 test_finish() {
   test_teardown_env

@@ -52,6 +52,54 @@ cluster::request() {
   curl "${curl_args[@]}"
 }
 
+# cluster::request_checked <method> <path> [json-body]
+# Additive sibling of cluster::request (006-cli-daemon-wiring research.md
+# R3): cluster::request itself is NEVER modified by this function - its
+# one existing caller (`cluster status`) keeps its exact pre-existing
+# output/exit-code contract, byte for byte.
+#
+# cluster::request_checked closes a genuine gap cluster::request leaves
+# open: curl's own exit code only reflects TRANSPORT-level failure
+# (connection refused, timeout, TLS error, ...) - a 4xx/5xx HTTP
+# response is still curl exit 0, with the daemon's own error JSON body
+# printed as if it were a success body. Every non-2xx-capable route this
+# feature wires (join's peer-addr validation can 400, apikey rotate's
+# ownership check can 403, tenant quota's nonexistent-tenant check can
+# 404) needs its caller to tell that apart from "the daemon is
+# unreachable", per spec.md's Edge Cases.
+#
+# Captures the HTTP status via curl's own -w trailer, splits it from the
+# body, and returns three distinguishable outcomes:
+#   - transport failure (connection refused/timeout/TLS error/etc.):
+#     curl's own non-zero exit code passed straight through, unchanged -
+#     identical to cluster::request's existing behavior, so
+#     cluster::require_daemon-style reachability handling keeps working
+#     unmodified.
+#   - reachable, 2xx status: prints the body to stdout, returns 0.
+#   - reachable, non-2xx status: prints the body (the daemon's own
+#     {"error": "..."} JSON) to stdout, returns 1 - the caller reports
+#     the daemon's real error message rather than guessing one.
+cluster::request_checked() {
+  local method="$1" path="$2" body="${3:-}"
+  local -a curl_args=(
+    -sS --max-time 5
+    -w '\n%{http_code}'
+    -X "${method}" "${LLMCTL_CLUSTER_ENDPOINT}${path}"
+    -H 'Content-Type: application/json'
+  )
+  _cluster_http3_supported && curl_args+=(--http3)
+  [[ -n "${LLMCTL_CLUSTER_TOKEN:-}" ]] && curl_args+=(-H "Authorization: Bearer ${LLMCTL_CLUSTER_TOKEN}")
+  [[ -n "${body}" ]] && curl_args+=(-d "${body}")
+
+  local raw
+  raw="$(curl "${curl_args[@]}")" || return $?
+
+  local resp_body="${raw%$'\n'*}"
+  local status="${raw##*$'\n'}"
+  printf '%s\n' "${resp_body}"
+  [[ "${status}" =~ ^2[0-9][0-9]$ ]]
+}
+
 # cluster::require_daemon
 # Hard-fails (never a silent fallback to single-host scheduling) unless
 # llmctld answers its own status endpoint. Every cluster-mode subcommand

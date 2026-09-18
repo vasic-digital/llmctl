@@ -183,8 +183,15 @@ main() {
       cluster::require_daemon
       case "${csub}" in
         join)   [[ "$#" -eq 1 ]] || die "usage: llmctl cluster join <peer-addr>"
-                die "llmctld reachable but 'cluster join' is not yet implemented (Phase 9, US7)" ;;
-        leave)  die "llmctld reachable but 'cluster leave' is not yet implemented (Phase 9, US7)" ;;
+                # 006-cli-daemon-wiring FR-001: the daemon's real
+                # POST /v1/cluster/join route requires both peer_id and
+                # peer_addr (llmctld/internal/api/routes_cluster.go's
+                # joinRequest); usage() documents a single <peer-addr>
+                # argument, so peer_id is derived from this host's own
+                # stable hostname rather than adding an undocumented
+                # second positional argument.
+                cluster::request POST /v1/cluster/join "$(json_body peer_id="$(hostname)" peer_addr="$1")" ;;
+        leave)  cluster::request POST /v1/cluster/leave ;;
         status) cluster::request GET /v1/cluster/status ;;
         *)      die "unknown cluster subcommand: ${csub} (join|leave|status)" ;;
       esac
@@ -194,10 +201,32 @@ main() {
       cluster::require_daemon
       case "${tsub}" in
         create) [[ "$#" -eq 1 ]] || die "usage: llmctl tenant create <name>"
-                die "llmctld reachable but 'tenant create' is not yet implemented (Phase 11, US9)" ;;
-        list)   die "llmctld reachable but 'tenant list' is not yet implemented (Phase 11, US9)" ;;
-        quota)  [[ "$#" -ge 1 ]] || die "usage: llmctl tenant quota <name> [...]"
-                die "llmctld reachable but 'tenant quota' is not yet implemented (Phase 11, US9)" ;;
+                cluster::request POST /v1/tenants "$(json_body id="$1" name="$1")" ;;
+        list)   cluster::request_checked GET /v1/tenants \
+                  || die "llmctld returned an error for 'tenant list' (see above)" ;;
+        quota)  [[ "$#" -ge 1 ]] || die "usage: llmctl tenant quota <name> [--requests-per-second N] [--max-concurrent-requests N] [--max-gpu-bytes N] [--max-cpu-cores N] [--max-ram-bytes N] [--max-storage-bytes N]"
+                local qname="$1"; shift
+                if [[ "$#" -eq 0 ]]; then
+                  cluster::request_checked GET "/v1/tenants/${qname}/quota" \
+                    || die "llmctld returned an error for 'tenant quota' (see above)"
+                else
+                  local -a qkv=()
+                  while [[ "$#" -gt 0 ]]; do
+                    [[ "$#" -ge 2 ]] || die "usage: llmctl tenant quota <name> --<field> <value> [...]"
+                    case "$1" in
+                      --requests-per-second)     qkv+=("requests_per_second=$2") ;;
+                      --max-concurrent-requests) qkv+=("max_concurrent_requests=$2") ;;
+                      --max-gpu-bytes)           qkv+=("max_gpu_bytes=$2") ;;
+                      --max-cpu-cores)           qkv+=("max_cpu_cores=$2") ;;
+                      --max-ram-bytes)           qkv+=("max_ram_bytes=$2") ;;
+                      --max-storage-bytes)       qkv+=("max_storage_bytes=$2") ;;
+                      *) die "unknown 'tenant quota' flag: $1" ;;
+                    esac
+                    shift 2
+                  done
+                  cluster::request_checked PUT "/v1/tenants/${qname}/quota" "$(json_body "${qkv[@]}")" \
+                    || die "llmctld returned an error for 'tenant quota' (see above)"
+                fi ;;
         *)      die "unknown tenant subcommand: ${tsub} (create|list|quota)" ;;
       esac
       ;;
@@ -206,9 +235,15 @@ main() {
       cluster::require_daemon
       case "${asub}" in
         create) [[ "$#" -eq 1 ]] || die "usage: llmctl apikey create <scope>"
-                die "llmctld reachable but 'apikey create' is not yet implemented (Phase 11, US9)" ;;
+                # 006-cli-daemon-wiring FR-003: the daemon's real
+                # POST /v1/auth/apikeys route requires owner_id
+                # (llmctld/internal/api/routes_auth.go's
+                # createAPIKeyRequest); usage() documents a single
+                # <scope> argument, so the given value is used as both
+                # the key's owner_id and its sole scope entry.
+                cluster::request POST /v1/auth/apikeys "$(json_body owner_id="$1" "scopes[]=$1")" ;;
         rotate) [[ "$#" -eq 1 ]] || die "usage: llmctl apikey rotate <key-id>"
-                die "llmctld reachable but 'apikey rotate' is not yet implemented (Phase 11, US9)" ;;
+                cluster::request POST "/v1/auth/apikeys/$1/rotate" ;;
         *)      die "unknown apikey subcommand: ${asub} (create|rotate)" ;;
       esac
       ;;
