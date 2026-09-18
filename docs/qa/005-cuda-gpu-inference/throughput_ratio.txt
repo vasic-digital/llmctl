@@ -4,17 +4,17 @@ prompt: {"messages":[{"role":"user","content":"Write a short paragraph (at least
 
 CPU-forced run (--n-gpu-layers 0):
   completion_tokens: 207
-  wall-clock elapsed: 15.4440s
-  tok/s: 13.4033
+  wall-clock elapsed: 15.8341s
+  tok/s: 13.0731
   finish_reason: stop
   content (truncated): Photosynthesis is the vital process by which plants, algae, and some bacteria convert light energy from the sun into chemical energy in the form of gl
 
 GPU-planned run (--n-gpu-layers 99, from hw_probe_json | catalog_plan_json):
   completion_tokens: 204
-  wall-clock elapsed: 1.6506s
-  tok/s: 123.5914
+  wall-clock elapsed: 1.6494s
+  tok/s: 123.6813
   finish_reason: stop
   content (truncated): Photosynthesis is the vital process by which plants, algae, and some bacteria convert light energy from the sun into chemical energy in the form of gl
 
-ratio (GPU tok/s / CPU tok/s): 9.2210
+ratio (GPU tok/s / CPU tok/s): 9.4607
 SC-003 threshold: >= 2.0x
