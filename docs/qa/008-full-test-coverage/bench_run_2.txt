@@ -1,0 +1,37 @@
+llmctld consolidated benchmark suite - captured 20260918T084229Z
+?   	github.com/vasic-digital/llmctl/llmctld/cmd/llmctld	[no test files]
+PASS
+ok  	github.com/vasic-digital/llmctl/llmctld/internal/api	0.010s
+PASS
+ok  	github.com/vasic-digital/llmctl/llmctld/internal/audit	0.004s
+goos: linux
+goarch: amd64
+pkg: github.com/vasic-digital/llmctl/llmctld/internal/auth
+cpu: AMD Ryzen 7 2700X Eight-Core Processor         
+BenchmarkValidateToken-16    	  113928	      9973 ns/op	    2976 B/op	      54 allocs/op
+BenchmarkCheck-16            	42311126	        25.94 ns/op	       0 B/op	       0 allocs/op
+PASS
+ok  	github.com/vasic-digital/llmctl/llmctld/internal/auth	2.382s
+PASS
+ok  	github.com/vasic-digital/llmctl/llmctld/internal/authz	0.006s
+PASS
+ok  	github.com/vasic-digital/llmctl/llmctld/internal/cluster	0.003s
+PASS
+ok  	github.com/vasic-digital/llmctl/llmctld/internal/executor	0.006s
+PASS
+ok  	github.com/vasic-digital/llmctl/llmctld/internal/isolation	0.004s
+PASS
+ok  	github.com/vasic-digital/llmctl/llmctld/internal/mtls	0.006s
+PASS
+ok  	github.com/vasic-digital/llmctl/llmctld/internal/raft	0.010s
+PASS
+ok  	github.com/vasic-digital/llmctl/llmctld/internal/replication	0.007s
+goos: linux
+goarch: amd64
+pkg: github.com/vasic-digital/llmctl/llmctld/internal/tenancy
+cpu: AMD Ryzen 7 2700X Eight-Core Processor         
+BenchmarkAllowRequest-16    	28804280	        45.53 ns/op	       0 B/op	       0 allocs/op
+PASS
+ok  	github.com/vasic-digital/llmctl/llmctld/internal/tenancy	2.351s
+PASS
+ok  	github.com/vasic-digital/llmctl/llmctld/test/integration	0.009s

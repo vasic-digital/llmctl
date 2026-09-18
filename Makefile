@@ -5,7 +5,7 @@ SHELL := /bin/bash
 ROOT  := $(abspath .)
 SCRIPTS := bin/llmctl $(wildcard lib/*.sh) $(wildcard tests/*.sh)
 
-.PHONY: test lint validate install archive json-check llmctld-build llmctld-test llmctld-lint
+.PHONY: test lint validate install archive json-check llmctld-build llmctld-test llmctld-lint bench-all
 
 test:
 	bash tests/run_tests.sh
@@ -44,6 +44,30 @@ llmctld-lint:
 		cd llmctld && golangci-lint run ./...; \
 	else \
 		echo "golangci-lint not installed - skipping llmctld-lint (install it for stricter checks)"; \
+	fi
+
+# bench-all: 008-full-test-coverage T020 (User Story 3) - consolidates
+# llmctld's three already-existing, already-passing benchmark files
+# (internal/tenancy/quota_bench_test.go, internal/auth/jwt_bench_test.go,
+# internal/auth/rbac_bench_test.go) into ONE report via a single
+# `go test -bench=. -benchmem ./...` invocation from llmctld/ (Go's own
+# tooling requires no per-file registration - `-bench=.` matches every
+# BenchmarkXxx function in the module, confirmed research.md R3) -
+# writes the combined, timestamped raw output to
+# docs/testing/bench_runs/, never rewriting the three existing benchmark
+# functions themselves. See docs/testing/BENCHMARK_BASELINE.md for the
+# documented baseline + acceptable-variance this target's output is
+# compared against.
+bench-all:
+	@if command -v go >/dev/null 2>&1; then \
+		mkdir -p docs/testing/bench_runs; \
+		ts=$$(date -u +%Y%m%dT%H%M%SZ); \
+		out="docs/testing/bench_runs/bench_$${ts}.txt"; \
+		echo "llmctld consolidated benchmark suite - captured $${ts}" > "$${out}"; \
+		( cd llmctld && go test -bench=. -benchmem -run='^$$' ./... ) >> "$${out}" 2>&1; \
+		echo "wrote $${out}"; \
+	else \
+		echo "go not installed - skipping bench-all"; \
 	fi
 
 ifeq ($(LLMCTL_CLUSTER_MODE),1)
