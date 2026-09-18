@@ -1,0 +1,32 @@
+=== T001: baseline full-suite run — HONEST CAVEAT REQUIRED, READ THIS FIRST ===
+
+PROCESS VIOLATION DISCLOSURE (self-reported, per this project's own anti-bluff discipline):
+This background run (bash scripts/tests/run-all.sh) was started FIRST, per Phase 1's
+instruction to establish a baseline BEFORE any test-file edits. However, while it was
+still executing (a full 74-file suite run takes 30-45+ minutes on this host), the T002-T006
+investigation and the T003/T004 fixes to test_ccr_upstream_ca.sh and test_kimi_alias_file.sh
+were performed CONCURRENTLY, in violation of working-tree quiescence discipline. By the time
+this background run reached those two files (alphabetically early: c < i, k < p), they had
+ALREADY been edited/fixed — so this run does NOT reflect a true pre-fix baseline for those
+two files. It shows them passing 12/12 and 40/40 respectively (the FIXED behavior), not the
+originally-failing state.
+
+A clean, uncontaminated RED baseline for the CA-cert isolation defect was separately captured
+via a git worktree of the parent (pre-fix) commit — see red_repro_ca_leak.txt in this same
+directory, which reproduces the original 2+2=4 failures with the EXACT invocation commands
+against the genuinely pre-fix code.
+
+What THIS run DOES honestly show: the suite's overall shape at the moment it executed each
+file, and — importantly — it independently discovered a FOURTH, previously-undocumented
+instance of the identical ambient-CA-cert-leak defect in test_helixllm_model_export.sh
+(NOT in this feature's originally-assigned scope), which was root-caused and fixed separately
+(see red_repro_helixllm_export_ca_leak.txt / green_helixllm_export_ca_leak_fixed.txt).
+
+Final summary line from this run:
+Test files: 74   passed: 73   failed: 1   (skipped-prereq: 0)
+Failed files:
+  - test_helixllm_model_export.sh
+
+A genuinely clean, quiescent full-suite baseline (no concurrent edits, all fixes already
+committed) is captured separately in final_74_of_74_x2.txt (T013), which is the authoritative
+before/after comparison this feature's SC-003/SC-004 actually rest on.

@@ -1,0 +1,26 @@
+=== T013: Full suite run TWICE in immediate succession (final gate) ===
+Command: bash scripts/tests/run-all.sh (full output tee'd, exit code captured per run)
+Both runs executed against the working tree AFTER all fixes in T003/T004/T005/T006 (test_ccr_upstream_ca.sh,
+test_kimi_alias_file.sh, test_helixllm_model_export.sh) were committed. No fix was applied to
+test_providers.sh (see flake_rate_baseline.txt / final report for why — root cause not confirmed).
+
+--- RUN 1 result (tail) ---
+============================================
+Test files: 74   passed: 74   failed: 0   (skipped-prereq: 0)
+ALL GREEN
+=== T013 RUN 1 EXIT: 0 ===
+
+--- RUN 2 result (tail) ---
+============================================
+Test files: 74   passed: 74   failed: 0   (skipped-prereq: 0)
+ALL GREEN
+=== T013 RUN 2 EXIT: 0 ===
+
+--- Full target-assertion confirmation (both runs cleanly passed the previously-flaky assertion) ---
+    [32m[PASS][0m non-quiet refresh logs 'refreshed' (0)
+    [32m[PASS][0m quiet refresh suppresses the log (0)
+
+--
+    [32m[PASS][0m non-quiet refresh logs 'refreshed' (0)
+    [32m[PASS][0m quiet refresh suppresses the log (0)
+

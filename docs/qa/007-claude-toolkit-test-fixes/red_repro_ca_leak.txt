@@ -1,0 +1,146 @@
+=== RED REPRO: deliberate ambient CA-cert contamination against PRE-FIX code (commit bf1627c, parent of 9a7b1bf) ===
+Command: export CMA_PROVIDER_CA_CERT=/tmp/fake-ambient.pem NODE_EXTRA_CA_CERTS=/tmp/fake-ambient.pem SSL_CERT_FILE=/tmp/fake-ambient.pem; bash scripts/tests/test_ccr_upstream_ca.sh; bash scripts/tests/test_kimi_alias_file.sh
+
+--- test_ccr_upstream_ca.sh ---
+
+  • HYGIENE: cma_run_provider under test comes from the sandbox alias file
+    [32m[PASS][0m wrapper loaded from the sandbox, not the host: cma_run_provider came from /tmp/cma-test.akCE1p/.local/share/claude-multi-account/aliases.sh
+
+  • router+CA: the launch is not refused
+    [32m[PASS][0m cma_run_provider testrtr exited 0 (rc=0) (0)
+
+  • router+CA: ccr restart receives SSL_CERT_FILE
+    [32m[PASS][0m restart saw SSL_CERT_FILE set (0)
+
+  • router+CA: the ccr launch receives SSL_CERT_FILE
+    [32m[PASS][0m default-claude-code saw SSL_CERT_FILE set (0)
+
+  • router+CA: the bundle lives under the per-alias CCR_HOME and contains the upstream CA
+    [32m[PASS][0m combined CA bundle written under the per-alias CCR_HOME: /tmp/cma-test.akCE1p/.claude-code-router/testrtr/ca-bundle.pem
+    [32m[PASS][0m CA bundle is chmod 600 (private upstream CA) (600)
+    [32m[PASS][0m the bundle contains the upstream CA cert (0)
+
+  • router+CA: the bundle is COMBINED (system roots preserved when a system bundle exists)
+    [32m[PASS][0m bundle holds system roots (/etc/ssl/certs/ca-certificates.crt: 122 certs) PLUS the upstream CA (123 total) (0)
+
+  • router WITHOUT CA: SSL_CERT_FILE stays unset (trust is not narrowed)
+    [31m[FAIL][0m every ccr invocation saw an empty SSL_CERT_FILE (0/3)
+           want=0 got=1
+
+  • native+CA: the launch is not refused
+    [32m[PASS][0m cma_run_provider testnat exited 0 (rc=0) (0)
+
+  • native+CA: claude is launched with NODE_EXTRA_CA_CERTS pointing at the CA PEM
+    [32m[PASS][0m claude child saw NODE_EXTRA_CA_CERTS=/tmp/cma-test.akCE1p/upstream-ca.pem (log: NODE_EXTRA_CA_CERTS=[/tmp/cma-test.akCE1p/upstream-ca.pem]) (0)
+
+  • native WITHOUT CA: NODE_EXTRA_CA_CERTS stays unset
+    [31m[FAIL][0m claude child saw an empty NODE_EXTRA_CA_CERTS (log: NODE_EXTRA_CA_CERTS=[/tmp/fake-ambient.pem])
+           want=0 got=1
+
+[31m✗ 2 failed, 10 passed[0m
+
+Failures:
+  - router WITHOUT CA: SSL_CERT_FILE stays unset (trust is not narrowed) :: every ccr invocation saw an empty SSL_CERT_FILE (0/3)
+  - native WITHOUT CA: NODE_EXTRA_CA_CERTS stays unset :: claude child saw an empty NODE_EXTRA_CA_CERTS (log: NODE_EXTRA_CA_CERTS=[/tmp/fake-ambient.pem])
+EXIT: 1
+
+--- test_kimi_alias_file.sh ---
+
+  • cma_kimi_home returns ~/.kimi-code
+    [32m[PASS][0m kimi user-scope root (/tmp/cma-test.ikBYsN/.kimi-code)
+
+  • cma_kimi_account_home returns ~/.kimi-code-<alias>
+    [32m[PASS][0m account home (/tmp/cma-test.ikBYsN/.kimi-code-kimi3)
+
+  • cma_kimi_provider_home returns ~/.kimi-prov-<id>
+    [32m[PASS][0m provider home (/tmp/cma-test.ikBYsN/.kimi-prov-deepseek)
+
+  • CMA_KIMI_SHARED_ITEMS carries the five kimi shared items
+    [32m[PASS][0m shared items list (AGENTS.md plugins skills sessions session_index.jsonl)
+
+  • cma_resolve_kimi_bin prefers ~/.kimi-code/bin/kimi
+    [32m[PASS][0m root bin preferred (/tmp/cma-test.ikBYsN/.kimi-code/bin/kimi)
+
+  • cma_resolve_kimi_bin falls back to ~/.local/bin then PATH
+    [32m[PASS][0m local bin fallback (/tmp/cma-test.ikBYsN/.local/bin/kimi)
+
+  • cma_suggest_kimi_alias returns next free kimiN
+    [32m[PASS][0m kimi1 taken -> kimi2 (kimi2)
+
+  • cma_validate_kimi_alias rejects reserved kimi-* and kc-* namespaces
+    [32m[PASS][0m kimi-deepseek rejected (1)
+    [32m[PASS][0m rejection names the reserved namespace (0)
+    [32m[PASS][0m kc-* rejected (1)
+
+  • cma_validate_kimi_alias accepts an ordinary kimiN name
+    [32m[PASS][0m kimi5 accepted (0)
+
+  • cma_write_kimi_alias writes KIMI_CODE_HOME form
+    [32m[PASS][0m kimi7 alias line with KIMI_CODE_HOME=: 'alias kimi7="KIMI_CODE_HOME=/tmp/cma-test.ikBYsN/.kimi-code-kimi7 cma_run_kimi"' in aliases.sh
+
+  • re-writing the same kimi alias is a byte no-op
+    [32m[PASS][0m idempotent kimi alias write (51b85935583aed6e574aab2d3b07564c0baeec934e0e7a27c68b087953116a77)
+
+  • cma_remove_kimi_alias drops the alias
+    [32m[PASS][0m kimi7 alias removed: 'alias kimi7=' absent from aliases.sh
+
+  • cma_detect_kimi_accounts includes marker dirs and empty dirs, excludes shared/marker-less
+    [32m[PASS][0m a (sessions marker) and b (empty) detected (0)
+    [32m[PASS][0m kimi-code-shared excluded (1)
+    [32m[PASS][0m marker-less non-empty dir excluded (1)
+
+  • cma_detect_kimi_accounts recognizes config.toml as a marker
+    [32m[PASS][0m config.toml is a kimi marker (0)
+
+  • rendered alias file contains cma_run_kimi and cma_run_kimi_provider
+    [32m[PASS][0m cma_run_kimi present (0)
+    [32m[PASS][0m cma_run_kimi_provider present (0)
+
+  • HYGIENE: wrappers under test come from the sandbox alias file
+    [32m[PASS][0m cma_run_kimi from sandbox: cma_run_kimi came from /tmp/cma-test.ikBYsN/.local/share/claude-multi-account/aliases.sh
+    [32m[PASS][0m cma_run_kimi_provider from sandbox: cma_run_kimi_provider came from /tmp/cma-test.ikBYsN/.local/share/claude-multi-account/aliases.sh
+
+  • cma_run_kimi resolves the bundled bin, scrubs leaked provider env, forwards args
+    [32m[PASS][0m kimi args forwarded verbatim (-p hi --output-format text)
+    [32m[PASS][0m CLAUDE_CODE_MAX_OUTPUT_TOKENS not leaked to kimi (1)
+    [32m[PASS][0m ANTHROPIC_BASE_URL not leaked to kimi (1)
+    [32m[PASS][0m KIMI_CODE_HOME from the alias line is preserved (0)
+
+  • cma_run_kimi_provider refuses non-verified without --force
+    [32m[PASS][0m non-verified refuses with rc 3 (3)
+    [32m[PASS][0m refusal names the verify hint (0)
+
+  • cma_run_kimi_provider honors --force
+    [32m[PASS][0m --force launches despite non-verified (0)
+
+  • cma_run_kimi_provider refuses when config.toml is missing
+    [32m[PASS][0m missing config.toml refuses (1)
+    [32m[PASS][0m refusal names sync hint (0)
+
+  • cma_run_kimi_provider launches with KIMI_CODE_HOME and -m default_model
+    [32m[PASS][0m KIMI_CODE_HOME points at per-id home (0)
+    [32m[PASS][0m launch uses -m default_model then user args (-m deepseek/deepseek-chat Reply exactly: KIMI-PROV-OK)
+
+  • cma_run_kimi_provider FORCES the per-id home over an ambient KIMI_CODE_HOME
+    [32m[PASS][0m ambient KIMI_CODE_HOME ignored; per-id home still used (0)
+
+  • cma_run_kimi_provider exports NODE_EXTRA_CA_CERTS only for https + CA
+    [32m[PASS][0m NODE_EXTRA_CA_CERTS exported for https+CA (0)
+    [31m[FAIL][0m NODE_EXTRA_CA_CERTS not exported for http base
+           want=1 got=0
+
+  • cma_run_kimi_provider launches an https twin with NO CA pin (system roots)
+    [32m[PASS][0m https twin without CA pin still launches (0)
+    [31m[FAIL][0m NODE_EXTRA_CA_CERTS not exported without a CA pin
+           want=1 got=0
+
+  • _cma_alias_gate rejects a render missing cma_run_kimi
+    [32m[PASS][0m gate refuses candidate without cma_run_kimi (1)
+    [32m[PASS][0m gate names cma_run_kimi as a missing floor item (0)
+
+[31m✗ 2 failed, 38 passed[0m
+
+Failures:
+  - cma_run_kimi_provider exports NODE_EXTRA_CA_CERTS only for https + CA :: NODE_EXTRA_CA_CERTS not exported for http base
+  - cma_run_kimi_provider launches an https twin with NO CA pin (system roots) :: NODE_EXTRA_CA_CERTS not exported without a CA pin
+EXIT: 1

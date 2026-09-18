@@ -1,0 +1,171 @@
+=== GREEN: SAME invocation against the fixed test_helixllm_model_export.sh (ambient CMA_PROVIDER_CA_CERT still present on this host) ===
+
+  • helixllm-export runs on demand and writes a catalogue
+    [32m[PASS][0m helixllm-export exits cleanly (0)
+    [32m[PASS][0m per-model catalogue written: /tmp/cma-test.grfwb4/.local/share/claude-multi-account/providers/helixllm-models.json
+
+  • control needle: both live hosts were really queried, carrying the gateway key
+    [32m[PASS][0m each live host received >=1 /v1/models request (0)
+    [32m[PASS][0m host alpha received the gateway API key as a Bearer header (0)
+    [32m[PASS][0m host beta received the gateway API key as a Bearer header (0)
+
+  • one entry per model per host (T047)
+    [32m[PASS][0m 6 entries = 4 local models on alpha + 2 on beta (.entries | length = 6)
+    [32m[PASS][0m alpha contributes 4 entries ([.entries[] | select(.base_url|test("46957"))] | length = 4)
+    [32m[PASS][0m beta contributes 2 entries ([.entries[] | select(.base_url|test("56707"))] | length = 2)
+    [32m[PASS][0m every catalogue id is distinct ([.entries[].id] | (length == (unique|length)) = true)
+
+  • remote vendor models (no model_identity) are NOT exported as local providers
+    [32m[PASS][0m the vendor passthrough model is excluded ([.entries[] | select(.id=="gpt-4o")] | length = 0)
+
+  • an unreachable host contributes nothing and is never presented as available
+    [32m[PASS][0m the dead host produced no entries ([.entries[] | select(.base_url|test("41471"))] | length = 0)
+    [32m[PASS][0m the dead host's endpoint appears nowhere in the catalogue: ':41471' absent from helixllm-models.json
+
+  • every exported id satisfies BOTH real lib.sh validators, unmodified
+    [32m[PASS][0m no exported id is rejected by the real cma_validate_alias (0)
+    [32m[PASS][0m no exported id violates the provider-id charset guard (0)
+
+  • a hostile model id is DROPPED, never written anywhere
+    [32m[PASS][0m the hostile id never reaches the catalogue: 'rm -rf' absent from helixllm-models.json
+    [32m[PASS][0m control: the hostile id really is rejected by cma_validate_alias (so the drop is meaningful) (1)
+
+  • the human-readable identity travels as a VALUE, never as an identifier
+    [32m[PASS][0m every entry carries its helixllm/<host>/<model> identity as data ([.entries[] | select(.model_identity|startswith("helixllm/"))] | length = 6)
+    [32m[PASS][0m no entry uses the identity (or anything containing / or :) as its id ([.entries[] | select(.id|test("[/:]"))] | length = 0)
+
+  • re-export updates existing entries instead of appending duplicates
+    [32m[PASS][0m still 6 entries after three exports (updated, not appended) (.entries | length = 6)
+    [32m[PASS][0m still no duplicate ids after three exports ([.entries[].id] | (length == (unique|length)) = true)
+    [32m[PASS][0m the id set is unchanged across re-exports (helixllm-gemma3-27b-112233445566,helixllm-llama3-8b-a1b2c3d4e5f6,helixllm-mistral-7b-998877665544,helixllm-org-llama3-bbccddeeff00,helixllm-phi4-14b-aabbccddeeff,helixllm-qwen3-coder-30b-0f1e2d3c4b5a)
+    [32m[PASS][0m first_seen is PRESERVED on update (proving an update, not a replace-by-append) (2026-09-18T09:13:36Z)
+
+  • without --apply nothing else is touched; with --apply the config is written
+    [32m[PASS][0m helixllm-export --apply exits cleanly (0)
+    [32m[PASS][0m --apply wrote a provider env record per exported model (before=0 after=6) (0)
+    [32m[PASS][0m env record for the first exported model: /tmp/cma-test.grfwb4/.local/share/claude-multi-account/providers/helixllm-gemma3-27b-112233445566.env
+    [32m[PASS][0m the env record sends the PUBLISHED id as the model name: 'CMA_PROVIDER_MODEL='helixllm-gemma3-27b-112233445566'' in helixllm-gemma3-27b-112233445566.env
+
+  • --apply is idempotent too: re-applying updates the same records
+    [32m[PASS][0m re-applying created no additional env records (6)
+    [32m[PASS][0m catalogue still holds exactly 6 entries (.entries | length = 6)
+
+  • --apply persists CMA_PROVIDER_CA_CERT into every env record it writes
+    [32m[PASS][0m apply with CMA_PROVIDER_CA_CERT set exits cleanly (0)
+    [32m[PASS][0m the env record carries the CA anchor for the launch path: 'CMA_PROVIDER_CA_CERT='/tmp/cma-test.grfwb4/export-ca.pem'' in helixllm-gemma3-27b-112233445566.env
+
+  • a re-apply WITHOUT the anchor converges the line away (no stale CA)
+    [32m[PASS][0m re-apply without CMA_PROVIDER_CA_CERT exits cleanly (0)
+    [32m[PASS][0m the env record no longer carries a CA line once the anchor is gone (1)
+
+  • the gateway key is what reaches the wire; the discovery secret is not
+    [32m[PASS][0m alpha's recorded Authorization header carries the gateway key: 'auth=Bearer dummy-gateway-key-never-real' in .srv_a_hits
+    [32m[PASS][0m the discovery secret was never sent to alpha: 'psk-DO-NOT-SEND-8f31c0aa' absent from .srv_a_hits
+    [32m[PASS][0m the discovery secret was never sent to beta: 'psk-DO-NOT-SEND-8f31c0aa' absent from .srv_b_hits
+    [32m[PASS][0m the exporter really issued at least one request in this window (tot=1) (0)
+    [32m[PASS][0m every request the exporter made carried the gateway key (1)
+
+  • with NO gateway key configured, no Authorization header is sent at all
+    [32m[PASS][0m an open-access host is queried with no credential rather than a useless one: 'auth=<none>' in .srv_a_hits
+    [32m[PASS][0m and still no discovery secret on the wire: 'psk-DO-NOT-SEND-8f31c0aa' absent from .srv_a_hits
+
+  • the discovery pre-shared secret is in NO exported artefact
+    [32m[PASS][0m the sweep really examined the exported files (9 scanned; the catalogue + 6 env records at least) (0)
+    [32m[PASS][0m the sweep ran without error (grep rc=1 — an rc of 2 would make an empty result meaningless) (0)
+    [32m[PASS][0m no exported file under /tmp/cma-test.grfwb4/.local/share/claude-multi-account/providers (or the alias file) contains the secret ()
+    [32m[PASS][0m the catalogue does not carry the secret: 'psk-DO-NOT-SEND-8f31c0aa' absent from helixllm-models.json
+
+  • an identity containing a backslash survives the export unchanged
+    [32m[PASS][0m control: the host really serves the backslash-bearing identity (helixllm/alpha/org\llama3:8b)
+    [32m[PASS][0m control: that identity carries exactly ONE backslash on the wire (1)
+    [32m[PASS][0m the catalogue stores the identity exactly as served (no doubled backslash) (helixllm/alpha/org\llama3:8b)
+    [32m[PASS][0m the stored identity still carries exactly ONE backslash, not two (1)
+
+  • ordinary org/model and hf.co/... shapes are unaffected too
+    [32m[PASS][0m a slash+colon identity round-trips unchanged ([.entries[]|select(.model_identity=="helixllm/alpha/qwen3-coder:30b")]|length = 1)
+
+  • control: the records this case is about exist before anything is withdrawn
+    [32m[PASS][0m beta's gemma3 provider exists before the host drops it: /tmp/cma-test.grfwb4/.local/share/claude-multi-account/providers/helixllm-gemma3-27b-112233445566.env
+    [32m[PASS][0m beta's phi4 provider exists too: /tmp/cma-test.grfwb4/.local/share/claude-multi-account/providers/helixllm-phi4-14b-aabbccddeeff.env
+    [32m[PASS][0m the hand-authored provider is in place: /tmp/cma-test.grfwb4/.local/share/claude-multi-account/providers/hand-authored-thing.env
+
+  • when a reachable host stops serving a model, --apply retires it
+    [32m[PASS][0m --apply exits cleanly after the host dropped a model (0)
+    [32m[PASS][0m the withdrawn model's env record is gone (0)
+    [32m[PASS][0m the withdrawn model's alias is gone — it is no longer invocable (1)
+    [32m[PASS][0m and it is out of the catalogue ([.entries[]|select(.id=="helixllm-gemma3-27b-112233445566")]|length = 0)
+    [32m[PASS][0m the model beta STILL serves was left alone: /tmp/cma-test.grfwb4/.local/share/claude-multi-account/providers/helixllm-phi4-14b-aabbccddeeff.env
+    [32m[PASS][0m the hand-authored provider was not touched (it never claimed this tool wrote it): /tmp/cma-test.grfwb4/.local/share/claude-multi-account/providers/hand-authored-thing.env
+    [32m[PASS][0m the retired provider's CLAUDE config dir was BACKED UP, not deleted (1)
+    [32m[PASS][0m the retired provider's KIMI twin dir was BACKED UP, not deleted (1)
+    [32m[PASS][0m the retired provider's claude config dir is no longer live (0)
+    [32m[PASS][0m the retired provider's kimi twin dir is no longer live (0)
+    [32m[PASS][0m the retired provider's kimi twin alias is gone — it is no longer invocable (1)
+
+  • an UNREACHABLE host never causes a removal — silence is not evidence
+    [32m[PASS][0m control: alpha's provider exists before alpha goes away: /tmp/cma-test.grfwb4/.local/share/claude-multi-account/providers/helixllm-llama3-8b-a1b2c3d4e5f6.env
+    [32m[PASS][0m alpha's providers SURVIVE while alpha is unreachable (a sleeping host must not wipe a working config): /tmp/cma-test.grfwb4/.local/share/claude-multi-account/providers/helixllm-llama3-8b-a1b2c3d4e5f6.env
+    [32m[PASS][0m every one of alpha's providers survives, not just the first: /tmp/cma-test.grfwb4/.local/share/claude-multi-account/providers/helixllm-org-llama3-bbccddeeff00.env
+    [32m[PASS][0m and the user is TOLD they were kept because the host was unreachable, not silently skipped (0)
+
+  • --dry-run reports the retirement without performing it
+    [32m[PASS][0m --dry-run announces what it would retire (0)
+    [32m[PASS][0m --dry-run changed nothing on disk (6)
+
+  • a host that replies while serving NOTHING is kept — an empty answer is not proof of withdrawal
+    [32m[PASS][0m control: beta really did answer 200 with an empty, reasoned listing (0)
+    [32m[PASS][0m beta's provider SURVIVES an empty listing (a host mid-restart must not wipe a working config): /tmp/cma-test.grfwb4/.local/share/claude-multi-account/providers/helixllm-phi4-14b-aabbccddeeff.env
+    [32m[PASS][0m and its alias is still invocable, not just its env file (0)
+    [32m[PASS][0m and the user is TOLD why it was kept, rather than it being silently skipped (0)
+    [32m[PASS][0m alpha, still serving, is untouched: /tmp/cma-test.grfwb4/.local/share/claude-multi-account/providers/helixllm-llama3-8b-a1b2c3d4e5f6.env
+    [32m[PASS][0m and the hand-authored provider still stands: /tmp/cma-test.grfwb4/.local/share/claude-multi-account/providers/hand-authored-thing.env
+
+  • a listing of nothing but REMOTE vendor models is not proof either
+    [32m[PASS][0m beta's local provider survives a listing that names only a vendor passthrough: /tmp/cma-test.grfwb4/.local/share/claude-multi-account/providers/helixllm-phi4-14b-aabbccddeeff.env
+
+  • and once beta is demonstrably serving again, convergence finally happens
+    [32m[PASS][0m beta named what it serves and phi4 was not in it, so phi4 IS retired (0)
+    [32m[PASS][0m and its alias is gone — it is no longer invocable (1)
+    [32m[PASS][0m the model beta now serves was written: /tmp/cma-test.grfwb4/.local/share/claude-multi-account/providers/helixllm-codestral-22b-778899aabbcc.env
+    [32m[PASS][0m and the hand-authored provider still stands: /tmp/cma-test.grfwb4/.local/share/claude-multi-account/providers/hand-authored-thing.env
+
+  • control: beta really publishes a withheld, identity-bearing option
+    [32m[PASS][0m it is published with availability=withheld (withheld)
+    [32m[PASS][0m and carries a withheld_reason (provider_unavailable)
+    [32m[PASS][0m and it DOES carry a model_identity — so the identity clause alone would admit it (helixllm/beta/deepseek-r1:70b)
+
+  • the serving filter itself — read from the script, not restated — rejects it
+    [32m[PASS][0m control: the filter was really read out of the script (empty would make every count below meaningless) (0)
+    [32m[PASS][0m the withheld entry does not survive the serving filter (0)
+    [32m[PASS][0m control: that same filter still admits alpha's served models (kept=5) — it is selective, not empty (0)
+
+  • a withheld option is never exported as a usable model
+    [32m[PASS][0m --apply exits cleanly against a withheld-only listing (0)
+    [32m[PASS][0m the withheld model is absent from the catalogue ([.entries[]|select(.id=="helixllm-deepseek-r1-70b-ffeeddccbbaa")]|length = 0)
+    [32m[PASS][0m nothing of it reaches the catalogue under any key: 'deepseek-r1' absent from helixllm-models.json
+    [32m[PASS][0m and no provider record was written for it — it is not invocable (0)
+
+  • a host whose only identity-bearing options are WITHHELD is answered-not-serving
+    [32m[PASS][0m beta is reported as answered-but-not-serving (true)
+    [32m[PASS][0m and it is NOT counted among the hosts that proved they are serving (true)
+    [32m[PASS][0m control: alpha, genuinely serving, IS in hosts_serving in the same envelope (true)
+
+  • so the user's existing configuration for that host is KEPT, not deleted
+    [32m[PASS][0m beta's existing provider survives a withheld-only listing (a backend refusing to serve is not a withdrawal): /tmp/cma-test.grfwb4/.local/share/claude-multi-account/providers/helixllm-codestral-22b-778899aabbcc.env
+    [32m[PASS][0m and its alias is still invocable, not merely its env file (0)
+    [32m[PASS][0m and the hand-authored provider still stands: /tmp/cma-test.grfwb4/.local/share/claude-multi-account/providers/hand-authored-thing.env
+    [32m[PASS][0m and the user is TOLD it was kept because the host named nothing it serves (0)
+
+  • a SERVING sibling on the same host is still exported, and still licenses retirement
+    [32m[PASS][0m control: the now-withdrawn model is still configured before this run: /tmp/cma-test.grfwb4/.local/share/claude-multi-account/providers/helixllm-codestral-22b-778899aabbcc.env
+    [32m[PASS][0m --apply exits cleanly on a mixed withheld/serving listing (0)
+    [32m[PASS][0m the SERVING sibling is exported (an explicit availability of "serving" is honoured) ([.entries[]|select(.id=="helixllm-nemotron-9b-0a1b2c3d4e5f")]|length = 1)
+    [32m[PASS][0m and it has a provider record — it is invocable: /tmp/cma-test.grfwb4/.local/share/claude-multi-account/providers/helixllm-nemotron-9b-0a1b2c3d4e5f.env
+    [32m[PASS][0m while the withheld option beside it is STILL not exported ([.entries[]|select(.id=="helixllm-deepseek-r1-70b-ffeeddccbbaa")]|length = 0)
+    [32m[PASS][0m and still has no provider record (0)
+    [32m[PASS][0m beta proved it is serving and did not name the old model, so THAT one is retired (0)
+    [32m[PASS][0m and the retired model's alias is gone — retirement still works, it was only made conditional (1)
+    [32m[PASS][0m and the hand-authored provider still stands: /tmp/cma-test.grfwb4/.local/share/claude-multi-account/providers/hand-authored-thing.env
+
+[32m✓ 105 passed, 0 failed[0m
+EXIT: 0

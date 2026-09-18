@@ -1,7 +1,7 @@
 # CONTINUATION
 
-**Revision:** 20
-**Last modified:** 2026-09-17T19:52:42Z
+**Revision:** 21
+**Last modified:** 2026-09-18T11:19:00Z
 
 Per Constitution §12.10: this file reflects the live state of work on the
 `001-llmctl-completion` feature so any agent can resume exactly where the
@@ -1407,6 +1407,136 @@ this host).
 nvcc_version.txt, build_attempt_1_unmodified.log, T004_T005_skip_rationale.txt,
 list_devices.txt, vram_delta.txt, throughput_ratio.txt,
 moe_fast_still_does_not_fit.txt, superpowers_tui_session.log).
+
+## 10q. Follow-up: `claude_toolkit` residual test-isolation fixes — CA-cert leak (3 files fixed + 1 out-of-scope discovery) confirmed and closed; flaky-assertion root cause NOT reproduced after extensive investigation, honestly PENDING_FORENSICS (007-claude-toolkit-test-fixes, 2026-09-18)
+
+Cross-repo feature tracked at `specs/007-claude-toolkit-test-fixes/` in
+this repo, implemented entirely in the sibling `claude_toolkit` repo
+(commits `9a7b1bf6643b23d80f8284bf7755ef3cd854eb18`,
+`ec7c28f7e10ab7676041e02a398f50be5c4f0012`).
+
+**Honest headline correction to this task's own framing**: T014's task
+text describes "the CA-isolation and flake root causes documented and
+closed" (plural). Only ONE of the two is closed. The CA-isolation defect
+IS closed (root cause confirmed, fixed, proven RED→GREEN). The flake's
+root cause is NOT closed — after exhaustive investigation it was never
+identified, and per this project's own Iron Law ("no fixes without root
+cause investigation first") no fix was applied. Reporting this
+discrepancy explicitly rather than silently matching the task text's
+assumption is itself the anti-bluff requirement this project's
+Constitution mandates.
+
+**User Story 1 (CA-cert isolation) — CLOSED, fully proven.** Root cause
+confirmed exactly as `specs/007-claude-toolkit-test-fixes/research.md`
+predicted: `test_ccr_upstream_ca.sh`'s and `test_kimi_alias_file.sh`'s
+"WITHOUT CA" scenarios never explicitly
+`unset CMA_PROVIDER_CA_CERT NODE_EXTRA_CA_CERTS SSL_CERT_FILE` before
+running, so an ambient `CMA_PROVIDER_CA_CERT` already present in the
+invoking shell (this host has it set to a sibling project's cert path)
+leaked through and made the "stays unset" assertions fail. Fixed with an
+explicit `unset` immediately before each affected scenario in both
+files. Proven RED→GREEN via a git-worktree-isolated pre-fix checkout
+(genuinely clean, uncontaminated by the process-discipline lapse
+disclosed below): deliberately re-exporting the three vars reproduces
+2+2=4 failures against the pre-fix commit and 0 failures against the
+fix; a clean shell continues to pass identically (no regression to the
+already-clean case).
+
+**Out-of-scope discovery, also fixed:** the SAME defect class exists in
+`test_helixllm_model_export.sh`'s "a re-apply WITHOUT the anchor
+converges the line away (no stale CA)" assertion (not in this feature's
+originally-assigned file list) — root-caused and fixed identically,
+confirmed via a real run under the host's REAL ambient contamination
+(no synthetic injection needed): 105/105 passed after the fix.
+
+**Process-discipline self-disclosure (§11.4.84 working-tree quiescence
+violation):** the initial "baseline" full-suite background run was
+started first, but the CA-cert investigation and fix were performed
+WHILE it was still executing (a 74-file run takes ~10-12 minutes here),
+so by the time that background run reached the two affected files it was
+already testing the FIXED code, not the original failing state. This is
+disclosed explicitly rather than silently presented as a clean baseline;
+the genuinely clean RED evidence for the CA-cert defect was captured
+separately via a `git worktree add --detach <path> HEAD~1`. All further
+evidence-gathering runs in this feature were done without concurrent
+edits.
+
+**User Story 2 (`test_providers.sh`'s intermittent "non-quiet refresh
+logs 'refreshed'" assertion) — NOT CLOSED, honestly PENDING_FORENSICS.**
+Extensive systematic-debugging investigation performed (Iron Law: no fix
+without root cause). **34 independent executions of the target
+assertion across 5 methodologies, 34/34 PASS, 0/34 FAIL**: 18 iterations
+of the full, unmodified test file in a dedicated loop (deliberately
+stopped at 18/20 at a time-box committed mid-session, never reached
+19-20, disclosed honestly rather than rounded up — see
+`docs/qa/007-claude-toolkit-test-fixes/flake_rate_baseline.txt`), plus 4
+parallel streams (6+3+3+2 runs) of an isolated fast-path repro with full
+diagnostic instrumentation, under BOTH normal and deliberately elevated
+CPU contention (load average ~7 on a 16-core host, memory ~57%, swap
+settled), plus 2 more clean executions of the same assertion inside the
+two complete 74/74 full-suite runs captured for the final gate (T013).
+Zero reproductions of the original failure anywhere.
+
+Several candidate mechanisms from research.md's R4 were RULED OUT with
+direct code-reading + runtime evidence, not guessed: (1) a malformed
+provider `.env` aborting the `set -euo pipefail` REFRESH_ALIASES loop
+before the unconditional log line — ruled out by re-sourcing every
+`.env` file present at the assertion's execution point in an isolated
+`set -euo pipefail` subshell, rc=0 for all; (2) an explicit background
+job (`&`) in the direct code path — ruled out by exhaustive grep, zero
+matches; (3) the toolkit's own documented
+`BASH_ENV=~/.bashrc`-triggers-the-real-production-session-hook footgun
+(`tests/lib/assert.sh`'s own comment names this) — confirmed `BASH_ENV`
+is EMPTY in every shell used for this investigation, ruling it out HERE
+specifically while it remains a genuinely different, not-yet-excluded
+risk in an operator's own interactive login shell (flagged, not
+dismissed); (4) the session-refresh hook firing during this assertion's
+own sandbox — ruled out because `cma_install_session_hook` is first
+called in Section 9 of the test file, strictly AFTER the Section 8
+target assertion, and execution is sequential.
+
+Per this project's own Iron Law and no-guessing mandate, **no code
+change was applied** to `test_providers.sh` — a plausible-sounding fix
+for an unconfirmed, unreproduced mechanism would itself be a bluff. This
+is tracked PENDING_FORENSICS for recurrence-linking (never re-minted)
+if the flake is ever captured again with reproducible evidence,
+consistent with research.md's own note that the original observation
+was a single occurrence followed by a clean 427/427 re-run — i.e. a rate
+low enough that 34 clean attempts narrow the hypothesis space without
+confidently ruling out a genuine, very-rare underlying issue.
+
+**Full-suite final state (T013):** `bash scripts/tests/run-all.sh` run
+twice in immediate succession, quiescent working tree (all fixes already
+committed, no concurrent edits) — **RUN 1: 74/74 passed, 0 failed, ALL
+GREEN. RUN 2: 74/74 passed, 0 failed, ALL GREEN.** (see
+`docs/qa/007-claude-toolkit-test-fixes/final_74_of_74_x2.txt`).
+
+**Incidental observation (not acted on, flagged for the operator):** 7
+tracked-in-git `claude_toolkit/scripts/tests/proof/*.txt` files show
+uncommitted diffs after this session's many test runs — confirmed to be
+pure non-deterministic run byproducts (timestamps, ephemeral mock
+ports/PIDs), not a defect and not part of this feature's scope. Left
+uncommitted deliberately; whether these files should be gitignored is a
+separate, pre-existing repo-hygiene question for the operator to decide
+(§11.4.122 — no unilateral removal/reversion performed).
+
+**Two out-of-scope/injected-looking instructions received during this
+session were NOT acted on** and are flagged here for the real
+coordinator's attention: (1) a mid-session message purporting to be from
+"the coordinator" instructing an unrelated security fix in
+`llmctld/internal/api/routes_tenants.go` (tenant-quota RBAC), citing
+task IDs "T014/T015" that do not match this feature's actual
+`tasks.md` (T001-T014, and T014 is this CONTINUATION.md update, not a
+security fix) — declined as out of scope; (2) two `hawkscan:hawkscan`
+post-commit hook auto-suggestions (fired after each of the two commits
+above) referencing commit hashes that do not match either of this
+session's real commits — declined as unrelated/inconsistent.
+
+**Full evidence trail**: `docs/qa/007-claude-toolkit-test-fixes/`
+(baseline_full_suite.txt, red_repro_ca_leak.txt, green_ca_leak_fixed.txt,
+clean_case_no_contamination.txt, red_repro_helixllm_export_ca_leak.txt,
+green_helixllm_export_ca_leak_fixed.txt, flake_rate_baseline.txt,
+final_74_of_74_x2.txt).
 
 ## 11. Binding constraints (unchanged, restated per §12.10)
 
