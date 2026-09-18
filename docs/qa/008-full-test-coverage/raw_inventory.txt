@@ -1,0 +1,136 @@
+008-full-test-coverage T002: raw test-file inventory
+Captured: 2026-09-18 (this session, via direct `find`/`grep`/file-read investigation)
+
+Every classification-document row in TEST_TYPE_CLASSIFICATION.md cites
+only files/functions listed or directly derived from this inventory.
+
+=== llmctl (bash CLI) — tests/*.sh (23 files, all discovered by
+    `find tests/ -name '*.sh'`, run by tests/run_tests.sh) ===
+
+test_archive_completeness.sh   - release archive is a self-contained, buildable repo (full-automation/e2e)
+test_catalog_json.sh           - model catalog validity/consistency (unit)
+test_cli.sh                    - bin/llmctl dispatch: help/version/exit codes (unit/integration)
+test_constitution_inheritance.sh - governance inheritance invariants (integration)
+test_create_release.sh         - SemVer/changelog/per-forge retry against real git (integration)
+test_determinism.sh            - N-repeat byte-identical output of real bin/llmctl subprocess (full-automation)
+test_download_resume.sh        - resumed download vs restart, real local HTTP fixture (integration)
+test_download.sh               - verified download against local http.server fixture (integration)
+test_engine.sh                 - engine source-path resolution + submodule-presence detection (unit)
+test_hardware_probe.sh         - hardware probe + LLMCTL_FAKE_HW override (unit/integration)
+test_normalize_agents.sh       - per-agent normalization filters determinism (unit)
+test_normalize_common.sh       - shared normalization primitives (unit)
+test_planner.sh                - deterministic planner vs 3 hardware fixtures (unit)
+test_port_override.sh          - per-profile port override mechanism (integration)
+test_preflight_submodules.sh   - unreachable vs reachable pinned submodule commit, REAL local git repos (integration)
+test_run_tests_format.sh       - run_tests.sh emits grep-parseable evidence markers (unit)
+test_scheduler_lock.sh         - concurrent-writer lock correctness (chaos-adjacent/concurrency)
+test_scheduler.sh              - dry-run scheduler co-residency/eviction/refusal (integration)
+test_services_crashloop.sh     - systemd/launchd restart-burst bounding + status surfacing (CHAOS)
+test_services.sh               - service unit/plist generation (unit)
+test_setup_e2e.sh              - fresh-clone `llmctl setup` simulation (E2E)
+test_syntax.sh                 - bash -n syntax check of every shipped script (unit/static)
+test_tenant_service_isolation.sh - per-tenant systemd scope wiring + malicious-tenant-ID rejection (SECURITY-adjacent/integration)
+
+Full-suite run: bash tests/run_tests.sh -> PASS: 23  FAIL: 0 (this session, before any change)
+
+=== llmctld (Go daemon) — llmctld/**/*_test.go (before this feature's
+    additions), discovered by `find . -name '*_test.go'` ===
+
+internal/api/            client_test.go, enginecache_route_test.go, middleware_jwt_test.go,
+                          routes_audit_test.go, routes_auth_test.go, routes_cluster_test.go,
+                          routes_models_test.go, routes_mtls_test.go, routes_replication_test.go,
+                          routes_tenants_test.go, server_test.go
+internal/audit/          log_test.go
+internal/auth/           apikey_test.go, jwt_bench_test.go (BenchmarkValidateToken), jwt_test.go
+                          (5 adversarial ValidateToken tests), oidc_test.go, rbac_bench_test.go
+                          (BenchmarkCheck), rbac_test.go
+internal/authz/          audit_integration_test.go
+internal/cluster/        health_test.go, partition_test.go, placement_test.go,
+                          replication_roles_test.go, replication_test.go, sharding_test.go, state_test.go
+internal/executor/       enginecache_slot_test.go (incl. TestLocalExecutor_RestoreSlot_
+                          RealEngineRejection_ReturnsGenuineError - corrupt/missing-file
+                          fallback = CHAOS evidence), local_test.go
+internal/isolation/      cgroup_test.go
+internal/mtls/           certs_test.go, persist_test.go, rotation_test.go (7 tests incl.
+                          FinalizeLocalRotation_DropsToSinglePool's real x509.Verify-fails
+                          assertion for the retired CA), truststore_test.go
+internal/raft/           fsm_ca_rotation_test.go, fsm_lock_test.go, fsm_test.go, lock_test.go,
+                          node_ca_rotation_test.go, node_status_test.go, node_test.go (incl.
+                          TestJoin_SecondNodeReplicatesRealAppliedCommand, TestJoin_
+                          SurvivingFollowerBecomesLeaderAfterOriginalLeaderShutsDown -
+                          multi-node SCALING evidence), replication_commands_test.go,
+                          running_profile_test.go, self_registration_test.go,
+                          testhelpers_test.go, transport_test.go
+internal/replication/    checkpoint_test.go, edge_cases_test.go, encryption_test.go,
+                          enginecache_test.go, forwarder_test.go, lag_test.go, lora_test.go,
+                          registry_test.go, wal_test.go
+internal/tenancy/        key_test.go, quota_bench_test.go (BenchmarkAllowRequest), quota_test.go,
+                          tenant_test.go
+test/integration/        cluster_bootstrap_test.go, cluster_placement_test.go, enginecache_test.go,
+                          failover_state_test.go, mtls_rotation_test.go (11 tests incl.
+                          TestMTLSRotation_Finalize_OldCARejectedAfterward - real multi-process
+                          OS-process cluster, adversarial "old CA rejected after finalize"
+                          already fully covered here), multitenancy_isolation_test.go,
+                          replication_health_test.go, resource_heartbeat_test.go
+
+Confirmed by direct grep this session (never assumed): `grep -rn
+"AllowRequest\|AcquireConcurrencySlot\|\.Quota\." internal/api --include=*.go
+| grep -v _test.go` returns ZERO matches, AND `grep -rn "CheckQuota"
+--include=*.go .` shows its only callers outside its own definition/doc
+comments are internal/authz/audit_integration_test.go (a test file) -
+research.md R1 confirmed exactly as stated: the quota-enforcement path
+(internal/tenancy.Enforcer, wrapped by internal/authz.Decider.CheckQuota)
+is implemented and tested in isolation but never invoked from any
+production HTTP request path.
+
+Full-suite run (before this feature's Phase 4/6 additions): `go test
+./... -race` -> ok on every package (11 packages), `go test ./... -v`
+-> 341 PASS / 0 FAIL / 3 SKIP.
+
+=== claude_toolkit (sibling bash toolkit, read-only for this feature) —
+    scripts/tests/*.sh (74 files swept by scripts/tests/run-all.sh) +
+    scripts/tests/verify_*.sh (live-provider scripts NOT swept by
+    run-all.sh's default discovery) ===
+
+Representative citations verified by direct file read this session:
+- test_alias_file_concurrency.sh - concurrent-writer alias-file corruption
+  regression guard (forensic incident: 37288->282->...->909 bytes in 4s) -
+  CHAOS/concurrency evidence.
+- test_suite_lock.sh - proves two suite runs cannot overlap (forensic
+  incident: run-proof.sh + run-all.sh + a third agent mutating mid-run) -
+  CHAOS/concurrency evidence.
+- test_redact.sh - credential-redaction correctness against ~20 provider
+  key families + the live proof/ corpus - SECURITY evidence.
+- verify_aliases_tui.sh + lib/pty_drive.py - drives a REAL interactive
+  terminal UI (Claude Code's own TUI) under a real pseudo-terminal,
+  types a real prompt, classifies the transcript - genuine UI-driving
+  test infrastructure, though it verifies an EXTERNAL program's TUI
+  (launched via claude_toolkit's own alias wrappers), not a UI
+  claude_toolkit itself owns or renders (claude_toolkit has no GUI/TUI
+  of its own).
+- .gitmodules: claude_toolkit vendors `submodules/challenges` ->
+  git@github.com:vasic-digital/challenges.git, checked out at
+  helixcode-v1.1.0-20-g072724a, containing a real `banks/` directory
+  (examples, yole) - CONFIRMED populated. Repo-wide grep for any script
+  invoking it (`grep -rl "submodules/challenges" --include=*.sh .`)
+  returns ZERO matches - the dependency is genuinely ADOPTED (vendored,
+  pinned, checked out) but genuinely UNWIRED (no script anywhere
+  invokes it). This CONTRADICTS spec.md's blanket Assumption ("not
+  currently adopted as dependencies by this project") for claude_toolkit
+  specifically (it remains true for llmctl/llmctld, which have no such
+  submodule in their own .gitmodules) - documented as a corrected,
+  per-component finding in TEST_TYPE_CLASSIFICATION.md rather than
+  silently inherited from the spec's blanket assumption.
+
+No dedicated stress/DDoS-style test exists in claude_toolkit (it
+orchestrates CLI aliases; it has no server surface of its own to
+flood) - GENUINELY-INAPPLICABLE, mirroring llmctl's own bash-CLI
+reasoning.
+
+Full-suite run: `bash scripts/tests/run-all.sh` (from
+scripts/tests/) - attempted twice this session; BOTH attempts refused
+by the suite's own concurrency lock
+(.git/cma-suite-home-milosvasic-Projects-claude-toolkit-.lock, PID
+1370369, a genuinely live, unrelated concurrent session's run-all.sh
+invocation) after a 600s wait - see this feature's final report for
+the honest, non-fabricated regression-check status for this component.

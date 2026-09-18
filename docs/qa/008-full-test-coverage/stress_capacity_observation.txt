@@ -1,0 +1,16 @@
+llmctld stress test capacity observation
+captured: 2026-09-18T09:02:33Z
+route: GET /v1/cluster/status (unauthenticated, real gin engine, real net/http httptest.Server, real single-node raft.Node)
+host: GOOS=linux GOARCH=amd64 GOMAXPROCS=16 NumCPU=16
+
+concurrency  attempted  succeeded  failed     success_rate p50        p95        p99       
+5            8740       8740       0          1.0000       275.711µs  994.604µs  2.78404ms 
+10           10606      10606      0          1.0000       292.731µs  1.237044ms 2.510139ms
+25           11082      11082      0          1.0000       779.093µs  5.436618ms 9.652453ms
+50           11270      11270      0          1.0000       2.898201ms 11.245509ms 17.159219ms
+100          7775       7775       0          1.0000       6.730263ms 21.543114ms 32.13101ms
+200          10906      10906      0          1.0000       7.055935ms 15.959335ms 20.470881ms
+400          11702      11702      0          1.0000       24.994506ms 53.029532ms 71.245165ms
+800          10765      10765      0          1.0000       58.009079ms 154.837821ms 218.61448ms
+
+stop condition: reached the documented concurrency ceiling (800) with every window's success rate >= 0.90

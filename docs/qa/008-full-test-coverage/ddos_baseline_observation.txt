@@ -1,0 +1,12 @@
+llmctld DDoS-style flood baseline observation (NO middleware in place - research.md R1 decision input)
+captured: 2026-09-18T09:01:49Z
+route: GET /v1/cluster/status (unauthenticated, real gin engine, real net/http httptest.Server, real single-node raft.Node)
+host: GOOS=linux GOARCH=amd64 GOMAXPROCS=16 NumCPU=16
+
+flood window: concurrency=3000 duration=3s attempted=41358 succeeded=41358 failed=0 success_rate=1.0000
+
+legitimate traffic (one request per ~50ms, running before/during/after the flood):
+  attempted=26 succeeded=26 failed=0 success_rate=1.0000
+  p50=85.265082ms p95=301.073133ms p99=361.774742ms
+
+R1 decision-input verdict: legitimate traffic remained fully healthy (success_rate=1.0000, zero failures) under a 3x-flood burst - the existing Go/gin/OS-level defaults already provide acceptable degradation for this route; per research.md R1's decision procedure, no additional quota middleware is required for THIS route/observation.
