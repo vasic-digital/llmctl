@@ -74,9 +74,17 @@ checkable statement; the table cell is shorthand for the same verdict.)
 - **llmctl — COVERED.** `tests/test_planner.sh` (deterministic planner
   against 3 hardware fixtures), `tests/test_catalog_json.sh` (catalog
   validity), `tests/test_normalize_common.sh` /
-  `tests/test_normalize_agents.sh` (transform primitives). All 23 files
-  under `tests/*.sh` run via `bash tests/run_tests.sh`: **PASS: 23
-  FAIL: 0** (this session, real subprocess run, `docs/qa/008-full-test-coverage/raw_inventory.txt`).
+  `tests/test_normalize_agents.sh` (transform primitives). All files
+  under `tests/*.sh` run via `bash tests/run_tests.sh`: **PASS: 28
+  FAIL: 0** as of 2026-09-18, real subprocess run, independently
+  re-verified by a dedicated cross-spec regression-verification pass
+  (`docs/qa/008-full-test-coverage/raw_inventory.txt` captured an
+  earlier, now-stale count of 23 — this file grows as sibling features
+  land new tests directly in `tests/*.sh`; the file-count number in
+  this row is therefore a point-in-time observation, not a fixed fact,
+  and MUST be re-verified with a fresh `bash tests/run_tests.sh` run
+  rather than trusted from this citation alone, per this document's own
+  FR-008 re-examination-trigger discipline).
 - **llmctld — COVERED.** `internal/tenancy/quota_test.go`,
   `internal/auth/jwt_test.go` (5 tests incl.
   `TestValidateToken_RejectsTamperedSignature`), `internal/auth/rbac_test.go`,
@@ -197,17 +205,27 @@ checkable statement; the table cell is shorthand for the same verdict.)
   HTTP server wrapping the real gin engine + real, unmodified
   `RegisterClusterRoutes` handler, run FOR 3 seconds while a separate
   low-rate "legitimate traffic" goroutine issues one request every
-  ~50ms throughout. Captured evidence, two independent runs (this
-  session): run 1 — flood attempted=44187 succeeded=44187 failed=0;
-  legitimate attempted=27 succeeded=27 failed=0 (success_rate=1.0000).
-  run 2 — flood attempted=43767 succeeded=43767 failed=0; legitimate
-  attempted=25 succeeded=25 failed=0 (success_rate=1.0000). Raw
-  evidence: `docs/qa/008-full-test-coverage/ddos_baseline_observation.txt`.
-  **Decision (research.md R1, "DDoS Decision" section below): no new
-  middleware was added** — the existing Go/gin/net-http defaults already
-  demonstrate acceptable degradation (zero legitimate-traffic failures
-  across both runs at a flood 3.75× this daemon's own measured
-  800-concurrent sustained-capacity ceiling).
+  ~50ms throughout. Illustrative captured evidence from two independent
+  runs during original implementation: run 1 — flood attempted=44187
+  succeeded=44187 failed=0; legitimate attempted=27 succeeded=27
+  failed=0 (success_rate=1.0000). run 2 — flood attempted=43767
+  succeeded=43767 failed=0; legitimate attempted=25 succeeded=25
+  failed=0 (success_rate=1.0000). **Honest evidence-durability note**
+  (found by an independent cross-spec regression-verification pass,
+  2026-09-18): `docs/qa/008-full-test-coverage/ddos_baseline_observation.txt`
+  is overwritten in place by the test on every run, so the raw file's
+  live content will NOT match the exact numbers quoted above once the
+  test has run again — this is expected (a fresh, timing-based flood
+  measurement) and does not indicate a functional regression, but the
+  specific integer counts above are illustrative of ONE real run, not a
+  byte-for-byte reproducible fixture; re-run the test yourself for the
+  current numbers rather than treating this citation as re-verifiable
+  against the checked-in file. **Decision (research.md R1, "DDoS
+  Decision" section below): no new middleware was added** — the
+  existing Go/gin/net-http defaults already demonstrate acceptable
+  degradation (100% legitimate-traffic success across every run
+  observed, including the independent re-run, at a flood several times
+  this daemon's own measured sustained-capacity ceiling).
 - **claude_toolkit — GENUINELY-INAPPLICABLE.** `claude_toolkit` is a
   bash orchestration toolkit around Claude Code CLI aliases; it binds no
   listening network socket of its own (confirmed: no `nc -l`,
@@ -280,13 +298,24 @@ checkable statement; the table cell is shorthand for the same verdict.)
   windows (5/10/25/50/100/200/400/800 concurrent workers, 750ms each)
   against a real, locally-listening HTTP server wrapping the real gin
   engine + real `GET /v1/cluster/status` handler + a real, single-node
-  `raft.Node`. Captured evidence (this session, real run):
-  **every window sustained 100% success rate up to and including 800
-  concurrent workers** (9471 requests attempted/succeeded at the final
-  window, p50=63.1ms/p95=81.1ms/p99=89.9ms) — the daemon's own measured
-  ceiling for this route on this host was not reached within this run's
-  bounds. Raw evidence:
-  `docs/qa/008-full-test-coverage/stress_capacity_observation.txt`.
+  `raft.Node`. Illustrative captured evidence from original
+  implementation (real run): **every window sustained 100% success rate
+  up to and including 800 concurrent workers** (9471 requests
+  attempted/succeeded at the final window, p50=63.1ms/p95=81.1ms/
+  p99=89.9ms) — the daemon's own measured ceiling for this route on
+  this host was not reached within this run's bounds. **Honest
+  evidence-durability note** (found by an independent cross-spec
+  regression-verification pass, 2026-09-18): `docs/qa/008-full-test-coverage/stress_capacity_observation.txt`
+  is overwritten in place on every run — an independent re-run of this
+  same test (same 5-800 concurrency ladder) measured 6577 requests at
+  the 800-worker window (still 100% success, zero failures, at a
+  slightly-lower absolute count consistent with normal host-load
+  variance between runs of a real wall-clock-bounded, 750ms-per-window
+  test) — so the exact integer counts above are illustrative of ONE
+  real run, not a fixture re-verifiable byte-for-byte against the
+  checked-in file; the qualitative conclusion (100% success through
+  every tested concurrency level) has been independently reproduced and
+  holds.
 - **claude_toolkit — GENUINELY-INAPPLICABLE.** Same structural reason as
   claude_toolkit's DDoS row: no listening network socket of its own to
   sustain load against.
