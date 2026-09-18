@@ -1,0 +1,70 @@
+005-cuda-gpu-inference T014: paired meta-test mutation (Constitution §1.1)
+============================================================================
+
+tasks.md T014 as originally written: "a mutation that moves the T005
+compiler-compatibility flag OUTSIDE the cuda) case (e.g., unconditionally
+into the shared cmake_args base array) MUST make T013 fail."
+
+ADAPTED (honestly, not silently): T005 was skipped (see
+T004_T005_skip_rationale.txt - the real build succeeded unmodified, no
+compiler-compatibility flag was ever added to lib/engine.sh), so there is
+no such flag in the codebase to mutate. The mutation below tests the
+IDENTICAL regression CLASS T013/T014 exist to catch - a cuda)-branch-only
+cmake flag leaking unconditionally into the shared base cmake_args array
+(and therefore into the cpu) branch too) - using the flag that DOES
+exist in the cuda) branch: -DGGML_CUDA=ON.
+
+Mutation applied (real, saved+restored, not merely described):
+
+  --- a/lib/engine.sh
+  +++ b/lib/engine.sh
+  @@ -60,11 +60,10 @@
+     local backend; backend="$(engine_detect_backend)"
+  -  local -a cmake_args=(-DCMAKE_BUILD_TYPE=Release)
+  +  local -a cmake_args=(-DCMAKE_BUILD_TYPE=Release -DGGML_CUDA=ON)
+     case "${backend}" in
+       cuda)
+         log "CUDA toolkit detected -> GGML_CUDA=ON"
+  -      cmake_args+=(-DGGML_CUDA=ON)
+         ;;
+
+Real test run against the MUTATED lib/engine.sh
+(tests/test_engine_cpu_regression.sh):
+
+  ok: the shadow no-nvcc bin directory genuinely excludes nvcc
+  ok: engine_detect_backend returns 'cpu' when nvcc is absent from PATH
+  ok: cpu-only dry-run cmake invocation still contains -DGGML_NATIVE=ON
+  FAIL: cpu-only dry-run cmake invocation does NOT contain -DGGML_CUDA=ON
+    cmake invocation unexpectedly contains -DGGML_CUDA=ON with no nvcc on PATH
+  ok: cpu-only dry-run cmake invocation does NOT contain any CMAKE_CUDA_FLAGS entry (the T005 compiler-compatibility flag is cuda)-branch-only)
+  ok: engine_detect_backend on the real (unmodified) PATH still returns one of the known backends (got: cuda)
+  RESULT: FAIL (1 assertion failure(s))
+  mutated exit code: 1
+
+CONFIRMED: the mutation makes T013 genuinely FAIL, proving this test is
+not a bluff - it can and does catch the exact regression class it exists
+to guard against.
+
+Revert (real, byte-for-byte, verified via diff against the pre-mutation
+copy AND against `git status --short lib/engine.sh` reporting no
+changes):
+
+  $ diff -u /tmp/engine.sh.orig lib/engine.sh
+  (no output - identical)
+  $ git status --short lib/engine.sh
+  (no output - clean, tracked file unchanged)
+
+Real test run against the REVERTED (original, committed) lib/engine.sh:
+
+  ok: the shadow no-nvcc bin directory genuinely excludes nvcc
+  ok: engine_detect_backend returns 'cpu' when nvcc is absent from PATH
+  ok: cpu-only dry-run cmake invocation still contains -DGGML_NATIVE=ON
+  ok: cpu-only dry-run cmake invocation does NOT contain -DGGML_CUDA=ON
+  ok: cpu-only dry-run cmake invocation does NOT contain any CMAKE_CUDA_FLAGS entry (the T005 compiler-compatibility flag is cuda)-branch-only)
+  ok: engine_detect_backend on the real (unmodified) PATH still returns one of the known backends (got: cuda)
+  RESULT: PASS
+  reverted exit code: 0
+
+CONFIRMED: the full RED (mutated, fails) -> GREEN (reverted, passes)
+cycle was genuinely executed, not merely asserted. This satisfies T014's
+anti-bluff requirement.

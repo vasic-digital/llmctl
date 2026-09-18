@@ -1,0 +1,91 @@
+005-cuda-gpu-inference T011: Superpowers-TUI live-session re-run
+==================================================================
+
+HONEST DISCLOSURE (per the task brief - reported explicitly, never
+silently skipped or fabricated):
+
+This session was executed by a non-interactively-dispatched subagent
+with no way to drive an actual interactive `claude` CLI process running
+the Superpowers plugin's real multi-turn TUI (that requires either a
+human-attended terminal session or a genuinely interactive Claude Code
+process this environment cannot launch/control as a headless subagent).
+No transcript of an actual Claude Code + Superpowers TUI session is
+claimed or included below, and no such session was run.
+
+SUBSTITUTE ACTUALLY PERFORMED (real, not simulated): the model server's
+real HTTP `/v1/chat/completions` endpoint was driven through a real,
+growing, 4-turn coding-assistant-style conversation (skill-invocation-
+shaped turn -> tool-call-shaped follow-up -> implementation turn ->
+summary turn), using the SAME shape of multi-turn interaction
+docs/CONTINUATION.md section 10m identified as needing "at least 4
+sequential model round-trips (skill-invocation + tool-call + final-
+answer flow)" - and measuring the REAL wall-clock latency and REAL
+tokens/sec of each turn, which is the exact dimension section 10m
+documented as the root cause of every prior FAIL (CPU generation speed
+degrading turn-over-turn until the client's own per-request timeout
+fired).
+
+Profile under test: `fast` (Llama-3.1-8B-Instruct-Q4_K_M.gguf), launched
+directly against the T005/T006-verified CUDA-enabled llama-server build
+at the real catalog-planned settings (--ctx-size 8192 --n-gpu-layers 99,
+matching `hw_probe_json | catalog_plan_json`'s live-computed plan for
+this profile on this host: mode=gpu, ngl=99, vram_mb=5716). `moe-fast`
+(the profile section 10m's headline FAIL was specifically about) was
+NOT re-run this round: a fresh, real `hw_probe_json | catalog_plan_json`
+check on THIS host, right now, honestly reports it does NOT fit even
+with GPU enabled (mode=none, fits=false, ram_mb needed=15644 vs this
+host's live ram_mb budget=13298, vram_mb needed exceeds the 10444 MiB
+VRAM budget too - see moe_fast_still_does_not_fit.txt in this
+directory for the full captured planner output + free/nvidia-smi
+readings). Forcing it to run anyway (bypassing the planner's own
+budget refusal) risked repeating the exact swap-fills-to-100%-full
+host-degradation incident section 10m's own subagent self-caught and
+had to recover from during an earlier, similarly-oversized manual test -
+this run declined to repeat that risk. This is FR-006/Acceptance
+Scenario 2's honestly-disclosed "still fails for a specific profile...
+the reason is captured and disclosed" outcome for moe-fast specifically,
+not a claim that no profile was re-verified.
+
+REAL CAPTURED RESULT (raw JSON-lines output, one object per turn, exact
+tool that produced it: python3 multiturn_conversation.py against
+127.0.0.1:18098, real llama-server subprocess, real GPU offload):
+
+{"turn": 1, "prompt_len_chars": 1477, "elapsed_s": 4.879, "completion_tokens": 300, "tok_s": 61.482, "finish_reason": "length", "content_preview": "The function `divide_list` appears to be well-structured, but there are a few potential issues to consider:\n\n1. **Zero Division Error**: If the `divisor` is zero, the function will raise a `ZeroDivisi"}
+{"turn": 2, "prompt_len_chars": 2388, "elapsed_s": 2.688, "completion_tokens": 166, "tok_s": 61.766, "finish_reason": "stop", "content_preview": "Here's the corrected function:\n\n```python\ndef divide_list(values, divisor):\n    \"\"\"\n    Divide each value in the list by the divisor.\n\n    Args:\n        values (list): A list of numbers to be divided."}
+{"turn": 3, "prompt_len_chars": 3680, "elapsed_s": 4.865, "completion_tokens": 300, "tok_s": 61.662, "finish_reason": "length", "content_preview": "Here's a pytest unit test module for the corrected `divide_list` function:\n\n```python\nimport pytest\n\ndef test_divide_list_normal_case():\n    values = [10, 20, 30]\n    divisor = 2\n    expected_result ="}
+{"turn": 4, "prompt_len_chars": 3980, "elapsed_s": 0.593, "completion_tokens": 34, "tok_s": 57.319, "finish_reason": "stop", "content_preview": "\"Fixed divide_list function to raise ValueError when divisor is zero and return empty list unchanged when input list is empty, preventing potential ZeroDivisionError and improving robustness.\""}
+{"overall_elapsed_s": 13.026, "turns_completed": 4}
+
+INTERPRETATION (honest, bounded to what was actually measured):
+
+- All 4 turns completed successfully with real, coherent, on-topic
+  content (a genuine bug-review -> fix -> test -> commit-message
+  sequence), growing conversation context each turn (1477 -> 3980
+  chars) exactly as a real multi-turn session would.
+- Per-turn latency: 0.59s - 4.88s. Total 4-turn wall-clock: 13.0s.
+- tok/s stayed CONSISTENT across all 4 turns (57.3 - 61.8 tok/s) with
+  NO progressive degradation - this is the direct, measured contrast
+  to section 10m's documented CPU-only finding of speed degrading from
+  ~11.75 tok/s down to ~2.9-3.0 tok/s over 4 turns, which is what
+  caused the client's own ~180s idle timeout (and even a patient 900s
+  outer budget) to repeatedly fire before a turn could finish.
+- 13.0s total for 4 full turns is comfortably within BOTH previously-
+  documented client-side budgets (the ~180s per-request idle timeout
+  and the 900s patient internal budget) by roughly one to two orders
+  of magnitude of headroom - a real, measured, large margin, not a
+  narrow pass.
+
+WHAT THIS DOES NOT PROVE (honest boundary, stated explicitly per this
+project's own anti-bluff discipline): this substitute does not exercise
+Claude Code's own system prompt overhead, the Superpowers plugin's
+actual skill-invocation/tool-call protocol, or the real interactive TUI
+client's own timeout/retry/streaming behavior - only the underlying
+model server's real multi-turn generation speed, which was section
+10m's own diagnosed root cause. Whether the real Superpowers-TUI
+challenge itself now passes end-to-end for `fast` (never previously
+tested for layer 4 per section 10m's status table) or for `small`
+(whose prior layer-4 FAIL was attributed to context-window sizing, a
+DIFFERENT root cause GPU speed does not address) still requires an
+actual interactive Claude Code session, which this dispatched subagent
+could not run. This is disclosed here explicitly, exactly as required,
+rather than glossed over.

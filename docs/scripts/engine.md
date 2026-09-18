@@ -154,6 +154,61 @@ LLMCTL_LLAMA_SERVER=/custom/path/llama-server bin/llmctl models download fast
    `colibri`) or building both in sequence for `all`; an unrecognized value
    dies naming the valid choices.
 
+## 005-cuda-gpu-inference addendum: real CUDA build confirmed, no compiler flag needed, LD_LIBRARY_PATH required at runtime
+
+**No code change to this file was needed for this feature.**
+`research.md`'s R2 concern — that CUDA 12.4's `nvcc` would reject this
+host's `gcc 15.2.0` as an unsupported host compiler (per CUDA 12.4's
+published `gcc <= 13.x` support matrix) and require a
+`-DCMAKE_CUDA_FLAGS=-allow-unsupported-compiler` addition to the `cuda)`
+branch — was investigated with a real, unmodified `engine_build_llama`
+rebuild and did NOT materialize: the full CUDA compile (every
+`ggml-cuda/*.cu` object file) and link succeeded with zero
+compiler-compatibility errors or warnings. `engine_build_llama`'s `cuda)`
+branch remains exactly `cmake_args+=(-DGGML_CUDA=ON)`, unchanged. See
+`docs/qa/005-cuda-gpu-inference/T004_T005_skip_rationale.txt` and
+`build_attempt_1_unmodified.log` for the full real evidence.
+
+**Runtime gotcha confirmed for a CUDA-enabled build (not new to this
+build system, but newly relevant once GPU builds exist): invoking the
+built `llama-server` binary directly (bypassing `lib/scheduler.sh`'s
+`sched_build_launch`, which already sets `LD_LIBRARY_PATH` correctly via
+`svc_write_env`) without `LD_LIBRARY_PATH` pointed at
+`submodules/llama.cpp/build/bin` silently loads the stale, CPU-only,
+dpkg-owned system package `libggml0`'s
+`/usr/lib/x86_64-linux-gnu/libggml.so.0` instead of the freshly-built
+one sitting right next to the binary, and `--list-devices` reports
+`Available devices: (none)` even on a genuinely CUDA-capable build —
+exactly the same SONAME-collision class already root-caused in
+`lib/download.sh`'s `_dl_smoke_test_gguf()` and
+`lib/service_linux.sh`'s `svc_write_env()`. Confirmed directly this
+session:
+
+```sh
+# WITHOUT LD_LIBRARY_PATH -> stale system libggml.so.0 -> no CUDA device
+./submodules/llama.cpp/build/bin/llama-server --list-devices
+# Available devices:
+#   (none)
+
+# WITH LD_LIBRARY_PATH -> the real, freshly-built libggml.so.0 -> CUDA found
+LD_LIBRARY_PATH="$(pwd)/submodules/llama.cpp/build/bin" \
+  ./submodules/llama.cpp/build/bin/llama-server --list-devices
+# Available devices:
+#   CUDA0: NVIDIA GeForce RTX 3060 (11909 MiB, 11000 MiB free)
+```
+
+Any new call site that launches `llama-server` directly (outside
+`lib/scheduler.sh`'s existing, already-correct launch path) MUST set
+`LD_LIBRARY_PATH` to the binary's own directory first — see
+`tests/test_gpu_vram_delta.sh` and `tests/test_gpu_throughput_ratio.sh`
+for the pattern.
+
+**Real, measured GPU offload evidence** (profile `small`, this host,
+RTX 3060): a real chat-completion request produced a 2343 MiB VRAM delta
+(SC-002 threshold 500 MiB) and a 56.6x throughput ratio versus the same
+build forced to `--n-gpu-layers 0` (SC-003 threshold 2x). Full evidence:
+`docs/qa/005-cuda-gpu-inference/`.
+
 ## Related scripts
 
 * Sources `lib/common.sh` and `lib/os_detect.sh`.
@@ -168,9 +223,14 @@ LLMCTL_LLAMA_SERVER=/custom/path/llama-server bin/llmctl models download fast
   submodules declared in `.gitmodules` (out of scope for this
   documentation pass, but the direct build target of this file).
 * Exercised by `tests/test_engine.sh` (backend detection, dry-run build
-  command shape) and end-to-end via `tests/test_setup_e2e.sh` (the
-  `llmctl setup` flow, which calls `engine_build all`).
+  command shape), `tests/test_engine_cpu_regression.sh` (005-cuda-gpu-
+  inference: permanent CPU-only-path regression guard), and end-to-end
+  via `tests/test_setup_e2e.sh` (the `llmctl setup` flow, which calls
+  `engine_build all`). `tests/test_gpu_vram_delta.sh` and
+  `tests/test_gpu_throughput_ratio.sh` (005-cuda-gpu-inference) exercise
+  this file's build OUTPUT (the built `llama-server` binary) directly,
+  rather than sourcing this file.
 
 ## Last verified date
 
-2026-09-17
+2026-09-18

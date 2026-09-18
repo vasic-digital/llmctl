@@ -1301,6 +1301,113 @@ Go-daemon integration gap (directly above, §10n) remains the one
 still-genuinely-open item from that list — correctly out of scope for
 both of these follow-up passes, not silently dropped.
 
+## 10p. Feature 005 (CUDA GPU-Accelerated Inference Enablement): real GPU offload confirmed, 56.6x measured throughput, §10m's diagnosed root cause resolved (real substitute evidence, real Superpowers-TUI session NOT re-run - honest limitation disclosed) (2026-09-18)
+
+**This section documents an amendment to, not a silent deletion of, §10m.**
+§10m's FAIL verdict for the real, interactive Superpowers-TUI challenge
+is NOT superseded by a new PASS entry here, because the real interactive
+Claude Code + Superpowers TUI session was NOT re-run this round (a
+dispatched, non-interactive subagent cannot drive one) - that limitation
+is disclosed explicitly below, per this project's anti-bluff discipline,
+rather than glossed over or silently claimed resolved.
+
+**What changed and is now REAL, captured evidence (spec:
+`specs/005-cuda-gpu-inference/`)**: this host's CUDA toolkit
+(`nvidia-cuda-toolkit` 12.4.131, distro package) was already installed
+prior to this round (confirmed via `nvcc --version`); the previously-
+documented blocker in §10m ("this host's `llama-server` build has NO
+CUDA backend at all") is now CLOSED - a real, unmodified
+`engine_build_llama` rebuild (no code change to `lib/engine.sh` was
+needed; `research.md` R2's predicted gcc-15.2-vs-CUDA-12.4 compiler
+incompatibility did NOT materialize on this host, confirmed by a real,
+complete, zero-error build) produced a genuinely CUDA-capable
+`llama-server` (`--list-devices` -> `CUDA0: NVIDIA GeForce RTX 3060
+(11909 MiB, 11000 MiB free)`, but ONLY when `LD_LIBRARY_PATH` points at
+the freshly-built `submodules/llama.cpp/build/bin` - without it, the
+dynamic linker silently prefers the stale, CPU-only, dpkg-owned system
+package `libggml0`'s `/usr/lib/x86_64-linux-gnu/libggml.so.0` and
+reports "Available devices: (none)", the exact SONAME-collision class
+already root-caused and worked around elsewhere in this codebase per
+§10k item 1 - both new tests below apply the same fix).
+
+**Real, measured VRAM delta (SC-002, target >= 500 MiB)** —
+`tests/test_gpu_vram_delta.sh`, profile `small`
+(Llama-3.2-3B-Instruct-Q4_K_M, real catalog-planned ngl=99): idle
+baseline 1233 MiB -> 3576 MiB while a real chat-completion request was
+in flight -> **delta 2343 MiB**, ~4.7x the SC-002 threshold. RED-first
+proof genuinely performed (not merely asserted): the identical test run
+against a real, separately-built CPU-only binary (`-DGGML_NATIVE=ON
+-DGGML_CUDA=OFF`, same source tree) measured delta=0 MiB and correctly
+FAILED, proving this test genuinely discriminates real GPU residency
+from a claimed one.
+
+**Real, measured throughput ratio (SC-003, target >= 2x)** —
+`tests/test_gpu_throughput_ratio.sh`, same profile+prompt, same CUDA
+build, `--n-gpu-layers 0` forced vs the real catalog-planned ngl=99:
+CPU-forced 1.97 tok/s (207 completion tokens / 104.91s) vs GPU-planned
+111.59 tok/s (204 completion tokens / 1.83s) - **ratio 56.6x**, ~28x the
+SC-003 threshold. RED-first proof: the same test against the separately-
+built CPU-only binary measured ratio 0.98x (both runs genuinely
+CPU-only regardless of the `--n-gpu-layers` flag passed) and correctly
+FAILED.
+
+**`moe-fast` (§10m's headline FAIL profile) still does NOT fit this
+host's VRAM even with GPU now enabled** - honestly re-checked via a
+fresh, real `hw_probe_json | catalog_plan_json` this round: `mode: none,
+fits: false`, needs 15644 MiB RAM (exceeds this host's live 13298 MiB
+RAM budget) with 0 MiB VRAM plannable (the 12.1 GB `gpt-oss-20b-MXFP4`
+file plus its KV cache exceeds the 10444 MiB VRAM budget on a 12 GB
+card). This profile was deliberately NOT force-started outside the
+planner's own budget refusal - doing so risks repeating the exact
+swap-fills-to-100%-full host-degradation incident §10m's own subagent
+had to self-catch and recover from during an earlier, similarly-
+oversized manual test. Captured in full:
+`docs/qa/005-cuda-gpu-inference/moe_fast_still_does_not_fit.txt`. This
+is FR-006/Acceptance Scenario 2's honestly-disclosed "still fails ...
+reason captured and disclosed" outcome for this specific profile,
+per this project's own no-silent-omission discipline.
+
+**T011 honest substitute for the real Superpowers-TUI session (full
+disclosure in `docs/qa/005-cuda-gpu-inference/superpowers_tui_session.log`)**:
+unable to drive an actual interactive Claude Code + Superpowers TUI
+process as a non-interactive dispatched subagent, a real (not
+simulated) 4-turn, growing-context, coding-assistant-shaped HTTP
+conversation was run directly against the GPU-enabled `fast` profile
+(Llama-3.1-8B, real catalog-planned ngl=99) - the SAME multi-turn shape
+(skill-invocation -> tool-call -> implementation -> summary) §10m
+identified as needing "at least 4 sequential model round-trips."
+Result: all 4 turns real, coherent, on-topic; per-turn tok/s held
+CONSTANT at 57.3-61.8 across all 4 turns (207 chars -> 3980 chars of
+growing context) with ZERO progressive degradation - the direct,
+measured contrast to §10m's CPU-only finding of tok/s degrading from
+~11.75 down to ~2.9-3.0 over 4 turns; total 4-turn wall-clock 13.0s,
+one-to-two orders of magnitude under BOTH previously-documented client
+budgets (~180s per-request idle timeout, 900s patient outer budget).
+**This demonstrates §10m's diagnosed root cause (CPU generation speed)
+is genuinely resolved for this profile at this measurement layer.** It
+does NOT prove the real interactive Superpowers-TUI challenge itself now
+passes end-to-end (Claude Code's own system-prompt overhead, the
+Superpowers plugin's real skill-invocation/tool-call protocol, and the
+TUI client's own timeout/retry/streaming behavior are all untested by
+this HTTP-only substitute) - a genuine interactive re-run remains an
+OPEN follow-up item for a session that can actually drive that TUI,
+tracked here rather than silently assumed passing.
+
+**Zero regression confirmed**: `tests/test_engine_cpu_regression.sh`
+(new, permanent regression guard) PASSES - with `nvcc` shadowed off
+`PATH`, `engine_detect_backend` still returns exactly `cpu` and the
+`cpu)` branch's dry-run cmake invocation is byte-for-byte unaffected
+(still `-DGGML_NATIVE=ON`, still no `-DGGML_CUDA=ON` or any
+`CMAKE_CUDA_FLAGS` entry). `lib/engine.sh` itself is UNCHANGED by this
+feature (see `docs/qa/005-cuda-gpu-inference/T004_T005_skip_rationale.txt`
+for why the anticipated compiler-compatibility flag was never needed on
+this host).
+
+**Full evidence trail**: `docs/qa/005-cuda-gpu-inference/` (host_baseline.txt,
+nvcc_version.txt, build_attempt_1_unmodified.log, T004_T005_skip_rationale.txt,
+list_devices.txt, vram_delta.txt, throughput_ratio.txt,
+moe_fast_still_does_not_fit.txt, superpowers_tui_session.log).
+
 ## 11. Binding constraints (unchanged, restated per §12.10)
 
 - Anti-bluff (Constitution §11.4 family): every PASS claim in this

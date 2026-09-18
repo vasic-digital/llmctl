@@ -1,0 +1,25 @@
+{
+  "mode": "none",
+  "ram_mb": 15644,
+  "vram_mb": 0,
+  "storage_mb": 11548,
+  "ctx": 16384,
+  "ngl": 0,
+  "parallel": 2,
+  "flash_attn": "auto",
+  "fits": false,
+  "port": 8084,
+  "engine": "llama",
+  "capability": [
+    "chat"
+  ],
+  "min_tier": "baseline",
+  "tier_ok": false,
+  "recommended": false
+}
+budgets: {"ram_mb": 13298, "vram_mb": 10444, "storage_free_mb": 1241084}
+
+               total        used        free      shared  buff/cache   available
+Mem:            30Gi        12Gi       6.8Gi       722Mi        11Gi        17Gi
+Swap:          8.0Gi       8.0Gi       8.1Mi
+1242 MiB, 10668 MiB, 12288 MiB
