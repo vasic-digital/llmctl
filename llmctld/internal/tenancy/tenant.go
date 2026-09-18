@@ -90,6 +90,23 @@ func (r *Registry) Delete(id string) error {
 	return nil
 }
 
+// List returns every tenant currently registered (006-cli-daemon-wiring
+// FR-006, data-model.md: order is not contractually significant - the
+// backing GET /v1/tenants route and its bash caller assert set
+// membership, never order). Always returns a non-nil slice, even when
+// the registry is empty, so a caller (or a JSON encoder) never has to
+// special-case a nil result into an empty array.
+func (r *Registry) List() []*Tenant {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	out := make([]*Tenant, 0, len(r.tenants))
+	for _, t := range r.tenants {
+		out = append(out, t)
+	}
+	return out
+}
+
 // RegisterModel adds modelName to tenantID's own model namespace
 // (FR-037). It does not itself grant visibility to any other tenant -
 // that requires an explicit ShareModel call.

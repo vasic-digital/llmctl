@@ -80,6 +80,23 @@ func (e *Enforcer) SetLimits(tenantID string, limits Limits) {
 	delete(e.buckets, tenantID)
 }
 
+// GetLimits returns tenantID's currently-configured Limits and whether
+// any were ever set for it (006-cli-daemon-wiring FR-007, data-model.md).
+// A tenant with no prior SetLimits call reports the zero Limits{} plus
+// ok=false, distinguishing "never configured" (ok=false) from
+// "configured, unlimited on every dimension" (ok=true, Limits{}) - the
+// SAME zero-means-unlimited convention this package's other methods
+// already document, extended one level so a caller reading the value
+// back (e.g. GET /v1/tenants/:id/quota) never has to guess which case it
+// is looking at.
+func (e *Enforcer) GetLimits(tenantID string) (Limits, bool) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	limits, ok := e.limits[tenantID]
+	return limits, ok
+}
+
 // AllowRequest applies tenantID's RequestsPerSecond limit via a
 // token-bucket algorithm, evaluated at the caller-supplied now (never
 // time.Now() internally) so tests can drive it deterministically without

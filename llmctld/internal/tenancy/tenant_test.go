@@ -200,6 +200,44 @@ func TestShareModel_UnknownOwnerModelFails(t *testing.T) {
 	}
 }
 
+// TestRegistry_List proves the 006-cli-daemon-wiring accessor: an empty
+// registry returns an empty (never nil) slice, and after registering
+// tenants, List returns every one of them, matched by ID regardless of
+// order (data-model.md explicitly leaves order non-contractual).
+func TestRegistry_List(t *testing.T) {
+	r := NewRegistry()
+
+	empty := r.List()
+	if empty == nil {
+		t.Fatal("List on an empty registry returned nil, want an empty (non-nil) slice")
+	}
+	if len(empty) != 0 {
+		t.Fatalf("List on an empty registry returned %d entries, want 0", len(empty))
+	}
+
+	if _, err := r.Create("tenant-a", "Tenant A"); err != nil {
+		t.Fatalf("Create(tenant-a) returned unexpected error: %v", err)
+	}
+	if _, err := r.Create("tenant-b", "Tenant B"); err != nil {
+		t.Fatalf("Create(tenant-b) returned unexpected error: %v", err)
+	}
+
+	got := r.List()
+	if len(got) != 2 {
+		t.Fatalf("List returned %d entries after 2 Creates, want 2: %+v", len(got), got)
+	}
+	seen := map[string]string{}
+	for _, tenant := range got {
+		seen[tenant.ID] = tenant.Name
+	}
+	if seen["tenant-a"] != "Tenant A" {
+		t.Fatalf("List missing or wrong entry for tenant-a: %+v", got)
+	}
+	if seen["tenant-b"] != "Tenant B" {
+		t.Fatalf("List missing or wrong entry for tenant-b: %+v", got)
+	}
+}
+
 func contains(models []string, name string) bool {
 	for _, m := range models {
 		if m == name {

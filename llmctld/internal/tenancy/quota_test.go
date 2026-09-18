@@ -180,6 +180,43 @@ func TestCheckResourceBudget_DeniesOverBudgetPerDimensionIndependently(t *testin
 	}
 }
 
+// TestEnforcer_GetLimits proves the 006-cli-daemon-wiring accessor
+// (data-model.md): a tenant with no configured Limits reports the zero
+// value plus ok=false (distinguishing "never configured" from
+// "configured, all-unlimited" - the no-guessing convention this
+// package's own doc comments already establish for the rate/concurrency/
+// resource dimensions individually), and a tenant with limits set via
+// SetLimits reports exactly those limits plus ok=true.
+func TestEnforcer_GetLimits(t *testing.T) {
+	e := NewEnforcer()
+
+	gotZero, ok := e.GetLimits("ghost")
+	if ok {
+		t.Fatalf("GetLimits on a never-configured tenant returned ok=true, limits=%+v", gotZero)
+	}
+	if gotZero != (Limits{}) {
+		t.Fatalf("GetLimits on a never-configured tenant returned %+v, want the zero value", gotZero)
+	}
+
+	want := Limits{
+		RequestsPerSecond:     5,
+		MaxConcurrentRequests: 10,
+		MaxGPUBytes:           8589934592,
+		MaxCPUCores:           4,
+		MaxRAMBytes:           17179869184,
+		MaxStorageBytes:       107374182400,
+	}
+	e.SetLimits("t1", want)
+
+	got, ok := e.GetLimits("t1")
+	if !ok {
+		t.Fatal("GetLimits on a tenant with limits set via SetLimits returned ok=false")
+	}
+	if got != want {
+		t.Fatalf("GetLimits returned %+v, want %+v", got, want)
+	}
+}
+
 // TestCheckResourceBudget_UnlimitedWhenCeilingsAreZero proves the
 // documented zero-means-unlimited convention applies independently to
 // each of the 4 resource dimensions.
