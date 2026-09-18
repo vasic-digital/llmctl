@@ -63,22 +63,40 @@ and after).
 
 === claude_toolkit (sibling toolkit, read-only for this feature) ===
 
-Two attempts this session to run `bash scripts/tests/run-all.sh`:
-attempt 1 (bounded 25-minute timeout) and attempt 2 (bounded 25-minute
-timeout, retried after attempt 1's wait expired) - BOTH refused by the
-suite's own concurrency guard (`.git/cma-suite-home-milosvasic-Projects-
-claude-toolkit-.lock`), held throughout by a genuinely live, unrelated
-process (PID 1370369, `bash scripts/tests/run-all.sh`, confirmed alive
-via `ps -p 1370369` at 11, 14, 16, 26, and 31 minutes elapsed across
-this session) that this feature correctly did NOT force past
-(Constitution's own concurrency-lock discipline: "concurrent suite runs
-are refused on purpose: a repo that mutates while its own tests execute
-cannot produce reproducible results").
+Three attempts this session to run `bash scripts/tests/run-all.sh`:
 
-Verdict: NOT independently re-verified this session. This is a
-regression-check AVAILABILITY gap, not a regression RISK - this feature
-made ZERO changes to any file in claude_toolkit (it is explicitly
-read-only for this feature per the task scope), so there is nothing in
-claude_toolkit for this feature to have regressed. The concurrent
-session's own use of claude_toolkit's test suite is itself evidence the
-toolkit is in active, independent use during this session.
+Attempts 1 and 2 (bounded 25-minute timeouts each) were BOTH refused by
+the suite's own concurrency guard
+(`.git/cma-suite-home-milosvasic-Projects-claude-toolkit-.lock`), held
+throughout by a genuinely live, unrelated process (PID 1370369, `bash
+scripts/tests/run-all.sh`, confirmed alive via `ps -p 1370369` at 11,
+14, 16, 26, and 31 minutes elapsed across this session) that this
+feature correctly did NOT force past (Constitution's own concurrency-
+lock discipline: "concurrent suite runs are refused on purpose: a repo
+that mutates while its own tests execute cannot produce reproducible
+results").
+
+Attempt 3 (bounded 5-minute timeout, started after PID 1370369 was
+confirmed to have exited): the lock was free and the suite genuinely
+started running. Within the 5-minute bound it got through the first 20
+of 74 `test_*.sh` files (alphabetically:
+test_128k_output_clamp.sh..test_failing_layer_attribution.sh), all real,
+non-mocked test bodies executing their own assertions - **491 [PASS]
+assertions, ZERO [FAIL] assertions** - before the bound terminated it
+mid-run (`Terminated ... RC:124`, a timeout, not a suite-reported
+failure). This is real, captured, honest evidence, not a fabricated
+pass - see
+`/tmp/claude-1000/-home-milosvasic-Projects-llmctl/4cea4116-8339-d4a8-4d6c-db1d21cb18d4/scratchpad/claude_toolkit_final.txt`
+for the raw output (a session-scratchpad path, not part of this
+project's own tracked tree).
+
+Verdict: PARTIALLY re-verified this session (20/74 files, 491/491
+assertions PASS, 0 FAIL) - the remaining 54 files were not reached
+within this session's time budget. This is a regression-check
+COVERAGE gap for the untested remainder, not a regression RISK for
+this feature specifically - this feature made ZERO changes to any file
+in claude_toolkit (it is explicitly read-only for this feature per the
+task scope), so there is nothing in claude_toolkit for this feature to
+have regressed. The concurrent session's own use of claude_toolkit's
+test suite throughout most of this session is itself evidence the
+toolkit is in active, independent, real use.
