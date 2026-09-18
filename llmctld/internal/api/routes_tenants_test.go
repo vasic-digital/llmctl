@@ -298,7 +298,11 @@ func TestTenantQuota_ViewAndSet(t *testing.T) {
 		t.Fatalf("view on a nonexistent tenant: expected 404, got %d: %s", rec.Code, rec.Body.String())
 	}
 
-	// Set via PUT, echoed back 200.
+	// PUT requires ActionTenantManage (SECURITY FIX post-review - see
+	// TestSetTenantQuota_RequiresAdminRole for the full RED-before-GREEN
+	// proof): tenant-a's own JWT, holding no admin-class role, MUST be
+	// denied setting its OWN quota - self-ownership is sufficient for
+	// VIEWING but never for SETTING.
 	setBody := map[string]interface{}{
 		"requests_per_second":     5.0,
 		"max_concurrent_requests": 10,
@@ -307,9 +311,14 @@ func TestTenantQuota_ViewAndSet(t *testing.T) {
 		"max_ram_bytes":           int64(17179869184),
 		"max_storage_bytes":       int64(107374182400),
 	}
-	rec = doJSON(t, engine, http.MethodPut, "/v1/tenants/tenant-a/quota", setBody, tenantAToken)
+	if rec := doJSON(t, engine, http.MethodPut, "/v1/tenants/tenant-a/quota", setBody, tenantAToken); rec.Code != http.StatusForbidden {
+		t.Fatalf("PRIVILEGE ESCALATION: tenant-a's own non-admin JWT set its OWN quota and got status=%d body=%s (want 403)", rec.Code, rec.Body.String())
+	}
+
+	// Set via PUT using an admin/tenant-manage caller, echoed back 200.
+	rec = doJSON(t, engine, http.MethodPut, "/v1/tenants/tenant-a/quota", setBody, adminToken)
 	if rec.Code != http.StatusOK {
-		t.Fatalf("PUT quota: expected 200, got %d: %s", rec.Code, rec.Body.String())
+		t.Fatalf("PUT quota (admin): expected 200, got %d: %s", rec.Code, rec.Body.String())
 	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &limitsResp); err != nil {
 		t.Fatalf("decode PUT response: %v", err)
@@ -341,6 +350,65 @@ func TestTenantQuota_ViewAndSet(t *testing.T) {
 	}
 	if rec := doJSON(t, engine, http.MethodPut, "/v1/tenants/tenant-a/quota", setBody, tenantBToken); rec.Code != http.StatusForbidden {
 		t.Fatalf("cross-tenant PUT: expected 403, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+// TestSetTenantQuota_RequiresAdminRole is a post-review security fix
+// (found by an automated commit security review after 006-cli-daemon-
+// wiring's T014/T015 landed): PUT /v1/tenants/:id/quota was gated by
+// authorizeTenantOwnership, which grants access whenever
+// claims.TenantID == the path tenant - meaning a tenant's own,
+// otherwise-unprivileged JWT could PUT its OWN quota and set it to
+// anything (including unlimited on every dimension, per Limits's
+// zero-means-unlimited convention), a genuine privilege escalation that
+// defeats the entire purpose of operator-imposed quota enforcement
+// (the SAME class of self-service-privilege-escalation bug
+// requireKeyManagementAccess in routes_auth.go was already written to
+// prevent for API-key creation - see that function's doc comment).
+// SETTING a quota is an operator/admin action exactly like tenant
+// creation (POST /v1/tenants) and MUST be gated by the SAME
+// ActionTenantManage bar, never self-ownership; VIEWING a quota
+// (GET /v1/tenants/:id/quota) is unaffected - a tenant may still see
+// its own currently-enforced quota, it just can no longer set it.
+func TestSetTenantQuota_RequiresAdminRole(t *testing.T) {
+	engine, decider := newTenantsTestEngine()
+	adminToken := issueTenantJWT(t, decider, "", []string{auth.RoleAdmin})
+	doJSON(t, engine, http.MethodPost, "/v1/tenants", map[string]string{"id": "tenant-a", "name": "Tenant A"}, adminToken)
+
+	setBody := map[string]interface{}{"max_concurrent_requests": 999999}
+
+	// The escalation: tenant-a's own JWT, holding NO admin-class role,
+	// attempts to set its OWN quota. This MUST be denied - a caller
+	// authorized only by owning the tenant, never by ActionTenantManage,
+	// must not be able to set that tenant's enforced quota.
+	tenantAToken := issueTenantJWT(t, decider, "tenant-a", []string{auth.RoleModelOperator})
+	rec := doJSON(t, engine, http.MethodPut, "/v1/tenants/tenant-a/quota", setBody, tenantAToken)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("PRIVILEGE ESCALATION: tenant-a's own non-admin JWT set its OWN quota and got status=%d body=%s (want 403)", rec.Code, rec.Body.String())
+	}
+
+	// An admin/tenant-manage caller MUST still be able to set ANY
+	// tenant's quota - the fix must not remove legitimate admin access.
+	rec = doJSON(t, engine, http.MethodPut, "/v1/tenants/tenant-a/quota", setBody, adminToken)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("admin caller: expected 200 setting tenant-a's quota, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	// Viewing (GET) is unaffected - tenant-a can still see its own
+	// (now admin-set) quota via ownership, per this route's unchanged
+	// authorizeTenantOwnership check.
+	rec = doJSON(t, engine, http.MethodGet, "/v1/tenants/tenant-a/quota", nil, tenantAToken)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET quota (view) must remain accessible to the owning tenant: expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var limitsResp struct {
+		MaxConcurrentRequests int `json:"max_concurrent_requests"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &limitsResp); err != nil {
+		t.Fatalf("decode GET quota response: %v", err)
+	}
+	if limitsResp.MaxConcurrentRequests != 999999 {
+		t.Fatalf("GET quota (view) did not reflect the admin-set value: %+v", limitsResp)
 	}
 }
 

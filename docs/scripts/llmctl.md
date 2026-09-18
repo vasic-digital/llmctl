@@ -125,7 +125,13 @@ bin/llmctl apikey rotate <key-id>
     `--max-concurrent-requests`, `--max-gpu-bytes`, `--max-cpu-cores`,
     `--max-ram-bytes`, `--max-storage-bytes` were passed (set) — any
     flag not given defaults to `0` (unlimited) on the daemon side, per
-    `tenancy.Limits`'s own zero-means-unlimited convention.
+    `tenancy.Limits`'s own zero-means-unlimited convention. **Setting**
+    a quota (`PUT`) requires an `LLMCTL_CLUSTER_TOKEN` carrying a role
+    granting `tenant:manage` (the same bar as `tenant create`) — a
+    tenant cannot raise its own quota merely by owning that tenant
+    (post-review security fix: an earlier version of this route allowed
+    exactly that self-service escalation). **Viewing** a quota (`GET`)
+    still only requires owning the tenant (or `tenant:manage`).
   - `tenant list` and `tenant quota` (both verbs) go through the new
     `cluster::request_checked` (see below), never the original
     `cluster::request`, so a non-2xx daemon response (e.g. a 404 for a

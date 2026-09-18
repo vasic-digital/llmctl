@@ -116,19 +116,35 @@ func RegisterTenantRoutes(r gin.IRoutes, decider *authz.Decider) {
 		c.JSON(http.StatusOK, limits)
 	})
 
-	// PUT /v1/tenants/:id/quota (006-cli-daemon-wiring FR-007, T015): the
-	// "set" half of tenant quota <name> [...]. Any field omitted from
-	// the request body defaults to 0 (unlimited) per Go's JSON-unmarshal
-	// zero-value behavior and Limits's own existing zero-means-unlimited
-	// convention - no new "partial update" semantics invented
-	// (data-model.md). Echoes the now-current Limits back on success,
-	// same shape as the GET above; same 404/403 checks as GET, reusing
-	// authorizeTenantOwnership rather than a second authorization path.
+	// PUT /v1/tenants/:id/quota (006-cli-daemon-wiring FR-007, T015; SECURITY
+	// FIX post-review): the "set" half of tenant quota <name> [...]. Any
+	// field omitted from the request body defaults to 0 (unlimited) per
+	// Go's JSON-unmarshal zero-value behavior and Limits's own existing
+	// zero-means-unlimited convention - no new "partial update" semantics
+	// invented (data-model.md). Echoes the now-current Limits back on
+	// success, same shape as the GET above; 404 check reused from GET.
+	//
+	// AUTHORIZATION IS THE SAME ActionTenantManage BAR AS POST
+	// /v1/tenants, DELIBERATELY NOT authorizeTenantOwnership: an earlier
+	// version of this handler used authorizeTenantOwnership (matching
+	// the VIEW route below), which grants access whenever
+	// claims.TenantID == the path tenant - letting a tenant's own,
+	// otherwise-unprivileged JWT set its OWN enforced quota to anything
+	// (including unlimited on every dimension), a genuine privilege
+	// escalation that defeats the entire purpose of operator-imposed
+	// quota enforcement (found by an automated commit security review;
+	// TestSetTenantQuota_RequiresAdminRole is this vulnerability's
+	// RED-before-GREEN proof, the SAME class of self-service-privilege-
+	// escalation bug requireKeyManagementAccess in routes_auth.go was
+	// already written to prevent for API-key creation). SETTING a quota
+	// is an operator/admin action exactly like tenant creation, never a
+	// tenant's own prerogative - VIEWING (the GET route immediately
+	// above) is unaffected and stays ownership-gated.
 	r.PUT("/v1/tenants/:id/quota", RequireJWT(decider), func(c *gin.Context) {
 		claims := ClaimsFromContext(c)
 		tenantID := c.Param("id")
-		if !authorizeTenantOwnership(decider, claims, tenantID) {
-			c.JSON(http.StatusForbidden, gin.H{"error": "caller may only set its own tenant's quota"})
+		if !decider.CheckRBAC(claims.Subject, claims.Roles, auth.ActionTenantManage, "tenants") {
+			c.JSON(http.StatusForbidden, gin.H{"error": "requires a role granting tenant:manage"})
 			return
 		}
 		if _, ok := decider.Tenants.Get(tenantID); !ok {
