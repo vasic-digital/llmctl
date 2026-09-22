@@ -77,7 +77,15 @@ set -euo pipefail
 #       could not run to completion)
 preflight_check_ref() {
   local scratch_dir="$1" url="$2" expected_sha="$3"
-  local fetch_timeout="${PREFLIGHT_FETCH_TIMEOUT:-30}"
+  # 90s (was 30s): measured directly this session - a full
+  # `--tags '+refs/heads/*:...'` fetch of git@github.com:ggml-org/llama.cpp.git
+  # (an extremely large, extremely active upstream with thousands of
+  # branches) genuinely takes ~42s over SSH even on a healthy connection;
+  # 30s produced a spurious "could not verify" (rc 2) for a submodule whose
+  # ref was, in fact, perfectly reachable once the fetch was allowed to
+  # finish. 90s gives >2x headroom above the measured real duration while
+  # still bounding a genuinely hung connection per the note below.
+  local fetch_timeout="${PREFLIGHT_FETCH_TIMEOUT:-90}"
 
   # A connection-refused/DNS-error fetch fails fast; a genuinely HUNG
   # network path (no RST, no response) would otherwise block indefinitely -
