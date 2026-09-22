@@ -220,7 +220,19 @@ _release_main() {
 
   echo
   echo "=== Step 2: changelog (conventional commits since ${since_tag}) ==="
-  local notes_file; notes_file="$(mktemp)"
+  # NOTE: the notes file MUST live under $HOME, never a bare mktemp() in
+  # /tmp. Confirmed live this session: glab is commonly installed as a
+  # SNAP package, which runs confined in its own private mount namespace
+  # with no access to the host's /tmp at all - `glab release create
+  # --notes-file /tmp/...` fails with "Open /tmp/...: no such file or
+  # directory" even though the file genuinely exists and is world-readable
+  # on the real filesystem (snap confinement, not a real missing-file
+  # bug). The same file under $HOME worked immediately. gh has no such
+  # restriction, but using one $HOME-based path for both keeps this
+  # single and simple rather than forking per-forge temp-file logic.
+  local notes_dir="${HOME}/.cache/llmctl-release"
+  mkdir -p "${notes_dir}"
+  local notes_file; notes_file="$(mktemp "${notes_dir}/notes.XXXXXX")"
   release_generate_changelog "${root}" "${since_tag}" | tee "${notes_file}"
 
   echo
