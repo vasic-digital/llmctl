@@ -95,4 +95,36 @@ out="$(preflight_run "unfetchable-submodule" "file:///nonexistent/path/that/does
 assert_eq 2 "${rc}" "preflight_run exits 2 (could-not-verify) when the fetch itself fails, never silently treated as reachable (rc 0) nor mis-reported as confirmed-unreachable (rc 1)"
 assert_contains "${out}" "UNKNOWN" "could-not-verify case is reported with an honest UNKNOWN message, not a false FAIL/PASS claim"
 
+# --- Regression: preflight_run must not leak a stale RETURN trap into its
+# CALLER's scope when invoked repeatedly from a caller-owned loop (the exact
+# shape _preflight_walk uses in the standalone run) - a real, live-reproduced
+# defect this session where a bash RETURN trap set inside preflight_run fired
+# again when the WRAPPING function returned, referencing that invocation's
+# now-out-of-scope `scratch_dir` local and crashing under `set -euo pipefail`
+# with "scratch_dir: unbound variable" - AFTER two correct PASS results had
+# already printed, silently aborting the walk before every remaining
+# submodule was checked (a false "the rest are fine" by omission). -----------
+_preflight_run_leak_wrapper() {
+  local names=("wrap-a" "wrap-b") n rc
+  for n in "${names[@]}"; do
+    rc=0
+    preflight_run "${n}" "file://${UPSTREAM_GOOD}" "${GOOD_SHA}" || rc=$?
+    [[ "${rc}" -eq 0 ]] || return 1
+  done
+  return 0
+}
+
+wrapper_out=""
+wrapper_rc=0
+wrapper_out="$(_preflight_run_leak_wrapper 2>&1)" || wrapper_rc=$?
+assert_eq 0 "${wrapper_rc}" "a caller that invokes preflight_run twice in its own loop returns cleanly (no leaked RETURN-trap crash on the CALLER's own return)"
+case "${wrapper_out}" in
+  *"unbound variable"*)
+    assert_eq 0 1 "no 'unbound variable' text ever appears - a leaked trap referencing an out-of-scope local must not fire (got: ${wrapper_out:0:200})"
+    ;;
+  *)
+    assert_eq 0 0 "no 'unbound variable' text appears in the wrapper's output"
+    ;;
+esac
+
 test_finish

@@ -110,11 +110,23 @@ preflight_run() {
   local name="$1" url="$2" expected_sha="$3"
   local scratch_dir rc
   scratch_dir="$(mktemp -d)"
-  trap 'rm -rf "${scratch_dir}"' RETURN
+  # NOTE: deliberately NOT `trap ... RETURN` here. A RETURN trap set inside a
+  # function is not reliably scoped to that single invocation in bash: when
+  # this function is called repeatedly from a caller's loop (exactly how
+  # _preflight_walk below uses it), the trap can fire again when the CALLER
+  # itself returns - at which point `scratch_dir` is a different function's
+  # now-out-of-scope local, and `set -u` kills the whole script with
+  # "scratch_dir: unbound variable". Reproduced live this session: two real
+  # PASS/FAIL results were printed correctly, then the walk crashed anyway
+  # on the next caller-level return, before every submodule (including
+  # constitution's nested ones) had even been checked - a false "the
+  # remaining submodules are fine" by omission. Explicit cleanup on every
+  # return path avoids the whole class of trap-scoping footgun.
   git init --quiet "${scratch_dir}"
 
   rc=0
   preflight_check_ref "${scratch_dir}" "${url}" "${expected_sha}" || rc=$?
+  rm -rf "${scratch_dir}"
   case "${rc}" in
     0)
       printf 'PASS submodule %s: ref %s is reachable from %s\n' "${name}" "${expected_sha}" "${url}"
