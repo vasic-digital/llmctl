@@ -16,6 +16,31 @@ Engines (vendored as git submodules, pinned to stable tags):
 
 ## Quickstart
 
+### Recommended: one-command persistent install
+
+```bash
+git clone --recursive <this-repository-url> llmctl
+cd llmctl
+./scripts/install.sh      # setup -> download 'small' -> install -> enable
+                           # -> verify reboot/logout survival -> status
+```
+
+This builds the engines, downloads the default `small` profile, writes and
+enables its persistent service (systemd `--user` on Linux, launchd on
+macOS), confirms the host is actually configured to survive logout/reboot
+(and tells you exactly what to run if it isn't — it never guesses), and
+prints final status. Install a different profile, or several, with
+`--profile`:
+
+```bash
+./scripts/install.sh --profile fast --profile vision
+```
+
+See `docs/scripts/install.md` for every flag, idempotency guarantees on an
+already-partially-installed host, and troubleshooting.
+
+### Or do it manually (on-demand, no persistence)
+
 ```bash
 git clone --recursive <this-repository-url> llmctl
 cd llmctl
@@ -23,6 +48,12 @@ cd llmctl
 ./bin/llmctl models download fast
 ./bin/llmctl start fast   # serves an OpenAI-compatible API on 127.0.0.1:8080
 ```
+
+`start` runs the profile only for this session — it stops at logout/reboot.
+For a service that survives logout/reboot, follow up with
+`./bin/llmctl install` (writes the persistent-service templates) then
+`./bin/llmctl enable fast` (enable + start persistently) — or just use
+`./scripts/install.sh` above, which chains all of this for you.
 
 Forgot `--recursive`? `git submodule update --init` or just run
 `llmctl build`, which initializes the submodules itself.
