@@ -75,6 +75,14 @@ _sched_run_file() { echo "${LLMCTL_RUNTIME_DIR}/$1.run"; }
 sched_running() {
   local f
   ensure_dir "${LLMCTL_RUNTIME_DIR}"
+  # sched_load_backend is idempotent (re-sourcing service_linux.sh/
+  # service_macos.sh just redefines the same functions) - called
+  # unconditionally here so _sched_reconcile_reservations's svc_is_active
+  # call below is always defined, regardless of whether this PUBLIC
+  # function is reached via a caller that already loaded the backend
+  # (every current caller does) or a future one that has not.
+  sched_load_backend
+  _sched_reconcile_reservations
   for f in "${LLMCTL_RUNTIME_DIR}"/*.run; do
     [[ -e "${f}" ]] || continue
     basename "${f}" .run
@@ -107,6 +115,84 @@ ram_mb=${ram}
 vram_mb=${vram}
 started_epoch=$(date +%s)
 EOF
+}
+
+# _sched_reconcile_reservations - self-heal missing *.run reservation
+# records for profiles that are ENABLED and genuinely ACTIVE per the real
+# service backend, but have no reservation record on disk.
+#
+# Root-caused 2026-09-22 (real repro on a rebooted host, not guessed):
+# LLMCTL_RUNTIME_DIR defaults to ${XDG_RUNTIME_DIR}/llmctl - a tmpfs
+# systemd/PAM deliberately wipe on every reboot. A profile's *.run
+# reservation file is ONLY ever (re)written by this file's own code paths
+# (_enable_impl / _sched_start_impl, via _sched_write_reservation) - never
+# by systemd itself. After a reboot, systemd correctly auto-restarts an
+# already-`enabled` persistent service (WantedBy=default.target + user
+# lingering) with NO llmctl invocation involved at all, so llmctl's own
+# bookkeeping has ZERO record of it being started until `bin/llmctl` runs
+# again for that exact profile - `sched_running()`/`llmctl status` then
+# wrongly reported "no llmctl services running" for services genuinely
+# serving real traffic (independently confirmed on the diagnosing host via
+# `systemctl --user list-units`, `ss -tlnp`, and `nvidia-smi`).
+#
+# This is not merely cosmetic. sched_reserved_field() - which
+# _enable_impl's own 2026-09-17 overcommit-safety check reads to compute
+# currently-reserved RAM/VRAM before allowing a NEW profile to enable -
+# iterates the SAME *.run glob, so immediately after a reboot it silently
+# reported ZERO reserved for a profile that was in fact consuming real host
+# RAM/VRAM: a later `llmctl enable <new-profile>` could pass that check and
+# genuinely overcommit the host - the EXACT failure mode the 2026-09-17 fix
+# exists to prevent, reintroduced via a different trigger (post-reboot
+# state desync instead of the original unconditional-write bug that fix
+# addressed).
+#
+# Reconstruction reuses the IDENTICAL hw_probe_json | catalog_plan_json +
+# json_query derivation _enable_impl already uses for mode/port/ram/vram
+# (see _enable_impl below) - never a second, divergent derivation.
+#
+# A profile that is enabled but NOT genuinely active (crash-looping,
+# "activating (auto-restart)", "failed", ...) is deliberately left
+# un-reconciled: it is not running and must not be reserved as if it were.
+# Idempotent: a profile that already has a reservation record is skipped,
+# so a second call touches nothing further.
+_sched_reconcile_reservations() {
+  [[ -d "${LLMCTL_SERVICES_DIR}" ]] || return 0
+  local f profile plan_file=""
+  for f in "${LLMCTL_SERVICES_DIR}"/*.enabled; do
+    [[ -e "${f}" ]] || continue
+    profile="$(basename "${f}" .enabled)"
+    [[ -f "$(_sched_run_file "${profile}")" ]] && continue
+    catalog_exists "${profile}" || continue
+    svc_is_active "${profile}" 2>/dev/null || continue
+    if [[ -z "${plan_file}" ]]; then
+      plan_file="$(mktemp)"
+      hw_probe_json | catalog_plan_json > "${plan_file}"
+    fi
+    local mode port ram vram
+    mode="$(json_query "${plan_file}" "d[\"profiles\"][\"${profile}\"][\"mode\"]")"
+    port="$(json_query "${plan_file}" "d[\"profiles\"][\"${profile}\"][\"port\"]")"
+    ram="$(json_query "${plan_file}" "d[\"profiles\"][\"${profile}\"][\"ram_mb\"]")"
+    vram="$(json_query "${plan_file}" "d[\"profiles\"][\"${profile}\"][\"vram_mb\"]")"
+    _sched_write_reservation "${profile}" "${mode}" "${port}" "${ram}" "${vram}"
+    # >&2: sched_running() is a data-producing function whose stdout callers
+    # parse as a bare list of profile names (e.g. _sched_stop_impl's
+    # `while read` loop below) - this progress message must never land on
+    # that same stream, or a caller would treat it as a bogus profile name.
+    log "reconciled missing reservation for '${profile}' (enabled + genuinely active, no .run marker - likely a post-reboot state desync)" >&2
+  done
+  # NOT `[[ -n "${plan_file}" ]] && rm -f "${plan_file}"`: as the LAST
+  # statement of this function, a bare `cond && cmd` whose condition is
+  # false (the common case - nothing needed reconciling) returns THAT
+  # nonzero status as the function's own exit status, which aborts the
+  # whole calling script under `set -e` the moment any caller invokes this
+  # function as a bare statement (as sched_running() does). Reproduced
+  # directly: `f() { [[ -f /nonexistent ]] && echo no; }; f; echo after`
+  # under `set -euo pipefail` never reaches the `echo after` line. An `if`
+  # always returns 0 when its condition is false and there is no `else`,
+  # so it carries no such risk.
+  if [[ -n "${plan_file}" ]]; then
+    rm -f "${plan_file}"
+  fi
 }
 
 # --- launch argument construction --------------------------------------------
@@ -232,6 +318,9 @@ _sched_start_impl() {
   [[ "$#" -ge 1 ]] || die "usage: llmctl start <profile> [more...]"
   sched_load_backend
   ensure_state_dirs
+  # Reconcile any post-reboot state desync BEFORE the budget check below
+  # reads sched_reserved_field - see _sched_reconcile_reservations.
+  sched_running >/dev/null
 
   local plan_file; plan_file="$(mktemp)"
   hw_probe_json | catalog_plan_json > "${plan_file}"
@@ -335,6 +424,13 @@ _enable_impl() {
   local profile="$1"
   catalog_exists "${profile}" || die "unknown profile: ${profile} (see: llmctl models list)"
   sched_load_backend
+  # Reconcile any post-reboot state desync BEFORE the overcommit check below
+  # reads sched_reserved_field - otherwise a genuinely-running-but-
+  # unreconciled enabled profile (see _sched_reconcile_reservations) would
+  # read as zero RAM/VRAM reserved and this check could pass on stale
+  # accounting, exactly the overcommit the 2026-09-17 fix below exists to
+  # prevent.
+  sched_running >/dev/null
   local plan_file; plan_file="$(mktemp)"
   hw_probe_json | catalog_plan_json > "${plan_file}"
   local mode port ctx ngl parallel fa ram vram
