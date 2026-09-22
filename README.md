@@ -72,7 +72,7 @@ Forgot `--recursive`? `git submodule update --init` or just run
 | `llmctl build [llama\|colibri\|all]` | build engines (backend auto-detected) |
 | `llmctl start <p> [more...]` | start profiles iff the combined footprint fits |
 | `llmctl stop <p\|all>` | stop services |
-| `llmctl switch <p>` | stop everything, start exactly one profile |
+| `llmctl switch <p>` | on-demand model switch: stop everything, start exactly one profile — atomic and safe (a failed switch auto-restores whatever was running before, never leaves the host with nothing running) |
 | `llmctl auto <chat\|coder\|vision>...` | best set that fits *now*, LRU-evicting non-enabled services |
 | `llmctl status` / `logs <p>` | running services / log tail |
 | `llmctl install` | install service templates (systemd units / launchd dir) |

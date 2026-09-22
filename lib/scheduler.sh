@@ -378,7 +378,19 @@ _sched_start_impl() {
       rm -f "${plan_file}"
       err "cannot start '${p}': needs ${ram} MiB RAM + ${vram} MiB VRAM, but only $(( ram_budget - used_ram )) MiB RAM + $(( vram_budget - used_vram )) MiB VRAM remain"
       [[ -n "${suggestion}" ]] && err "suggested alternative that fits now: llmctl start ${suggestion}"
-      err "or free everything with: llmctl switch ${p}"
+      # Only suggest 'switch' when something else is ACTUALLY running to
+      # free room from - a real, live-hit bug (2026-09-22) suggested
+      # "llmctl switch ${p}" even when called FROM INSIDE llmctl switch
+      # itself (which had already stopped everything before reaching this
+      # check), telling the operator to run the EXACT command that had
+      # just failed. When nothing else is running, the real, honest
+      # constraint is the HOST's own available RAM/VRAM, which switching
+      # cannot create more of.
+      if [[ -n "$(sched_running)" ]]; then
+        err "or free room by stopping another running profile: llmctl switch ${p}"
+      else
+        err "no other llmctl profile is running to free up - this host's own available RAM/VRAM is currently too low (see: llmctl hw). Free host memory (close other applications) and retry, or choose a smaller profile."
+      fi
       return 1
     fi
     selected+=("${p}")
@@ -520,10 +532,64 @@ _sched_stop_impl() {
   done
 }
 
-sched_switch() {
-  local profile="$1"
-  sched_stop all >/dev/null
-  sched_start "${profile}"
+# sched_switch <profile> - the public, locking entrypoint (mirrors
+# sched_start/sched_stop/sched_auto above - see their shared header
+# comment on why a switch-shaped operation must run as ONE atomic locked
+# unit, never as two separate public sched_stop + sched_start calls).
+sched_switch() { scheduler::with_lock _sched_switch_impl "$@"; }
+
+# _sched_switch_impl <profile> - stops every currently-running profile and
+# starts <profile> instead. SAFETY (fixed 2026-09-22, real live incident,
+# not guessed): a failed switch MUST NEVER leave the host with fewer
+# running services than before the switch was attempted. Reproduced live:
+# `llmctl switch fast` on a RAM-constrained host stopped the
+# then-healthy, then-serving small+vision, failed to start fast (real
+# cause: this host's own free RAM was below llmctl's safety margin -
+# stopping small+vision did not create enough headroom), and left the
+# host with LITERALLY ZERO llmctl services running - `llmctl status`
+# reported "no llmctl services running" and there was no automatic
+# recovery; restoring service required a manual `llmctl start small`.
+# The fix: snapshot the currently-running set BEFORE stopping anything;
+# if starting the target profile fails for ANY reason (budget gate,
+# systemd refusing the unit, anything _sched_start_impl can return
+# nonzero for), automatically restore the snapshotted set (best-effort)
+# before propagating the ORIGINAL failure - so a failed switch attempt
+# is, at worst, a no-op from the operator's point of view, never a
+# regression from "something is running" to "nothing is running".
+# Also a no-op (skips the stop+restart entirely) when <profile> is
+# ALREADY the sole running profile, avoiding a needless model-reload.
+_sched_switch_impl() {
+  [[ "$#" -eq 1 ]] || die "usage: llmctl switch <profile>"
+  local target="$1"
+  sched_load_backend
+  catalog_exists "${target}" || die "unknown profile: ${target} (see: llmctl models list)"
+
+  local -a previously_running=()
+  local r
+  while IFS= read -r r; do previously_running+=("${r}"); done < <(sched_running)
+
+  if [[ "${#previously_running[@]}" -eq 1 && "${previously_running[0]}" == "${target}" ]]; then
+    info "${target} is already the only running profile - nothing to switch"
+    return 0
+  fi
+
+  _sched_stop_impl all
+
+  local start_rc=0
+  _sched_start_impl "${target}" || start_rc=$?
+  [[ "${start_rc}" -eq 0 ]] && return 0
+
+  err "switch to '${target}' failed - restoring the previously-running set: ${previously_running[*]:-<none>}"
+  if [[ "${#previously_running[@]}" -gt 0 ]]; then
+    local rollback_rc=0
+    _sched_start_impl "${previously_running[@]}" || rollback_rc=$?
+    if [[ "${rollback_rc}" -eq 0 ]]; then
+      err "rollback succeeded - the previously-running profile(s) are running again"
+    else
+      err "ROLLBACK ALSO FAILED - the host may have fewer services running than before this switch attempt. Check: llmctl status"
+    fi
+  fi
+  return "${start_rc}"
 }
 
 # _sched_auto_impl <capability...> - call sched_auto (above) from outside

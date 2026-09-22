@@ -103,9 +103,17 @@ LLMCTL_BIND_HOST_FAST=127.0.0.1 llmctl start fast     # lock just "fast"; the de
   plan AND the running (`used_ram`/`used_vram`) + requested totals against
   `ram_budget`/`vram_budget`; on refusal it scans `d["recommended"]` for the
   first alternative that would fit right now and prints it, plus a
-  `llmctl switch <profile>` fallback line, and returns 1 without starting
-  anything (see the exact refusal-message assertions in
-  `tests/test_scheduler.sh`).
+  CONTEXT-AWARE fallback line (fixed 2026-09-22, real live incident): if
+  another llmctl profile is genuinely running (`sched_running` non-empty),
+  it suggests `llmctl switch <profile>` (stopping that other profile would
+  free room); if NOTHING is running, suggesting `switch` would be circular
+  (there is nothing left to stop - this exact message fired from INSIDE
+  `llmctl switch` itself on a live host, telling the operator to re-run
+  the command that had just failed), so it instead names the real
+  constraint honestly: the host's own available RAM/VRAM is too low right
+  now. Either way, returns 1 without starting anything (see the exact
+  refusal-message assertions in `tests/test_scheduler.sh` and
+  `tests/test_scheduler_switch_safety.sh`).
 * **Already-running profile is a no-op, not an error** — inside the
   selection loop, `sched_is_running "${p}"` short-circuits with
   `log "${p} is already running"` and `continue`, so re-requesting a running
@@ -249,8 +257,19 @@ LLMCTL_BIND_HOST_FAST=127.0.0.1 llmctl start fast     # lock just "fast"; the de
    (for `all`/no args) everything currently running via `sched_running`,
    calls `svc_stop` per target (tolerating failure with `|| true`), removes
    the `.run` file, and logs.
-9. **`sched_switch`** — calls `sched_stop all` then `sched_start
-   "${profile}"` (two separate locked operations; simple and always works).
+9. **`sched_switch`** (`_sched_switch_impl`, fixed 2026-09-22) — a SINGLE
+   locked, atomic operation (not two separate `sched_stop`/`sched_start`
+   calls as before): snapshots the currently-running set, no-ops if the
+   target is already the sole running profile, otherwise stops everything
+   and starts the target - and if that start fails for ANY reason
+   (budget gate, systemd refusing the unit), automatically restores the
+   snapshotted set (best-effort) before propagating the original failure.
+   A failed switch is therefore never worse than a no-op: the host is
+   left with what was running before, never with nothing running. See
+   `tests/test_scheduler_switch_safety.sh` for the full RED/GREEN
+   coverage and the real, live-reproduced incident that motivated this
+   (a `switch` to an oversized profile stranded a healthy, serving host
+   with zero running services until a manual `llmctl start` restored it).
 10. **`_sched_auto_impl`** — resolves the best-ranked, catalog-recommended
     profile per requested capability into a `want` array, then runs the
     bounded (16-iteration) fit-or-evict loop described in Edge cases, and
