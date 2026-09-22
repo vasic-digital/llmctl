@@ -132,8 +132,30 @@ else
 fi
 
 # Recursive child submodule inheritance check
+#
+# NOTE (2026-09-22): these three submodules are all THIRD-PARTY (JustVugg/
+# colibri, ggml-org/llama.cpp, WangX0111/superspec) - repos this project
+# vendors but does not own and has no push access to. This invariant used
+# to REQUIRE an injected "Helix Constitution" pointer inside each one's own
+# CLAUDE.md/AGENTS.md - but a commit adding that pointer directly into a
+# third-party submodule's tree can never be pushed anywhere reachable
+# (Constitution §11.4.28(B): never inject project-specific content into a
+# submodule the project doesn't own/control). All three submodules had
+# EXACTLY this problem this session: their pinned commit was a local-only
+# "Add Helix Constitution inheritance pointers" commit, confirmed genuinely
+# unreachable from the real upstream by scripts/release/preflight_submodules.sh
+# (a real, tested release-blocking check) - meaning a fresh clone running
+# `git submodule update` would fail outright. All three pins were reset to
+# their real, upstream-reachable base commit, which is why this invariant
+# can no longer find the injected pointer text: it was never a legitimate
+# thing to look for in a submodule we cannot push to. This check is now
+# HONEST informational for third-party submodules (matching the existing
+# "no CLAUDE.md/AGENTS.md" branch's non-failing posture below) rather than
+# a hard failure - the inheritance relationship for a vendored, non-owned
+# dependency is documented in THIS project's own tree (README.md, CLAUDE.md)
+# instead, which we do control and can safely commit/push.
 echo
-echo "Invariant 6: Nested submodules have inheritance pointers"
+echo "Invariant 6: Nested third-party submodules are documented, never modified"
 SUBMODULES=(
     "submodules/superspec"
     "submodules/llama.cpp"
@@ -144,18 +166,17 @@ for submodule in "${SUBMODULES[@]}"; do
     SUB_PATH="${PROJECT_ROOT}/${submodule}"
     if [[ -d "${SUB_PATH}" ]]; then
         echo "  Checking ${submodule}..."
-        
-        # Check for CLAUDE.md or AGENTS.md with inheritance pointer
+
+        # Third-party submodule: report presence/absence of its OWN
+        # (upstream-authored) CLAUDE.md/AGENTS.md honestly, but never treat
+        # the absence of an injected "Helix Constitution" pointer as a
+        # failure - injecting one would make the pin unpushable/unreachable.
         if [[ -f "${SUB_PATH}/CLAUDE.md" ]]; then
-            check_inheritance_pointer "${SUB_PATH}/CLAUDE.md" \
-                "Helix Constitution" \
-                "${submodule}/CLAUDE.md"
+            echo "  - ${submodule}/CLAUDE.md: present (upstream-owned content, not modified by this project - §11.4.28(B))"
         elif [[ -f "${SUB_PATH}/AGENTS.md" ]]; then
-            check_inheritance_pointer "${SUB_PATH}/AGENTS.md" \
-                "Helix Constitution" \
-                "${submodule}/AGENTS.md"
+            echo "  - ${submodule}/AGENTS.md: present (upstream-owned content, not modified by this project - §11.4.28(B))"
         else
-            echo "  - ${submodule}: No CLAUDE.md or AGENTS.md (will need inheritance pointer added)"
+            echo "  - ${submodule}: No CLAUDE.md or AGENTS.md upstream (nothing to report - not injected either, by design)"
         fi
     else
         echo "  - ${submodule}: Not found"

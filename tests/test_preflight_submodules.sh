@@ -127,4 +127,56 @@ case "${wrapper_out}" in
     ;;
 esac
 
+# --- Regression: a submodule whose .gitmodules SECTION NAME differs from
+# its own `path =` value must not be silently skipped by _preflight_walk.
+# Real, live-reproduced defect this session:
+# constitution/submodules/design-toolkit is registered as
+# `[submodule "design-toolkit"]` with `path = submodules/design-toolkit` -
+# the old lookup assumed `submodule.<path>.url` (section name == path),
+# found nothing, and _preflight_walk's `[[ -n "${url}" ]] || continue`
+# guard silently skipped it entirely: not a PASS, not a FAIL, not even an
+# UNKNOWN line - it never appeared in the preflight's output at all,
+# meaning a broken pin there would go completely undetected. ----------------
+WALK_WORK="${TEST_TMP}/walk_fixtures"
+mkdir -p "${WALK_WORK}"
+
+WALK_UPSTREAM="${WALK_WORK}/upstream"
+git init -q "${WALK_UPSTREAM}"
+git -C "${WALK_UPSTREAM}" config user.email test@example.com
+git -C "${WALK_UPSTREAM}" config user.name test
+echo "one" > "${WALK_UPSTREAM}/f.txt"
+git -C "${WALK_UPSTREAM}" add f.txt
+git -C "${WALK_UPSTREAM}" commit -qm "commit A"
+WALK_SHA="$(git -C "${WALK_UPSTREAM}" rev-parse HEAD)"
+
+WALK_SUPER="${WALK_WORK}/super"
+mkdir -p "${WALK_SUPER}/submodules/oddname"
+git init -q "${WALK_SUPER}"
+git -C "${WALK_SUPER}" config user.email test@example.com
+git -C "${WALK_SUPER}" config user.name test
+# Deliberately mimic design-toolkit's exact shape: a .gitmodules SECTION
+# NAME ("oddname") that does NOT match its own `path =` value
+# ("submodules/oddname") - never `git submodule add` here, which would
+# always keep them in sync; write .gitmodules by hand to reproduce the
+# real mismatch.
+cat > "${WALK_SUPER}/.gitmodules" <<EOF
+[submodule "oddname"]
+	path = submodules/oddname
+	url = file://${WALK_UPSTREAM}
+EOF
+git -C "${WALK_SUPER}" add .gitmodules
+git -C "${WALK_SUPER}" commit -qm "add .gitmodules with mismatched section name"
+# `git submodule status` needs a real gitlink entry for the path, which a
+# hand-written .gitmodules alone doesn't create - add one directly.
+git -C "${WALK_SUPER}" update-index --add --cacheinfo 160000,"${WALK_SHA}",submodules/oddname
+git -C "${WALK_SUPER}" commit -qm "add oddname gitlink"
+
+_PREFLIGHT_FAILS=0
+_PREFLIGHT_UNKNOWNS=0
+walk_out="$(_preflight_walk "${WALK_SUPER}" 2>&1)"
+assert_contains "${walk_out}" "oddname" "_preflight_walk checks a submodule whose .gitmodules SECTION NAME differs from its own path= value (previously silently skipped entirely)"
+assert_contains "${walk_out}" "PASS" "the mismatched-section-name submodule's genuinely-reachable ref is reported PASS, not silently omitted"
+assert_eq 0 "${_PREFLIGHT_FAILS}" "no false FAIL recorded for the mismatched-section-name submodule"
+assert_eq 0 "${_PREFLIGHT_UNKNOWNS}" "no false UNKNOWN recorded for the mismatched-section-name submodule"
+
 test_finish

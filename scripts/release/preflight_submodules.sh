@@ -146,38 +146,70 @@ preflight_run() {
   esac
 }
 
+# _preflight_url_for_path <gitmodules-file> <target-path>
+# Returns the URL of the submodule whose `path =` value equals
+# <target-path>. A .gitmodules SECTION NAME is not guaranteed to equal the
+# submodule's own `path` (e.g. `[submodule "design-toolkit"]` with
+# `path = submodules/design-toolkit`) - looking the URL up by assuming
+# `submodule.<path>.url` (the section name equals the path) silently finds
+# NOTHING for such a submodule, and _preflight_walk's own `[[ -n "${url}"
+# ... ]] || continue` guard then SKIPS it entirely - not even an UNKNOWN
+# line, no trace it was ever considered. Reproduced live this session:
+# constitution/submodules/design-toolkit never appeared anywhere in a real
+# preflight run's output. Matching by the authoritative `path =` value
+# (via `--get-regexp` over every `submodule.*.path` key) is correct
+# regardless of whether the section name happens to match the path.
+_preflight_url_for_path() {
+  local gitmodules="$1" target_path="$2" section
+  section="$(git config -f "${gitmodules}" --get-regexp '^submodule\..*\.path$' 2>/dev/null \
+    | awk -v p="${target_path}" '$2 == p { print $1; exit }' \
+    | sed -E 's/^submodule\.(.*)\.path$/\1/')"
+  [[ -n "${section}" ]] || return 1
+  git config -f "${gitmodules}" --get "submodule.${section}.url" 2>/dev/null
+}
+
+# _preflight_walk <repo-dir>
+# Walks every submodule `git submodule status` reports for <repo-dir> and
+# runs preflight_run against each, accumulating into the global
+# _PREFLIGHT_FAILS / _PREFLIGHT_UNKNOWNS counters (the caller resets them
+# before the first call, so this repo + constitution's own nested
+# submodules can be walked cumulatively across two calls). Deliberately a
+# TOP-LEVEL function (not nested inside _preflight_main as it used to be)
+# so it is directly sourceable and testable against a fixture repo,
+# independent of this file's own hardcoded real-repo-root discovery.
+_preflight_walk() {
+  local repo_dir="$1"
+  local line path sha url rc
+  while IFS= read -r line; do
+    [[ -n "${line}" ]] || continue
+    # `git submodule status` lines: " <sha> <path> (<describe>)" (or a
+    # leading +/- marker for out-of-sync/uninitialized).
+    sha="$(printf '%s' "${line}" | awk '{print $1}' | sed 's/^[+-]//')"
+    path="$(printf '%s' "${line}" | awk '{print $2}')"
+    url="$(_preflight_url_for_path "${repo_dir}/.gitmodules" "${path}" 2>/dev/null || true)"
+    [[ -n "${url}" && -n "${sha}" ]] || continue
+    rc=0
+    preflight_run "${repo_dir}/${path}" "${url}" "${sha}" || rc=$?
+    case "${rc}" in
+      0) ;;
+      2) _PREFLIGHT_UNKNOWNS=$((_PREFLIGHT_UNKNOWNS + 1)) ;;
+      *) _PREFLIGHT_FAILS=$((_PREFLIGHT_FAILS + 1)) ;;
+    esac
+  done < <(git -C "${repo_dir}" submodule status 2>/dev/null || true)
+}
+
 # --- standalone run: real submodules, this repo + constitution recursively --
 _preflight_main() {
   local root; root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-  local fails=0 unknowns=0
-
-  _preflight_walk() {
-    local repo_dir="$1"
-    local line path sha url rc
-    while IFS= read -r line; do
-      [[ -n "${line}" ]] || continue
-      # `git submodule status` lines: " <sha> <path> (<describe>)" (or a
-      # leading +/- marker for out-of-sync/uninitialized).
-      sha="$(printf '%s' "${line}" | awk '{print $1}' | sed 's/^[+-]//')"
-      path="$(printf '%s' "${line}" | awk '{print $2}')"
-      url="$(git -C "${repo_dir}" config -f "${repo_dir}/.gitmodules" --get "submodule.${path}.url" 2>/dev/null || true)"
-      [[ -n "${url}" && -n "${sha}" ]] || continue
-      rc=0
-      preflight_run "${repo_dir}/${path}" "${url}" "${sha}" || rc=$?
-      case "${rc}" in
-        0) ;;
-        2) unknowns=$((unknowns + 1)) ;;
-        *) fails=$((fails + 1)) ;;
-      esac
-    done < <(git -C "${repo_dir}" submodule status 2>/dev/null || true)
-  }
+  _PREFLIGHT_FAILS=0
+  _PREFLIGHT_UNKNOWNS=0
 
   _preflight_walk "${root}"
   [[ -d "${root}/constitution" ]] && _preflight_walk "${root}/constitution"
 
-  if (( fails > 0 || unknowns > 0 )); then
+  if (( _PREFLIGHT_FAILS > 0 || _PREFLIGHT_UNKNOWNS > 0 )); then
     printf 'PREFLIGHT FAILED: %d submodule ref(s) confirmed unreachable, %d could not be verified (see FAIL/UNKNOWN lines above)\n' \
-      "${fails}" "${unknowns}" >&2
+      "${_PREFLIGHT_FAILS}" "${_PREFLIGHT_UNKNOWNS}" >&2
     printf 'Neither class is safe to release against - a ref that cannot be verified is treated the same as an unreachable one (no artifact ships on an unproven submodule).\n' >&2
     return 1
   fi
