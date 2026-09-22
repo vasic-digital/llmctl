@@ -1,13 +1,21 @@
 # Changelog
 
-All notable changes to llmctl are documented here. Entries below `## v3.0.0`
+All notable changes to llmctl are documented here. Entries below `## v3.0.1`
 are the full conventional-commits history since `v2.0.0`, generated
 deterministically by `scripts/release/create_release.sh`'s
 `release_generate_changelog` function (same function used for the actual
 GitHub/GitLab release notes, so this file and the published release notes
 never drift).
 
-## v3.0.0 (2026-09-22)
+**Note on `v3.0.0`**: a `v3.0.0` git tag was created but never published as a
+release on either forge - the release-packaging preflight caught a real bug
+in its own tooling (`preflight_run()` leaking a bash trap into its caller,
+see the Fixes section below) before any artifact was built. Rather than
+delete/recreate that tag, the fix landed as a normal follow-up commit and
+`v3.0.1` is the actual published release. The `v3.0.0` tag remains in the
+repository, pointing at the commit immediately before this fix.
+
+## v3.0.1 (2026-09-22)
 
 ### Highlights
 
