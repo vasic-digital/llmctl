@@ -216,7 +216,7 @@ sched_build_launch() {
       if [[ "${LLMCTL_DRY_RUN}" != "1" && ! -f "${model}" ]]; then
         die "model not downloaded: ${model}. Run: llmctl models download ${profile}"
       fi
-      SCHED_ARGS=(--model "${model}" --host 127.0.0.1 --port "${port}"
+      SCHED_ARGS=(--model "${model}" --host "$(catalog_bind_host "${profile}")" --port "${port}"
                   --ctx-size "${ctx}" --n-gpu-layers "${ngl}"
                   --flash-attn "${fa}" --parallel "${parallel}" --jinja)
       [[ -n "${mmproj}" && -f "${mmproj}" ]] && SCHED_ARGS+=(--mmproj "${mmproj}")
@@ -292,7 +292,27 @@ sched_build_launch() {
       # llama engine already has, never requiring the pip install step at
       # all for the common case.
       SCHED_EXEC="${LLMCTL_COLI_BIN:-${LLMCTL_ROOT}/submodules/colibri/c/coli}"
-      SCHED_ARGS=(serve --model "${dir}" --host 127.0.0.1 --port "${port}")
+      SCHED_ARGS=(serve --model "${dir}" --host "$(catalog_bind_host "${profile}")" --port "${port}")
+      # KNOWN INTERACTION, discovered + confirmed live 2026-09-22, deliberately
+      # NOT silently worked around here: the colibri engine itself
+      # (submodules/colibri/c/openai_server.py's serve()) carries its own,
+      # independent fail-closed "#SEC-6" guard - it refuses to bind any host
+      # outside 127.0.0.1/localhost/::1 unless an API key or
+      # COLI_ALLOW_INSECURE_BIND=1 is set, exiting 1 with "refusing to bind
+      # <host> beyond localhost without COLI_API_KEY set (set
+      # COLI_ALLOW_INSECURE_BIND=1 to override)". So under this project's own
+      # LAN-accessible default (LLMCTL_BIND_HOST=0.0.0.0), a colibri profile
+      # (colibri-glm, colibri-qwen36) will fail to start (crash-loop, with
+      # that exact message in `llmctl logs`/`status`) UNLESS the operator
+      # explicitly sets COLI_ALLOW_INSECURE_BIND=1 in that service's
+      # environment themselves, or reverts just that profile to loopback-only
+      # via LLMCTL_BIND_HOST_<PROFILE> (see catalog_bind_host). llmctl
+      # deliberately does NOT set COLI_ALLOW_INSECURE_BIND=1 automatically -
+      # silently overriding a component's own explicit, independently-
+      # designed security control on the operator's behalf is a materially
+      # different (and more consequential) decision than choosing llmctl's
+      # OWN default, and belongs to the operator, not to this scheduler.
+      # See README.md "Safety guarantees" for the full disclosure.
       ;;
     *) die "unknown engine for profile ${profile}: ${engine}" ;;
   esac

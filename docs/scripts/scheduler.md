@@ -39,7 +39,10 @@ state"), and this file is the only place that policy is enforced.
   colibri launcher), `LLMCTL_SEED` (opt-in deterministic decoding),
   `LLMCTL_SLOT_SAVE_PATH` (opt-in KV-cache slot-save directory),
   `LLMCTL_DRY_RUN` (checked directly and also relied on transitively via the
-  sourced service backends).
+  sourced service backends). Reads `LLMCTL_BIND_HOST`/
+  `LLMCTL_BIND_HOST_<PROFILE>` indirectly via `lib/catalog.sh`'s
+  `catalog_bind_host()` (see catalog.md) — `sched_build_launch` calls that
+  function, never the raw env vars, for both engine paths' `--host` flag.
 
 ## Usage examples
 
@@ -87,6 +90,10 @@ LLMCTL_DRY_RUN=1 llmctl start fast     # prints service actions, no real exec
 LLMCTL_SEED=42 llmctl start fast       # deterministic decoding (--seed --temp 0)
 LLMCTL_SLOT_SAVE_PATH=/var/llmctl/slots llmctl start coder
 LLMCTL_FAKE_HW=tests/fixtures/hw-baseline.json llmctl plan --json
+
+LLMCTL_BIND_HOST=127.0.0.1 llmctl start fast          # lock every profile to localhost-only
+LLMCTL_BIND_HOST_FAST=127.0.0.1 llmctl start fast     # lock just "fast"; the default (0.0.0.0,
+                                                       # LAN-accessible) still applies elsewhere
 ```
 
 ## Edge cases
@@ -164,6 +171,32 @@ LLMCTL_FAKE_HW=tests/fixtures/hw-baseline.json llmctl plan --json
   `"failed (crash-loop)"` plus the service's last log line
   (`tail -n 1 ${LLMCTL_LOG_DIR}/${p}.log`, or `"(no log)"` if absent) instead
   of just listing it as an ordinary running row.
+* **Engine bind host defaults to LAN-accessible, not localhost-only** —
+  both `sched_build_launch` engine branches resolve their `--host` flag via
+  `catalog_bind_host "${profile}"`, which defaults to `0.0.0.0`
+  (`LLMCTL_BIND_HOST` in `common.sh`) per explicit operator mandate,
+  rather than the historically-hardcoded `127.0.0.1`. This is a real
+  security trade-off (no built-in API auth) disclosed in README.md's
+  "Safety guarantees" — an operator who needs localhost-only sets
+  `LLMCTL_BIND_HOST=127.0.0.1` (every profile) or
+  `LLMCTL_BIND_HOST_<PROFILE>=127.0.0.1` (just one) before `start`/
+  `enable`/`switch`. `lib/download.sh`'s one-shot smoke-test launch is
+  unaffected either way and stays hardcoded to `127.0.0.1` (it is
+  ephemeral and never needs to be LAN-reachable).
+* **The colibri engine has its OWN, independent fail-closed bind guard,
+  which `sched_build_launch` deliberately does NOT try to work around** —
+  confirmed live (2026-09-22): `submodules/colibri/c/openai_server.py`'s
+  `serve()` refuses any non-loopback `--host` with no API key unless
+  `COLI_ALLOW_INSECURE_BIND=1` is set in its environment, printing
+  "refusing to bind ... without COLI_API_KEY set" and exiting 1 (a
+  crash-loop under `enable`/`install`). `sched_build_launch` still resolves
+  `--host` via `catalog_bind_host` for colibri exactly as it does for
+  llama — it just never sets `COLI_ALLOW_INSECURE_BIND` itself, since doing
+  so would silently override a component's own explicit security control
+  rather than this project's own default; see README.md "Safety
+  guarantees" for the operator-facing remediation (set the env var on that
+  unit, or lock that one profile to loopback via
+  `LLMCTL_BIND_HOST_<PROFILE>`).
 * **`sched_reserved_field`/reservation files tolerate missing values** —
   `${v:-0}` defaults a missing/blank field to `0` when summing `ram_mb` or
   `vram_mb` across `*.run` files, and the glob loop itself checks
@@ -191,11 +224,12 @@ LLMCTL_FAKE_HW=tests/fixtures/hw-baseline.json llmctl plan --json
 4. **`sched_build_launch`** — given a profile/mode/port/ctx/ngl/parallel/fa,
    looks up the engine via `catalog_engine`, and populates the global
    `SCHED_EXEC` + `SCHED_ARGS` array with the real command line for either
-   `llama` (resolves model + optional mmproj file via `catalog_files`, adds
+   `llama` (resolves model + optional mmproj file via `catalog_files`,
+   resolves `--host` via `catalog_bind_host "${profile}"`, adds
    `--seed`/`--temp` when `LLMCTL_SEED` is set, adds `--slot-save-path` when
    `LLMCTL_SLOT_SAVE_PATH` is set) or `colibri` (resolves the model
-   directory, builds a `coli serve` command line). Dies on an unknown
-   engine.
+   directory, resolves `--host` the identical way, builds a `coli serve`
+   command line). Dies on an unknown engine.
 5. **Public locking wrappers** — `sched_start`, `sched_stop`, `sched_auto`,
    `sched_enable` each call `scheduler::with_lock` around their respective
    `_impl` function.
@@ -242,10 +276,13 @@ LLMCTL_FAKE_HW=tests/fixtures/hw-baseline.json llmctl plan --json
 * Exercised by `tests/test_scheduler.sh` (co-residency, refusal + suggested
   alternative, LRU eviction, enabled-service protection, `switch`),
   `tests/test_scheduler_lock.sh` (concurrency/locking correctness),
-  `tests/test_services.sh`, `tests/test_services_crashloop.sh`, and
-  `tests/test_tenant_service_isolation.sh` (which exercise the service
+  `tests/test_scheduler_bind_host.sh` (`LLMCTL_BIND_HOST`/
+  `LLMCTL_BIND_HOST_<PROFILE>`, both engine paths),
+  `tests/test_scheduler_reboot_reconciliation.sh` (post-reboot `*.run`
+  self-heal), `tests/test_services.sh`, `tests/test_services_crashloop.sh`,
+  and `tests/test_tenant_service_isolation.sh` (which exercise the service
   backends this file loads and depends on).
 
 ## Last verified date
 
-2026-09-17
+2026-09-22

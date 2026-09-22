@@ -28,6 +28,11 @@ math in multiple places.
 * Per-profile host-local port overrides are read from environment variables
   named `LLMCTL_PORT_<PROFILE>` (profile name upper-cased, `-` -> `_`, see
   `catalog_port_override_env_name`) — entirely opt-in, never required.
+* Engine bind address resolution reads `${LLMCTL_BIND_HOST}` (from
+  `common.sh`, default `0.0.0.0` — LAN-accessible per operator mandate) and
+  an optional per-profile override `LLMCTL_BIND_HOST_<PROFILE>` (same
+  upper-cased, `-` -> `_` naming rule as the port override, see
+  `catalog_bind_host_override_env_name`).
 
 ## Usage examples
 
@@ -41,6 +46,7 @@ catalog_exists fast                 # boolean via exit code
 catalog_field fast engine           # -> "llama"
 catalog_engine fast                 # -> "llama"
 catalog_port fast                   # -> the catalog's port, or an override
+catalog_bind_host fast               # -> "0.0.0.0" by default, or an override
 catalog_min_tier fast               # -> "baseline" (or the catalog's/default)
 catalog_desc fast
 catalog_hf_repo fast
@@ -51,6 +57,11 @@ catalog_total_size_mb fast
 
 # host-local port rebind for exactly one profile (never edit the catalog file)
 LLMCTL_PORT_FAST=18080 catalog_port fast
+
+# lock exactly one profile back to localhost-only (global default is 0.0.0.0)
+LLMCTL_BIND_HOST_FAST=127.0.0.1 catalog_bind_host fast
+# or revert every profile at once
+LLMCTL_BIND_HOST=127.0.0.1 catalog_bind_host fast
 
 # tier classification (hardware JSON on stdin)
 hw_probe_json | catalog_classify_tier   # -> baseline|workstation|datacenter|below-minimum
@@ -138,6 +149,20 @@ echo "${plan_json}" | catalog_plan_get fast mode
   not change what the scheduler actually binds to; an invalid (non-integer)
   override value causes the planner to print an error to stderr and
   `sys.exit(1)` rather than silently ignoring it.
+* **`catalog_bind_host` has a single resolution point, unlike `catalog_port`**
+  — bind address is not a `catalog_plan_json` planner field (it is a
+  deployment/network concern, not a portability/footprint fact), so there
+  is no second, independently-duplicated resolution inside the embedded
+  Python planner the way `resolve_port` duplicates `catalog_port`'s naming
+  rule. `lib/scheduler.sh`'s `sched_build_launch` is the ONLY caller (both
+  the `llama` and `colibri` engine branches), calling `catalog_bind_host`
+  directly at `--host` construction time — there is no display-only getter
+  to keep in sync with a separate functional path.
+* **`catalog_bind_host` override resolution is profile-validated exactly
+  like `catalog_port`'s**: setting `LLMCTL_BIND_HOST_<PROFILE>` for a
+  profile that doesn't exist in the catalog still `die`s with the same
+  "unknown profile" message, via the identical `catalog_check` +
+  `catalog_exists` pattern.
 
 ## Internal behaviour
 
@@ -151,6 +176,11 @@ echo "${plan_json}" | catalog_plan_get fast mode
    document `d`.
 3. **`catalog_port` / `catalog_port_override_env_name`**: layered on top of
    `catalog_field`, checking for an `LLMCTL_PORT_<PROFILE>` override first.
+3b. **`catalog_bind_host` / `catalog_bind_host_override_env_name`**: not
+    layered on `catalog_field` (no catalog "host" field exists to fall back
+    to) — validates the profile directly via `catalog_check` +
+    `catalog_exists`, then returns `LLMCTL_BIND_HOST_<PROFILE>` if set, else
+    the global `${LLMCTL_BIND_HOST}` (from `common.sh`, default `0.0.0.0`).
 4. **`catalog_classify_tier`**: reads a hardware JSON document from stdin and
    applies a fixed threshold ladder (datacenter: >=32 cores AND >=96 GiB RAM
    AND >=400 GiB free storage; workstation: >=24 cores OR >=64 GiB RAM OR
@@ -190,9 +220,11 @@ echo "${plan_json}" | catalog_plan_get fast mode
   `plan` command).
 * Exercised by `tests/test_catalog_json.sh` (catalog getters),
   `tests/test_planner.sh` (tier classification + planning logic),
-  `tests/test_port_override.sh` (the `LLMCTL_PORT_<PROFILE>` mechanism), and
+  `tests/test_port_override.sh` (the `LLMCTL_PORT_<PROFILE>` mechanism),
+  `tests/test_scheduler_bind_host.sh` (the `LLMCTL_BIND_HOST`/
+  `LLMCTL_BIND_HOST_<PROFILE>` mechanism, both engine paths), and
   end-to-end via `tests/test_cli.sh`'s `plan`/`models list` assertions.
 
 ## Last verified date
 
-2026-09-17
+2026-09-22

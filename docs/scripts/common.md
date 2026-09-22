@@ -28,6 +28,17 @@ logging and path conventions.
   redirect all of llmctl's state into a throwaway sandbox directory.
 * Honors `LLMCTL_DRY_RUN` (default `0`) and `NO_COLOR` as opt-in environment
   switches; color output is further gated on `[[ -t 1 ]]` (stdout is a tty).
+* Honors `LLMCTL_BIND_HOST` (default `0.0.0.0` — LAN-accessible, per
+  explicit operator mandate) as the global default engine bind address;
+  consumed by `lib/catalog.sh`'s `catalog_bind_host()`, which
+  `lib/scheduler.sh`'s `sched_build_launch` resolves its `--host` flag
+  through for both engine paths. **Security trade-off, disclosed here and
+  in README.md "Safety guarantees":** llama-server's/colibri's
+  OpenAI-compatible APIs have no built-in authentication, so a `0.0.0.0`
+  bind is reachable — with zero auth — by any device that can reach the
+  host's LAN interface. Set `LLMCTL_BIND_HOST=127.0.0.1` to revert every
+  profile to localhost-only, or `LLMCTL_BIND_HOST_<PROFILE>` (see
+  `catalog.sh`) to revert just one.
 
 ## Usage examples
 
@@ -107,6 +118,9 @@ export LLMCTL_DATA_DIR=/tmp/llmctl-test/data
 3. **Dry-run flag**: default `LLMCTL_DRY_RUN` to `0` if unset (read by
    `lib/download.sh`, `lib/engine.sh`, and `lib/scheduler.sh` to skip real
    side effects).
+3b. **Bind-host default**: default `LLMCTL_BIND_HOST` to `0.0.0.0` if unset
+    (read by `lib/catalog.sh`'s `catalog_bind_host()`, never directly by
+    `lib/scheduler.sh` — see catalog.md's per-profile override mechanism).
 4. **Color setup**: a single `if [[ -t 1 && -z "${NO_COLOR:-}" ]]` branch
    sets five ANSI escape-code variables plus a reset code, or blanks all of
    them in the `else` branch.
@@ -148,4 +162,4 @@ export LLMCTL_DATA_DIR=/tmp/llmctl-test/data
 
 ## Last verified date
 
-2026-09-17
+2026-09-22

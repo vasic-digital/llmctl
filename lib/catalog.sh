@@ -29,6 +29,24 @@
 #   catalog_plan_json() (the actual launch-port every scheduler operation
 #   uses) - see catalog_port_override_env_name() below for the exact name
 #   derivation.
+#
+# Per-profile bind-host override (opt-in, host-local):
+#   common.sh's LLMCTL_BIND_HOST sets the GLOBAL default engine bind
+#   address (0.0.0.0, LAN-accessible, per operator mandate - see that
+#   file's header comment for the full security-trade-off disclosure).
+#   catalog.json has no "host" field (bind address is a deployment/network
+#   concern, not a portable model-catalog fact), so there is nothing to
+#   override IN the catalog the way LLMCTL_PORT_<PROFILE> overrides a
+#   catalog "port" value. Instead, LLMCTL_BIND_HOST_<PROFILE> (same
+#   profile-name upper-cased, '-' -> '_' derivation as
+#   catalog_port_override_env_name, e.g. LLMCTL_BIND_HOST_FAST=127.0.0.1)
+#   overrides the GLOBAL LLMCTL_BIND_HOST default for JUST that profile on
+#   JUST this host - e.g. to lock one sensitive profile back to
+#   localhost-only while the rest of the fleet stays LAN-accessible.
+#   Consulted by catalog_bind_host() - the actual host every
+#   sched_build_launch call (llama AND colibri engine paths) resolves its
+#   --host flag through - see catalog_bind_host_override_env_name() below
+#   for the exact name derivation.
 set -euo pipefail
 
 _cat_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -94,6 +112,36 @@ catalog_port() {
     catalog_field "${p}" port
   fi
 }
+# catalog_bind_host_override_env_name <profile> -> LLMCTL_BIND_HOST_<PROFILE>
+# Identical name-derivation rule as catalog_port_override_env_name() above
+# (see that function's comment for why tr's two character classes map
+# position-for-position); kept as its own function for the same reason -
+# one source of truth for the override-name derivation, used by both
+# catalog_bind_host() and any future caller.
+catalog_bind_host_override_env_name() {
+  printf 'LLMCTL_BIND_HOST_%s' "$(printf '%s' "$1" | tr '[:lower:]-' '[:upper:]_')"
+}
+
+# catalog_bind_host <profile> -> the engine bind address for this profile.
+# Per-profile override (LLMCTL_BIND_HOST_<PROFILE>, see the file-header
+# comment above) takes precedence over the global LLMCTL_BIND_HOST default
+# (common.sh); still profile-validated (catalog_check + catalog_exists)
+# exactly like catalog_port(), so an override for an unknown profile still
+# dies with the same "unknown profile" message rather than silently
+# returning the override for a profile that does not exist.
+catalog_bind_host() {
+  local p="$1" override_var override
+  catalog_check
+  catalog_exists "${p}" || die "unknown profile: ${p} (see: llmctl models list)"
+  override_var="$(catalog_bind_host_override_env_name "${p}")"
+  override="${!override_var:-}"
+  if [[ -n "${override}" ]]; then
+    printf '%s\n' "${override}"
+  else
+    printf '%s\n' "${LLMCTL_BIND_HOST}"
+  fi
+}
+
 catalog_min_tier()   { catalog_field "$1" min_tier baseline; }
 catalog_desc()       { catalog_field "$1" desc ""; }
 catalog_hf_repo()    { catalog_field "$1" hf_repo; }

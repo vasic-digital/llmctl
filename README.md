@@ -96,7 +96,10 @@ memory model). Reservations are tracked in `$XDG_STATE_HOME/llmctl/run/`.
 
 Ports are fixed per profile: fast 8080, coder 8081, vision 8082,
 vision-pro 8083, moe-fast 8084, small 8085, ws-dense-32b 8086, ws-moe-30b
-8087, colibri-glm 8090, colibri-qwen36 8091. All bind to `127.0.0.1`.
+8087, colibri-glm 8090, colibri-qwen36 8091. By default every profile binds
+to `0.0.0.0` (LAN-accessible) — see "Safety guarantees" below for the
+security trade-off and how to lock a profile (or the whole host) back to
+`127.0.0.1`.
 
 ## Hardware tiers
 
@@ -130,7 +133,52 @@ to `datacenter`.
   launchd agents use `KeepAlive` + a widened `ThrottleInterval=60` (launchd
   has no native give-up-after-N-restarts primitive, so this bounds the
   restart *rate*, not the total attempts).
-* **Local-only**: all servers bind to `127.0.0.1`.
+* **LAN-accessible by default, with an explicit trade-off**: every engine
+  server binds to `0.0.0.0` by default, so any device on the local network
+  can reach it (not just the host itself). **This has no built-in
+  authentication** — llama-server's and colibri's OpenAI-compatible APIs
+  accept unauthenticated requests from anyone who can reach the bound
+  address, so on an untrusted or shared network segment (a coworking
+  space, a guest Wi-Fi, a corporate LAN with unknown peers) this means
+  anyone on that network can consume your GPU/model resources or read chat
+  completions with zero auth. This is an intentional, explicit choice —
+  llmctl is designed to be reachable from other devices you own on your
+  own trusted LAN (a phone, a laptop, a second workstation) without extra
+  setup. If your network is not fully trusted, scope reachability at your
+  firewall/router (block the port from outside your LAN, or put the host
+  on its own VLAN) or lock llmctl itself back to localhost-only:
+  * `LLMCTL_BIND_HOST=127.0.0.1` (env var, before `start`/`enable`) reverts
+    **every** profile to localhost-only.
+  * `LLMCTL_BIND_HOST_<PROFILE>=127.0.0.1` (e.g. `LLMCTL_BIND_HOST_FAST`)
+    reverts **just that profile** — the rest of the fleet stays
+    LAN-accessible. Profile names are upper-cased with `-` → `_`
+    (`ws-dense-32b` → `LLMCTL_BIND_HOST_WS_DENSE_32B`).
+
+  Both are read at `start`/`enable`/`switch`/`auto` time (`lib/catalog.sh`'s
+  `catalog_bind_host()`), so they take effect the next time a profile is
+  (re)started — restart an already-running profile after setting either
+  variable for it to apply. `lib/download.sh`'s one-shot model-verification
+  smoke test is unaffected either way: it always uses a throwaway,
+  localhost-only port during the download step, never reachable from the
+  LAN.
+
+  **`colibri-glm`/`colibri-qwen36` need one extra step for the LAN-accessible
+  default to actually work.** The colibri engine has its own, independent
+  fail-closed bind guard: it refuses to start on any non-loopback host
+  unless it is given an API key or `COLI_ALLOW_INSECURE_BIND=1` is set in
+  its environment — confirmed live: with neither set, `coli serve --host
+  0.0.0.0 ...` prints `refusing to bind 0.0.0.0 beyond localhost without
+  COLI_API_KEY set (set COLI_ALLOW_INSECURE_BIND=1 to override)` and exits
+  immediately, which under `enable`/`install` shows up as a crash-loop.
+  llmctl does **not** set this for you automatically — silently
+  overriding a component's own explicit security control is a bigger,
+  separate decision from choosing llmctl's own bind-host default, and it
+  is yours to make, not llmctl's. To actually get a LAN-accessible colibri
+  profile, add `Environment=COLI_ALLOW_INSECURE_BIND=1` to that unit
+  (`systemctl --user edit llmctl-colibri@colibri-qwen36.service` on Linux)
+  or export it before a manual `coli serve` invocation — or just leave
+  that one profile on `LLMCTL_BIND_HOST_<PROFILE>=127.0.0.1`, which needs
+  no such change.
 
 ## Credentials
 

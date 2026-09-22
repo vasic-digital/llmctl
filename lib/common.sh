@@ -45,6 +45,34 @@ LLMCTL_CATALOG="${LLMCTL_CATALOG:-${LLMCTL_ROOT}/models/catalog.json}"
 # Dry-run switch: service/scheduler side effects are printed, not executed.
 LLMCTL_DRY_RUN="${LLMCTL_DRY_RUN:-0}"
 
+# Engine bind host (opt-in override, ${VAR:-default}-style, same convention
+# as LLMCTL_LLAMA_SERVER / LLMCTL_COLI_BIN / LLMCTL_DRY_RUN). Consumed by
+# lib/catalog.sh's catalog_bind_host() - see that file's header comment for
+# the per-profile override mechanism (LLMCTL_BIND_HOST_<PROFILE>).
+#
+# Defaults to 0.0.0.0 (LAN-accessible) per explicit operator mandate
+# ("Everything must be fully accessible from local network") - NOT the
+# conservative localhost-only choice a security-first default would pick.
+# HONEST TRADE-OFF (Constitution anti-bluff covenant - this MUST be stated,
+# never silently shipped): llama-server's OpenAI-compatible API has no
+# built-in authentication. Binding to 0.0.0.0 means ANY device that can
+# reach this host's LAN interface can call the API - consume GPU/model
+# resources, read chat completions, or exhaust context/VRAM - with ZERO
+# auth. This is safe on a trusted home/office LAN behind a NAT/firewall
+# with no untrusted peers; it is NOT safe on a shared, guest, corporate, or
+# otherwise untrusted network segment. Operators on such a network MUST
+# either set LLMCTL_BIND_HOST=127.0.0.1 (reverts to localhost-only,
+# globally) or LLMCTL_BIND_HOST_<PROFILE>=127.0.0.1 (per-profile, e.g.
+# LLMCTL_BIND_HOST_FAST=127.0.0.1) BEFORE enabling/starting a profile, or
+# scope reachability at the firewall/VLAN layer instead. See README.md
+# "Safety guarantees" for the full disclosure.
+#
+# lib/download.sh's one-shot smoke-test launch is DELIBERATELY exempt from
+# this variable - it is an ephemeral, localhost-only verification step
+# during model download that never needs to be LAN-reachable, and stays
+# hardcoded to 127.0.0.1 regardless of this setting.
+LLMCTL_BIND_HOST="${LLMCTL_BIND_HOST:-0.0.0.0}"
+
 # ---------------------------------------------------------------------------
 # Colors (disabled when not a tty or NO_COLOR is set).
 # ---------------------------------------------------------------------------
