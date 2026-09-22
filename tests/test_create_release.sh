@@ -62,8 +62,23 @@ echo "gh $*" >> "${FAKE_GH_LOG}"
 exit "${FAKE_GH_EXIT:-0}"
 EOF
 chmod +x "${FAKE_BIN}/gh"
+# The fake glab REJECTS `--title` and requires `--name`/`-n` for the
+# release title - mirroring real glab 1.118.0's actual behaviour
+# ("Unknown flag: --title") rather than accepting any argument like a
+# permissive stub would. This is the exact class of gap that let a real
+# bug ship undetected this session: create_release.sh used `--title` for
+# BOTH gh and glab, which worked against gh (that IS gh's real flag) and
+# the OLD permissive fake glab, but failed live against the real glab
+# CLI - AFTER github's half of the release had already published,
+# exactly the partial-publish state FR-050 forbids treating as released.
 cat > "${FAKE_BIN}/glab" <<'EOF'
 #!/usr/bin/env bash
+for arg in "$@"; do
+  if [[ "${arg}" == "--title" ]]; then
+    echo "Unknown flag: --title" >&2
+    exit 1
+  fi
+done
 echo "glab $*" >> "${FAKE_GLAB_LOG}"
 exit "${FAKE_GLAB_EXIT:-0}"
 EOF

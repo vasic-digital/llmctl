@@ -132,14 +132,20 @@ release_state_set() {
 # success/failure in the per-version, per-forge idempotency state.
 release_publish_forge() {
   local forge="$1" tag="$2" title="$3" notes_file="$4"
-  local bin ok=1
+  local bin title_flag ok=1
   case "${forge}" in
-    github) bin="gh" ;;
-    gitlab) bin="glab" ;;
+    # `gh release create` and `glab release create` do NOT share a title
+    # flag name: gh uses `--title`, glab uses `-n`/`--name` (confirmed live
+    # this session - a real v3.0.2 publish attempt with `--title` failed
+    # against glab 1.118.0 with "Unknown flag: --title", AFTER the github
+    # half had already published successfully, exactly the partial-publish
+    # state FR-050 requires treating as not-yet-released).
+    github) bin="gh"; title_flag="--title" ;;
+    gitlab) bin="glab"; title_flag="--name" ;;
     *) echo "unknown forge: ${forge}" >&2; return 1 ;;
   esac
 
-  if "${bin}" release create "${tag}" --title "${title}" --notes-file "${notes_file}"; then
+  if "${bin}" release create "${tag}" "${title_flag}" "${title}" --notes-file "${notes_file}"; then
     ok=0
   fi
 
