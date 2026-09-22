@@ -1,21 +1,29 @@
 # Changelog
 
-All notable changes to llmctl are documented here. Entries below `## v3.0.1`
+All notable changes to llmctl are documented here. Entries below `## v3.0.2`
 are the full conventional-commits history since `v2.0.0`, generated
 deterministically by `scripts/release/create_release.sh`'s
 `release_generate_changelog` function (same function used for the actual
 GitHub/GitLab release notes, so this file and the published release notes
 never drift).
 
-**Note on `v3.0.0`**: a `v3.0.0` git tag was created but never published as a
-release on either forge - the release-packaging preflight caught a real bug
-in its own tooling (`preflight_run()` leaking a bash trap into its caller,
-see the Fixes section below) before any artifact was built. Rather than
-delete/recreate that tag, the fix landed as a normal follow-up commit and
-`v3.0.1` is the actual published release. The `v3.0.0` tag remains in the
-repository, pointing at the commit immediately before this fix.
+**Note on `v3.0.0` and `v3.0.1`**: both tags were created but never
+published as a release on either forge - the release-packaging preflight
+(the tool designed for exactly this) kept catching real, genuine bugs
+before any artifact was built: `preflight_run()` leaking a bash trap into
+its caller (masking further checks), `submodules/colibri` / `submodules/
+superspec` / `submodules/llama.cpp` all pinned to local-only, never-pushed
+commits (confirmed genuinely unreachable), `constitution/submodules/
+design-toolkit` silently skipped by the walker entirely, and finally the
+fetch timeout being too short for `llama.cpp`'s huge upstream. Rather than
+delete/recreate tags each time, every fix landed as a normal follow-up
+commit and `v3.0.2` is the actual published release, at the first commit
+where `scripts/release/preflight_submodules.sh` reports a fully clean
+`PREFLIGHT PASSED` (27/27 submodules, zero FAIL, zero UNKNOWN) AND the full
+35-file test suite is green. Both `v3.0.0` and `v3.0.1` tags remain in the
+repository as an honest record of that process.
 
-## v3.0.1 (2026-09-22)
+## v3.0.2 (2026-09-22)
 
 ### Highlights
 
@@ -63,7 +71,6 @@ repository, pointing at the commit immediately before this fix.
 
 ### Full conventional-commits history since v2.0.0
 
-## Changelog since v2.0.0
 
 ### Features
 - one-command install/bootstrap script for systemd --user persistence
@@ -100,6 +107,10 @@ repository, pointing at the commit immediately before this fix.
 - complete Phases 9-11 (distributed cluster, state persistence/recovery, auth/tenancy) with security fixes
 
 ### Fixes
+- preflight fetch timeout too short for llama.cpp's huge upstream
+- llama.cpp submodule pin + preflight design-toolkit omission + inheritance test
+- colibri/superspec submodule pins pointed at never-pushed local commits
+- preflight_run() leaked a RETURN trap into its caller, crashing mid-walk
 - engine bind host hardcoded to 127.0.0.1, defeating LAN accessibility
 - sched_running() never reconciled state after a reboot wiped *.run
 - small profile's --parallel 2 silently halved its usable context
@@ -113,6 +124,8 @@ repository, pointing at the commit immediately before this fix.
 - close a real cross-tenant data-access gap found by independent review (T072-FU5)
 
 ### Documentation
+- v3.0.1 (v3.0.0 tag never published - preflight bug caught first)
+- add CHANGELOG.md + VERSION for v3.0.0 release
 - capture 007 closure evidence + CONTINUATION.md §10q (claude_toolkit test fixes)
 - add SpecKit spec/plan/research/tasks for features 005-007
 - fix stale/non-reproducible citations found by regression-verification
