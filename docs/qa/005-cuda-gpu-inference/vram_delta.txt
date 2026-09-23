@@ -2,8 +2,8 @@ profile: small
 model: /home/milosvasic/.local/share/llmctl/models/small/Llama-3.2-3B-Instruct-Q4_K_M.gguf
 planned ngl (from hw_probe_json | catalog_plan_json): 99
 nvidia-smi --query-gpu=memory.used --format=csv,noheader,nounits
-before (idle, no server running):  3155 MiB
-after (during/just-after a real inference request): 5498 MiB
+before (idle, no server running):  3151 MiB
+after (during/just-after a real inference request): 5494 MiB
 delta: 2343 MiB
 SC-002 threshold: >= 500 MiB
 completion content (truncated): Photosynthesis is the vital process by which plants, algae, and some bacteria convert light energy from the sun into chemical energy in the form of glucose. This complex process occurs in specialized 
