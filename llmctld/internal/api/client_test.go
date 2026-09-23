@@ -1,8 +1,12 @@
 package api
 
 import (
+	"net/http"
+	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/gin-gonic/gin"
 
 	"github.com/vasic-digital/llmctl/llmctld/internal/cluster"
 	"github.com/vasic-digital/llmctl/llmctld/internal/mtls"
@@ -156,5 +160,89 @@ func TestRequestJoin_SurfacesLeaderRefusal(t *testing.T) {
 	// server-side refusal, not a client-fabricated one.
 	if err := RequestJoin(buildTestTLSConfig(t, ca, "node-b-api-client"), srv.Addr, "node-b", "", "127.0.0.1:9100", cluster.Resources{}); err == nil {
 		t.Fatalf("RequestJoin with an empty peerAddr must surface the server's refusal, got nil error")
+	}
+}
+
+// TestForwardModelStart_RetriesWithinItsOwnBudget_NotJustOneSlowAttempt is
+// a real, live-reproduced defect (2026-09-23): ForwardModelStart's retry
+// loop is bounded by forwardModelStartRetryBudget (5s), but each attempt's
+// own client.Do() call used to share the SAME http.Client whose Timeout
+// was 10s - LARGER than the entire retry budget. If a single attempt
+// genuinely blocks (a real, plausible "target briefly busy" condition -
+// this is EXACTLY the scenario forwardModelStartRetryBudget's own header
+// comment says the retry exists for) until ITS OWN client-side timeout
+// fires, that one attempt alone consumes MORE time than the whole retry
+// budget - so by the time it returns its error, the retry loop's deadline
+// check fires immediately and the function returns failure having made
+// EXACTLY ONE attempt, never reaching a second one, even though the
+// target would have answered on that very next attempt. Found chasing a
+// real, deterministic (non-flaky) failure of
+// TestClusterPlacement_ConcurrentStarts_NeverDoubleBookANode
+// (test/integration): "api: ForwardModelStart: target node-c ...
+// context deadline exceeded" at iteration 0 on a completely idle host -
+// two independent hypotheses (test-client timeout, host CPU contention)
+// were tried and refuted before finding this real, structural,
+// load-independent mismatch between the two duration constants.
+//
+// This test proves the exact mechanism directly against a REAL server (no
+// mocks): a target whose handler genuinely BLOCKS (never writes a
+// response) for the first N invocations - forcing the CLIENT's own
+// Timeout, not a server-side error, to be what fails the attempt - then
+// answers 200 OK from invocation N+1 onward. A single blocking attempt
+// that consumes the entire retry budget before returning its (timeout)
+// error is precisely the scenario the fix must survive.
+func TestForwardModelStart_RetriesWithinItsOwnBudget_NotJustOneSlowAttempt(t *testing.T) {
+	ca, err := mtls.GenerateCA()
+	if err != nil {
+		t.Fatalf("GenerateCA: %v", err)
+	}
+	leader, err := raft.Bootstrap(raft.Config{
+		NodeID:    "node-a",
+		BindAddr:  "127.0.0.1:0",
+		TLSConfig: buildTestTLSConfig(t, ca, "node-a"),
+	})
+	if err != nil {
+		t.Fatalf("raft.Bootstrap(node-a): %v", err)
+	}
+	defer func() { _ = leader.Shutdown() }()
+	waitForRealLeader(t, leader, 3*time.Second)
+
+	srv := NewServer(leader, buildTestTLSConfig(t, ca, "node-a-api"))
+	// A handler registered directly on the SAME real mTLS-protected route
+	// group NewServer already built, at the EXACT path ForwardModelStart
+	// posts to - RegisterClusterRoutes never registers this path, so
+	// there is no route conflict, and this test needs none of the real
+	// model-start handler's tenant/JWT/RBAC machinery to exercise
+	// ForwardModelStart's own retry timing.
+	var attempts int32
+	const blockingAttempts = 1
+	block := make(chan struct{})
+	srv.Router().POST("/v1/tenants/:id/models/:model/start", func(c *gin.Context) {
+		n := atomic.AddInt32(&attempts, 1)
+		if n <= blockingAttempts {
+			<-block // never returns until the test unblocks it - forces the CLIENT's own Timeout, not a server error, to fail this attempt.
+			return
+		}
+		c.Status(http.StatusOK)
+	})
+	if err := srv.Listen("127.0.0.1:0"); err != nil {
+		t.Fatalf("Listen: %v", err)
+	}
+	defer func() {
+		close(block)
+		_ = srv.Close()
+	}()
+
+	start := time.Now()
+	err = ForwardModelStart(buildTestTLSConfig(t, ca, "node-c-api-client"), srv.Addr, "node-a", "tenant-a", "moe-fast", "")
+	elapsed := time.Since(start)
+	if err != nil {
+		t.Fatalf("ForwardModelStart did not retry past the one deliberately-blocked attempt within its own %s retry budget (elapsed %s): %v", forwardModelStartRetryBudget, elapsed, err)
+	}
+	if got := atomic.LoadInt32(&attempts); got < blockingAttempts+1 {
+		t.Fatalf("handler was invoked %d time(s), want at least %d (the blocked attempt(s) plus one real retry that succeeded) - ForwardModelStart returned success without ever actually retrying", got, blockingAttempts+1)
+	}
+	if elapsed >= forwardModelStartRetryBudget {
+		t.Fatalf("ForwardModelStart took %s, which is NOT within its own declared %s retry budget", elapsed, forwardModelStartRetryBudget)
 	}
 }

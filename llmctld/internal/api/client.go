@@ -121,9 +121,29 @@ func RequestJoin(clientTLS *tls.Config, leaderAPIAddr, peerID, peerAddr, apiAddr
 // but on network-level errors rather than a specific HTTP status, since
 // the receiving node's own handler never has a reason to return 409 for
 // this route the way a not-yet-elected leader does for /v1/cluster/join).
+//
+// forwardModelStartAttemptTimeout bounds each INDIVIDUAL attempt's own
+// http.Client.Timeout, and MUST stay meaningfully SMALLER than
+// forwardModelStartRetryBudget - real, live-reproduced defect (2026-09-23):
+// this client's Timeout used to be a bare, unlabeled 10s, LARGER than the
+// entire 5s retry budget. A single attempt against a target that is
+// genuinely, briefly busy (exactly the condition this retry exists for)
+// can block for the client's own full Timeout before erroring - if that
+// Timeout exceeds the retry budget, ONE slow attempt alone consumes more
+// time than the whole budget, so the loop's own deadline check fires
+// immediately after that first error and the function returns failure
+// having made EXACTLY ONE attempt - the "narrow, explicit retry" this
+// whole mechanism exists to provide never actually happens. Proven
+// directly (TestForwardModelStart_RetriesWithinItsOwnBudget_
+// NotJustOneSlowAttempt, client_test.go): a single deliberately-blocked
+// attempt consumed the full old 10s Timeout and returned failure at
+// exactly that mark, 2x over the declared 5s budget, having never
+// retried. 1s leaves comfortable room for several genuine retries (at
+// the 100ms interval below) within the unchanged 5s overall bound.
 const (
-	forwardModelStartRetryBudget   = 5 * time.Second
-	forwardModelStartRetryInterval = 100 * time.Millisecond
+	forwardModelStartRetryBudget    = 5 * time.Second
+	forwardModelStartRetryInterval  = 100 * time.Millisecond
+	forwardModelStartAttemptTimeout = 1 * time.Second
 )
 
 // ForwardModelStart forwards a model-start request that THIS node's own
@@ -150,7 +170,7 @@ const (
 func ForwardModelStart(clientTLS *tls.Config, targetAPIAddr, targetNodeID, tenantID, model, authorizationHeader string) error {
 	client := &http.Client{
 		Transport: &http3.Transport{TLSClientConfig: clientTLS},
-		Timeout:   10 * time.Second,
+		Timeout:   forwardModelStartAttemptTimeout,
 	}
 
 	body, err := json.Marshal(nodeOptionalRequest{Node: targetNodeID})
