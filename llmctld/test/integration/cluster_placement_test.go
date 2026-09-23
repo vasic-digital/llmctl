@@ -799,6 +799,25 @@ func TestClusterPlacement_ConcurrentStarts_NeverDoubleBookANode(t *testing.T) {
 		}
 	}
 
+	// Root-caused 2026-09-23: this test's own concurrent auto-placed start
+	// calls genuinely race real Raft leader election + leader-forwarding +
+	// the placement decision + a real dry-run subprocess dispatch, all
+	// within a single client-side round trip - tc.httpClient()'s default
+	// 5s Timeout is the SAME class of too-tight-under-real-load timeout
+	// replication_health_test.go's own longClient override already exists
+	// to fix (see that file's header comment on the identical pattern);
+	// confirmed by hand: this test fails deterministically (not merely
+	// flakily) on a host under real, persistent background CPU contention
+	// (a co-resident process pegged near 100% CPU throughout), with the
+	// client returning "context deadline exceeded (Client.Timeout exceeded
+	// while awaiting headers)" at iteration 0 every time - not a placement
+	// logic bug, a too-tight client timeout for genuinely real load. A
+	// dedicated, longer-timeout client (sharing the SAME real mTLS
+	// transport, exactly like replication_health_test.go's longClient) is
+	// used for these two calls only, so this test's own client never times
+	// out before the real, bounded (never indefinite) election/forwarding
+	// genuinely completes.
+	longClient := &http.Client{Transport: client.Transport, Timeout: 30 * time.Second}
 	const iterations = 10
 	for iter := 0; iter < iterations; iter++ {
 		var wg sync.WaitGroup
@@ -807,11 +826,11 @@ func TestClusterPlacement_ConcurrentStarts_NeverDoubleBookANode(t *testing.T) {
 		wg.Add(2)
 		go func() {
 			defer wg.Done()
-			smallResp, smallStatus = startModelAutoPlaced(t, client, nodeA.apiAddr, tenantJWT, "tenant-a", "small")
+			smallResp, smallStatus = startModelAutoPlaced(t, longClient, nodeA.apiAddr, tenantJWT, "tenant-a", "small")
 		}()
 		go func() {
 			defer wg.Done()
-			moeResp, moeStatus = startModelAutoPlaced(t, client, nodeA.apiAddr, tenantJWT, "tenant-a", "moe-fast")
+			moeResp, moeStatus = startModelAutoPlaced(t, longClient, nodeA.apiAddr, tenantJWT, "tenant-a", "moe-fast")
 		}()
 		wg.Wait()
 

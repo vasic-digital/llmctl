@@ -40,7 +40,7 @@
 //	$ LLMCTL_DRY_RUN=1 LLMCTL_FAKE_HW=tests/fixtures/hw-baseline.json \
 //	    ./bin/llmctl start small
 //	[dry-run] systemctl --user start llmctl-llama@small.service
-//	started small (mode=gpu, port=8085, reserved 2048 MiB RAM + 3973 MiB VRAM)
+//	started small (mode=gpu, port=8085, reserved 2048 MiB RAM + 2949 MiB VRAM)
 //
 // Under LLMCTL_DRY_RUN=1, lib/scheduler.sh's sched_build_launch skips its
 // "model not downloaded" existence check (lib/scheduler.sh lines ~130 and
@@ -228,7 +228,7 @@ func (e *LocalExecutor) Stop(profile string) error {
 //
 //	$ LLMCTL_FAKE_HW=tests/fixtures/hw-baseline.json ./bin/llmctl plan --json
 //	{"profiles": {"small": {"mode": "gpu", "ram_mb": 2048,
-//	 "vram_mb": 3973, ...}, ...}, ...}
+//	 "vram_mb": 2949, ...}, ...}, ...}
 type planDoc struct {
 	Profiles map[string]struct {
 		RAMMB  int64 `json:"ram_mb"`
