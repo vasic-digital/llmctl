@@ -138,12 +138,32 @@ func RequestJoin(clientTLS *tls.Config, leaderAPIAddr, peerID, peerAddr, apiAddr
 // NotJustOneSlowAttempt, client_test.go): a single deliberately-blocked
 // attempt consumed the full old 10s Timeout and returned failure at
 // exactly that mark, 2x over the declared 5s budget, having never
-// retried. 1s leaves comfortable room for several genuine retries (at
-// the 100ms interval below) within the unchanged 5s overall bound.
+// retried.
+//
+// Re-measured 2026-09-23, second pass: an initial fix set this to 1s
+// (5s budget / 1s attempt ~= 5 possible attempts), which fixed the
+// unit-level defect above but a real 3-node cluster integration test
+// (TestClusterPlacement_ConcurrentStarts_NeverDoubleBookANode) kept
+// failing - temporary timing instrumentation directly around the
+// dispatch call (removed after use) showed EVERY attempt, for EVERY
+// target, in EVERY iteration, consistently took ~1.0-1.1s before either
+// timing out or (rarely) just barely succeeding - a real HTTP/3+mTLS
+// connection handshake to another live process under genuine concurrent
+// Raft traffic on this host consistently needs slightly MORE than 1s, so
+// the 1s attempt timeout was aborting nearly every attempt just before
+// it would have completed. requestJoinRetryBudget (this same file)
+// already establishes 10s as this project's own precedent for "how long
+// a genuine cluster network round-trip may reasonably take" - 3s here
+// gives a real handshake a ~3x margin over the measured ~1.0-1.1s cost,
+// and the budget is raised to 10s (matching that same precedent) so
+// ~3 genuine attempts still fit before giving up, preserving the
+// "narrow, bounded, never indefinite" design intent while no longer
+// racing the exact connection-establishment cost this mechanism
+// measurably needs.
 const (
-	forwardModelStartRetryBudget    = 5 * time.Second
+	forwardModelStartRetryBudget    = 10 * time.Second
 	forwardModelStartRetryInterval  = 100 * time.Millisecond
-	forwardModelStartAttemptTimeout = 1 * time.Second
+	forwardModelStartAttemptTimeout = 3 * time.Second
 )
 
 // ForwardModelStart forwards a model-start request that THIS node's own
@@ -287,9 +307,19 @@ func ForwardAutoPlaceStart(clientTLS *tls.Config, leaderAPIAddr, tenantID, model
 // against it, never trusting "the sending node already authorized this"
 // (T025's own authorization-parity review target).
 func ForwardModelStop(clientTLS *tls.Config, targetAPIAddr, targetNodeID, tenantID, model, authorizationHeader string) error {
+	// Shares ForwardModelStart's exact retry loop shape (deadline :=
+	// time.Now().Add(forwardModelStartRetryBudget); ... time.Sleep
+	// (forwardModelStartRetryInterval)) below - a sibling instance of the
+	// SAME real, live-reproduced defect that constant's own doc comment
+	// describes: this client's Timeout was a bare, unlabeled 10s, LARGER
+	// than the retry budget it retries within, found in the same
+	// systematic sweep (2026-09-23) that fixed ForwardModelStart, before
+	// it could independently recur here too (mirroring
+	// ForwardNameOnlyStop's own header comment's "before it could recur
+	// there too" discipline for the analogous stop-forwarding gap).
 	client := &http.Client{
 		Transport: &http3.Transport{TLSClientConfig: clientTLS},
-		Timeout:   10 * time.Second,
+		Timeout:   forwardModelStartAttemptTimeout,
 	}
 
 	body, err := json.Marshal(nodeOptionalRequest{Node: targetNodeID})

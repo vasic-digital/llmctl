@@ -246,3 +246,65 @@ func TestForwardModelStart_RetriesWithinItsOwnBudget_NotJustOneSlowAttempt(t *te
 		t.Fatalf("ForwardModelStart took %s, which is NOT within its own declared %s retry budget", elapsed, forwardModelStartRetryBudget)
 	}
 }
+
+// TestForwardModelStop_RetriesWithinItsOwnBudget_NotJustOneSlowAttempt is
+// ForwardModelStop's sibling of
+// TestForwardModelStart_RetriesWithinItsOwnBudget_NotJustOneSlowAttempt -
+// found in the SAME systematic sweep of client.go (2026-09-23) that fixed
+// ForwardModelStart: ForwardModelStop shares the IDENTICAL retry-loop
+// shape (deadline := time.Now().Add(forwardModelStartRetryBudget); ...)
+// and had NOT yet been updated off the old bare, unlabeled 10s
+// client.Timeout when ForwardModelStart's fix landed - the exact same
+// budget-smaller-than-per-attempt-timeout mismatch, unfixed, in a sibling
+// function. Proves the fix via the identical real (no-mock) mechanism:
+// a handler that genuinely blocks (forcing the client's own Timeout,
+// never a server error, to fail the first attempt) then succeeds.
+func TestForwardModelStop_RetriesWithinItsOwnBudget_NotJustOneSlowAttempt(t *testing.T) {
+	ca, err := mtls.GenerateCA()
+	if err != nil {
+		t.Fatalf("GenerateCA: %v", err)
+	}
+	leader, err := raft.Bootstrap(raft.Config{
+		NodeID:    "node-a",
+		BindAddr:  "127.0.0.1:0",
+		TLSConfig: buildTestTLSConfig(t, ca, "node-a"),
+	})
+	if err != nil {
+		t.Fatalf("raft.Bootstrap(node-a): %v", err)
+	}
+	defer func() { _ = leader.Shutdown() }()
+	waitForRealLeader(t, leader, 3*time.Second)
+
+	srv := NewServer(leader, buildTestTLSConfig(t, ca, "node-a-api"))
+	var attempts int32
+	const blockingAttempts = 1
+	block := make(chan struct{})
+	srv.Router().POST("/v1/tenants/:id/models/:model/stop", func(c *gin.Context) {
+		n := atomic.AddInt32(&attempts, 1)
+		if n <= blockingAttempts {
+			<-block
+			return
+		}
+		c.Status(http.StatusOK)
+	})
+	if err := srv.Listen("127.0.0.1:0"); err != nil {
+		t.Fatalf("Listen: %v", err)
+	}
+	defer func() {
+		close(block)
+		_ = srv.Close()
+	}()
+
+	start := time.Now()
+	err = ForwardModelStop(buildTestTLSConfig(t, ca, "node-c-api-client"), srv.Addr, "node-a", "tenant-a", "moe-fast", "")
+	elapsed := time.Since(start)
+	if err != nil {
+		t.Fatalf("ForwardModelStop did not retry past the one deliberately-blocked attempt within its own %s retry budget (elapsed %s): %v", forwardModelStartRetryBudget, elapsed, err)
+	}
+	if got := atomic.LoadInt32(&attempts); got < blockingAttempts+1 {
+		t.Fatalf("handler was invoked %d time(s), want at least %d - ForwardModelStop returned success without ever actually retrying", got, blockingAttempts+1)
+	}
+	if elapsed >= forwardModelStartRetryBudget {
+		t.Fatalf("ForwardModelStop took %s, which is NOT within its own declared %s retry budget", elapsed, forwardModelStartRetryBudget)
+	}
+}
