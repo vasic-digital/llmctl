@@ -188,6 +188,31 @@ func startModelAutoPlaced(t *testing.T, client *http.Client, apiAddr, bearerToke
 	return resp, status
 }
 
+// waitForModelVisibleOnNode polls apiAddr's own real, JWT-protected GET
+// /v1/tenants/:id/models/:model/visible (multitenancy_isolation_test.go's
+// checkVisible) until it reports true, or fails the test if it never does
+// within timeout - proving THIS SPECIFIC node's own FSM (and, since the
+// same route requires RequireJWT + tenant authorization, this node's own
+// tenant/auth state too) has genuinely caught up to a prior leader-side
+// registration, never merely that the LEADER accepted the write. Mirrors
+// mtls_rotation_test.go's waitForRevocationReplicated - the identical
+// leader-committed-vs-follower-applied distinction, applied to model
+// visibility instead of certificate revocation.
+func waitForModelVisibleOnNode(t *testing.T, client *http.Client, apiAddr, bearerToken, tenantID, model string, timeout time.Duration) {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	var lastStatus int
+	for time.Now().Before(deadline) {
+		visible, status := checkVisible(t, client, apiAddr, bearerToken, tenantID, model)
+		lastStatus = status
+		if status == http.StatusOK && visible {
+			return
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	t.Fatalf("model %q was never observed as visible on %s for tenant %q within %s (last status: %d)", model, apiAddr, tenantID, timeout, lastStatus)
+}
+
 // TestClusterPlacement_StartWithoutNode_LandsOnNodeWithCapacity is T013
 // (quickstart.md Scenario 1): a real 3-node cluster where only node-a
 // genuinely has room for the "small" profile (node-b/node-c both report
@@ -797,6 +822,42 @@ func TestClusterPlacement_ConcurrentStarts_NeverDoubleBookANode(t *testing.T) {
 		if s := registerModel(t, client, n.apiAddr, tenantJWT, "tenant-a", "moe-fast"); s != http.StatusOK {
 			t.Fatalf("POST /v1/tenants/tenant-a/models(moe-fast) on node %q: status=%d", n.nodeID, s)
 		}
+	}
+
+	// Root-caused 2026-09-23, third real defect in this same test: node-c
+	// (and, less often, node-b) JOINS the cluster with an EMPTY Raft log
+	// and must replicate every prior committed entry (tenant creation,
+	// model registration) from the leader before its own FSM genuinely
+	// reflects them - registerModel's 200 OK above proves only that the
+	// LEADER accepted and committed the write, never that THIS specific
+	// node has caught up and applied it yet (mirroring the exact
+	// leader-committed-vs-follower-applied distinction
+	// waitForRevocationReplicated, mtls_rotation_test.go, already
+	// documents and guards against for cluster-wide certificate
+	// revocation). This test's iteration loop below used to fire its
+	// first concurrent real request IMMEDIATELY after the join+register
+	// calls returned - with no wait for node-c's own catch-up replication
+	// (directly observed in the raft debug log: "failed to get previous
+	// log ... appendEntries rejected, sending older logs" logged AT THE
+	// SAME MOMENT as the concurrent request) - racing real replication
+	// lag against ForwardModelStart's now-correctly-functioning (see
+	// client.go's forwardModelStartAttemptTimeout fix) but still bounded,
+	// non-indefinite 5s retry budget, and losing roughly half the time
+	// (measured directly: 3 of 8 consecutive runs passed before this fix).
+	// waitForModelVisibleOnNode polls EACH node's own real, JWT-protected
+	// GET /v1/tenants/:id/models/:model/visible - proving THAT node's own
+	// FSM, not merely the leader's, has applied the registration (and,
+	// since this same route requires RequireJWT + tenant authorization,
+	// that this node's tenant/auth state has ALSO caught up - exactly the
+	// readiness the concurrent starts below actually need) - before any
+	// concurrent request assumes every node is genuinely ready. Checked
+	// for BOTH real models this test dispatches concurrently ("small" ->
+	// node-b, "moe-fast" -> node-c per the assertions below) - failures
+	// were observed against EITHER target in different runs before this
+	// fix, never only one.
+	for _, n := range allNodes {
+		waitForModelVisibleOnNode(t, client, n.apiAddr, tenantJWT, "tenant-a", "small", 10*time.Second)
+		waitForModelVisibleOnNode(t, client, n.apiAddr, tenantJWT, "tenant-a", "moe-fast", 10*time.Second)
 	}
 
 	// Root-caused 2026-09-23: this test's own concurrent auto-placed start
