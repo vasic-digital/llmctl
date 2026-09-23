@@ -330,6 +330,47 @@ sched_stop()   { scheduler::with_lock _sched_stop_impl "$@"; }
 sched_auto()   { scheduler::with_lock _sched_auto_impl "$@"; }
 sched_enable() { scheduler::with_lock _enable_impl "$@"; }
 
+# _sched_wait_ready <port> - polls the profile's own OpenAI-compatible
+# endpoint on LOOPBACK (regardless of the configured LLMCTL_BIND_HOST - a
+# service bound to 0.0.0.0 or any other address always also accepts
+# loopback connections, so readiness is always checked over 127.0.0.1)
+# until it answers, or the bounded timeout elapses.
+#
+# Root-caused 2026-09-23 (real repro against the real running instance,
+# via claude_toolkit's own live full-catalog sweep): `svc_start` returning
+# success only means the service manager reports the unit "active" - for a
+# Type=simple/exec systemd unit that fires right after fork/exec, WELL
+# BEFORE llama-server/colibri finishes mmapping and loading the model
+# weights and is actually able to serve a request. Every prior caller of
+# `_sched_start_impl` (hence every `llmctl start`/`switch`/`auto`) had been
+# trusting "started" to mean "ready" - it never did. `llmctl switch`
+# reported success while the target profile could not yet answer a single
+# request, and a caller racing that window with even a generous few-second
+# probe would see a live, healthy-about-to-be host as unreachable.
+#
+# LLMCTL_READY_TIMEOUT=0 disables the wait entirely, trusting svc_start's
+# own signal exactly as before this fix - the sanctioned test-injection
+# escape valve for hermetic scheduler tests whose fake service backend
+# never binds a real port (defaulted for every such test via
+# tests/helpers.sh's test_setup_env, mirroring the already-documented
+# LLMCTL_FAKE_HW pattern). Production default is a generous 60s (real GGUF
+# model loads can genuinely take that long on a cold disk cache), polled
+# every 1s so a fast-loading profile is not held up waiting.
+_sched_wait_ready() {
+  local port="$1"
+  local timeout="${LLMCTL_READY_TIMEOUT:-60}"
+  local interval="${LLMCTL_READY_POLL_INTERVAL:-1}"
+  (( timeout > 0 )) || return 0
+  command -v curl >/dev/null 2>&1 || return 0
+  local waited=0
+  while (( waited < timeout )); do
+    curl -sf --max-time 1 "http://127.0.0.1:${port}/v1/models" >/dev/null 2>&1 && return 0
+    sleep "${interval}"
+    waited=$(( waited + interval ))
+  done
+  return 1
+}
+
 # _sched_start_impl <profile...> - returns non-zero (with a clear message)
 # when the combined footprint does not fit. Call sched_start (above) from
 # outside this file; this unlocked form exists so sched_auto can compose it
@@ -428,6 +469,20 @@ _sched_start_impl() {
     # reported honestly and NEVER reserved as running.
     if ! svc_start "${p}"; then
       err "failed to start '${p}': the service backend refused to start it (see: llmctl logs ${p}; on Linux, check 'llmctl install' has been run and 'systemctl --user status llmctl-$(catalog_engine "${p}")@${p}.service')"
+      rm -f "${plan_file}"
+      return 1
+    fi
+    # svc_start reports the SERVICE MANAGER's own "active" signal, not the
+    # model's readiness - see _sched_wait_ready's header comment for the
+    # real, live-reproduced race this closes. A profile that never becomes
+    # ready is stopped again (never left as an unreserved, half-started
+    # zombie) and the start is reported as the honest failure it is - the
+    # SAME failure shape `_sched_switch_impl`'s existing rollback wrapper
+    # already handles, so a switch whose target never becomes ready
+    # correctly rolls back to the previously-running profile too.
+    if ! _sched_wait_ready "${port}"; then
+      err "started '${p}' but it never answered http://127.0.0.1:${port}/v1/models within ${LLMCTL_READY_TIMEOUT:-60}s (see: llmctl logs ${p})"
+      svc_stop "${p}" || true
       rm -f "${plan_file}"
       return 1
     fi

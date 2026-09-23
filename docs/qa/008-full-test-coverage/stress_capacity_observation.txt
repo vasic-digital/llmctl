@@ -1,16 +1,16 @@
 llmctld stress test capacity observation
-captured: 2026-09-18T10:20:40Z
+captured: 2026-09-22T23:40:34Z
 route: GET /v1/cluster/status (unauthenticated, real gin engine, real net/http httptest.Server, real single-node raft.Node)
 host: GOOS=linux GOARCH=amd64 GOMAXPROCS=16 NumCPU=16
 
 concurrency  attempted  succeeded  failed     success_rate p50        p95        p99       
-5            3975       3975       0          1.0000       739.083µs  1.751937ms 2.680282ms
-10           5366       5366       0          1.0000       1.068605ms 2.477031ms 3.506715ms
-25           4595       4595       0          1.0000       3.168364ms 7.757104ms 12.199204ms
-50           5663       5663       0          1.0000       6.041466ms 11.413119ms 14.563864ms
-100          5161       5161       0          1.0000       13.614059ms 23.418693ms 45.887152ms
-200          6264       6264       0          1.0000       24.97077ms 28.566285ms 34.456921ms
-400          5858       5858       0          1.0000       52.700901ms 63.944401ms 67.289565ms
-800          6577       6577       0          1.0000       109.511421ms 120.82601ms 125.703941ms
+5            14102      14102      0          1.0000       217.701µs  359.65µs   1.153832ms
+10           9731       9731       0          1.0000       261.251µs  4.835138ms 5.35305ms 
+25           8958       8958       0          1.0000       605.451µs  3.362806ms 5.360669ms
+50           11538      11538      0          1.0000       1.313462ms 5.389299ms 9.012216ms
+100          13598      13598      0          1.0000       3.974457ms 14.194075ms 33.583269ms
+200          9146       9146       0          1.0000       11.66101ms 59.706095ms 125.441002ms
+400          9537       9537       0          1.0000       16.65789ms 29.578523ms 43.567997ms
+800          12124      12124      0          1.0000       27.782609ms 60.576997ms 90.16279ms
 
 stop condition: reached the documented concurrency ceiling (800) with every window's success rate >= 0.90

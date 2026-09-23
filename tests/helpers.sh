@@ -80,6 +80,15 @@ test_setup_env() {
   export LLMCTL_UNIT_DIR="${TEST_TMP}/systemd-user"
   export LLMCTL_PLIST_DIR="${TEST_TMP}/LaunchAgents"
   export NO_COLOR=1
+  # Disabled by default for every hermetic test: _sched_wait_ready polls a
+  # REAL http://127.0.0.1:<port>/v1/models after a start/switch, but every
+  # existing fake-systemctl fixture's "start" verb only flips a state file -
+  # it never binds a real listening socket, so leaving the production
+  # default (60s) active here would make ordinary scheduler tests hang for
+  # a full minute and then fail on an unrelated concern. A dedicated test
+  # (test_scheduler_wait_ready.sh) exercises the real wait against a real,
+  # deliberately-delayed HTTP fixture and sets its own non-zero timeout.
+  export LLMCTL_READY_TIMEOUT=0
   mkdir -p "${LLMCTL_STATE_DIR}" "${LLMCTL_RUNTIME_DIR}"
 }
 
