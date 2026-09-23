@@ -103,13 +103,57 @@ rc3=0
 LLMCTL_READY_TIMEOUT=0 _sched_wait_ready "${PORT3}" || rc3=$?
 assert_eq 0 "${rc3}" "LLMCTL_READY_TIMEOUT=0 disables the wait entirely (opt-out for hermetic tests with no real listener)"
 
-# --- Test 4: real end-to-end wiring through _sched_start_impl's own
-# codepath is intentionally NOT re-derived here with a second fake-systemd
-# harness (test_scheduler_switch_safety.sh already owns that fixture, and
-# rewiring it to spawn a real delayed listener would duplicate this file's
-# job) - the live re-run of claude_toolkit's real sync-all-llmctl sweep
-# against the real, unmodified running llmctl instance is this fix's
-# integration-level proof, captured separately as this session's own live
-# evidence. ------------------------------------------------------------------
+# --- Test 4: LLMCTL_DRY_RUN=1 MUST skip the readiness-wait entirely,
+# regardless of LLMCTL_READY_TIMEOUT - a REAL, live-reproduced regression
+# this exact fix introduced (2026-09-23), found chasing an unrelated Go
+# integration-test failure (llmctld's TestClusterPlacement_
+# ConcurrentStarts_NeverDoubleBookANode): under LLMCTL_DRY_RUN=1,
+# svc_start only PRINTS "[dry-run] systemctl --user start ..." - it never
+# starts a real listening process - so _sched_wait_ready's poll of
+# http://127.0.0.1:<port>/v1/models can NEVER succeed in dry-run mode, and
+# _sched_start_impl (wired last night, same session) blocked for the
+# FULL default 60s timeout on every single dry-run start. Measured
+# directly: `LLMCTL_DRY_RUN=1 LLMCTL_FAKE_HW=hw-cpu-heavy.json bin/llmctl
+# start moe-fast` (with LLMCTL_READY_TIMEOUT unset, its real production
+# default) took 1m3.599s real time before finally erroring - dry-run
+# mode's own documented "no real work, fast and hermetic" contract,
+# broken.
+#
+# This bug was INVISIBLE to every other bash test in this suite (all
+# 37/37 "passed" the same night this bug was introduced) purely because
+# tests/helpers.sh's test_setup_env EXPORTS LLMCTL_READY_TIMEOUT=0 - and
+# `export` propagates to every subprocess a bash test spawns (bin/llmctl
+# included), so it masked this exact regression everywhere in the bash
+# suite. It was NOT masked for llmctld's own Go integration tests: their
+# LocalExecutor spawns bin/llmctl via a Go subprocess whose environment is
+# built explicitly (t.Setenv of LLMCTL_DRY_RUN, LLMCTL_STATE_DIR, etc.)
+# and never includes LLMCTL_READY_TIMEOUT - which real distributed-systems
+# code (llmctld's own real Raft-cluster placement tests) was silently
+# absorbing as multi-minute test hangs, which surfaced first as an
+# unrelated-looking, deterministic 5+ minute test failure two commits
+# after this fix landed. This test proves the fix WITHOUT relying on that
+# same environment-masking default: it explicitly unsets
+# LLMCTL_READY_TIMEOUT (env -u) to reproduce the REAL production default
+# exactly as llmctld's Go harness does, so a regression here can never
+# hide behind this file's own test setup again. ------------------------------
+PORT4=18764
+t0="$(date +%s)"
+rc4=0
+env -u LLMCTL_READY_TIMEOUT bash -c '
+  set -euo pipefail
+  export LLMCTL_DRY_RUN=1
+  source "'"${LLMCTL_ROOT}"'/lib/common.sh"
+  source "'"${LLMCTL_ROOT}"'/lib/catalog.sh"
+  source "'"${LLMCTL_ROOT}"'/lib/hardware.sh"
+  source "'"${LLMCTL_ROOT}"'/lib/service_linux.sh" 2>/dev/null || source "'"${LLMCTL_ROOT}"'/lib/service_macos.sh"
+  source "'"${LLMCTL_ROOT}"'/lib/scheduler.sh"
+  sched_load_backend
+  _sched_wait_ready '"${PORT4}"'
+' || rc4=$?
+t1="$(date +%s)"
+elapsed4=$(( t1 - t0 ))
+assert_eq 0 "${rc4}" "_sched_wait_ready under LLMCTL_DRY_RUN=1 reports success (never blocks waiting for a listener dry-run mode will never start)"
+[[ "${elapsed4}" -le 5 ]] && ok=0 || ok=1
+assert_eq 0 "${ok}" "REGRESSION GUARD: dry-run readiness check completed in ${elapsed4}s, not the ~60s production default timeout"
 
 test_finish

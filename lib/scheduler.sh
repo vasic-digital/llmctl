@@ -356,8 +356,28 @@ sched_enable() { scheduler::with_lock _enable_impl "$@"; }
 # LLMCTL_FAKE_HW pattern). Production default is a generous 60s (real GGUF
 # model loads can genuinely take that long on a cold disk cache), polled
 # every 1s so a fast-loading profile is not held up waiting.
+#
+# LLMCTL_DRY_RUN=1 ALSO disables the wait unconditionally, regardless of
+# LLMCTL_READY_TIMEOUT - a real, live-reproduced regression THIS SAME fix
+# introduced (2026-09-23): under LLMCTL_DRY_RUN=1, svc_start only PRINTS
+# "[dry-run] systemctl --user start ..." - it never starts a real
+# listening process - so this function's own poll can NEVER succeed in
+# dry-run mode; every dry-run start was blocking for the FULL default 60s
+# before finally erroring, breaking dry-run mode's own documented
+# "no real work, fast and hermetic" contract. Measured directly:
+# `LLMCTL_DRY_RUN=1 bin/llmctl start <profile>` took 1m3.599s real time
+# before erroring. Found via llmctld's own Go integration tests (its
+# LocalExecutor spawns bin/llmctl with LLMCTL_DRY_RUN=1 set but
+# LLMCTL_READY_TIMEOUT never set - unlike every bash test in this suite,
+# which inherits tests/helpers.sh's LLMCTL_READY_TIMEOUT=0 export and so
+# never encountered the real, unmasked 60s default at all) - a real
+# distributed-systems test (TestClusterPlacement_ConcurrentStarts_
+# NeverDoubleBookANode) absorbed this as a multi-minute hang two commits
+# after the original fix landed, surfacing first as an unrelated-looking
+# raft/forwarding timeout before being traced back here.
 _sched_wait_ready() {
   local port="$1"
+  [[ "${LLMCTL_DRY_RUN:-0}" == "1" ]] && return 0
   local timeout="${LLMCTL_READY_TIMEOUT:-60}"
   local interval="${LLMCTL_READY_POLL_INTERVAL:-1}"
   (( timeout > 0 )) || return 0
