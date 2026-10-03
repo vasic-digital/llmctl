@@ -63,6 +63,25 @@ assert_file_contains "/tmp/llmctl_ctx_override_test_stderr.$$" "not a valid cont
   "invalid ctx override reports a clear error naming the bad value"
 rm -f "/tmp/llmctl_ctx_override_test_stderr.$$"
 
+# --- 4b. a zero or negative ctx override fails loudly (not silently accepted) -
+# Round-2 independent review (2026-10-03): a plain int() parse let 0/negative
+# through, and 0 has a DANGEROUS, different meaning to llama-server's own
+# --ctx-size (native/trained context, which kv_mb() would estimate as ~0 MiB
+# and falsely report `fits: true` for a config that genuinely OOMs).
+rc=0
+LLMCTL_CTX_SMALL=0 plan_for >/dev/null 2>/tmp/llmctl_ctx_override_test_stderr_zero.$$ || rc=$?
+assert_eq 1 "${rc}" "LLMCTL_CTX_SMALL=0 fails the plan instead of silently using it (0 means something dangerously different to llama-server, not 'use the catalog default')"
+assert_file_contains "/tmp/llmctl_ctx_override_test_stderr_zero.$$" "must be >=" \
+  "zero ctx override reports a clear error naming the MIN_CTX floor"
+rm -f "/tmp/llmctl_ctx_override_test_stderr_zero.$$"
+
+rc=0
+LLMCTL_CTX_SMALL=-5 plan_for >/dev/null 2>/tmp/llmctl_ctx_override_test_stderr_neg.$$ || rc=$?
+assert_eq 1 "${rc}" "LLMCTL_CTX_SMALL=-5 (negative) fails the plan instead of silently using it"
+assert_file_contains "/tmp/llmctl_ctx_override_test_stderr_neg.$$" "must be >=" \
+  "negative ctx override reports a clear error naming the MIN_CTX floor"
+rm -f "/tmp/llmctl_ctx_override_test_stderr_neg.$$"
+
 # --- 5. LLMCTL_KVTYPE_<PROFILE> plumbs into the FUNCTIONAL path -------------
 plan_kv="$(LLMCTL_KVTYPE_SMALL=q4_0 plan_for)"
 assert_eq "q4_0" "$(printf '%s' "${plan_kv}" | json_stdin 'd["profiles"]["small"].get("kv_cache_type")')" \
@@ -129,5 +148,34 @@ assert_eq "65536" "$(printf '%s' "${out_overridden}" | json_stdin 'd["profiles"]
   "llmctl plan --json honors LLMCTL_CTX_SMALL end-to-end through the real CLI entrypoint"
 assert_eq "q4_0" "$(printf '%s' "${out_overridden}" | json_stdin 'd["profiles"]["small"].get("kv_cache_type")')" \
   "llmctl plan --json honors LLMCTL_KVTYPE_SMALL end-to-end through the real CLI entrypoint"
+
+# --- 10. the REAL launch command genuinely carries --cache-type-k/-v -------
+# Finding 2 (round-2 independent review, 2026-10-03): sections 1-9 above all
+# test catalog_plan_json's kv_cache_type *decision*, but nothing previously
+# asserted that the decision actually reaches the real llama-server command
+# line lib/scheduler.sh's sched_build_launch constructs (SCHED_ARGS - the
+# same array svc_write_env persists into the real per-profile .env file
+# systemd/launchd actually execute, and scheduler.sh:599/:712's real call
+# sites). A planner that decided correctly but was never wired to the real
+# launch path would still pass every test above.
+source "${LLMCTL_ROOT}/lib/scheduler.sh"
+export LLMCTL_DRY_RUN=1
+
+sched_build_launch small gpu 18099 8192 99 1 auto f16
+args_f16=" ${SCHED_ARGS[*]} "
+if [[ "${args_f16}" == *" --cache-type-k "* || "${args_f16}" == *" --cache-type-v "* ]]; then
+  printf '  FAIL: %s\n    f16 (llama-servers own default) must NOT add --cache-type-k/-v to the real launch command, but it did: %s\n' \
+    "f16 kv_type omits --cache-type-k/-v from the real launch command" "${args_f16}" >&2
+  TEST_FAILS=$((TEST_FAILS+1))
+else
+  printf '  ok: %s\n' "f16 kv_type omits --cache-type-k/-v from the real launch command (byte-for-byte unchanged for every profile that does not opt in)"
+fi
+
+sched_build_launch small gpu 18099 8192 99 1 auto q4_0
+args_q4="${SCHED_ARGS[*]}"
+assert_contains "${args_q4}" "--cache-type-k q4_0" \
+  "q4_0 kv_type adds --cache-type-k q4_0 to the real launch command sched_build_launch constructs"
+assert_contains "${args_q4}" "--cache-type-v q4_0" \
+  "q4_0 kv_type adds --cache-type-v q4_0 to the real launch command sched_build_launch constructs"
 
 test_finish

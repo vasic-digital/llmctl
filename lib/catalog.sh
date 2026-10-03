@@ -307,21 +307,44 @@ vram_live = vram_free is not None
 # overhead). Root-caused 2026-10-03: the flat 1/8 MiB-per-token estimate
 # below was ALWAYS an f16-calibrated number (llama-server's own default
 # before this fix), never actually re-derived when q4_0/q8_0/etc. KV
-# quantization became available as a real --cache-type-k/-v flag. Only
-# q4_0's ratio (0.25) is EMPIRICALLY VERIFIED on real hardware (RTX 3060,
+# quantization became available as a real --cache-type-k/-v flag.
+#
+# Only q4_0's ratio is EMPIRICALLY VERIFIED on real hardware (RTX 3060,
 # Llama-3.2-3B-Instruct-Q4_K_M): a live llama-server run's own OOM log
 # reported "allocating 3550740480 bytes" (3386 MiB) for the KV buffer at
 # ctx=110000, giving ~0.0308 MiB/token measured vs. 0.125 MiB/token for
-# the existing f16 formula at that same ctx - a ratio of ~0.246, matching
-# the naive 4-bit/16-bit=0.25 figure closely. The other ratios are
-# DERIVED from each format's known bit-width (q8_0 ~8.5 bits incl. scale,
-# q5_x ~5.3-5.75 bits, q4_1/iq4_nl ~4.5-4.75 bits) and are NOT yet
-# independently measured on real hardware - treat them as estimates, not
-# verified constants, until each has its own live-measurement data point.
+# the existing f16 formula at that same ctx - a measured ratio of ~0.246.
+# That is the MAGNITUDE this entry's 0.25 is verified against; it is NOT
+# the same number as q4_0's own bit-width derivation (block32, 4 bits +
+# one fp16 scale per 32 elements = 4.5 bits/16 = 0.28125) - the measured
+# 0.246 sits closer to the naive 4-bit/16-bit=0.25 figure than to its own
+# format's bit-width-derived value, a COINCIDENTAL alignment (quite
+# possibly measurement noise / allocator rounding at this single data
+# point), not proof that "naive bit ratio" is the right derivation method
+# in general. 0.25 is kept here because it is the value actually measured,
+# not because the method that produced it is trusted elsewhere.
+#
+# Every other ratio is DERIVED from each format's known block structure
+# (ggml block size 32 unless noted) and has NOT been independently
+# measured on real hardware - round-2 independent review (2026-10-03)
+# found three of these derived values rounded DOWN from their own
+# bit-width math, which is the dangerous direction for an admission-
+# control estimate (an underestimate reports `fits: true` for a config
+# that can genuinely OOM - see resolve_ctx's MIN_CTX comment above for
+# the same asymmetry). Each is now rounded UP to its bit-width ceiling:
+#   q8_0:  8 bits + fp16 scale (16 bits)/32   = 8.5  bits -> 8.5/16  = 0.53125
+#   q5_1:  5 bits + fp16 scale+min (32 bits)/32 = 6.0 bits -> 6.0/16  = 0.375
+#   q4_1:  4 bits + fp16 scale (16 bits)/32   = 4.5  bits -> 4.5/16  = 0.28125 (rounded up to 0.3125, one safety step above the bare bit-width ceiling)
+# q5_0 and iq4_nl are left as previously estimated (0.34 and 0.28): their
+# own bit-width ceilings (5.5/16=0.34375 and ~4.5/16=0.28125) are within a
+# fraction of a percent of the existing values, well under the magnitude
+# this review flagged for the three above - treat all non-q4_0 values as
+# estimates, not verified constants, until each has its own live-
+# measurement data point.
 KV_TYPE_RATIO = {
     "f32": 2.0, "f16": 1.0, "bf16": 1.0,
-    "q8_0": 0.5, "q5_1": 0.36, "q5_0": 0.34,
-    "q4_1": 0.3, "q4_0": 0.25, "iq4_nl": 0.28,
+    "q8_0": 0.531, "q5_1": 0.375, "q5_0": 0.34,
+    "q4_1": 0.3125, "q4_0": 0.25, "iq4_nl": 0.28,
 }
 
 def kv_mb(ctx, parallel, kv_type="f16"):
@@ -348,13 +371,33 @@ def resolve_ctx(name, default_ctx):
     override = os.environ.get(env_name)
     if not override:
         return default_ctx
+    # A plain int() parse (unlike resolve_port's identical-looking one) is
+    # NOT safe here: round-2 independent review (2026-10-03) found 0 and
+    # negative values silently accepted, and 0 is NOT harmless for ctx the
+    # way it would be for a port -- llama-server's own `--ctx-size 0` means
+    # "use the model's native/trained context" (confirmed in its --help),
+    # which for a typical model is far larger than its catalog default and
+    # would NOT fit in available VRAM, while kv_mb()'s estimate for ctx=0
+    # computes as ~0 MiB, so the plan would falsely report `fits: true` for
+    # a config that genuinely OOMs. MIN_CTX is an arbitrary-but-generous
+    # floor (below any plausible real context) that exists purely to catch
+    # 0/negative/absurdly-small typos, not to express a real minimum.
+    MIN_CTX = 512
     try:
-        return int(override)
+        value = int(override)
     except ValueError:
         sys.stderr.write(
             "catalog_plan_json: %s=%r is not a valid context size\n" % (env_name, override)
         )
         sys.exit(1)
+    if value < MIN_CTX:
+        sys.stderr.write(
+            "catalog_plan_json: %s=%r must be >= %d (0 or negative has a "
+            "different, dangerous meaning to llama-server's --ctx-size, not "
+            "'use the catalog default')\n" % (env_name, override, MIN_CTX)
+        )
+        sys.exit(1)
+    return value
 
 def resolve_kv_type(name, default_type):
     """Per-profile KV-cache-type override: opt-in LLMCTL_KVTYPE_<PROFILE>

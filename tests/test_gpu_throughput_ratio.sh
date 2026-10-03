@@ -23,6 +23,24 @@ source "${LLMCTL_ROOT}/lib/hardware.sh"
 source "${LLMCTL_ROOT}/lib/catalog.sh"
 
 PROFILE="${LLMCTL_TEST_GPU_PROFILE:-small}"
+# Pin PROFILE's own ctx/kv-type to a conservative f16 baseline (round-2
+# review of the context-override/KV-quant feature, 2026-10-03):
+# models/catalog.json's real defaults for small/vision were raised
+# (small -> ctx=55000 q4_0, vision -> ctx=24000 q4_0) for genuinely safer
+# live headroom, which this test's own `catalog_plan_json` call (no
+# LLMCTL_FAKE_HW here -- it reads the REAL host probe) now sees against
+# whatever VRAM the host currently has free. A raised default's larger KV
+# estimate can push the profile to `mode=cpu` (ngl=0) under real
+# contention, which this GPU-vs-CPU-offload benchmark cannot run with
+# (PLANNED_NGL=0 collapses both halves of the comparison). Pin back to a
+# small, known-safe footprint via the override mechanism itself, matching
+# d00757c's identical fix for test_scheduler.sh -- derived from PROFILE so
+# this still does the right thing if LLMCTL_TEST_GPU_PROFILE selects a
+# different profile, not just 'small'.
+_ctx_var="LLMCTL_CTX_$(printf '%s' "${PROFILE}" | tr '[:lower:]-' '[:upper:]_')"
+_kv_var="LLMCTL_KVTYPE_$(printf '%s' "${PROFILE}" | tr '[:lower:]-' '[:upper:]_')"
+export "${_ctx_var}=${!_ctx_var:-8192}"
+export "${_kv_var}=${!_kv_var:-f16}"
 QA_DIR="${LLMCTL_ROOT}/docs/qa/005-cuda-gpu-inference"
 mkdir -p "${QA_DIR}"
 EVIDENCE="${QA_DIR}/throughput_ratio.txt"

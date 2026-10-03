@@ -30,6 +30,16 @@ source "${LLMCTL_ROOT}/lib/catalog.sh"
 # a real, already-downloaded model. Any absence is an honest SKIP
 # (Constitution §11.4.3), never a fabricated PASS or a silent no-op. ------
 PROFILE="${LLMCTL_TEST_GPU_PROFILE:-small}"
+# Pin PROFILE's own ctx/kv-type to a conservative f16 baseline (round-2
+# review of the context-override/KV-quant feature, 2026-10-03) -- see the
+# identical, fully-commented fix in test_gpu_throughput_ratio.sh for the
+# full rationale: models/catalog.json's raised small/vision defaults can
+# push this profile to `mode=cpu` (ngl=0) under real host contention,
+# which this direct-GPU-offload VRAM-delta measurement cannot run with.
+_ctx_var="LLMCTL_CTX_$(printf '%s' "${PROFILE}" | tr '[:lower:]-' '[:upper:]_')"
+_kv_var="LLMCTL_KVTYPE_$(printf '%s' "${PROFILE}" | tr '[:lower:]-' '[:upper:]_')"
+export "${_ctx_var}=${!_ctx_var:-8192}"
+export "${_kv_var}=${!_kv_var:-f16}"
 QA_DIR="${LLMCTL_ROOT}/docs/qa/005-cuda-gpu-inference"
 mkdir -p "${QA_DIR}"
 EVIDENCE="${QA_DIR}/vram_delta.txt"
