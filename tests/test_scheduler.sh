@@ -21,6 +21,37 @@ out="$("${LLMCTL}" status)"
 assert_contains "${out}" "fast" "status lists fast"
 assert_contains "${out}" "small" "status lists small"
 
+# --- 1b. LLMCTL-F1: machine-readable `status --json` -------------------------
+json_out="$("${LLMCTL}" status --json 2>&1)" || true
+json_ok="$(printf '%s' "${json_out}" | python3 -c '
+import json, sys
+try:
+    rows = json.load(sys.stdin)
+    assert isinstance(rows, list), "top level must be a JSON array"
+    names = sorted(r["profile"] for r in rows)
+    assert names == ["fast", "small"], "expected exactly fast+small, got %r" % names
+    for r in rows:
+        assert set(r.keys()) == {"profile","port","mode","ram_mb","vram_mb","enabled","state","last_log_line"}, r
+        assert r["state"] == "running", r
+        assert r["last_log_line"] is None, r
+        assert isinstance(r["enabled"], bool), r
+    print("ok")
+except Exception as exc:
+    print("FAIL: %s" % exc)
+' 2>&1)" || true
+assert_eq "ok" "${json_ok}" "status --json: valid JSON array, exact field set, fast+small both state=running with no log line"
+
+out_text="$("${LLMCTL}" status)"
+out_json_names="$(printf '%s' "${json_out}" | python3 -c 'import json,sys
+try:
+    print(" ".join(sorted(r["profile"] for r in json.load(sys.stdin))))
+except Exception as exc:
+    print("FAIL: %s" % exc)
+' 2>&1)" || true
+text_names="$(printf '%s' "${out_text}" | tail -n +2 | awk '{print $1}' | sort | tr '\n' ' ' | sed 's/ $//')"
+assert_eq "fast small" "${out_json_names}" "status --json's profile set matches the plain-text table's (single source of truth, not a second parse)"
+assert_eq "fast small" "${text_names}" "sanity: the plain-text table itself still lists exactly fast+small (unchanged by the refactor)"
+
 # --- 2. refusal with suggested alternative ------------------------------------
 # fast+small reserve 9689/10444 MiB VRAM; vision needs 4210 -> must refuse.
 sleep 1  # ensure distinct LRU epochs

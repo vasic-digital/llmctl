@@ -733,6 +733,17 @@ _sched_switch_impl() {
       err "rollback succeeded - the previously-running profile(s) are running again"
     else
       err "ROLLBACK ALSO FAILED - the host may have fewer services running than before this switch attempt. Check: llmctl status"
+      # LLMCTL-F2: a distinct, documented exit code for this specific
+      # outcome, so a caller never has to pattern-match the stderr text
+      # above to tell "switch failed, rollback succeeded" apart from
+      # "switch failed AND rollback also failed" - the stderr text stays
+      # (existing consumers that already grep for it keep working), this
+      # is the NEW, primary machine-readable signal. 75 (EX_TEMPFAIL,
+      # BSD sysexits.h) - no other exit/return code in this codebase uses
+      # it; chosen because the condition is exactly that: a temporary,
+      # operator-attention-needed failure, not a plain usage/not-found error
+      # (the two other non-0/1 codes already in use here, 2 and 127).
+      return 75
     fi
   fi
   return "${start_rc}"
@@ -821,15 +832,16 @@ _sched_auto_impl() {
 # profile (restart limit exceeded, systemd/launchd gave up) as
 # "failed (crash-loop)" with its last log line, rather than silently
 # showing it as just another row (FR-044, Clarification 14).
-sched_status() {
+# _sched_status_rows - single source of truth for "what's running right now
+# and its reservation details", consumed by BOTH sched_status() (human
+# table) and sched_status_json() (LLMCTL-F1: machine-readable contract).
+# Emits one TAB-separated row per *.run file:
+#   profile\tport\tmode\tram_mb\tvram_mb\tenabled\tstate\tlast_log_line
+# last_log_line is empty unless state=="failed (crash-loop)" - computed here
+# either way so neither caller re-opens the log file independently.
+_sched_status_rows() {
   sched_load_backend
-  local running; running="$(sched_running)"
-  if [[ -z "${running}" ]]; then
-    echo "no llmctl services running"
-    return 0
-  fi
-  printf '%-16s %-6s %-8s %-10s %-10s %-8s %s\n' "profile" "port" "mode" "RAM MiB" "VRAM MiB" "enabled" "state"
-  local f p port mode ram vram en state
+  local f p port mode ram vram en state last_log
   for f in "${LLMCTL_RUNTIME_DIR}"/*.run; do
     [[ -e "${f}" ]] || continue
     p="$(basename "${f}" .run)"
@@ -838,14 +850,68 @@ sched_status() {
     ram="$(sed -n 's/^ram_mb=//p' "${f}")"
     vram="$(sed -n 's/^vram_mb=//p' "${f}")"
     sched_is_enabled "${p}" && en="yes" || en="no"
+    last_log=""
     if svc_is_failed "${p}" 2>/dev/null; then
       state="failed (crash-loop)"
+      last_log="$(tail -n 1 "${LLMCTL_LOG_DIR}/${p}.log" 2>/dev/null || echo "(no log)")"
     else
       state="running"
     fi
-    printf '%-16s %-6s %-8s %-10s %-10s %-8s %s\n' "${p}" "${port}" "${mode}" "${ram}" "${vram}" "${en}" "${state}"
-    if [[ "${state}" == "failed (crash-loop)" ]]; then
-      printf '  last log line: %s\n' "$(tail -n 1 "${LLMCTL_LOG_DIR}/${p}.log" 2>/dev/null || echo "(no log)")"
-    fi
+    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "${p}" "${port}" "${mode}" "${ram}" "${vram}" "${en}" "${state}" "${last_log}"
   done
+}
+
+sched_status() {
+  local running; running="$(sched_running)"
+  if [[ -z "${running}" ]]; then
+    echo "no llmctl services running"
+    return 0
+  fi
+  printf '%-16s %-6s %-8s %-10s %-10s %-8s %s\n' "profile" "port" "mode" "RAM MiB" "VRAM MiB" "enabled" "state"
+  local p port mode ram vram en state last_log
+  while IFS=$'\t' read -r p port mode ram vram en state last_log; do
+    printf '%-16s %-6s %-8s %-10s %-10s %-8s %s\n' "${p}" "${port}" "${mode}" "${ram}" "${vram}" "${en}" "${state}"
+    [[ "${state}" == "failed (crash-loop)" ]] && printf '  last log line: %s\n' "${last_log}"
+  done < <(_sched_status_rows)
+  # Explicit, since a `while read ... <(proc-sub)` loop's own exit status
+  # is `read`'s final EOF-signaling failure (1), not the body's last
+  # successful printf - without this, sched_status() silently returned 1
+  # on every call that actually had something to print (caught live: it
+  # broke `set -e` callers of `llmctl status` with no args, a real
+  # regression introduced by this very refactor).
+  return 0
+}
+
+# sched_status_json - LLMCTL-F1: machine-readable running-state contract.
+# External contract (do not change field names/shapes without a version
+# bump in README): a JSON array, one object per currently-running profile:
+#   {"profile": str, "port": int, "mode": str, "ram_mb": int, "vram_mb": int,
+#    "enabled": bool, "state": "running"|"failed (crash-loop)",
+#    "last_log_line": str|null}
+# "last_log_line" is null except when state is the crash-loop value. Unlike
+# `llmctl plan --json`, which never carries a "running" field (by design -
+# it is the plan, not live state), THIS is the one place a caller gets both
+# "what's running" and its reservation details as structured data, built
+# from the exact same rows sched_status()'s human table prints (shared
+# _sched_status_rows helper - never a second, divergent parse of *.run).
+sched_status_json() {
+  python3 -c '
+import json, sys
+rows = []
+for line in sys.stdin.read().splitlines():
+    if not line:
+        continue
+    p, port, mode, ram, vram, en, state, last_log = line.split("\t")
+    rows.append({
+        "profile": p,
+        "port": int(port) if port.isdigit() else port,
+        "mode": mode,
+        "ram_mb": int(ram) if ram.isdigit() else ram,
+        "vram_mb": int(vram) if vram.isdigit() else vram,
+        "enabled": en == "yes",
+        "state": state,
+        "last_log_line": last_log if last_log else None,
+    })
+print(json.dumps(rows))
+' < <(_sched_status_rows)
 }

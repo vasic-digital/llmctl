@@ -186,7 +186,13 @@ main() {
       ;;
     switch)   [[ "$#" -eq 1 ]] || die "usage: llmctl switch <profile>"; sched_switch "$1" ;;
     auto)     sched_auto "$@" ;;
-    status)   sched_status ;;
+    status)
+      if [[ "${1:-}" == "--json" ]]; then
+        sched_status_json
+      else
+        sched_status
+      fi
+      ;;
     logs)     [[ "$#" -ge 1 ]] || die "usage: llmctl logs <profile> [lines]"
               sched_load_backend; svc_logs "$@" ;;
     cluster)
