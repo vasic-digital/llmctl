@@ -33,6 +33,23 @@ math in multiple places.
   an optional per-profile override `LLMCTL_BIND_HOST_<PROFILE>` (same
   upper-cased, `-` -> `_` naming rule as the port override, see
   `catalog_bind_host_override_env_name`).
+* Per-profile context-size and KV-cache-type overrides, read inside
+  `catalog_plan_json`'s embedded Python planner (same upper-cased,
+  `-` -> `_` naming rule, see `catalog_ctx_override_env_name` /
+  `catalog_kv_type_override_env_name`):
+  - `LLMCTL_CTX_<PROFILE>` overrides `defaults.ctx` (the `--ctx-size`
+    llama-server is launched with). Must be an integer; anything else
+    dies with a message naming the bad value.
+  - `LLMCTL_KVTYPE_<PROFILE>` overrides `defaults.kv_cache_type` (passed
+    as llama-server's `--cache-type-k`/`--cache-type-v` when not `f16`).
+    Must be one of llama-server's real accepted values (`f32`, `f16`,
+    `bf16`, `q8_0`, `q5_1`, `q5_0`, `q4_1`, `q4_0`, `iq4_nl`); anything
+    else dies naming the full allowed set. Quantizing the KV cache
+    trades numerical precision for VRAM — `q4_0` is the one ratio
+    verified live on real hardware (~1/4 the per-token cost of `f16`);
+    the others are derived from known bit-widths, not yet independently
+    measured. Both overrides are entirely opt-in: a profile that sets
+    neither behaves exactly as before (f16, catalog's own `ctx`).
 
 ## Usage examples
 
@@ -62,6 +79,11 @@ LLMCTL_PORT_FAST=18080 catalog_port fast
 LLMCTL_BIND_HOST_FAST=127.0.0.1 catalog_bind_host fast
 # or revert every profile at once
 LLMCTL_BIND_HOST=127.0.0.1 catalog_bind_host fast
+
+# raise one profile's context size and/or quantize its KV cache, without
+# touching the shared, portable catalog file:
+LLMCTL_CTX_SMALL=65536 hw_probe_json | catalog_plan_json
+LLMCTL_KVTYPE_SMALL=q4_0 hw_probe_json | catalog_plan_json
 
 # tier classification (hardware JSON on stdin)
 hw_probe_json | catalog_classify_tier   # -> baseline|workstation|datacenter|below-minimum

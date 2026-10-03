@@ -74,7 +74,7 @@ service's own hard resource limit.
 
 ```mermaid
 flowchart TD
-    START["profile requested<br/>(start / auto / switch)"] --> KV["estimate KV cache<br/>ctx x parallel / 8 MiB"]
+    START["profile requested<br/>(start / auto / switch)"] --> KV["estimate KV cache<br/>ctx x parallel x type-ratio / 8 MiB<br/>(type-ratio=1.0 for f16, less when<br/>kv_cache_type/LLMCTL_KVTYPE_&lt;P&gt; quantizes it)"]
     KV --> ENGINE{engine?}
     ENGINE -->|llama.cpp| FITVRAM{"model + KV<br/>&le; VRAM budget?"}
     FITVRAM -->|yes| GPU["mode = gpu<br/>full offload, ngl from catalog"]
