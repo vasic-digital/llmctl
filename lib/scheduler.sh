@@ -122,6 +122,18 @@ sched_reserved_field() {
 # is NOT live: the pre-"vram_live" static total-capacity VRAM estimate,
 # which cannot see any current usage on its own and has always relied on
 # this subtraction to approximate it.
+#
+# Reads the eviction-credit variables _sched_auto_impl sets (round-2
+# independent review, 2026-10-03): that function's own eviction loop, and
+# the _sched_start_impl call it delegates to once the loop converges, BOTH
+# call this function -- and both need to see memory THIS SAME auto call
+# has already evicted, which a plan_file probed once before the loop
+# started cannot (and, for a dry-run/fixture host, never will) reflect on
+# its own. bash's dynamic scoping makes a caller's `local` visible to
+# whatever it calls, so _sched_auto_impl's locals are visible here without
+# any explicit parameter -- and for every OTHER caller (the vast majority:
+# plain `llmctl start`/`enable`), the names are simply unset and the
+# `:-0` default makes this function behave exactly as before.
 _sched_initial_used() {
   local pf="$1" vram_live
   # json_query special-cases a Python bool result: it exits 1 for False
@@ -138,7 +150,10 @@ _sched_initial_used() {
   vram_live="$(json_query "${pf}" 'str(d["budgets"]["vram_live"])')"
   local iv=0
   [[ "${vram_live}" == "True" ]] || iv="$(sched_reserved_field vram_mb)"
-  printf '0 %s\n' "${iv}"
+  local ir
+  ir=$(( 0 - ${_sched_auto_ram_credit:-0} ))
+  iv=$(( iv - ${_sched_auto_vram_credit:-0} ))
+  printf '%s %s\n' "${ir}" "${iv}"
 }
 
 _sched_write_reservation() {
@@ -795,9 +810,12 @@ _sched_auto_impl() {
   local plan_file; plan_file="$(mktemp)"
   hw_probe_json | catalog_plan_json > "${plan_file}"
 
-  local ram_budget vram_budget
+  local ram_budget vram_budget vram_live
   ram_budget="$(json_query "${plan_file}" 'd["budgets"]["ram_mb"]')"
   vram_budget="$(json_query "${plan_file}" 'd["budgets"]["vram_mb"]')"
+  # str() sidesteps json_query's bool-False-exits-1 convention, same reason
+  # _sched_initial_used queries it this way (see that function's comment).
+  vram_live="$(json_query "${plan_file}" 'str(d["budgets"]["vram_live"])')"
 
   # Resolve the desired set: best-ranked recommended profile per capability.
   local -a want=()
@@ -818,6 +836,19 @@ _sched_auto_impl() {
   done
 
   # Eviction loop: try to fit; if not, evict the LRU non-enabled service.
+  # _sched_auto_ram_credit / _sched_auto_vram_credit (round-2 independent
+  # review, 2026-10-03): running totals of what THIS call's own evictions
+  # have freed, read by _sched_initial_used via bash's dynamic scoping (a
+  # `local` here is visible to every function this one calls, INCLUDING
+  # the final _sched_start_impl delegation below) -- see that function's
+  # header comment for why this is necessary, not merely the loop-local
+  # convergence check: _sched_start_impl re-probes the host independently,
+  # and on a dry-run/fixture host (this suite) or a real host whose driver
+  # has not yet caught up (process-exit timing), that fresh probe would
+  # not reflect what was just evicted on its own. Never set outside this
+  # function, so every OTHER caller of _sched_initial_used sees these as
+  # unset and the `:-0` default there reduces to exactly today's behavior.
+  local _sched_auto_ram_credit=0 _sched_auto_vram_credit=0
   local attempt
   for (( attempt=0; attempt<16; attempt++ )); do
     local used_ram used_vram ok=1
@@ -854,8 +885,22 @@ _sched_auto_impl() {
       return 1
     fi
     warn "auto: evicting '${lru}' (LRU, not enabled) to make room"
+    # Credit the evicted profile's OWN reservation into the running totals
+    # BEFORE stopping it / deleting its .run file. RAM is always live (no
+    # static fallback exists), so it is always credited; VRAM is credited
+    # only when vram_live -- the static-total case must NOT be credited
+    # here, since its baseline (sched_reserved_field, read fresh by
+    # _sched_initial_used every attempt) already shrinks on its own the
+    # moment the .run file below is removed, and crediting on top of that
+    # would double-count the same freed memory in the other direction.
+    local lru_run freed_ram freed_vram
+    lru_run="$(_sched_run_file "${lru}")"
+    freed_ram="$(sed -n 's/^ram_mb=//p' "${lru_run}" | head -1)"
+    freed_vram="$(sed -n 's/^vram_mb=//p' "${lru_run}" | head -1)"
+    _sched_auto_ram_credit=$(( _sched_auto_ram_credit + ${freed_ram:-0} ))
+    [[ "${vram_live}" == "True" ]] && _sched_auto_vram_credit=$(( _sched_auto_vram_credit + ${freed_vram:-0} ))
     svc_stop "${lru}" || true
-    rm -f "$(_sched_run_file "${lru}")"
+    rm -f "${lru_run}"
   done
 
   rm -f "${plan_file}"

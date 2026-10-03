@@ -233,4 +233,32 @@ assert_contains "${out}" "cannot start 'vision'" "10b: the SECOND profile in the
 assert_file_absent "${LLMCTL_RUNTIME_DIR}/small.run" "10b: nothing starts when the batch's validation phase refuses any member (atomic start, pre-existing design)"
 assert_file_absent "${LLMCTL_RUNTIME_DIR}/vision.run" "10b: vision (the one that overflows the combined demand) is correctly refused, never started"
 
+# --- 10c. Round-2 independent review (2026-10-03): _sched_auto_impl's
+# eviction loop never converged once _sched_initial_used started
+# returning 0 for a live budget (10b's own fix, this same session) --
+# ram_budget is probed ONCE before the loop and never re-probed after an
+# eviction, so nothing an eviction freed was ever reflected, and the
+# loop evicted every evictable service and still failed with a FALSE
+# "remaining services are enabled (protected)" message even when
+# nothing was enabled. Reproduced directly against the unfixed code
+# with this exact fixture/scenario before writing this fix: 'small'
+# (ram 2949) running alone, 'auto chat vision' resolves to fast(5716)+
+# vision(4210)=9926 against a live 9904 RAM budget -- 'small' gets
+# evicted (the only evictable candidate) and the call STILL failed. ---
+export LLMCTL_FAKE_HW="${LLMCTL_ROOT}/tests/fixtures/hw-ram-contended-auto-eviction.json"
+test_teardown_env; test_setup_env   # fresh state for the new fixture
+
+out="$("${LLMCTL}" start small 2>&1)" && rc=0 || rc=$?
+assert_eq 0 "${rc}" "10c: 'small' starts alone"
+assert_file_exists "${LLMCTL_RUNTIME_DIR}/small.run" "10c: small reservation written"
+
+out="$("${LLMCTL}" auto chat vision 2>&1)" && rc=0 || rc=$?
+assert_eq 0 "${rc}" "10c: auto chat vision succeeds after evicting small (9904 RAM budget + 2949 credited back >= fast(5716)+vision(4210)=9926)"
+assert_contains "${out}" "evicting 'small'" "10c: small is the one evicted (LRU, not enabled, not in the wanted set)"
+assert_contains "${out}" "started fast" "10c: fast genuinely started"
+assert_contains "${out}" "started vision" "10c: vision genuinely started"
+assert_file_absent "${LLMCTL_RUNTIME_DIR}/small.run" "10c: small's reservation removed by the eviction"
+assert_file_exists "${LLMCTL_RUNTIME_DIR}/fast.run" "10c: fast reservation written"
+assert_file_exists "${LLMCTL_RUNTIME_DIR}/vision.run" "10c: vision reservation written"
+
 test_finish
