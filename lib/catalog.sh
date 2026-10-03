@@ -309,42 +309,53 @@ vram_live = vram_free is not None
 # before this fix), never actually re-derived when q4_0/q8_0/etc. KV
 # quantization became available as a real --cache-type-k/-v flag.
 #
-# Only q4_0's ratio is EMPIRICALLY VERIFIED on real hardware (RTX 3060,
-# Llama-3.2-3B-Instruct-Q4_K_M): a live llama-server run's own OOM log
-# reported "allocating 3550740480 bytes" (3386 MiB) for the KV buffer at
-# ctx=110000, giving ~0.0308 MiB/token measured vs. 0.125 MiB/token for
-# the existing f16 formula at that same ctx - a measured ratio of ~0.246.
-# That is the MAGNITUDE this entry's 0.25 is verified against; it is NOT
-# the same number as q4_0's own bit-width derivation (block32, 4 bits +
-# one fp16 scale per 32 elements = 4.5 bits/16 = 0.28125) - the measured
-# 0.246 sits closer to the naive 4-bit/16-bit=0.25 figure than to its own
-# format's bit-width-derived value, a COINCIDENTAL alignment (quite
-# possibly measurement noise / allocator rounding at this single data
-# point), not proof that "naive bit ratio" is the right derivation method
-# in general. 0.25 is kept here because it is the value actually measured,
-# not because the method that produced it is trusted elsewhere.
+# q4_0 is EMPIRICALLY VERIFIED on real hardware (RTX 3060,
+# Llama-3.2-3B-Instruct-Q4_K_M, 28 layers x 8 KV heads x 128 head_dim): a
+# live llama-server run's own OOM log reported "allocating 3550740480
+# bytes" for the KV buffer at ctx=110080 (110000 padded to a slot
+# boundary) - and that is an EXACT match (round-3 independent review,
+# 2026-10-03, re-verified here byte-for-byte), not an approximation:
+# 2(K+V) * 28 * 8 * 128 * 2bytes(f16) = 114688 f16-bytes/token, times
+# q4_0's true per-block ratio (4 bits + one fp16 scale per 32 elements =
+# 4.5 bits/16 = 0.28125), times 110080 tokens = 3550740480.0 bytes,
+# to the byte. 0.28125 (not 0.25) is q4_0's honest, portable ratio.
 #
-# Every other ratio is DERIVED from each format's known block structure
-# (ggml block size 32 unless noted) and has NOT been independently
+# Why this entry used to read 0.25, and why that was wrong to keep: this
+# model's REAL f16 KV cost (114688 B/token = 0.109375 MiB/token) is itself
+# ~14% BELOW what kv_mb()'s flat "ctx/8 MiB" base formula assumes (0.125
+# MiB/token - exactly right only for a 32-layer/8-head/128-dim model, e.g.
+# an 8B-class Llama). Applying the true 0.28125 ratio to the OVERESTIMATED
+# 0.125 base happened to land close to applying 0.25 to it (0.25*0.125 ~=
+# 0.28125*0.109375), so 0.25 "worked" on this specific model only by
+# accidentally cancelling the base formula's own error on a SPECIFIC other
+# model - not a property of q4_0 itself, and actively UNSAFE (underestimate
+# by ~11%) for any model whose real f16 cost actually matches the base
+# formula's assumption. Fixed by storing q4_0's true, portable ratio
+# (0.28125) instead of a value entangled with one model's base-formula
+# error.
+#
+# Every other ratio is DERIVED from each format's known ggml block
+# structure (block size 32 unless noted) and has NOT been independently
 # measured on real hardware - round-2 independent review (2026-10-03)
-# found three of these derived values rounded DOWN from their own
-# bit-width math, which is the dangerous direction for an admission-
-# control estimate (an underestimate reports `fits: true` for a config
-# that can genuinely OOM - see resolve_ctx's MIN_CTX comment above for
-# the same asymmetry). Each is now rounded UP to its bit-width ceiling:
-#   q8_0:  8 bits + fp16 scale (16 bits)/32   = 8.5  bits -> 8.5/16  = 0.53125
-#   q5_1:  5 bits + fp16 scale+min (32 bits)/32 = 6.0 bits -> 6.0/16  = 0.375
-#   q4_1:  4 bits + fp16 scale (16 bits)/32   = 4.5  bits -> 4.5/16  = 0.28125 (rounded up to 0.3125, one safety step above the bare bit-width ceiling)
+# found three of these rounded DOWN from their own bit-width math (the
+# dangerous direction: an underestimate reports `fits: true` for a config
+# that can genuinely OOM - see resolve_ctx's MIN_CTX comment above for the
+# same asymmetry); round-3 (2026-10-03) found q8_0 still fractionally below
+# its own ceiling and corrected q4_1's derivation (it carries BOTH a scale
+# AND a min per block, not one):
+#   q8_0:  8 bits + fp16 scale (16 bits)/32            = 8.5 bits -> 8.5/16 = 0.53125
+#   q5_1:  5 bits + fp16 scale+min (32 bits)/32         = 6.0 bits -> 6.0/16 = 0.375
+#   q4_1:  4 bits + fp16 scale+min (2x16=32 bits)/32    = 5.0 bits -> 5.0/16 = 0.3125 (exact ceiling, no rounding needed)
 # q5_0 and iq4_nl are left as previously estimated (0.34 and 0.28): their
 # own bit-width ceilings (5.5/16=0.34375 and ~4.5/16=0.28125) are within a
 # fraction of a percent of the existing values, well under the magnitude
-# this review flagged for the three above - treat all non-q4_0 values as
+# this review flagged for the others - treat all non-q4_0 values as
 # estimates, not verified constants, until each has its own live-
 # measurement data point.
 KV_TYPE_RATIO = {
     "f32": 2.0, "f16": 1.0, "bf16": 1.0,
-    "q8_0": 0.531, "q5_1": 0.375, "q5_0": 0.34,
-    "q4_1": 0.3125, "q4_0": 0.25, "iq4_nl": 0.28,
+    "q8_0": 0.53125, "q5_1": 0.375, "q5_0": 0.34,
+    "q4_1": 0.3125, "q4_0": 0.28125, "iq4_nl": 0.28,
 }
 
 def kv_mb(ctx, parallel, kv_type="f16"):
