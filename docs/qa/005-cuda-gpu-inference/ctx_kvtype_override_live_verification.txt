@@ -1,0 +1,153 @@
+Finding 5 (round-2 independent review of the context-override/KV-cache-
+quantization feature, 2026-10-03): real live re-verification of 'small'
+(models/catalog.json default ctx=55000, kv_cache_type=q4_0) and 'vision'
+(ctx=24000, kv_cache_type=q4_0) via a real `llmctl stop`/`start`, real
+`/v1/chat/completions` requests, and real `nvidia-smi` before/after VRAM
+readings. Host: RTX 3060, 12288 MiB total VRAM. All commands below were
+run directly against the live llmctl install at
+/home/milosvasic/Projects/llmctl - nothing here is simulated, mocked, or
+dry-run.
+
+Both profiles previously defaulted to ctx=8192 (the root cause this whole
+feature fixes - see 875f5e1/158bf17). This file proves the raised
+defaults are REAL and ENFORCED by the actual running llama-server
+process, not merely written to a config file and never read.
+
+================================================================================
+small (ctx=55000, kv_cache_type=q4_0)
+================================================================================
+Sat Oct  3 06:04:03 PM UTC 2026
+
+--- before: stopping small, idle GPU reading ---
+stopped small
+3921 MiB, 12288 MiB
+
+--- starting small (real catalog defaults, no override needed) ---
+[llmctl] wrote /home/milosvasic/.local/state/llmctl/services/small.env
+started small (mode=gpu, port=8085, reserved 2048 MiB RAM + 3644 MiB VRAM)
+
+--- real launch command (from the written .env, confirms sched_build_launch's
+    actual output reaches the real process) ---
+LLMCTL_ARGS=--model .../small/Llama-3.2-3B-Instruct-Q4_K_M.gguf --host 0.0.0.0
+  --port 8085 --ctx-size 55000 --n-gpu-layers 99 --flash-attn auto --parallel 1
+  --jinja --cache-type-k q4_0 --cache-type-v q4_0
+
+--- waiting for /health ---
+healthy after 1s
+
+--- loaded (idle, model resident) GPU reading ---
+7961 MiB, 12288 MiB   (delta vs idle: +4040 MiB - genuine GPU residency)
+
+--- real /v1/chat/completions request (small prompt, sanity check) ---
+response content: "CONTEXT_OK" (exact match, not an echo - model genuinely
+followed the instruction)
+usage: prompt_tokens=54, completion_tokens=3
+
+--- GPU reading during/just-after inference ---
+7961 MiB, 12288 MiB
+
+--- THE key proof: a 50045-token real prompt (>6x the OLD 8192-token ceiling
+    that triggered this entire investigation - "pi-llmctl-small ... exceeds
+    the available context size (8192 tokens)") -----------------------------
+response content: "MIDSIZE_CONTEXT_OK" (exact match)
+usage: prompt_tokens=50045, completion_tokens=6, cached_tokens=30
+=> a request that would have HARD-FAILED with a 400 under the old 8192
+   default now completes successfully, with the model genuinely reading
+   and following the instruction at the end of a 50045-token prompt.
+
+--- GPU reading after the 50045-token real completion ---
+7967 MiB, 12288 MiB
+
+--- the real enforced ceiling is genuinely ~55000, not unlimited: a 90044-
+    token prompt is correctly REJECTED by the real running server --------
+{"error":{"code":400,"message":"request (90044 tokens) exceeds the available
+context size (55040 tokens), try increasing it","type":"exceed_context_size_error",
+"n_prompt_tokens":90044,"n_ctx":55040}}
+=> proves the raised ctx=55000 (rounded to 55040 by llama-server's own
+   batch-size rounding) is the REAL enforced limit of the live process,
+   not a config value that is written but silently ignored.
+
+================================================================================
+vision (ctx=24000, kv_cache_type=q4_0)
+================================================================================
+Sat Oct  3 06:05:36 PM UTC 2026
+
+--- first attempt: vision started while 'small' was still resident ---
+started vision (mode=cpu, port=8082, reserved 3936 MiB RAM + 0 MiB VRAM)
+=> vision correctly fell back to CPU mode (ngl=0) under real GPU
+   contention with 'small' already loaded. This is CORRECT admission-
+   control behavior (the earlier VRAM-budget fix, 3926468, working as
+   intended) - NOT forced via a manual -ngl override (that was an earlier,
+   now-understood methodology mistake in this same investigation: forcing
+   -ngl bypasses the real-free-VRAM-aware budget decision and proves
+   nothing about it). For a clean GPU-mode measurement, small was stopped
+   and vision retried alone:
+
+--- idle GPU reading (nothing loaded) ---
+3921 MiB, 12288 MiB
+
+--- starting vision alone ---
+started vision (mode=gpu, port=8082, reserved 2048 MiB RAM + 3936 MiB VRAM)
+
+--- real launch command ---
+LLMCTL_ARGS=--model .../vision/gemma-3-4b-it-Q4_K_M.gguf --host 0.0.0.0
+  --port 8082 --ctx-size 24000 --n-gpu-layers 99 --flash-attn auto --parallel 1
+  --jinja --mmproj .../vision/mmproj-model-f16.gguf --cache-type-k q4_0
+  --cache-type-v q4_0
+
+--- waiting for /health ---
+healthy after 1s
+
+--- loaded (idle, model resident) GPU reading ---
+7681 MiB, 12288 MiB   (delta vs idle: +3760 MiB - genuine GPU residency)
+
+--- real /v1/chat/completions request (sanity check) ---
+response content: "VISION_CONTEXT_OK\n" (exact match)
+usage: prompt_tokens=18, completion_tokens=7
+
+--- an 18022-token real prompt (>2x the OLD 8192-token ceiling) -----------
+response content: "VISION_LONG_CONTEXT_OK\n" (exact match)
+usage: prompt_tokens=18022, completion_tokens=9, cached_tokens=1
+=> a request that would have HARD-FAILED with a 400 under the old 8192
+   default now completes successfully.
+
+--- GPU reading during/after inference ---
+7685 MiB, 12288 MiB
+
+--- the real enforced ceiling is genuinely ~24000, not unlimited: a 30012-
+    token prompt is correctly REJECTED by the real running server --------
+{"error":{"code":400,"message":"request (30012 tokens) exceeds the available
+context size (24064 tokens), try increasing it","type":"exceed_context_size_error",
+"n_prompt_tokens":30012,"n_ctx":24064}}
+=> proves the raised ctx=24000 (rounded to 24064) is the REAL enforced
+   limit of the live process, not a config value that is written but
+   silently ignored.
+
+================================================================================
+cleanup: host restored to its pre-verification running state -------------
+================================================================================
+stopped vision
+[llmctl] wrote /home/milosvasic/.local/state/llmctl/services/small.env
+started small (mode=gpu, port=8085, reserved 2048 MiB RAM + 3644 MiB VRAM)
+
+final `llmctl status`:
+profile          port   mode     RAM MiB    VRAM MiB   enabled  state
+small            8085   gpu      2048       3644       yes      running
+
+================================================================================
+Summary
+================================================================================
+Both profiles' raised context defaults (small: 8192 -> 55000, vision:
+8192 -> 24000, both with q4_0 KV-cache quantization) are confirmed live,
+on real hardware, via real HTTP completions and real nvidia-smi readings:
+- genuinely larger prompts (50045 / 18022 tokens) that would have been
+  hard-rejected under the old 8192 default now complete successfully,
+  with the model genuinely following instructions embedded at the end of
+  the long prompt (not an echo/bluff - verified by requiring an exact,
+  non-trivial completion string).
+- the real running server still enforces its own real ceiling (55040 /
+  24064 tokens, matching the raised ctx values), correctly rejecting an
+  oversized prompt with the real llama-server error message rather than
+  silently truncating or OOMing.
+- VRAM deltas (+4040 MiB small, +3760 MiB vision vs idle) confirm genuine
+  GPU residency at ngl=99, not a CPU fallback silently substituted.
