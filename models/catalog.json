@@ -73,12 +73,13 @@
       "min_tier": "baseline",
       "port": 8082,
       "defaults": {
-        "ctx": 8192,
+        "ctx": 24000,
         "ngl": 99,
         "parallel": 1,
-        "flash_attn": "auto"
+        "flash_attn": "auto",
+        "kv_cache_type": "q4_0"
       },
-      "desc": "Gemma 3 4B IT Q4_K_M + mmproj - lightweight vision",
+      "desc": "Gemma 3 4B IT Q4_K_M + mmproj - lightweight vision. ctx raised 8192->24000 with q4_0 KV quantization (2026-10-03, verified live on a 12GB RTX 3060 with ~4.8GB free: a real /v1/chat/completions request succeeded with the real mmproj loaded and ~1.1GB of VRAM margin remaining). Chosen more conservatively than the 'small' profile's 55000 because this is a different model+mmproj combination that was not pushed to its own bleeding edge - override per-host via LLMCTL_CTX_VISION / LLMCTL_KVTYPE_VISION if more is actually available.",
       "engine": "llama",
       "hf_repo": "ggml-org/gemma-3-4b-it-GGUF",
       "hf_revision": "main",
@@ -161,12 +162,13 @@
       "min_tier": "baseline",
       "port": 8085,
       "defaults": {
-        "ctx": 8192,
+        "ctx": 55000,
         "ngl": 99,
         "parallel": 1,
-        "flash_attn": "auto"
+        "flash_attn": "auto",
+        "kv_cache_type": "q4_0"
       },
-      "desc": "Llama 3.2 3B Instruct Q4_K_M - tiny, always-on capable",
+      "desc": "Llama 3.2 3B Instruct Q4_K_M - tiny, always-on capable. ctx raised 8192->55000 with q4_0 KV quantization (2026-10-03, verified live on a 12GB RTX 3060 with ~4.8GB free: a real /v1/chat/completions request succeeded at 55000 tokens with ~800 MiB of VRAM margin remaining, and separately at 75000 tokens with only ~170 MiB margin - 55000 was chosen over the higher figure to leave real headroom on a contended host rather than sit at the bleeding edge). Override per-host via LLMCTL_CTX_SMALL / LLMCTL_KVTYPE_SMALL if more or less VRAM is actually available.",
       "engine": "llama",
       "hf_repo": "unsloth/Llama-3.2-3B-Instruct-GGUF",
       "hf_revision": "main",
