@@ -101,6 +101,20 @@ catalog_port_override_env_name() {
   printf 'LLMCTL_PORT_%s' "$(printf '%s' "$1" | tr '[:lower:]-' '[:upper:]_')"
 }
 
+# catalog_ctx_override_env_name <profile> -> LLMCTL_CTX_<PROFILE>
+# Same name-derivation rule as catalog_port_override_env_name() above - the
+# bash-side half of the ctx-override mechanism, matching resolve_ctx()
+# (catalog_plan_json's Python, the functional path) for naming consistency.
+catalog_ctx_override_env_name() {
+  printf 'LLMCTL_CTX_%s' "$(printf '%s' "$1" | tr '[:lower:]-' '[:upper:]_')"
+}
+
+# catalog_kv_type_override_env_name <profile> -> LLMCTL_KVTYPE_<PROFILE>
+# Same name-derivation rule, bash-side half of resolve_kv_type()'s override.
+catalog_kv_type_override_env_name() {
+  printf 'LLMCTL_KVTYPE_%s' "$(printf '%s' "$1" | tr '[:lower:]-' '[:upper:]_')"
+}
+
 catalog_engine()     { catalog_field "$1" engine; }
 catalog_port() {
   # Opt-in per-profile override (see the file-header comment above) takes
@@ -288,9 +302,79 @@ vram_budget = int((vram_free if vram_free is not None else vram_total) * 0.85)
 # live measurement.
 vram_live = vram_free is not None
 
-def kv_mb(ctx, parallel):
-    # Conservative f16 KV estimate: 1/8 MiB per token-slot.
-    return int(math.ceil(ctx * parallel / 8.0))
+# KV-cache-type VRAM multipliers, relative to f16 = 1.0 (bits-per-element
+# ratio to f16's 16 bits, plus each quant type's own per-block scale
+# overhead). Root-caused 2026-10-03: the flat 1/8 MiB-per-token estimate
+# below was ALWAYS an f16-calibrated number (llama-server's own default
+# before this fix), never actually re-derived when q4_0/q8_0/etc. KV
+# quantization became available as a real --cache-type-k/-v flag. Only
+# q4_0's ratio (0.25) is EMPIRICALLY VERIFIED on real hardware (RTX 3060,
+# Llama-3.2-3B-Instruct-Q4_K_M): a live llama-server run's own OOM log
+# reported "allocating 3550740480 bytes" (3386 MiB) for the KV buffer at
+# ctx=110000, giving ~0.0308 MiB/token measured vs. 0.125 MiB/token for
+# the existing f16 formula at that same ctx - a ratio of ~0.246, matching
+# the naive 4-bit/16-bit=0.25 figure closely. The other ratios are
+# DERIVED from each format's known bit-width (q8_0 ~8.5 bits incl. scale,
+# q5_x ~5.3-5.75 bits, q4_1/iq4_nl ~4.5-4.75 bits) and are NOT yet
+# independently measured on real hardware - treat them as estimates, not
+# verified constants, until each has its own live-measurement data point.
+KV_TYPE_RATIO = {
+    "f32": 2.0, "f16": 1.0, "bf16": 1.0,
+    "q8_0": 0.5, "q5_1": 0.36, "q5_0": 0.34,
+    "q4_1": 0.3, "q4_0": 0.25, "iq4_nl": 0.28,
+}
+
+def kv_mb(ctx, parallel, kv_type="f16"):
+    # f16-calibrated base estimate (1/8 MiB per token-slot), scaled by the
+    # resolved KV cache type's measured/derived ratio - see KV_TYPE_RATIO.
+    ratio = KV_TYPE_RATIO.get(kv_type, 1.0)
+    return int(math.ceil(ctx * parallel * ratio / 8.0))
+
+def resolve_ctx(name, default_ctx):
+    """Per-profile context-size override: opt-in LLMCTL_CTX_<PROFILE> env
+    var, same naming rule as resolve_port below. Root-caused 2026-10-03:
+    models/catalog.json's "ctx" default had NO override anywhere in the
+    codebase (unlike "port"), so every profile was permanently stuck at
+    its catalog default regardless of what a specific host could actually
+    support - confirmed live on this host that llmctl-small's model
+    (Llama-3.2-3B) can serve a REAL 75000-token context with q4_0 KV
+    quantization, far past its 8192-token catalog default, yet there was
+    no way to actually configure that without editing the shared catalog
+    file. This is the function every actual launch resolves its ctx
+    through (sched_build_launch's --ctx-size), mirroring resolve_port's
+    role for --port exactly.
+    """
+    env_name = "LLMCTL_CTX_" + name.upper().replace("-", "_")
+    override = os.environ.get(env_name)
+    if not override:
+        return default_ctx
+    try:
+        return int(override)
+    except ValueError:
+        sys.stderr.write(
+            "catalog_plan_json: %s=%r is not a valid context size\n" % (env_name, override)
+        )
+        sys.exit(1)
+
+def resolve_kv_type(name, default_type):
+    """Per-profile KV-cache-type override: opt-in LLMCTL_KVTYPE_<PROFILE>
+    env var. Validated against llama-server's own real --cache-type-k/-v
+    allowed set (confirmed via `llama-server --help` on this host) -
+    never passed through unvalidated, since an invalid value would only
+    be caught at launch time by the engine itself, after the scheduler
+    had already reported a (wrong) fits/footprint estimate for it.
+    """
+    allowed = {"f32", "f16", "bf16", "q8_0", "q4_0", "q4_1", "iq4_nl", "q5_0", "q5_1"}
+    env_name = "LLMCTL_KVTYPE_" + name.upper().replace("-", "_")
+    override = os.environ.get(env_name)
+    value = override if override else default_type
+    if value not in allowed:
+        sys.stderr.write(
+            "catalog_plan_json: kv_cache_type %r is not one of %s\n"
+            % (value, sorted(allowed))
+        )
+        sys.exit(1)
+    return value
 
 def resolve_port(name, default_port):
     """Per-profile port override (see the file-header comment): opt-in
@@ -317,28 +401,34 @@ def footprint(name, p):
     """-> dict(mode, ram_mb, vram_mb, storage_mb, fits) or None when unfit."""
     size_mb = sum((f.get("size") or 0) for f in p["files"]) // 1048576
     dfl = p.get("defaults", {})
-    ctx = int(dfl.get("ctx", 8192))
+    ctx = resolve_ctx(name, int(dfl.get("ctx", 8192)))
     par = int(dfl.get("parallel", 1))
     if p["engine"] == "colibri":
         # Weights are memory-mapped from NVMe; RAM is page cache + working set.
+        # No GPU KV cache (colibri's own int4-gs64 scheme is unrelated to
+        # llama-server's --cache-type-k/-v), so kv_cache_type is not applicable.
         ram_need = 24576 if size_mb >= 102400 else 8192
         ok = ram_need <= ram_budget and size_mb * 11 // 10 <= storage_free
         return {"mode": "colibri", "ram_mb": ram_need, "vram_mb": 0,
                 "storage_mb": size_mb, "ctx": ctx, "ngl": 0, "parallel": par,
                 "flash_attn": "off", "fits": ok}
-    kv = kv_mb(ctx, par)
+    kv_type = resolve_kv_type(name, dfl.get("kv_cache_type", "f16"))
+    kv = kv_mb(ctx, par, kv_type)
     if vram_budget > 0 and size_mb + kv <= vram_budget and 2048 <= ram_budget:
         return {"mode": "gpu", "ram_mb": 2048, "vram_mb": size_mb + kv,
                 "storage_mb": size_mb, "ctx": ctx,
                 "ngl": int(dfl.get("ngl", 99)), "parallel": par,
-                "flash_attn": dfl.get("flash_attn", "auto"), "fits": True}
+                "flash_attn": dfl.get("flash_attn", "auto"), "kv_cache_type": kv_type,
+                "fits": True}
     if size_mb + kv <= ram_budget:
         return {"mode": "cpu", "ram_mb": size_mb + kv, "vram_mb": 0,
                 "storage_mb": size_mb, "ctx": ctx, "ngl": 0, "parallel": par,
-                "flash_attn": dfl.get("flash_attn", "auto"), "fits": True}
+                "flash_attn": dfl.get("flash_attn", "auto"), "kv_cache_type": kv_type,
+                "fits": True}
     return {"mode": "none", "ram_mb": size_mb + kv, "vram_mb": 0,
             "storage_mb": size_mb, "ctx": ctx, "ngl": 0, "parallel": par,
-            "flash_attn": dfl.get("flash_attn", "auto"), "fits": False}
+            "flash_attn": dfl.get("flash_attn", "auto"), "kv_cache_type": kv_type,
+            "fits": False}
 
 profiles = {}
 for name in sorted(catalog["profiles"].keys()):

@@ -251,7 +251,7 @@ _sched_reconcile_reservations() {
 # Prints exec path on stdout; arguments are left in the global array
 # SCHED_ARGS (bash has no array returns).
 sched_build_launch() {
-  local profile="$1" mode="$2" port="$3" ctx="$4" ngl="$5" parallel="$6" fa="$7"
+  local profile="$1" mode="$2" port="$3" ctx="$4" ngl="$5" parallel="$6" fa="$7" kv_type="${8:-f16}"
   local engine; engine="$(catalog_engine "${profile}")"
   SCHED_ARGS=()
   case "${engine}" in
@@ -272,6 +272,16 @@ sched_build_launch() {
                   --ctx-size "${ctx}" --n-gpu-layers "${ngl}"
                   --flash-attn "${fa}" --parallel "${parallel}" --jinja)
       [[ -n "${mmproj}" && -f "${mmproj}" ]] && SCHED_ARGS+=(--mmproj "${mmproj}")
+      # KV-cache-type quantization (root-caused 2026-10-03: a profile's
+      # context was always f16-only, which uses ~4x the VRAM per token
+      # that q4_0 does - empirically verified live on real hardware to let
+      # a tiny model serve a far larger context in the same VRAM budget).
+      # f16 is llama-server's own default, so it is never passed explicitly
+      # - only a genuinely non-f16 resolved type adds these flags, keeping
+      # every existing profile's real command line byte-for-byte unchanged.
+      if [[ "${kv_type}" != "f16" ]]; then
+        SCHED_ARGS+=(--cache-type-k "${kv_type}" --cache-type-v "${kv_type}")
+      fi
       # Deterministic live-challenge mode (spec.md FR-012/SC-008): opt-in via
       # LLMCTL_SEED, not baked into every default launch - an always-on fixed
       # seed would make every interactive coding-assistant session
@@ -531,7 +541,7 @@ _sched_start_impl() {
   local used_ram used_vram
   read -r used_ram used_vram < <(_sched_initial_used "${plan_file}")
 
-  local p mode port ram vram ctx ngl parallel fa fits
+  local p mode port ram vram ctx ngl parallel fa kv_type fits
   local -a selected=()
   for p in "$@"; do
     catalog_exists "${p}" || { rm -f "${plan_file}"; die "unknown profile: ${p} (see: llmctl models list)"; }
@@ -585,7 +595,8 @@ _sched_start_impl() {
     ngl="$(json_query "${plan_file}" "d[\"profiles\"][\"${p}\"][\"ngl\"]")"
     parallel="$(json_query "${plan_file}" "d[\"profiles\"][\"${p}\"][\"parallel\"]")"
     fa="$(json_query "${plan_file}" "d[\"profiles\"][\"${p}\"][\"flash_attn\"]")"
-    sched_build_launch "${p}" "${mode}" "${port}" "${ctx}" "${ngl}" "${parallel}" "${fa}"
+    kv_type="$(json_query "${plan_file}" "d[\"profiles\"][\"${p}\"].get(\"kv_cache_type\", \"f16\")")"
+    sched_build_launch "${p}" "${mode}" "${port}" "${ctx}" "${ngl}" "${parallel}" "${fa}" "${kv_type}"
     svc_write_env "${p}" "$(catalog_engine "${p}")" "${SCHED_EXEC}" "${SCHED_ARGS[@]}"
     # Root-caused 2026-09-17 (real repro, not guessed): this whole function
     # runs as the `command` operand of `scheduler::with_lock`'s
@@ -662,13 +673,14 @@ _enable_impl() {
   sched_running >/dev/null
   local plan_file; plan_file="$(mktemp)"
   hw_probe_json | catalog_plan_json > "${plan_file}"
-  local mode port ctx ngl parallel fa ram vram
+  local mode port ctx ngl parallel fa kv_type ram vram
   mode="$(json_query "${plan_file}" "d[\"profiles\"][\"${profile}\"][\"mode\"]")"
   port="$(json_query "${plan_file}" "d[\"profiles\"][\"${profile}\"][\"port\"]")"
   ctx="$(json_query "${plan_file}" "d[\"profiles\"][\"${profile}\"][\"ctx\"]")"
   ngl="$(json_query "${plan_file}" "d[\"profiles\"][\"${profile}\"][\"ngl\"]")"
   parallel="$(json_query "${plan_file}" "d[\"profiles\"][\"${profile}\"][\"parallel\"]")"
   fa="$(json_query "${plan_file}" "d[\"profiles\"][\"${profile}\"][\"flash_attn\"]")"
+  kv_type="$(json_query "${plan_file}" "d[\"profiles\"][\"${profile}\"].get(\"kv_cache_type\", \"f16\")")"
   ram="$(json_query "${plan_file}" "d[\"profiles\"][\"${profile}\"][\"ram_mb\"]")"
   vram="$(json_query "${plan_file}" "d[\"profiles\"][\"${profile}\"][\"vram_mb\"]")"
   # Root-caused 2026-09-17 (real repro, not guessed): unlike `llmctl start`,
@@ -697,7 +709,7 @@ _enable_impl() {
     fi
   fi
   rm -f "${plan_file}"
-  sched_build_launch "${profile}" "${mode}" "${port}" "${ctx}" "${ngl}" "${parallel}" "${fa}"
+  sched_build_launch "${profile}" "${mode}" "${port}" "${ctx}" "${ngl}" "${parallel}" "${fa}" "${kv_type}"
   svc_write_env "${profile}" "$(catalog_engine "${profile}")" "${SCHED_EXEC}" "${SCHED_ARGS[@]}"
   touch "${LLMCTL_SERVICES_DIR}/${profile}.enabled"
   if ! svc_enable "${profile}"; then
