@@ -273,6 +273,20 @@ ram_budget = max(0, ram_avail - 4096)          # 4 GiB RAM headroom
 # "equal to total", which would silently resurrect the exact bug this
 # fixes.
 vram_budget = int((vram_free if vram_free is not None else vram_total) * 0.85)
+# vram_live: True whenever vram_budget was computed from a REAL, live
+# free-VRAM measurement rather than the static total-capacity fallback.
+# Independent review, 2026-10-03 (same day as the fix above): a budget
+# that already reflects current usage (ram_budget ALWAYS does, via
+# ram_avail; vram_budget does exactly when this is True) must not ALSO
+# have currently-running profiles' reservations added back on top at the
+# admission-control call sites in scheduler.sh - that double-subtracts
+# the same memory twice, UNDER-counting how much is genuinely free. The
+# scheduler reads this flag to decide whether sched_reserved_field's sum
+# belongs in that arithmetic at all (see scheduler.sh's
+# _sched_initial_used). ram_budget carries no equivalent flag because it
+# has never had a static-fallback path - ram_avail is unconditionally a
+# live measurement.
+vram_live = vram_free is not None
 
 def kv_mb(ctx, parallel):
     # Conservative f16 KV estimate: 1/8 MiB per token-slot.
@@ -364,7 +378,7 @@ if current["members"]:
 out = {
     "tier": tier,
     "budgets": {"ram_mb": ram_budget, "vram_mb": vram_budget,
-                "storage_free_mb": storage_free},
+                "vram_live": vram_live, "storage_free_mb": storage_free},
     "profiles": profiles,
     "recommended": sorted([n for n, f in profiles.items() if f["recommended"]],
                           key=lambda n: profiles[n]["port"]),

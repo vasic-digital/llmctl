@@ -187,14 +187,30 @@ assert_eq "${BEFORE_RESERVATION_MTIME}" "${AFTER_RESERVATION_MTIME}" "REGRESSION
 #    failed. With nothing else running, the message must instead name
 #    the real constraint (the HOST's own available RAM/VRAM). ------------
 # 4a. Something else IS running (vision-pro, from case 3 above) -
-#     starting 'ws-moe-30b' (needs 25889 MiB RAM) exceeds the fixture's
-#     ~25904 MiB budget once vision-pro's own ~9824 MiB reservation is
-#     subtracted (leaves ~16080 MiB) -> the 'switch' suggestion is the
-#     CORRECT, actionable one here.
+#     starting 'fast' (needs 5716 MiB VRAM) exceeds the fixture's
+#     ~10444 MiB VRAM budget once vision-pro's own ~9824 MiB VRAM
+#     reservation is subtracted (leaves only ~620 MiB) -> the 'switch'
+#     suggestion is the CORRECT, actionable one here.
+#     NOTE (independent review, 2026-10-03): this scenario originally
+#     used 'ws-moe-30b' against the RAM budget, subtracting vision-pro's
+#     ~9824 MiB RAM reservation from the ~25904 MiB budget to leave
+#     ~16080 MiB -- a budget-gate refusal that depended on RAM's
+#     admission check double-subtracting a currently-running profile's
+#     own reservation on top of an already-live ram_avail measurement
+#     (fixed this session: _sched_initial_used no longer does that for
+#     RAM, which is always live, nor for VRAM when vram_live is true).
+#     No catalog profile in hw-baseline.json needs more RAM than the
+#     host's raw, honestly-computed 25904 MiB budget on its own (the
+#     largest, ws-moe-30b, needs 25889), so a RAM-driven refusal while
+#     only one small profile is running is no longer reproducible here --
+#     correctly so, since the host genuinely does have that much RAM
+#     free. VRAM in this fixture has no gpu_free_vram_mb (vram_live is
+#     false), so its admission check is UNCHANGED by that fix, and
+#     remains the faithful way to exercise this message-wording path.
 rc=0
-start_out="$(sched_start ws-moe-30b 2>&1)" || rc=$?
+start_out="$(sched_start fast 2>&1)" || rc=$?
 assert_eq 1 "${rc}" "starting an oversized profile while another is running fails (sanity for message-context test 4a)"
-assert_contains "${start_out}" "stopping another running profile: llmctl switch ws-moe-30b" "4a: WITH another profile running, the message correctly suggests switch"
+assert_contains "${start_out}" "stopping another running profile: llmctl switch fast" "4a: WITH another profile running, the message correctly suggests switch"
 
 # 4b. NOTHING is running (stop everything first) AND the host itself is
 #     genuinely too small for ANY profile (a separate, deliberately tiny

@@ -179,4 +179,58 @@ assert_eq 1 "${dir_created}" "the per-profile slot-save directory is created bef
 unset LLMCTL_SLOT_SAVE_PATH
 rm -rf "${slot_save_base}"
 
+# --- 10. Admission-control double-count regression (independent review,
+# 2026-10-03): with a REAL free-VRAM measurement (gpu_free_vram_mb
+# present, vram_live true in the plan), the budget already reflects
+# whatever the currently-running 'small' is using. Adding
+# sched_reserved_field's sum of that SAME reservation on top of the
+# budget AGAIN double-subtracts it, wrongly refusing a second profile
+# ('vision') that genuinely fits the real remaining headroom. Fixed via
+# _sched_initial_used (scheduler.sh): it starts VRAM's accumulator at 0
+# whenever vram_live is true, never at sched_reserved_field's sum.
+# Fixture: 12288 MiB total / 6000 MiB real free VRAM -> budget
+# int(6000*0.85)=5100. 'small' alone needs 2949 MiB VRAM (fits
+# standalone, 2949<=5100). 'vision' alone needs 4210 MiB VRAM (also fits
+# standalone, 4210<=5100) -- genuinely, once 'small' is running, since
+# gpu_free_vram_mb already excludes what 'small' holds. The OLD,
+# buggy arithmetic computed used_vram(2949) + vision's 4210 = 7159 >
+# 5100 and wrongly refused it. ------------------------------------------------
+export LLMCTL_FAKE_HW="${LLMCTL_ROOT}/tests/fixtures/hw-vram-contended-coresident.json"
+test_teardown_env; test_setup_env   # fresh state for the new fixture
+
+out="$("${LLMCTL}" start small 2>&1)" && rc=0 || rc=$?
+assert_eq 0 "${rc}" "co-resident double-count regression: starting 'small' alone succeeds"
+assert_file_exists "${LLMCTL_RUNTIME_DIR}/small.run" "small reservation written"
+
+out="$("${LLMCTL}" start vision 2>&1)" && rc=0 || rc=$?
+assert_eq 0 "${rc}" "co-resident double-count regression: 'vision' is NOT wrongly refused while 'small' is already running (would be 7159 > 5100 under the old double-count; is 4210 <= 5100 under the fix)"
+assert_contains "${out}" "started vision" "vision genuinely started alongside small"
+assert_file_exists "${LLMCTL_RUNTIME_DIR}/vision.run" "vision reservation written"
+assert_file_exists "${LLMCTL_RUNTIME_DIR}/small.run" "small's own reservation is untouched by starting vision"
+
+# --- 10b. Same-call multi-profile accounting must still work: starting
+# TWO profiles in ONE 'llmctl start a b' call, from a clean (nothing
+# running) state, must still refuse the pair if the SECOND one's own
+# demand plus the FIRST one's (selected earlier in this same call, so
+# not yet reflected in any fresh hw re-probe) would exceed the real
+# budget -- this accounting is UNCONDITIONAL (always needed, live
+# budget or not) and must not have been broken by removing the OTHER,
+# currently-running-profile double-count above. 'small' (2949) +
+# 'vision' (4210) = 7159 > 5100 -- must still be refused when requested
+# TOGETHER, from a clean start, in one call. _sched_start_impl validates
+# the WHOLE requested batch before starting ANYTHING (two-phase:
+# validate all, then start all), so a refusal anywhere in validation
+# means NOTHING from this call starts -- not even 'small', which would
+# have fit on its own. That atomicity is correct, pre-existing design,
+# not something this fix changes; the regression this case actually
+# guards is the ACCOUNTING total (7159) staying right, not which half
+# gets blamed. --------------------------------------------------------
+test_teardown_env; test_setup_env   # clean state, nothing running
+
+out="$("${LLMCTL}" start small vision 2>&1)" && rc=0 || rc=$?
+assert_eq 1 "${rc}" "10b: same-call multi-profile demand (small+vision=7159) still correctly exceeds the 5100 budget and is refused"
+assert_contains "${out}" "cannot start 'vision'" "10b: the SECOND profile in the call is the one named as refused (small, selected first, already fit on its own)"
+assert_file_absent "${LLMCTL_RUNTIME_DIR}/small.run" "10b: nothing starts when the batch's validation phase refuses any member (atomic start, pre-existing design)"
+assert_file_absent "${LLMCTL_RUNTIME_DIR}/vision.run" "10b: vision (the one that overflows the combined demand) is correctly refused, never started"
+
 test_finish

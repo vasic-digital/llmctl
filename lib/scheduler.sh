@@ -104,6 +104,43 @@ sched_reserved_field() {
   echo "${total}"
 }
 
+# _sched_initial_used <plan_file> -> echoes "<ram> <vram>", the STARTING
+# point for an admission-control accumulator that each call site then
+# grows, within that SAME call, by every profile it selects (a fresh
+# hw_probe_json re-measurement cannot see those until they actually
+# start). It must NEVER start from sched_reserved_field's sum of
+# CURRENTLY-RUNNING profiles when the matching budget already reflects
+# real, live host usage - ram_budget always does (hw["memory"]["available_mb"]
+# has no static-fallback path); vram_budget does exactly when the plan's
+# own "vram_live" flag is true (lib/catalog.sh). Adding that sum back on
+# top of an already-live budget double-subtracts the same memory twice,
+# UNDER-counting how much the host genuinely has free (independent
+# review, 2026-10-03 - reproduced live: a contended-VRAM fixture with
+# "fast" already running had `llmctl start small` refused for exceeding
+# a budget that had, in reality, ~6.5 GiB still free). The sum remains
+# exactly correct as a FALLBACK reconstruction for the one case a budget
+# is NOT live: the pre-"vram_live" static total-capacity VRAM estimate,
+# which cannot see any current usage on its own and has always relied on
+# this subtraction to approximate it.
+_sched_initial_used() {
+  local pf="$1" vram_live
+  # json_query special-cases a Python bool result: it exits 1 for False
+  # (its own documented convention for a plain boolean query consumed via
+  # `[[ "$(json_query ...)" == True ]]` from a CALLER that tolerates the
+  # nonzero exit, e.g. one guarded by `||` or `if`). A bare, unguarded
+  # `var="$(json_query ...)"` assignment is NOT such a caller -- under
+  # set -e it can abort before this function ever reaches its own
+  # printf, the exact self-inflicted bug this comment now prevents
+  # (reproduced directly: it silently zeroed used_ram/used_vram instead
+  # of computing either the correct live value or the old fallback).
+  # str() sidesteps json_query's bool special-case entirely by making the
+  # result a plain string, which always exits 0.
+  vram_live="$(json_query "${pf}" 'str(d["budgets"]["vram_live"])')"
+  local iv=0
+  [[ "${vram_live}" == "True" ]] || iv="$(sched_reserved_field vram_mb)"
+  printf '0 %s\n' "${iv}"
+}
+
 _sched_write_reservation() {
   local profile="$1" mode="$2" port="$3" ram="$4" vram="$5"
   ensure_dir "${LLMCTL_RUNTIME_DIR}"
@@ -477,8 +514,7 @@ _sched_start_impl() {
   vram_budget="$(json_query "${plan_file}" 'd["budgets"]["vram_mb"]')"
 
   local used_ram used_vram
-  used_ram="$(sched_reserved_field ram_mb)"
-  used_vram="$(sched_reserved_field vram_mb)"
+  read -r used_ram used_vram < <(_sched_initial_used "${plan_file}")
 
   local p mode port ram vram ctx ngl parallel fa fits
   local -a selected=()
@@ -638,8 +674,7 @@ _enable_impl() {
     local ram_budget vram_budget used_ram used_vram
     ram_budget="$(json_query "${plan_file}" 'd["budgets"]["ram_mb"]')"
     vram_budget="$(json_query "${plan_file}" 'd["budgets"]["vram_mb"]')"
-    used_ram="$(sched_reserved_field ram_mb)"
-    used_vram="$(sched_reserved_field vram_mb)"
+    read -r used_ram used_vram < <(_sched_initial_used "${plan_file}")
     if (( used_ram + ram > ram_budget )) || (( used_vram + vram > vram_budget )); then
       rm -f "${plan_file}"
       err "cannot enable '${profile}': needs ${ram} MiB RAM + ${vram} MiB VRAM, but only $(( ram_budget - used_ram )) MiB RAM + $(( vram_budget - used_vram )) MiB VRAM remain within the host budget (stop another enabled profile first, e.g. 'llmctl disable <profile>', or use 'llmctl start ${profile}' on demand instead of a persistent enable)"
@@ -786,8 +821,7 @@ _sched_auto_impl() {
   local attempt
   for (( attempt=0; attempt<16; attempt++ )); do
     local used_ram used_vram ok=1
-    used_ram="$(sched_reserved_field ram_mb)"
-    used_vram="$(sched_reserved_field vram_mb)"
+    read -r used_ram used_vram < <(_sched_initial_used "${plan_file}")
     for p in "${want[@]}"; do
       sched_is_running "${p}" && continue
       local need_ram need_vram
