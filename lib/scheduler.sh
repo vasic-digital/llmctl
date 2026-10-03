@@ -886,24 +886,49 @@ _sched_auto_impl() {
     fi
     warn "auto: evicting '${lru}' (LRU, not enabled) to make room"
     # Credit the evicted profile's OWN reservation into the running totals
-    # BEFORE stopping it / deleting its .run file. RAM is always live (no
-    # static fallback exists), so it is always credited; VRAM is credited
-    # only when vram_live -- the static-total case must NOT be credited
-    # here, since its baseline (sched_reserved_field, read fresh by
-    # _sched_initial_used every attempt) already shrinks on its own the
-    # moment the .run file below is removed, and crediting on top of that
-    # would double-count the same freed memory in the other direction.
+    # ONLY once svc_stop actually SUCCEEDS (round-3 independent review,
+    # 2026-10-03: a failed stop leaves the service running and still
+    # holding this memory -- crediting it anyway would make the final
+    # admission check in the delegated _sched_start_impl call believe more
+    # is free than genuinely is, the dangerous over-admission direction).
+    # RAM is always live (no static fallback exists), so a successful stop
+    # is always credited; VRAM is credited only when vram_live -- the
+    # static-total case must NOT be credited here, since its baseline
+    # (sched_reserved_field, read fresh by _sched_initial_used every
+    # attempt) already shrinks on its own the moment the .run file below
+    # is removed, and crediting on top of that would double-count the same
+    # freed memory in the other direction.
     local lru_run freed_ram freed_vram
     lru_run="$(_sched_run_file "${lru}")"
     freed_ram="$(sed -n 's/^ram_mb=//p' "${lru_run}" | head -1)"
     freed_vram="$(sed -n 's/^vram_mb=//p' "${lru_run}" | head -1)"
-    _sched_auto_ram_credit=$(( _sched_auto_ram_credit + ${freed_ram:-0} ))
-    [[ "${vram_live}" == "True" ]] && _sched_auto_vram_credit=$(( _sched_auto_vram_credit + ${freed_vram:-0} ))
-    svc_stop "${lru}" || true
-    rm -f "${lru_run}"
+    if svc_stop "${lru}"; then
+      _sched_auto_ram_credit=$(( _sched_auto_ram_credit + ${freed_ram:-0} ))
+      [[ "${vram_live}" == "True" ]] && _sched_auto_vram_credit=$(( _sched_auto_vram_credit + ${freed_vram:-0} ))
+      rm -f "${lru_run}"
+    else
+      warn "auto: stopping '${lru}' failed -- not crediting its memory as freed; it may still be running"
+    fi
   done
 
   rm -f "${plan_file}"
+  # Secondary point from the round-3 review, deferred (not fixed) with
+  # justification rather than silently skipped: on a real host, by the
+  # time this delegated call's OWN fresh hw_probe_json re-probe runs, a
+  # successful synchronous eviction above has likely already freed real
+  # memory that fresh probe can see -- so _sched_initial_used's credit
+  # subtraction (still in scope here via bash dynamic scoping) could, for
+  # THIS final admission check specifically, double-recognize the same
+  # freed memory the fresh probe already counted. This is bounded and
+  # safe-ISH (it can only make the check believe up to the genuinely-freed
+  # amount is available a second time, never fabricate memory that was
+  # never real), and the loop ABOVE already enforced that the wanted set's
+  # total demand fits within budget+credit before breaking, so no
+  # genuinely-too-large request reaches here. Threading the ORIGINAL
+  # pre-eviction budget through to diff against this fresh probe (the
+  # reviewer's suggested max(0, credit - delta) fix) would require new
+  # plumbing into a function with no other awareness of the auto-eviction
+  # context; deferred as lower-severity per the review's own assessment.
   _sched_start_impl "${want[@]}"
 }
 

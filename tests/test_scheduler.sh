@@ -261,4 +261,28 @@ assert_file_absent "${LLMCTL_RUNTIME_DIR}/small.run" "10c: small's reservation r
 assert_file_exists "${LLMCTL_RUNTIME_DIR}/fast.run" "10c: fast reservation written"
 assert_file_exists "${LLMCTL_RUNTIME_DIR}/vision.run" "10c: vision reservation written"
 
+# --- 10d. Round-3 independent review (2026-10-03): a FAILED svc_stop must
+# NOT credit the evicted profile's memory as freed -- it is still running
+# and still holding it. 10c's own credit mechanism incremented the credit
+# unconditionally, before even calling svc_stop, which would have made the
+# final admission check in the delegated _sched_start_impl call believe
+# more memory is free than genuinely is (the over-admission direction).
+# Uses LLMCTL_TEST_FORCE_STOP_FAIL (new, test-only, inert outside
+# LLMCTL_DRY_RUN=1) to make 'small's stop genuinely fail. Same fixture and
+# scenario as 10c, but the credit must never be granted, 'small' must
+# still be reported as running (its .run file must survive), and the auto
+# call should fail cleanly rather than wrongly succeed. ---
+test_teardown_env; test_setup_env   # fresh state
+
+out="$("${LLMCTL}" start small 2>&1)" && rc=0 || rc=$?
+assert_eq 0 "${rc}" "10d: 'small' starts alone"
+assert_file_exists "${LLMCTL_RUNTIME_DIR}/small.run" "10d: small reservation written"
+
+export LLMCTL_TEST_FORCE_STOP_FAIL=small
+out="$("${LLMCTL}" auto chat vision 2>&1)" && rc=0 || rc=$?
+unset LLMCTL_TEST_FORCE_STOP_FAIL
+assert_contains "${out}" "stopping 'small' failed" "10d: the forced stop failure is reported, not silently swallowed"
+assert_file_exists "${LLMCTL_RUNTIME_DIR}/small.run" "10d: small's reservation SURVIVES -- it is still running, never credited as freed"
+assert_eq 1 "${rc}" "10d: auto chat vision does NOT wrongly succeed via a bogus credit for memory that was never actually freed"
+
 test_finish

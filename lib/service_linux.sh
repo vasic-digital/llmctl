@@ -317,7 +317,20 @@ svc_disable() {
 }
 
 svc_start()   { local unit; unit="$(_svc_unit_for "$1")"; _svc_ensure_tenant_slice_dropin "${unit}"; _svc_sys start "${unit}"; }
-svc_stop()    { _svc_sys stop  "$(_svc_unit_for "$1")"; }
+# LLMCTL_TEST_FORCE_STOP_FAIL: test-only hook (round-3 independent review,
+# 2026-10-03). Under LLMCTL_DRY_RUN=1, _svc_sys unconditionally returns 0,
+# so the hermetic test suite has no existing way to exercise a FAILED stop
+# (e.g. to prove _sched_auto_impl's eviction credit is correctly withheld
+# when svc_stop genuinely fails). Checked only when both this var and
+# LLMCTL_DRY_RUN are set, matching exactly the named profile -- inert in
+# every real, non-test invocation.
+svc_stop() {
+  if [[ "${LLMCTL_DRY_RUN:-}" == "1" && -n "${LLMCTL_TEST_FORCE_STOP_FAIL:-}" && "${LLMCTL_TEST_FORCE_STOP_FAIL}" == "$1" ]]; then
+    printf '[dry-run] systemctl --user stop %s (TEST: forced failure)\n' "$(_svc_unit_for "$1")"
+    return 1
+  fi
+  _svc_sys stop  "$(_svc_unit_for "$1")"
+}
 svc_restart() { local unit; unit="$(_svc_unit_for "$1")"; _svc_ensure_tenant_slice_dropin "${unit}"; _svc_sys restart "${unit}"; }
 
 svc_status() {
