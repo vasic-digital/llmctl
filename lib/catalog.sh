@@ -326,15 +326,17 @@ vram_live = vram_free is not None
 # ~12.5% BELOW what kv_mb()'s flat "ctx/8 MiB" base formula assumes (0.125
 # MiB/token, equivalently a ~14.3% overestimate relative to the real cost -
 # exactly right only when layers * kv_heads * head_dim = 32768, e.g.
-# 32x8x128, as in an 8B-class Llama). Applying the true 0.28125 ratio to
-# the OVERESTIMATED 0.125 base happened to land close to applying 0.25 to
-# it (0.25*0.125 ~= 0.28125*0.109375), so 0.25 "worked" on this specific
-# model only by accidentally cancelling the base formula's own error on a
-# SPECIFIC other model - not a property of q4_0 itself, and actively
-# UNSAFE (underestimate by ~11%) for any model whose real f16 cost
-# actually matches the base formula's assumption. Fixed by storing q4_0's
-# true, portable ratio (0.28125) instead of a value entangled with one
-# model's base-formula error.
+# 32x8x128, as in an 8B-class Llama). 0.25 applied to the OVERESTIMATED
+# 0.125 base happened to land close to the true cost - the true 0.28125
+# ratio applied to THIS model's REAL 0.109375 base (0.25*0.125 = 0.03125
+# ~= 0.28125*0.109375 = 0.03076, ~1.6% apart) - so 0.25 "worked" on this
+# specific model only by accidentally cancelling the base formula's own
+# error for THIS model's geometry (28 layers x 8 KV heads x 128 head_dim,
+# not the 32x8x128 geometry the base formula assumes) - not a property of
+# q4_0 itself, and actively UNSAFE (underestimate by ~11%) for any model
+# whose real f16 cost actually matches the base formula's assumption.
+# Fixed by storing q4_0's true, portable ratio (0.28125) instead of a
+# value entangled with one model's base-formula error.
 #
 # Every other ratio is DERIVED from each format's known ggml block
 # structure, confirmed against this repo's own submodules/llama.cpp
@@ -356,10 +358,10 @@ vram_live = vram_free is not None
 #   q4_1:    2*half(4B) + 16B data          = 20B/32el = 5.0  bits -> 5.0/16  = 0.3125
 #   q5_0:    half(2B) + u32 qh(4B) + 16B    = 22B/32el = 5.5  bits -> 5.5/16  = 0.34375
 #   iq4_nl:  half(2B) + 16B data            = 18B/32el = 4.5  bits -> 4.5/16  = 0.28125
-# None of these five (nor q4_0) has been independently measured on real
-# hardware - only q4_0 has a live-measurement data point. Treat them as
-# exact-ceiling derivations, not verified constants, until each has its
-# own measurement.
+# None of these five has been independently measured on real hardware -
+# only q4_0 (above) has a live-measurement data point. Treat these five
+# as exact-ceiling derivations, not measured constants, until each has
+# its own measurement.
 KV_TYPE_RATIO = {
     "f32": 2.0, "f16": 1.0, "bf16": 1.0,
     "q8_0": 0.53125, "q5_1": 0.375, "q5_0": 0.34375,
