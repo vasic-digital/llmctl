@@ -3,18 +3,18 @@ model: /home/milosvasic/.local/share/llmctl/models/small/Llama-3.2-3B-Instruct-Q
 prompt: {"messages":[{"role":"user","content":"Write a short paragraph (at least 100 words) explaining how photosynthesis works."}],"max_tokens":220,"temperature":0}
 
 CPU-forced run (--n-gpu-layers 0):
-  completion_tokens: 185
-  wall-clock elapsed: 28.2687s
-  tok/s: 6.5443
+  completion_tokens: 206
+  wall-clock elapsed: 13.8900s
+  tok/s: 14.8308
   finish_reason: stop
   content (truncated): Photosynthesis is the vital process by which plants, algae, and some bacteria convert light energy from the sun into chemical energy in the form of gl
 
 GPU-planned run (--n-gpu-layers 99, from hw_probe_json | catalog_plan_json):
-  completion_tokens: 183
-  wall-clock elapsed: 1.5120s
-  tok/s: 121.0317
+  completion_tokens: 181
+  wall-clock elapsed: 1.4791s
+  tok/s: 122.3717
   finish_reason: stop
   content (truncated): Photosynthesis is the vital process by which plants, algae, and some bacteria convert light energy from the sun into chemical energy in the form of gl
 
-ratio (GPU tok/s / CPU tok/s): 18.4942
+ratio (GPU tok/s / CPU tok/s): 8.2512
 SC-003 threshold: >= 2.0x
