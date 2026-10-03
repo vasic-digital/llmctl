@@ -58,10 +58,17 @@ case "${verb}" in
     exit 1
     ;;
   start)
-    if [[ -n "${FAKE_SYSTEMCTL_POISON_UNIT:-}" && "${unit}" == "${FAKE_SYSTEMCTL_POISON_UNIT}" ]]; then
-      echo "fake systemctl: refusing to start ${unit} (poisoned for this test)" >&2
-      exit 1
-    fi
+    # Space-separated list so a test can poison more than one unit at once
+    # (LLMCTL-F2's rollback-also-failed case needs the SWITCH target AND
+    # the ROLLBACK target to both fail in one invocation). The original,
+    # singular FAKE_SYSTEMCTL_POISON_UNIT still works unchanged - it is
+    # just a one-element case of this same list.
+    for poisoned in ${FAKE_SYSTEMCTL_POISON_UNIT:-} ${FAKE_SYSTEMCTL_POISON_UNITS:-}; do
+      if [[ "${unit}" == "${poisoned}" ]]; then
+        echo "fake systemctl: refusing to start ${unit} (poisoned for this test)" >&2
+        exit 1
+      fi
+    done
     grep -qxF "${unit}" "${FAKE_SYSTEMCTL_ACTIVE_UNITS}" 2>/dev/null || echo "${unit}" >> "${FAKE_SYSTEMCTL_ACTIVE_UNITS}"
     exit 0
     ;;
@@ -222,5 +229,45 @@ case "${start_out}" in
     ;;
 esac
 assert_contains "${start_out}" "this host's own available RAM/VRAM is currently too low" "4b: message instead names the real, honest constraint (host RAM/VRAM, not another llmctl profile)"
+
+# =====================================================================
+# 5. LLMCTL-F2 - a distinct, documented exit code (75, EX_TEMPFAIL) when
+#    the switch fails AND the best-effort rollback restart ALSO fails -
+#    today the only signal was grepping stderr for the literal string
+#    "ROLLBACK ALSO FAILED". Both the switch target (fast) and one of the
+#    two profiles the rollback must restart (small) are poisoned at once,
+#    so _sched_start_impl genuinely fails on both the forward attempt and
+#    the restore attempt - not simulated by any shortcut.
+# =====================================================================
+: > "${FAKE_ACTIVE}"
+echo "llmctl-llama@small.service" >> "${FAKE_ACTIVE}"
+echo "llmctl-llama@vision.service" >> "${FAKE_ACTIVE}"
+_sched_write_reservation small gpu 8085 2048 2949
+_sched_write_reservation vision gpu 8082 2048 4210
+assert_eq "small
+vision" "$(sched_running | sort)" "precondition for case 5: small + vision running again before the rollback-also-failed scenario"
+
+unset FAKE_SYSTEMCTL_POISON_UNIT
+export FAKE_SYSTEMCTL_POISON_UNITS="llmctl-llama@fast.service llmctl-llama@small.service"
+rc=0
+switch_err5="$(sched_switch fast 2>&1)" || rc=$?
+unset FAKE_SYSTEMCTL_POISON_UNITS
+
+assert_eq 75 "${rc}" "LLMCTL-F2: sched_switch returns the distinct exit code 75 (EX_TEMPFAIL) when switch AND rollback both fail, not just the original start_rc"
+assert_contains "${switch_err5}" "ROLLBACK ALSO FAILED" "the existing stderr text is still present (pre-F2 consumers keep working)"
+
+# Control: the ORDINARY rollback-succeeds case (test 1 above) must still
+# return the plain start_rc (1), never the distinct 75 - 75 means
+# specifically "rollback also failed", not "switch failed" in general.
+: > "${FAKE_ACTIVE}"
+echo "llmctl-llama@small.service" >> "${FAKE_ACTIVE}"
+echo "llmctl-llama@vision.service" >> "${FAKE_ACTIVE}"
+_sched_write_reservation small gpu 8085 2048 2949
+_sched_write_reservation vision gpu 8082 2048 4210
+export FAKE_SYSTEMCTL_POISON_UNIT="llmctl-llama@fast.service"
+rc=0
+sched_switch fast >/dev/null 2>&1 || rc=$?
+unset FAKE_SYSTEMCTL_POISON_UNIT
+assert_eq 1 "${rc}" "CONTROL: an ordinary switch failure with a SUCCESSFUL rollback still returns plain start_rc (1), never the distinct 75"
 
 test_finish
