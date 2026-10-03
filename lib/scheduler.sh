@@ -269,6 +269,25 @@ sched_build_launch() {
       if [[ "${LLMCTL_DRY_RUN}" != "1" && ! -d "${dir}" ]]; then
         die "model not downloaded: ${dir}. Run: llmctl models download ${profile}"
       fi
+      # Pre-flight warning for the KNOWN INTERACTION documented in full just
+      # below (colibri's own independent #SEC-6 bind guard vs. this host's
+      # LAN-accessible default) - named BEFORE the launch is attempted,
+      # never only after the crash-loop starts. This does NOT change the
+      # interaction itself or auto-set COLI_ALLOW_INSECURE_BIND (that
+      # remains the operator's call, per the comment below) - it only
+      # surfaces the same two resolution paths that comment already states,
+      # before the operator wastes a cycle on a launch doomed to crash-loop.
+      if [[ "$(catalog_bind_host "${profile}")" != "127.0.0.1" \
+         && "$(catalog_bind_host "${profile}")" != "localhost" \
+         && "$(catalog_bind_host "${profile}")" != "::1" \
+         && "${COLI_ALLOW_INSECURE_BIND:-}" != "1" ]]; then
+        warn "profile '${profile}' uses the colibri engine and will bind to" \
+             "$(catalog_bind_host "${profile}") (non-loopback). colibri's own independent" \
+             "security guard will refuse to start under this combination unless" \
+             "COLI_ALLOW_INSECURE_BIND=1 is set for this launch, or" \
+             "LLMCTL_BIND_HOST_$(printf '%s' "${profile}" | tr '[:lower:]-' '[:upper:]_')=127.0.0.1" \
+             "reverts just this profile to loopback-only."
+      fi
       # Root-caused 2026-09-17 (real repro, not guessed): the bare command
       # "coli" is only resolvable when its pip-installable launcher wrapper
       # has actually been installed onto PATH - `llmctl build colibri`

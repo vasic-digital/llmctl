@@ -123,6 +123,48 @@ out="$(LLMCTL_BIND_HOST=127.0.0.1 bash -c '
 assert_contains "${out}" "--host 127.0.0.1" \
   "colibri engine: global LLMCTL_BIND_HOST=127.0.0.1 overrides colibri-qwen36 back to localhost-only"
 
+# --- 9. Pre-flight warning for the colibri-bind-guard interaction -------------
+# (claude_toolkit's docs/research/2026-10-02-llmctl-upstream-findings.md,
+# finding LLMCTL-F3's suggested remediation: name the interaction BEFORE the
+# crash-loop, not only after). Must fire for colibri + non-loopback + no
+# override; must NOT fire for loopback, for COLI_ALLOW_INSECURE_BIND=1, or
+# for a non-colibri engine under the same LAN-exposed default.
+out="$(sched_build_launch colibri-qwen36 cpu 8091 8192 99 1 auto 2>&1 >/dev/null)"
+assert_contains "${out}" "colibri-qwen36" \
+  "colibri + non-loopback + no override: warning names the profile"
+assert_contains "${out}" "COLI_ALLOW_INSECURE_BIND=1" \
+  "colibri + non-loopback + no override: warning names the first resolution path"
+assert_contains "${out}" "LLMCTL_BIND_HOST_COLIBRI_QWEN36=127.0.0.1" \
+  "colibri + non-loopback + no override: warning names the second resolution path (per-profile override)"
+
+out="$(COLI_ALLOW_INSECURE_BIND=1 bash -c '
+  source "'"${LLMCTL_ROOT}"'/lib/common.sh"
+  source "'"${LLMCTL_ROOT}"'/lib/os_detect.sh"
+  source "'"${LLMCTL_ROOT}"'/lib/hardware.sh"
+  source "'"${LLMCTL_ROOT}"'/lib/catalog.sh"
+  source "'"${LLMCTL_ROOT}"'/lib/scheduler.sh"
+  export LLMCTL_DRY_RUN=1
+  sched_build_launch colibri-qwen36 cpu 8091 8192 99 1 auto
+' 2>&1 >/dev/null)"
+assert_eq "" "${out}" \
+  "COLI_ALLOW_INSECURE_BIND=1 suppresses the warning (operator already made the call)"
+
+out="$(LLMCTL_BIND_HOST_COLIBRI_QWEN36=127.0.0.1 bash -c '
+  source "'"${LLMCTL_ROOT}"'/lib/common.sh"
+  source "'"${LLMCTL_ROOT}"'/lib/os_detect.sh"
+  source "'"${LLMCTL_ROOT}"'/lib/hardware.sh"
+  source "'"${LLMCTL_ROOT}"'/lib/catalog.sh"
+  source "'"${LLMCTL_ROOT}"'/lib/scheduler.sh"
+  export LLMCTL_DRY_RUN=1
+  sched_build_launch colibri-qwen36 cpu 8091 8192 99 1 auto
+' 2>&1 >/dev/null)"
+assert_eq "" "${out}" \
+  "a loopback per-profile override suppresses the warning (nothing to warn about)"
+
+out="$(sched_build_launch fast cpu 8080 8192 99 1 auto 2>&1 >/dev/null)"
+assert_eq "" "${out}" \
+  "non-colibri engine (fast, llama) under the same LAN-exposed default never fires the colibri-specific warning"
+
 # --- 8. lib/download.sh's smoke-test host is DELIBERATELY untouched -----------
 # (one-shot, ephemeral, localhost-only verification during download - never
 # LAN-reachable, regardless of LLMCTL_BIND_HOST; a regression here would
