@@ -849,8 +849,19 @@ _sched_auto_impl() {
   # function, so every OTHER caller of _sched_initial_used sees these as
   # unset and the `:-0` default there reduces to exactly today's behavior.
   local _sched_auto_ram_credit=0 _sched_auto_vram_credit=0
-  local attempt
-  for (( attempt=0; attempt<16; attempt++ )); do
+  # Profiles whose svc_stop has already failed THIS call (round-4
+  # independent review, 2026-10-03): excluded from LRU re-selection below,
+  # so a persistently-unstoppable service is tried once, not up to 16
+  # times, and a DIFFERENT evictable candidate gets a chance if one exists.
+  local -a failed_stops=()
+  # LLMCTL_TEST_AUTO_MAX_ATTEMPTS (test-only, round-4 independent review,
+  # 2026-10-03): lowers the loop bound below so a hermetic test can force
+  # genuine exhaustion with a small number of fixture candidates, instead
+  # of needing >=16 distinct always-successfully-evicted ones to reach the
+  # same control-flow path. Unset in production, where it is exactly 16.
+  local max_attempts="${LLMCTL_TEST_AUTO_MAX_ATTEMPTS:-16}"
+  local attempt converged=0
+  for (( attempt=0; attempt<max_attempts; attempt++ )); do
     local used_ram used_vram ok=1
     read -r used_ram used_vram < <(_sched_initial_used "${plan_file}")
     for p in "${want[@]}"; do
@@ -863,9 +874,10 @@ _sched_auto_impl() {
       used_ram=$(( used_ram + need_ram ))
       used_vram=$(( used_vram + need_vram ))
     done
-    [[ "${ok}" == "1" ]] && break
+    if [[ "${ok}" == "1" ]]; then converged=1; break; fi
 
-    # Find LRU non-enabled running service.
+    # Find LRU non-enabled running service, excluding anything we've
+    # already tried and failed to stop this call.
     local lru="" lru_epoch=99999999999 f epoch prof
     for f in "${LLMCTL_RUNTIME_DIR}"/*.run; do
       [[ -e "${f}" ]] || continue
@@ -873,6 +885,7 @@ _sched_auto_impl() {
       # Never evict something we are trying to start, or enabled services.
       [[ " ${want[*]} " == *" ${prof} "* ]] && continue
       sched_is_enabled "${prof}" && continue
+      [[ " ${failed_stops[*]:-} " == *" ${prof} "* ]] && continue
       epoch="$(sed -n 's/^started_epoch=//p' "${f}" | head -1)"
       if (( ${epoch:-99999999999} < lru_epoch )); then
         lru_epoch="${epoch:-99999999999}"; lru="${prof}"
@@ -880,7 +893,11 @@ _sched_auto_impl() {
     done
     if [[ -z "${lru}" ]]; then
       rm -f "${plan_file}"
-      err "cannot satisfy 'auto $*': remaining services are enabled (protected)"
+      if [[ "${#failed_stops[@]}" -gt 0 ]]; then
+        err "cannot satisfy 'auto $*': could not stop enough services to make room (failed to stop: ${failed_stops[*]})"
+      else
+        err "cannot satisfy 'auto $*': remaining services are enabled (protected)"
+      fi
       err "disable one first (llmctl disable <profile>) or use: llmctl switch ${want[0]}"
       return 1
     fi
@@ -908,10 +925,28 @@ _sched_auto_impl() {
       rm -f "${lru_run}"
     else
       warn "auto: stopping '${lru}' failed -- not crediting its memory as freed; it may still be running"
+      failed_stops+=("${lru}")
     fi
   done
 
   rm -f "${plan_file}"
+
+  # round-4 independent review, 2026-10-03 (blocking F1): the loop above
+  # can also end by simply EXHAUSTING all 16 attempts without ever setting
+  # ok=1 -- that is NOT convergence, and falling through to the delegated
+  # _sched_start_impl call in that case means NEITHER the loop's own
+  # (pre-eviction-plan-based) check NOR a correct post-eviction check ever
+  # confirmed the wanted set actually fits; it was simply never disproven
+  # within 16 tries. The deferred secondary point below (credit possibly
+  # double-recognizing a fresh probe's already-updated numbers) is "bounded
+  # and safe-ish" ONLY on the convergence path, where the loop's check did
+  # run and pass -- it does NOT bound the exhaustion path, where no
+  # passing check ever ran at all. Fail closed instead.
+  if [[ "${converged}" != "1" ]]; then
+    err "cannot satisfy 'auto $*': could not make room after ${max_attempts} eviction attempts (tried: ${failed_stops[*]:-<none>})"
+    return 1
+  fi
+
   # Secondary point from the round-3 review, deferred (not fixed) with
   # justification rather than silently skipped: on a real host, by the
   # time this delegated call's OWN fresh hw_probe_json re-probe runs, a
@@ -922,13 +957,14 @@ _sched_auto_impl() {
   # freed memory the fresh probe already counted. This is bounded and
   # safe-ISH (it can only make the check believe up to the genuinely-freed
   # amount is available a second time, never fabricate memory that was
-  # never real), and the loop ABOVE already enforced that the wanted set's
-  # total demand fits within budget+credit before breaking, so no
-  # genuinely-too-large request reaches here. Threading the ORIGINAL
-  # pre-eviction budget through to diff against this fresh probe (the
-  # reviewer's suggested max(0, credit - delta) fix) would require new
-  # plumbing into a function with no other awareness of the auto-eviction
-  # context; deferred as lower-severity per the review's own assessment.
+  # never real), and the loop ABOVE already enforced (on this, the
+  # converged path) that the wanted set's total demand fits within
+  # budget+credit before breaking, so no genuinely-too-large request
+  # reaches here. Threading the ORIGINAL pre-eviction budget through to
+  # diff against this fresh probe (the reviewer's suggested
+  # max(0, credit - delta) fix) would require new plumbing into a function
+  # with no other awareness of the auto-eviction context; deferred as
+  # lower-severity per the review's own assessment.
   _sched_start_impl "${want[@]}"
 }
 

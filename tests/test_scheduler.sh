@@ -284,5 +284,48 @@ unset LLMCTL_TEST_FORCE_STOP_FAIL
 assert_contains "${out}" "stopping 'small' failed" "10d: the forced stop failure is reported, not silently swallowed"
 assert_file_exists "${LLMCTL_RUNTIME_DIR}/small.run" "10d: small's reservation SURVIVES -- it is still running, never credited as freed"
 assert_eq 1 "${rc}" "10d: auto chat vision does NOT wrongly succeed via a bogus credit for memory that was never actually freed"
+# round-4 independent review, 2026-10-03 (F2, test-instrumentation):
+# the assertion above only proved the FINAL rc; it never proved the loop
+# itself failed closed rather than merely being rescued by
+# _sched_start_impl's own independent re-check after a 16-attempt
+# exhaustion. With 'small' excluded from LRU re-selection after its first
+# failed stop (this same fix), the ONLY evictable candidate is gone after
+# attempt 0, so this now fails via the loop's own lru-empty branch on
+# attempt 1, not via 16 repeated identical failures papered over by
+# _sched_start_impl. The exact, new, loop-level message proves this.
+assert_contains "${out}" "could not stop enough services to make room (failed to stop: small)" "10d: fails via the LOOP's own exclusion-aware message, not merely _sched_start_impl's independent rescue"
+
+# --- 10e. Round-4 independent review (2026-10-03), blocking F1: the
+# eviction loop can also end by EXHAUSTING every attempt without ever
+# setting ok=1 (never converging), as opposed to running out of evictable
+# candidates (10d's lru-empty path). Pre-fix, that fell straight through
+# to the delegated _sched_start_impl call with no loop-level proof the
+# wanted set fits -- correct only by the accident of _sched_start_impl's
+# own fresh re-check happening to catch it. Genuinely reaching this via
+# >=16 distinct, always-successfully-evicted candidates is impractical in
+# a focused fixture (and, combined with 10d's own fix, a single
+# repeatedly-failing candidate no longer gets to cause this at all -- it
+# is excluded after one failure instead). LLMCTL_TEST_AUTO_MAX_ATTEMPTS
+# (new, test-only, inert when unset) lowers the loop bound to 1 so a
+# single successful-but-insufficient eviction can force genuine
+# exhaustion without needing 16 fixture candidates: 'small' evicts fine
+# (credited), but the loop ends before it ever gets to re-check whether
+# fast+vision now fits with that credit -- converged must stay 0, and the
+# call must fail cleanly, NEVER reaching _sched_start_impl at all (proven
+# by fast/vision never starting, not merely by the final rc). ---------------
+test_teardown_env; test_setup_env   # fresh state, same contended fixture
+
+out="$("${LLMCTL}" start small 2>&1)" && rc=0 || rc=$?
+assert_eq 0 "${rc}" "10e: 'small' starts alone"
+
+export LLMCTL_TEST_AUTO_MAX_ATTEMPTS=1
+out="$("${LLMCTL}" auto chat vision 2>&1)" && rc=0 || rc=$?
+unset LLMCTL_TEST_AUTO_MAX_ATTEMPTS
+assert_eq 1 "${rc}" "10e: with only 1 attempt allowed, the call fails cleanly rather than falling through unverified"
+assert_contains "${out}" "could not make room after 1 eviction attempts" "10e: the new loop-level exhaustion message fires, naming the real attempt bound"
+assert_contains "${out}" "evicting 'small'" "10e: small WAS evicted (the single allowed attempt's eviction genuinely ran)"
+assert_file_absent "${LLMCTL_RUNTIME_DIR}/small.run" "10e: small's reservation is gone -- the eviction itself succeeded"
+assert_file_absent "${LLMCTL_RUNTIME_DIR}/fast.run" "10e: fast was NEVER started -- _sched_start_impl must not be reached on the non-converged path"
+assert_file_absent "${LLMCTL_RUNTIME_DIR}/vision.run" "10e: vision was NEVER started, for the same reason"
 
 test_finish
