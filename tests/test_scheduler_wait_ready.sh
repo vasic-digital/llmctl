@@ -156,4 +156,47 @@ assert_eq 0 "${rc4}" "_sched_wait_ready under LLMCTL_DRY_RUN=1 reports success (
 [[ "${elapsed4}" -le 5 ]] && ok=0 || ok=1
 assert_eq 0 "${ok}" "REGRESSION GUARD: dry-run readiness check completed in ${elapsed4}s, not the ~60s production default timeout"
 
+# --- Test 5: a wait_ready timeout caused by a port ALREADY HELD BY SOMEONE
+# ELSE must be reported with the SPECIFIC real cause, not the generic
+# "never answered" timeout message. Live-reproduced 2026-10-03: `llmctl
+# switch fast` against a port an unrelated external process already held
+# timed out after the full 60s with only "never answered ... within 60s"
+# - the operator had to independently run `ss -ltnp` to discover the real
+# cause, even though llama-server's OWN log already named it exactly
+# ("couldn't bind HTTP server socket, hostname: 0.0.0.0, port: 8080").
+# _sched_diagnose_bind_failure closes this gap by reading that same log. ---
+LLMCTL_LOG_DIR="${LLMCTL_STATE_DIR}/logs"
+mkdir -p "${LLMCTL_LOG_DIR}"
+
+# Negative control FIRST: no log at all for this profile -> no diagnosis,
+# caller must fall back to its own generic message.
+rm -f "${LLMCTL_LOG_DIR}/noLogProfile.log"
+diag5n=""
+rc5n=0
+diag5n="$(_sched_diagnose_bind_failure "noLogProfile" 19999)" || rc5n=$?
+assert_eq 1 "${rc5n}" "_sched_diagnose_bind_failure returns 1 (no diagnosis) when there is no log file at all"
+assert_eq "" "${diag5n}" "no diagnosis text is emitted when there is nothing to diagnose"
+
+# Negative control: a log exists but names a DIFFERENT, unrelated failure
+# (e.g. a real OOM) -> still no bind-conflict diagnosis, never a false
+# positive.
+printf 'some unrelated line\nE srv ggml_backend_cuda_buffer_type_alloc_buffer: allocating buffer: cudaMalloc failed: out of memory\n' \
+  > "${LLMCTL_LOG_DIR}/oomProfile.log"
+rc5o=0
+_sched_diagnose_bind_failure "oomProfile" 19998 >/dev/null || rc5o=$?
+assert_eq 1 "${rc5o}" "_sched_diagnose_bind_failure does NOT fire on an unrelated failure (e.g. OOM) - never a false positive"
+
+# Positive case: the real bind-conflict signature, exactly as llama-server
+# emits it.
+printf 'I srv    load_model: loading model foo\nE srv         start: couldn'"'"'t bind HTTP server socket, hostname: 0.0.0.0, port: 19997\nI srv    operator(): operator(): cleaning up before exit...\n' \
+  > "${LLMCTL_LOG_DIR}/bindConflict.log"
+diag5=""
+rc5=0
+diag5="$(_sched_diagnose_bind_failure "bindConflict" 19997)" || rc5=$?
+assert_eq 0 "${rc5}" "_sched_diagnose_bind_failure detects the real bind-conflict signature and returns 0"
+[[ "${diag5}" == *"19997"* && "${diag5}" == *"already in use"* ]] && ok=0 || ok=1
+assert_eq 0 "${ok}" "the diagnosis names the real port and says it's already in use (got: ${diag5})"
+[[ "${diag5}" == *"LLMCTL_PORT_BINDCONFLICT"* ]] && ok=0 || ok=1
+assert_eq 0 "${ok}" "the diagnosis names the exact override env var the operator can set (got: ${diag5})"
+
 test_finish

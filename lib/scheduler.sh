@@ -394,6 +394,53 @@ sched_enable() { scheduler::with_lock _enable_impl "$@"; }
 # NeverDoubleBookANode) absorbed this as a multi-minute hang two commits
 # after the original fix landed, surfacing first as an unrelated-looking
 # raft/forwarding timeout before being traced back here.
+# _sched_diagnose_bind_failure <profile> <port> -> on stdout, a SPECIFIC
+# cause when one is found in the profile's own log; returns 0. Returns 1
+# (nothing printed) when no known pattern is found - the caller then falls
+# back to its own generic "never answered" message.
+#
+# Root-caused live 2026-10-03 (real repro, not guessed): `llmctl switch
+# fast` against a port an unrelated EXTERNAL process already held (nothing
+# to do with llmctl) timed out after the full default 60s with only
+# "started 'fast' but it never answered ... within 60s" - the operator had
+# to independently run `ss -ltnp` to learn the real cause, even though
+# llama-server's OWN log already named it precisely: "couldn't bind HTTP
+# server socket, hostname: 0.0.0.0, port: 8080". `Restart=always` means the
+# engine was retrying (and re-logging the identical line) every ~100-200ms
+# the whole time _sched_wait_ready polled - the evidence was always there,
+# just never read back.
+#
+# Deliberately a POSITIVE pattern match on llama-server's own known
+# bind-failure wording, never a bare "did the port end up free" check
+# before reporting - a port that is merely SLOW to free (the previous
+# profile's own stop still draining) must not be misreported as "someone
+# else's process", and this function runs only AFTER _sched_wait_ready has
+# already exhausted its bounded timeout, so slow-but-eventually-fine was
+# already given its full chance.
+_sched_diagnose_bind_failure() {
+  local profile="$1" port="$2"
+  local logf="${LLMCTL_LOG_DIR}/${profile}.log"
+  [[ -f "${logf}" ]] || return 1
+  tail -n 50 "${logf}" 2>/dev/null | grep -qF "couldn't bind HTTP server socket" || return 1
+  # ss's owner column is best-effort context, not the diagnosis itself -
+  # absent on a host without `ss`/without permission to see other users'
+  # sockets, in which case we still name the real cause, just without the
+  # process label.
+  local owner="" env_name
+  if have_cmd ss; then
+    owner="$(ss -ltnp 2>/dev/null | awk -v p=":${port}\$" '$4 ~ p {for(i=1;i<=NF;i++) if ($i ~ /users:/) {print $i; exit}}')"
+    owner="${owner#*\"}"; owner="${owner%%\"*}"
+  fi
+  env_name="LLMCTL_PORT_$(printf '%s' "${profile}" | tr '[:lower:]-' '[:upper:]_')"
+  if [[ -n "${owner}" ]]; then
+    printf 'port %s is already in use by another process (%s), not an llmctl profile - stop it, or set %s to a free port' \
+      "${port}" "${owner}" "${env_name}"
+  else
+    printf 'port %s is already in use by another process (not an llmctl profile) - stop it, or set %s to a free port' \
+      "${port}" "${env_name}"
+  fi
+}
+
 _sched_wait_ready() {
   local port="$1"
   [[ "${LLMCTL_DRY_RUN:-0}" == "1" ]] && return 0
@@ -520,7 +567,12 @@ _sched_start_impl() {
     # already handles, so a switch whose target never becomes ready
     # correctly rolls back to the previously-running profile too.
     if ! _sched_wait_ready "${port}"; then
-      err "started '${p}' but it never answered http://127.0.0.1:${port}/v1/models within ${LLMCTL_READY_TIMEOUT:-60}s (see: llmctl logs ${p})"
+      local diag
+      if diag="$(_sched_diagnose_bind_failure "${p}" "${port}")"; then
+        err "failed to start '${p}': ${diag} (see: llmctl logs ${p})"
+      else
+        err "started '${p}' but it never answered http://127.0.0.1:${port}/v1/models within ${LLMCTL_READY_TIMEOUT:-60}s (see: llmctl logs ${p})"
+      fi
       svc_stop "${p}" || true
       rm -f "${plan_file}"
       return 1
