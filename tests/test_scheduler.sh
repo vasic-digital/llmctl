@@ -10,6 +10,21 @@ export LLMCTL_DRY_RUN=1
 export LLMCTL_FAKE_HW="${LLMCTL_ROOT}/tests/fixtures/hw-baseline.json"
 LLMCTL="${LLMCTL_ROOT}/bin/llmctl"
 
+# This file's fixtures and inline comments are tuned against small's and
+# vision's ctx=8192/f16 footprint (small ram=2949, vision=4210, as the
+# comments throughout this file state explicitly). models/catalog.json's
+# real defaults for those two profiles were later raised (small-> ctx=55000
+# q4_0, vision-> ctx=24000 q4_0) for genuinely safer live headroom - see
+# that file's "desc" fields. Pinning both profiles back to the exact
+# values this file's scheduler-accounting arithmetic was written against,
+# via the override mechanism built alongside this fix (LLMCTL_CTX_<PROFILE>
+# / LLMCTL_KVTYPE_<PROFILE>), keeps this file testing scheduler/eviction
+# logic rather than tracking catalog tuning that has nothing to do with it.
+export LLMCTL_CTX_SMALL=8192
+export LLMCTL_KVTYPE_SMALL=f16
+export LLMCTL_CTX_VISION=8192
+export LLMCTL_KVTYPE_VISION=f16
+
 # --- 1. co-resident start fits ------------------------------------------------
 out="$("${LLMCTL}" start fast small 2>&1)" && rc=0 || rc=$?
 assert_eq 0 "${rc}" "start fast small (co-resident) exit code"

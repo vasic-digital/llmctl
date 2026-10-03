@@ -38,11 +38,15 @@ plan_for() {
 }
 
 # --- 2. no override: catalog defaults, zero behavior change ------------------
+# Uses 'fast' (untouched by this feature's own catalog-default changes to
+# small/vision) rather than 'small', so this regression guard proves
+# "no override -> whatever the catalog currently says" generically, and
+# does not go stale the next time small/vision's own defaults are tuned.
 plan="$(plan_for)"
-assert_eq "8192" "$(printf '%s' "${plan}" | json_stdin 'd["profiles"]["small"]["ctx"]')" \
-  "no override: small's ctx is still the catalog default (regression guard)"
-assert_eq "f16" "$(printf '%s' "${plan}" | json_stdin 'd["profiles"]["small"].get("kv_cache_type")')" \
-  "no override: small's kv_cache_type defaults to f16 (zero behavior change for every profile that doesn't opt in)"
+assert_eq "8192" "$(printf '%s' "${plan}" | json_stdin 'd["profiles"]["fast"]["ctx"]')" \
+  "no override: fast's ctx is still the catalog default (regression guard)"
+assert_eq "f16" "$(printf '%s' "${plan}" | json_stdin 'd["profiles"]["fast"].get("kv_cache_type")')" \
+  "no override: fast's kv_cache_type defaults to f16 (zero behavior change for every profile that doesn't opt in)"
 
 # --- 3. LLMCTL_CTX_<PROFILE> plumbs into the FUNCTIONAL path (ctx) ----------
 plan_ctx="$(LLMCTL_CTX_SMALL=65536 plan_for)"
@@ -67,7 +71,11 @@ assert_eq "f16" "$(printf '%s' "${plan_kv}" | json_stdin 'd["profiles"]["fast"].
   "kv-type override is scoped to 'small' only, 'fast' keeps f16"
 
 # --- 6. kv_cache_type genuinely changes the VRAM footprint (not just a label) -
-plan_f16_ctx="$(LLMCTL_CTX_SMALL=8192 plan_for)"
+# Pins LLMCTL_KVTYPE_SMALL=f16 explicitly for the baseline: small's own
+# catalog default is q4_0 (see models/catalog.json), so without the pin
+# this "f16" baseline would silently inherit q4_0 and the two sides of
+# this comparison would no longer differ.
+plan_f16_ctx="$(LLMCTL_CTX_SMALL=8192 LLMCTL_KVTYPE_SMALL=f16 plan_for)"
 vram_f16="$(printf '%s' "${plan_f16_ctx}" | json_stdin 'd["profiles"]["small"]["vram_mb"]')"
 plan_q4="$(LLMCTL_CTX_SMALL=8192 LLMCTL_KVTYPE_SMALL=q4_0 plan_for)"
 vram_q4="$(printf '%s' "${plan_q4}" | json_stdin 'd["profiles"]["small"]["vram_mb"]')"
@@ -98,7 +106,12 @@ plan_contended_f16() {
 # finding is about is whether it fits on GPU specifically, so the
 # assertion checks "mode", not the overall "fits"). At q4_0, the SAME
 # ctx needs only 375 MiB KV: 1926+375=2301 <= 2550 - genuinely fits on GPU.
-mode_f16="$(LLMCTL_CTX_SMALL=12000 plan_contended_f16 | json_stdin 'd["profiles"]["small"]["mode"]')"
+# small's own catalog default for kv_cache_type is q4_0 (tuned separately,
+# see models/catalog.json), so this f16 scenario must pin
+# LLMCTL_KVTYPE_SMALL=f16 explicitly - otherwise it would silently inherit
+# the catalog's q4_0 default and no longer exercise the f16 boundary this
+# assertion is about.
+mode_f16="$(LLMCTL_CTX_SMALL=12000 LLMCTL_KVTYPE_SMALL=f16 plan_contended_f16 | json_stdin 'd["profiles"]["small"]["mode"]')"
 assert_eq "cpu" "${mode_f16}" \
   "sanity: ctx=12000 at f16 genuinely does NOT fit on GPU in the contended fixture's real headroom - falls through to cpu mode (confirms the test fixture actually exercises the boundary, not a vacuous pass)"
 mode_q4="$(LLMCTL_CTX_SMALL=12000 LLMCTL_KVTYPE_SMALL=q4_0 plan_contended_f16 | json_stdin 'd["profiles"]["small"]["mode"]')"
@@ -109,8 +122,8 @@ assert_eq "gpu" "${mode_q4}" \
 LLMCTL="${LLMCTL_ROOT}/bin/llmctl"
 export LLMCTL_FAKE_HW="${LLMCTL_ROOT}/tests/fixtures/hw-baseline.json"
 out="$("${LLMCTL}" plan --json)"
-assert_eq "8192" "$(printf '%s' "${out}" | json_stdin 'd["profiles"]["small"]["ctx"]')" \
-  "llmctl plan --json without overrides still shows the catalog default (regression guard)"
+assert_eq "8192" "$(printf '%s' "${out}" | json_stdin 'd["profiles"]["fast"]["ctx"]')" \
+  "llmctl plan --json without overrides still shows the catalog default (regression guard, using 'fast' - untouched by this feature's own catalog tuning)"
 out_overridden="$(LLMCTL_CTX_SMALL=65536 LLMCTL_KVTYPE_SMALL=q4_0 "${LLMCTL}" plan --json)"
 assert_eq "65536" "$(printf '%s' "${out_overridden}" | json_stdin 'd["profiles"]["small"]["ctx"]')" \
   "llmctl plan --json honors LLMCTL_CTX_SMALL end-to-end through the real CLI entrypoint"
