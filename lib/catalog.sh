@@ -312,50 +312,58 @@ vram_live = vram_free is not None
 # q4_0 is EMPIRICALLY VERIFIED on real hardware (RTX 3060,
 # Llama-3.2-3B-Instruct-Q4_K_M, 28 layers x 8 KV heads x 128 head_dim): a
 # live llama-server run's own OOM log reported "allocating 3550740480
-# bytes" for the KV buffer at ctx=110080 (110000 padded to a slot
-# boundary) - and that is an EXACT match (round-3 independent review,
-# 2026-10-03, re-verified here byte-for-byte), not an approximation:
-# 2(K+V) * 28 * 8 * 128 * 2bytes(f16) = 114688 f16-bytes/token, times
-# q4_0's true per-block ratio (4 bits + one fp16 scale per 32 elements =
-# 4.5 bits/16 = 0.28125), times 110080 tokens = 3550740480.0 bytes,
-# to the byte. 0.28125 (not 0.25) is q4_0's honest, portable ratio.
+# bytes" for the KV buffer at ctx=110080 (110000 padded up to a multiple
+# of 256 by llama.cpp's GGML_PAD(n_ctx, 256)) - and that is an EXACT match
+# (round-3 independent review, 2026-10-03, re-verified here byte-for-byte),
+# not an approximation: 2(K+V) * 28 * 8 * 128 * 2bytes(f16) = 114688
+# f16-bytes/token, times q4_0's true per-block ratio (4 bits + one fp16
+# scale per 32 elements = 4.5 bits/16 = 0.28125), times 110080 tokens =
+# 3550740480.0 bytes, to the byte. 0.28125 (not 0.25) is q4_0's honest,
+# portable ratio.
 #
 # Why this entry used to read 0.25, and why that was wrong to keep: this
 # model's REAL f16 KV cost (114688 B/token = 0.109375 MiB/token) is itself
-# ~14% BELOW what kv_mb()'s flat "ctx/8 MiB" base formula assumes (0.125
-# MiB/token - exactly right only for a 32-layer/8-head/128-dim model, e.g.
-# an 8B-class Llama). Applying the true 0.28125 ratio to the OVERESTIMATED
-# 0.125 base happened to land close to applying 0.25 to it (0.25*0.125 ~=
-# 0.28125*0.109375), so 0.25 "worked" on this specific model only by
-# accidentally cancelling the base formula's own error on a SPECIFIC other
-# model - not a property of q4_0 itself, and actively UNSAFE (underestimate
-# by ~11%) for any model whose real f16 cost actually matches the base
-# formula's assumption. Fixed by storing q4_0's true, portable ratio
-# (0.28125) instead of a value entangled with one model's base-formula
-# error.
+# ~12.5% BELOW what kv_mb()'s flat "ctx/8 MiB" base formula assumes (0.125
+# MiB/token, equivalently a ~14.3% overestimate relative to the real cost -
+# exactly right only when layers * kv_heads * head_dim = 32768, e.g.
+# 32x8x128, as in an 8B-class Llama). Applying the true 0.28125 ratio to
+# the OVERESTIMATED 0.125 base happened to land close to applying 0.25 to
+# it (0.25*0.125 ~= 0.28125*0.109375), so 0.25 "worked" on this specific
+# model only by accidentally cancelling the base formula's own error on a
+# SPECIFIC other model - not a property of q4_0 itself, and actively
+# UNSAFE (underestimate by ~11%) for any model whose real f16 cost
+# actually matches the base formula's assumption. Fixed by storing q4_0's
+# true, portable ratio (0.28125) instead of a value entangled with one
+# model's base-formula error.
 #
 # Every other ratio is DERIVED from each format's known ggml block
-# structure (block size 32 unless noted) and has NOT been independently
-# measured on real hardware - round-2 independent review (2026-10-03)
-# found three of these rounded DOWN from their own bit-width math (the
-# dangerous direction: an underestimate reports `fits: true` for a config
-# that can genuinely OOM - see resolve_ctx's MIN_CTX comment above for the
-# same asymmetry); round-3 (2026-10-03) found q8_0 still fractionally below
-# its own ceiling and corrected q4_1's derivation (it carries BOTH a scale
-# AND a min per block, not one):
-#   q8_0:  8 bits + fp16 scale (16 bits)/32            = 8.5 bits -> 8.5/16 = 0.53125
-#   q5_1:  5 bits + fp16 scale+min (32 bits)/32         = 6.0 bits -> 6.0/16 = 0.375
-#   q4_1:  4 bits + fp16 scale+min (2x16=32 bits)/32    = 5.0 bits -> 5.0/16 = 0.3125 (exact ceiling, no rounding needed)
-# q5_0 and iq4_nl are left as previously estimated (0.34 and 0.28): their
-# own bit-width ceilings (5.5/16=0.34375 and ~4.5/16=0.28125) are within a
-# fraction of a percent of the existing values, well under the magnitude
-# this review flagged for the others - treat all non-q4_0 values as
-# estimates, not verified constants, until each has its own live-
-# measurement data point.
+# structure, confirmed against this repo's own submodules/llama.cpp
+# static_asserts (ggml-common.h) - block size 32 elements unless noted -
+# and has NOT been independently measured on real hardware. Round-2
+# independent review (2026-10-03) found three of these rounded DOWN from
+# their own bit-width math (the dangerous direction: an underestimate
+# reports `fits: true` for a config that can genuinely OOM - see
+# resolve_ctx's MIN_CTX comment below for the same asymmetry); round-3
+# corrected q8_0 and q4_1's derivation (q4_1 carries BOTH a scale AND a
+# min per block, not one); round-4 independent review (2026-10-03) found
+# q5_0 and iq4_nl were STILL stored below their own exact ceilings (1.09%
+# and 0.44% low respectively - not "a fraction of a percent", and both
+# gaps larger than the one round-3 fixed for q8_0) and corrected them.
+# Every non-q4_0 ratio below is now its format's exact bit-width ceiling,
+# derived from its ggml block struct's real byte size - not an estimate:
+#   q8_0:    half(2B) + 32B data = 34B/32el = 8.5  bits -> 8.5/16  = 0.53125
+#   q5_1:    2*half(4B) + u32 qh(4B) + 16B  = 24B/32el = 6.0  bits -> 6.0/16  = 0.375
+#   q4_1:    2*half(4B) + 16B data          = 20B/32el = 5.0  bits -> 5.0/16  = 0.3125
+#   q5_0:    half(2B) + u32 qh(4B) + 16B    = 22B/32el = 5.5  bits -> 5.5/16  = 0.34375
+#   iq4_nl:  half(2B) + 16B data            = 18B/32el = 4.5  bits -> 4.5/16  = 0.28125
+# None of these five (nor q4_0) has been independently measured on real
+# hardware - only q4_0 has a live-measurement data point. Treat them as
+# exact-ceiling derivations, not verified constants, until each has its
+# own measurement.
 KV_TYPE_RATIO = {
     "f32": 2.0, "f16": 1.0, "bf16": 1.0,
-    "q8_0": 0.53125, "q5_1": 0.375, "q5_0": 0.34,
-    "q4_1": 0.3125, "q4_0": 0.28125, "iq4_nl": 0.28,
+    "q8_0": 0.53125, "q5_1": 0.375, "q5_0": 0.34375,
+    "q4_1": 0.3125, "q4_0": 0.28125, "iq4_nl": 0.28125,
 }
 
 def kv_mb(ctx, parallel, kv_type="f16"):
