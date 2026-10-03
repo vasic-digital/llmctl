@@ -1,9 +1,13 @@
 #!/usr/bin/env bash
-# test_planner.sh - deterministic planner tests against the 3 hardware fixtures.
+# test_planner.sh - deterministic planner tests against the hardware fixtures.
 # Expected values below are derived from the catalog sizes and the documented
-# memory model (RAM budget = avail - 4GiB, VRAM budget = total * 0.85,
-# KV = ctx * parallel / 8 MiB). If the catalog or the memory model changes,
-# these expectations must be updated deliberately.
+# memory model (RAM budget = avail - 4GiB, VRAM budget = 85% of REAL FREE
+# VRAM when measured, else 85% of total as a fallback, KV = ctx * parallel /
+# 8 MiB). All fixtures here predate the free-VRAM field and so exercise the
+# fallback path; hw-vram-contended.json (below) is the one fixture that
+# carries a real gpu_free_vram_mb and exercises the live-measurement path.
+# If the catalog or the memory model changes, these expectations must be
+# updated deliberately.
 set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/helpers.sh"
 test_setup_env
@@ -78,5 +82,27 @@ assert_eq "workstation" "$(printf '%s' "$(LLMCTL_FAKE_HW="${LLMCTL_ROOT}/tests/f
   "catalog_classify_tier: apple fixture"
 assert_eq "baseline" "$(printf '%s' "$(LLMCTL_FAKE_HW="${LLMCTL_ROOT}/tests/fixtures/hw-constrained.json" hw_probe_json)" | catalog_classify_tier)" \
   "catalog_classify_tier: constrained fixture (8 cores / 32768 MiB RAM sits exactly at the baseline threshold)"
+
+# --- vram-contended: SAME total VRAM as "baseline" (12288 MiB) but only
+# 3000 MiB is REAL FREE VRAM (simulating something else already holding
+# ~9.3GiB on the same card) - root-caused 2026-10-03: the pre-fix
+# total-based budget (12288*0.85=10444) let "small" (~2949 MiB real
+# footprint: 1926 MiB weights + 1024 MiB KV at ctx=8192/parallel=1) report
+# "fits: true" / mode "gpu" here, and it then genuinely OOM'd at launch
+# time (cudaMalloc failed) because the real free budget (3000*0.85=2550)
+# could never have held it. This is the exact scenario the free-VRAM fix
+# targets: same card, same catalog, only the LIVE measurement differs.
+plan="$(plan_for vram-contended)"
+assert_eq "2550" "$(printf '%s' "${plan}" | json_stdin 'd["budgets"]["vram_mb"]')" \
+  "vram-contended VRAM budget uses REAL FREE (3000*0.85), not total (12288*0.85=10444)"
+# "fits" means "fits this host in SOME mode" (gpu OR cpu), not specifically
+# gpu -- "small" still fits overall via the cpu-mode RAM fallback (there is
+# plenty of RAM budget), so it correctly stays "true" here. The real proof
+# this fix works is the MODE assertion below: it must be "cpu", never "gpu"
+# (which would OOM against the real 3000 MiB free budget).
+assert_eq "true" "$(printf '%s' "${plan}" | json_stdin 'd["profiles"]["small"]["fits"]' | tr 'A-Z' 'a-z')" \
+  "small still fits this host overall (via cpu-mode RAM fallback), just no longer via gpu mode"
+assert_eq "cpu" "$(printf '%s' "${plan}" | json_stdin 'd["profiles"]["small"]["mode"]')" \
+  "small correctly falls through to cpu mode instead of a gpu mode that would OOM"
 
 test_finish

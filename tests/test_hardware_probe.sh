@@ -13,7 +13,7 @@ source "${LLMCTL_ROOT}/lib/hardware.sh"
 captured="$(hw_probe_json)" && rc=0 || rc=$?
 assert_eq 0 "${rc}" "real probe exit code"
 keys="$(printf '%s' "${captured}" | json_stdin '" ".join(sorted(d.keys()))')"
-assert_eq "arch cpu gpu_total_vram_mb gpus memory os storage" "${keys}" "probe JSON top-level keys"
+assert_eq "arch cpu gpu_free_vram_mb gpu_total_vram_mb gpus memory os storage" "${keys}" "probe JSON top-level keys"
 cores="$(printf '%s' "${captured}" | json_stdin 'd["cpu"]["cores"]')"
 rc=0
 [[ "${cores}" =~ ^[0-9]+$ && "${cores}" -ge 1 ]] || rc=1

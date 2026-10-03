@@ -3,7 +3,15 @@
 #
 # The planner is intentionally simple and conservative:
 #   * RAM budget   = available RAM - 4 GiB headroom
-#   * VRAM budget  = total VRAM  - 15% headroom
+#   * VRAM budget  = REAL FREE VRAM (live nvidia-smi/amdgpu measurement) -
+#                    15% headroom, when a live free-VRAM reading exists;
+#                    falls back to total VRAM - 15% headroom only when it
+#                    does not (old hw-doc fixture, or a GPU path with no
+#                    verified free-memory counter - see hardware.sh). Fixed
+#                    2026-10-03: the total-based estimate alone let a
+#                    profile report "fits" while something else already
+#                    held several GiB of the same card, causing a real
+#                    CUDA OOM at launch the catalog could not predict.
 #   * KV cache     = ctx_tokens * parallel_slots / 8 MiB  (conservative upper
 #                    estimate for f16 KV; documented in docs/architecture.md)
 #   * GGUF models  = "gpu" mode (full offload, ngl from catalog defaults) when
@@ -235,6 +243,7 @@ cores = hw["cpu"]["cores"]
 ram_total = hw["memory"]["total_mb"]
 ram_avail = hw["memory"]["available_mb"]
 vram_total = hw.get("gpu_total_vram_mb", 0)
+vram_free = hw.get("gpu_free_vram_mb")         # None: unmeasurable/old fixture
 storage_free = hw["storage"]["free_mb"]
 
 # Tier computed by catalog_classify_tier (bash) - the single source of
@@ -243,7 +252,27 @@ tier = os.environ["LLMCTL_TIER"]
 tier_rank = {"below-minimum": 0, "baseline": 1, "workstation": 2, "datacenter": 3}
 
 ram_budget = max(0, ram_avail - 4096)          # 4 GiB RAM headroom
-vram_budget = int(vram_total * 0.85)           # 15% VRAM headroom
+# Root-caused 2026-10-03 (real repro, not guessed): a profile reported
+# "fits: true" here, computed from the card's STATIC TOTAL capacity, then
+# genuinely OOM'd (cudaMalloc failed) at launch because something else
+# already held several GiB of the SAME card's real capacity - this
+# estimate could not see that, unlike ram_budget above which already uses
+# REAL available RAM (ram_avail), not ram_total. vram_free (from
+# hardware.sh's live nvidia-smi memory.free / amdgpu sysfs used-counter /
+# Apple available-RAM-scaled probe) closes that asymmetry the same way:
+# when a real measurement exists, the budget is 85% of what is ACTUALLY
+# free right now, not 85% of the card's theoretical ceiling. The 15%
+# figure itself is unchanged and reused rather than re-derived - it was
+# already covering CUDA context/driver reserved allocations and
+# allocator fragmentation on top of raw weights+KV, and that overhead is
+# the same whether counted from total or from already-free capacity.
+# Falls back to the pre-fix total-based estimate only when vram_free is
+# genuinely unmeasurable (None) - an old hw-doc fixture, or a GPU
+# vendor/path this fix could not verify a free-memory counter for (see
+# hardware.sh's AMD rocm-smi comment) - never by treating "unknown" as
+# "equal to total", which would silently resurrect the exact bug this
+# fixes.
+vram_budget = int((vram_free if vram_free is not None else vram_total) * 0.85)
 
 def kv_mb(ctx, parallel):
     # Conservative f16 KV estimate: 1/8 MiB per token-slot.

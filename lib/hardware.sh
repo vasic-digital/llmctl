@@ -112,14 +112,23 @@ _probe_mem() {
 _probe_gpus() {
   local os; os="$(llmctl_os)"
 
-  # NVIDIA (any OS with nvidia-smi).
+  # Each line now carries a 6th field: real free VRAM in MiB, or the literal
+  # "unknown" when this vendor/path cannot measure it live (never a guess -
+  # catalog.sh's budget falls back to the old total-based estimate for an
+  # "unknown" GPU rather than pretending a number it doesn't have).
+
+  # NVIDIA (any OS with nvidia-smi). memory.free is a real, live counter -
+  # root-caused 2026-10-03: a profile with "fits: true" (computed from
+  # static total VRAM) genuinely OOM'd (cudaMalloc failed) because something
+  # ELSE already held several GiB of the card's real capacity at launch
+  # time - the catalog's own total-based estimate cannot see that.
   if have_cmd nvidia-smi; then
     local cuda=""
     cuda="$(nvidia-smi 2>/dev/null | sed -n 's/.*CUDA Version: \([0-9.]*\).*/\1/p' | head -1)"
-    while IFS=',' read -r name vram driver; do
-      name="${name# }"; vram="${vram// /}"; driver="${driver# }"
-      [[ -n "${name}" && -n "${vram}" ]] && printf 'nvidia|%s|%s|%s|cuda=%s\n' "${name}" "${vram}" "${driver:-unknown}" "${cuda:-unknown}"
-    done < <(nvidia-smi --query-gpu=name,memory.total,driver_version --format=csv,noheader,nounits 2>/dev/null || true)
+    while IFS=',' read -r name vram vfree driver; do
+      name="${name# }"; vram="${vram// /}"; vfree="${vfree// /}"; driver="${driver# }"
+      [[ -n "${name}" && -n "${vram}" ]] && printf 'nvidia|%s|%s|%s|cuda=%s|%s\n' "${name}" "${vram}" "${driver:-unknown}" "${cuda:-unknown}" "${vfree:-unknown}"
+    done < <(nvidia-smi --query-gpu=name,memory.total,memory.free,driver_version --format=csv,noheader,nounits 2>/dev/null || true)
   fi
 
   # AMD (Linux): rocm-smi first, then /sys fallback.
@@ -132,10 +141,16 @@ _probe_gpus() {
         name="$(rocm-smi --showproductname -d "${id}" --csv 2>/dev/null | awk -F',' 'NR>1{print $2; exit}' || true)"
         vram="$(rocm-smi --showmeminfo vram -d "${id}" --csv 2>/dev/null | awk -F',' 'NR>1{print $2; exit}' || true)"
         [[ -n "${vram}" ]] && vram=$(( vram / 1048576 )) || vram=0
-        printf 'amd|%s|%s|rocm|%s\n' "${name:-AMD GPU (ROCm)}" "${vram}" "card${id}"
+        # Free VRAM intentionally left "unknown" here, not guessed: this
+        # repo's rocm-smi --showmeminfo CSV column layout for a USED/free
+        # counter was not verified against a real ROCm host (none available
+        # to the author at fix time) - a wrong column index would silently
+        # feed catalog.sh a fabricated number, which is worse than the
+        # already-disclosed total-based estimate this path keeps instead.
+        printf 'amd|%s|%s|rocm|%s|unknown\n' "${name:-AMD GPU (ROCm)}" "${vram}" "card${id}"
       done
     elif compgen -G "/sys/class/drm/card[0-9]" >/dev/null; then
-      local card vram name drv
+      local card vram name drv vused vfree
       for card in /sys/class/drm/card[0-9]; do
         [[ -e "${card}/device" ]] || continue
         drv="$(basename "$(readlink -f "${card}/device/driver" 2>/dev/null || echo unknown)")"
@@ -143,10 +158,19 @@ _probe_gpus() {
           amdgpu)
             vram="$(cat "${card}/device/mem_info_vram_total" 2>/dev/null || echo 0)"
             name="AMD GPU (amdgpu)"
-            printf 'amd|%s|%s|%s|%s\n' "${name}" "$(( vram / 1048576 ))" "driver=${drv}" "$(basename "${card}")"
+            # amdgpu's own sysfs DOES expose a live "used" counter (unlike
+            # rocm-smi's unverified CSV shape above) - free = total - used,
+            # a real measurement, not a guess.
+            vused="$(cat "${card}/device/mem_info_vram_used" 2>/dev/null || echo "")"
+            if [[ -n "${vused}" ]]; then
+              vfree=$(( (vram - vused) / 1048576 ))
+            else
+              vfree="unknown"
+            fi
+            printf 'amd|%s|%s|%s|%s|%s\n' "${name}" "$(( vram / 1048576 ))" "driver=${drv}" "$(basename "${card}")" "${vfree}"
             ;;
           i915|xe)
-            printf 'intel|Intel integrated GPU (%s)|0|driver=%s|%s\n' "${drv}" "${drv}" "$(basename "${card}")"
+            printf 'intel|Intel integrated GPU (%s)|0|driver=%s|%s|unknown\n' "${drv}" "${drv}" "$(basename "${card}")"
             ;;
         esac
       done
@@ -155,12 +179,18 @@ _probe_gpus() {
 
   # Apple Silicon: unified memory -> usable VRAM estimate (0.7 x total RAM,
   # matching what macOS exposes to Metal via recommendedMaxWorkingSetSize).
+  # "Free" here is the same 0.7 ratio applied to REAL AVAILABLE RAM
+  # (mem_avail, already a live measurement from _probe_mem) rather than
+  # total RAM - the identical total-vs-available distinction this fix makes
+  # for NVIDIA, applied the same way Apple's own existing heuristic already
+  # scales total.
   if is_apple_silicon; then
-    local mem chip vram
+    local mem chip vram vfree
     mem="$(_probe_mem)" || mem="0 0"
     chip="$(_probe_apple_chip)"
     vram=$(( ${mem%% *} * 7 / 10 ))
-    printf 'apple|%s|%s|unified|unified-memory\n' "${chip:-Apple Silicon}" "${vram}"
+    vfree=$(( ${mem##* } * 7 / 10 ))
+    printf 'apple|%s|%s|unified|unified-memory|%s\n' "${chip:-Apple Silicon}" "${vram}" "${vfree}"
   fi
   return 0
 }
@@ -278,11 +308,21 @@ for line in env("LLMCTL_HW_GPUS").splitlines():
     if len(parts) < 5:
         continue
     vendor, name, vram, driver, extra = parts[0], parts[1], parts[2], parts[3], parts[4]
+    # 6th field (free VRAM, MiB) is optional for backward compat with any
+    # caller still emitting the old 5-field line shape; "unknown" (or
+    # absent) means this vendor/path cannot measure it live right now -
+    # never fabricated as equal to total, which would silently recreate
+    # the exact stale-total bug this field exists to fix.
+    vfree_raw = parts[5] if len(parts) >= 6 else "unknown"
     try:
         vram_mb = int(vram)
     except ValueError:
         vram_mb = 0
-    g = {"vendor": vendor, "name": name, "vram_mb": vram_mb}
+    try:
+        vram_free_mb = int(vfree_raw)
+    except ValueError:
+        vram_free_mb = None
+    g = {"vendor": vendor, "name": name, "vram_mb": vram_mb, "vram_free_mb": vram_free_mb}
     if vendor == "nvidia":
         g["driver"] = driver
         g["cuda_version"] = extra.split("=", 1)[-1] if "=" in extra else extra
@@ -313,6 +353,15 @@ doc = {
     },
     "gpus": gpus,
     "gpu_total_vram_mb": sum(g["vram_mb"] for g in gpus),
+    # None (JSON null) when ANY gpu's free VRAM is unmeasurable, rather than
+    # silently summing a partial/unknown set as if it were a complete real
+    # measurement - catalog.sh falls back to the total-based budget in that
+    # case, exactly as it did before this field existed.
+    "gpu_free_vram_mb": (
+        sum(g["vram_free_mb"] for g in gpus)
+        if gpus and all(g["vram_free_mb"] is not None for g in gpus)
+        else None
+    ),
     "storage": {
         "path": env("LLMCTL_HW_S_PATH"),
         "free_mb": int(env("LLMCTL_HW_S_FREE", "0")),
