@@ -1,0 +1,145 @@
+== ask: success, JSON shape, evidence ==
+  ok: ask choice exits 0
+  ok: choice answer present (billing = first option, mildly peaked backend)
+  ok: model is the served profile
+  ok: evidence.port is the endpoint port
+  ok: latency_ms is a real positive millisecond figure
+  ok: latency_ms is not a whole-second multiple (D-20)
+  ok: probabilities sum to 1
+  ok: noul answer type
+  ok: score answer in range
+  ok: score legend echoed
+== ask: question file, profile, explain, dry-run ==
+  ok: question-file + --profile exits 0
+  ok: --explain shows the rendered prompt
+  ok: --explain shows the letter map
+  ok: --explain shows probabilities
+  ok: --explain never prints the key
+  ok: --dry-run needs no key, no gateway, no network
+  ok: --dry-run says it sent nothing
+== N-01: a 5 MB state works from a file and from stdin, nothing on argv ==
+  ok: fixture is at least 5 MB (5268900 bytes)
+  ok: 5 MB --state-file exits 0
+  ok: 5 MB state answered
+  ok: 5 MB --stdin exits 0
+  ok: 5 MB state through the bash front end exits 0 (was rc 126 'Argument list too long')
+  ok: front end returns the gateway answer
+== no command line ever carries the key or the state (D-03, N-01) ==
+  ok: control: the cmdline scan sees a key placed on argv
+  ok: both clients are mid-request (slow gateway)
+  ok: the access key is on no process command line during a request
+  ok: the state text is on no process command line during a request
+  ok: slow request completed (direct)
+  ok: slow request completed (front end)
+  ok: the key is in no output
+== exit codes: 4 key, 5 certificate, 6 unreachable/not ready, 1 readout, 10 abstained ==
+  ok: no key anywhere -> 4
+  ok: missing-key message names the problem
+  ok: blank key -> 4
+  ok: wrong key (gateway answers 401) -> 4
+  ok: the rejected key is not echoed
+  ok: wrong CA -> 5
+  ok: wrong-CA message says why
+  ok: missing CA file -> 5
+  ok: closed port -> 6
+  ok: closed-port message says why
+  ok: plain http endpoint is refused (never clear text) -> 2
+  ok: gateway not ready (503) -> 6 after bounded retries
+  ok: readout failure (422 readout_failed) -> 1
+llmctl-decide ask: answer withheld: confidence below --min-confidence 0.9
+  ok: confidence below --min-confidence -> exit 10
+  ok: abstained answer still printed with abstained true
+  ok: confidence above --min-confidence -> 0
+  ok: abstained false recorded
+== usage errors exit 2 (strict flags, N-07; bad env, N-16) ==
+  ok: unknown flag -> 2
+  ok: no state -> 2
+  ok: bad type -> 2
+  ok: stray positional -> 2
+  ok: models: unknown flag -> 2
+  ok: LLMCTL_DECIDE_MAX_OPTIONS=abc -> 2
+  ok: bad numeric env names the variable
+  ok: no traceback for a bad numeric env
+  ok: LLMCTL_DECIDE_PORT out of range -> 2
+== batch: NDJSON in/out, per-line errors, highest-severity exit ==
+  ok: batch exit code = highest severity seen (usage 2)
+  ok: one output line per input line
+  ok: line 1 keeps its id
+  ok: line 2 is a per-line usage error
+  ok: line 3 answered after a bad line
+  ok: batch reads stdin by default
+== models ==
+  ok: models exits 0
+  ok: models lists the served profile
+  ok: models --json is the gateway document
+== thin front end (lib/decide.sh) ==
+  ok: cmd_decide ask delegates and exits 0
+  ok: front end prints the Go client's JSON
+  ok: front end passes exit code 4 through
+  ok: front end passes exit code 10 through
+  ok: unknown decide subcommand -> 2
+  ok: front end: unknown ask flag -> 2 (from the client)
+  ok: unusable LLMCTL_DECIDE_BIN -> 1 with a message
+  ok: message names the variable
+  ok: binary absent and no Go -> 1 (never 3)
+  ok: the error says exactly what to run
+  ok: retired seams/variables are gone from lib/decide.sh (D-11, D-29)
+  ok: stale 'when it lands' comment is gone (D-24)
+== strict arguments for capacity/status (N-07) ==
+  ok: capacity: unknown argument -> 2
+  ok: status: unknown argument -> 2
+  ok: status: extra argument -> 2
+== wizard: end of input is a message and rc 2, never a silent exit (N-06); prompts on stderr (N-09) ==
+  ok: the calling shell survives wizard EOF and sees rc 2
+  ok: EOF produces a message
+  ok: the prompt text reaches stderr even with piped stdin
+  ok: scripted wizard run exits 0
+  ok: wizard answers through the same client
+== OD-23: probe-order / calibrate / completions through the real binary and the thin front end ==
+  ok: probe-order exits 0 against a live gateway
+  ok: a full cycle of a 3-option question = 3 gateway calls
+  ok: the first-listed-option bias of the backend shows as flips and position-0 share 1.0
+  ok: text report prints the flip rate
+  ok: text report prints the per-position bias
+  ok: probe-order without --questions -> 2
+  ok: probe-order --permute 1 -> 2
+  ok: probe-order against a not-ready gateway -> 6
+  ok: calibrate below 200 labels exits 0 (a report)
+  ok: below 200 labels: the refusal text
+  ok: below 200 labels nothing is written
+  ok: calibrate cannot write a BOUND profile when the template hash cannot be resolved -> 2
+  ok: no bound profile written without its bindings
+  ok: calibrate binds to the computed template hash and the catalog's model sha
+  ok: the written profile is bound (64-hex model sha and computed template hash)
+  ok: calibrate with explicit bindings writes the bound profile
+  ok: report says written, ECE measured and improved
+  ok: profile file mode is 0600
+  ok: profile content: bound, 250 samples, temperature
+  ok: calibrate without --labels -> 2
+  ok: calibrate with an unknown method -> 2
+  ok: completions bash exits 0
+  ok: completions zsh exits 0
+  ok: completions fish -> 2
+  ok: the bash completion script parses
+  ok: bash completion of 'c' offers calibrate
+  ok: bash completion of a flag
+  ok: bash completion through 'llmctl decide'
+== every subcommand the binary registers is reachable through the front end ==
+  ok: the real binary reports its registered subcommands
+  ok: front end forwards 'ask' to the binary with its arguments
+  ok: front end forwards 'batch' to the binary with its arguments
+  ok: front end forwards 'calibrate' to the binary with its arguments
+  ok: front end forwards 'cert' to the binary with its arguments
+  ok: front end forwards 'completions' to the binary with its arguments
+  ok: front end forwards 'discover' to the binary with its arguments
+  ok: front end forwards 'key' to the binary with its arguments
+  ok: front end forwards 'mcp' to the binary with its arguments
+  ok: front end forwards 'models' to the binary with its arguments
+  ok: front end forwards 'port' to the binary with its arguments
+  ok: front end forwards 'probe-order' to the binary with its arguments
+  ok: front end forwards 'registry' to the binary with its arguments
+  ok: front end forwards 'schema' to the binary with its arguments
+  ok: front end forwards 'serve' to the binary with its arguments
+  ok: front end forwards 'smoke' to the binary with its arguments
+  ok: front end forwards 'vantage' to the binary with its arguments
+RESULT: PASS

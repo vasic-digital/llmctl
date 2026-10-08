@@ -3,8 +3,8 @@
  "green_log": "specs/009-jev-decision-models/evidence/p7-make-test.log",
  "counts": {
   "H": {
-   "OPEN": 2,
-   "FIXED": 7
+   "FIXED": 8,
+   "OPEN": 1
   },
   "M": {
    "FIXED": 28,
@@ -18,7 +18,6 @@
   }
  },
  "open_high": [
-  "D-01",
   "D-06"
  ],
  "rows": [
@@ -33,8 +32,16 @@
    "red": "specs/009-jev-decision-models/evidence/p1-red-original/d01_d15.jsonl:1",
    "guards": [],
    "green": "",
-   "closure": "OPEN",
-   "reason": "D-01: RED was SKIPPED (environment) - no RED observed; guard exists"
+   "closure": "FIXED",
+   "reason": "override: P1 SKIP superseded by realcheck/d01: RED on the unmodified candidate encode_pair (sha256 81595e3a..., re-verified 2026-10-08) with the pinned real DeBERTa spm.model -> hypothesis and both [SEP] cut; GREEN on the shipped lib/onnx_server.py sha256 97f48ddb... (byte-identical to HEAD) same host/venv/tokenizer; guards: tests/test_onnx_real_tokenizer.sh (real tokenizer, own mutation caught) and the hermetic F checks of tests/test_onnx_runtime.sh, whose reverted-fix mutation was caught in evidence/sc004-verify/mut-D-01.log",
+   "override_evidence": [
+    "specs/009-jev-decision-models/evidence/realcheck/d01/red_output.txt",
+    "specs/009-jev-decision-models/evidence/realcheck/d01/green_output.txt",
+    "specs/009-jev-decision-models/evidence/realcheck/d01/test_output.txt",
+    "specs/009-jev-decision-models/evidence/realcheck/d01/commands_and_hashes.txt",
+    "specs/009-jev-decision-models/evidence/sc004-verify/green-test_onnx_runtime.log",
+    "specs/009-jev-decision-models/evidence/sc004-verify/mut-D-01.log"
+   ]
   },
   {
    "id": "D-02",

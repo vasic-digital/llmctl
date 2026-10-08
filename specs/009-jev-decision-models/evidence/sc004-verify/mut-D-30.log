@@ -1,0 +1,24 @@
+  FAIL: D-30 RED scenario now NOT-REPRODUCED (exit 0)
+    expected: 0
+    actual:   2
+  FAIL: RED scenario control needle found (instrument not blind)
+    needle not found: control needle found in both archives
+    haystack: D-30           ERROR          build_archive.sh failed: bash: /tmp/red-d30-DmHxcW/llmctl-copy/scripts/release/build_archive.sh: No such file or directory
+build_archive: unused allow entry: submodules/llama.cpp/docs/development/llama-star/idea-arch.key (names no tracked file and no path in the shipped history)
+build_archive: unused allow entry: vendor/llama.cpp/docs/development/llama-star/idea-arch.key (names no tracked file and no path in the shipped history)
+build_archive: unused allow entry: submodules/llama.cpp/docs/llama-star/idea-arch.key (names no tracked file and no path in the shipped history)
+build_archive: unused allow entry: submodules/containers/tests/configs/.env.docker (names no tracked file and no path in the shipped history)
+build_archive: unused allow entry: submodules/containers/tests/configs/.env.local (names no tracked file and no path in the shipped history)
+build_archive: unused allow entry: submodules/containers/tests/configs/.env.podman (names no tracked file and no path in the shipped history)
+build_archive: unused allow entry: submodules/containers/tests/configs/.env.remote-cluster (names no tracked file and no path in the shipped history)
+build_archive: unused allow entry: submodules/containers/tests/configs/.env.remote-single (names no tracked file and no path in the shipped history)
+build_archive: unused allow entry: submodules/containers/tests/configs/.env.scheduler-roundrobin (names no tracked file and no path in the shipped history)
+build_archive: SECRET PATH in tar.gz: decide/log.key
+build_archive: SECRET PATH in tar.gz: cert/ca/ca.key
+build_archive: SECRET PATH in tar.gz: .env
+build_archive: SECRET PATH in tar.gz: sub/sub_secret.pem
+build_archive: SECRET PATH in zip: decide/log.key
+build_archive: SECRET PATH in zip: cert/ca/ca.key
+build_archive: SECRET PATH in zip: .env
+build_archive: SECRET PATH in zip: sub/sub_secret.pem
+build_archive: aborted, secret-looking paths or unreleased git state found; no archive left behind

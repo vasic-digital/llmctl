@@ -1,0 +1,5 @@
+--- FAIL: TestPostJSONReReadsTheKeyFileOnA401AndRetriesOnce (0.00s)
+    keyfile_test.go:196: rotation without restart failed: The decision backend failed.
+FAIL
+FAIL	github.com/vasic-digital/llmctl/internal/gateway	0.014s
+FAIL

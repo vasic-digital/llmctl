@@ -1,0 +1,100 @@
+  ok: server A: /healthz becomes 200
+  ok: server B: /healthz becomes 200
+  ok: server C: /healthz becomes 200
+  ok: server D: /healthz becomes 200
+  ok: server E: /healthz becomes 200
+  ok: server F: /healthz becomes 200
+  ok: server G: /healthz becomes 200
+  ok: server H: /healthz becomes 200
+  ok: server I: /healthz becomes 200
+  ok: server J: /healthz becomes 200
+  ok: server K: /healthz becomes 200
+  ok: server K2: /healthz becomes 200
+  ok: server R: /healthz becomes 200
+  ok: server L: /healthz becomes 200
+  ok: /healthz: unauthenticated, body is exactly {"status":"ok"} (no profile name)
+  ok: /readyz: ready after the load-time smoke ran a real stub inference
+  ok: legacy /health (profile-leaking, backend-less) no longer exists -> 404
+  ok: /readyz: I -> 503 not_ready when the load-time smoke inference fails
+  ok: /v1/score on a not-ready runtime -> 503 JSON, not a dropped connection
+  ok: /healthz stays 200 (liveness) while not_ready
+  ok: /readyz: J -> 503 not_ready when the load-time smoke inference fails
+  ok: /v1/score on a not-ready runtime -> 503 JSON, not a dropped connection
+  ok: /healthz stays 200 (liveness) while not_ready
+  ok: auth: no Bearer -> 401 JSON
+  ok: auth: 401 on an unread body closes the connection (no mis-parsed leftover, N-12)
+  ok: auth: wrong Bearer -> 401
+  ok: auth: LLMCTL_DECIDE_API_KEY in the environment is NOT accepted as the key
+  ok: auth: non-Bearer scheme -> 401
+  ok: auth: correct Bearer -> 200
+  ok: A: labels follow the pinned config.json id2label order ['entailment', 'neutral', 'contradiction']
+  ok: A: scores columns line up with labels (pair0 entails, pair1 contradicts)
+  ok: A: each score row is a float64 softmax summing to 1
+  ok: A: truncated flags present and false for short pairs
+  ok: A: model name + default max_tokens=512
+  ok: A: label_source says the order came from config.json (config:config.json)
+  ok: B: labels follow the pinned config.json id2label order ['contradiction', 'neutral', 'entailment']
+  ok: B: scores columns line up with labels (pair0 entails, pair1 contradicts)
+  ok: B: each score row is a float64 softmax summing to 1
+  ok: B: truncated flags present and false for short pairs
+  ok: B: model name + default max_tokens=512
+  ok: B: label_source says the order came from config.json (config:config.json)
+  ok: C: onnx/config.json BESIDE onnx/model.onnx beats the root config.json (N-21 precedence): config:onnx/config.json
+  ok: D: LABEL_n id2label is served but FLAGGED in label_source: generic-config:config.json (LABEL_n names carry no semantics)
+  ok: E: no config.json -> explicit LABEL_n fallback flagged 'none': none (no id2label found; labels are LABEL_n by logits count)
+  ok: A: graph declaring 2 inputs is fed exactly input_ids+attention_mask (token_type_ids not forced, D-17b)
+  ok: F: graph declaring token_type_ids is fed it too (BYO export served, D-17b)
+  ok: F: long premise -> truncated=[true], max_tokens=16
+  ok: F: sequence fed to the model is capped at max_tokens (16 <= 16)
+  ok: F: [CLS] ... [SEP] hyp [SEP] special tokens survive truncation
+  ok: F: all 5 HYPOTHESIS tokens (incl. its 'not' token) survive intact after the premise was cut
+  ok: F: the model saw the surviving hypothesis -> contradiction wins (hypothesis never truncated, D-01)
+  ok: F: truncated is reported PER PAIR
+  ok: F: hypothesis alone over max_tokens -> 422 JSON (hypothesis is never shortened)
+  ok: G: tokenizer.json path truncates ONLY the premise (only_first) and reports it
+  ok: G: tokenizer.json path: hypothesis too long -> 422
+  ok: L: LLMCTL_CTX_<PROFILE>=24 honoured as max_tokens (N-20)
+  ok: H: model healthy at load (smoke passed) before it starts failing
+  ok: H: NaN logits -> 500 JSON error, NaN never serialised (N-24)
+  ok: K2: logits count != id2label count -> 500 JSON (D-07, no SystemExit)
+  ok: R: backend exception -> 500 JSON (N-24)
+  ok: R: the server survives and answers the next request too
+  ok: 400: body is JSON array (D-08)
+  ok: 400: body is JSON string (D-08)
+  ok: 400: body is not JSON (D-08)
+  ok: 400: body is null (D-08)
+  ok: 400: body is number (D-08)
+  ok: 400: pairs missing
+  ok: 400: pairs empty
+  ok: 400: pairs not a list
+  ok: 400: pair not an object
+  ok: 400: premise missing
+  ok: 400: hypothesis empty
+  ok: 400: premise not a string
+  ok: unknown POST path -> 404 JSON
+  ok: unsupported method -> 405 JSON (not an HTML page)
+  ok: K: more pairs than LLMCTL_ONNX_MAX_PAIRS -> 413
+  ok: K: exactly MAX_PAIRS pairs -> 200 (boundary)
+  ok: K: body over the cap -> 413 BEFORE the body is read
+  ok: K: oversized-body rejection closes the connection
+  ok: K: chunked / no Content-Length -> 411 JSON
+  ok: keep-alive: a 400 on a fully-read body keeps the connection and the next request parses cleanly (N-12)
+  ok: half-sent headers: connection is closed by the socket timeout (1.0s, D-09)
+  ok: 16 concurrent requests over 8 threads -> all 200
+  ok: contract driver exit status
+  ok: contract driver reported no FAIL lines
+  ok: contract driver actually executed >= 60 checks (guards against a silently empty driver)
+  ok: key is NOT in /proc/<pid>/cmdline (only --api-key-file path is) (D-03)
+  ok: key is NOT in the runtime's environment either
+  ok: listening socket is bound to 127.0.0.1 only (/proc/net/tcp)
+  ok: no listener on 0.0.0.0/:: for the runtime port
+  ok: request text (premise) is never logged
+  ok: startup: load-time smoke inference logged
+  ok: startup: listening event logged to stdout
+  ok: not-ready runtime logs the failed smoke
+  ok: no onnx_server .pyc created under lib/ by running the runtime (D-25)
+  ok: production runtime carries no LLMCTL_ONNX_FAKE / BACKEND_* test seam
+  ok: runtime holds no typed-question logic (that lives in the Go gateway)
+  ok: constant-time check: wrong key rejected (401)
+  ok: constant-time check: hmac.compare_digest was used for the key (D-23)
+RESULT: PASS

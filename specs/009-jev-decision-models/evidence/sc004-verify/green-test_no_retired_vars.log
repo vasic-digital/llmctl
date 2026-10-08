@@ -1,0 +1,11 @@
+  ok: control: scanner sees a planted production hit
+  ok: C3-13: a production file under a directory merely NAMED tests/ (lib/tests/) is scanned
+  ok: C3-13: a production file under a directory merely NAMED build/ (scripts/build/) is scanned
+  ok: control: the TOP-LEVEL docs/ and tests/ are not part of the production scan
+  ok: C3-13 control: a file within its pinned mention budget passes
+  ok: C3-13: a NEW mention beyond the pinned budget in an allow-listed file FAILS
+  ok: C3-13: a file that is not allow-listed and does not explain the retirement FAILS
+  ok: C3-13 control: a doc line that says it is retired still passes
+  ok: no production file names a retired variable
+  ok: no other file names a retired variable without saying it is retired (allow-listed files within their pinned counts)
+RESULT: PASS

@@ -1,0 +1,5 @@
+--- FAIL: TestKeyIsReadFromTheEnvFileToo (0.00s)
+    cmd_ask_test.go:295: rc=4 llmctl-decide ask: no access key found: export LLMCTL_API_KEY or store it in /tmp/TestKeyIsReadFromTheEnvFileToo3216477334/001/absent.env (the gateway creates it on first start; see `llmctl key doctor`)
+FAIL
+FAIL	github.com/vasic-digital/llmctl/cmd/llmctl-decide	0.012s
+FAIL

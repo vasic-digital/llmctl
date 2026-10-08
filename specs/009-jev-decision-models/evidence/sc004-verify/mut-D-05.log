@@ -1,0 +1,5 @@
+--- FAIL: TestServeStopNeverSignalsUnrelatedProcess (0.03s)
+    cmd_serve_test.go:148: stop rc=0 out="llmctl decide gateway: stopped\n" err=""
+FAIL
+FAIL	github.com/vasic-digital/llmctl/cmd/llmctl-decide	0.041s
+FAIL

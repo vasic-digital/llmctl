@@ -1,0 +1,50 @@
+  ok: D-03: serve --api-key is refused (no key on argv, rc 2)
+  ok: D-03: the flag does not exist
+  ok: D-11/D-29: no production file reads a retired seam variable (lib bin cmd internal scripts)
+  ok: D-13: every file of every decide profile carries a pinned sha256
+  ok: D-22: decide-nli ships the sentencepiece model it loads
+  ok: D-22: decide-nli does not download an unused tokenizer.json
+  ok: D-24: 'auto <bogus>' lists decide among the capabilities
+  ok: D-24: the build usage line names onnx
+  ok: D-24: lib/decide.sh no longer says serve is coming 'when it lands'
+fatal: not a git repository (or any parent up to mount point /)
+Stopping at filesystem boundary (GIT_DISCOVERY_ACROSS_FILESYSTEM not set).
+  FAIL: D-25: __pycache__/*.pyc are gitignored
+    expected: 0
+    actual:   1
+fatal: not a git repository (or any parent up to mount point /)
+Stopping at filesystem boundary (GIT_DISCOVERY_ACROSS_FILESYSTEM not set).
+  ok: D-25: no compiled cache is tracked
+  ok: D-19b: a decision-gateway systemd unit body exists
+  ok: D-19b: the unit restarts the gateway
+  ok: N-05/N-16: LLMCTL_SEED=abc is refused at start with rc 2
+  ok: N-05/N-16: LLMCTL_SEED=abc leaves no traceback / panic
+  ok: N-05/N-16: the message names LLMCTL_SEED
+  ok: N-05/N-16: LLMCTL_DECIDE_MAX_OPTIONS=abc is refused at start with rc 2
+  ok: N-05/N-16: LLMCTL_DECIDE_MAX_OPTIONS=abc leaves no traceback / panic
+  ok: N-05/N-16: the message names LLMCTL_DECIDE_MAX_OPTIONS
+  ok: N-05/N-16: LLMCTL_DECIDE_PORT=abc is refused at start with rc 2
+  ok: N-05/N-16: LLMCTL_DECIDE_PORT=abc leaves no traceback / panic
+  ok: N-05/N-16: the message names LLMCTL_DECIDE_PORT
+  ok: N-16: decide ask with a malformed LLMCTL_DECIDE_MAX_OPTIONS: no traceback
+  ok: N-16: decide ask names the malformed variable
+  ok: N-16: decide ask with a malformed variable fails
+  ok: N-06: EOF at a prompt returns rc 2 and the calling shell keeps running
+  ok: N-06: EOF at a prompt explains itself
+  ok: N-07: decide status --jsno -> rc 2
+  ok: N-07: decide capacity --jsno -> rc 2
+  ok: N-08: docs/scripts/decide.md names only defined functions
+  ok: N-08: control - the doc scan sees decide_ask
+  ok: N-09: prompt text reaches stderr with piped stdin
+  ok: N-25: test_decide_download.sh / test_onnx_download.sh pick a free port (no PORT=<literal>)
+  ok: N-26: no SUCCESS assertion sits in a skipped-smoke context
+  ok: N-26: control - the scanner sees assert_file_contains
+  ok: N-28: CONFIRMED hash claims cite huggingface.co, not only hf-mirror.com
+  ok: N-27: scripts/doc_counts.sh --check reports no stale documented count
+  ok: N-27/G-084: host A counts only the host-independent assertions
+  ok: N-27/G-084: host A reports its 2 host-dependent assertions separately
+  ok: N-27/G-084: host A: a page claiming 4 matches
+  ok: N-27/G-084: host B (other branch, SKIP) yields the same count
+  ok: N-27/G-084: host B: the same page matches
+  ok: N-27/G-084: a wrong claim is stale even on a host that SKIPs (no env-dependent excuse)
+RESULT: FAIL (1 assertion failure(s))

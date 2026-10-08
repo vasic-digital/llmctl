@@ -1,0 +1,74 @@
+  ok: server A: /healthz becomes 200
+  ok: server B: /healthz becomes 200
+  ok: server C: /healthz becomes 200
+  ok: server D: /healthz becomes 200
+  ok: server E: /healthz becomes 200
+  ok: server F: /healthz becomes 200
+  ok: server G: /healthz becomes 200
+  ok: server H: /healthz becomes 200
+  ok: server I: /healthz becomes 200
+  ok: server J: /healthz becomes 200
+  ok: server K: /healthz becomes 200
+  ok: server K2: /healthz becomes 200
+  ok: server R: /healthz becomes 200
+  ok: server L: /healthz becomes 200
+  FAIL: F: [CLS] ... [SEP] hyp [SEP] special tokens survive truncation
+  ok: /healthz: unauthenticated, body is exactly {"status":"ok"} (no profile name)
+  ok: /readyz: ready after the load-time smoke ran a real stub inference
+  ok: legacy /health (profile-leaking, backend-less) no longer exists -> 404
+  ok: /readyz: I -> 503 not_ready when the load-time smoke inference fails
+  ok: /v1/score on a not-ready runtime -> 503 JSON, not a dropped connection
+  ok: /healthz stays 200 (liveness) while not_ready
+  ok: /readyz: J -> 503 not_ready when the load-time smoke inference fails
+  ok: /v1/score on a not-ready runtime -> 503 JSON, not a dropped connection
+  ok: /healthz stays 200 (liveness) while not_ready
+  ok: auth: no Bearer -> 401 JSON
+  ok: auth: 401 on an unread body closes the connection (no mis-parsed leftover, N-12)
+  ok: auth: wrong Bearer -> 401
+  ok: auth: LLMCTL_DECIDE_API_KEY in the environment is NOT accepted as the key
+  ok: auth: non-Bearer scheme -> 401
+  ok: auth: correct Bearer -> 200
+  ok: A: labels follow the pinned config.json id2label order ['entailment', 'neutral', 'contradiction']
+  ok: A: scores columns line up with labels (pair0 entails, pair1 contradicts)
+  ok: A: each score row is a float64 softmax summing to 1
+  ok: A: truncated flags present and false for short pairs
+  ok: A: model name + default max_tokens=512
+  ok: A: label_source says the order came from config.json (config:config.json)
+  ok: B: labels follow the pinned config.json id2label order ['contradiction', 'neutral', 'entailment']
+  ok: B: scores columns line up with labels (pair0 entails, pair1 contradicts)
+  ok: B: each score row is a float64 softmax summing to 1
+  ok: B: truncated flags present and false for short pairs
+  ok: B: model name + default max_tokens=512
+  ok: B: label_source says the order came from config.json (config:config.json)
+  ok: C: onnx/config.json BESIDE onnx/model.onnx beats the root config.json (N-21 precedence): config:onnx/config.json
+  ok: D: LABEL_n id2label is served but FLAGGED in label_source: generic-config:config.json (LABEL_n names carry no semantics)
+  ok: E: no config.json -> explicit LABEL_n fallback flagged 'none': none (no id2label found; labels are LABEL_n by logits count)
+  ok: A: graph declaring 2 inputs is fed exactly input_ids+attention_mask (token_type_ids not forced, D-17b)
+  ok: F: graph declaring token_type_ids is fed it too (BYO export served, D-17b)
+  ok: F: long premise -> truncated=[true], max_tokens=16
+  ok: F: sequence fed to the model is capped at max_tokens (16 <= 16)
+Traceback (most recent call last):
+  File "/tmp/claude-1000/-home-milosvasic-Projects-llmctl/4cea4116-8339-d4a8-4d6c-db1d21cb18d4/scratchpad/sc004/M/tests/fixtures/onnx_rt_contract.py", line 132, in <module>
+    check(7 in ids[ids.index(2) + 1:] and len(ids) - ids.index(2) - 2 == 5,
+                   ~~~~~~~~~^^^
+ValueError: list.index(x): x not in list
+  FAIL: contract driver exit status
+    expected: 0
+    actual:   1
+  FAIL: contract driver reported no FAIL lines
+    expected: 0
+    actual:   1
+  ok: key is NOT in /proc/<pid>/cmdline (only --api-key-file path is) (D-03)
+  ok: key is NOT in the runtime's environment either
+  ok: listening socket is bound to 127.0.0.1 only (/proc/net/tcp)
+  ok: no listener on 0.0.0.0/:: for the runtime port
+  ok: request text (premise) is never logged
+  ok: startup: load-time smoke inference logged
+  ok: startup: listening event logged to stdout
+  ok: not-ready runtime logs the failed smoke
+  ok: no onnx_server .pyc created under lib/ by running the runtime (D-25)
+  ok: production runtime carries no LLMCTL_ONNX_FAKE / BACKEND_* test seam
+  ok: runtime holds no typed-question logic (that lives in the Go gateway)
+  ok: constant-time check: wrong key rejected (401)
+  ok: constant-time check: hmac.compare_digest was used for the key (D-23)
+RESULT: FAIL (2 assertion failure(s))

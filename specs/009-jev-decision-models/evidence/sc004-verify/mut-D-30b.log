@@ -1,0 +1,197 @@
+  FAIL: D-30 RED scenario now NOT-REPRODUCED (exit 0)
+    expected: 0
+    actual:   2
+  FAIL: RED scenario control needle found (instrument not blind)
+    needle not found: control needle found in both archives
+    haystack: D-30           ERROR          build_archive.sh failed: bash: /tmp/red-d30-LCANNZ/llmctl-copy/scripts/release/build_archive.sh: No such file or directory
+build_archive: unused allow entry: submodules/llama.cpp/docs/development/llama-star/idea-arch.key (names no tracked file and no path in the shipped history)
+build_archive: unused allow entry: vendor/llama.cpp/docs/development/llama-star/idea-arch.key (names no tracked file and no path in the shipped history)
+build_archive: unused allow entry: submodules/llama.cpp/docs/llama-star/idea-arch.key (names no tracked file and no path in the shipped history)
+build_archive: unused allow entry: submodules/containers/tests/configs/.env.docker (names no tracked file and no path in the shipped history)
+build_archive: unused allow entry: submodules/containers/tests/configs/.env.local (names no tracked file and no path in the shipped history)
+build_archive: unused allow entry: submodules/containers/tests/configs/.env.podman (names no tracked file and no path in the shipped history)
+build_archive: unused allow entry: submodules/containers/tests/configs/.env.remote-cluster (names no tracked file and no path in the shipped history)
+build_archive: unused allow entry: submodules/containers/tests/configs/.env.remote-single (names no tracked file and no path in the shipped history)
+build_archive: unused allow entry: submodules/containers/tests/configs/.env.scheduler-roundrobin (names no tracked file and no path in the shipped history)
+  ok: tracked file present in both archives: tracked.txt
+  ok: tracked file present in both archives: sub/sub_file.txt
+  ok: tracked file present in both archives: .gitignore
+  FAIL: planted untracked secret absent from both archives: .env
+    expected: 1
+    actual:   0
+  FAIL: planted untracked secret absent from both archives: cert/ca/ca.key
+    expected: 1
+    actual:   0
+  FAIL: planted untracked secret absent from both archives: decide/log.key
+    expected: 1
+    actual:   0
+  FAIL: planted untracked secret absent from both archives: sub/sub_secret.pem
+    expected: 1
+    actual:   0
+  ok: tracked secret makes build_archive exit non-zero
+  ok: no tar.gz left behind after secret detection
+  ok: no zip left behind after secret detection
+  ok: failure names the offending path
+  ok: MUTATION: old unfiltered script leaks planted .env (test can fail)
+  ok: MUTATION: old unfiltered script leaks cert/ca/ca.key (test can fail)
+  ok: denied: .env
+  ok: denied: app/.env
+  ok: denied: .ENV
+  ok: denied: x/.Env.local
+  ok: denied: .env.production
+  ok: denied: a/b/.env.staging
+  ok: denied: server.key
+  ok: denied: x/ca.KEY
+  ok: denied: tls/server.pem
+  ok: denied: dir/Cert.PEM
+  ok: denied: k/store.p12
+  ok: denied: k/store.pfx
+  ok: denied: k/app.jks
+  ok: denied: k/app.keystore
+  ok: denied: id_rsa
+  ok: denied: home/.ssh/id_rsa.pub
+  ok: denied: id_ed25519
+  ok: denied: x/id_ed25519_sk
+  ok: denied: id_ecdsa
+  ok: denied: id_dsa
+  ok: denied: home/.netrc
+  ok: denied: .pgpass
+  ok: denied: x/.PGPASS
+  ok: denied: credentials.json
+  ok: denied: gcp/credentials-prod.json
+  ok: denied: cert/ca.crt
+  ok: denied: x/cert/ca/ca.crt
+  ok: denied: tests/fixtures/cert/ca.key
+  ok: denied: submodules/a/b/docs/x.pem
+  ok: denied: submodules/llama.cpp/vendor/docs/.env
+  ok: denied: tests/fixtures/real/.env
+  ok: denied: tests/fixtures/cert/ca.key
+  ok: denied: submodules/x/docs/y/z.key
+  ok: denied: secrets/creds.p12
+  ok: allowed (control, no false positive): .env.example
+  ok: allowed (control, no false positive): x/.env.example
+  ok: allowed (control, no false positive): README.md
+  ok: allowed (control, no false positive): lib/keyring.sh
+  ok: allowed (control, no false positive): docs/monkey.md
+  ok: allowed (control, no false positive): src/keystone.go
+  ok: allowed (control, no false positive): certificate.md
+  ok: allowed (control, no false positive): tests/test_certs.sh
+  ok: allowed (control, no false positive): x/.git/config
+  ok: allowed (control, no false positive): submodules/llama.cpp/docs/development/llama-star/idea-arch.key
+  ok: allowed (control, no false positive): submodules/containers/tests/configs/.env.docker
+  ok: a sibling of an exempted file is NOT exempt (exact-path exemption, no subtree)
+  ok: a glob entry in an allow manifest is refused
+  ok: ...with the reason
+  ok: a path listed EXACTLY in a manifest is exempt
+  ok: ...and its unlisted neighbour is not
+  ok: scan_archive flags .env
+  ok: scan_archive names .env
+  ok: scan_archive flags x/.ENV.local
+  ok: scan_archive names x/.ENV.local
+  ok: scan_archive flags a.key
+  ok: scan_archive names a.key
+  ok: scan_archive flags b.PEM
+  ok: scan_archive names b.PEM
+  ok: scan_archive flags c.p12
+  ok: scan_archive names c.p12
+  ok: scan_archive flags d.pfx
+  ok: scan_archive names d.pfx
+  ok: scan_archive flags e.jks
+  ok: scan_archive names e.jks
+  ok: scan_archive flags f.keystore
+  ok: scan_archive names f.keystore
+  ok: scan_archive flags id_rsa
+  ok: scan_archive names id_rsa
+  ok: scan_archive flags id_ed25519
+  ok: scan_archive names id_ed25519
+  ok: scan_archive flags .netrc
+  ok: scan_archive names .netrc
+  ok: scan_archive flags .pgpass
+  ok: scan_archive names .pgpass
+  ok: scan_archive flags credentials.json
+  ok: scan_archive names credentials.json
+  ok: scan_archive flags cert/ca.crt
+  ok: scan_archive names cert/ca.crt
+  ok: scan_archive passes a clean archive (control)
+  ok: scan_archive flags a PEM private-key block in a content file
+  ok: ...but a source line merely QUOTING the header is not a key block
+  ok: C2-16: a secret path inside a NESTED archive is flagged
+  ok: C2-16: ...naming the nested zip
+  ok: C2-16: ...and the nested tar.gz
+  ok: C2-16: a PEM private-key block inside a NESTED archive is flagged
+  ok: C2-16: a clean nested archive passes (control: not a blanket refusal)
+  ok: C2-16: a nested archive over the size bound FAILS CLOSED
+  ok: C2-16: ...with the reason
+  ok: C2-16: a nested archive over the depth bound FAILS CLOSED
+  ok: C2-16: an EXACT allow entry is the explicit opt-out for a nested archive
+  ok: scan_archive flags a shipped stash ref
+  ok: scan_archive flags a git config remote with embedded credentials
+  ok: C3-05: a nested archive whose single top directory IS '.env/' is flagged (top not stripped away)
+  ok: C3-05: ...naming the unstripped path
+  ok: C3-05: a nested zip whose single top directory is 'cert/' is flagged
+  ok: C3-15/S2: a nested archive WITHOUT a common top (a top-level .env) is flagged (strip only for a single top)
+  ok: C3-15/S2: two tops, a/.env flagged
+  ok: C3-05 control: a clean nested archive with a single top passes
+  ok: C3-05: a plain allow entry does NOT exempt that path inside a nested archive
+  ok: C3-05: the qualified '<outer>!<inner>' entry exempts exactly that nested path
+  ok: C3-05: ...and a qualified entry for a DIFFERENT outer path exempts nothing
+  ok: C3-05 fixture: the bomb is tiny compressed (<1 MiB)
+  ok: C3-05: a nested archive inflating beyond the decompressed budget FAILS CLOSED
+  ok: C3-05: ...with the reason
+  ok: C3-05: ...and refuses quickly (streamed budget, not a full inflate)
+  ok: C3-05 control: the same 64 MiB nested archive is accepted under the default budget (not a blanket refusal)
+build_archive: unused allow entry: submodules/llama.cpp/docs/development/llama-star/idea-arch.key (names no tracked file and no path in the shipped history)
+build_archive: unused allow entry: vendor/llama.cpp/docs/development/llama-star/idea-arch.key (names no tracked file and no path in the shipped history)
+build_archive: unused allow entry: submodules/llama.cpp/docs/llama-star/idea-arch.key (names no tracked file and no path in the shipped history)
+build_archive: unused allow entry: submodules/containers/tests/configs/.env.docker (names no tracked file and no path in the shipped history)
+build_archive: unused allow entry: submodules/containers/tests/configs/.env.local (names no tracked file and no path in the shipped history)
+build_archive: unused allow entry: submodules/containers/tests/configs/.env.podman (names no tracked file and no path in the shipped history)
+build_archive: unused allow entry: submodules/containers/tests/configs/.env.remote-cluster (names no tracked file and no path in the shipped history)
+build_archive: unused allow entry: submodules/containers/tests/configs/.env.remote-single (names no tracked file and no path in the shipped history)
+build_archive: unused allow entry: submodules/containers/tests/configs/.env.scheduler-roundrobin (names no tracked file and no path in the shipped history)
+  ok: tar: no stash in the shipped .git
+  ok: tar: no refs/stash
+  ok: tar: the stashed .env BLOB is not in the object store
+  ok: tar: the stash commit is not in the object store
+  ok: tar: the local-only branch commit is not in the object store
+  ok: tar: the local-only branch is not shipped
+  ok: tar: no remote configured
+  ok: tar: no token / credential helper anywhere under .git
+  ok: tar: no hook shipped
+  ok: tar: no reflog shipped
+  ok: tar: the SUBMODULE's stashed .env blob is not shipped
+  ok: tar: no submodule remote
+  ok: tar: the release commit itself is present (control)
+  ok: tar: the submodule release commit is present (control)
+  ok: tar: the working-tree file is shipped (control)
+  ok: zip: no stash in the shipped .git
+  ok: zip: no refs/stash
+  ok: zip: the stashed .env BLOB is not in the object store
+  ok: zip: the stash commit is not in the object store
+  ok: zip: the local-only branch commit is not in the object store
+  ok: zip: the local-only branch is not shipped
+  ok: zip: no remote configured
+  ok: zip: no token / credential helper anywhere under .git
+  ok: zip: no hook shipped
+  ok: zip: no reflog shipped
+  ok: zip: the SUBMODULE's stashed .env blob is not shipped
+  ok: zip: no submodule remote
+  ok: zip: the release commit itself is present (control)
+  ok: zip: the submodule release commit is present (control)
+  ok: zip: the working-tree file is shipped (control)
+  ok: C2-05 control: a repo whose history only ever held benign deleted files builds
+  ok: C2-05: a committed-then-deleted secret in the shipped history makes build_archive fail
+  ok: C2-05: ...naming the historical path
+  ok: C2-05: ...leaving no archive behind
+  ok: C2-05: an EXACT allow entry exempts that historical path
+  ok: C2-05: a deleted secret in a SUBMODULE's history fails the build
+  ok: C2-05: ...named with the full repo-relative path
+  ok: C3-03: a newline-named key committed then deleted fails the build
+  ok: C3-03: ...saying the historical path holds a newline
+  ok: C3-03: ...leaving no archive behind
+  ok: C3-04: a deleted secret PATH whose blob is identical to another path's is still judged
+  ok: C3-04: ...naming the duplicate-content path
+  ok: C3-04: the exact allow entry for the duplicate-content historical path is consulted and exempts it
+  ok: C3-04: an allow entry matching no tree/history path is reported
+  ok: C3-04: ...but a consulted entry is not reported as unused
+RESULT: FAIL (6 assertion failure(s))
