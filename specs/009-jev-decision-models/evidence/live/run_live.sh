@@ -132,7 +132,9 @@ rnd = random.Random(7); dense = "".join(rnd.choice("0123456789abcdef") for _ in 
 edge("state_6500_chars", dict(req, state=big[:6500]))
 edge("state_8000_chars", dict(req, state=big[:8000]))
 edge("state_9000_chars_over_gateway_cap", dict(req, state=big[:9000]))
-edge("state_dense_7500_hex_chars_token_overflow", dict(req, state=dense))
+# expected: valid = 200 within the deadline OR 502 + x-llmctl-decide-reason: deadline_exceeded (slow prefill of an input that fits the ctx);
+# 422 only where the estimate exceeds the profile budget (small-ctx profiles); never a crash
+edge("state_dense_7500_hex_chars_slow_prefill", dict(req, state=dense))
 edge("twenty_options", {"model": prof, "state": "Where does this belong?", "questions": {"c": {"type": "choice", "instructions": "Pick the department", "criteria": {("opt%02d" % i): ("department number %d" % i) for i in range(20)}}}})
 res["note"] = "state text above is synthetic filler; no golden-set text; keys never recorded"
 open(out + "/determinism-edges.json", "w").write(json.dumps(res, indent=1))

@@ -160,6 +160,16 @@ rejected with `422 validation_failed` by default.** With the opt-in `LLMCTL_DECI
 shortened (head and tail kept) and the response carries `x-llmctl-decide-truncated: true`; the header is also set when an
 encoder runtime reports that it truncated a premise (opt-in; otherwise 422). Question and option text are never shortened.
 
+### Slow prefill and the deadline
+
+`422 validation_failed` is only for **over-budget input** (the token estimate exceeds what the serving instance's context
+allows). An input that *fits* the context but whose prefill takes longer than the end-to-end deadline
+(`LLMCTL_DECIDE_TIMEOUT`, default 8 s - e.g. several thousand dense hex characters on a large-context profile) is answered
+`502 backend_failed` with the additive headers `x-llmctl-decide-reason: deadline_exceeded` and
+`x-llmctl-decide-deadline-ms: <deadline>`; any other 502 carries `x-llmctl-decide-reason: engine_error`. The error body
+is unchanged. The deadline is a limit, not a guarantee that an input within the context budget is accepted in time:
+send a smaller state, use a faster profile, or raise the deadline.
+
 ## Concurrency and limits
 
 `LLMCTL_DECIDE_CONCURRENCY` (4) simultaneous engine calls with a bounded `LLMCTL_DECIDE_QUEUE` (64) -> `529 overloaded`

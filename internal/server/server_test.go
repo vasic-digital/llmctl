@@ -1367,3 +1367,40 @@ func TestInstanceHeaderIsSetOnlyWhenTheBackendNotedAnInstance(t *testing.T) {
 		t.Fatalf("instance header = %q, want engine-7.b", got)
 	}
 }
+
+// A 502 caused by the gateway's own end-to-end deadline is distinguishable (additive headers; the
+// error body schema is closed and unchanged) from an engine failure.
+func TestDeadlineExpiryIs502WithReasonHeaders(t *testing.T) {
+	h := startServer(t, withLimits(func(l *Limits) { l.Timeout = 200 * time.Millisecond }))
+	h.be.setDecide(func(ctx context.Context, r *contract.ParsedRequest) ([]contract.NamedAnswer, contract.Usage, error) {
+		<-ctx.Done()
+		return nil, contract.Usage{}, ctx.Err()
+	})
+	r := h.do(h.client(), "POST", "/v1/systemone", sampleBody, nil)
+	if r.status != 502 || r.errType() != "backend_failed" {
+		t.Fatalf("%d %s", r.status, r.body)
+	}
+	if got := r.hdr.Get("x-llmctl-decide-reason"); got != "deadline_exceeded" {
+		t.Errorf("reason header = %q, want deadline_exceeded", got)
+	}
+	if got := r.hdr.Get("x-llmctl-decide-deadline-ms"); got != "200" {
+		t.Errorf("deadline header = %q, want 200", got)
+	}
+}
+
+func TestEngineFailureIs502WithEngineErrorReason(t *testing.T) {
+	h := startServer(t)
+	h.be.setDecide(func(ctx context.Context, r *contract.ParsedRequest) ([]contract.NamedAnswer, contract.Usage, error) {
+		return nil, contract.Usage{}, errors.New("connection refused")
+	})
+	r := h.do(h.client(), "POST", "/v1/systemone", sampleBody, nil)
+	if r.status != 502 {
+		t.Fatalf("%d %s", r.status, r.body)
+	}
+	if got := r.hdr.Get("x-llmctl-decide-reason"); got != "engine_error" {
+		t.Errorf("reason header = %q, want engine_error", got)
+	}
+	if r.hdr.Get("x-llmctl-decide-deadline-ms") != "" {
+		t.Errorf("deadline header must be absent for an engine failure")
+	}
+}

@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -557,11 +558,21 @@ func (s *Server) handleSystemOne(c *gin.Context) {
 		c.Set(ckDecAns, answers)
 	}
 	if err != nil {
-		if ce := asContractError(err); ce != nil {
-			s.fail(c, ce)
-		} else {
-			s.fail(c, mustTransport(502, contract.TransportOptions{})) // generic: engine text never reaches the client
+		ce := asContractError(err)
+		if ce == nil {
+			ce = mustTransport(502, contract.TransportOptions{}) // generic: engine text never reaches the client
 		}
+		if ce.Status == http.StatusBadGateway {
+			// additive diagnosis (the error body schema is closed): was it the gateway's own end-to-end
+			// deadline, or the engine? A slow-but-valid prefill is the former; it is not an over-budget 422.
+			if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+				c.Writer.Header().Set("x-llmctl-decide-reason", "deadline_exceeded")
+				c.Writer.Header().Set("x-llmctl-decide-deadline-ms", strconv.FormatInt(s.lim.Timeout.Milliseconds(), 10))
+			} else {
+				c.Writer.Header().Set("x-llmctl-decide-reason", "engine_error")
+			}
+		}
+		s.fail(c, ce)
 		return
 	}
 	if mr, ok := s.cfg.Backend.(MaturityReporter); ok {
