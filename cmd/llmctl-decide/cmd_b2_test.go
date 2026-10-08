@@ -13,23 +13,27 @@ func TestCLIContractMarksUnshippedCommandsAsPlanned(t *testing.T) {
 		t.Fatal(err)
 	}
 	doc := string(b)
-	for _, name := range []string{"scale"} {
-		if _, shipped := commands[name]; shipped {
-			t.Errorf("%q is now a registered subcommand: update the planned marker in cli.md", name)
-			continue
-		}
-		found := false
-		for _, line := range strings.Split(doc, "\n") {
-			if (strings.HasPrefix(line, "## ") || strings.HasPrefix(line, "|")) && strings.Contains(line, name) && !strings.Contains(line, "Delta") {
-				found = true
-				if !strings.Contains(line, "planned, not in 3.1.0") {
-					t.Errorf("cli.md documents %q as available without marking it \"planned, not in 3.1.0\": %q", name, line)
-				}
+	// `scale` shipped in 3.1.0 as a shell front-end command (lib/decide.sh -> sched_decision_scale),
+	// not as a Go subcommand: it must be dispatched by the front-end, and cli.md must no longer call
+	// it planned. (If it were planned again this test must be flipped back, never silently passed.)
+	front, err := os.ReadFile("../../lib/decide.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(front), "scale)       decide_scale") && !strings.Contains(string(front), "scale) decide_scale") {
+		t.Errorf("cli.md documents \"scale\" as shipped but lib/decide.sh does not dispatch it")
+	}
+	scaleDocumented := false
+	for _, line := range strings.Split(doc, "\n") {
+		if (strings.HasPrefix(line, "## ") || strings.HasPrefix(line, "|")) && strings.Contains(line, "scale") && !strings.Contains(line, "Delta") {
+			scaleDocumented = true
+			if strings.Contains(line, "planned, not in 3.1.0") {
+				t.Errorf("\"scale\" is implemented (lib/decide.sh) but cli.md still marks it planned: %q", line)
 			}
 		}
-		if !found {
-			t.Errorf("cli.md no longer mentions %q", name)
-		}
+	}
+	if !scaleDocumented {
+		t.Errorf("cli.md no longer mentions \"scale\"")
 	}
 	// OD-23: calibrate, probe-order and completions are implemented; cli.md must say so (no
 	// "planned" marker on a line about them) and the binary must have them.
