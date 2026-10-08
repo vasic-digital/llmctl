@@ -1,0 +1,8 @@
+date=2026-10-08T17:13:29Z host=anton task=live-cpu-mode-vram-2026-10-08
+cmd: llmctl start decide-kev-4b -> started (mode=cpu, port=8105, reserved 3916 MiB RAM + 0 MiB VRAM) with --n-gpu-layers 0 --ctx-size 8192 --batch-size 4096 --ubatch-size 4096
+nvidia-smi before start: 7343 MiB / 12288 MiB (vision pid 3160295 = 3752 MiB, external llama-server pid 6608 = 3069 MiB)
+nvidia-smi after start+20s: 11809 MiB / 12288 MiB
+6608, 3069 MiB, /home/milosvasic/opt/llamacpp_gpu/current/llama-server
+3160295, 3752 MiB, /home/milosvasic/Projects/llmctl/submodules/llama.cpp/build/bin/llama-server
+1842432, 4460 MiB, /home/milosvasic/Projects/llmctl/submodules/llama.cpp/build/bin/llama-server
+=> engine pid 1842432 holds 4460 MiB VRAM in cpu mode (-ngl 0); scheduler booked 0 MiB VRAM

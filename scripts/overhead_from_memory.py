@@ -27,6 +27,8 @@ Evidence formats:
   memory-summary-json  nezha/<profile>/memory-summary.json  {"ctx", "model_bytes", "memory": [{"VmHWM_kB": ..}, ..]}
   ctx-peak-txt         ctx-peak-memory-experiment.txt       "model=<file> ctx=<N> idleHWM_kB=.. peakHWM_kB=.."
   pid-vram-txt         <profile>/memory.txt                 "vram(MiB) pid=<pid>: <MiB>" lines (max taken)
+  cpu-mode-apps-txt    <profile>/cpu-mode-vram-*.txt        nvidia-smi "<pid>, <MiB> MiB, <path>" rows + one "=> engine pid P holds N MiB" line
+                                                            (the named pid's row is the authority; a mismatch is refused)
 
 Optional gpu-mode half (live run 2026-10-08; see derive_gpu): profiles.<name>.memory.gpu =
   {"status": "measured", "format": "gpu-memory-txt", "evidence": "<live-models/<profile>/memory.txt>", "host", "ctx"}
@@ -82,6 +84,27 @@ def parse_pid_vram(text):
     return max(v)
 
 
+def parse_cpu_mode_apps(text):
+    """Peak VRAM of a cpu-mode (-ngl 0) engine from an nvidia-smi compute-apps transcript (G-138).
+
+    The transcript lists "<pid>, <N> MiB, <path>" rows (several processes may share the same binary path, so the
+    path cannot name the engine) and ONE conclusion line "=> engine pid <P> holds <N> MiB VRAM ...".  The row of the
+    pid the conclusion names is the authority; a conclusion that disagrees with its row, or names a pid with no row,
+    is refused rather than reconciled."""
+    m = re.search(r"^=>\s*engine pid\s+(\d+)\s+holds\s+(\d+)\s*MiB\b", text, re.M)
+    if not m:
+        raise ValueError("no '=> engine pid P holds N MiB' conclusion line in the evidence")
+    pid, claimed = m.group(1), int(m.group(2))
+    rows = {}
+    for rp, rmib in re.findall(r"^(\d+),\s*(\d+)\s*MiB,", text, re.M):
+        rows[rp] = max(rows.get(rp, 0), int(rmib))
+    if pid not in rows:
+        raise ValueError("the conclusion names pid %s but the listing has no row for it" % pid)
+    if rows[pid] != claimed:
+        raise ValueError("the conclusion claims %d MiB for pid %s but its listing row says %d MiB" % (claimed, pid, rows[pid]))
+    return rows[pid]
+
+
 def is_decision(p):
     return "decide" in (p.get("capability") or [])
 
@@ -128,9 +151,13 @@ def derive(cat, root):
             defaults["window_tokens"] = ctx
             ram["peak_hwm_mib"], ram["weights_mib"] = _round1(peak), _round1(weights)
         if vram.get("status") == "measured":
-            if vram.get("format") != "pid-vram-txt":
-                raise ValueError("%s: unknown vram evidence format %r" % (name, vram.get("format")))
-            peak_v = parse_pid_vram(_read(root, vram["evidence"]))
+            vfmt = vram.get("format")
+            if vfmt == "pid-vram-txt":
+                peak_v = parse_pid_vram(_read(root, vram["evidence"]))
+            elif vfmt == "cpu-mode-apps-txt":
+                peak_v = parse_cpu_mode_apps(_read(root, vram["evidence"]))
+            else:
+                raise ValueError("%s: unknown vram evidence format %r" % (name, vfmt))
             defaults["overhead_vram_mb"] = vram_overhead(peak_v)
             vram["peak_mib"] = peak_v
         if mem:

@@ -2078,6 +2078,7 @@
         "ngl": 99,
         "parallel": 1,
         "flash_attn": "auto",
+        "overhead_vram_mb": 4906,
         "gpu_vram_mb": 7328,
         "gpu_ram_mb": 4899
       },
@@ -2138,8 +2139,11 @@
           "reason": "NEZHA run pending"
         },
         "vram": {
-          "status": "unmeasured",
-          "reason": "measured only on a CPU-only host (no CUDA build, so no offload); a CUDA host with enough free RAM to load it was not available (the scheduler refused it, NATIVE-REPORT.md section 3)"
+          "status": "measured",
+          "format": "cpu-mode-apps-txt",
+          "evidence": "specs/009-jev-decision-models/evidence/live/decide-kev-4b/cpu-mode-vram-live-2026-10-08.txt",
+          "host": "anton",
+          "peak_mib": 4460
         },
         "gpu": {
           "status": "measured",

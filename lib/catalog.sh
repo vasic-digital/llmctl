@@ -509,6 +509,24 @@ def gpu_booking(name, p, size_mb, ctx, par, kv_type, kv_est):
                 "prov": "lower-bound", "evidence": g.get("evidence"), "cbuf": cb}
     return {"vram": size_mb + kv_est, "ram": 2048, "prov": "estimated", "evidence": None, "cbuf": None}
 
+def cpu_offload_vram(name, p, dfl, g, ovh_v):
+    """cpu mode (-ngl 0) VRAM booking on a host WITH a GPU -> (MiB, provenance).  A CUDA build offloads large-batch
+    ops even at -ngl 0 (G-138: kev-4b held 4460 MiB while 0 was booked).  Order of authority:
+      measured          memory.vram measured (defaults.overhead_vram_mb: 1.10 x the engine pid's peak in cpu mode);
+      floor             a recorded compute-buffer lower bound (kev-9b) - a floor, the true peak is UNKNOWN;
+      gpu-peak-ceiling  cpu-mode VRAM UNMEASURED but the gpu-mode peak at this ctx IS: booked as a CEILING, because
+                        the cpu-mode offload was below the gpu-mode peak in all 4 profiles measured in both modes
+                        (julia 176<212, laya 232<574, kev-08b 2382<2900, kev-4b 4460<7328).  Not a measurement;
+      unmeasured        nothing recorded: 0 is booked as before and the profile stays UNKNOWN (never a made-up number).
+    The same value feeds footprint() and the decision-capacity report."""
+    if (p.get("memory") or {}).get("vram", {}).get("status") == "measured" and ovh_v >= (g["cbuf"] or 0):
+        return ovh_v, "measured"
+    if g["cbuf"]:
+        return max(ovh_v, g["cbuf"]), "floor"
+    if g["prov"] == "measured":
+        return g["vram"], "gpu-peak-ceiling"
+    return ovh_v, "unmeasured"
+
 def footprint(name, p):
     """-> dict(mode, ram_mb, vram_mb, storage_mb, fits) or None when unfit."""
     size_mb = sum((f.get("size") or 0) for f in p["files"]) // 1048576
@@ -550,7 +568,9 @@ def footprint(name, p):
     ovh_v = overhead_field(name, dfl, "overhead_vram_mb")
     kv += ovh
     g = gpu_booking(name, p, size_mb, ctx, par, kv_type, kv)
-    gfields = {"gpu_vram_mb": g["vram"], "vram_provenance": g["prov"], "vram_evidence": g["evidence"]}
+    cpu_vram, cpu_prov = cpu_offload_vram(name, p, dfl, g, ovh_v) if vram_budget > 0 else (0, "n/a")
+    gfields = {"gpu_vram_mb": g["vram"], "vram_provenance": g["prov"], "vram_evidence": g["evidence"],
+               "cpu_vram_provenance": cpu_prov}
     if vram_budget > 0 and g["vram"] <= vram_budget and g["ram"] <= ram_budget:
         return dict({"mode": "gpu", "ram_mb": g["ram"], "vram_mb": g["vram"],
                      "storage_mb": size_mb, "ctx": ctx,
@@ -563,7 +583,6 @@ def footprint(name, p):
     # (mode none) rather than silently booking 0.  When the offload is unmeasured but a compute-buffer lower bound is
     # recorded (kev-9b), that floor is booked instead of 0 - conservative: kev-08b's measured cpu-mode offload
     # (2382 MiB) exceeds its gpu-mode VRAM above weights (2900 - 774), i.e. the offload holds the compute buffer too.
-    cpu_vram = max(ovh_v, g["cbuf"] or 0) if vram_budget > 0 else 0
     if size_mb + kv <= ram_budget and cpu_vram <= vram_budget:
         return dict({"mode": "cpu", "ram_mb": size_mb + kv, "vram_mb": cpu_vram,
                      "storage_mb": size_mb, "ctx": ctx, "ngl": 0, "parallel": par,
@@ -685,7 +704,7 @@ for name in sorted(catalog["profiles"].keys()):
         gpu_ram_mb, gpu_vram_mb = dg["ram"], dg["vram"]
         cpu_ram_mb = size_mb + dkv
         # cpu placement on a host with a GPU also holds the measured offload VRAM (same rule as footprint())
-        cpu_vram_mb = max(int(dfl.get("overhead_vram_mb", 0)), dg["cbuf"] or 0) if vram_budget > 0 else 0
+        cpu_vram_mb = cpu_offload_vram(name, p, dfl, dg, int(dfl.get("overhead_vram_mb", 0)))[0] if vram_budget > 0 else 0
     inst_gpu = 0
     inst_cpu = 0
     reason = ""
@@ -791,12 +810,16 @@ for name in sorted(plan["profiles"], key=lambda n: plan["profiles"][n]["port"]):
         verdict, why = "FITS", "recommended"
         if p.get("unknown_overhead"):
             why += " (overhead UNKNOWN (%s): booked 0 until measured)" % ",".join(p["unknown_overhead"])
+        if p.get("mode") == "cpu" and p.get("cpu_vram_provenance") not in (None, "n/a"):
+            why += " (cpu-mode VRAM %s)" % p["cpu_vram_provenance"]
         if "unknown_overhead" in p and p.get("mode") == "gpu" and p.get("vram_provenance") == "estimated":
             why += " (VRAM estimated: engine compute buffer UNKNOWN, not measured on a GPU)"
     elif not p["tier_ok"]:
         verdict, why = "GATED", "needs min_tier=%s" % p["min_tier"]
     else:
         verdict, why = "NO-FIT", "footprint exceeds RAM and VRAM budgets"
+        if p.get("mode") == "none" and p.get("cpu_vram_provenance") not in (None, "n/a"):
+            why += " (cpu-mode VRAM %s)" % p["cpu_vram_provenance"]
     print("%-16s %-6s %-9s %-8s %-8s %-6s %-5s %-4s %s" %
           (name, p["port"], verdict, p["mode"], p["ram_mb"], p["vram_mb"],
            p["ctx"], p["ngl"], why))

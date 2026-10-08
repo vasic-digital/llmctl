@@ -161,8 +161,11 @@ that bounds it (1024 / 1024 / 2048 tokens, so a longer state is answered `422`);
 `decide-kev-9b` and `decide-lev` carry **no measured overhead yet** - they could not be admitted on the
 test host, so their reservation is weights + the flat KV rule only and is likely an under-estimate.
 A "cpu mode" (`-ngl 0`) placement is not VRAM-free either: a CUDA build offloads large-batch ops to the GPU
-(`--op-offload`), and the planner books no VRAM for it - measured 0.1-0.2 GiB for Julia-1/Laya and 2.3 GiB for
-Kev-0.8B (`evidence/live/op-offload-vram-experiment.txt`; `--no-op-offload` removes it but is ~15x slower).
+(`--op-offload`). On a host with a GPU the planner books that VRAM (measured 0.1-0.2 GiB for Julia-1/Laya, 2.3 GiB for
+Kev-0.8B, 4.4 GiB for Kev-4B: `evidence/live/op-offload-vram-experiment.txt`,
+`evidence/live/decide-kev-4b/cpu-mode-vram-live-2026-10-08.txt`; `--no-op-offload` removes it but is ~15x slower); a profile
+whose cpu-mode VRAM is unmeasured books its gpu-mode peak as a ceiling when that is known, else 0 and is reported UNKNOWN
+(see `docs/hardware-tiers.md`, G-138).
 
 **Live results** (this host: Ryzen/RTX 3060 12 GB, ~5 GB RAM available, `evidence/live/NATIVE-REPORT.md`):
 the scheduler admitted `decide-julia` and `decide-laya` (cpu mode); `decide-kev-08b` ran once under the
