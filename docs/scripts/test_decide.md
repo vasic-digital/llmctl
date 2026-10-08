@@ -18,7 +18,7 @@ tier, so a stub is allowed: arguments pass through verbatim and every exit code
 capacity` / `decide status`, and the catalog engine classes. The prompt
 template, forged-option neutralisation and the exact shaping math have their
 own Go tests (see "Related scripts"); the real client against a real TLS
-gateway is `tests/test_decide_cli.sh`. Captured 2026-10-07: **71 passing
+gateway is `tests/test_decide_cli.sh`. Captured 2026-10-07: **73 passing
 assertions, RESULT: PASS** (no network, no GPU, no real model required; needs
 `go`).
 

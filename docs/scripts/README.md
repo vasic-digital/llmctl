@@ -73,9 +73,12 @@ One page per script, library or test suite (Constitution 11.4.18). Test pages st
 | [test_decide_download](test_decide_download.md) | Overview |
 | [test_decide_security_mutation](test_decide_security_mutation.md) | Overview |
 | [test_decide_service](test_decide_service.md) | Overview |
+| [test_decide_scale](test_decide_scale.md) | Overview |
 | [test_decision_capacity](test_decision_capacity.md) | Overview |
 | [test_determinism](test_determinism.md) | Overview |
 | [test_doc_reachability](test_doc_reachability.md) | `test_doc_reachability.sh` |
+| [test_docs_audit](test_docs_audit.md) | Overview |
+| [test_doctor_decide](test_doctor_decide.md) | Overview |
 | [test_docs_no_literal_keys](test_docs_no_literal_keys.md) | Overview |
 | [test_download](test_download.md) | Overview |
 | [test_download_resume](test_download_resume.md) | Overview |
@@ -88,6 +91,7 @@ One page per script, library or test suite (Constitution 11.4.18). Test pages st
 | [test_gate_hook_tmp](test_gate_hook_tmp.md) | Overview |
 | [test_gateway_endpoints](test_gateway_endpoints.md) | `test_gateway_endpoints.sh` |
 | [test_gateway_mutation](test_gateway_mutation.md) | `test_gateway_mutation.sh` |
+| [test_gateway_stress](test_gateway_stress.md) | Overview |
 | [test_go_unit](test_go_unit.md) | `test_go_unit.sh` |
 | [test_gpu_throughput_ratio](test_gpu_throughput_ratio.md) | `test_gpu_throughput_ratio.sh` |
 | [test_gpu_vram_delta](test_gpu_vram_delta.md) | `test_gpu_vram_delta.sh` |
@@ -98,6 +102,7 @@ One page per script, library or test suite (Constitution 11.4.18). Test pages st
 | [test_macos_plist](test_macos_plist.md) | `test_macos_plist.sh` |
 | [test_matrix_harness](test_matrix_harness.md) | `test_matrix_harness.sh` |
 | [test_mcp_stdio](test_mcp_stdio.md) | Overview |
+| [test_no_pipe_grep_q](test_no_pipe_grep_q.md) | Overview |
 | [test_no_retired_vars](test_no_retired_vars.md) | `test_no_retired_vars.sh` |
 | [test_no_stray_binaries](test_no_stray_binaries.md) | `test_no_stray_binaries.sh` |
 | [test_normalize_agents](test_normalize_agents.md) | Overview |
@@ -114,6 +119,7 @@ One page per script, library or test suite (Constitution 11.4.18). Test pages st
 | [test_registry_discovery](test_registry_discovery.md) | Overview |
 | [test_regression_defects](test_regression_defects.md) | Overview |
 | [test_release_no_secrets](test_release_no_secrets.md) | `test_release_no_secrets.sh` |
+| [test_release_scripts](test_release_scripts.md) | Overview |
 | [test_run_tests_format](test_run_tests_format.md) | Overview |
 | [test_scheduler](test_scheduler.md) | Overview |
 | [test_scheduler_bind_host](test_scheduler_bind_host.md) | `test_scheduler_bind_host.sh` |
@@ -128,6 +134,7 @@ One page per script, library or test suite (Constitution 11.4.18). Test pages st
 | [test_small_profile_full_context](test_small_profile_full_context.md) | `test_small_profile_full_context.sh` |
 | [test_syntax](test_syntax.md) | Overview |
 | [test_systemd_cleanliness](test_systemd_cleanliness.md) | Overview |
+| [test_task_coverage](test_task_coverage.md) | Overview |
 | [test_tenant_list_quota](test_tenant_list_quota.md) | `test_tenant_list_quota.sh` |
 | [test_tenant_service_isolation](test_tenant_service_isolation.md) | Overview |
 | [test_tls_server](test_tls_server.md) | `test_tls_server.sh` |
