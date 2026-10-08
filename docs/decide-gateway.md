@@ -291,6 +291,12 @@ By default (`LLMCTL_DECIDE_RESOLVER=auto`) the gateway routes to the engines in 
 static `LLMCTL_DECIDE_ENDPOINT_<PROFILE>` / catalog ports. It publishes itself in the registry (`kind=gateway`) while serving.
 See `docs/registry-discovery.md`.
 
+The static endpoint of a profile is, in order: `LLMCTL_DECIDE_ENDPOINT_<PROFILE>` (comma separated loopback URLs) >
+`http://127.0.0.1:$LLMCTL_PORT_<PROFILE>` > `http://127.0.0.1:<catalog port>`. `LLMCTL_PORT_<PROFILE>` is the same host-local port rebind the shell
+side honours (`<PROFILE>` upper-cased, `-` -> `_`, e.g. `LLMCTL_PORT_DECIDE_NLI=18096`), so a hand-started engine on an overridden port is found without
+also setting the endpoint variable. A value that is not an integer in 1-65535 (including `auto`) is ignored and the catalog port is used. In `auto` and
+`registry` mode a healthy registry entry for the profile is preferred over these static endpoints.
+
 **`auto` decides per profile, on every request.** A gateway started in `auto` mode *before* any decision engine is registered (engines take up to
 `LLMCTL_REGISTER_WAIT`, default 600 s, to load their model and register) serves the static endpoints, and a profile switches to the registry the moment
 it has a healthy registry entry (and back to its static endpoint when that entry goes away or turns unhealthy) - no restart (C2-13, B3-09). A profile served only

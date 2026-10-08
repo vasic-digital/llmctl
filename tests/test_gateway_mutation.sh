@@ -69,6 +69,10 @@ mutate "global bind host ignored" cmd/llmctl-decide/cmd_serve.go \
   'env["LLMCTL_DECIDE_BIND"], env["LLMCTL_BIND_HOST"]}' 'env["LLMCTL_DECIDE_BIND"]}' ./cmd/llmctl-decide
 mutate "loopback-only engine check removed" internal/gateway/resolver.go \
   'if ip := net.ParseIP(h); ip != nil && ip.IsLoopback() {' 'if ip := net.ParseIP(h); ip != nil {' ./internal/gateway
+mutate "LLMCTL_PORT_<PROFILE> override ignored by the static resolver" internal/gateway/resolver.go \
+  'port = p' '_ = p' ./internal/gateway
+mutate "LLMCTL_PORT_<PROFILE> port range unchecked" internal/gateway/resolver.go \
+  'err == nil && p >= 1 && p <= 65535 {' 'err == nil {' ./internal/gateway
 mutate "cache_prompt forced on" internal/gateway/letter.go \
   '"cache_prompt": spec.Readout.CachePrompt && b.Mode == Throughput, // never in deterministic mode (B2-12)' '"cache_prompt": true,' ./internal/gateway
 mutate "engine error text echoed" internal/gateway/driver.go \

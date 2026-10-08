@@ -44,6 +44,46 @@ func TestStaticResolverFromEnv(t *testing.T) {
 	}
 }
 
+func TestPortVarName(t *testing.T) {
+	if got := PortVar("decide-nli"); got != "LLMCTL_PORT_DECIDE_NLI" {
+		t.Fatal(got)
+	}
+}
+
+// LLMCTL_PORT_<PROFILE> (the bash side's host-local rebind) must move the static fallback; an explicit
+// LLMCTL_DECIDE_ENDPOINT_<PROFILE> still wins; invalid values are ignored (catalog port) and never panic.
+func TestStaticResolverFromEnvHonoursPortOverride(t *testing.T) {
+	specs := testSpecs() // decide-nli has catalog port 8096
+	url := func(env map[string]string) string {
+		r := StaticResolverFromEnv(specs, func(k string) string { return env[k] })
+		eps, _ := r.Resolve(KindDecide, "decide-nli")
+		if len(eps) != 1 {
+			t.Fatalf("%v: %+v", env, eps)
+		}
+		return eps[0].URL
+	}
+	if got := url(map[string]string{"LLMCTL_PORT_DECIDE_NLI": "18096"}); got != "http://127.0.0.1:18096" {
+		t.Errorf("port override ignored: %s", got)
+	}
+	if got := url(map[string]string{"LLMCTL_PORT_DECIDE_NLI": " 18096 "}); got != "http://127.0.0.1:18096" {
+		t.Errorf("padded override: %s", got)
+	}
+	if got := url(map[string]string{"LLMCTL_PORT_DECIDE_NLI": "18096", "LLMCTL_DECIDE_ENDPOINT_DECIDE_NLI": "http://127.0.0.1:9999"}); got != "http://127.0.0.1:9999" {
+		t.Errorf("endpoint var must win over port override: %s", got)
+	}
+	for _, bad := range []string{"abc", "0", "-5", "65536", "99999999999999999999", "80.5", "auto", ""} {
+		if got := url(map[string]string{"LLMCTL_PORT_DECIDE_NLI": bad}); got != "http://127.0.0.1:8096" {
+			t.Errorf("invalid override %q must fall back to the catalog port, got %s", bad, got)
+		}
+	}
+	if got := url(map[string]string{"LLMCTL_PORT_DECIDE_NLI": "65535"}); got != "http://127.0.0.1:65535" {
+		t.Errorf("upper bound: %s", got)
+	}
+	if got := url(map[string]string{"LLMCTL_PORT_DECIDE_NLI": "1"}); got != "http://127.0.0.1:1" {
+		t.Errorf("lower bound: %s", got)
+	}
+}
+
 func TestEnvVarName(t *testing.T) {
 	if got := EndpointVar("decide-tiny"); got != "LLMCTL_DECIDE_ENDPOINT_DECIDE_TINY" {
 		t.Fatal(got)
