@@ -167,7 +167,7 @@ catalog_bind_host() {
 catalog_min_tier()   { catalog_field "$1" min_tier baseline; }
 catalog_desc()       { catalog_field "$1" desc ""; }
 catalog_hf_repo()    { catalog_field "$1" hf_repo; }
-# catalog_decision_protocol <profile> -> letter-logit | systemone-native | nli-onnx ("" for a non-decision profile).
+# catalog_decision_protocol <profile> -> letter-logit | systemone-native | nli-onnx | jev-verdict ("" for a non-decision profile).
 catalog_decision_protocol() {
   catalog_check
   json_query "${LLMCTL_CATALOG}" "d[\"profiles\"][\"$1\"].get(\"decision\",{}).get(\"protocol\") or \"\"" 2>/dev/null || true

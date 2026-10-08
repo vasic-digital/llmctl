@@ -200,7 +200,9 @@ REV = re.compile(r"^[0-9a-f]{40}$")
 LICENSES = {"Apache-2.0", "MIT", "BSD-3-Clause", "BSD-2-Clause"}
 CLASSES = {"vendor-measured", "independent", "llmctl-measured", "unverified"}
 ROLES = {"model", "tokenizer", "config", "head", "mmproj"}
-PROTOCOLS = {"letter-logit", "systemone-native", "nli-onnx"}
+# jev-verdict: Jev-Style verdict readout (one " ->" slot per option); catalogued, NOT served by the
+# gateway yet (internal/gateway/catalog.go unsupportedReason)
+PROTOCOLS = {"letter-logit", "systemone-native", "nli-onnx", "jev-verdict"}
 CHAT_CAPS = {"chat", "coder", "vision"}
 tiers = ("below-minimum", "baseline", "workstation", "datacenter")
 ports = {}
@@ -247,8 +249,14 @@ for name, p in d["profiles"].items():
         errors.append("%s: decision.protocol %r not in %s" % (name, proto, sorted(PROTOCOLS)))
     if (p.get("engine") == "onnx") != (proto == "nli-onnx"):
         errors.append("%s: engine onnx <=> protocol nli-onnx violated (engine=%s protocol=%s)" % (name, p.get("engine"), proto))
-    if p.get("engine") == "llama" and proto not in ("letter-logit", "systemone-native"):
-        errors.append("%s: llama engine needs protocol letter-logit|systemone-native" % name)
+    if p.get("engine") == "llama" and proto not in ("letter-logit", "systemone-native", "jev-verdict"):
+        errors.append("%s: llama engine needs protocol letter-logit|systemone-native|jev-verdict" % name)
+    # the Jev-Style decision GGUFs are read at a verdict slot per option, never by a generated letter
+    # (vendor readout_config.json "readout": "verdict"; measured letter mass ~0, 2026-10-08)
+    if (p.get("hf_repo") or "").startswith("chaoliangUNSW/Jev-Style-") and proto != "jev-verdict":
+        errors.append("%s: Jev-Style verdict model needs protocol jev-verdict (got %r)" % (name, proto))
+    if proto == "jev-verdict" and "not servable" not in (dec.get("tier_note") or ""):
+        errors.append("%s: a jev-verdict profile must say in decision.tier_note that it is not servable yet" % name)
     mo = dec.get("max_options")
     if not isinstance(mo, int) or not 2 <= mo <= 255 or (proto == "letter-logit" and mo > 26):
         errors.append("%s: decision.max_options %r out of range" % (name, mo))
@@ -375,7 +383,12 @@ mutate "size differs from huggingface.co" 'd["profiles"]["decide-tiny"]["files"]
 mutate "sha256 differs from huggingface.co" 'f=d["profiles"]["decide-max"]["files"][0]; f["sha256"]=("0" if f["sha256"][0]!="0" else "1")+f["sha256"][1:]'
 mutate "tokenizer.json re-added next to spm.model" 'd["profiles"]["decide-nli"]["files"].append({"name":"tokenizer.json","size":8656646,"sha256":"05402ffae6dd"+"0"*52,"role":"tokenizer"})'
 mutate "lower-case spelling a (G-031)" 'd["profiles"]["decide"]["decision"]["readout"]["spellings"].append("a")'
-mutate "lower-case spelling with a leading space (G-031)" 'd["profiles"]["decide-tiny"]["decision"]["readout"]["spellings"].append(" a")'
+mutate "lower-case spelling with a leading space (G-031)" 'd["profiles"]["decide-2b"]["decision"]["readout"]["spellings"].append(" a")'
+# decide-tiny is a Jev-Style verdict model (vendor readout_config.json "readout": "verdict"); its first
+# token is " yes"/" no", never a letter (evidence/live-models/decide-tiny/letter_probe.out): putting it
+# back on the letter-logit protocol must be refused
+mutate "Jev-Style verdict model back on letter-logit" 'dd=d["profiles"]["decide-tiny"]["decision"]; dd["protocol"]="letter-logit"; dd["readout"]=dict(d["profiles"]["decide"]["decision"]["readout"])'
+mutate "jev-verdict profile without its not-servable note" 'del d["profiles"]["decide-tiny"]["decision"]["tier_note"]'
 mutate "multi-letter spelling (G-031)" 'd["profiles"]["decide-pro"]["decision"]["readout"]["spellings"].append("AB")'
 mutate "profile name with a dot" 'd["profiles"]["decide.2"]=d["profiles"]["decide"]; d["ports"]["decide.2"]=8093'
 

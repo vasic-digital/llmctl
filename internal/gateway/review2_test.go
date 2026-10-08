@@ -131,12 +131,14 @@ func specNamed(t *testing.T, specs []ProfileSpec, id string) ProfileSpec {
 
 func TestCatalogCtxBecomesTheTokenBudget(t *testing.T) {
 	specs := realCatalog(t)
-	tiny := specNamed(t, specs, "decide-tiny")
-	if tiny.Ctx != 4096 || tiny.Parallel != 4 {
-		t.Fatalf("ctx/parallel not read from the catalog defaults: %+v", tiny)
+	// decide-tiny was the real letter-logit profile used here until it was reclassified jev-verdict
+	// (not servable, 2026-10-08); `decide` is a shipped letter-logit profile (ctx 8192, parallel 2).
+	dec := specNamed(t, specs, "decide")
+	if dec.Protocol != ProtoLetter || dec.Ctx != 8192 || dec.Parallel != 2 {
+		t.Fatalf("ctx/parallel not read from the catalog defaults: %+v", dec)
 	}
-	l := tiny.Limits(contract.DefaultLimits())
-	if l.MaxPromptTokens != contract.PromptTokenBudget(4096) || l.MaxPromptTokens <= 3000 || l.MaxPromptTokens >= 4096 {
+	l := dec.Limits(contract.DefaultLimits())
+	if l.MaxPromptTokens != contract.PromptTokenBudget(8192) || l.MaxPromptTokens <= 7000 || l.MaxPromptTokens >= 8192 {
 		t.Fatalf("budget %d", l.MaxPromptTokens)
 	}
 	nli := specNamed(t, specs, "decide-nli").Limits(contract.DefaultLimits())
@@ -165,14 +167,15 @@ func TestRealCatalogRejectsWhatCannotFitBeforeAnyEngine(t *testing.T) {
 		_, err := contract.ParseRequest(b, contract.DefaultLimits(), profiles)
 		return err
 	}
+	// `decide` (letter-logit, 8192-token window; decide-tiny is jev-verdict and not servable since 2026-10-08)
 	prose := strings.Repeat("The invoice is overdue and billing was notified. ", 160) // ~7.9k chars of English
-	if err := parse("decide-tiny", prose); err != nil {
-		t.Fatalf("ordinary prose that fits a 4096-token window must be accepted: %v", err)
+	if err := parse("decide", prose); err != nil {
+		t.Fatalf("ordinary prose that fits an 8192-token window must be accepted: %v", err)
 	}
-	dense := strings.Repeat("0123456789", 800) // 8000 digits ~ 8000 tokens
+	dense := strings.Repeat("0123456789", 815) // 8150 digits ~ 8150 tokens > the 8063-token budget, <= 8192 chars
 	var ce *contract.ContractError
-	if err := parse("decide-tiny", dense); !errors.As(err, &ce) || ce.Status != 422 || ce.ErrorType != contract.ErrTypeValidationFailed {
-		t.Fatalf("8000 digits cannot fit a 4096-token window: a 422 validation_failed before the engine, got %v", err)
+	if err := parse("decide", dense); !errors.As(err, &ce) || ce.Status != 422 || ce.ErrorType != contract.ErrTypeValidationFailed {
+		t.Fatalf("8150 digits cannot fit an 8192-token window: a 422 validation_failed before the engine, got %v", err)
 	}
 	// the encoder window (512 tokens) is far smaller than the 8192-character cap
 	long := strings.Repeat("The server is down and nobody noticed it. ", 70)

@@ -499,11 +499,19 @@ _dl_smoke_test_decision() {
     return 0
   fi
 
-  local port; port="$(_dl_smoke_pick_port)" || return 1
   # The probes follow the profile's decision protocol: a native (/v1/systemone) model has no chat
   # endpoint, a letter-logit model has no /v1/systemone (501). A native engine scores the whole state in
   # one batch, so its smoke gets a 4096 context (the default 512 cannot hold the encoder's window).
   _DL_DECISION_PROTO="$(catalog_decision_protocol "${profile}")"; _DL_DECISION_PROTO="${_DL_DECISION_PROTO:-letter-logit}"
+  if [[ "${_DL_DECISION_PROTO}" == "jev-verdict" ]]; then
+    # A Jev-Style verdict model is read at one " ->" slot per option; the gateway has no driver for that
+    # protocol (internal/gateway/catalog.go unsupportedReason), so there is no production readout to
+    # smoke. Said honestly: NOT exercised - never a letter probe that can only fail, never a PASS.
+    _dl_log "decision smoke NOT EXERCISED: protocol jev-verdict is not servable by the gateway yet (download + sha256 verified only)"
+    warn "decision smoke not run for ${profile}: protocol jev-verdict is not servable by the gateway yet"
+    return 0
+  fi
+  local port; port="$(_dl_smoke_pick_port)" || return 1
   local ctx=512; [[ "${_DL_DECISION_PROTO}" == "systemone-native" ]] && ctx=4096
   local args=(--model "${model}" --ctx-size "${ctx}" --n-gpu-layers 0 --host 127.0.0.1 --port "${port}")
   log "decision smoke test: starting llama-server for ${profile} on 127.0.0.1:${port}"

@@ -1,0 +1,8 @@
+choice-2 (invoice) [('billing: handles invoices', 0.268), ('legal: contracts', -0.889)]
+   probs(T=global) [0.788, 0.212]
+choice-4 (invoice) [('billing: handles invoices', 0.57), ('legal: contracts', -0.911), ('shipping: deliveries', -1.465), ('support: login help', -1.853)]
+   probs(T=global) [0.741, 0.138, 0.073, 0.047]
+noul (disk 97%) [('false: no, the statement does not hold', 0.592), ('true: yes, the statement holds', 0.654)]
+   probs(T=global) [0.482, 0.518]
+noul (disk 12%) [('false: no, the statement does not hold', 1.026), ('true: yes, the statement holds', -1.277)]
+   probs(T=global) [0.932, 0.068]

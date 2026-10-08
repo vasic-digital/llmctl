@@ -1,0 +1,9 @@
+--- FAIL: TestShippedCatalogDecideTinyIsJevVerdictUnsupported (0.00s)
+    jev_verdict_test.go:55: decide-tiny protocol = "letter-logit", want "jev-verdict" (its readout is a per-option verdict slot, not a letter)
+--- FAIL: TestCatalogAcceptsJevVerdictAndMarksItUnsupported (0.00s)
+    jev_verdict_test.go:72: spec = [{ID:decide-j Protocol:jev-verdict Port:8092 MaxOptions:20 ScoreLevels:[2 10] Readout:{NProbs:32 MassThreshold:0.5 Spellings:[A  A] CachePrompt:false} Experimental:[] Notes: Ctx:0 Parallel:0 Desc: ReleaseDate: ModelSHA256: Maturity:map[] Unsupported:}]
+--- FAIL: TestRouterRefusesUnsupportedProfileClearly (0.00s)
+    jev_verdict_test.go:100: a catalog with an unsupported profile must still serve the others: gateway: no driver for protocol jev-verdict
+FAIL
+FAIL	github.com/vasic-digital/llmctl/internal/gateway	0.017s
+FAIL

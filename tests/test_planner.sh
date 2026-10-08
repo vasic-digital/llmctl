@@ -299,7 +299,8 @@ assert_contains "${human}" "decide-nli" "human plan: Decision capacity lists dec
 
 # --- additive decision_instances fields (data-model s10, FR-028) ---------------
 plan="$(plan_for baseline)"
-assert_eq "letter-logit" "$(di decide-tiny protocol)" "decision_instances.protocol: decide-tiny letter-logit (additive field)"
+assert_eq "jev-verdict" "$(di decide-tiny protocol)" "decision_instances.protocol: decide-tiny jev-verdict (additive field; reclassified 2026-10-08, verdict readout)"
+assert_eq "letter-logit" "$(di decide protocol)" "decision_instances.protocol: decide letter-logit"
 assert_eq "nli-onnx" "$(di decide-nli protocol)" "decision_instances.protocol: decide-nli nli-onnx"
 assert_eq "cpu" "$(di decide-tiny best_placement)" "decide-tiny best placement on baseline is cpu (16 cpu > 6 gpu instances)"
 assert_eq "" "$(di decide-pro best_placement)" "tier-gated decide-pro has no best placement (null)"

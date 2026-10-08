@@ -74,7 +74,7 @@ func NewRouter(cfg RouterConfig) (*Router, error) {
 		if h, err := TemplateHash(s, cfg.Temperature); err == nil {
 			r.hash[s.ID] = h
 		}
-		if cfg.Drivers[s.Protocol] == nil {
+		if s.Unsupported == "" && cfg.Drivers[s.Protocol] == nil {
 			return nil, errors.New("gateway: no driver for protocol " + s.Protocol)
 		}
 		r.specs[s.ID] = s
@@ -94,7 +94,9 @@ func (r *Router) Mode() string { return string(r.cfg.Mode) }
 type pairBudgeter interface{ PairBudget() int }
 
 // usable reports whether the profile's protocol may serve at all.
-func (r *Router) usable(s ProfileSpec) bool { return s.Protocol != ProtoNative || r.cfg.NativeEnabled }
+func (r *Router) usable(s ProfileSpec) bool {
+	return s.Unsupported == "" && (s.Protocol != ProtoNative || r.cfg.NativeEnabled)
+}
 
 // degrader is implemented by a Driver that can tell an instance is mis-configured (the NLI driver
 // when the encoder runtime's labels cannot be mapped): such an instance is reported degraded and
@@ -294,6 +296,9 @@ func (r *Router) Decide(ctx context.Context, req *contract.ParsedRequest) ([]con
 	if !ok {
 		return nil, contract.Usage{}, notReady()
 	}
+	if spec.Unsupported != "" {
+		return nil, contract.Usage{}, unsupportedProfile(spec)
+	}
 	eps := r.healthy(spec)
 	if len(eps) == 0 {
 		return nil, contract.Usage{}, notReady()
@@ -312,6 +317,16 @@ func (r *Router) Decide(ctx context.Context, req *contract.ParsedRequest) ([]con
 		answers[i].Answer = r.cfg.Calibrations.Apply(spec.ID, answers[i].Answer)
 	}
 	return answers, usage, nil
+}
+
+// unsupportedProfile refuses a request for a catalog profile whose protocol the gateway does not
+// implement: a deterministic configuration fact, so the non-retryable 500, with a message that names
+// the profile, its protocol and the reason (catalog data only, never request content) instead of the
+// opaque readout failure an engine call with the wrong prompt produces.
+func unsupportedProfile(spec ProfileSpec) error {
+	logFaultOnce("llmctl decide: profile %s (protocol %s) is not servable: %s", spec.ID, spec.Protocol, spec.Unsupported)
+	return &contract.ContractError{Status: 500, ErrorType: contract.ErrTypeBackendFailed,
+		Message: "Profile " + spec.ID + " (protocol " + spec.Protocol + ") is not servable: " + spec.Unsupported + "."}
 }
 
 var _ server.DecisionMetaProvider = (*Router)(nil)

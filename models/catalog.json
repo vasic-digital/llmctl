@@ -1446,22 +1446,14 @@
         }
       },
       "decision": {
-        "protocol": "letter-logit",
+        "protocol": "jev-verdict",
         "max_options": 20,
         "max_options_status": "evidence-pending",
         "score_levels": [
           2,
           10
         ],
-        "readout": {
-          "n_probs": 32,
-          "mass_threshold": 0.5,
-          "spellings": [
-            "A",
-            " A"
-          ],
-          "cache_prompt": false
-        }
+        "tier_note": "not servable by the gateway yet: the model is read at one ' ->' verdict slot per option (vendor readout_config.json readout=verdict); it never answers with a letter (specs/009-jev-decision-models/evidence/live-models/decide-tiny/letter_probe.out)"
       },
       "files": [
         {

@@ -33,7 +33,23 @@ const (
 	ProtoLetter = "letter-logit"
 	ProtoNative = "systemone-native"
 	ProtoNLI    = "nli-onnx"
+	// ProtoJevVerdict is the Jev-Style "macjev-render-v1" verdict readout: the state, the question and
+	// every option are rendered once, and option k is scored as logit(" yes") - logit(" no") at the
+	// k-th " ->" slot (the model's readout_config.json "readout": "verdict"). The model does not answer
+	// with a letter (measured 2026-10-08: letter mass ~0 with and without its chat template), so the
+	// letter-logit driver cannot serve it. The catalog may name it; the gateway does not implement it yet.
+	ProtoJevVerdict = "jev-verdict"
 )
+
+// unsupportedReason is why the gateway cannot serve a catalog protocol ("" = it can). A profile with
+// such a protocol stays in the catalog (download, planning) but is never listed or routed, and a
+// request for it is refused clearly instead of reaching an engine with a prompt the model cannot answer.
+func unsupportedReason(protocol string) string {
+	if protocol == ProtoJevVerdict {
+		return "the jev-verdict readout (one verdict slot per option) is not implemented by this gateway"
+	}
+	return ""
+}
 
 // ReadoutSpec is the catalog's letter-logit readout block.
 type ReadoutSpec struct {
@@ -71,6 +87,8 @@ type ProfileSpec struct {
 	ModelSHA256 string
 	// Maturity is the catalog's per-type maturity (T138): nil = none published.
 	Maturity map[string]server.MaturityInfo
+	// Unsupported is why the gateway cannot serve this profile's protocol ("" = it can; unsupportedReason).
+	Unsupported string
 }
 
 // rawMaturity is one question type's catalog maturity entry (T138; derived by scripts/maturity_from_golden.py).
@@ -246,10 +264,11 @@ func ParseCatalog(data []byte) ([]ProfileSpec, error) {
 			s.ReleaseDate = d.ReleaseDate
 		}
 		switch d.Protocol {
-		case ProtoLetter, ProtoNative, ProtoNLI:
+		case ProtoLetter, ProtoNative, ProtoNLI, ProtoJevVerdict:
 		default:
 			return nil, fmt.Errorf("gateway: profile %s: unknown decision protocol %q", id, d.Protocol)
 		}
+		s.Unsupported = unsupportedReason(d.Protocol)
 		if d.MaxOptions != nil {
 			if *d.MaxOptions < 2 || *d.MaxOptions > contract.HostedMaxOptions {
 				return nil, fmt.Errorf("gateway: profile %s: max_options must be 2..255", id)

@@ -1,0 +1,10 @@
+=== RUN   TestJevTinyRealFirstTokenDefeatsLetterReadout
+--- PASS: TestJevTinyRealFirstTokenDefeatsLetterReadout (0.00s)
+=== RUN   TestShippedCatalogDecideTinyIsJevVerdictUnsupported
+--- PASS: TestShippedCatalogDecideTinyIsJevVerdictUnsupported (0.00s)
+=== RUN   TestCatalogAcceptsJevVerdictAndMarksItUnsupported
+--- PASS: TestCatalogAcceptsJevVerdictAndMarksItUnsupported (0.00s)
+=== RUN   TestRouterRefusesUnsupportedProfileClearly
+--- PASS: TestRouterRefusesUnsupportedProfileClearly (0.00s)
+PASS
+ok  	github.com/vasic-digital/llmctl/internal/gateway	0.015s
