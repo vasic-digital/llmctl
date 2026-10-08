@@ -418,10 +418,10 @@ export LLMCTL_DRY_RUN=1
 export LLMCTL_FAKE_HW="${LLMCTL_ROOT}/tests/fixtures/hw-baseline.json"
 out="$("${LLMCTL}" auto decide 2>&1)" && rc=0 || rc=$?
 assert_eq 0 "${rc}" "12: auto decide on the baseline fixture succeeds"
-assert_contains "${out}" "capability 'decide' -> profile 'decide-tiny'" "12: auto decide picks decide-tiny (first recommended in the ranking)"
-assert_contains "${out}" "first recommended profile in the decide ranking [decide-tiny decide-nli decide-2b decide decide-pro decide-max decide-julia decide-laya decide-kev-08b decide-lev decide-kev-4b decide-kev-9b]" "12: the choice is explained with the full ranking (FR-030)"
+assert_contains "${out}" "capability 'decide' -> profile 'decide-nli'" "12: auto decide picks decide-nli (first servable recommended in the ranking; decide-tiny is ranked last)"
+assert_contains "${out}" "first recommended profile in the decide ranking [decide-nli decide-2b decide decide-pro decide-max decide-julia decide-laya decide-kev-08b decide-lev decide-kev-4b decide-kev-9b decide-tiny]" "12: the choice is explained with the full ranking (FR-030)"
 assert_contains "${out}" "smallest footprint first" "12: the explanation states the rule (smallest first, not highest accuracy)"
-assert_file_exists "${LLMCTL_RUNTIME_DIR}/decide-tiny.run" "12: decide-tiny reserved by the real admission path"
+assert_file_exists "${LLMCTL_RUNTIME_DIR}/decide-nli.run" "12: decide-nli reserved by the real admission path"
 out="$("${LLMCTL}" auto bogus 2>&1)" && rc=0 || rc=$?
 assert_eq 1 "${rc}" "12: auto <unknown capability> fails"
 assert_contains "${out}" "(chat|coder|vision|decide)" "12: D-24 the error lists decide among the capabilities"

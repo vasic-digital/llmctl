@@ -120,6 +120,7 @@ One page per script, library or test suite (Constitution 11.4.18). Test pages st
 | [test_regression_defects](test_regression_defects.md) | Overview |
 | [test_release_no_secrets](test_release_no_secrets.md) | `test_release_no_secrets.sh` |
 | [test_release_scripts](test_release_scripts.md) | Overview |
+| [test_run_live_nli](test_run_live_nli.md) | Overview |
 | [test_run_tests_format](test_run_tests_format.md) | Overview |
 | [test_scheduler](test_scheduler.md) | Overview |
 | [test_scheduler_bind_host](test_scheduler_bind_host.md) | `test_scheduler_bind_host.sh` |

@@ -139,7 +139,7 @@ See `docs/hardware-tiers.md`. The baseline reference machine (Ryzen 7 2700X,
 Threadripper, 32 GB VRAM) unlock the `ws-*` profiles and full co-residency;
 `colibri-glm` (a 744B MoE that streams weights from ~380 GB of NVMe) is gated
 to `datacenter`. The catalog also carries **decision profiles** (capability `decide`) for typed
-noul/choice/score decisions, from `decide-tiny` (0.8B GGUF, any tier) and `decide-nli`
+noul/choice/score decisions, from `decide-nli`, `decide-2b` and the other servable profiles (`decide-tiny` is catalogued but not servable yet)
 (DeBERTa-v3-large zero-shot NLI on the `onnx` engine, any tier) up to workstation-tier
 profiles. The authoritative, current profile table (tiers, sizes, ports, source-labelled
 benchmarks) is `docs/decision-models.md`.

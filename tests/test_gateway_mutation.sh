@@ -93,6 +93,12 @@ mutate "NLI entailment read from a fixed column" internal/gateway/nli.go \
   'ent[i] = row[cols.entail]' 'ent[i] = row[len(row)-1-0*cols.entail-0*cols.contra]' ./internal/gateway
 mutate "NLI generic label_source accepted" internal/gateway/nli.go \
   'if strings.HasPrefix(src, "generic-config") || strings.HasPrefix(src, "none") {' 'if false && src != "" {' ./internal/gateway
+mutate "NLI not_entailment accepted beside a third label" internal/gateway/nli.go \
+  'if len(labels) != 2 || cols.entail < 0 {' 'if cols.entail < 0 {' ./internal/gateway
+mutate "NLI two-label head without an entailment column accepted (decoder panic)" internal/gateway/nli.go \
+  'if len(labels) != 2 || cols.entail < 0 {' 'if len(labels) != 2 {' ./internal/gateway
+mutate "NLI binary entailment/not_entailment head refused again" internal/gateway/nli.go \
+  'if seen["not_entailment"] > 0 {' 'if false {' ./internal/gateway
 mutate "NLI truncation not reported to the gateway" internal/gateway/nli.go \
   '			server.NoteTruncated(ctx)' '			_ = server.NoteTruncated' ./internal/gateway
 mutate "key file permission check removed" internal/gateway/keyfile.go \

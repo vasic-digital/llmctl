@@ -742,7 +742,7 @@ the relevant `lib/*.sh` module.
 | `LLMCTL_COLI_BIN` | Override the `coli` launcher binary name/path used by `colibri` profile launches. |
 | `LLMCTL_UNIT_DIR` (Linux) | Override the systemd `--user` unit directory `install` writes to. |
 | `LLMCTL_PLIST_DIR` (macOS) | Override the LaunchAgents directory `install`/`enable` writes to. |
-| `LLMCTL_DECIDE_PROFILE` | Default profile for `decide` commands (default: `decide-tiny` if downloaded, else `decide`). |
+| `LLMCTL_DECIDE_PROFILE` | Default profile for `decide` commands (default: the first servable profile of the decide ranking that is downloaded (`decide-nli`, then `decide-2b`, `decide`, …); `decide-tiny` is catalogued but not servable by the gateway yet). |
 | `LLMCTL_DECIDE_PORT` | Gateway port for `decide serve` (default `8095`). |
 | `LLMCTL_DECIDE_TEMPERATURE` | Calibration temperature dividing letter logprobs before renormalization in the gateway's `letter-logit` driver (default `1.0`). |
 | `LLMCTL_DECIDE_NO_INTERACTIVE=1` | Makes every `decide` interactive path exit 2 — set it in CI. |

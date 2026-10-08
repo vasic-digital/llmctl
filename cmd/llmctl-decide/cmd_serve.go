@@ -350,10 +350,18 @@ func prepare(f serveFlags, env keyring.Environ, d serveDirs, stderr io.Writer) (
 	}
 	def := env["LLMCTL_DECIDE_PROFILE"]
 	if def == "" {
+		// default: the first spec the gateway can actually serve; a jev-verdict profile
+		// (decide-tiny) is catalogued but refused, so it must never be the implicit default.
 		def = p.specs[0].ID
 		for _, s := range p.specs {
-			if s.ID == "decide-tiny" {
+			if s.Protocol != gateway.ProtoJevVerdict {
 				def = s.ID
+				break
+			}
+		}
+		for _, s := range p.specs {
+			if s.ID == "decide-tiny" && s.Protocol != gateway.ProtoJevVerdict {
+				def = s.ID // historical preference, kept only while the profile is servable
 			}
 		}
 	}

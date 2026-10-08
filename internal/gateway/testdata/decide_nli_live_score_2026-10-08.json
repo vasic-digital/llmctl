@@ -1,0 +1,1 @@
+{"labels": ["entailment", "not_entailment"], "label_source": "config:config.json", "scores": [[0.8834913130240478, 0.11650868697595226], [5.636262038702702e-05, 0.9999436373796129]], "truncated": [false, false], "model": "llmctl-decide-nli", "max_tokens": 512}

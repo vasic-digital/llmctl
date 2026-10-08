@@ -56,7 +56,9 @@ Response `200`:
 * `label_source` is `config:<relpath>`, or flagged: `generic-config:<relpath> (LABEL_n …)`
   when id2label only holds `LABEL_n` names, or `none (…)` when no id2label exists (labels are
   then `LABEL_0..n-1` by logits count). **A client must not map `generic-config`/`none`
-  to entailment/contradiction semantics.** A malformed id2label (non-integer or
+  to entailment/contradiction semantics.** A binary head answers `labels` =
+  `["entailment","not_entailment"]` (the pinned decide-nli model does; live 2026-10-08); the client
+  uses P(entailment) and must not split `not_entailment` into neutral/contradiction. A malformed id2label (non-integer or
   non-contiguous ids) is a startup error, never a guess.
 * **Truncation is premise-only**, at token level, so the hypothesis and the special tokens
   always survive: SentencePiece path `[CLS] p[:budget] [SEP] h [SEP]`; `tokenizer.json`

@@ -61,8 +61,10 @@ sched_rank_for_capability() {
     coder)  echo "colibri-glm coder ws-moe-30b ws-dense-32b colibri-qwen36" ;;
     vision) echo "vision-pro vision" ;;
     # decide: ascending footprint/accuracy tradeoff (best-first for `auto
-    # decide` = smallest that fits). Rationale per rung: decide-tiny (0.5
-    # GiB, calibrated for exactly this workload) > decide-nli (1.7 GiB
+    # decide` = smallest SERVABLE that fits). decide-tiny (0.5 GiB) is a
+    # Jev-Style verdict-readout model the gateway cannot serve yet, so it is
+    # ranked LAST and never picked ahead of a servable profile. Rationale per
+    # rung: decide-nli (1.7 GiB
     # fp32 ONNX encoder; CPU-only but NLI entailment needs no generation,
     # one forward pass per option) > decide-2b (1.9 GiB generative,
     # Q8_0 > decide-tiny's Q4_K_M at similar size) > decide (2.6 GiB,
@@ -71,7 +73,7 @@ sched_rank_for_capability() {
     # /v1/systemone profiles (llama.cpp >= b11379; the gateway serves them only
     # with LLMCTL_DECIDE_NATIVE=1), appended in ascending footprint order so that
     # `auto decide` never prefers an engine-gated profile over a proven one.
-    decide) echo "decide-tiny decide-nli decide-2b decide decide-pro decide-max decide-julia decide-laya decide-kev-08b decide-lev decide-kev-4b decide-kev-9b" ;;
+    decide) echo "decide-nli decide-2b decide decide-pro decide-max decide-julia decide-laya decide-kev-08b decide-lev decide-kev-4b decide-kev-9b decide-tiny" ;;
     *)      return 1 ;;
   esac
 }

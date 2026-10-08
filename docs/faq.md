@@ -363,7 +363,7 @@ matches hosted Jev on knowledge-heavy or multi-hop hard items, and llmctl
 makes no parity claim. The per-profile numbers (all with source labels,
 from `models/catalog.json` `desc` fields and
 [`docs/research/jev-ecosystem.md`](research/jev-ecosystem.md)):
-`decide-tiny` (Jev-Style 0.8B v3) reports 79.2% on 2,000 typed decisions
+`decide-tiny` (Jev-Style 0.8B v3; a verdict-readout model, not servable by the gateway yet) reports 79.2% on 2,000 typed decisions
 per its model card — **vendor-measured**; `decide` (Mapika decider-4b
 v2.1) reports JevBench composite 64.13, ranked #1 of 89 —
 **vendor-measured** (hosted Jev 1.13.0 itself scores 63.29 on JevBench,
@@ -409,9 +409,9 @@ scripted-heredoc happy path, abort path).
 **read-only capacity report**: it tells you how many instances *would* fit
 in GPU mode or CPU mode (alternative placements, never additive;
 `total_decision_slots = max(gpu, cpu) × parallel`), but it reserves and
-launches nothing. `llmctl decide scale decide-tiny 2` is what starts them:
+launches nothing. `llmctl decide scale decide-2b 2` is what starts them:
 
-* Instance keys are `decide-tiny`, `decide-tiny.2`, `decide-tiny.3` … The primary keeps its documented port;
+* Instance keys are `decide-2b`, `decide-2b.2`, `decide-2b.3` … The primary keeps its documented port;
   every further instance gets a port from the registry allocator (so instances beyond the first need the
   registry binary: `llmctl build decide`; without it the scale is refused before anything starts).
 * Scale-up is **admission-bounded** by the same RAM/VRAM budget check `llmctl start` uses and is
@@ -420,7 +420,7 @@ launches nothing. `llmctl decide scale decide-tiny 2` is what starts them:
 * Scale-down stops the **highest-numbered** instances first. Asking for the current count is a no-op.
 * A runtime failure while scaling up rolls back every instance started in that call (exit 1).
 * After a failed `llmctl switch`, the restore brings back the same **count** of instances of a scaled
-  profile, not necessarily the same keys (if only `decide-tiny.3` was running it comes back as `decide-tiny`).
+  profile, not necessarily the same keys (if only `decide-2b.3` was running it comes back as `decide-2b`).
 * `LLMCTL_DECIDE_MODE=deterministic` (default) serves a profile from its primary and overflows to the next
   instance only when the primary is saturated; `throughput` spreads least-loaded and marks every response
   `x-llmctl-decide-mode: throughput`.
@@ -500,8 +500,10 @@ generic, though — the BYO-ONNX path (full detail in
 1. Export the model to ONNX yourself (e.g. `pip install "laya[onnx]"`).
 2. Put `model.onnx` in a model dir with the tokenizer (`tokenizer.json`
    for Laya's BPE — needs `pip install tokenizers` — or `spm.model`), and
-   optionally a `config.json` with `id2label` (else the canonical
-   `[entailment, neutral, contradiction]` order is assumed and logged).
+   a `config.json` whose `id2label` names `entailment` and `contradiction`
+   (or exactly `entailment` and `not_entailment`). Without a usable
+   `id2label` the runtime reports `LABEL_n` names and the gateway refuses
+   to guess a column (`502`, instance degraded).
 3. Add a custom `"engine": "onnx"`, `"capability": ["decide"]` profile
    with real sha256/size pins to a **copied** catalog.
 4. Point llmctl at it with `LLMCTL_CATALOG=/path/to/catalog.json` and use

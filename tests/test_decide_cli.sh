@@ -270,7 +270,7 @@ for path, n in ((sys.argv[1], 250), (sys.argv[2], 150)):
             f.write("r%d,noul,%.4f,%d\n" % (i, p, 1 if random.random() < q else 0))
 PY
 CALSTATE="${TEST_TMP}/calstate"
-out="$(LLMCTL_STATE_DIR="${CALSTATE}" fe calibrate --profile decide-tiny --labels "${TEST_TMP}/labels150.csv")" && rc=0 || rc=$?
+out="$(LLMCTL_STATE_DIR="${CALSTATE}" fe calibrate --profile decide-2b --labels "${TEST_TMP}/labels150.csv")" && rc=0 || rc=$?
 assert_eq 0 "${rc}" "calibrate below 200 labels exits 0 (a report)"
 assert_contains "${out}" "insufficient for ECE" "below 200 labels: the refusal text"
 assert_eq "False" "$([[ -e "${CALSTATE}" ]] && echo True || echo False)" "below 200 labels nothing is written"
@@ -283,14 +283,14 @@ JSON
 out="$(LLMCTL_STATE_DIR="${TEST_TMP}/calstate-unres" fe calibrate --profile decide-tiny --labels "${TEST_TMP}/labels250.csv" --catalog "${TEST_TMP}/nohash-catalog.json" --json 2>/dev/null)" && rc=0 || rc=$?
 assert_eq 2 "${rc}" "calibrate cannot write a BOUND profile when the template hash cannot be resolved -> 2"
 assert_eq "False" "$([[ -e "${TEST_TMP}/calstate-unres/decide/calibration/decide-tiny.json" ]] && echo True || echo False)" "no bound profile written without its bindings"
-out="$(LLMCTL_STATE_DIR="${CALSTATE}" fe calibrate --profile decide-tiny --labels "${TEST_TMP}/labels250.csv" --json 2>/dev/null)" && rc=0 || rc=$?
+out="$(LLMCTL_STATE_DIR="${CALSTATE}" fe calibrate --profile decide-2b --labels "${TEST_TMP}/labels250.csv" --json 2>/dev/null)" && rc=0 || rc=$?
 assert_eq 0 "${rc}" "calibrate binds to the computed template hash and the catalog's model sha"
-assert_eq "True" "$(json_get 'd["bound"] and len(d["template_hash"]) == 64 and len(d["model_sha256"]) == 64' < "${CALSTATE}/decide/calibration/decide-tiny.json")" "the written profile is bound (64-hex model sha and computed template hash)"
-out="$(LLMCTL_STATE_DIR="${CALSTATE}" fe calibrate --profile decide-tiny --labels "${TEST_TMP}/labels250.csv" --model-sha "$(printf 'a%.0s' $(seq 1 64))" --template-hash "$(printf 'b%.0s' $(seq 1 64))" --json)" && rc=0 || rc=$?
+assert_eq "True" "$(json_get 'd["bound"] and len(d["template_hash"]) == 64 and len(d["model_sha256"]) == 64' < "${CALSTATE}/decide/calibration/decide-2b.json")" "the written profile is bound (64-hex model sha and computed template hash)"
+out="$(LLMCTL_STATE_DIR="${CALSTATE}" fe calibrate --profile decide-2b --labels "${TEST_TMP}/labels250.csv" --model-sha "$(printf 'a%.0s' $(seq 1 64))" --template-hash "$(printf 'b%.0s' $(seq 1 64))" --json)" && rc=0 || rc=$?
 assert_eq 0 "${rc}" "calibrate with explicit bindings writes the bound profile"
 assert_eq "True" "$(printf '%s' "${out}" | json_get 'd["profile_written"] and d["calibration"]["status"] == "ok" and d["fit"]["after_in_sample"]["ece"] < d["calibration"]["ece"]')" "report says written, ECE measured and improved"
-assert_eq "600" "$(python3 -c 'import os,sys; print(oct(os.stat(sys.argv[1]).st_mode & 0o777)[2:])' "${CALSTATE}/decide/calibration/decide-tiny.json")" "profile file mode is 0600"
-assert_eq "True" "$(json_get 'd["bound"] and d["n_samples"] == 250 and d["method"] == "temperature"' < "${CALSTATE}/decide/calibration/decide-tiny.json")" "profile content: bound, 250 samples, temperature"
+assert_eq "600" "$(python3 -c 'import os,sys; print(oct(os.stat(sys.argv[1]).st_mode & 0o777)[2:])' "${CALSTATE}/decide/calibration/decide-2b.json")" "profile file mode is 0600"
+assert_eq "True" "$(json_get 'd["bound"] and d["n_samples"] == 250 and d["method"] == "temperature"' < "${CALSTATE}/decide/calibration/decide-2b.json")" "profile content: bound, 250 samples, temperature"
 assert_eq 2 "$(rc_of fe calibrate --profile decide-tiny)" "calibrate without --labels -> 2"
 assert_eq 2 "$(rc_of fe calibrate --profile decide-tiny --labels "${TEST_TMP}/labels250.csv" --method nope)" "calibrate with an unknown method -> 2"
 

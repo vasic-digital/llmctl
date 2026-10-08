@@ -30,7 +30,9 @@ import (
 // label_source says the names are generic (`generic-config...`, `none...`) or a required label is
 // missing or ambiguous: 502 backend_failed with a generic body, the reason logged server side only,
 // and the instance reported degraded (Degraded; the router then fails readiness) instead of
-// guessing a column.
+// guessing a column. A binary head whose labels are exactly {entailment, not_entailment} (the pinned
+// decide-nli model) is served as-is: only P(entailment) enters the score and not_entailment is its
+// exact complement, so nothing is split into neutral/contradiction (D-06).
 //
 // Mapping (documented, adjustable through Hypothesis): the premise is the state text; each option
 // becomes one pair whose hypothesis is DefaultHypothesis(question, option) - the question
@@ -166,6 +168,8 @@ func labelKind(l string) string {
 		return "contradiction"
 	case "neutral":
 		return "neutral"
+	case "not_entailment", "not-entailment", "not entailment", "non_entailment", "non-entailment":
+		return "not_entailment"
 	}
 	return ""
 }
@@ -197,6 +201,16 @@ func resolveColumns(labels []string, source string) (nliColumns, error) {
 		if c > 1 {
 			return nliColumns{}, &labelConfigError{"label " + k + " appears " + strconv.Itoa(c) + " times in labels"}
 		}
+	}
+	// A BINARY NLI head (id2label exactly {entailment, not_entailment}, e.g. the pinned decide-nli
+	// zeroshot-v2.0 model) is served as-is: the score is P(entailment) alone and not_entailment is its
+	// exact complement, so nothing is split or invented (D-06). not_entailment beside any other label
+	// is a contradictory label set and is refused.
+	if seen["not_entailment"] > 0 {
+		if len(labels) != 2 || cols.entail < 0 {
+			return nliColumns{}, &labelConfigError{"labels " + clip(strings.Join(labels, ","), 120) + " mix not_entailment with labels other than exactly one entailment"}
+		}
+		return cols, nil
 	}
 	if cols.entail < 0 || cols.contra < 0 {
 		return nliColumns{}, &labelConfigError{"labels " + clip(strings.Join(labels, ","), 120) + " do not name both entailment and contradiction"}

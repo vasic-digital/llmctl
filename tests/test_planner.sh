@@ -525,7 +525,7 @@ assert_contains "$(printf '%s' "${pa}" | catalog_plan_human | grep 'decide-2b ')
 # > decide-pro > decide-max, then the six native /v1/systemone profiles in
 # ascending footprint (never preferred over a proven profile).
 source "${LLMCTL_ROOT}/lib/scheduler.sh"
-assert_eq "decide-tiny decide-nli decide-2b decide decide-pro decide-max decide-julia decide-laya decide-kev-08b decide-lev decide-kev-4b decide-kev-9b" \
-  "$(sched_rank_for_capability decide)" "decide rank: tiny > nli > 2b > base > pro > max > native (julia > laya > kev-08b > lev > kev-4b > kev-9b)"
+assert_eq "decide-nli decide-2b decide decide-pro decide-max decide-julia decide-laya decide-kev-08b decide-lev decide-kev-4b decide-kev-9b decide-tiny" \
+  "$(sched_rank_for_capability decide)" "decide rank: nli > 2b > base > pro > max > native (julia > laya > kev-08b > lev > kev-4b > kev-9b) > tiny (jev-verdict, not servable, last)"
 
 test_finish

@@ -222,16 +222,16 @@ A type missing from a profile's object counts as unmeasured. Values below are co
 
 | fixture | decision profiles added to the recommended set | `auto decide` picks |
 |---|---|---|
-| `apple` | `decide-tiny`, `decide`, `decide-pro`, `decide-nli`, `decide-max`, `decide-2b`, `decide-julia`, `decide-kev-08b`, `decide-kev-4b`, `decide-kev-9b`, `decide-laya`, `decide-lev` | `decide-tiny` |
-| `baseline` | `decide-tiny`, `decide`, `decide-nli`, `decide-2b`, `decide-julia`, `decide-kev-08b`, `decide-kev-4b`, `decide-laya`, `decide-lev` | `decide-tiny` |
-| `constrained` | `decide-tiny`, `decide`, `decide-nli`, `decide-2b`, `decide-julia`, `decide-kev-08b`, `decide-kev-4b`, `decide-laya`, `decide-lev` | `decide-tiny` |
-| `cpu-heavy` | `decide-tiny`, `decide`, `decide-pro`, `decide-nli`, `decide-max`, `decide-2b`, `decide-julia`, `decide-kev-08b`, `decide-kev-4b`, `decide-kev-9b`, `decide-laya`, `decide-lev` | `decide-tiny` |
-| `ram-contended-auto-eviction` | `decide-tiny`, `decide`, `decide-nli`, `decide-2b`, `decide-kev-4b`, `decide-lev` | `decide-tiny` |
-| `small-exact` | `decide-tiny`, `decide-nli`, `decide-julia`, `decide-kev-08b`, `decide-laya` | `decide-tiny` |
+| `apple` | `decide-tiny`, `decide`, `decide-pro`, `decide-nli`, `decide-max`, `decide-2b`, `decide-julia`, `decide-kev-08b`, `decide-kev-4b`, `decide-kev-9b`, `decide-laya`, `decide-lev` | `decide-nli` |
+| `baseline` | `decide-tiny`, `decide`, `decide-nli`, `decide-2b`, `decide-julia`, `decide-kev-08b`, `decide-kev-4b`, `decide-laya`, `decide-lev` | `decide-nli` |
+| `constrained` | `decide-tiny`, `decide`, `decide-nli`, `decide-2b`, `decide-julia`, `decide-kev-08b`, `decide-kev-4b`, `decide-laya`, `decide-lev` | `decide-nli` |
+| `cpu-heavy` | `decide-tiny`, `decide`, `decide-pro`, `decide-nli`, `decide-max`, `decide-2b`, `decide-julia`, `decide-kev-08b`, `decide-kev-4b`, `decide-kev-9b`, `decide-laya`, `decide-lev` | `decide-nli` |
+| `ram-contended-auto-eviction` | `decide-tiny`, `decide`, `decide-nli`, `decide-2b`, `decide-kev-4b`, `decide-lev` | `decide-nli` |
+| `small-exact` | `decide-tiny`, `decide-nli`, `decide-julia`, `decide-kev-08b`, `decide-laya` | `decide-nli` |
 | `tiny` | none | no fit |
-| `vram-contended-coresident` | `decide-tiny`, `decide`, `decide-nli`, `decide-2b`, `decide-julia`, `decide-kev-08b`, `decide-kev-4b`, `decide-laya`, `decide-lev` | `decide-tiny` |
-| `vram-contended` | `decide-tiny`, `decide`, `decide-nli`, `decide-2b`, `decide-julia`, `decide-kev-4b`, `decide-laya`, `decide-lev` | `decide-tiny` |
-| `workstation` | `decide-tiny`, `decide`, `decide-pro`, `decide-nli`, `decide-max`, `decide-2b`, `decide-julia`, `decide-kev-08b`, `decide-kev-4b`, `decide-kev-9b`, `decide-laya`, `decide-lev` | `decide-tiny` |
+| `vram-contended-coresident` | `decide-tiny`, `decide`, `decide-nli`, `decide-2b`, `decide-julia`, `decide-kev-08b`, `decide-kev-4b`, `decide-laya`, `decide-lev` | `decide-nli` |
+| `vram-contended` | `decide-tiny`, `decide`, `decide-nli`, `decide-2b`, `decide-julia`, `decide-kev-4b`, `decide-laya`, `decide-lev` | `decide-nli` |
+| `workstation` | `decide-tiny`, `decide`, `decide-pro`, `decide-nli`, `decide-max`, `decide-2b`, `decide-julia`, `decide-kev-08b`, `decide-kev-4b`, `decide-kev-9b`, `decide-laya`, `decide-lev` | `decide-nli` |
 
 **`auto decide` ranking** (`sched_rank_for_capability decide`, fixed): `decide-tiny`,
 `decide-nli`, `decide-2b`, `decide`, `decide-pro`, `decide-max`, then the six native
@@ -247,11 +247,11 @@ workload; the rationale per rung is in the comment above
 `decide`/`decide-max`; that is a different, undocumented-until-chosen
 policy, so an operator who wants a larger profile starts it explicitly
 with `llmctl start <profile>`. `auto decide` prints its choice and why
-(`capability 'decide' -> profile 'decide-tiny'` followed by `why: first
+(`capability 'decide' -> profile 'decide-nli'` followed by `why: first
 recommended profile in the decide ranking [...]`, listing any higher-ranked
 profile it skipped and the reason: tier gate or footprint). The encoder
-profile `decide-nli` ranks second, so it is picked when `decide-tiny` is
-not recommended on the host; it needs the onnx runtime dependencies
+profile `decide-nli` ranks first (`decide-tiny` is ranked last because the
+gateway cannot serve it yet); it needs the onnx runtime dependencies
 (`docs/decision-models.md`).
 
 ## Datacenter-only: colibri-glm

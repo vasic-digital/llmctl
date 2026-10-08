@@ -208,7 +208,12 @@ gateway (`internal/gateway/nli.go`) does the typed-question math:
   choice, the level description for score).
 * **label columns are selected BY NAME**, never by position: `entailment` (also `entails`, `entail`) and
   `contradiction` (`contradicts`, `contradict`) must be present exactly once, case-insensitively; `neutral`
-  is used when present. A `label_source` starting with `generic-config` or `none` (the model only has
+  is used when present. A **binary** NLI head whose labels are exactly `entailment` and `not_entailment`
+  (also `not-entailment`, `not entailment`, `non_entailment`, `non-entailment`) is accepted as-is: the option score only ever uses
+  P(entailment), and `not_entailment` is its exact complement, so nothing is split into
+  neutral/contradiction or invented. The pinned `decide-nli` model is such a head
+  (`MoritzLaurer/deberta-v3-large-zeroshot-v2.0`, `config.json` id2label `{0: entailment, 1: not_entailment}`).
+  `not_entailment` beside any other label set is refused. A `label_source` starting with `generic-config` or `none` (the model only has
   `LABEL_n` names), a missing or ambiguous label, a row that is not a probability distribution over
   `labels`, or the old scalar-per-pair shape is a **configuration error**: the gateway answers
   `502 backend_failed` with a generic body (the reason goes to the server log only), reports the instance
@@ -256,11 +261,13 @@ generic, so Laya-class models work via a bring-your-own-ONNX path:
 
 1. Export the model to ONNX (e.g. `pip install "laya[onnx]"` and convert
    in-process, or any HF Optimum-style export of a
-   sequence-classification head with a 3-class NLI-compatible output).
+   sequence-classification head with an NLI-compatible output: 3-class, or binary
+   `entailment`/`not_entailment`).
 2. Place `model.onnx` in a model directory together with the tokenizer —
    `tokenizer.json` (needs `pip install tokenizers`; Laya ships BPE, no
    `spm.model`) or `spm.model` — and a `config.json` with a real
-   `id2label` naming `entailment` and `contradiction` (a model without one is
+   `id2label` naming `entailment` and `contradiction`, or exactly `entailment` and
+   `not_entailment` (a model without one is
    refused at request time as a label configuration error, see above).
    Both `<dir>/model.onnx` and `<dir>/onnx/model.onnx` layouts are
    accepted.
@@ -286,7 +293,7 @@ the real server code; only the model backends (`onnxruntime`,
 ## `auto decide` ranking
 
 `sched_rank_for_capability decide` (best-first; `auto decide` picks the
-first that fits): `decide-tiny` > `decide-nli` > `decide-2b` > `decide` >
+first that fits): `decide-nli` > `decide-2b` > `decide` >
 `decide-pro` > `decide-max` > the six native profiles (`decide-julia` > `decide-laya` > `decide-kev-08b` > `decide-lev` > `decide-kev-4b` > `decide-kev-9b`, ascending footprint, appended last so `auto decide` never prefers an engine-gated profile over a proven one). Rationale per rung (from the comment in
 `lib/scheduler.sh`): `decide-tiny` (0.5 GiB, calibrated for exactly this
 workload) > `decide-nli` (1.7 GiB fp32 ONNX encoder; CPU-only but NLI

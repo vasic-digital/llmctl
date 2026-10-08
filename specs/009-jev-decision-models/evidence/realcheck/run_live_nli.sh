@@ -4,6 +4,19 @@
 # Run on the host that has the model (REALCHECK ran it on nezha.local under ~/llmctl-work-realcheck/). It never prints a key.
 # Needs: REPO (tree copy), W (work dir), the env exported below. Output dir OUT is sealed with MANIFEST.json + SHA256SUMS by the caller.
 set -uo pipefail
+# acquire_access_key <dest>: writes the gateway access key (only the key, one line) to <dest>, mode 0600,
+# never to the terminal. Run from the repo root with the LLMCTL_* env of this script.
+# (`key export` is the startup-file installer and prints no key: it left this file EMPTY - D-06 run 2026-10-08.)
+acquire_access_key() {
+  local rc
+  rm -f "$1"
+  ( umask 077; bin/llmctl decide key show --yes-print > "$1" 2>/dev/null ); rc=$?
+  chmod 600 "$1" 2>/dev/null
+  [[ "${rc}" -eq 0 && -s "$1" ]]
+}
+RUNNER_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# RUN_LIVE_NLI_LIB_ONLY=1: define the functions and stop (tests/test_run_live_nli.sh sources it).
+if [[ "${RUN_LIVE_NLI_LIB_ONLY:-0}" == "1" ]]; then return 0 2>/dev/null || exit 0; fi
 P=decide-nli
 : "${REPO:?}" "${W:?}" "${OUT:?}" "${GW_PORT:?}" "${ENG_PORT:?}"
 cd "${REPO}" || exit 1
@@ -61,8 +74,8 @@ say "gateway"
 bin/llmctl decide serve --port "${GW_PORT}" > "${OUT}/gateway-start.txt" 2>&1; echo "rc=$?" >> "${OUT}/gateway-start.txt"
 for _ in $(seq 1 30); do bin/llmctl decide models 2>/dev/null | awk -v p="${P}" '$1==p && $2=="ready"{f=1} END{exit !f}' && break; sleep 1; done
 bin/llmctl decide models > "${OUT}/gateway-models.txt" 2>&1
-LIVE_KEYFILE="${W}/work/access.key"; ( umask 077; bin/llmctl decide key export > "${LIVE_KEYFILE}" 2>/dev/null ); chmod 600 "${LIVE_KEYFILE}"
-[[ -s "${LIVE_KEYFILE}" ]] || { echo "no access key could be exported" > "${OUT}/RESULT.txt"; exit 4; }
+LIVE_KEYFILE="${W}/work/access.key"; mkdir -p "${W}/work"
+acquire_access_key "${LIVE_KEYFILE}" || { echo "no access key could be exported" > "${OUT}/RESULT.txt"; exit 4; }
 
 say "smoke + ask"
 { bin/llmctl decide smoke --url "http://127.0.0.1:${ENG_PORT}" --protocol nli-onnx --key-file "${IKEY}" --options 2 --json; echo "rc=$?"
@@ -81,7 +94,7 @@ nice -n 10 python3 scripts/golden/run_golden.py --base-url "${GW}" --cacert "${C
 mem "after-probes"
 
 say "determinism + batch composition + D-01 over HTTP + edges"
-python3 "${REPO}/specs-realcheck/live_checks.py" "${GW}" "${CA}" "${LIVE_KEYFILE}" "${P}" "http://127.0.0.1:${ENG_PORT}" "${IKEY}" "${OUT}" "${MDIR}/onnx/spm.model" > "${OUT}/live_checks.log" 2>&1; echo "rc=$?" >> "${OUT}/live_checks.log"
+python3 "${RUNNER_DIR}/live_checks.py" "${GW}" "${CA}" "${LIVE_KEYFILE}" "${P}" "http://127.0.0.1:${ENG_PORT}" "${IKEY}" "${OUT}" "${MDIR}/onnx/spm.model" > "${OUT}/live_checks.log" 2>&1; echo "rc=$?" >> "${OUT}/live_checks.log"
 mem "after-checks"
 
 python3 - "${OUT}" <<'PYEOF'

@@ -246,7 +246,7 @@ flowchart LR
         CERT[("$LLMCTL_HOME/cert<br/>CA + leaf")] -.-> GW
         KEY[(".env access key<br/>0600")] -.-> GW
         REG[("registry<br/>$LLMCTL_STATE_DIR/registry")] <-->|"discover / follow"| GW
-        GW -->|"HTTP loopback<br/>internal key file"| LL["llama-server<br/>letter-logit / systemone-native<br/>decide-tiny, decide, decide-pro, decide-2b, decide-max"]
+        GW -->|"HTTP loopback<br/>internal key file"| LL["llama-server<br/>letter-logit / systemone-native<br/>decide, decide-pro, decide-2b, decide-max"]
         GW -->|"HTTP loopback<br/>internal key file"| ON["lib/onnx_server.py<br/>POST /v1/score<br/>decide-nli"]
         SCHED["llmctl start / enable / auto<br/>(scheduler + systemd/launchd)"] --> LL & ON
         SCHED -->|"register / unregister<br/>(svc_hook.sh)"| REG

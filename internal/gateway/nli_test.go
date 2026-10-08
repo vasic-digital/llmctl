@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math"
 	"net/http"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -317,6 +318,89 @@ func TestNLIRouterReportsADegradedInstanceInsteadOfServingGuesses(t *testing.T) 
 	}
 	if _, _, err := rt.Decide(context.Background(), req); ce(t, err).Status != 503 {
 		t.Errorf("a degraded instance answers 503 not_ready instead of being called again: %v", err)
+	}
+}
+
+// D-06 (live 2026-10-08): the pinned decide-nli model (MoritzLaurer/deberta-v3-large-zeroshot-v2.0
+// @cf44676c, config.json sha256 3b0a2a3f...) is a BINARY NLI head: id2label {0: entailment,
+// 1: not_entailment}. The fixture is the byte-exact /v1/score answer of the real runtime with the
+// real model (CPU, 2026-10-08). The decoder reads only P(entailment); not_entailment is its exact
+// complement, so the binary head needs no invented neutral/contradiction split. Before the fix the
+// gateway refused it ("do not name both entailment and contradiction"), degraded the only instance
+// and answered 503 not_ready to everything (golden well_formed 0/132).
+func TestNLIBinaryEntailmentNotEntailmentHeadFromTheRealPinnedModel(t *testing.T) {
+	raw, err := os.ReadFile("testdata/decide_nli_live_score_2026-10-08.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var real struct {
+		Labels []string    `json:"labels"`
+		Scores [][]float64 `json:"scores"`
+	}
+	if err := json.Unmarshal(raw, &real); err != nil || len(real.Scores) != 2 {
+		t.Fatalf("fixture: %v", err)
+	}
+	if strings.Join(real.Labels, ",") != "entailment,not_entailment" {
+		t.Fatalf("fixture labels %v", real.Labels)
+	}
+	srv, _ := fakeServer(t, func(_ *recorded, w http.ResponseWriter) { _, _ = w.Write(raw) })
+	n := &NLIBackend{Logf: func(string, ...any) {}}
+	ans, _, err := n.Decide(context.Background(), ep(srv.URL), specByID(t, "decide-nli"), parseFor(t, noulBody))
+	if err != nil {
+		t.Fatalf("the binary entailment/not_entailment head must be served: %v", err)
+	}
+	e0, e1 := real.Scores[0][0], real.Scores[1][0]
+	if want := contract.Round9(e0 / (e0 + e1)); ans[0].Answer.Noul != want { // answers carry 9 decimals
+		t.Fatalf("noul %v want %v (P(entailment) column)", ans[0].Answer.Noul, want)
+	}
+	if n.Degraded(ep(srv.URL)) {
+		t.Fatal("a valid binary head must not degrade the instance")
+	}
+	// the column is found by NAME, in either id2label order
+	srv2, _ := fakeServer(t, func(_ *recorded, w http.ResponseWriter) {
+		rows := [][]float64{{real.Scores[0][1], real.Scores[0][0]}, {real.Scores[1][1], real.Scores[1][0]}}
+		b, _ := json.Marshal(map[string]any{"labels": []string{"not_entailment", "entailment"}, "label_source": "config:config.json", "scores": rows, "truncated": []bool{false, false}})
+		_, _ = w.Write(b)
+	})
+	ans2, _, err := (&NLIBackend{}).Decide(context.Background(), ep(srv2.URL), specByID(t, "decide-nli"), parseFor(t, noulBody))
+	if err != nil || math.Abs(ans2[0].Answer.Noul-ans[0].Answer.Noul) > 1e-12 {
+		t.Fatalf("permuted binary head: %v %v", ans2, err)
+	}
+}
+
+// The binary acceptance is exactly {entailment, not_entailment} and nothing looser: never a third
+// label beside it, never a generic/none label source, never an unknown complement name.
+func TestNLIBinaryHeadAcceptanceIsNarrow(t *testing.T) {
+	cases := map[string]struct {
+		labels []string
+		source string
+	}{
+		"generic-source":                {[]string{"entailment", "not_entailment"}, "generic-config:config.json (LABEL_n names)"},
+		"none-source":                   {[]string{"entailment", "not_entailment"}, "none (no id2label)"},
+		"third-label":                   {[]string{"entailment", "not_entailment", "neutral"}, "config:x"},
+		"complement-and-contra":         {[]string{"entailment", "not_entailment", "contradiction"}, "config:x"},
+		"unknown-complement":            {[]string{"entailment", "other"}, "config:x"},
+		"two-complements":               {[]string{"not_entailment", "non_entailment"}, "config:x"},
+		"complement-without-entailment": {[]string{"not_entailment", "neutral"}, "config:x"},
+		"complement-only-and-more":      {[]string{"not_entailment", "neutral", "contradiction"}, "config:x"},
+		"duplicate-entailment":          {[]string{"entailment", "entails"}, "config:x"},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			srv, _ := fakeServer(t, func(_ *recorded, w http.ResponseWriter) {
+				row := make([]float64, len(tc.labels))
+				for i := range row {
+					row[i] = 1 / float64(len(row))
+				}
+				b, _ := json.Marshal(map[string]any{"labels": tc.labels, "label_source": tc.source, "scores": [][]float64{row, row}, "truncated": []bool{false, false}})
+				_, _ = w.Write(b)
+			})
+			n := &NLIBackend{Logf: func(string, ...any) {}}
+			_, _, err := n.Decide(context.Background(), ep(srv.URL), specByID(t, "decide-nli"), parseFor(t, noulBody))
+			if c := ce(t, err); c.Status != 502 || !n.Degraded(ep(srv.URL)) {
+				t.Fatalf("%+v degraded=%v", c, n.Degraded(ep(srv.URL)))
+			}
+		})
 	}
 }
 
