@@ -97,6 +97,28 @@ _doc_decide_checks() {
     _doc_warn "decide: engine HTTPS unknown - llama-server not built (llmctl build llama)"
   fi
 
+  # T138: per-profile x question-type maturity of every decision profile, read from the catalog (the same
+  # derived block /v1/models and `llmctl plan` use). All three types measured above baseline -> PASS;
+  # anything else (experimental | unmeasured) -> WARN naming the types, never a silent PASS.
+  local matout
+  if matout="$(json_query "${LLMCTL_CATALOG}" '"\n".join(
+      ("%s %s %s" % (n, "|".join("%s=%s" % (t, ((p.get("maturity") or {}).get(t) or {}).get("status", "unmeasured")) for t in ("noul", "choice", "score")),
+                     ",".join(t for t in ("noul", "choice", "score") if ((p.get("maturity") or {}).get(t) or {}).get("status", "unmeasured") != "measured")))
+      for n, p in sorted(d["profiles"].items(), key=lambda kv: kv[1].get("port", 0)) if "decide" in p.get("capability", []))' 2>/dev/null)"; then
+    local mline mname mrest mtypes mexp
+    while IFS= read -r mline; do
+      [[ -n "${mline}" ]] || continue
+      mname="${mline%% *}"; mrest="${mline#* }"; mtypes="${mrest%% *}"; mexp="${mrest#* }"
+      [[ "${mrest}" == *" "* ]] || mexp=""
+      mtypes="${mtypes//|/ }"
+      if [[ -z "${mexp}" ]]; then
+        _doc_pass "decide: maturity ${mname}: ${mtypes}"
+      else
+        _doc_warn "decide: maturity ${mname}: ${mtypes} (experimental: ${mexp//,/, })"
+      fi
+    done <<< "${matout}"
+  fi
+
   # Gateway port: free, or already served by our own running gateway.
   local port="${LLMCTL_DECIDE_PORT:-8095}"
   local gstat gpid=""

@@ -173,4 +173,26 @@ mkdir -p "${LLMCTL_DATA_DIR}/venv-onnx/bin"; printf '#!/bin/sh\nexit 1\n' > "${L
 out="$(doctor_out)"
 assert_contains "${out}" "PASS decide: private venv" "present venv -> PASS"
 
+echo "== T138: per-profile x type maturity =="
+MATCAT="${TEST_TMP}/maturity-catalog.json"
+python3 - "${LLMCTL_ROOT}/models/catalog.json" "${MATCAT}" <<'PYEOF'
+import json, sys
+d = json.load(open(sys.argv[1]))
+for n in [k for k, p in d["profiles"].items() if "decide" in p.get("capability", [])]:
+    del d["profiles"][n]
+mk = lambda st: {"status": st, "reason": "fixture"}
+def prof(m):
+    return {"port": 9999, "engine": "llama", "capability": ["decide"], "maturity": {"noul": mk(m[0]), "choice": mk(m[1]), "score": mk(m[2])}}
+d["profiles"]["mat-all"] = prof(("measured", "measured", "measured"))
+d["profiles"]["mat-mixed"] = prof(("measured", "experimental", "unmeasured"))
+json.dump(d, open(sys.argv[2], "w"))
+PYEOF
+out="$(LLMCTL_CATALOG="${MATCAT}" doctor_out)"
+assert_contains "${out}" "PASS decide: maturity mat-all: noul=measured choice=measured score=measured" "fully measured profile -> PASS"
+assert_contains "${out}" "WARN decide: maturity mat-mixed: noul=measured choice=experimental score=unmeasured (experimental: choice, score)" "experimental/unmeasured types -> WARN naming them"
+case "${out}" in *"PASS decide: maturity mat-mixed"*) printf '  FAIL: mixed-maturity profile reported PASS\n' >&2; TEST_FAILS=$((TEST_FAILS+1));; *) printf '  ok: no PASS for a mixed-maturity profile\n';; esac
+echo "== T138 control needle: a catalog with NO decide profile prints no maturity line, and the real catalog does =="
+out="$(doctor_out)"
+assert_contains "${out}" "decide: maturity decide-lev:" "real catalog: the instrument sees a known profile (control needle)"
+
 test_finish
