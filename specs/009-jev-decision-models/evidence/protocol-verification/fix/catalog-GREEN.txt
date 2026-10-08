@@ -1,0 +1,69 @@
+  ok: catalog parses as JSON (python3 json.load)
+profiles: 22
+  ok: catalog cross-check (fields, unique ports, known profiles)
+  ok: all GGUF files carry a real sha256
+
+  ok: decide profiles: present, llama engine, decide capability, real sha256 pins, ports 8092-8094
+
+  ok: iter2 profiles: decide-nli (onnx), decide-2b, decide-max pinned and consistent (ports 8096/8098/8097)
+
+  ok: decision schema contract + huggingface.co pin evidence cross-check
+  ok: decide-max port is 8097 in ports map and profile
+  ok: no 8099 anywhere in the catalog
+  ok: no document still advertises decide-max on 8099 (every tracked/unignored .md scanned)
+  ok: control: the stale-8099 pattern matches a planted stale line
+  ok: constitution Port Map lists decide-max on 8097
+  ok: no test cites the out-of-tree research path (D-26)
+  ok: mutation 'null one sha256' is rejected by the validator
+  ok: mutation 'flip one revision char' is rejected by the validator
+  ok: mutation 'main as revision' is rejected by the validator
+  ok: mutation 'non-commercial licence' is rejected by the validator
+  ok: mutation 'missing licence' is rejected by the validator
+  ok: mutation 'chat capability on a decision profile' is rejected by the validator
+  ok: mutation 'duplicate port' is rejected by the validator
+  ok: mutation 'decide-max back on 8099' is rejected by the validator
+  ok: mutation 'onnx engine with letter-logit protocol' is rejected by the validator
+  ok: mutation 'unknown protocol' is rejected by the validator
+  ok: mutation 'benchmark class invented' is rejected by the validator
+  ok: mutation 'decision object removed' is rejected by the validator
+  ok: mutation 'size differs from huggingface.co' is rejected by the validator
+  ok: mutation 'sha256 differs from huggingface.co' is rejected by the validator
+  ok: mutation 'tokenizer.json re-added next to spm.model' is rejected by the validator
+  ok: mutation 'lower-case spelling a (G-031)' is rejected by the validator
+  ok: mutation 'lower-case spelling with a leading space (G-031)' is rejected by the validator
+  ok: mutation 'Jev-Style verdict model back on letter-logit' is rejected by the validator
+  ok: mutation 'jev-verdict profile without its not-servable note' is rejected by the validator
+  ok: mutation '2-label NLI model without decision.not_servable' is rejected by the validator
+  ok: mutation '2-label NLI model with an empty not_servable' is rejected by the validator
+  ok: mutation 'not_servable profile whose tier_note does not say so' is rejected by the validator
+  ok: mutation 'JevK5 letter-logit profile above 16 options' is rejected by the validator
+  ok: mutation 'multi-letter spelling (G-031)' is rejected by the validator
+  ok: mutation 'profile name with a dot' is rejected by the validator
+
+  ok: native profiles: ports 8103-8108, systemone-native, pins equal the admission records
+  ok: native-pin mutation is rejected: f=d["profiles"]["decide-lev"]["files"][0]; f["sha256"]=("0" 
+  ok: native-pin mutation is rejected: d["profiles"]["decide-laya"]["port"]=8099; d["ports"]["decid
+  ok: native-pin mutation is rejected: d["profiles"]["decide-julia"]["decision"]["protocol"]="lette
+  ok: native-pin mutation is rejected: d["profiles"]["decide-kev-4b"]["hf_revision"]="0"*40
+  ok: T139: every decision profile's overhead_mb / overhead_vram_mb / window_tokens equals the derivation from its evidence
+memory: OK (catalog == evidence derivation)
+  info: 17 decision-profile memory half(s) still unmeasured (listed as OPEN by overhead_from_memory.py --check)
+  ok: T138: every decision profile's maturity object equals the derivation from its golden-run output
+maturity: OK (catalog == golden-run derivation)
+  ok: T138/T139: every decision profile carries memory + maturity objects whose evidence paths exist
+  ok: mutation 'decide-julia loses its memory object' is rejected
+  ok: mutation 'decide-julia loses its memory object (structure)' is rejected
+  ok: mutation 'hand-typed overhead_mb' is rejected
+  ok: mutation 'overhead_vram_mb removed from a measured profile' is rejected
+  ok: mutation 'window_tokens changed' is rejected
+  ok: mutation 'ram evidence path does not exist' is rejected
+  ok: mutation 'ram evidence path does not exist (structure)' is rejected
+  ok: mutation 'unmeasured half without a reason' is rejected
+  ok: mutation 'unmeasured profile gains a number by hand' is rejected
+  ok: mutation 'maturity status hand-flipped to measured' is rejected
+  ok: mutation 'maturity evidence path does not exist' is rejected
+  ok: mutation 'maturity evidence path does not exist (script)' is rejected
+  ok: mutation 'maturity object removed' is rejected
+  ok: mutation 'maturity object removed (structure)' is rejected
+  ok: mutation 'maturity lower_bound hand-edited above baseline' is rejected
+RESULT: PASS

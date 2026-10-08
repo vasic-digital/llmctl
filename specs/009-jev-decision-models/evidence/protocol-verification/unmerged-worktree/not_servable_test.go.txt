@@ -1,0 +1,65 @@
+package gateway
+
+import (
+	"strings"
+	"testing"
+)
+
+// decide-nli's vendor head is 2-label (config.json id2label {0: entailment, 1: not_entailment},
+// specs/009-jev-decision-models/evidence/protocol-verification/decide-nli/config.json:10-13) while the
+// nli-onnx driver requires a contradiction column (nli.go nliColumnsFor) - the live run was refused
+// (evidence/live-models.jsonl). The catalog marks it decision.not_servable; the gateway must treat it
+// exactly like an unimplemented protocol: never listed or routed, refused before any engine contact.
+func TestShippedCatalogDecideNLIIsNotServable(t *testing.T) {
+	specs, err := LoadCatalog("../../models/catalog.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, s := range specs {
+		if s.ID != "decide-nli" {
+			continue
+		}
+		if s.Protocol != ProtoNLI {
+			t.Fatalf("decide-nli protocol = %q, want %q", s.Protocol, ProtoNLI)
+		}
+		if !strings.Contains(s.Unsupported, "contradiction") {
+			t.Fatalf("decide-nli must be not servable, naming the missing contradiction label; Unsupported = %q", s.Unsupported)
+		}
+		return
+	}
+	t.Fatal("decide-nli missing from the shipped catalog")
+}
+
+func TestCatalogNotServableFieldMarksUnsupported(t *testing.T) {
+	specs, err := ParseCatalog([]byte(`{"profiles":{"decide-n":{"port":8096,"capability":["decide"],
+		"decision":{"protocol":"nli-onnx","max_options":20,"score_levels":[2,10],"not_servable":"2-label head, no contradiction column"}}}}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(specs) != 1 || specs[0].Unsupported != "2-label head, no contradiction column" {
+		t.Fatalf("spec = %+v", specs)
+	}
+	// golden-false: no not_servable (or an empty one) on an implemented protocol is servable
+	for _, body := range []string{
+		`{"profiles":{"decide-n":{"port":8096,"capability":["decide"],"decision":{"protocol":"nli-onnx","max_options":20,"score_levels":[2,10]}}}}`,
+		`{"profiles":{"decide-n":{"port":8096,"capability":["decide"],"decision":{"protocol":"nli-onnx","max_options":20,"score_levels":[2,10],"not_servable":""}}}}`,
+	} {
+		sp, err := ParseCatalog([]byte(body))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if sp[0].Unsupported != "" {
+			t.Fatalf("servable profile marked unsupported: %q (%s)", sp[0].Unsupported, body)
+		}
+	}
+	// the shipped letter/native profiles that the verification found matching stay servable
+	all, err := LoadCatalog("../../models/catalog.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, s := range all {
+		if s.Protocol == ProtoNative && s.Unsupported != "" {
+			t.Fatalf("%s: a systemone-native profile (vendor-verified match) must stay servable: %q", s.ID, s.Unsupported)
+		}
+	}
+}

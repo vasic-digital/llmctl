@@ -1,0 +1,2 @@
+ok  	github.com/vasic-digital/llmctl/internal/gateway	6.460s
+ok  	github.com/vasic-digital/llmctl/internal/server	25.449s

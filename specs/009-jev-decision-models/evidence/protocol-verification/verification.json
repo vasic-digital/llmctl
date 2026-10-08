@@ -1,0 +1,32 @@
+{
+  "task": "protocol verification of every decision profile against the vendor's pinned-revision config files",
+  "date": "2026-10-08",
+  "method": "curl -sL --max-time 30 https://huggingface.co/api/models/<repo>/tree/<rev>?recursive=true, then every non-weight file < 2 MB from https://huggingface.co/<repo>/raw/<rev>/<path> (fetch.py logic; no model weights downloaded). Copies under <profile>/ ('/' in a path -> '__'), file trees under trees/, hashes in SHA256SUMS.",
+  "gateway_drivers": {
+    "letter-logit": "internal/gateway/letter.go: POST /v1/chat/completions, one user message rendered by internal/contract/prompt.go RenderPrompt (llmctl's own template, 'Answer with a single letter.'), first-token logprobs of the option letters",
+    "systemone-native": "internal/gateway/native.go: POST /v1/systemone (llama.cpp native decision API); needs LLMCTL_DECIDE_NATIVE=1",
+    "nli-onnx": "internal/gateway/nli.go: POST /v1/score; columns selected by name and BOTH entailment and contradiction are required (nli.go:201-202)",
+    "jev-verdict": "not implemented (internal/gateway/catalog.go unsupportedReason)"
+  },
+  "profiles": [
+    {"profile": "decide-tiny", "catalog_protocol": "jev-verdict", "vendor_readout": "verdict (logit(' yes')-logit(' no') at each ' ->' slot), template macjev-render-v1",
+     "evidence": "decide-tiny/readout_config.json:4-5", "match": "yes (after d856e69); gateway cannot serve it", "class": "b", "live": "FAIL as letter-logit (evidence/live-models.jsonl), root cause in live-models/decide-tiny/ROOTCAUSE.md"},
+    {"profile": "decide", "catalog_protocol": "letter-logit", "vendor_readout": "option-letter logits at each answer slot of a decider.prompt 'plain' layout (no chat template), softmax / temperature 1.099 (per type 1.11/1.56/1.287)",
+     "evidence": "decide/decide_gguf.py:5-6,62,75; decide/decider_config.json:2-11; decide/README.md:27-29", "match": "readout class yes; prompt layout and temperature NO (llmctl sends its own prompt through the GGUF chat template, temperature 1)", "class": "c-with-risk", "live": "NOT-EXERCISED"},
+    {"profile": "decide-2b", "catalog_protocol": "letter-logit", "vendor_readout": "next-token logprobs of uppercase letters A..P after a ChatML system+user(JSON) prompt with an empty <think></think> block; per-file temperature 1.42; >16 options need the JevK5 runtime (knockout)",
+     "evidence": "decide-2b/README.md:83-84,90-91,99,101-102,125-145", "match": "readout class yes; prompt, temperature and option range (catalog max_options 20 > 16 single-pass letters) NO", "class": "a (max_options) + c-with-risk", "live": "NOT-EXERCISED"},
+    {"profile": "decide-max", "catalog_protocol": "letter-logit", "vendor_readout": "same as decide-2b (same repo/README); per-file temperature 1.316",
+     "evidence": "decide-max/README.md:83-84,90-91,96,101-102,125-145", "match": "readout class yes; prompt, temperature and option range NO", "class": "a (max_options) + c-with-risk", "live": "NOT-EXERCISED"},
+    {"profile": "decide-pro", "catalog_protocol": "letter-logit", "vendor_readout": "softmax over answer-letter logits at the last prompt position, prompts of PROMPT_VERSION spark-decisions-v3 ('any other prompt format can make the adapter useless')",
+     "evidence": "decide-pro/README.md:22-23,79-85", "match": "readout class yes; prompt NO", "class": "c-with-risk", "live": "NOT-EXERCISED"},
+    {"profile": "decide-nli", "catalog_protocol": "nli-onnx", "vendor_readout": "2-label NLI head: id2label {0: entailment, 1: not_entailment}",
+     "evidence": "decide-nli/config.json:10-13; decide-nli/onnx__config.json:10-13; decide-nli/README.md:22-23", "match": "NO: the gateway requires a contradiction column", "class": "b", "live": "FAIL (gateway refuses the labels, evidence/live-models.jsonl)"},
+    {"profile": "decide-julia", "catalog_protocol": "systemone-native", "vendor_readout": "/v1/systemone (ModernBertDecisionModel)", "evidence": "decide-julia/README.md:20; decide-julia/convert.log:7-8", "match": "yes", "class": "c", "live": "RAN"},
+    {"profile": "decide-kev-08b", "catalog_protocol": "systemone-native", "vendor_readout": "/v1/systemone (KevModel)", "evidence": "decide-kev-08b/README.md:20; decide-kev-08b/convert.log:7,13", "match": "yes", "class": "c", "live": "RAN (+ SC-001 PASS, evidence/sc001.json)"},
+    {"profile": "decide-kev-4b", "catalog_protocol": "systemone-native", "vendor_readout": "/v1/systemone (KevModel)", "evidence": "decide-kev-4b/README.md:20; decide-kev-4b/convert.log:7,13", "match": "yes", "class": "c", "live": "RAN"},
+    {"profile": "decide-kev-9b", "catalog_protocol": "systemone-native", "vendor_readout": "/v1/systemone (KevModel)", "evidence": "decide-kev-9b/README.md:20; decide-kev-9b/convert.log:7,13", "match": "yes", "class": "c", "live": "FAIL-START (CUDA OOM; a planner VRAM issue, not a protocol issue)"},
+    {"profile": "decide-laya", "catalog_protocol": "systemone-native", "vendor_readout": "/v1/systemone (ModernBertDecisionModel)", "evidence": "decide-laya/README.md:20; decide-laya/convert.log:7-8", "match": "yes", "class": "c", "live": "RAN"},
+    {"profile": "decide-lev", "catalog_protocol": "systemone-native", "vendor_readout": "/v1/systemone (Lev checkpoint)", "evidence": "decide-lev/README.md:20; decide-lev/convert.log:7", "match": "yes", "class": "c", "live": "RAN"}
+  ],
+  "classes": {"a": "fixable catalog config error", "b": "needs a driver the gateway does not have: catalogued, not servable, clear refusal, tracked follow-up", "c": "matches", "c-with-risk": "readout class matches; vendor prompt/temperature differ; not live-tested, so whether answers are usable is UNCONFIRMED"}
+}

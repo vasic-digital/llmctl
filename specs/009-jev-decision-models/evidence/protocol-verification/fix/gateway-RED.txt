@@ -1,0 +1,7 @@
+--- FAIL: TestShippedCatalogDecideNLIIsNotServable (0.00s)
+    not_servable_test.go:26: decide-nli must be not servable, naming the missing contradiction label; Unsupported = ""
+--- FAIL: TestCatalogNotServableFieldMarksUnsupported (0.00s)
+    not_servable_test.go:40: spec = [{ID:decide-n Protocol:nli-onnx Port:8096 MaxOptions:20 ScoreLevels:[2 10] Readout:{NProbs:32 MassThreshold:0.5 Spellings:[A  A] CachePrompt:false} Experimental:[] Notes: Ctx:0 Parallel:0 Desc: ReleaseDate: ModelSHA256: Maturity:map[] Unsupported:}]
+FAIL
+FAIL	github.com/vasic-digital/llmctl/internal/gateway	0.046s
+FAIL

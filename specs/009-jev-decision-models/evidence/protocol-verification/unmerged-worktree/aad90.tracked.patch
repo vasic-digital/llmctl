@@ -1,0 +1,631 @@
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index 424ccac..bdecb13 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -37,6 +37,7 @@ known limit: [`docs/limitations.md`](docs/limitations.md); every known gap: `spe
+ - **Version.** The `VERSION` file and `llmctl version` now both read `3.1.0` (`llmctl version` printed a stale `0.1.0` before; `tests/test_cli.sh` now also asserts it equals `VERSION`). The catalog's own `version` field is the schema version (still `1`) and is unchanged.
+ - **Accuracy figures are provisional** (agent-authored labels, human review pending). Every decision profile carries a per-question-type **maturity** (`measured` / `experimental` / `unmeasured`, derived from its golden run by `scripts/maturity_from_golden.py`): a type whose measured Wilson lower bound does not clear the majority/chance baseline, or that has no live golden run yet, is labelled experimental in `GET /v1/models` (`experimental_types`), in `llmctl plan` and on the answer itself (`maturity: "experimental"`). Every admitted profile still ships and nothing is hidden. Per-profile table: `docs/hardware-tiers.md`.
+ - **Second host.** Portability runs used `nezha.local` (ALT Linux, CPU only).
++- **Two catalogued decision profiles are not servable in 3.1.0.** A check of every decision profile against its vendor's pinned-revision config files (`specs/009-jev-decision-models/evidence/protocol-verification/verification.json`, copies + `SHA256SUMS`) found two whose readout the gateway does not implement: `decide-tiny` (protocol `jev-verdict`: one `" ->"` verdict slot per option; live it answered `" no"`/`" yes"`, never a letter) and `decide-nli` (a 2-label `entailment`/`not_entailment` head; the `nli-onnx` driver needs a contradiction column). Both stay in the catalog (download and verify work) but `llmctl plan` shows them `UNSERVABLE`, `auto decide` and co-residency skip them, `llmctl models list` marks them `NOT SERVABLE`, and the gateway refuses a request for either with a non-retryable error before any engine call. Examples in the README, tutorial, user manual and quickstart now use `decide-kev-08b`, the smallest profile verified live (`evidence/sc001.json`; it needs `LLMCTL_DECIDE_NATIVE=1` and llama.cpp >= b11379). The six native profiles match their vendors' `/v1/systemone` contract. The four `letter-logit` profiles (`decide`, `decide-2b`, `decide-pro`, `decide-max`) use the vendors' readout class, but not their prompts or temperatures, and none has been run live; JevK5 (`decide-2b`, `decide-max`) now caps `max_options` at 16, the letters its single-pass readout covers. With `decide-tiny`/`decide-nli` skipped, `auto decide` now picks `decide-2b` on most hosts - a profile not yet verified live.
+ 
+ ### Added
+ 
+diff --git a/README.md b/README.md
+index a9d2d6b..fcf3a9d 100644
+--- a/README.md
++++ b/README.md
+@@ -139,9 +139,10 @@ See `docs/hardware-tiers.md`. The baseline reference machine (Ryzen 7 2700X,
+ Threadripper, 32 GB VRAM) unlock the `ws-*` profiles and full co-residency;
+ `colibri-glm` (a 744B MoE that streams weights from ~380 GB of NVMe) is gated
+ to `datacenter`. The catalog also carries **decision profiles** (capability `decide`) for typed
+-noul/choice/score decisions, from `decide-tiny` (0.8B GGUF, any tier) and `decide-nli`
+-(DeBERTa-v3-large zero-shot NLI on the `onnx` engine, any tier) up to workstation-tier
+-profiles. The authoritative, current profile table (tiers, sizes, ports, source-labelled
++noul/choice/score decisions, from `decide-julia`/`decide-kev-08b` (native `/v1/systemone`
++models, any tier; `decide-kev-08b` is the smallest profile verified live end to end) up to
++workstation-tier profiles. `decide-tiny` (a Jev-Style verdict-readout model) and `decide-nli` (a
++2-label NLI head) are catalogued but **not servable** by the gateway in 3.1.0. The authoritative, current profile table (tiers, sizes, ports, source-labelled
+ benchmarks) is `docs/decision-models.md`.
+ 
+ ## Safety guarantees
+diff --git a/bin/llmctl b/bin/llmctl
+index 7ebb4c2..795d5d5 100755
+--- a/bin/llmctl
++++ b/bin/llmctl
+@@ -132,6 +132,14 @@ ENVIRONMENT
+ EOF
+ }
+ 
++# A catalogued decision profile the gateway cannot serve is still listed (download/verify work) but
++# never as usable: its capability column carries the reason.
++_models_not_servable_tag() {
++  local why; why="$(catalog_decision_not_servable "$1")"
++  [[ -n "${why}" ]] && printf ' [NOT SERVABLE: %s]' "${why}"
++  return 0
++}
++
+ cmd_models_list() {
+   catalog_check
+   printf '%-16s %-6s %-8s %-10s %-12s %s\n' "profile" "port" "engine" "size GiB" "min-tier" "capabilities"
+@@ -141,7 +149,7 @@ cmd_models_list() {
+     printf '%-16s %-6s %-8s %-10s %-12s %s\n' \
+       "${p}" "$(catalog_port "${p}")" "$(catalog_engine "${p}")" \
+       "$(( (size_mb + 1023) / 1024 ))" "$(catalog_min_tier "${p}")" \
+-      "$(catalog_capability "${p}")"
++      "$(catalog_capability "${p}")$(_models_not_servable_tag "${p}")"
+   done
+ }
+ 
+diff --git a/docs/decision-models.md b/docs/decision-models.md
+index cc0671e..be5517b 100644
+--- a/docs/decision-models.md
++++ b/docs/decision-models.md
+@@ -112,12 +112,25 @@ profile with no ready engine answers `503 not_ready`.
+ The gateway reads each profile's `decision.protocol` from the catalog and picks
+ the driver:
+ 
+-* **`letter-logit`** (`decide-tiny`, `decide-2b`, `decide`, `decide-pro`,
+-  `decide-max`; engine `llama`): the mechanism above, in `internal/gateway/letter.go`.
++* **`letter-logit`** (`decide-2b`, `decide`, `decide-pro`, `decide-max`; engine `llama`): the
++  mechanism above, in `internal/gateway/letter.go`. The vendors read these models with their own
++  prompts and temperatures (decider.prompt, the JevK5 ChatML client, Rizzo Flow `spark-decisions-v3`);
++  the gateway sends its one shared prompt through the GGUF chat template, and none of the four has
++  been run live yet - whether their answers are usable is unverified
++  (`specs/009-jev-decision-models/evidence/protocol-verification/verification.json`). JevK5 (`decide-2b`, `decide-max`) is read in one pass
++  over the letters A..P, so those profiles cap `max_options` at 16.
++* **`jev-verdict`** (`decide-tiny`): the Jev-Style readout, one `" ->"` verdict slot per option
++  (vendor `readout_config.json` `"readout": "verdict"`). Catalogued, **not servable**: the gateway has no
++  driver for it; `plan` shows it `UNSERVABLE`, `auto decide` skips it, a request for it is refused
++  (`evidence/live-models/decide-tiny/ROOTCAUSE.md`).
+ * **`nli-onnx`** (`decide-nli`; engine `onnx`): for each option the gateway sends a
+   premise (the state) / hypothesis pair to the internal encoder runtime's `POST /v1/score`
+   and normalises the entailment column (found by label NAME, never by position;
+-  unusable labels are refused rather than guessed) - `internal/gateway/nli.go`.
++  unusable labels are refused rather than guessed) - `internal/gateway/nli.go`. The driver needs both
++  an entailment and a contradiction label. `decide-nli`'s model has a 2-label head (`entailment` /
++  `not_entailment`, vendor `config.json` `id2label`), so the catalog marks it `decision.not_servable`:
++  **not servable** in 3.1.0, skipped by `plan`/`auto decide`, refused by the gateway before any engine
++  call. Serving it needs 2-label support checked against the vendor's zero-shot pipeline (follow-up).
+ * **`systemone-native`** (`decide-julia`, `decide-kev-08b`, `decide-kev-4b`, `decide-kev-9b`,
+   `decide-laya`, `decide-lev`; engine `llama` >= b11379): the engine's native `POST /v1/systemone`
+   (`internal/gateway/native.go`). The gateway re-validates and re-shapes the engine's answer through
+@@ -286,7 +299,7 @@ the real server code; only the model backends (`onnxruntime`,
+ ## `auto decide` ranking
+ 
+ `sched_rank_for_capability decide` (best-first; `auto decide` picks the
+-first that fits): `decide-tiny` > `decide-nli` > `decide-2b` > `decide` >
++first that fits and is servable - `decide-tiny` and `decide-nli` are skipped as not servable in 3.1.0): `decide-tiny` > `decide-nli` > `decide-2b` > `decide` >
+ `decide-pro` > `decide-max` > the six native profiles (`decide-julia` > `decide-laya` > `decide-kev-08b` > `decide-lev` > `decide-kev-4b` > `decide-kev-9b`, ascending footprint, appended last so `auto decide` never prefers an engine-gated profile over a proven one). Rationale per rung (from the comment in
+ `lib/scheduler.sh`): `decide-tiny` (0.5 GiB, calibrated for exactly this
+ workload) > `decide-nli` (1.7 GiB fp32 ONNX encoder; CPU-only but NLI
+diff --git a/docs/faq.md b/docs/faq.md
+index e91cda0..fc3d40f 100644
+--- a/docs/faq.md
++++ b/docs/faq.md
+@@ -409,9 +409,9 @@ scripted-heredoc happy path, abort path).
+ **read-only capacity report**: it tells you how many instances *would* fit
+ in GPU mode or CPU mode (alternative placements, never additive;
+ `total_decision_slots = max(gpu, cpu) × parallel`), but it reserves and
+-launches nothing. `llmctl decide scale decide-tiny 2` is what starts them:
++launches nothing. `llmctl decide scale decide-kev-08b 2` is what starts them:
+ 
+-* Instance keys are `decide-tiny`, `decide-tiny.2`, `decide-tiny.3` … The primary keeps its documented port;
++* Instance keys are `decide-kev-08b`, `decide-kev-08b.2`, `decide-kev-08b.3` … The primary keeps its documented port;
+   every further instance gets a port from the registry allocator (so instances beyond the first need the
+   registry binary: `llmctl build decide`; without it the scale is refused before anything starts).
+ * Scale-up is **admission-bounded** by the same RAM/VRAM budget check `llmctl start` uses and is
+@@ -420,7 +420,7 @@ launches nothing. `llmctl decide scale decide-tiny 2` is what starts them:
+ * Scale-down stops the **highest-numbered** instances first. Asking for the current count is a no-op.
+ * A runtime failure while scaling up rolls back every instance started in that call (exit 1).
+ * After a failed `llmctl switch`, the restore brings back the same **count** of instances of a scaled
+-  profile, not necessarily the same keys (if only `decide-tiny.3` was running it comes back as `decide-tiny`).
++  profile, not necessarily the same keys (if only `decide-kev-08b.3` was running it comes back as `decide-kev-08b`).
+ * `LLMCTL_DECIDE_MODE=deterministic` (default) serves a profile from its primary and overflows to the next
+   instance only when the primary is saturated; `throughput` spreads least-loaded and marks every response
+   `x-llmctl-decide-mode: throughput`.
+diff --git a/docs/hardware-tiers.md b/docs/hardware-tiers.md
+index 2ca4478..29a0d03 100644
+--- a/docs/hardware-tiers.md
++++ b/docs/hardware-tiers.md
+@@ -207,16 +207,16 @@ A type missing from a profile's object counts as unmeasured. Values below are co
+ 
+ | fixture | decision profiles added to the recommended set | `auto decide` picks |
+ |---|---|---|
+-| `apple` | `decide-tiny`, `decide`, `decide-pro`, `decide-nli`, `decide-max`, `decide-2b`, `decide-julia`, `decide-kev-08b`, `decide-kev-4b`, `decide-kev-9b`, `decide-laya`, `decide-lev` | `decide-tiny` |
+-| `baseline` | `decide-tiny`, `decide`, `decide-nli`, `decide-2b`, `decide-julia`, `decide-kev-08b`, `decide-kev-4b`, `decide-laya`, `decide-lev` | `decide-tiny` |
+-| `constrained` | `decide-tiny`, `decide`, `decide-nli`, `decide-2b`, `decide-julia`, `decide-kev-08b`, `decide-kev-4b`, `decide-laya`, `decide-lev` | `decide-tiny` |
+-| `cpu-heavy` | `decide-tiny`, `decide`, `decide-pro`, `decide-nli`, `decide-max`, `decide-2b`, `decide-julia`, `decide-kev-08b`, `decide-kev-4b`, `decide-kev-9b`, `decide-laya`, `decide-lev` | `decide-tiny` |
+-| `ram-contended-auto-eviction` | `decide-tiny`, `decide`, `decide-nli`, `decide-2b`, `decide-kev-4b`, `decide-lev` | `decide-tiny` |
+-| `small-exact` | `decide-tiny`, `decide-nli`, `decide-julia`, `decide-laya` | `decide-tiny` |
++| `apple` | `decide`, `decide-pro`, `decide-max`, `decide-2b`, `decide-julia`, `decide-kev-08b`, `decide-kev-4b`, `decide-kev-9b`, `decide-laya`, `decide-lev` | `decide-2b` |
++| `baseline` | `decide`, `decide-2b`, `decide-julia`, `decide-kev-08b`, `decide-kev-4b`, `decide-laya`, `decide-lev` | `decide-2b` |
++| `constrained` | `decide`, `decide-2b`, `decide-julia`, `decide-kev-08b`, `decide-kev-4b`, `decide-laya`, `decide-lev` | `decide-2b` |
++| `cpu-heavy` | `decide`, `decide-pro`, `decide-max`, `decide-2b`, `decide-julia`, `decide-kev-08b`, `decide-kev-4b`, `decide-kev-9b`, `decide-laya`, `decide-lev` | `decide-2b` |
++| `ram-contended-auto-eviction` | `decide`, `decide-2b`, `decide-kev-4b`, `decide-lev` | `decide-2b` |
++| `small-exact` | `decide-julia`, `decide-laya` | `decide-julia` |
+ | `tiny` | none | no fit |
+-| `vram-contended-coresident` | `decide-tiny`, `decide`, `decide-nli`, `decide-2b`, `decide-julia`, `decide-kev-08b`, `decide-kev-4b`, `decide-laya`, `decide-lev` | `decide-tiny` |
+-| `vram-contended` | `decide-tiny`, `decide`, `decide-nli`, `decide-2b`, `decide-julia`, `decide-kev-4b`, `decide-laya`, `decide-lev` | `decide-tiny` |
+-| `workstation` | `decide-tiny`, `decide`, `decide-pro`, `decide-nli`, `decide-max`, `decide-2b`, `decide-julia`, `decide-kev-08b`, `decide-kev-4b`, `decide-kev-9b`, `decide-laya`, `decide-lev` | `decide-tiny` |
++| `vram-contended-coresident` | `decide`, `decide-2b`, `decide-julia`, `decide-kev-08b`, `decide-kev-4b`, `decide-laya`, `decide-lev` | `decide-2b` |
++| `vram-contended` | `decide`, `decide-2b`, `decide-julia`, `decide-kev-4b`, `decide-laya`, `decide-lev` | `decide-2b` |
++| `workstation` | `decide`, `decide-pro`, `decide-max`, `decide-2b`, `decide-julia`, `decide-kev-08b`, `decide-kev-4b`, `decide-kev-9b`, `decide-laya`, `decide-lev` | `decide-2b` |
+ 
+ **`auto decide` ranking** (`sched_rank_for_capability decide`, fixed): `decide-tiny`,
+ `decide-nli`, `decide-2b`, `decide`, `decide-pro`, `decide-max`, then the six native
+@@ -224,7 +224,10 @@ profiles in ascending footprint order (`decide-julia`, `decide-laya`, `decide-ke
+ `decide-lev`, `decide-kev-4b`, `decide-kev-9b`) - appended last so that `auto decide`
+ never prefers a profile that needs the native engine path (the gateway serves them only with
+ `LLMCTL_DECIDE_NATIVE=1`) over a proven one. The rule
+-is **the first recommended profile of that list wins** - i.e. an ascending
++is **the first recommended profile of that list wins** (a profile the gateway cannot serve is never
++recommended: `decide-tiny`, protocol `jev-verdict`, and `decide-nli`, a 2-label NLI head, are catalogued
++but skipped - `plan` shows them as `UNSERVABLE`, see
++`specs/009-jev-decision-models/evidence/protocol-verification/verification.json`) - i.e. an ascending
+ footprint/accuracy ladder, *smallest footprint first*, not "highest
+ accuracy" (`decide-tiny` is the profile calibrated for exactly this
+ workload; the rationale per rung is in the comment above
+diff --git a/docs/tutorial.md b/docs/tutorial.md
+index 5b9d3c2..966ab4e 100644
+--- a/docs/tutorial.md
++++ b/docs/tutorial.md
+@@ -265,15 +265,20 @@ The decision layer answers yes/no, pick-one and rate questions with probabilitie
+ with a mandatory access key. It is a different service from the chat server above and needs Go >= 1.25 for its binary.
+ 
+ ```bash
+-./bin/llmctl build decide                 # builds build/llmctl-decide
+-./bin/llmctl models download decide-tiny  # verified download + a typed smoke question
+-./bin/llmctl enable decide-tiny           # the engine (loopback only) behind the gateway
+-./bin/llmctl decide serve                 # HTTPS on :8095; creates the CA, certificate and access key on first start
+-./bin/llmctl decide ask --type noul --state "Arithmetic facts." --instructions "Is 2+2=4?"
+-./bin/llmctl decide ask --type choice --state "Routing." --instructions "Which team handles invoices?" \
++./bin/llmctl build decide                    # builds build/llmctl-decide
++./bin/llmctl models download decide-kev-08b  # verified download + a typed smoke question
++./bin/llmctl enable decide-kev-08b           # the engine (loopback only) behind the gateway
++LLMCTL_DECIDE_NATIVE=1 ./bin/llmctl decide serve   # HTTPS on :8095; creates the CA, certificate and access key on first start
++./bin/llmctl decide ask --profile decide-kev-08b --type noul --state "Arithmetic facts." --instructions "Is 2+2=4?"
++./bin/llmctl decide ask --profile decide-kev-08b --type choice --state "Routing." --instructions "Which team handles invoices?" \
+     --criteria '{"billing":"handles invoices","legal":"contracts"}' --json
+ ```
+ 
++`decide-kev-08b` is a native `/v1/systemone` profile: it needs the llama.cpp engine at b11379 or newer and
++`LLMCTL_DECIDE_NATIVE=1` on the gateway (see [`docs/decision-models.md`](decision-models.md#native-profiles-systemone-native-llamacpp-b11379)).
++It is the smallest profile verified live end to end (all three question types, `specs/009-jev-decision-models/evidence/sc001.json`).
++`decide-tiny` is catalogued but not servable in 3.1.0 (its model is read at a verdict slot per option, not a letter).
++
+ Each answer carries probabilities and a `confidence` (a shaping convention, **not** the chance of being right). Use `--min-confidence 0.7` to
+ make a low-confidence answer exit 10 instead of being used. The key is never printed (`llmctl decide key show --yes-print` shows it on purpose).
+ Read [`docs/limitations.md`](limitations.md) before using a decision as a gate: it is not a safety guardrail. Reference: [`docs/decide-gateway.md`](decide-gateway.md),
+diff --git a/docs/user-manual.md b/docs/user-manual.md
+index 639417c..d6389d2 100644
+--- a/docs/user-manual.md
++++ b/docs/user-manual.md
+@@ -459,9 +459,9 @@ Criteria shapes:
+ Examples:
+ 
+ ```bash
+-llmctl decide ask --type noul --state "Arithmetic facts." \
++llmctl decide ask --profile decide-kev-08b --type noul --state "Arithmetic facts." \
+     --instructions "Is 2+2=4?"
+-# {"model":"decide-tiny","answers":{"q":{"type":"noul","noul":0.97...}},"evidence":{...}}
++# {"model":"decide-kev-08b","answers":{"q":{"type":"noul","noul":0.97...}},"evidence":{...}}
+ 
+ llmctl decide ask --profile decide --type choice --state "Routing." \
+     --instructions "Which team handles invoices?" \
+@@ -742,7 +742,7 @@ the relevant `lib/*.sh` module.
+ | `LLMCTL_COLI_BIN` | Override the `coli` launcher binary name/path used by `colibri` profile launches. |
+ | `LLMCTL_UNIT_DIR` (Linux) | Override the systemd `--user` unit directory `install` writes to. |
+ | `LLMCTL_PLIST_DIR` (macOS) | Override the LaunchAgents directory `install`/`enable` writes to. |
+-| `LLMCTL_DECIDE_PROFILE` | Default profile for `decide` commands (default: `decide-tiny` if downloaded, else `decide`). |
++| `LLMCTL_DECIDE_PROFILE` | Default profile for `decide` commands. Unset, the gateway picks `decide-tiny` when it is in the catalog (else the first profile by id) - and `decide-tiny` is not servable in 3.1.0, so a request without a profile is refused: set this variable (e.g. `decide-kev-08b`) or pass `--profile`. |
+ | `LLMCTL_DECIDE_PORT` | Gateway port for `decide serve` (default `8095`). |
+ | `LLMCTL_DECIDE_TEMPERATURE` | Calibration temperature dividing letter logprobs before renormalization in the gateway's `letter-logit` driver (default `1.0`). |
+ | `LLMCTL_DECIDE_NO_INTERACTIVE=1` | Makes every `decide` interactive path exit 2 — set it in CI. |
+diff --git a/internal/gateway/catalog.go b/internal/gateway/catalog.go
+index b6fd385..2b5bf31 100644
+--- a/internal/gateway/catalog.go
++++ b/internal/gateway/catalog.go
+@@ -87,7 +87,8 @@ type ProfileSpec struct {
+ 	ModelSHA256 string
+ 	// Maturity is the catalog's per-type maturity (T138): nil = none published.
+ 	Maturity map[string]server.MaturityInfo
+-	// Unsupported is why the gateway cannot serve this profile's protocol ("" = it can; unsupportedReason).
++	// Unsupported is why the gateway cannot serve this profile ("" = it can): the protocol is not
++	// implemented (unsupportedReason), or the catalog says so for this model (decision.not_servable).
+ 	Unsupported string
+ }
+ 
+@@ -121,7 +122,11 @@ type rawCatalog struct {
+ 			Experimental []string `json:"experimental"`
+ 			TierNote     string   `json:"tier_note"`
+ 			ReleaseDate  string   `json:"release_date"`
+-			Readout      *struct {
++			// NotServable is a catalog-declared reason the gateway cannot serve an otherwise implemented
++			// protocol for this model (e.g. a 2-label NLI head where the nli-onnx driver needs a
++			// contradiction column); "" = servable.
++			NotServable string `json:"not_servable"`
++			Readout     *struct {
+ 				NProbs        *int     `json:"n_probs"`
+ 				MassThreshold *float64 `json:"mass_threshold"`
+ 				Spellings     []string `json:"spellings"`
+@@ -269,6 +274,9 @@ func ParseCatalog(data []byte) ([]ProfileSpec, error) {
+ 			return nil, fmt.Errorf("gateway: profile %s: unknown decision protocol %q", id, d.Protocol)
+ 		}
+ 		s.Unsupported = unsupportedReason(d.Protocol)
++		if s.Unsupported == "" {
++			s.Unsupported = strings.TrimSpace(d.NotServable)
++		}
+ 		if d.MaxOptions != nil {
+ 			if *d.MaxOptions < 2 || *d.MaxOptions > contract.HostedMaxOptions {
+ 				return nil, fmt.Errorf("gateway: profile %s: max_options must be 2..255", id)
+diff --git a/lib/catalog.sh b/lib/catalog.sh
+index 372921d..cfee0ad 100644
+--- a/lib/catalog.sh
++++ b/lib/catalog.sh
+@@ -173,6 +173,13 @@ catalog_decision_protocol() {
+   json_query "${LLMCTL_CATALOG}" "d[\"profiles\"][\"$1\"].get(\"decision\",{}).get(\"protocol\") or \"\"" 2>/dev/null || true
+ }
+ 
++# catalog_decision_not_servable <profile> -> why the decision gateway cannot serve the profile ("" = it can):
++# protocol jev-verdict has no driver; decision.not_servable is a catalog-declared reason (mirrors
++# internal/gateway/catalog.go and the planner's not_servable_reason).
++catalog_decision_not_servable() {
++  catalog_check
++  json_query "${LLMCTL_CATALOG}" "(lambda dec: 'protocol jev-verdict (one verdict slot per option) has no gateway driver' if dec.get('protocol') == 'jev-verdict' else str(dec.get('not_servable') or ''))(d[\"profiles\"][\"$1\"].get(\"decision\") or {})" 2>/dev/null || true
++}
+ catalog_capability() { catalog_check; json_query "${LLMCTL_CATALOG}" "' '.join(d[\"profiles\"][\"$1\"][\"capability\"])"; }
+ 
+ catalog_default() {
+@@ -544,6 +551,14 @@ def footprint(name, p):
+             "flash_attn": dfl.get("flash_attn", "auto"), "kv_cache_type": kv_type,
+             "fits": False}
+ 
++def not_servable_reason(p):
++    """'' when the gateway can serve the profile, else why not (mirrors internal/gateway/catalog.go
++    unsupportedReason + decision.not_servable)."""
++    dec = p.get("decision") or {}
++    if dec.get("protocol") == "jev-verdict":
++        return "protocol jev-verdict (one verdict slot per option) has no gateway driver"
++    return str(dec.get("not_servable") or "")
++
+ profiles = {}
+ for name in sorted(catalog["profiles"].keys()):
+     p = catalog["profiles"][name]
+@@ -561,9 +576,16 @@ for name in sorted(catalog["profiles"].keys()):
+                     assigned = int(ln[5:].strip())
+     if assigned is not None:
+         fp["assigned_port"] = assigned
++    # A decision profile the gateway cannot serve stays in the catalog (download, verify) but is never
++    # recommended, grouped or counted as capacity: offering it would hand the user a profile whose every
++    # answer is a refusal (evidence/protocol-verification/verification.json).
++    nsv = not_servable_reason(p)
+     fp.update({"port": resolve_port(name, p["port"]), "engine": p["engine"],
+                "capability": p["capability"], "min_tier": min_tier,
+-               "tier_ok": tier_ok, "recommended": bool(fp["fits"] and tier_ok)})
++               "tier_ok": tier_ok, "servable": not nsv,
++               "recommended": bool(fp["fits"] and tier_ok and not nsv)})
++    if nsv:
++        fp["not_servable"] = nsv
+     if "decide" in p.get("capability", []):
+         # T139: what the planner booked above weights + KV, and the window it was measured at (None = unmeasured)
+         pdfl = p.get("defaults", {})
+@@ -715,7 +737,12 @@ for name in sorted(catalog["profiles"].keys()):
+                  "gpu": ({"ram_mb": gpu_ram_mb, "vram_mb": gpu_vram_mb}
+                          if p["engine"] != "onnx" else None),
+                  "cpu": {"ram_mb": cpu_ram_mb, "vram_mb": cpu_vram_mb}},
+-             "tier_ok": dtier_ok}
++             "tier_ok": dtier_ok,
++             # memory capacity is still computed (the admission probe reads the placements), but a profile
++             # the gateway cannot serve is never presented as usable decision capacity
++             "servable": not not_servable_reason(p)}
++    if not_servable_reason(p):
++        entry["not_servable"] = not_servable_reason(p)
+     if reason:
+         entry["reason"] = reason
+     decision_instances[name] = entry
+@@ -760,6 +787,8 @@ for name in sorted(plan["profiles"], key=lambda n: plan["profiles"][n]["port"]):
+         verdict, why = "FITS", "recommended"
+         if p.get("unknown_overhead"):
+             why += " (overhead UNKNOWN (%s): booked 0 until measured)" % ",".join(p["unknown_overhead"])
++    elif p.get("servable", True) is False:
++        verdict, why = "UNSERVABLE", "catalogued, not servable: %s" % p.get("not_servable", "")
+     elif not p["tier_ok"]:
+         verdict, why = "GATED", "needs min_tier=%s" % p["min_tier"]
+     else:
+@@ -801,6 +830,8 @@ if di:
+         else:
+             detail = "RAM %d MiB / VRAM %d MiB per instance" % (
+                 r["per_instance"]["ram_mb"], r["per_instance"]["vram_mb"])
++        if r.get("servable", True) is False:
++            detail = "not servable (%s); %s" % (r.get("not_servable", ""), detail)
+         print("%-14s %-8s %-14s %-14s %-15s %s" %
+               (name, tier_ok, r["instances_gpu"], r["instances_cpu"],
+                r["per_instance"]["slots"], detail))
+diff --git a/lib/scheduler.sh b/lib/scheduler.sh
+index 9a1bf1e..2f9426b 100644
+--- a/lib/scheduler.sh
++++ b/lib/scheduler.sh
+@@ -1335,7 +1335,9 @@ _sched_switch_impl() {
+ # (tier gate / footprint) for a profile the plan does not recommend.
+ _sched_why_not_recommended() {
+   local pf="$1" p="$2"
+-  if [[ "$(json_query "${pf}" "str(d[\"profiles\"][\"${p}\"][\"tier_ok\"])")" != "True" ]]; then
++  if [[ "$(json_query "${pf}" "str(d[\"profiles\"][\"${p}\"].get(\"servable\", True))")" == "False" ]]; then
++    printf 'not servable by the gateway: %s' "$(json_query "${pf}" "d[\"profiles\"][\"${p}\"].get(\"not_servable\", \"\")")"
++  elif [[ "$(json_query "${pf}" "str(d[\"profiles\"][\"${p}\"][\"tier_ok\"])")" != "True" ]]; then
+     printf 'tier gate: host tier %s below min_tier %s' "$(json_query "${pf}" 'd["tier"]')" \
+       "$(json_query "${pf}" "d[\"profiles\"][\"${p}\"][\"min_tier\"]")"
+   else
+diff --git a/models/catalog.json b/models/catalog.json
+index 555af5e..aed8f7b 100644
+--- a/models/catalog.json
++++ b/models/catalog.json
+@@ -1673,7 +1673,8 @@
+           "choice",
+           "score"
+         ],
+-        "tier_note": "experimental choice/score: one encoder forward pass per option (latency grows linearly with option count)"
++        "tier_note": "not servable by the gateway yet: the model's NLI head is 2-label (entailment/not_entailment, vendor config.json id2label) and the nli-onnx driver needs a contradiction column; the live run was refused (specs/009-jev-decision-models/evidence/protocol-verification/verification.json). Once servable: experimental choice/score, one encoder forward pass per option (latency grows linearly with option count)",
++        "not_servable": "the model's NLI head is 2-label (entailment/not_entailment) and the nli-onnx readout needs a contradiction column"
+       },
+       "files": [
+         {
+@@ -1752,7 +1753,7 @@
+       },
+       "decision": {
+         "protocol": "letter-logit",
+-        "max_options": 20,
++        "max_options": 16,
+         "max_options_status": "evidence-pending",
+         "score_levels": [
+           2,
+@@ -1827,7 +1828,7 @@
+       },
+       "decision": {
+         "protocol": "letter-logit",
+-        "max_options": 20,
++        "max_options": 16,
+         "max_options_status": "evidence-pending",
+         "score_levels": [
+           2,
+diff --git a/specs/009-jev-decision-models/quickstart.md b/specs/009-jev-decision-models/quickstart.md
+index 778eb78..6e24b32 100644
+--- a/specs/009-jev-decision-models/quickstart.md
++++ b/specs/009-jev-decision-models/quickstart.md
+@@ -53,11 +53,12 @@ Expected: owner-only modes; second start reuses key and certificate; env value w
+ 
+ ## Q3 First typed answers (real model)
+ 
+-Prereq: `llmctl models download decide-tiny` verified; gateway running.
++Prereq: `llmctl models download decide-kev-08b` verified; engine llama.cpp >= b11379; gateway running with `LLMCTL_DECIDE_NATIVE=1`.
++(`decide-kev-08b` is the smallest profile verified live, `evidence/sc001.json`; `decide-tiny` is catalogued but not servable in 3.1.0, `evidence/live-models/decide-tiny/ROOTCAUSE.md`.)
+ ```
+-llmctl decide ask --profile decide-tiny --type noul   --state "Disk usage is 97% and rising" --instructions "Is immediate action needed?" --json
+-llmctl decide ask --profile decide-tiny --type choice --state-file tests/fixtures/ticket1.txt --criteria '{"billing":"…","bug":"…","other":"…"}' --json
+-llmctl decide ask --profile decide-tiny --type score  --state-file tests/fixtures/review1.txt --criteria '["poor","ok","good"]' --json
++llmctl decide ask --profile decide-kev-08b --type noul   --state "Disk usage is 97% and rising" --instructions "Is immediate action needed?" --json
++llmctl decide ask --profile decide-kev-08b --type choice --state-file tests/fixtures/ticket1.txt --criteria '{"billing":"…","bug":"…","other":"…"}' --json
++llmctl decide ask --profile decide-kev-08b --type score  --state-file tests/fixtures/review1.txt --criteria '["poor","ok","good"]' --json
+ ```
+ Expected: valid JSON; `noul` ∈ [0,1] with no confidence field; choice probabilities sum to 1 (±1e-6), `confidence` ∈ [0,1]; score within [0, n−1]; `evidence` shows the profile and unquantised latency; exit 0. Evidence class `real-model`.
+ 
+@@ -124,8 +125,8 @@ Expected: valid requests keep being answered; no gateway exit or hang; no unboun
+ 
+ ```
+ llmctl plan --json | jq '.decision_instances'
+-llmctl decide scale decide-tiny <N from the report>      # succeeds
+-llmctl decide scale decide-tiny <N+1>                    # exit 3 with needed-vs-available numbers
++llmctl decide scale decide-kev-08b <N from the report>   # succeeds
++llmctl decide scale decide-kev-08b <N+1>                 # exit 3 with needed-vs-available numbers
+ ```
+ Expected: the reported `total_decision_slots` equals the number the scheduler really admitted; the refusal changes nothing on the host; the already-running vision server is untouched.
+ 
+@@ -180,7 +181,7 @@ Expected: identical assets/checksums/notes on both forges; archive's own suite p
+ ## Q17 Dynamic ports and discovery (FR-088..091, SC-015)
+ 
+ ```bash
+-LLMCTL_PORT_STRATEGY=dynamic llmctl start decide-tiny            # port allocated from LLMCTL_PORT_RANGE, bind-tested
++LLMCTL_PORT_STRATEGY=dynamic llmctl start decide-kev-08b         # port allocated from LLMCTL_PORT_RANGE, bind-tested
+ llmctl discover --json                                            # registry rows == live processes
+ python3 - <<'PY'
+ # occupy a default port, start three instances, kill one, assert the registry and gateway routing follow within one health interval
+diff --git a/tests/test_catalog_json.sh b/tests/test_catalog_json.sh
+index f05985c..e769679 100644
+--- a/tests/test_catalog_json.sh
++++ b/tests/test_catalog_json.sh
+@@ -257,7 +257,21 @@ for name, p in d["profiles"].items():
+         errors.append("%s: Jev-Style verdict model needs protocol jev-verdict (got %r)" % (name, proto))
+     if proto == "jev-verdict" and "not servable" not in (dec.get("tier_note") or ""):
+         errors.append("%s: a jev-verdict profile must say in decision.tier_note that it is not servable yet" % name)
++    # decision.not_servable: a catalog-declared reason the gateway cannot serve an implemented protocol
++    # for this model; a non-empty string, echoed in tier_note (internal/gateway/catalog.go NotServable)
++    nsv = dec.get("not_servable")
++    if nsv is not None and (not isinstance(nsv, str) or not nsv.strip()):
++        errors.append("%s: decision.not_servable must be a non-empty reason string" % name)
++    if nsv is not None and "not servable" not in (dec.get("tier_note") or ""):
++        errors.append("%s: a not_servable profile must say in decision.tier_note that it is not servable" % name)
++    # the zeroshot-v2.0 DeBERTa head is 2-label (id2label entailment/not_entailment); the nli-onnx
++    # readout needs a contradiction column (evidence/protocol-verification/decide-nli/config.json:10-13)
++    if (p.get("hf_repo") or "") == "MoritzLaurer/deberta-v3-large-zeroshot-v2.0" and not (isinstance(nsv, str) and nsv.strip()):
++        errors.append("%s: 2-label NLI head (entailment/not_entailment) must carry decision.not_servable" % name)
+     mo = dec.get("max_options")
++    # JevK5 is read in ONE pass over the letters A..P (vendor README, evidence/protocol-verification/decide-2b/README.md:125)
++    if (p.get("hf_repo") or "") == "alibiserikbay/JevK5-GGUF" and isinstance(mo, int) and mo > 16:
++        errors.append("%s: JevK5 single-pass readout covers 16 option letters (A..P); max_options %r > 16" % (name, mo))
+     if not isinstance(mo, int) or not 2 <= mo <= 255 or (proto == "letter-logit" and mo > 26):
+         errors.append("%s: decision.max_options %r out of range" % (name, mo))
+     if dec.get("max_options_status") not in ("evidence-pending", "measured"):
+@@ -389,6 +403,15 @@ mutate "lower-case spelling with a leading space (G-031)" 'd["profiles"]["decide
+ # back on the letter-logit protocol must be refused
+ mutate "Jev-Style verdict model back on letter-logit" 'dd=d["profiles"]["decide-tiny"]["decision"]; dd["protocol"]="letter-logit"; dd["readout"]=dict(d["profiles"]["decide"]["decision"]["readout"])'
+ mutate "jev-verdict profile without its not-servable note" 'del d["profiles"]["decide-tiny"]["decision"]["tier_note"]'
++# decide-nli's vendor head is 2-label (config.json id2label entailment/not_entailment) and the nli-onnx
++# driver needs a contradiction column (evidence/protocol-verification/verification.json): it must stay
++# marked not servable, and the note must say so
++mutate "2-label NLI model without decision.not_servable" 'del d["profiles"]["decide-nli"]["decision"]["not_servable"]'
++mutate "2-label NLI model with an empty not_servable" 'd["profiles"]["decide-nli"]["decision"]["not_servable"]="  "'
++mutate "not_servable profile whose tier_note does not say so" 'd["profiles"]["decide-nli"]["decision"]["tier_note"]="experimental choice/score"'
++# JevK5 reads ONE pass over the letters A..P (vendor README "LETTERS = \"ABCDEFGHIJKLMNOP\""; more than
++# 16 options needs the JevK5 runtime's knockout, which the gateway does not implement)
++mutate "JevK5 letter-logit profile above 16 options" 'd["profiles"]["decide-max"]["decision"]["max_options"]=20'
+ mutate "multi-letter spelling (G-031)" 'd["profiles"]["decide-pro"]["decision"]["readout"]["spellings"].append("AB")'
+ mutate "profile name with a dot" 'd["profiles"]["decide.2"]=d["profiles"]["decide"]; d["ports"]["decide.2"]=8093'
+ 
+diff --git a/tests/test_docs_audit.sh b/tests/test_docs_audit.sh
+index f10e874..e27843f 100755
+--- a/tests/test_docs_audit.sh
++++ b/tests/test_docs_audit.sh
+@@ -88,4 +88,18 @@ run_audit "${LLMCTL_ROOT}"
+ printf '%s\n' "${out}" | sed 's/^/    /'
+ assert_eq 0 "${rc}" "real README.md + docs/: 0 mismatches (SC-009)"
+ examined_all "real tree"
++
++# --- a runnable example never uses a profile the gateway cannot serve ------------------------------
++# decide-tiny (jev-verdict) and decide-nli (2-label NLI head) are catalogued but not servable in 3.1.0
++# (specs/009-jev-decision-models/evidence/protocol-verification/verification.json); a doc command that
++# downloads/enables/starts/asks one of them is a broken quick start.
++UNSERVABLE_RE='(models download|enable|start|decide ask[^#]*--profile|decide serve[^#]*--profile) +(decide-tiny|decide-nli)([^-.a-z0-9]|$)'
++unservable_hits() { grep -nE "${UNSERVABLE_RE}" "$@" 2>/dev/null || true; }
++# control needle: the instrument must see a planted bad line (and pass a good one) before its silence counts
++printf './bin/llmctl models download decide-tiny  # smoke\nllmctl decide ask --profile decide-nli --type noul\nllmctl start decide-kev-08b\nllmctl start decide-tiny.2x\n' > "${TEST_TMP}/needle.md"
++assert_eq 2 "$(unservable_hits "${TEST_TMP}/needle.md" | wc -l | tr -d ' ')" "control needle: the unservable-example check sees exactly the two planted bad lines"
++mapfile -t DOC_FILES < <(cd "${LLMCTL_ROOT}" && ls README.md docs/*.md specs/009-jev-decision-models/quickstart.md)
++hits="$(cd "${LLMCTL_ROOT}" && unservable_hits "${DOC_FILES[@]}" | grep -v '^docs/CONTINUATION.md' || true)"
++assert_eq "" "${hits}" "no runnable doc example uses an unservable decision profile (decide-tiny/decide-nli)"
++
+ test_finish
+diff --git a/tests/test_planner.sh b/tests/test_planner.sh
+index 8f2b5fd..2d87c4d 100644
+--- a/tests/test_planner.sh
++++ b/tests/test_planner.sh
+@@ -29,26 +29,24 @@ assert_eq "10444" "$(printf '%s' "${plan}" | json_stdin 'd["budgets"]["vram_mb"]
+ # decide-tiny (min_tier below-minimum, 1592 MiB GPU footprint), decide
+ # (min_tier baseline, 3671 MiB), the onnx encoder decide-nli (min_tier
+ # below-minimum, CPU-only: RAM 1663*1.5+512 = 3006 MiB, VRAM 0) and
+-# decide-2b (min_tier baseline, 3006 MiB) all fit a baseline host and join
+-# the recommended set; decide-pro and decide-max stay tier-gated to
+-# workstation.
+-assert_eq "fast coder vision moe-fast small decide-tiny decide decide-nli decide-2b decide-julia decide-kev-08b decide-kev-4b decide-laya decide-lev" \
++# decide-2b (min_tier baseline, 3006 MiB) all fit a baseline host; decide and
++# decide-2b join the recommended set, decide-tiny (jev-verdict) and decide-nli
++# (2-label NLI head) do not - the gateway cannot serve them (section below);
++# decide-pro and decide-max stay tier-gated to workstation.
++assert_eq "fast coder vision moe-fast small decide decide-2b decide-julia decide-kev-08b decide-kev-4b decide-laya decide-lev" \
+   "$(printf '%s' "${plan}" | json_stdin '" ".join(d["recommended"])')" \
+-  "baseline recommended set (decide-tiny/decide + iter2 decide-nli/decide-2b + the native decide-julia/kev-08b/kev-4b/laya/lev; decide-kev-9b tier-gated to workstation)"
++  "baseline recommended set (decide + decide-2b + the native decide-julia/kev-08b/kev-4b/laya/lev; decide-kev-9b tier-gated to workstation; decide-tiny and decide-nli fit but are not servable)"
+ assert_eq "gpu"  "$(printf '%s' "${plan}" | json_stdin 'd["profiles"]["fast"]["mode"]')"  "baseline fast mode"
+ assert_eq "cpu"  "$(printf '%s' "${plan}" | json_stdin 'd["profiles"]["coder"]["mode"]')" "baseline coder mode (17.7GiB > 10444MiB VRAM)"
+ assert_eq "5716" "$(printf '%s' "${plan}" | json_stdin 'd["profiles"]["fast"]["vram_mb"]')" "baseline fast VRAM footprint (4692 model + 1024 KV)"
+ assert_eq "21793" "$(printf '%s' "${plan}" | json_stdin 'd["profiles"]["coder"]["ram_mb"]')" "baseline coder RAM footprint (17697 + 4096 KV)"
+ assert_eq "False" "$(printf '%s' "${plan}" | json_stdin 'd["profiles"]["ws-dense-32b"]["tier_ok"]')" "baseline gates ws-dense-32b by tier"
+-# Group 2 arithmetic (RAM budget 25904, VRAM budget 10444): moe-fast
+-# (2048/3137) + small (2048/2950) + decide-tiny (2048/1592) + decide
+-# (2048/3671) = VRAM 11350-2228=9122 (captured; weights footprints differ
+-# per profile) still fits, and the CPU-only decide-nli (RAM 3006, VRAM 0)
+-# joins on RAM alone (RAM 2048*4+3006 = 11198 <= 25904). decide-2b
+-# (2048/3006) would push VRAM to 12128 > 10444 -> new group 3 of one.
+-assert_eq "fast coder vision|moe-fast small decide-tiny decide decide-nli|decide-2b decide-julia decide-kev-08b|decide-kev-4b decide-laya|decide-lev" \
++# Group 2 (RAM budget 25904, VRAM budget 10444): moe-fast + small + decide
++# (captured planner output); the unservable decide-tiny/decide-nli are never
++# grouped; decide-2b opens group 3.
++assert_eq "fast coder vision|moe-fast small decide|decide-2b decide-julia decide-kev-08b|decide-kev-4b decide-laya|decide-lev" \
+   "$(printf '%s' "${plan}" | json_stdin '"|".join(" ".join(g["profiles"]) for g in d["coresidency_groups"])')" \
+-  "baseline co-residency groups (decide-nli joins group 2 as VRAM-0; decide-2b spills to group 3 with decide-julia/decide-kev-08b, whose measured working-set overheads fill the VRAM budget; decide-kev-4b and decide-laya share group 4; decide-lev ends alone in group 5)"
++  "baseline co-residency groups (the unservable decide-tiny/decide-nli are never grouped; decide-2b spills to group 3 with decide-julia/decide-kev-08b, whose measured working-set overheads fill the VRAM budget; decide-kev-4b and decide-laya share group 4; decide-lev ends alone in group 5)"
+ 
+ # --- onnx footprint branch (decide-nli) --------------------------------------
+ # Catalog pins: files sum to 1744456292 B = 1663 MiB (1741985401 model.onnx
+@@ -62,7 +60,7 @@ assert_eq "3006" "$(printf '%s' "${plan}" | json_stdin 'd["profiles"]["decide-nl
+ assert_eq "0"    "$(printf '%s' "${plan}" | json_stdin 'd["profiles"]["decide-nli"]["vram_mb"]')" "decide-nli VRAM need is 0 (CPU inference)"
+ assert_eq "512"  "$(printf '%s' "${plan}" | json_stdin 'd["profiles"]["decide-nli"]["ctx"]')" "decide-nli ctx default 512 (encoder, not a generation ctx)"
+ assert_eq "True" "$(printf '%s' "${plan}" | json_stdin 'd["profiles"]["decide-nli"]["fits"]')" "decide-nli fits baseline (3006 <= 25904)"
+-assert_eq "True" "$(printf '%s' "${plan}" | json_stdin 'd["profiles"]["decide-nli"]["recommended"]')" "decide-nli recommended on baseline (min_tier below-minimum)"
++assert_eq "False" "$(printf '%s' "${plan}" | json_stdin 'd["profiles"]["decide-nli"]["recommended"]')" "decide-nli fits baseline but is NOT recommended (2-label NLI head, not servable)"
+ # decide-2b / decide-max llama footprints (KV ceil(8192*2*0.53125/8)=1088):
+ assert_eq "3006" "$(printf '%s' "${plan}" | json_stdin 'd["profiles"]["decide-2b"]["vram_mb"]')" "decide-2b GPU footprint (1918 weights + 1088 KV)"
+ assert_eq "False" "$(printf '%s' "${plan}" | json_stdin 'd["profiles"]["decide-max"]["tier_ok"]')" "decide-max tier-gated on baseline"
+@@ -71,28 +69,25 @@ assert_eq "10174" "$(printf '%s' "${plan}" | json_stdin 'd["profiles"]["decide-m
+ # --- workstation: Threadripper 64c / 256GB / 32GB VRAM / 2TB NVMe ------------
+ plan="$(plan_for workstation)"
+ assert_eq "datacenter" "$(printf '%s' "${plan}" | json_stdin 'd["tier"]')" "workstation fixture tier"
+-assert_eq "fast coder vision vision-pro moe-fast small ws-dense-32b ws-moe-30b colibri-glm colibri-qwen36 decide-tiny decide decide-pro decide-nli decide-max decide-2b decide-julia decide-kev-08b decide-kev-4b decide-kev-9b decide-laya decide-lev" \
++assert_eq "fast coder vision vision-pro moe-fast small ws-dense-32b ws-moe-30b colibri-glm colibri-qwen36 decide decide-pro decide-max decide-2b decide-julia decide-kev-08b decide-kev-4b decide-kev-9b decide-laya decide-lev" \
+   "$(printf '%s' "${plan}" | json_stdin '" ".join(d["recommended"])')" \
+-  "workstation recommended set (all 22 profiles: decide-pro/decide-max/decide-kev-9b workstation tier gate passes on a datacenter host)"
++  "workstation recommended set (all 22 profiles except the unservable decide-tiny/decide-nli: decide-pro/decide-max/decide-kev-9b workstation tier gate passes on a datacenter host)"
+ assert_eq "gpu" "$(printf '%s' "${plan}" | json_stdin 'd["profiles"]["ws-dense-32b"]["mode"]')" "ws-dense-32b fully offloaded"
+ assert_eq "colibri" "$(printf '%s' "${plan}" | json_stdin 'd["profiles"]["colibri-glm"]["mode"]')" "colibri-glm mode"
+ # Group 5 (VRAM budget 27852): ws-moe-30b (vram 25889) + colibri-glm +
+-# colibri-qwen36 (colibri: vram 0) + decide-tiny (vram 1592) = 27481 fits;
+-# adding decide (vram 3671) would reach 31152 > 27852 -> new group 6 holds
+-# decide + decide-pro (vram 3671+5260 = 8931) + the CPU-only decide-nli
+-# (vram 0, RAM 3006) + decide-2b (3006) = 11937 fits; decide-max (10174)
+-# would reach 22111 > ... (captured: it fits too, 22111 <= 27852) -> one
+-# group of five.
+-assert_eq "fast coder|vision vision-pro|moe-fast small|ws-dense-32b|ws-moe-30b colibri-glm colibri-qwen36 decide-tiny|decide decide-pro decide-nli decide-max decide-2b decide-julia|decide-kev-08b decide-kev-4b decide-kev-9b decide-laya decide-lev" \
++# colibri-qwen36 (colibri: vram 0); adding decide (vram 3671) would exceed
++# 27852 -> group 6 starts at decide (captured planner output; the unservable
++# decide-tiny/decide-nli are never grouped).
++assert_eq "fast coder|vision vision-pro|moe-fast small|ws-dense-32b|ws-moe-30b colibri-glm colibri-qwen36|decide decide-pro decide-max decide-2b decide-julia|decide-kev-08b decide-kev-4b decide-kev-9b decide-laya decide-lev" \
+   "$(printf '%s' "${plan}" | json_stdin '"|".join(" ".join(g["profiles"]) for g in d["coresidency_groups"])')" \
+-  "workstation co-residency groups (group 6 = the five remaining letter/NLI decide profiles + the small native ones up to decide-julia; group 7 = decide-kev-08b and the remaining native profiles; measured planner output)"
++  "workstation co-residency groups (group 6 = the four servable letter decide profiles + the small native ones up to decide-julia; group 7 = decide-kev-08b and the remaining native profiles; measured planner output)"
+ 
+ # --- apple: M4 Max 64GB unified ----------------------------------------------
+ plan="$(plan_for apple)"
+ assert_eq "workstation" "$(printf '%s' "${plan}" | json_stdin 'd["tier"]')" "apple tier (64GB unified RAM)"
+-assert_eq "fast coder vision vision-pro moe-fast small ws-dense-32b ws-moe-30b colibri-qwen36 decide-tiny decide decide-pro decide-nli decide-max decide-2b decide-julia decide-kev-08b decide-kev-4b decide-kev-9b decide-laya decide-lev" \
++assert_eq "fast coder vision vision-pro moe-fast small ws-dense-32b ws-moe-30b colibri-qwen36 decide decide-pro decide-max decide-2b decide-julia decide-kev-08b decide-kev-4b decide-kev-9b decide-laya decide-lev" \
+   "$(printf '%s' "${plan}" | json_stdin '" ".join(d["recommended"])')" \
+-  "apple recommended set (colibri-glm gated to datacenter; all twelve decide profiles fit 64GB unified memory)"
++  "apple recommended set (colibri-glm gated to datacenter; all twelve decide profiles fit 64GB unified memory; the ten servable ones are recommended)"
+ assert_eq "False" "$(printf '%s' "${plan}" | json_stdin 'd["profiles"]["colibri-glm"]["tier_ok"]')" "apple gates colibri-glm"
+ assert_eq "gpu" "$(printf '%s' "${plan}" | json_stdin 'd["profiles"]["fast"]["mode"]')" "apple fast uses unified-memory GPU"
+ 
+@@ -467,6 +462,45 @@ assert_eq "194" "$(printf '%s' "${pj}" | json_stdin 'd["decision_instances"]["de
+ assert_eq "0" "$(printf '%s' "${pj3}" | json_stdin 'd["decision_instances"]["decide-julia"]["placements"]["cpu"]["vram_mb"]')" "T139: capacity cpu placement on a CPU-only host books 0 VRAM"
+ assert_eq "4" "$(printf '%s' "${pj}" | json_stdin 'd["decision_instances"]["decide-julia"]["instances_cpu"]')" "T139: 850 // 194 = 4 cpu-mode instances (VRAM-bound), not 25904 // 1698 = 15"
+ 
++# --- a profile the gateway cannot serve is NEVER recommended -------------------
++# decide-tiny (protocol jev-verdict: the vendor's readout is a " ->" verdict slot per option, no
++# gateway driver) and decide-nli (2-label NLI head entailment/not_entailment; the nli-onnx driver needs
++# a contradiction column) fit every host below, but `plan`, `auto decide` and co-residency must not
++# offer them as usable (evidence/protocol-verification/verification.json).
++for fx in baseline workstation apple; do
++  pj_s="$(plan_for "${fx}")"
++  for up in decide-tiny decide-nli; do
++    assert_eq "False False" "$(printf '%s' "${pj_s}" | json_stdin "str(d[\"profiles\"][\"${up}\"][\"servable\"]) + ' ' + str(d[\"profiles\"][\"${up}\"][\"recommended\"])")" \
++      "${fx}: ${up} is not servable and therefore not recommended"
++    assert_eq "False" "$(printf '%s' "${pj_s}" | json_stdin "str(\"${up}\" in d[\"recommended\"] or any(\"${up}\" in g[\"profiles\"] for g in d[\"coresidency_groups\"]))")" \
++      "${fx}: ${up} is in neither the recommended set nor a co-residency group"
++    assert_eq "False" "$(printf '%s' "${pj_s}" | json_stdin "str(d[\"decision_instances\"][\"${up}\"][\"servable\"])")" \
++      "${fx}: ${up}'s capacity entry says it is not servable (memory arithmetic kept, never presented as usable capacity)"
++  done
++  # golden-false: a servable profile that fits stays recommended (the gate must not over-refuse)
++  assert_eq "True True" "$(printf '%s' "${pj_s}" | json_stdin 'str(d["profiles"]["decide-kev-08b"]["servable"]) + " " + str(d["profiles"]["decide-kev-08b"]["recommended"])')" \
++    "${fx}: decide-kev-08b (servable, fits) stays recommended"
++done
++assert_contains "$(printf '%s' "$(plan_for baseline)" | json_stdin 'd["profiles"]["decide-tiny"]["not_servable"]')" "jev-verdict" "the plan names why decide-tiny is not servable"
++assert_contains "$(printf '%s' "$(plan_for baseline)" | json_stdin 'd["profiles"]["decide-nli"]["not_servable"]')" "contradiction" "the plan names why decide-nli is not servable"
++human_s="$(plan_for baseline | catalog_plan_human)"
++assert_contains "$(printf '%s\n' "${human_s}" | grep '^decide-tiny ')" "UNSERVABLE" "human plan marks decide-tiny UNSERVABLE"
++assert_contains "$(printf '%s\n' "${human_s}" | grep '^decide-nli ')" "UNSERVABLE" "human plan marks decide-nli UNSERVABLE"
++pf_s="$(mktemp)"; plan_for baseline > "${pf_s}"
++source "${LLMCTL_ROOT}/lib/scheduler.sh"
++assert_contains "$(_sched_why_not_recommended "${pf_s}" decide-tiny)" "not servable" "auto: the skip reason for decide-tiny says not servable (not a footprint lie)"
++assert_contains "$(printf '%s\n' "${human_s}" | grep -A40 '^Decision capacity' | grep '^decide-nli ')" "not servable" "human capacity table flags decide-nli as not servable"
++rm -f "${pf_s}"
++# `llmctl models list` still lists the catalogued profile (download/verify work) but never as usable
++assert_contains "$(catalog_decision_not_servable decide-tiny)" "jev-verdict" "catalog_decision_not_servable names decide-tiny's reason"
++assert_eq "" "$(catalog_decision_not_servable decide-kev-08b)" "golden-false: a servable profile has no not-servable reason"
++ml_s="$("${LLMCTL_ROOT}/bin/llmctl" models list)"
++for up in decide-tiny decide-nli; do
++  assert_contains "$(printf '%s\n' "${ml_s}" | grep "^${up} ")" "NOT SERVABLE" "models list marks ${up} NOT SERVABLE"
++done
++kev_row="$(printf '%s\n' "${ml_s}" | grep '^decide-kev-08b ')"
++assert_eq "listed unmarked" "$([[ -n "${kev_row}" && "${kev_row}" != *"NOT SERVABLE"* ]] && echo "listed unmarked" || echo "missing or marked: ${kev_row}")" "golden-false: models list shows decide-kev-08b without the marker"
++
+ # --- decide capability rank (scheduler auto-pick order) ------------------------
+ # Ascending footprint/accuracy tradeoff, best-first (rationale documented at
+ # sched_rank_for_capability): decide-tiny > decide-nli > decide-2b > decide
