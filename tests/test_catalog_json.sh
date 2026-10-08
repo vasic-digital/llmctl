@@ -258,6 +258,10 @@ for name, p in d["profiles"].items():
     if proto == "jev-verdict" and "not servable" not in (dec.get("tier_note") or ""):
         errors.append("%s: a jev-verdict profile must say in decision.tier_note that it is not servable yet" % name)
     mo = dec.get("max_options")
+    # JevK5 is read in ONE pass over the letters A..P (vendor README: LETTERS = "ABCDEFGHIJKLMNOP"); more than 16
+    # options needs the vendor runtime's knockout, which the gateway does not implement
+    if (p.get("hf_repo") or "") == "alibiserikbay/JevK5-GGUF" and isinstance(mo, int) and mo > 16:
+        errors.append("%s: JevK5 single-pass readout covers 16 option letters (A..P); max_options %r > 16" % (name, mo))
     if not isinstance(mo, int) or not 2 <= mo <= 255 or (proto == "letter-logit" and mo > 26):
         errors.append("%s: decision.max_options %r out of range" % (name, mo))
     if dec.get("max_options_status") not in ("evidence-pending", "measured"):
@@ -389,6 +393,7 @@ mutate "lower-case spelling with a leading space (G-031)" 'd["profiles"]["decide
 # back on the letter-logit protocol must be refused
 mutate "Jev-Style verdict model back on letter-logit" 'dd=d["profiles"]["decide-tiny"]["decision"]; dd["protocol"]="letter-logit"; dd["readout"]=dict(d["profiles"]["decide"]["decision"]["readout"])'
 mutate "jev-verdict profile without its not-servable note" 'del d["profiles"]["decide-tiny"]["decision"]["tier_note"]'
+mutate "JevK5 letter-logit profile above 16 options" 'd["profiles"]["decide-max"]["decision"]["max_options"]=20'
 mutate "multi-letter spelling (G-031)" 'd["profiles"]["decide-pro"]["decision"]["readout"]["spellings"].append("AB")'
 mutate "profile name with a dot" 'd["profiles"]["decide.2"]=d["profiles"]["decide"]; d["ports"]["decide.2"]=8093'
 

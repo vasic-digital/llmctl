@@ -1752,7 +1752,7 @@
       },
       "decision": {
         "protocol": "letter-logit",
-        "max_options": 20,
+        "max_options": 16,
         "max_options_status": "evidence-pending",
         "score_levels": [
           2,
@@ -1827,7 +1827,7 @@
       },
       "decision": {
         "protocol": "letter-logit",
-        "max_options": 20,
+        "max_options": 16,
         "max_options_status": "evidence-pending",
         "score_levels": [
           2,
