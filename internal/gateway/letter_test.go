@@ -55,6 +55,28 @@ func TestLetterNoulProbabilityAndRequestShape(t *testing.T) {
 	}
 }
 
+// Root cause (live, nezha 2026-10-08): thinking-mode chat templates (Qwen3/3.5 family: decide,
+// decide-2b, decide-max, decide-pro) make the engine open with a reasoning token (delivered in
+// reasoning_content, content empty), so no option letter is ever in the first-token alternatives
+// (HTTP 422 readout_failed / option_missing). llama-server honours a per-request
+// chat_template_kwargs {"enable_thinking": false}; the letter-logit request MUST send it, in both
+// modes, so the first generated token is the answer position.
+func TestLetterRequestDisablesThinking(t *testing.T) {
+	for _, mode := range []Mode{Deterministic, Throughput} {
+		srv, rec := fakeServer(t, func(_ *recorded, w http.ResponseWriter) {
+			_, _ = w.Write(llamaResponse(lpEntry{" A", -0.1}, lpEntry{" B", -2.3}))
+		})
+		be := &LetterLogitBackend{Mode: mode, Seed: 7}
+		if _, _, err := be.Decide(context.Background(), ep(srv.URL), specByID(t, "decide-tiny"), parseFor(t, noulBody)); err != nil {
+			t.Fatal(err)
+		}
+		kw, ok := rec.body["chat_template_kwargs"].(map[string]any)
+		if !ok || kw["enable_thinking"] != false {
+			t.Fatalf("mode %v: letter-logit request must carry chat_template_kwargs.enable_thinking=false, got %v", mode, rec.body["chat_template_kwargs"])
+		}
+	}
+}
+
 func TestLetterChoiceAndScore(t *testing.T) {
 	srv, _ := fakeServer(t, func(_ *recorded, w http.ResponseWriter) {
 		_, _ = w.Write(llamaResponse(lpEntry{" B", -0.2}, lpEntry{" A", -2.0}, lpEntry{" C", -3.0}))
