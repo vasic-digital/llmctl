@@ -161,6 +161,21 @@ deliberately does **not** list reserved-memory figures for the native profiles: 
 `decide-kev-9b` and `decide-lev` for lack of free RAM (it printed the numbers); refusing with numbers is the intended behaviour on a RAM-constrained host
 (`specs/009-jev-decision-models/evidence/live/NATIVE-REPORT.md`).
 
+**GPU-mode booking (live run 2026-10-08, 12 GiB GPU).** The weights + KV rule cannot see the engine's compute buffer, which a native
+`/v1/systemone` engine sizes from `--ubatch-size 4096`: `decide-kev-9b` was admitted at 7088 MiB and failed `cudaMalloc` of a 4016 MiB
+compute buffer, `decide-kev-4b` was booked 3916 MiB and held 7328 MiB, and `decide-kev-08b` was booked 5583 MiB (its cpu-mode RAM
+`overhead_mb` was added to VRAM) and held 2900 MiB. A profile may therefore carry `memory.gpu`, derived by `scripts/overhead_from_memory.py`
+from the evidence file it names: `measured` (format `gpu-memory-txt`) books the engine pid's highest recorded VRAM as the GPU need and
+`max(2048, peak VmHWM)` as its RAM; `lower-bound` (format `oom-compute-buffer-jsonl`) books weights + KV + the compute buffer the engine
+failed to allocate - a floor, the true peak stays UNKNOWN - and a cpu placement then books that buffer as offload VRAM instead of 0. A
+measurement is reused only at the context, slot count and KV type it was taken at; any override falls back to the estimate. Every other
+profile keeps the estimate and `llmctl plan --json` reports `vram_provenance` (`measured`, `lower-bound`, `estimated`), `vram_evidence`
+and `gpu_vram_mb`; the human plan marks an estimated GPU booking of a recommended decision profile `VRAM estimated`. Current state
+(`models/catalog.json`): `decide-julia`, `decide-laya`, `decide-kev-08b`, `decide-lev`, `decide-kev-4b` measured
+(`specs/009-jev-decision-models/evidence/live-models/<profile>/memory.txt`), `decide-kev-9b` lower-bound
+(`specs/009-jev-decision-models/evidence/live-models.jsonl`), all other decision profiles estimated. Effect on the table below: on
+`small-exact` `decide-kev-08b` is now recommended (GPU need 2900 MiB fits the 4250 MiB VRAM budget; it was 5583).
+
 ## Planner and `auto decide`
 
 SC-012 requires every change against the previous release (tag `v3.0.2`)
@@ -212,7 +227,7 @@ A type missing from a profile's object counts as unmeasured. Values below are co
 | `constrained` | `decide-tiny`, `decide`, `decide-nli`, `decide-2b`, `decide-julia`, `decide-kev-08b`, `decide-kev-4b`, `decide-laya`, `decide-lev` | `decide-tiny` |
 | `cpu-heavy` | `decide-tiny`, `decide`, `decide-pro`, `decide-nli`, `decide-max`, `decide-2b`, `decide-julia`, `decide-kev-08b`, `decide-kev-4b`, `decide-kev-9b`, `decide-laya`, `decide-lev` | `decide-tiny` |
 | `ram-contended-auto-eviction` | `decide-tiny`, `decide`, `decide-nli`, `decide-2b`, `decide-kev-4b`, `decide-lev` | `decide-tiny` |
-| `small-exact` | `decide-tiny`, `decide-nli`, `decide-julia`, `decide-laya` | `decide-tiny` |
+| `small-exact` | `decide-tiny`, `decide-nli`, `decide-julia`, `decide-kev-08b`, `decide-laya` | `decide-tiny` |
 | `tiny` | none | no fit |
 | `vram-contended-coresident` | `decide-tiny`, `decide`, `decide-nli`, `decide-2b`, `decide-julia`, `decide-kev-08b`, `decide-kev-4b`, `decide-laya`, `decide-lev` | `decide-tiny` |
 | `vram-contended` | `decide-tiny`, `decide`, `decide-nli`, `decide-2b`, `decide-julia`, `decide-kev-4b`, `decide-laya`, `decide-lev` | `decide-tiny` |

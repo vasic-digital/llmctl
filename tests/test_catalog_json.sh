@@ -476,8 +476,19 @@ for name, p in cat["profiles"].items():
     if "decide" not in p.get("capability", []):
         continue
     mem, mat = p.get("memory"), p.get("maturity")
-    if not isinstance(mem, dict) or set(mem) != {"ram", "vram"}:
-        errs.append("%s: memory must hold exactly ram and vram" % name); continue
+    # ram + vram always; gpu (the gpu-mode footprint, live run 2026-10-08) is optional - absent = unmeasured
+    if not isinstance(mem, dict) or not {"ram", "vram"} <= set(mem) <= {"ram", "vram", "gpu"}:
+        errs.append("%s: memory must hold ram and vram (and optionally gpu)" % name); continue
+    g = mem.get("gpu")
+    if g is not None:
+        if g.get("status") in ("measured", "lower-bound"):
+            if not os.path.isfile(os.path.join(root, g.get("evidence", "/nonexistent"))): errs.append("%s: memory.gpu evidence path does not exist" % name)
+            need = ("gpu_vram_mb", "gpu_ram_mb") if g["status"] == "measured" else ("gpu_compute_buffer_mb",)
+            if not all(isinstance(p.get("defaults", {}).get(k), int) for k in need): errs.append("%s: memory.gpu %s needs defaults.%s" % (name, g["status"], "/".join(need)))
+        elif g.get("status") == "unmeasured":
+            if not g.get("reason"): errs.append("%s: memory.gpu unmeasured without a reason" % name)
+        else:
+            errs.append("%s: memory.gpu.status %r" % (name, g.get("status")))
     for half in ("ram", "vram"):
         h = mem[half]
         if h.get("status") == "measured":
@@ -531,6 +542,14 @@ mut8 "ram evidence path does not exist"                'd["profiles"]["decide-ju
 mut8 "ram evidence path does not exist (structure)"    'd["profiles"]["decide-julia"]["memory"]["ram"]["evidence"]+=".missing"' struct
 mut8 "unmeasured half without a reason"               'del d["profiles"]["decide-tiny"]["memory"]["ram"]["reason"]' struct
 mut8 "unmeasured profile gains a number by hand"       'd["profiles"]["decide-tiny"]["defaults"]["overhead_mb"]=5' ovh
+# gpu-mode half (live run 2026-10-08): derived from the evidence like the other halves
+mut8 "hand-typed gpu_vram_mb (kev-4b measured 7328)"   'd["profiles"]["decide-kev-4b"]["defaults"]["gpu_vram_mb"]=3916' ovh
+mut8 "gpu ctx differs from the run's --ctx-size"       'd["profiles"]["decide-kev-4b"]["memory"]["gpu"]["ctx"]=4096' ovh
+mut8 "hand-typed gpu_compute_buffer_mb (kev-9b 4016)"  'd["profiles"]["decide-kev-9b"]["defaults"]["gpu_compute_buffer_mb"]=0' ovh
+mut8 "gpu evidence path does not exist"                'd["profiles"]["decide-lev"]["memory"]["gpu"]["evidence"]+=".missing"' struct
+mut8 "gpu evidence path does not exist (script)"       'd["profiles"]["decide-lev"]["memory"]["gpu"]["evidence"]+=".missing"' ovh
+mut8 "gpu status invented"                             'd["profiles"]["decide-kev-9b"]["memory"]["gpu"]["status"]="estimated"' struct
+mut8 "measured gpu half without its booking"           'del d["profiles"]["decide-kev-08b"]["defaults"]["gpu_vram_mb"]' struct
 mut8 "maturity status hand-flipped to measured"        'd["profiles"]["decide-laya"]["maturity"]["score"]["status"]="measured"' mat
 mut8 "maturity evidence path does not exist"           'd["profiles"]["decide-lev"]["maturity"]["noul"]["evidence"]+=".missing"' struct
 mut8 "maturity evidence path does not exist (script)"  'd["profiles"]["decide-lev"]["maturity"]["noul"]["evidence"]+=".missing"' mat

@@ -435,9 +435,29 @@ _svc_unit_for() {
   echo "llmctl-${engine}@${instance}.service"
 }
 
+# _svc_restart_bound_ok <unit> - refuses (non-zero, message on stderr) to start an INSTALLED template unit whose
+# restart bound systemd does not apply. Live run 2026-10-08 (decide-kev-9b, CUDA OOM at start): the host's installed
+# llmctl-llama@.service predated the [Unit] fix - StartLimitBurst/StartLimitIntervalSec sat inside [Service], systemd
+# logged "Unknown key 'StartLimitIntervalSec' in section [Service], ignoring" and applied its default interval
+# (`systemctl --user show`: StartLimitIntervalUSec=10s, StartLimitBurst=5). With RestartSec=5 five starts never land
+# inside 10 s, so Restart=always looped forever. Both StartLimitBurst= and StartLimitIntervalSec= must therefore be in
+# [Unit] (a unit without them gets the same never-tripping default). A template that is not installed is left to
+# systemctl's own "not found" error (unchanged behaviour).
+_svc_restart_bound_ok() {
+  local tmpl="${1%%@*}@.service" f
+  f="$(svc_unit_dir)/${tmpl}"
+  [[ -f "${f}" ]] || return 0
+  if awk '/^\[/{sec=$0} sec=="[Unit]" && /^StartLimitBurst=/{b=1} sec=="[Unit]" && /^StartLimitIntervalSec=/{i=1} END{exit !(b && i)}' "${f}"; then
+    return 0
+  fi
+  err "refusing to start ${1}: ${f} has no restart bound systemd applies (StartLimitBurst=/StartLimitIntervalSec= must be in [Unit]; inside [Service] or absent, systemd's 10 s default never trips at RestartSec=5, so an engine that fails at start would restart forever). Regenerate the units with: llmctl install"
+  return 1
+}
+
 # --- lifecycle ---------------------------------------------------------------
 svc_enable() {
   local unit; unit="$(_svc_unit_for "$1")"
+  _svc_restart_bound_ok "${unit}" || return 1
   _svc_ensure_tenant_slice_dropin "${unit}"
   _svc_sys enable "${unit}"
   _svc_sys start "${unit}"
@@ -450,7 +470,7 @@ svc_disable() {
   [[ "${LLMCTL_DRY_RUN}" == "1" ]] || rm -f "${LLMCTL_SERVICES_DIR}/$(_svc_instance_key "$1").env"
 }
 
-svc_start()   { local unit; unit="$(_svc_unit_for "$1")"; _svc_ensure_tenant_slice_dropin "${unit}"; _svc_sys start "${unit}"; }
+svc_start()   { local unit; unit="$(_svc_unit_for "$1")"; _svc_restart_bound_ok "${unit}" || return 1; _svc_ensure_tenant_slice_dropin "${unit}"; _svc_sys start "${unit}"; }
 # LLMCTL_TEST_FORCE_STOP_FAIL: test-only hook (round-3 independent review,
 # 2026-10-03). Under LLMCTL_DRY_RUN=1, _svc_sys unconditionally returns 0,
 # so the hermetic test suite has no existing way to exercise a FAILED stop
@@ -465,7 +485,7 @@ svc_stop() {
   fi
   _svc_sys stop  "$(_svc_unit_for "$1")"
 }
-svc_restart() { local unit; unit="$(_svc_unit_for "$1")"; _svc_ensure_tenant_slice_dropin "${unit}"; _svc_sys restart "${unit}"; }
+svc_restart() { local unit; unit="$(_svc_unit_for "$1")"; _svc_restart_bound_ok "${unit}" || return 1; _svc_ensure_tenant_slice_dropin "${unit}"; _svc_sys restart "${unit}"; }
 
 svc_status() {
   local unit; unit="$(_svc_unit_for "$1")"

@@ -483,6 +483,32 @@ def overhead_field(name, dfl, key):
         sys.exit(1)
     return v
 
+def gpu_booking(name, p, size_mb, ctx, par, kv_type, kv_est):
+    """GPU-placement need of a llama-engine profile -> dict(vram, ram, prov, evidence, cbuf).
+
+    Live run 2026-10-08 (specs/009-jev-decision-models/evidence/live-models/): the weights + ctx/8 KV estimate
+    cannot see the engine's compute buffer, which a native decision engine sizes from --ubatch-size 4096
+    (lib/scheduler.sh): kev-9b was admitted at 7088 MiB and failed cudaMalloc of a 4016 MiB compute buffer;
+    kev-4b booked 3916 and held 7328.  So, from profiles.<name>.memory.gpu (derived by
+    scripts/overhead_from_memory.py from the evidence file it names):
+      measured     -> the engine pid's highest recorded VRAM IS the booking (weights + KV + compute buffer as the
+                      engine allocated them; the budget already keeps 15% headroom), RAM = max(2048, peak VmHWM);
+      lower-bound  -> weights + KV estimate + the recorded compute buffer (a floor: the true peak is UNKNOWN);
+      otherwise    -> the old estimate (weights + KV + overhead_mb), provenance "estimated" (compute buffer UNKNOWN).
+    A measurement is reused only at the context / slot count / KV type it was taken at; any override falls back to
+    the estimate rather than a number taken under different conditions."""
+    dfl = p.get("defaults", {})
+    g = (p.get("memory") or {}).get("gpu") or {}
+    same = (g.get("ctx") == ctx and par == 1 and kv_type == g.get("kv_cache_type", "f16"))
+    if same and g.get("status") == "measured":
+        return {"vram": overhead_field(name, dfl, "gpu_vram_mb"), "ram": max(2048, overhead_field(name, dfl, "gpu_ram_mb")),
+                "prov": "measured", "evidence": g.get("evidence"), "cbuf": None}
+    if same and g.get("status") == "lower-bound":
+        cb = overhead_field(name, dfl, "gpu_compute_buffer_mb")
+        return {"vram": size_mb + kv_mb(ctx, par, kv_type) + cb, "ram": 2048,
+                "prov": "lower-bound", "evidence": g.get("evidence"), "cbuf": cb}
+    return {"vram": size_mb + kv_est, "ram": 2048, "prov": "estimated", "evidence": None, "cbuf": None}
+
 def footprint(name, p):
     """-> dict(mode, ram_mb, vram_mb, storage_mb, fits) or None when unfit."""
     size_mb = sum((f.get("size") or 0) for f in p["files"]) // 1048576
@@ -523,26 +549,30 @@ def footprint(name, p):
     ovh = overhead_field(name, dfl, "overhead_mb")
     ovh_v = overhead_field(name, dfl, "overhead_vram_mb")
     kv += ovh
-    if vram_budget > 0 and size_mb + kv <= vram_budget and 2048 <= ram_budget:
-        return {"mode": "gpu", "ram_mb": 2048, "vram_mb": size_mb + kv,
-                "storage_mb": size_mb, "ctx": ctx,
-                "ngl": int(dfl.get("ngl", 99)), "parallel": par,
-                "flash_attn": dfl.get("flash_attn", "auto"), "kv_cache_type": kv_type,
-                "fits": True}
+    g = gpu_booking(name, p, size_mb, ctx, par, kv_type, kv)
+    gfields = {"gpu_vram_mb": g["vram"], "vram_provenance": g["prov"], "vram_evidence": g["evidence"]}
+    if vram_budget > 0 and g["vram"] <= vram_budget and g["ram"] <= ram_budget:
+        return dict({"mode": "gpu", "ram_mb": g["ram"], "vram_mb": g["vram"],
+                     "storage_mb": size_mb, "ctx": ctx,
+                     "ngl": int(dfl.get("ngl", 99)), "parallel": par,
+                     "flash_attn": dfl.get("flash_attn", "auto"), "kv_cache_type": kv_type,
+                     "fits": True}, **gfields)
     # cpu mode (-ngl 0): a CUDA build still offloads large-batch host ops to the GPU (measured: kev-08b 2.3 GiB of
     # VRAM, encoders 0.1-0.2 GiB), so on a host that HAS a GPU the measured offload VRAM is booked; on a CPU-only
     # host there is no offload and nothing is booked.  A host whose VRAM budget cannot hold it refuses the profile
-    # (mode none) rather than silently booking 0.
-    cpu_vram = ovh_v if vram_budget > 0 else 0
+    # (mode none) rather than silently booking 0.  When the offload is unmeasured but a compute-buffer lower bound is
+    # recorded (kev-9b), that floor is booked instead of 0 - conservative: kev-08b's measured cpu-mode offload
+    # (2382 MiB) exceeds its gpu-mode VRAM above weights (2900 - 774), i.e. the offload holds the compute buffer too.
+    cpu_vram = max(ovh_v, g["cbuf"] or 0) if vram_budget > 0 else 0
     if size_mb + kv <= ram_budget and cpu_vram <= vram_budget:
-        return {"mode": "cpu", "ram_mb": size_mb + kv, "vram_mb": cpu_vram,
-                "storage_mb": size_mb, "ctx": ctx, "ngl": 0, "parallel": par,
-                "flash_attn": dfl.get("flash_attn", "auto"), "kv_cache_type": kv_type,
-                "fits": True}
-    return {"mode": "none", "ram_mb": size_mb + kv, "vram_mb": cpu_vram,
-            "storage_mb": size_mb, "ctx": ctx, "ngl": 0, "parallel": par,
-            "flash_attn": dfl.get("flash_attn", "auto"), "kv_cache_type": kv_type,
-            "fits": False}
+        return dict({"mode": "cpu", "ram_mb": size_mb + kv, "vram_mb": cpu_vram,
+                     "storage_mb": size_mb, "ctx": ctx, "ngl": 0, "parallel": par,
+                     "flash_attn": dfl.get("flash_attn", "auto"), "kv_cache_type": kv_type,
+                     "fits": True}, **gfields)
+    return dict({"mode": "none", "ram_mb": size_mb + kv, "vram_mb": cpu_vram,
+                 "storage_mb": size_mb, "ctx": ctx, "ngl": 0, "parallel": par,
+                 "flash_attn": dfl.get("flash_attn", "auto"), "kv_cache_type": kv_type,
+                 "fits": False}, **gfields)
 
 profiles = {}
 for name in sorted(catalog["profiles"].keys()):
@@ -651,10 +681,11 @@ for name in sorted(catalog["profiles"].keys()):
         dctx = resolve_ctx(name, int(dfl.get("ctx", 8192)))
         dkv_type = resolve_kv_type(name, dfl.get("kv_cache_type", "f16"))
         dkv = kv_mb(dctx, dpar, dkv_type) + int(dfl.get("overhead_mb", 0))   # validated by footprint() above
-        gpu_ram_mb, gpu_vram_mb = 2048, size_mb + dkv
+        dg = gpu_booking(name, p, size_mb, dctx, dpar, dkv_type, dkv)        # same booking rule as footprint()
+        gpu_ram_mb, gpu_vram_mb = dg["ram"], dg["vram"]
         cpu_ram_mb = size_mb + dkv
         # cpu placement on a host with a GPU also holds the measured offload VRAM (same rule as footprint())
-        cpu_vram_mb = int(dfl.get("overhead_vram_mb", 0)) if vram_budget > 0 else 0
+        cpu_vram_mb = max(int(dfl.get("overhead_vram_mb", 0)), dg["cbuf"] or 0) if vram_budget > 0 else 0
     inst_gpu = 0
     inst_cpu = 0
     reason = ""
@@ -760,6 +791,8 @@ for name in sorted(plan["profiles"], key=lambda n: plan["profiles"][n]["port"]):
         verdict, why = "FITS", "recommended"
         if p.get("unknown_overhead"):
             why += " (overhead UNKNOWN (%s): booked 0 until measured)" % ",".join(p["unknown_overhead"])
+        if "unknown_overhead" in p and p.get("mode") == "gpu" and p.get("vram_provenance") == "estimated":
+            why += " (VRAM estimated: engine compute buffer UNKNOWN, not measured on a GPU)"
     elif not p["tier_ok"]:
         verdict, why = "GATED", "needs min_tier=%s" % p["min_tier"]
     else:

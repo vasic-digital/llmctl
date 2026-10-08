@@ -451,4 +451,27 @@ export LLMCTL_FAKE_HW="${LLMCTL_ROOT}/tests/fixtures/hw-baseline.json"
 out="$("${LLMCTL}" start decide-pro 2>&1)" && rc=0 || rc=$?
 assert_eq 0 "${rc}" "12: explicit start of a tier-gated profile that fits is still allowed (tier gate is advisory for start)"
 
+# --- 13. live run 2026-10-08: admission on the measured VRAM need (decide-kev-9b CUDA OOM) ------------------------
+# The live host: 12288 MiB GPU, another process holding VRAM, recorded plan budget 7388 MiB = int(8692 * 0.85)
+# (live-models/decide-kev-9b/context.txt). kev-9b was admitted in gpu mode at 6064 + 1024 = 7088 MiB and failed
+# cudaMalloc of a 4016 MiB compute buffer (live-models.jsonl). Its gpu need is now >= 6064 + 1024 + 4016 = 11104,
+# so it must never be launched on the GPU there; kev-4b (which ran, engine peak 7328 MiB) still is, booked 7328.
+test_teardown_env; test_setup_env
+export LLMCTL_DRY_RUN=1
+python3 - "${LLMCTL_ROOT}/tests/fixtures/hw-baseline.json" "${TEST_TMP}/hw-anton-live.json" <<'PYEOF'
+import json, sys
+d = json.load(open(sys.argv[1])); d["gpus"][0]["vram_free_mb"] = 8692; d["gpu_free_vram_mb"] = 8692
+json.dump(d, open(sys.argv[2], "w"))
+PYEOF
+export LLMCTL_FAKE_HW="${TEST_TMP}/hw-anton-live.json"
+out="$("${LLMCTL}" start decide-kev-9b 2>&1)" && rc=0 || rc=$?
+assert_eq "no-gpu" "$(case "${out}" in *"mode=gpu"*) echo gpu ;; *) echo no-gpu ;; esac)" "13: decide-kev-9b is NOT admitted in gpu mode on the live-run host"
+assert_eq "absent" "$(grep -q -- '--n-gpu-layers 99' "${LLMCTL_SERVICES_DIR}/decide-kev-9b.env" 2>/dev/null && echo present || echo absent)" \
+  "13: ...and no launch record offloads its layers to the GPU"
+"${LLMCTL}" stop all >/dev/null 2>&1 || true
+out="$("${LLMCTL}" start decide-kev-4b 2>&1)" && rc=0 || rc=$?
+assert_eq 0 "${rc}" "13: decide-kev-4b (measured peak 7328 <= 7388) is still admitted"
+assert_contains "${out}" "mode=gpu" "13: ...in gpu mode"
+assert_contains "${out}" "reserved 4899 MiB RAM + 7328 MiB VRAM" "13: ...reserving its measured peaks (VmHWM 4899 MiB, engine VRAM 7328 MiB)"
+
 test_finish

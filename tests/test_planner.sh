@@ -83,9 +83,9 @@ assert_eq "colibri" "$(printf '%s' "${plan}" | json_stdin 'd["profiles"]["colibr
 # (vram 0, RAM 3006) + decide-2b (3006) = 11937 fits; decide-max (10174)
 # would reach 22111 > ... (captured: it fits too, 22111 <= 27852) -> one
 # group of five.
-assert_eq "fast coder|vision vision-pro|moe-fast small|ws-dense-32b|ws-moe-30b colibri-glm colibri-qwen36 decide-tiny|decide decide-pro decide-nli decide-max decide-2b decide-julia|decide-kev-08b decide-kev-4b decide-kev-9b decide-laya decide-lev" \
+assert_eq "fast coder|vision vision-pro|moe-fast small|ws-dense-32b|ws-moe-30b colibri-glm colibri-qwen36 decide-tiny|decide decide-pro decide-nli decide-max decide-2b decide-julia decide-kev-08b|decide-kev-4b decide-kev-9b decide-laya decide-lev" \
   "$(printf '%s' "${plan}" | json_stdin '"|".join(" ".join(g["profiles"]) for g in d["coresidency_groups"])')" \
-  "workstation co-residency groups (group 6 = the five remaining letter/NLI decide profiles + the small native ones up to decide-julia; group 7 = decide-kev-08b and the remaining native profiles; measured planner output)"
+  "workstation co-residency groups (group 6 = the five remaining letter/NLI decide profiles + decide-julia + decide-kev-08b, whose gpu booking is now its measured 2900 MiB peak instead of 5583; group 7 = the remaining native profiles; measured planner output)"
 
 # --- apple: M4 Max 64GB unified ----------------------------------------------
 plan="$(plan_for apple)"
@@ -397,14 +397,21 @@ python3 - "${LLMCTL_CATALOG}" "${OVH_CAT}" <<'PYEOF'
 import json, sys
 d = json.load(open(sys.argv[1]))
 d["profiles"]["decide-kev-4b"]["defaults"]["overhead_mb"] = 500
+d["profiles"]["decide-2b"]["defaults"]["overhead_mb"] = 500
 json.dump(d, open(sys.argv[2], "w"))
 PYEOF
 plan_with() { LLMCTL_CATALOG="$1" LLMCTL_FAKE_HW="${LLMCTL_ROOT}/tests/fixtures/hw-$2.json" hw_probe_json | LLMCTL_CATALOG="$1" catalog_plan_json; }
 base_plan="$(plan_with "${LLMCTL_CATALOG}" baseline)"; ovh_plan="$(plan_with "${OVH_CAT}" baseline)"
+# Since the 2026-10-08 live run the RAM overhead is added to the GPU VRAM need only while that need is an ESTIMATE
+# (decide-2b); a profile with a measured gpu-mode peak (decide-kev-4b, 7328 MiB) books the measurement instead -
+# adding a cpu-mode RAM overhead on top of it is exactly what over-booked kev-08b (5583 booked vs 2900 held).
+b_v="$(printf '%s' "${base_plan}" | json_stdin 'd["profiles"]["decide-2b"]["vram_mb"]')"
+o_v="$(printf '%s' "${ovh_plan}" | json_stdin 'd["profiles"]["decide-2b"]["vram_mb"]')"
+assert_eq "500" "$(( o_v - b_v ))" "overhead_mb is added to an ESTIMATED GPU-mode VRAM footprint (decide-2b, baseline fixture)"
+assert_eq "gpu" "$(printf '%s' "${ovh_plan}" | json_stdin 'd["profiles"]["decide-2b"]["mode"]')" "...and the placement mode is still gpu"
 b_v="$(printf '%s' "${base_plan}" | json_stdin 'd["profiles"]["decide-kev-4b"]["vram_mb"]')"
 o_v="$(printf '%s' "${ovh_plan}" | json_stdin 'd["profiles"]["decide-kev-4b"]["vram_mb"]')"
-assert_eq "500" "$(( o_v - b_v ))" "overhead_mb is added to the GPU-mode VRAM footprint (decide-kev-4b, baseline fixture)"
-assert_eq "gpu" "$(printf '%s' "${ovh_plan}" | json_stdin 'd["profiles"]["decide-kev-4b"]["mode"]')" "...and the placement mode is still gpu"
+assert_eq "7328 7328" "${b_v} ${o_v}" "golden-false: a MEASURED gpu booking (decide-kev-4b) is not inflated by a RAM overhead"
 assert_eq "$(printf '%s' "${base_plan}" | json_stdin 'd["profiles"]["decide-tiny"]["vram_mb"]')" \
   "$(printf '%s' "${ovh_plan}" | json_stdin 'd["profiles"]["decide-tiny"]["vram_mb"]')" "golden-false: a profile without overhead_mb keeps its footprint"
 b_r="$(plan_with "${LLMCTL_CATALOG}" cpu-heavy | json_stdin 'd["profiles"]["decide-kev-4b"]["ram_mb"]')"
@@ -440,11 +447,11 @@ json.dump(d, open(sys.argv[2], "w"))
 PYEOF
 }
 plan_hw() { LLMCTL_FAKE_HW="$1" hw_probe_json | catalog_plan_json; }
-write_hw "${TEST_TMP}/hw-gpu-1000.json" 1000    # VRAM budget int(1000 * 0.85) = 850 -> julia gpu (1698) does not fit, cpu does
+write_hw "${TEST_TMP}/hw-gpu-240.json" 240     # VRAM budget int(240 * 0.85) = 204 -> julia gpu (measured 212) does not fit, cpu (194 offload) does
 write_hw "${TEST_TMP}/hw-gpu-150.json" 150      # VRAM budget 127 < the 194 MiB offload overhead
 write_hw "${TEST_TMP}/hw-nogpu.json" none       # CPU-only host
-pj="$(plan_hw "${TEST_TMP}/hw-gpu-1000.json")"
-assert_eq "cpu" "$(printf '%s' "${pj}" | json_stdin 'd["profiles"]["decide-julia"]["mode"]')" "T139: julia lands in cpu mode when the GPU budget is 850 MiB"
+pj="$(plan_hw "${TEST_TMP}/hw-gpu-240.json")"
+assert_eq "cpu" "$(printf '%s' "${pj}" | json_stdin 'd["profiles"]["decide-julia"]["mode"]')" "T139: julia lands in cpu mode when the GPU budget is 204 MiB (< its measured 212 MiB gpu peak)"
 assert_eq "1698" "$(printf '%s' "${pj}" | json_stdin 'd["profiles"]["decide-julia"]["ram_mb"]')" "T139: julia cpu RAM = 160 weights + 128 KV + 1410 measured overhead"
 assert_eq "194" "$(printf '%s' "${pj}" | json_stdin 'd["profiles"]["decide-julia"]["vram_mb"]')" "T139/G-138: julia in cpu mode books its measured 194 MiB offload VRAM (was 0)"
 assert_eq "True" "$(printf '%s' "${pj}" | json_stdin 'd["profiles"]["decide-julia"]["fits"]')" "T139: ...and it fits"
@@ -465,7 +472,52 @@ assert_eq "6994" "$(printf '%s' "${pj3}" | json_stdin 'd["profiles"]["decide-lev
 # decision capacity: the cpu placement carries the VRAM too, and divides the VRAM budget by it
 assert_eq "194" "$(printf '%s' "${pj}" | json_stdin 'd["decision_instances"]["decide-julia"]["placements"]["cpu"]["vram_mb"]')" "T139: capacity cpu placement of julia books 194 MiB VRAM"
 assert_eq "0" "$(printf '%s' "${pj3}" | json_stdin 'd["decision_instances"]["decide-julia"]["placements"]["cpu"]["vram_mb"]')" "T139: capacity cpu placement on a CPU-only host books 0 VRAM"
-assert_eq "4" "$(printf '%s' "${pj}" | json_stdin 'd["decision_instances"]["decide-julia"]["instances_cpu"]')" "T139: 850 // 194 = 4 cpu-mode instances (VRAM-bound), not 25904 // 1698 = 15"
+assert_eq "1" "$(printf '%s' "${pj}" | json_stdin 'd["decision_instances"]["decide-julia"]["instances_cpu"]')" "T139: 204 // 194 = 1 cpu-mode instance (VRAM-bound), not 25904 // 1698 = 15"
+
+# --- Live run 2026-10-08 (primary host "anton", 12288 MiB GPU, another process holding 3219 MiB) ------------------
+# Evidence: specs/009-jev-decision-models/evidence/live-models/<profile>/memory.txt (the engine pid's VRAM and the
+# process VmHWM, sampled after start / golden questions / probes / window-filling edges) and live-models.jsonl.
+# Defects reproduced here from those numbers (RED before the fix):
+#   - decide-kev-9b was ADMITTED in gpu mode (booked 6064 weights + 1024 KV = 7088 <= budget 7388) and then the
+#     engine failed cudaMalloc of a 4016 MiB compute buffer and restart-looped (live-models.jsonl).
+#   - decide-kev-4b booked 3916 MiB VRAM, the engine held 7328 MiB at peak (memory.txt after-edges).
+#   - decide-kev-08b booked 5583 MiB VRAM (774 + 256 KV + its RAM overhead_mb 4553, which was measured in cpu mode),
+#     the engine held 2900 MiB at peak in gpu mode.
+# The recorded plan row (live-models/decide-kev-9b/context.txt) had budgets.vram_mb 7388 = int(8692 * 0.85).
+write_hw "${TEST_TMP}/hw-anton-live.json" 8692
+pa="$(plan_hw "${TEST_TMP}/hw-anton-live.json")"
+pq() { printf '%s' "${pa}" | json_stdin "$1"; }
+assert_eq "7388" "$(pq 'd["budgets"]["vram_mb"]')" "live-run fixture reproduces the recorded VRAM budget (7388 MiB)"
+# measured gpu-mode bookings = the engine pid's highest recorded VRAM (the budget already keeps 15% headroom)
+assert_eq "gpu 7328 measured" "$(pq 'str(d["profiles"]["decide-kev-4b"]["mode"]) + " " + str(d["profiles"]["decide-kev-4b"]["vram_mb"]) + " " + str(d["profiles"]["decide-kev-4b"]["vram_provenance"])')" \
+  "kev-4b: gpu booking = its measured peak 7328 MiB (was 3916), provenance measured"
+assert_eq "specs/009-jev-decision-models/evidence/live-models/decide-kev-4b/memory.txt" "$(pq 'd["profiles"]["decide-kev-4b"]["vram_evidence"]')" \
+  "kev-4b: the booking points at its evidence file"
+assert_eq "4899" "$(pq 'd["profiles"]["decide-kev-4b"]["ram_mb"]')" "kev-4b: gpu-mode RAM = measured peak VmHWM 5016504 kB -> 4899 MiB (the fixed 2048 under-booked it)"
+assert_eq "gpu 2900 measured 2048" "$(pq 'str(d["profiles"]["decide-kev-08b"]["mode"]) + " " + str(d["profiles"]["decide-kev-08b"]["vram_mb"]) + " " + str(d["profiles"]["decide-kev-08b"]["vram_provenance"]) + " " + str(d["profiles"]["decide-kev-08b"]["ram_mb"])')" \
+  "kev-08b: gpu booking = measured peak 2900 MiB (was 5583: cpu-mode RAM overhead was added to VRAM); RAM keeps the 2048 floor (peak 2019)"
+assert_eq "3926 3130" "$(pq 'str(d["profiles"]["decide-lev"]["vram_mb"]) + " " + str(d["profiles"]["decide-lev"]["ram_mb"])')" \
+  "lev: measured gpu peak 3926 MiB VRAM, VmHWM 3204400 kB -> 3130 MiB RAM"
+assert_eq "212 574" "$(pq 'str(d["profiles"]["decide-julia"]["vram_mb"]) + " " + str(d["profiles"]["decide-laya"]["vram_mb"])')" \
+  "julia/laya: measured gpu peaks 212 / 574 MiB VRAM"
+# kev-9b: only a LOWER BOUND is known (the 4016 MiB compute buffer it failed to allocate); gpu booking = weights + KV
+# + that buffer = 6064 + 1024 + 4016 = 11104 > 7388, so the gpu placement is refused
+assert_eq "False" "$(pq 'd["profiles"]["decide-kev-9b"]["mode"] == "gpu"')" "kev-9b: NOT placed on the GPU on the live-run host (it OOMed there)"
+assert_eq "11104 lower-bound" "$(pq 'str(d["profiles"]["decide-kev-9b"]["gpu_vram_mb"]) + " " + d["profiles"]["decide-kev-9b"]["vram_provenance"]')" \
+  "kev-9b: gpu VRAM need = 6064 + 1024 + 4016 measured compute buffer, flagged lower-bound"
+assert_eq "cpu 4016 7088" "$(pq 'str(d["profiles"]["decide-kev-9b"]["mode"]) + " " + str(d["profiles"]["decide-kev-9b"]["vram_mb"]) + " " + str(d["profiles"]["decide-kev-9b"]["ram_mb"])')" \
+  "kev-9b: falls to cpu mode, which still books the 4016 MiB compute-buffer lower bound as offload VRAM (never 0)"
+# golden-false: a profile with no gpu measurement keeps the old estimate and says so
+assert_eq "estimated" "$(pq 'd["profiles"]["decide-2b"]["vram_provenance"]')" "decide-2b (no gpu measurement): provenance estimated (UNKNOWN compute buffer)"
+assert_eq "None" "$(pq 'str(d["profiles"]["decide-2b"].get("vram_evidence"))')" "...with no evidence pointer"
+# a ctx override invalidates the measurement (measured at ctx 8192): back to the estimate, never the stale number
+pa_ctx="$(LLMCTL_CTX_DECIDE_KEV_4B=4096 plan_hw "${TEST_TMP}/hw-anton-live.json")"
+assert_eq "estimated" "$(printf '%s' "${pa_ctx}" | json_stdin 'd["profiles"]["decide-kev-4b"]["vram_provenance"]')" \
+  "kev-4b at an overridden ctx 4096: the ctx-8192 measurement is not reused"
+# decision capacity uses the same bookings
+assert_eq "7328" "$(pq 'd["decision_instances"]["decide-kev-4b"]["placements"]["gpu"]["vram_mb"]')" "capacity: kev-4b gpu placement books the measured 7328 MiB"
+assert_eq "11104" "$(pq 'd["decision_instances"]["decide-kev-9b"]["placements"]["gpu"]["vram_mb"]')" "capacity: kev-9b gpu placement books the 11104 MiB lower-bound need (does not fit 7388)"
+assert_contains "$(printf '%s' "${pa}" | catalog_plan_human | grep 'decide-2b ')" "VRAM estimated" "human plan flags an estimated (unmeasured) gpu VRAM booking"
 
 # --- decide capability rank (scheduler auto-pick order) ------------------------
 # Ascending footprint/accuracy tradeoff, best-first (rationale documented at

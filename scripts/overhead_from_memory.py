@@ -28,6 +28,13 @@ Evidence formats:
   ctx-peak-txt         ctx-peak-memory-experiment.txt       "model=<file> ctx=<N> idleHWM_kB=.. peakHWM_kB=.."
   pid-vram-txt         <profile>/memory.txt                 "vram(MiB) pid=<pid>: <MiB>" lines (max taken)
 
+Optional gpu-mode half (live run 2026-10-08; see derive_gpu): profiles.<name>.memory.gpu =
+  {"status": "measured", "format": "gpu-memory-txt", "evidence": "<live-models/<profile>/memory.txt>", "host", "ctx"}
+      -> defaults.gpu_vram_mb = peak engine-pid VRAM, defaults.gpu_ram_mb = ceil(peak VmHWM kB / 1024) (no margin)
+  {"status": "lower-bound", "format": "oom-compute-buffer-jsonl", "evidence": "<live-models.jsonl>", "host", "ctx"}
+      -> defaults.gpu_compute_buffer_mb = the compute buffer the engine failed to allocate
+  absent / {"status": "unmeasured", "reason": ..}  -> the planner keeps its estimate (vram_provenance "estimated").
+
 Usage:  overhead_from_memory.py [--catalog F] [--root DIR] (--check | --write | --print)
 """
 import argparse
@@ -128,11 +135,77 @@ def derive(cat, root):
             vram["peak_mib"] = peak_v
         if mem:
             mem["ram"], mem["vram"] = ram, vram
+        gpu = mem.get("gpu")
+        if gpu is not None:
+            mem["gpu"] = derive_gpu(name, gpu, root, defaults)
         out[name] = {"defaults": defaults, "memory": mem}
     return out
 
 
-DERIVED_KEYS = ("overhead_mb", "overhead_vram_mb", "window_tokens")
+def parse_gpu_memory(text):
+    """gpu-memory-txt (a gpu-mode run's <profile>/memory.txt): -> (peak engine-pid VRAM MiB, peak VmHWM kB)."""
+    v = parse_pid_vram(text)
+    hwm = [int(x) for x in re.findall(r"^VmHWM:\s*(\d+)\s*kB\s*$", text, re.M)]
+    if not hwm:
+        raise ValueError("no 'VmHWM: N kB' line in the evidence")
+    return v, max(hwm)
+
+
+def parse_oom_jsonl(text, profile):
+    """oom-compute-buffer-jsonl (live-models.jsonl): the compute-buffer size the profile's engine failed to allocate."""
+    for line in text.splitlines():
+        if not line.strip():
+            continue
+        row = json.loads(line)
+        if row.get("profile") == profile:
+            m = re.search(r"cudaMalloc (\d+) MiB compute buffer", row.get("reason", ""))
+            if m:
+                return int(m.group(1))
+    raise ValueError("no row for %s naming a 'cudaMalloc N MiB compute buffer' failure in the evidence" % profile)
+
+
+def _cmdline_ctx(root, evidence):
+    """--ctx-size of the run, from engine-cmdline.txt beside the evidence file (None when that file is absent)."""
+    path = os.path.join(root, os.path.dirname(evidence), "engine-cmdline.txt")
+    if not os.path.isfile(path):
+        return None
+    m = re.search(r"--ctx-size (\d+)", open(path).read())
+    return int(m.group(1)) if m else None
+
+
+def derive_gpu(name, gpu, root, defaults):
+    """memory.gpu (gpu-mode footprint, live run 2026-10-08):
+      measured     format gpu-memory-txt: gpu_vram_mb = peak engine-pid VRAM, gpu_ram_mb = ceil(peak VmHWM kB / 1024).
+                   The peak itself is the booking (no margin: the planner's VRAM budget already keeps 15% of free VRAM).
+      lower-bound  format oom-compute-buffer-jsonl: gpu_compute_buffer_mb = the buffer the engine failed to allocate;
+                   the planner books weights + KV + it, and the true peak stays UNKNOWN.
+    The declared ctx must equal the run's --ctx-size when engine-cmdline.txt sits beside the evidence."""
+    g = dict(gpu)
+    st = g.get("status")
+    if st == "measured":
+        if g.get("format") != "gpu-memory-txt":
+            raise ValueError("%s: unknown gpu evidence format %r" % (name, g.get("format")))
+        v, hwm_kb = parse_gpu_memory(_read(root, g["evidence"]))
+        defaults["gpu_vram_mb"] = v
+        defaults["gpu_ram_mb"] = math.ceil(Fraction(hwm_kb, 1024))
+        g["peak_vram_mib"], g["peak_hwm_mib"] = v, _round1(Fraction(hwm_kb, 1024))
+    elif st == "lower-bound":
+        if g.get("format") != "oom-compute-buffer-jsonl":
+            raise ValueError("%s: unknown gpu lower-bound format %r" % (name, g.get("format")))
+        cb = parse_oom_jsonl(_read(root, g["evidence"]), name)
+        defaults["gpu_compute_buffer_mb"] = cb
+        g["compute_buffer_mib"] = cb
+    else:
+        return g
+    if not isinstance(g.get("ctx"), int):
+        raise ValueError("%s: memory.gpu.%s needs the integer ctx the run used" % (name, st))
+    run_ctx = _cmdline_ctx(root, g["evidence"])
+    if run_ctx is not None and run_ctx != g["ctx"]:
+        raise ValueError("%s: memory.gpu.ctx %d differs from the run's --ctx-size %d" % (name, g["ctx"], run_ctx))
+    return g
+
+
+DERIVED_KEYS = ("overhead_mb", "overhead_vram_mb", "window_tokens", "gpu_vram_mb", "gpu_ram_mb", "gpu_compute_buffer_mb")
 
 
 def check(cat, root):
@@ -152,6 +225,12 @@ def check(cat, root):
                 diffs.append("%s: memory.%s.status must be measured or unmeasured" % (name, half))
             elif h["status"] == "unmeasured" and not h.get("reason"):
                 diffs.append("%s: memory.%s is unmeasured and gives no reason" % (name, half))
+        if "gpu" in p["memory"]:   # optional gpu-mode half (absent = unmeasured: the planner books its estimate)
+            g = p["memory"]["gpu"] or {}
+            if g.get("status") not in ("measured", "lower-bound", "unmeasured"):
+                diffs.append("%s: memory.gpu.status must be measured, lower-bound or unmeasured" % name)
+            elif g["status"] == "unmeasured" and not g.get("reason"):
+                diffs.append("%s: memory.gpu is unmeasured and gives no reason" % name)
         have_d = {k: p.get("defaults", {}).get(k) for k in DERIVED_KEYS if k in p.get("defaults", {})}
         if have_d != w["defaults"]:
             diffs.append("%s: defaults differ from the evidence derivation\n    have: %s\n    want: %s" % (name, have_d, w["defaults"]))

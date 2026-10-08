@@ -1889,7 +1889,9 @@
         "flash_attn": "auto",
         "overhead_mb": 1410,
         "window_tokens": 1024,
-        "overhead_vram_mb": 194
+        "overhead_vram_mb": 194,
+        "gpu_vram_mb": 212,
+        "gpu_ram_mb": 775
       },
       "desc": "Julia 1 Q8_0 (144M, modern-bert, mmBERT-small base) - tiny non-autoregressive typed-decision encoder served by llama-server's NATIVE /v1/systemone (decision_type laya; needs llama.cpp >= b11379, see docs/decision-models.md). CPU-friendly; min_tier below-minimum only recommends, never blocks. Per-slot context 1024 tokens and defaults.overhead_mb 1160: measured, not estimated - an encoder-class model allocates activation buffers that scale with the state length and the window (peak RSS 1.4 GiB with a state filling the 1024-token window; weights alone are far smaller; specs/009-jev-decision-models/evidence/live/ctx-peak-memory-experiment.txt). A state longer than the window is answered 422. Pins (size, sha256, revision 16fee179) from evidence/admission/ggml-org__Julia-1-GGUF.json, re-verified against huggingface.co in evidence/pin-reverify.json. Override: LLMCTL_PORT_DECIDE_JULIA, LLMCTL_CTX_DECIDE_JULIA.",
       "engine": "llama",
@@ -1958,6 +1960,15 @@
           "evidence": "specs/009-jev-decision-models/evidence/live/decide-julia/memory.txt",
           "host": "anton",
           "peak_mib": 176
+        },
+        "gpu": {
+          "status": "measured",
+          "format": "gpu-memory-txt",
+          "evidence": "specs/009-jev-decision-models/evidence/live-models/decide-julia/memory.txt",
+          "host": "anton",
+          "ctx": 1024,
+          "peak_vram_mib": 212,
+          "peak_hwm_mib": 774.9
         }
       }
     },
@@ -1974,7 +1985,9 @@
         "flash_attn": "auto",
         "overhead_mb": 4553,
         "window_tokens": 2048,
-        "overhead_vram_mb": 2621
+        "overhead_vram_mb": 2621,
+        "gpu_vram_mb": 2900,
+        "gpu_ram_mb": 2019
       },
       "desc": "Kev 0.8B Q8_0 (Qwen3.5-0.8B base + LoRA + pointer head embedded in the GGUF) - small typed-decision model served by llama-server's NATIVE /v1/systemone (decision_type kev; needs llama.cpp >= b11379). min_tier below-minimum only recommends, never blocks. Per-slot context 2048 tokens and defaults.overhead_mb 1540: measured, not estimated (peak RSS 2.5 GiB at a 2048-token window with 775 MiB of weights; specs/009-jev-decision-models/evidence/live/decide-kev-08b-cpu-ctx2048-override/memory.txt). Longer states are answered 422. Pins (size, sha256, revision e551e319) from evidence/admission/ggml-org__Kev-0.8B-GGUF.json, re-verified against huggingface.co in evidence/pin-reverify.json. Override: LLMCTL_PORT_DECIDE_KEV_08B, LLMCTL_CTX_DECIDE_KEV_08B.",
       "engine": "llama",
@@ -2042,6 +2055,15 @@
           "evidence": "specs/009-jev-decision-models/evidence/live/decide-kev-08b/memory.txt",
           "host": "anton",
           "peak_mib": 2382
+        },
+        "gpu": {
+          "status": "measured",
+          "format": "gpu-memory-txt",
+          "evidence": "specs/009-jev-decision-models/evidence/live-models/decide-kev-08b/memory.txt",
+          "host": "anton",
+          "ctx": 2048,
+          "peak_vram_mib": 2900,
+          "peak_hwm_mib": 2018.4
         }
       }
     },
@@ -2055,7 +2077,9 @@
         "ctx": 8192,
         "ngl": 99,
         "parallel": 1,
-        "flash_attn": "auto"
+        "flash_attn": "auto",
+        "gpu_vram_mb": 7328,
+        "gpu_ram_mb": 4899
       },
       "desc": "Kev 4B Q4_K_M (Qwen3.5-4B-Base + LoRA r16 + pointer head embedded in the GGUF) - typed-decision model served by llama-server's NATIVE /v1/systemone (decision_type kev; needs llama.cpp >= b11379). Upstream card: validated context 8,192 tokens. Pins (size, sha256, revision d924f2e2) from evidence/admission/ggml-org__Kev-4B-GGUF.json, re-verified against huggingface.co in evidence/pin-reverify.json. Override: LLMCTL_PORT_DECIDE_KEV_4B, LLMCTL_CTX_DECIDE_KEV_4B.",
       "engine": "llama",
@@ -2116,6 +2140,15 @@
         "vram": {
           "status": "unmeasured",
           "reason": "measured only on a CPU-only host (no CUDA build, so no offload); a CUDA host with enough free RAM to load it was not available (the scheduler refused it, NATIVE-REPORT.md section 3)"
+        },
+        "gpu": {
+          "status": "measured",
+          "format": "gpu-memory-txt",
+          "evidence": "specs/009-jev-decision-models/evidence/live-models/decide-kev-4b/memory.txt",
+          "host": "anton",
+          "ctx": 8192,
+          "peak_vram_mib": 7328,
+          "peak_hwm_mib": 4898.9
         }
       }
     },
@@ -2129,7 +2162,8 @@
         "ctx": 8192,
         "ngl": 99,
         "parallel": 1,
-        "flash_attn": "auto"
+        "flash_attn": "auto",
+        "gpu_compute_buffer_mb": 4016
       },
       "desc": "Kev 9B Q4_K_M - largest Kev typed-decision model served by llama-server's NATIVE /v1/systemone (decision_type kev; needs llama.cpp >= b11379). workstation tier: the scheduler refuses it, with numbers, on a host without the memory. Pins (size, sha256, revision ec2bbfe6) from evidence/admission/ggml-org__Kev-9B-GGUF.json, re-verified against huggingface.co in evidence/pin-reverify.json. Override: LLMCTL_PORT_DECIDE_KEV_9B, LLMCTL_CTX_DECIDE_KEV_9B.",
       "engine": "llama",
@@ -2181,6 +2215,15 @@
         "vram": {
           "status": "unmeasured",
           "reason": "measured only on a CPU-only host (no CUDA build, so no offload); a CUDA host with enough free RAM to load it was not available (the scheduler refused it, NATIVE-REPORT.md section 3)"
+        },
+        "gpu": {
+          "status": "lower-bound",
+          "format": "oom-compute-buffer-jsonl",
+          "evidence": "specs/009-jev-decision-models/evidence/live-models.jsonl",
+          "host": "anton",
+          "ctx": 8192,
+          "note": "engine failed cudaMalloc of this compute buffer at start (--ubatch-size 4096); the full gpu-mode peak is UNKNOWN (never started); ctx from the recorded plan row in live-models/decide-kev-9b/context.txt",
+          "compute_buffer_mib": 4016
         }
       }
     },
@@ -2197,7 +2240,9 @@
         "flash_attn": "auto",
         "overhead_mb": 615,
         "window_tokens": 1024,
-        "overhead_vram_mb": 256
+        "overhead_vram_mb": 256,
+        "gpu_vram_mb": 574,
+        "gpu_ram_mb": 667
       },
       "desc": "Laya Q8_0 (421M, modern-bert, non-autoregressive encoder) - typed-decision model served by llama-server's NATIVE /v1/systemone (decision_type laya; needs llama.cpp >= b11379). Upstream ships a 1,024-token default limit (see docs/decision-models.md). min_tier below-minimum only recommends, never blocks. Per-slot context 1024 tokens and defaults.overhead_mb 440: measured, not estimated - an encoder-class model allocates activation buffers that scale with the state length and the window (peak RSS 0.96 GiB with a state filling the 1024-token window; weights alone are far smaller; specs/009-jev-decision-models/evidence/live/ctx-peak-memory-experiment.txt). A state longer than the window is answered 422. Pins (size, sha256, revision 22265007) from evidence/admission/ggml-org__Laya-GGUF.json, re-verified against huggingface.co in evidence/pin-reverify.json. Override: LLMCTL_PORT_DECIDE_LAYA, LLMCTL_CTX_DECIDE_LAYA.",
       "engine": "llama",
@@ -2266,6 +2311,15 @@
           "evidence": "specs/009-jev-decision-models/evidence/live/decide-laya/memory.txt",
           "host": "anton",
           "peak_mib": 232
+        },
+        "gpu": {
+          "status": "measured",
+          "format": "gpu-memory-txt",
+          "evidence": "specs/009-jev-decision-models/evidence/live-models/decide-laya/memory.txt",
+          "host": "anton",
+          "ctx": 1024,
+          "peak_vram_mib": 574,
+          "peak_hwm_mib": 666.2
         }
       }
     },
@@ -2281,7 +2335,9 @@
         "parallel": 1,
         "flash_attn": "auto",
         "overhead_mb": 3098,
-        "window_tokens": 8192
+        "window_tokens": 8192,
+        "gpu_vram_mb": 3926,
+        "gpu_ram_mb": 3130
       },
       "desc": "lev Q4_K_M (interfaze-ai, Qwen3.5-4B + LoRA, head embedded in the GGUF) - typed-decision model served by llama-server's NATIVE /v1/systemone (decision_type lev; needs llama.cpp >= b11379). Pins (size, sha256, revision 3e9286a7) from evidence/admission/ggml-org__lev-GGUF.json, re-verified against huggingface.co in evidence/pin-reverify.json. Override: LLMCTL_PORT_DECIDE_LEV, LLMCTL_CTX_DECIDE_LEV.",
       "engine": "llama",
@@ -2346,6 +2402,15 @@
         "vram": {
           "status": "unmeasured",
           "reason": "measured only on a CPU-only host (no CUDA build, so no offload); a CUDA host with enough free RAM to load it was not available (the scheduler refused it, NATIVE-REPORT.md section 3)"
+        },
+        "gpu": {
+          "status": "measured",
+          "format": "gpu-memory-txt",
+          "evidence": "specs/009-jev-decision-models/evidence/live-models/decide-lev/memory.txt",
+          "host": "anton",
+          "ctx": 8192,
+          "peak_vram_mib": 3926,
+          "peak_hwm_mib": 3129.3
         }
       }
     }
