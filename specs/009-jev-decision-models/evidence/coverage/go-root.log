@@ -1,0 +1,23 @@
+ok  	github.com/vasic-digital/llmctl/cmd/llmctl-decide	3.983s	coverage: 86.7% of statements
+ok  	github.com/vasic-digital/llmctl/internal/audit	0.191s	coverage: 90.5% of statements
+ok  	github.com/vasic-digital/llmctl/internal/calibrate	1.296s	coverage: 91.6% of statements
+ok  	github.com/vasic-digital/llmctl/internal/certs	1.777s	coverage: 88.2% of statements
+ok  	github.com/vasic-digital/llmctl/internal/client	3.613s	coverage: 85.3% of statements
+	github.com/vasic-digital/llmctl/internal/client/internal/clienttest		coverage: 0.0% of statements
+ok  	github.com/vasic-digital/llmctl/internal/contract	0.039s	coverage: 96.3% of statements
+ok  	github.com/vasic-digital/llmctl/internal/gateway	5.231s	coverage: 90.1% of statements
+	github.com/vasic-digital/llmctl/internal/gateway/internal/fakebackends		coverage: 0.0% of statements
+ok  	github.com/vasic-digital/llmctl/internal/keyring	0.711s	coverage: 88.5% of statements
+ok  	github.com/vasic-digital/llmctl/internal/mcpserver	0.016s	coverage: 93.1% of statements
+ok  	github.com/vasic-digital/llmctl/internal/metrics	0.024s	coverage: 99.2% of statements
+ok  	github.com/vasic-digital/llmctl/internal/placement	0.507s	coverage: 93.2% of statements
+ok  	github.com/vasic-digital/llmctl/internal/readout	0.044s	coverage: 93.0% of statements
+ok  	github.com/vasic-digital/llmctl/internal/registry	12.413s	coverage: 91.7% of statements
+ok  	github.com/vasic-digital/llmctl/internal/schema	0.032s	coverage: 92.9% of statements
+ok  	github.com/vasic-digital/llmctl/internal/server	22.957s	coverage: 94.2% of statements
+	github.com/vasic-digital/llmctl/internal/server/internal/servetest		coverage: 0.0% of statements
+	github.com/vasic-digital/llmctl/internal/server/internal/testpki		coverage: 0.0% of statements
+ok  	github.com/vasic-digital/llmctl/internal/vantage	6.388s	coverage: 82.6% of statements
+	github.com/vasic-digital/llmctl/internal/vantage/cmd/vantage-probe		coverage: 0.0% of statements
+	github.com/vasic-digital/llmctl/internal/vantage/internal/fixture		coverage: 0.0% of statements
+ok  	github.com/vasic-digital/llmctl/internal/vantage/probecore	0.561s	coverage: 93.1% of statements

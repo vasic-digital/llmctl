@@ -1,0 +1,840 @@
+{
+  "schema": "llmctl.admission-summary/1",
+  "total": 48,
+  "by_disposition": {
+    "ADMITTED": 0,
+    "ADMIT-CANDIDATE": 13,
+    "USER-ONLY": 19,
+    "HOLD": 1,
+    "REJECTED": 14,
+    "NOT-FOUND": 1
+  },
+  "by_existence_verdict": {
+    "VERIFIED": 40,
+    "AMBIGUOUS": 1,
+    "UNVERIFIED": 7
+  },
+  "gate_failures": {
+    "G1": [
+      "Kestrelyn/kestrel-decider-230m",
+      "avbiswas/bev-decider-0.4B",
+      "ggml-org/Bespoke-Nimble-9B-v3-GGUF",
+      "ggml-org/OpenJev-GGUF",
+      "jevhome/jevhome-B",
+      "openjev/openjev",
+      "startlux-models/StartLux-Decision-4B-Q8_0-GGUF"
+    ],
+    "G3": [
+      "Kestrelyn/kestrel-decider-230m",
+      "StrandsAgents/strands-decider-2B-hobson-v21",
+      "autotrust/JEV-9B",
+      "avbiswas/bev-decider-0.4B",
+      "com-kotobalabs/open-jev-deberta-v3-large",
+      "fastino/GLiNER2.5-Decide",
+      "jaredpalmer/kev-4b",
+      "manjunathshiva/opendecider-nano",
+      "openjev/openjev",
+      "perplexity-ai/pplx-decider-v1-27b",
+      "reoring/fern",
+      "shgao/rsi-jev-v1.0-qwen3.5-2b"
+    ],
+    "G4": [
+      "3ntr0py-t4m3r/GLiNER2.5-Decide-GGUF",
+      "ggml-org/Clef-Flash-GGUF"
+    ],
+    "G5": [
+      "EldanRing/Winnow-12B",
+      "ggml-org/OpenJev-GGUF"
+    ],
+    "G6": [
+      "EldanRing/Winnow-12B",
+      "EldanRing/Winnow-E4B",
+      "Kestrelyn/kestrel-decider-230m",
+      "Manav2op/verdict-small",
+      "StrandsAgents/strands-decider-2B-hobson-v21",
+      "TokenRhythm/NeoHorse-Jev-4B-GGUF",
+      "autotrust/JEV-9B",
+      "avbiswas/bev-decider-0.4B",
+      "com-kotobalabs/open-jev-deberta-v3-large",
+      "fastino/GLiNER2.5-Decide",
+      "heman10x/rlcd-modernbert-151m",
+      "jaredpalmer/kev-4b",
+      "jevhome/jevhome-B",
+      "manjunathshiva/opendecider-nano",
+      "manjunathshiva/opendecider-small-GGUF",
+      "mihailgribov/typecastlm-qwen3.5-3.8b",
+      "mys/laya-typed-decisions-GGUF",
+      "onnx-community/kev-4b-ONNX",
+      "openjev/openjev",
+      "perplexity-ai/pplx-decider-v1-27b",
+      "reoring/fern",
+      "shgao/rsi-jev-v1.0-qwen3.5-2b",
+      "startlux-models/StartLux-Decision-4B-Q8_0-GGUF"
+    ],
+    "G9": [
+      "ggml-org/Clef-Flash-GGUF"
+    ]
+  },
+  "gate_pending": {
+    "G10": 13,
+    "G3": 2,
+    "G4": 8,
+    "G9": 39
+  },
+  "admit_candidates_needing_real_runs": [
+    {
+      "repo": "Mapika/decider-2b-GGUF",
+      "protocol": "letter-logit",
+      "needs_engine_advance": false,
+      "command": "LLMCTL_ADMIT_REAL_RUN=<real-run-executor> llmctl admit Mapika/decider-2b-GGUF"
+    },
+    {
+      "repo": "apus-ailab/APUS-OpenJev-v1-4B-GGUF",
+      "protocol": "letter-logit",
+      "needs_engine_advance": false,
+      "command": "LLMCTL_ADMIT_REAL_RUN=<real-run-executor> llmctl admit apus-ailab/APUS-OpenJev-v1-4B-GGUF"
+    },
+    {
+      "repo": "ggml-org/Julia-1-GGUF",
+      "protocol": "systemone-native",
+      "needs_engine_advance": true,
+      "command": "LLMCTL_ADMIT_REAL_RUN=<real-run-executor> llmctl admit ggml-org/Julia-1-GGUF"
+    },
+    {
+      "repo": "ggml-org/Kev-0.8B-GGUF",
+      "protocol": "systemone-native",
+      "needs_engine_advance": true,
+      "command": "LLMCTL_ADMIT_REAL_RUN=<real-run-executor> llmctl admit ggml-org/Kev-0.8B-GGUF"
+    },
+    {
+      "repo": "ggml-org/Kev-4B-GGUF",
+      "protocol": "systemone-native",
+      "needs_engine_advance": true,
+      "command": "LLMCTL_ADMIT_REAL_RUN=<real-run-executor> llmctl admit ggml-org/Kev-4B-GGUF"
+    },
+    {
+      "repo": "ggml-org/Kev-9B-GGUF",
+      "protocol": "systemone-native",
+      "needs_engine_advance": true,
+      "command": "LLMCTL_ADMIT_REAL_RUN=<real-run-executor> llmctl admit ggml-org/Kev-9B-GGUF"
+    },
+    {
+      "repo": "ggml-org/Laya-GGUF",
+      "protocol": "systemone-native",
+      "needs_engine_advance": true,
+      "command": "LLMCTL_ADMIT_REAL_RUN=<real-run-executor> llmctl admit ggml-org/Laya-GGUF"
+    },
+    {
+      "repo": "ggml-org/lev-GGUF",
+      "protocol": "systemone-native",
+      "needs_engine_advance": true,
+      "command": "LLMCTL_ADMIT_REAL_RUN=<real-run-executor> llmctl admit ggml-org/lev-GGUF"
+    }
+  ],
+  "candidates": [
+    {
+      "name": "gliner2.5-decide-gguf",
+      "repo": "3ntr0py-t4m3r/GLiNER2.5-Decide-GGUF",
+      "slug": "3ntr0py-t4m3r__GLiNER2.5-Decide-GGUF",
+      "pinned": "no",
+      "disposition": "USER-ONLY",
+      "existence": "VERIFIED",
+      "protocol": "systemone-native",
+      "needs_engine_advance": false,
+      "reasons": [
+        "G4: GGUF arch 'deberta-v3' is absent from the pinned tree and an engine bump is not proven to add it (custom / patched architecture)"
+      ],
+      "retrieved_at": "2026-10-07T16:15:58Z"
+    },
+    {
+      "name": "winnow-12b",
+      "repo": "EldanRing/Winnow-12B",
+      "slug": "EldanRing__Winnow-12B",
+      "pinned": "no",
+      "disposition": "USER-ONLY",
+      "existence": "VERIFIED",
+      "protocol": "unsupported",
+      "needs_engine_advance": false,
+      "reasons": [
+        "G5: over the file-size budget: largest model file gguf/Winnow-12B-Q8_0.gguf = 12669646592 B (cap 10737418240 B), tier workstation, memory ESTIMATE 16470540569 B (gguf: size*1.3) vs budget 19487261491 B (60% of /proc/meminfo MemTotal (Constitution 12.6))",
+        "G6: unsupported / unclassified protocol (curated hint 'unsupported'); fail closed"
+      ],
+      "retrieved_at": "2026-10-07T16:16:02Z"
+    },
+    {
+      "name": "winnow-e4b",
+      "repo": "EldanRing/Winnow-E4B",
+      "slug": "EldanRing__Winnow-E4B",
+      "pinned": "no",
+      "disposition": "USER-ONLY",
+      "existence": "VERIFIED",
+      "protocol": "unsupported",
+      "needs_engine_advance": false,
+      "reasons": [
+        "G6: unsupported / unclassified protocol (curated hint 'unsupported'); fail closed"
+      ],
+      "retrieved_at": "2026-10-07T16:16:03Z"
+    },
+    {
+      "name": "kestrel-decider-230m",
+      "repo": "Kestrelyn/kestrel-decider-230m",
+      "slug": "Kestrelyn__kestrel-decider-230m",
+      "pinned": "no",
+      "disposition": "REJECTED",
+      "existence": "VERIFIED",
+      "protocol": "unsupported",
+      "needs_engine_advance": false,
+      "reasons": [
+        "G1: weights licence other is not on the allow-list ['apache-2.0', 'mit', 'bsd-2-clause', 'bsd-3-clause', 'cc-by-4.0', 'cc0-1.0', 'isc', 'unlicense']; licence files in repo: ['LICENSE']"
+      ],
+      "retrieved_at": "2026-10-07T16:16:10Z"
+    },
+    {
+      "name": "verdictml-small",
+      "repo": "Manav2op/verdict-small",
+      "slug": "Manav2op__verdict-small",
+      "pinned": "no",
+      "disposition": "USER-ONLY",
+      "existence": "VERIFIED",
+      "protocol": "unsupported",
+      "needs_engine_advance": false,
+      "reasons": [
+        "G6: unsupported / unclassified protocol (curated hint 'unsupported'); fail closed"
+      ],
+      "retrieved_at": "2026-10-07T16:15:50Z"
+    },
+    {
+      "name": "decider-2b",
+      "repo": "Mapika/decider-2b-GGUF",
+      "slug": "Mapika__decider-2b-GGUF",
+      "pinned": "no",
+      "disposition": "ADMIT-CANDIDATE",
+      "existence": "VERIFIED",
+      "protocol": "letter-logit",
+      "needs_engine_advance": false,
+      "reasons": [
+        "G3 PENDING: model sha256 pinned from the API LFS oid (decider-2b-v11-Q4_K_M.gguf=b7c132a67934...); aux file(s) ['decider_config.json'] are non-LFS: sha256 must be computed at pin time (not done in paper mode)",
+        "G9 PENDING: live upstream issue-tracker sweep not done by this driver (offline); none recorded in the research register",
+        "G10 PENDING: paper-only mode: needs a real run on a host with the pinned engine"
+      ],
+      "retrieved_at": "2026-10-07T16:15:42Z"
+    },
+    {
+      "name": "decide",
+      "repo": "Mapika/decider-4b-GGUF",
+      "slug": "Mapika__decider-4b-GGUF",
+      "pinned": "yes",
+      "disposition": "ADMIT-CANDIDATE",
+      "existence": "VERIFIED",
+      "protocol": "letter-logit",
+      "needs_engine_advance": false,
+      "reasons": [
+        "G3 PENDING: model sha256 pinned from the API LFS oid (decider-4b-v2.1-Q4_K_M.gguf=c7083fcfc93f...); aux file(s) ['decider_config.json'] are non-LFS: sha256 must be computed at pin time (not done in paper mode)",
+        "G9 PENDING: live upstream issue-tracker sweep not done by this driver (offline); none recorded in the research register",
+        "G10 PENDING: paper-only mode: needs a real run on a host with the pinned engine"
+      ],
+      "retrieved_at": "2026-10-07T16:15:28Z"
+    },
+    {
+      "name": "decide-nli",
+      "repo": "MoritzLaurer/deberta-v3-large-zeroshot-v2.0",
+      "slug": "MoritzLaurer__deberta-v3-large-zeroshot-v2.0",
+      "pinned": "yes",
+      "disposition": "ADMIT-CANDIDATE",
+      "existence": "VERIFIED",
+      "protocol": "nli-onnx",
+      "needs_engine_advance": false,
+      "reasons": [
+        "G9 PENDING: live upstream issue-tracker sweep not done by this driver (offline); none recorded in the research register",
+        "G10 PENDING: paper-only mode: needs a real run on a host with the pinned engine"
+      ],
+      "retrieved_at": "2026-10-07T16:15:31Z"
+    },
+    {
+      "name": "strands-decider-2b-v21",
+      "repo": "StrandsAgents/strands-decider-2B-hobson-v21",
+      "slug": "StrandsAgents__strands-decider-2B-hobson-v21",
+      "pinned": "no",
+      "disposition": "USER-ONLY",
+      "existence": "VERIFIED",
+      "protocol": "unsupported",
+      "needs_engine_advance": false,
+      "reasons": [
+        "G3: no GGUF or ONNX file in the repo to pin (siblings: ['.gitattributes', 'LICENSE.md', 'MANIFEST.sha256', 'README.md', 'chat_template.jinja', 'eval/internal/eval.log', 'eval/internal/recipe_heldout.json', 'eval/jevbench-w4096/health.json'])",
+        "G6: unsupported / unclassified protocol (curated hint 'unsupported'); fail closed"
+      ],
+      "retrieved_at": "2026-10-07T16:15:51Z"
+    },
+    {
+      "name": "neohorse-jev-4b",
+      "repo": "TokenRhythm/NeoHorse-Jev-4B-GGUF",
+      "slug": "TokenRhythm__NeoHorse-Jev-4B-GGUF",
+      "pinned": "no",
+      "disposition": "USER-ONLY",
+      "existence": "VERIFIED",
+      "protocol": "unsupported",
+      "needs_engine_advance": false,
+      "reasons": [
+        "G6: unsupported / unclassified protocol (curated hint 'unsupported'); fail closed"
+      ],
+      "retrieved_at": "2026-10-07T16:15:53Z"
+    },
+    {
+      "name": "decide-2b+max",
+      "repo": "alibiserikbay/JevK5-GGUF",
+      "slug": "alibiserikbay__JevK5-GGUF",
+      "pinned": "yes",
+      "disposition": "ADMIT-CANDIDATE",
+      "existence": "VERIFIED",
+      "protocol": "letter-logit",
+      "needs_engine_advance": false,
+      "reasons": [
+        "G9 PENDING: live upstream issue-tracker sweep not done by this driver (offline); none recorded in the research register",
+        "G10 PENDING: paper-only mode: needs a real run on a host with the pinned engine"
+      ],
+      "retrieved_at": "2026-10-07T16:15:32Z"
+    },
+    {
+      "name": "anyjev",
+      "repo": "-",
+      "slug": "anyjev",
+      "pinned": "no",
+      "disposition": "REJECTED",
+      "existence": "UNVERIFIED",
+      "protocol": "unsupported",
+      "needs_engine_advance": false,
+      "reasons": [
+        "no weights artifact: harness / library, not a model (kind=harness)"
+      ],
+      "retrieved_at": "2026-10-07T16:16:22Z"
+    },
+    {
+      "name": "apus-openjev-4b",
+      "repo": "apus-ailab/APUS-OpenJev-v1-4B-GGUF",
+      "slug": "apus-ailab__APUS-OpenJev-v1-4B-GGUF",
+      "pinned": "no",
+      "disposition": "ADMIT-CANDIDATE",
+      "existence": "VERIFIED",
+      "protocol": "letter-logit",
+      "needs_engine_advance": false,
+      "reasons": [
+        "G9 PENDING: live upstream issue-tracker sweep not done by this driver (offline); none recorded in the research register",
+        "G10 PENDING: paper-only mode: needs a real run on a host with the pinned engine"
+      ],
+      "retrieved_at": "2026-10-07T16:15:43Z"
+    },
+    {
+      "name": "autotrust-jev-9b",
+      "repo": "autotrust/JEV-9B",
+      "slug": "autotrust__JEV-9B",
+      "pinned": "no",
+      "disposition": "USER-ONLY",
+      "existence": "VERIFIED",
+      "protocol": "unsupported",
+      "needs_engine_advance": false,
+      "reasons": [
+        "G3: no GGUF or ONNX file in the repo to pin (siblings: ['.gitattributes', 'README.md', 'adapter/README.md', 'adapter/adapter_config.json', 'adapter/adapter_model.safetensors', 'adapter_vllm/adapter_config.json', 'adapter_vllm/adapter_model.safetensors', 'adapter_vllm/decision_head.json'])",
+        "G6: unsupported / unclassified protocol (curated hint 'unsupported'); fail closed"
+      ],
+      "retrieved_at": "2026-10-07T16:16:18Z"
+    },
+    {
+      "name": "bev-decider-0.4b",
+      "repo": "avbiswas/bev-decider-0.4B",
+      "slug": "avbiswas__bev-decider-0.4B",
+      "pinned": "no",
+      "disposition": "REJECTED",
+      "existence": "VERIFIED",
+      "protocol": "unsupported",
+      "needs_engine_advance": false,
+      "reasons": [
+        "G1: weights licence cc-by-nc-4.0 is not on the allow-list ['apache-2.0', 'mit', 'bsd-2-clause', 'bsd-3-clause', 'cc-by-4.0', 'cc0-1.0', 'isc', 'unlicense']; licence files in repo: none"
+      ],
+      "retrieved_at": "2026-10-07T16:16:09Z"
+    },
+    {
+      "name": "decide-tiny",
+      "repo": "chaoliangUNSW/Jev-Style-0.8B-Decision-v3-GGUF",
+      "slug": "chaoliangUNSW__Jev-Style-0.8B-Decision-v3-GGUF",
+      "pinned": "yes",
+      "disposition": "ADMIT-CANDIDATE",
+      "existence": "VERIFIED",
+      "protocol": "letter-logit",
+      "needs_engine_advance": false,
+      "reasons": [
+        "G9 PENDING: live upstream issue-tracker sweep not done by this driver (offline); none recorded in the research register",
+        "G10 PENDING: paper-only mode: needs a real run on a host with the pinned engine"
+      ],
+      "retrieved_at": "2026-10-07T16:15:27Z"
+    },
+    {
+      "name": "clm",
+      "repo": "-",
+      "slug": "clm",
+      "pinned": "no",
+      "disposition": "REJECTED",
+      "existence": "UNVERIFIED",
+      "protocol": "unsupported",
+      "needs_engine_advance": false,
+      "reasons": [
+        "no weights artifact: harness / library, not a model (kind=harness)"
+      ],
+      "retrieved_at": "2026-10-07T16:16:22Z"
+    },
+    {
+      "name": "open-jev-deberta",
+      "repo": "com-kotobalabs/open-jev-deberta-v3-large",
+      "slug": "com-kotobalabs__open-jev-deberta-v3-large",
+      "pinned": "no",
+      "disposition": "USER-ONLY",
+      "existence": "VERIFIED",
+      "protocol": "unsupported",
+      "needs_engine_advance": false,
+      "reasons": [
+        "G3: no GGUF or ONNX file in the repo to pin (siblings: ['.gitattributes', 'README.md', 'added_tokens.json', 'config.json', 'head.safetensors', 'model.safetensors', 'open_jev_config.json', 'special_tokens_map.json'])",
+        "G6: unsupported / unclassified protocol (curated hint 'unsupported'); fail closed"
+      ],
+      "retrieved_at": "2026-10-07T16:16:15Z"
+    },
+    {
+      "name": "djev",
+      "repo": "-",
+      "slug": "djev",
+      "pinned": "no",
+      "disposition": "REJECTED",
+      "existence": "UNVERIFIED",
+      "protocol": "unsupported",
+      "needs_engine_advance": false,
+      "reasons": [
+        "no weights artifact: harness / library, not a model (kind=harness)"
+      ],
+      "retrieved_at": "2026-10-07T16:16:22Z"
+    },
+    {
+      "name": "edgejev",
+      "repo": "-",
+      "slug": "edgejev",
+      "pinned": "no",
+      "disposition": "REJECTED",
+      "existence": "UNVERIFIED",
+      "protocol": "unsupported",
+      "needs_engine_advance": false,
+      "reasons": [
+        "no weights artifact: harness / library, not a model (kind=harness)"
+      ],
+      "retrieved_at": "2026-10-07T16:16:22Z"
+    },
+    {
+      "name": "gliner2.5-decide",
+      "repo": "fastino/GLiNER2.5-Decide",
+      "slug": "fastino__GLiNER2.5-Decide",
+      "pinned": "no",
+      "disposition": "USER-ONLY",
+      "existence": "VERIFIED",
+      "protocol": "unsupported",
+      "needs_engine_advance": false,
+      "reasons": [
+        "G3: no GGUF or ONNX file in the repo to pin (siblings: ['.gitattributes', 'GLiNER-2.5-Decision-HF-Banner.png', 'README.md', 'SKILL.md', 'config.json', 'encoder_config/config.json', 'model.safetensors', 'special_tokens_map.json'])",
+        "G6: unsupported / unclassified protocol (curated hint 'unsupported'); fail closed"
+      ],
+      "retrieved_at": "2026-10-07T16:15:57Z"
+    },
+    {
+      "name": "bespoke-nimble-9b",
+      "repo": "ggml-org/Bespoke-Nimble-9B-v3-GGUF",
+      "slug": "ggml-org__Bespoke-Nimble-9B-v3-GGUF",
+      "pinned": "no",
+      "disposition": "REJECTED",
+      "existence": "VERIFIED",
+      "protocol": "systemone-native",
+      "needs_engine_advance": true,
+      "reasons": [
+        "G1: weights licence cc-by-nc-4.0 is not on the allow-list ['apache-2.0', 'mit', 'bsd-2-clause', 'bsd-3-clause', 'cc-by-4.0', 'cc0-1.0', 'isc', 'unlicense']; licence files in repo: none"
+      ],
+      "retrieved_at": "2026-10-07T16:15:47Z"
+    },
+    {
+      "name": "clef-flash",
+      "repo": "ggml-org/Clef-Flash-GGUF",
+      "slug": "ggml-org__Clef-Flash-GGUF",
+      "pinned": "no",
+      "disposition": "HOLD",
+      "existence": "VERIFIED",
+      "protocol": "systemone-native",
+      "needs_engine_advance": false,
+      "reasons": [
+        "G9: blocking open issue recorded: llama.cpp#30064 Q8_0 head quantisation collapses probabilities toward uniform (open at 2026-10-07); also needs b11371+"
+      ],
+      "retrieved_at": "2026-10-07T16:15:45Z"
+    },
+    {
+      "name": "julia-1",
+      "repo": "ggml-org/Julia-1-GGUF",
+      "slug": "ggml-org__Julia-1-GGUF",
+      "pinned": "no",
+      "disposition": "ADMIT-CANDIDATE",
+      "existence": "VERIFIED",
+      "protocol": "systemone-native",
+      "needs_engine_advance": true,
+      "reasons": [
+        "G4 PENDING: pending engine advance (FR-085): pinned tree has arch modern-bert=yes, /v1/systemone=no; needs llama.cpp >= b11361",
+        "G9 PENDING: non-blocking note recorded (llama.cpp#30073 large inputs rejected at default physical batch 512 (open at 2026-10-07; -b must be >= prompt length)); live tracker sweep not done by this driver",
+        "G10 PENDING: paper-only mode: needs a real run on a host with the pinned engine; also blocked on the engine advance (FR-085)"
+      ],
+      "retrieved_at": "2026-10-07T16:15:39Z"
+    },
+    {
+      "name": "kev-0.8b",
+      "repo": "ggml-org/Kev-0.8B-GGUF",
+      "slug": "ggml-org__Kev-0.8B-GGUF",
+      "pinned": "no",
+      "disposition": "ADMIT-CANDIDATE",
+      "existence": "VERIFIED",
+      "protocol": "systemone-native",
+      "needs_engine_advance": true,
+      "reasons": [
+        "G4 PENDING: pending engine advance (FR-085): pinned tree has arch qwen35=yes, /v1/systemone=no; needs llama.cpp >= b11361",
+        "G9 PENDING: non-blocking note recorded (llama.cpp#30073 large inputs rejected at default physical batch 512 (open at 2026-10-07; -b must be >= prompt length)); live tracker sweep not done by this driver",
+        "G10 PENDING: paper-only mode: needs a real run on a host with the pinned engine; also blocked on the engine advance (FR-085)"
+      ],
+      "retrieved_at": "2026-10-07T16:15:34Z"
+    },
+    {
+      "name": "kev-4b",
+      "repo": "ggml-org/Kev-4B-GGUF",
+      "slug": "ggml-org__Kev-4B-GGUF",
+      "pinned": "no",
+      "disposition": "ADMIT-CANDIDATE",
+      "existence": "VERIFIED",
+      "protocol": "systemone-native",
+      "needs_engine_advance": true,
+      "reasons": [
+        "G4 PENDING: pending engine advance (FR-085): pinned tree has arch qwen35=yes, /v1/systemone=no; needs llama.cpp >= b11361",
+        "G9 PENDING: non-blocking note recorded (llama.cpp#30073 large inputs rejected at default physical batch 512 (open at 2026-10-07; -b must be >= prompt length)); live tracker sweep not done by this driver",
+        "G10 PENDING: paper-only mode: needs a real run on a host with the pinned engine; also blocked on the engine advance (FR-085)"
+      ],
+      "retrieved_at": "2026-10-07T16:15:35Z"
+    },
+    {
+      "name": "kev-9b",
+      "repo": "ggml-org/Kev-9B-GGUF",
+      "slug": "ggml-org__Kev-9B-GGUF",
+      "pinned": "no",
+      "disposition": "ADMIT-CANDIDATE",
+      "existence": "VERIFIED",
+      "protocol": "systemone-native",
+      "needs_engine_advance": true,
+      "reasons": [
+        "G4 PENDING: pending engine advance (FR-085): pinned tree has arch qwen35=yes, /v1/systemone=no; needs llama.cpp >= b11361",
+        "G9 PENDING: non-blocking note recorded (llama.cpp#30073 large inputs rejected at default physical batch 512 (open at 2026-10-07; -b must be >= prompt length)); live tracker sweep not done by this driver",
+        "G10 PENDING: paper-only mode: needs a real run on a host with the pinned engine; also blocked on the engine advance (FR-085)"
+      ],
+      "retrieved_at": "2026-10-07T16:15:37Z"
+    },
+    {
+      "name": "laya",
+      "repo": "ggml-org/Laya-GGUF",
+      "slug": "ggml-org__Laya-GGUF",
+      "pinned": "no",
+      "disposition": "ADMIT-CANDIDATE",
+      "existence": "VERIFIED",
+      "protocol": "systemone-native",
+      "needs_engine_advance": true,
+      "reasons": [
+        "G4 PENDING: pending engine advance (FR-085): pinned tree has arch modern-bert=yes, /v1/systemone=no; needs llama.cpp >= b11361",
+        "G9 PENDING: non-blocking note recorded (llama.cpp#30073 large inputs rejected at default physical batch 512 (open at 2026-10-07; -b must be >= prompt length)); live tracker sweep not done by this driver",
+        "G10 PENDING: paper-only mode: needs a real run on a host with the pinned engine; also blocked on the engine advance (FR-085)"
+      ],
+      "retrieved_at": "2026-10-07T16:15:38Z"
+    },
+    {
+      "name": "openjev-gguf",
+      "repo": "ggml-org/OpenJev-GGUF",
+      "slug": "ggml-org__OpenJev-GGUF",
+      "pinned": "no",
+      "disposition": "REJECTED",
+      "existence": "VERIFIED",
+      "protocol": "systemone-native",
+      "needs_engine_advance": true,
+      "reasons": [
+        "G1: weights licence cc-by-nc-4.0 is not on the allow-list ['apache-2.0', 'mit', 'bsd-2-clause', 'bsd-3-clause', 'cc-by-4.0', 'cc0-1.0', 'isc', 'unlicense']; licence files in repo: none"
+      ],
+      "retrieved_at": "2026-10-07T16:15:46Z"
+    },
+    {
+      "name": "lev",
+      "repo": "ggml-org/lev-GGUF",
+      "slug": "ggml-org__lev-GGUF",
+      "pinned": "no",
+      "disposition": "ADMIT-CANDIDATE",
+      "existence": "VERIFIED",
+      "protocol": "systemone-native",
+      "needs_engine_advance": true,
+      "reasons": [
+        "G4 PENDING: pending engine advance (FR-085): pinned tree has arch qwen35=yes, /v1/systemone=no; needs llama.cpp >= b11361",
+        "G9 PENDING: non-blocking note recorded (llama.cpp#30073 large inputs rejected at default physical batch 512 (open at 2026-10-07; -b must be >= prompt length)); live tracker sweep not done by this driver",
+        "G10 PENDING: paper-only mode: needs a real run on a host with the pinned engine; also blocked on the engine advance (FR-085)"
+      ],
+      "retrieved_at": "2026-10-07T16:15:41Z"
+    },
+    {
+      "name": "verdict-2.0",
+      "repo": "heman10x/openJev-verdict-2.0",
+      "slug": "heman10x__openJev-verdict-2.0",
+      "pinned": "no",
+      "disposition": "NOT-FOUND",
+      "existence": "AMBIGUOUS",
+      "protocol": "unsupported",
+      "needs_engine_advance": false,
+      "reasons": [
+        "existence AMBIGUOUS: HTTP 401: huggingface.co answers 401 for both private and non-existent repos; cannot be told apart anonymously"
+      ],
+      "retrieved_at": "2026-10-07T16:16:19Z"
+    },
+    {
+      "name": "verdict-151m",
+      "repo": "heman10x/rlcd-modernbert-151m",
+      "slug": "heman10x__rlcd-modernbert-151m",
+      "pinned": "no",
+      "disposition": "USER-ONLY",
+      "existence": "VERIFIED",
+      "protocol": "unsupported",
+      "needs_engine_advance": false,
+      "reasons": [
+        "G6: unsupported / unclassified protocol (curated hint 'unsupported'); fail closed"
+      ],
+      "retrieved_at": "2026-10-07T16:15:49Z"
+    },
+    {
+      "name": "kev-4b-upstream",
+      "repo": "jaredpalmer/kev-4b",
+      "slug": "jaredpalmer__kev-4b",
+      "pinned": "no",
+      "disposition": "USER-ONLY",
+      "existence": "VERIFIED",
+      "protocol": "unsupported",
+      "needs_engine_advance": false,
+      "reasons": [
+        "G3: no GGUF or ONNX file in the repo to pin (siblings: ['.gitattributes', 'README.md', 'adapter_config.json', 'adapter_model.safetensors', 'added_tokens.json', 'head.pt', 'merges.txt', 'provenance.json'])",
+        "G6: unsupported / unclassified protocol (curated hint 'unsupported'); fail closed"
+      ],
+      "retrieved_at": "2026-10-07T16:16:13Z"
+    },
+    {
+      "name": "jevhome-b",
+      "repo": "jevhome/jevhome-B",
+      "slug": "jevhome__jevhome-B",
+      "pinned": "no",
+      "disposition": "REJECTED",
+      "existence": "VERIFIED",
+      "protocol": "unsupported",
+      "needs_engine_advance": false,
+      "reasons": [
+        "G1: weights licence cc-by-nc-4.0 is not on the allow-list ['apache-2.0', 'mit', 'bsd-2-clause', 'bsd-3-clause', 'cc-by-4.0', 'cc0-1.0', 'isc', 'unlicense']; licence files in repo: none"
+      ],
+      "retrieved_at": "2026-10-07T16:16:07Z"
+    },
+    {
+      "name": "local-jev",
+      "repo": "-",
+      "slug": "local-jev",
+      "pinned": "no",
+      "disposition": "REJECTED",
+      "existence": "UNVERIFIED",
+      "protocol": "unsupported",
+      "needs_engine_advance": false,
+      "reasons": [
+        "no weights artifact: harness / library, not a model (kind=harness)"
+      ],
+      "retrieved_at": "2026-10-07T16:16:21Z"
+    },
+    {
+      "name": "opendecider-nano",
+      "repo": "manjunathshiva/opendecider-nano",
+      "slug": "manjunathshiva__opendecider-nano",
+      "pinned": "no",
+      "disposition": "USER-ONLY",
+      "existence": "VERIFIED",
+      "protocol": "unsupported",
+      "needs_engine_advance": false,
+      "reasons": [
+        "G3: no GGUF or ONNX file in the repo to pin (siblings: ['.gitattributes', 'LICENSE', 'README.md', 'config.json', 'head.safetensors', 'model.safetensors', 'opendecider.json', 'tokenizer.json'])",
+        "G6: unsupported / unclassified protocol (curated hint 'unsupported'); fail closed"
+      ],
+      "retrieved_at": "2026-10-07T16:15:55Z"
+    },
+    {
+      "name": "opendecider-small",
+      "repo": "manjunathshiva/opendecider-small-GGUF",
+      "slug": "manjunathshiva__opendecider-small-GGUF",
+      "pinned": "no",
+      "disposition": "USER-ONLY",
+      "existence": "VERIFIED",
+      "protocol": "unsupported",
+      "needs_engine_advance": false,
+      "reasons": [
+        "G6: unsupported / unclassified protocol (curated hint 'unsupported'); fail closed"
+      ],
+      "retrieved_at": "2026-10-07T16:15:54Z"
+    },
+    {
+      "name": "typecastlm",
+      "repo": "mihailgribov/typecastlm-qwen3.5-3.8b",
+      "slug": "mihailgribov__typecastlm-qwen3.5-3.8b",
+      "pinned": "no",
+      "disposition": "USER-ONLY",
+      "existence": "VERIFIED",
+      "protocol": "unsupported",
+      "needs_engine_advance": false,
+      "reasons": [
+        "G6: unsupported / unclassified protocol (curated hint 'unsupported'); fail closed"
+      ],
+      "retrieved_at": "2026-10-07T16:16:04Z"
+    },
+    {
+      "name": "laya-typed-decisions-gguf",
+      "repo": "mys/laya-typed-decisions-GGUF",
+      "slug": "mys__laya-typed-decisions-GGUF",
+      "pinned": "no",
+      "disposition": "USER-ONLY",
+      "existence": "VERIFIED",
+      "protocol": "unsupported",
+      "needs_engine_advance": false,
+      "reasons": [
+        "G6: unsupported / unclassified protocol (curated hint 'unsupported'); fail closed"
+      ],
+      "retrieved_at": "2026-10-07T16:16:21Z"
+    },
+    {
+      "name": "kev-onnx",
+      "repo": "onnx-community/kev-4b-ONNX",
+      "slug": "onnx-community__kev-4b-ONNX",
+      "pinned": "no",
+      "disposition": "USER-ONLY",
+      "existence": "VERIFIED",
+      "protocol": "unsupported",
+      "needs_engine_advance": false,
+      "reasons": [
+        "G6: unsupported / unclassified protocol (curated hint 'unsupported'); fail closed"
+      ],
+      "retrieved_at": "2026-10-07T16:16:14Z"
+    },
+    {
+      "name": "openjev-27b",
+      "repo": "openjev/openjev",
+      "slug": "openjev__openjev",
+      "pinned": "no",
+      "disposition": "REJECTED",
+      "existence": "VERIFIED",
+      "protocol": "unsupported",
+      "needs_engine_advance": false,
+      "reasons": [
+        "G1: weights licence cc-by-nc-4.0 is not on the allow-list ['apache-2.0', 'mit', 'bsd-2-clause', 'bsd-3-clause', 'cc-by-4.0', 'cc0-1.0', 'isc', 'unlicense']; licence files in repo: ['LICENSE']"
+      ],
+      "retrieved_at": "2026-10-07T16:16:11Z"
+    },
+    {
+      "name": "pplx-decider-27b",
+      "repo": "perplexity-ai/pplx-decider-v1-27b",
+      "slug": "perplexity-ai__pplx-decider-v1-27b",
+      "pinned": "no",
+      "disposition": "USER-ONLY",
+      "existence": "VERIFIED",
+      "protocol": "unsupported",
+      "needs_engine_advance": false,
+      "reasons": [
+        "G3: no GGUF or ONNX file in the repo to pin (siblings: ['.gitattributes', 'LICENSE', 'NOTICE', 'README.md', 'chat_template.jinja', 'config.json', 'decision_config.json', 'inference.py'])",
+        "G6: unsupported / unclassified protocol (curated hint 'unsupported'); fail closed"
+      ],
+      "retrieved_at": "2026-10-07T16:16:17Z"
+    },
+    {
+      "name": "poorjev",
+      "repo": "-",
+      "slug": "poorjev",
+      "pinned": "no",
+      "disposition": "REJECTED",
+      "existence": "UNVERIFIED",
+      "protocol": "unsupported",
+      "needs_engine_advance": false,
+      "reasons": [
+        "no weights artifact: harness / library, not a model (kind=harness)"
+      ],
+      "retrieved_at": "2026-10-07T16:16:22Z"
+    },
+    {
+      "name": "fern",
+      "repo": "reoring/fern",
+      "slug": "reoring__fern",
+      "pinned": "no",
+      "disposition": "USER-ONLY",
+      "existence": "VERIFIED",
+      "protocol": "unsupported",
+      "needs_engine_advance": false,
+      "reasons": [
+        "G3: no GGUF or ONNX file in the repo to pin (siblings: ['.gitattributes', 'README.md', 'chat_template.jinja', 'config.json', 'eval.json', 'generation_config.json', 'model.safetensors', 'tokenizer.json'])",
+        "G6: unsupported / unclassified protocol (curated hint 'unsupported'); fail closed"
+      ],
+      "retrieved_at": "2026-10-07T16:16:01Z"
+    },
+    {
+      "name": "decide-pro",
+      "repo": "rizzoaiacademy/rizzo-flow",
+      "slug": "rizzoaiacademy__rizzo-flow",
+      "pinned": "yes",
+      "disposition": "ADMIT-CANDIDATE",
+      "existence": "VERIFIED",
+      "protocol": "letter-logit",
+      "needs_engine_advance": false,
+      "reasons": [
+        "G9 PENDING: live upstream issue-tracker sweep not done by this driver (offline); none recorded in the research register",
+        "G10 PENDING: paper-only mode: needs a real run on a host with the pinned engine"
+      ],
+      "retrieved_at": "2026-10-07T16:15:30Z"
+    },
+    {
+      "name": "semif",
+      "repo": "-",
+      "slug": "semif",
+      "pinned": "no",
+      "disposition": "REJECTED",
+      "existence": "UNVERIFIED",
+      "protocol": "unsupported",
+      "needs_engine_advance": false,
+      "reasons": [
+        "no weights artifact: harness / library, not a model (kind=harness)"
+      ],
+      "retrieved_at": "2026-10-07T16:16:21Z"
+    },
+    {
+      "name": "rsi-jev",
+      "repo": "shgao/rsi-jev-v1.0-qwen3.5-2b",
+      "slug": "shgao__rsi-jev-v1.0-qwen3.5-2b",
+      "pinned": "no",
+      "disposition": "USER-ONLY",
+      "existence": "VERIFIED",
+      "protocol": "unsupported",
+      "needs_engine_advance": false,
+      "reasons": [
+        "G3: no GGUF or ONNX file in the repo to pin (siblings: ['.gitattributes', 'README.md', 'code/load_release.py', 'code/rsijev/__init__.py', 'code/rsijev/arch.py', 'code/rsijev/contract.py', 'code/rsijev/data.py', 'code/rsijev/encode.py'])",
+        "G6: unsupported / unclassified protocol (curated hint 'unsupported'); fail closed"
+      ],
+      "retrieved_at": "2026-10-07T16:15:59Z"
+    },
+    {
+      "name": "startlux-decision-4b",
+      "repo": "startlux-models/StartLux-Decision-4B-Q8_0-GGUF",
+      "slug": "startlux-models__StartLux-Decision-4B-Q8_0-GGUF",
+      "pinned": "no",
+      "disposition": "REJECTED",
+      "existence": "VERIFIED",
+      "protocol": "unsupported",
+      "needs_engine_advance": false,
+      "reasons": [
+        "G1: weights licence cc-by-nc-4.0 is not on the allow-list ['apache-2.0', 'mit', 'bsd-2-clause', 'bsd-3-clause', 'cc-by-4.0', 'cc0-1.0', 'isc', 'unlicense']; licence files in repo: ['LICENSE']"
+      ],
+      "retrieved_at": "2026-10-07T16:16:06Z"
+    }
+  ],
+  "last_retrieved_at": "2026-10-07T16:16:22Z"
+}

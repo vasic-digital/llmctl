@@ -1,0 +1,17 @@
+Name                                                                      Stmts   Miss  Cover
+---------------------------------------------------------------------------------------------
+/home/milosvasic/Projects/llmctl/lib/onnx_server.py                         430    317    26%
+/home/milosvasic/Projects/llmctl/scripts/coverage/bash_line_coverage.py     225     27    88%
+/home/milosvasic/Projects/llmctl/scripts/coverage/make_report.py            204    204     0%
+/home/milosvasic/Projects/llmctl/scripts/golden/build_manifest.py            28      9    68%
+/home/milosvasic/Projects/llmctl/scripts/golden/run_golden.py               278     24    91%
+/home/milosvasic/Projects/llmctl/scripts/golden/similarity.py                70     22    69%
+/home/milosvasic/Projects/llmctl/scripts/golden/stats.py                    166     12    93%
+/home/milosvasic/Projects/llmctl/scripts/golden/verify_manifest.py           99     13    87%
+/home/milosvasic/Projects/llmctl/scripts/release/scan_archive.py            252     41    84%
+/home/milosvasic/Projects/llmctl/tests/evidence/__init__.py                   0      0   100%
+/home/milosvasic/Projects/llmctl/tests/evidence/leak_scan.py                128     16    88%
+/home/milosvasic/Projects/llmctl/tests/evidence/manifest.py                  82     14    83%
+/home/milosvasic/Projects/llmctl/tests/evidence/writer.py                   121     13    89%
+---------------------------------------------------------------------------------------------
+TOTAL                                                                      2083    712    66%

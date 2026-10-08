@@ -1,0 +1,4 @@
+# PUBLIC_FIXTURES.txt - test fixtures under tests/fixtures/ that are PUBLIC although their name
+# looks like key material (a *.pem / *.key / .env* test input). Exact repo-relative paths, one per
+# line, '#' comments, no globs: a fixture directory is NOT exempt as a whole (a real secret placed
+# in tests/fixtures/ must still stop a release). Currently none.

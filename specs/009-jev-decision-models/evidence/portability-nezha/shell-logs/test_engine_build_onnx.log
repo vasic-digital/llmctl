@@ -1,0 +1,19 @@
+  ok: committed lock file lib/lock/requirements-onnx.lock exists
+  ok: lock pins onnxruntime with ==
+  ok: lock pins numpy with ==
+  ok: lock pins sentencepiece with ==
+  ok: lock pins tokenizers with ==
+  ok: lock carries many real sha256 hashes
+  ok: committed lock is not marked UNPINNED
+  ok: UNPINNED lock: build refuses (non-zero exit)
+  ok: UNPINNED lock: message names the marker
+  ok: UNPINNED lock: no venv created
+  ok: hashless lock: build refuses
+  ok: hashless lock: message
+  ok: missing lock: build refuses
+  ok: dry-run prints the pinned onnxruntime version (D-16 hint carries a pin)
+  ok: dry-run states hashes are verified
+  ok: dry-run creates no venv
+  SKIP: live hash-locked install + tamper rejection
+    reason: needs PyPI access; set LLMCTL_TEST_NETWORK=1
+RESULT: PASS

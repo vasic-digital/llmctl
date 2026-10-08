@@ -1,0 +1,137 @@
+{
+  "schema": "llmctl.admission/1",
+  "candidate": {
+    "name": "verdict-151m",
+    "repo": "heman10x/rlcd-modernbert-151m",
+    "pinned": "no",
+    "protocol_hint": "unsupported",
+    "known_issue": "",
+    "name_collision": "",
+    "kind": "weights"
+  },
+  "slug": "heman10x__rlcd-modernbert-151m",
+  "mode": "paper-only",
+  "retrieved_at": "2026-10-07T16:15:49Z",
+  "existence": {
+    "verdict": "VERIFIED",
+    "evidence": "HTTP 200 from <LLMCTL_HF_BASE>/api/models/heman10x/rlcd-modernbert-151m",
+    "http_status": 200
+  },
+  "api": {
+    "id": "heman10x/rlcd-modernbert-151m",
+    "sha": "8af2496eb63c7fa66d7d234e1f62629380030eb4",
+    "lastModified": "2026-09-20T14:35:41.000Z",
+    "author": "heman10x",
+    "gated": false,
+    "private": false,
+    "disabled": false
+  },
+  "pins": [
+    {
+      "name": "model.onnx",
+      "size": 606323181,
+      "sha256": "4ae01f822538b000fa0e55859d4b3e6b40871d860149397e8784428b2a42ee5e",
+      "role": "model"
+    }
+  ],
+  "protocol": {
+    "class": "unsupported",
+    "source": "curated hint 'unsupported'"
+  },
+  "needs_engine_advance": false,
+  "tier": "below-minimum",
+  "est_memory_bytes": 1446355683,
+  "g10_subchecks": [
+    {
+      "check": "loadability",
+      "status": "SKIP",
+      "evidence": "not attempted: earlier gate(s) failed: ['G6']"
+    },
+    {
+      "check": "smoke_answer",
+      "status": "SKIP",
+      "evidence": "not attempted: earlier gate(s) failed: ['G6']"
+    },
+    {
+      "check": "determinism_repeats",
+      "status": "SKIP",
+      "evidence": "not attempted: earlier gate(s) failed: ['G6']"
+    },
+    {
+      "check": "option_order_sensitivity",
+      "status": "SKIP",
+      "evidence": "not attempted: earlier gate(s) failed: ['G6']"
+    },
+    {
+      "check": "memory_fit_measured",
+      "status": "SKIP",
+      "evidence": "not attempted: earlier gate(s) failed: ['G6']"
+    }
+  ],
+  "gates": [
+    {
+      "gate": "G1",
+      "name": "licence allow-list",
+      "status": "PASS",
+      "evidence": "weights licence apache-2.0 (SPDX, from the HF API) is on the allow-list; licence files in repo: none"
+    },
+    {
+      "gate": "G2",
+      "name": "stable revision",
+      "status": "PASS",
+      "evidence": "immutable ref 8af2496eb63c7fa66d7d234e1f62629380030eb4, lastModified 2026-09-20T14:35:41.000Z; re-verify at release"
+    },
+    {
+      "gate": "G3",
+      "name": "pinned size+sha256",
+      "status": "PASS",
+      "evidence": "1 file(s) with size+sha256 from the HF API LFS oid (auto-selected): model.onnx 606323181 B sha256:4ae01f822538..."
+    },
+    {
+      "gate": "G4",
+      "name": "loadable by pinned engine",
+      "status": "SKIP",
+      "evidence": "no supported runtime exists for an unclassified protocol (the failure is recorded at G6)"
+    },
+    {
+      "gate": "G5",
+      "name": "fits budgets",
+      "status": "PASS",
+      "evidence": "largest model file model.onnx = 606323181 B (cap 10737418240 B), tier below-minimum, memory ESTIMATE 1446355683 B (onnx: size*1.5+512MiB) vs budget 19487261491 B (60% of /proc/meminfo MemTotal (Constitution 12.6))"
+    },
+    {
+      "gate": "G6",
+      "name": "protocol classification",
+      "status": "FAIL",
+      "evidence": "unsupported / unclassified protocol (curated hint 'unsupported'); fail closed"
+    },
+    {
+      "gate": "G7",
+      "name": "supply chain",
+      "status": "PASS",
+      "evidence": "pin has no pickle files"
+    },
+    {
+      "gate": "G8",
+      "name": "provenance",
+      "status": "PASS",
+      "evidence": "API author 'heman10x' == repo owner; HF-side cross-link to GitHub/PyPI not checked in paper mode"
+    },
+    {
+      "gate": "G9",
+      "name": "known-issue sweep",
+      "status": "PENDING",
+      "evidence": "live upstream issue-tracker sweep not done by this driver (offline); none recorded in the research register"
+    },
+    {
+      "gate": "G10",
+      "name": "real run",
+      "status": "SKIP",
+      "evidence": "not attempted: earlier gate(s) failed: ['G6']"
+    }
+  ],
+  "disposition": "USER-ONLY",
+  "reasons": [
+    "G6: unsupported / unclassified protocol (curated hint 'unsupported'); fail closed"
+  ]
+}

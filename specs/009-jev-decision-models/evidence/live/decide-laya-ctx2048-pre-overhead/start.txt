@@ -1,0 +1,3 @@
+[llmctl] wrote /home/milosvasic/.local/state/llmctl/services/decide-laya.env
+started decide-laya (mode=cpu, port=8107, reserved 684 MiB RAM + 0 MiB VRAM)
+rc=0

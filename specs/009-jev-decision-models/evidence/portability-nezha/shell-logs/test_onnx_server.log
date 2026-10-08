@@ -1,0 +1,28 @@
+  ok: missing --model-dir -> rc 2
+  ok: missing --model-dir -> message
+  ok: nonexistent --model-dir -> rc 1
+  ok: nonexistent --model-dir -> message
+  ok: no --api-key-file -> refuses to start (rc 2)
+  ok: no --api-key-file -> message says key never comes from argv/env
+  ok: a key in the environment is NOT a substitute for --api-key-file
+  ok: --api-key on argv is not an accepted option (rc 2)
+  ok: --api-key on argv -> argparse rejects it
+  ok: world-readable key file -> rc 1
+  ok: world-readable key file -> message
+  ok: empty key file -> rc 1
+  ok: missing key file -> rc 1
+  ok: --host 0.0.0.0 refused (loopback 127.0.0.1 only)
+  ok: --host ::1 refused (loopback 127.0.0.1 only)
+  ok: --host localhost refused (loopback 127.0.0.1 only)
+  ok: --host 192.168.1.5 refused (loopback 127.0.0.1 only)
+  ok: LLMCTL_BIND_HOST is ignored (the runtime has no env bind override)
+  ok: --tokenizer must be a bare file name
+  ok: non-numeric LLMCTL_ONNX_MAX_PAIRS -> clean rc 2, no traceback
+  ok: bad env value: no Python traceback
+  ok: onnxruntime missing -> rc 1
+  ok: onnxruntime missing -> message points at the hash-locked build
+  ok: onnxruntime missing: no traceback
+  ok: non-integer id2label key -> rc 1 (refuses to guess)
+  ok: non-integer id2label key -> clear message
+  ok: non-integer id2label: no traceback
+RESULT: PASS

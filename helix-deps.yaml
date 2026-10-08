@@ -1,0 +1,28 @@
+# helix-deps.yaml — llmctl Submodule-Dependency Manifest
+# Per HelixConstitution §11.4.31 (Submodule-Dependency-Manifest Mandate).
+# Only the own-org (vasic-digital / HelixDevelopment) dependencies are listed; third-party
+# engines (llama.cpp, colibri) and tooling (superspec) are pinned in .gitmodules.
+# Last updated: 2026-10-07 (spec 009-jev-decision-models, FR-091).
+
+schema_version: 1
+
+deps:
+  - name: constitution
+    ssh_url: git@github.com:HelixDevelopment/constitution.git
+    ref: main
+    why: "Canonical-root Helix Constitution (project CLAUDE.md inherits it)"
+    layout: flat
+
+  - name: containers
+    ssh_url: git@github.com:vasic-digital/Containers.git
+    ref: main
+    pinned: 4a8f04e05f3535d77c48f69b89687f9fcc896fbf
+    why: "Dynamic port allocation, service registry/discovery, health probes and rootless container boot for the decision layer and its transport tests (spec FR-088..091, Helix §11.4.76); consumed from Go via go.mod replace => ./submodules/containers"
+    path: submodules/containers
+    layout: flat
+
+transitive_handling:
+  recursive: true
+  conflict_resolution: operator-required
+
+language_specific_subtree: false

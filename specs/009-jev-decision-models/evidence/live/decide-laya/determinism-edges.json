@@ -1,0 +1,92 @@
+{
+ "profile": "decide-laya",
+ "gateway_status": [
+  200,
+  200,
+  200,
+  200,
+  200,
+  200,
+  200,
+  200
+ ],
+ "gateway_bodies_sha256": [
+  "daaccd71ae473ba8903eb8be97e18e2960720b1f86fb4e6059157de87a7bd6fb"
+ ],
+ "gateway_byte_identical_8of8": true,
+ "gateway_latency_ms": [
+  175.8,
+  166.4,
+  159.9,
+  166.9,
+  170.2,
+  182.4,
+  174.7,
+  172.7
+ ],
+ "gateway_sample_body": "{\"model\":\"decide-laya\",\"answers\":{\"route\":{\"type\":\"choice\",\"choice\":\"billing\",\"probabilities\":{\"billing\":0.988563484,\"shipping\":0.005594238,\"technical\":0.005842278},\"confidence\":0.982845226},\"angry\":{\"type\":\"noul\",\"noul\":0.787979147},\"urgency\":{\"type\":\"score\",\"score\":1.8994886,\"legend\":{\"0\":\"can wait\",\"1\":\"this week\",\"2\":\"today\",\"3\":\"right now\"},\"probabilities\":{\"0\":0.038717988,\"1\":0.467838037,\"2\":0.048681363,\"3\":0.444762612},\"confidence\":0.290450716}},\"usage\":{\"input_tokens\":150,\"output_tokens\":0}}",
+ "engine_status": [
+  200,
+  200,
+  200,
+  200,
+  200,
+  200,
+  200,
+  200
+ ],
+ "engine_bodies_sha256": [
+  "b719d2b726648f141362e3e8d0e70e0721ec17eeb99d6658f297af01d37eef08"
+ ],
+ "engine_byte_identical_8of8": true,
+ "engine_model_field_is_a_local_path": "/home/milosvasic/.local/share/llmctl/models/decide-laya/Laya-Q8_0.gguf",
+ "gateway_model_field": "decide-laya",
+ "edges": {
+  "single_option_choice": {
+   "status": 422,
+   "ms": 3.4,
+   "body": "{\"message\":\"Request failed validation.\",\"error_type\":\"validation_failed\"}"
+  },
+  "no_key": {
+   "status": 401,
+   "ms": 2.1,
+   "body": "{\"message\":\"Authentication required.\",\"error_type\":\"unauthorized\"}"
+  },
+  "wrong_key": {
+   "status": 401,
+   "ms": 27.4,
+   "body": "{\"message\":\"Authentication required.\",\"error_type\":\"unauthorized\"}"
+  },
+  "unknown_model": {
+   "status": 422,
+   "ms": 2.2,
+   "body": "{\"message\":\"Unknown model.\",\"error_type\":\"unknown_model\"}"
+  },
+  "state_6500_chars": {
+   "status": 422,
+   "ms": 14.3,
+   "body": "{\"message\":\"State plus question exceeds the budget.\",\"error_type\":\"validation_failed\"}"
+  },
+  "state_8000_chars": {
+   "status": 422,
+   "ms": 16.6,
+   "body": "{\"message\":\"State plus question exceeds the budget.\",\"error_type\":\"validation_failed\"}"
+  },
+  "state_9000_chars_over_gateway_cap": {
+   "status": 422,
+   "ms": 2.7,
+   "body": "{\"message\":\"State plus question exceeds the budget.\",\"error_type\":\"validation_failed\"}"
+  },
+  "state_dense_7500_hex_chars_token_overflow": {
+   "status": 422,
+   "ms": 18.3,
+   "body": "{\"message\":\"State plus question exceeds the budget.\",\"error_type\":\"validation_failed\"}"
+  },
+  "twenty_options": {
+   "status": 200,
+   "ms": 65.5,
+   "body": "{\"model\":\"decide-laya\",\"answers\":{\"c\":{\"type\":\"choice\",\"choice\":\"opt00\",\"probabilities\":{\"opt00\":0.999999889,\"opt01\":1.11e-7,\"opt02\":0,\"opt03\":0,\"opt04\":0,\"opt05\":0,\"opt06\":0,\"opt07\":0,\"opt08\":0,\"opt09\":0,\"opt10\":0,\"opt11\":0,\"opt12\":0,\"opt13\":0,\"opt14\":0,\"opt15\":0,\"opt16\":0,\"opt17\":0,\"opt18\":0,\"opt1"
+  }
+ },
+ "note": "state text above is synthetic filler; no golden-set text; keys never recorded"
+}

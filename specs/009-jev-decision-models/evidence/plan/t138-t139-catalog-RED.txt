@@ -1,0 +1,14 @@
+# RED: the new catalog checks run against the catalog as it was BEFORE T138/T139 (scratch copy of models/catalog.json)
+DIFF: decide: decision profile has no `memory` object (declare ram/vram as measured with evidence, or unmeasured with a reason)
+DIFF: decide-2b: decision profile has no `memory` object (declare ram/vram as measured with evidence, or unmeasured with a reason)
+DIFF: decide-julia: decision profile has no `memory` object (declare ram/vram as measured with evidence, or unmeasured with a reason)
+DIFF: decide-kev-08b: decision profile has no `memory` object (declare ram/vram as measured with evidence, or unmeasured with a reason)
+DIFF: decide-kev-4b: decision profile has no `memory` object (declare ram/vram as measured with evidence, or unmeasured with a reason)
+DIFF: decide-kev-9b: decision profile has no `memory` object (declare ram/vram as measured with evidence, or unmeasured with a reason)
+DIFF: decide-laya: decision profile has no `memory` object (declare ram/vram as measured with evidence, or unmeasured with a reason)
+DIFF: decide-lev: decision profile has no `memory` object (declare ram/vram as measured with evidence, or unmeasured with a reason)
+exit=1
+DIFF: decide: maturity differs from the golden-run derivation
+    have: null
+    want: {"choice": {"reason": "not yet measured", "status": "unmeasured"}, "noul": {"reason": "not yet measured", "status": "unmeasured"}, "score": {"reason": "not yet measured", "status": "unmeasured"}}
+DIFF: decide-2b: maturity differs from the golden-run derivation

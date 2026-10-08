@@ -1,0 +1,80 @@
+== ensure creates CA + leaf with strict modes ==
+  ok: first ensure issues v-1
+  ok: cert dir is 0700
+  ok: CA key is 0600
+  ok: CA cert is 0644
+  ok: leaf key is 0600
+  ok: current is a relative symlink to v-1
+  ok: ensure prints nothing secret
+== idempotent second ensure ==
+  ok: second ensure creates nothing
+  ok: cert dir content unchanged
+== concurrent ensure from separate processes issues exactly once ==
+  ok: exactly one version directory
+  ok: all six processes saw the same leaf
+  ok: exactly one process issued
+  ok: no staging directories left behind
+== name constraints are enforced by openssl itself ==
+  ok: CA carries a critical nameConstraints extension
+  ok: CA is pathlen 0
+  ok: CA key is EC P-256
+  ok: leaf is CA:FALSE
+  ok: leaf is serverAuth
+  ok: leaf is not clientAuth
+  ok: permitted leaf verifies
+  ok: out-of-scope leaf (example.com) is REJECTED by openssl verify
+  ok: rejection reason is the name constraint
+  ok: public IP leaf (8.8.8.8) is REJECTED by openssl verify
+== constraints off is a deliberate, warned opt-out ==
+  ok: opt-out is logged on stderr
+  ok: warning names the constraints
+  ok: no nameConstraints extension when off
+  ok: with constraints off the same out-of-scope leaf verifies (the test above is not vacuous)
+== export / show / doctor ==
+  ok: exported CA is 0644
+  ok: exported CA holds no private key
+  ok: show lists fingerprints
+  ok: show --json is machine-readable
+  ok: doctor healthy -> exit 0
+  ok: doctor with a world-readable CA key -> exit 5
+== renew swaps current atomically and keeps the CA ==
+  ok: current -> v-2
+  ok: CA untouched by renew
+  ok: --reuse-key keeps the leaf key
+  ok: current -> v-3
+== expired leaf refused (exit 5) via the test clock ==
+  ok: ensure on an expired leaf exits 5
+  ok: message says expired
+  ok: doctor on an expired leaf exits 5
+  ok: renew is the way out of expiry
+== offline CA key ==
+  ok: CA key removed from the host
+  ok: offline CA key is 0600
+  ok: renew without the offline key exits 5
+  ok: message says the key is offline
+  ok: renew with the key supplied works
+  ok: CA key is still not on the host
+== BYO: expired pair refused, files never written ==
+  ok: expired BYO pair -> exit 5
+  ok: BYO files untouched
+  ok: valid BYO pair accepted (mode auto-detected)
+  ok: valid BYO files untouched
+  ok: BYO creates no CA
+  ok: mismatched BYO pair -> exit 5
+  ok: message says the key does not match
+== selfsigned mode ==
+  ok: selfsigned issued
+  ok: no CA in selfsigned mode
+  ok: openssl trusts the self-signed certificate as its own root
+== placement guard: planted in an un-ignored git work tree ==
+  ok: ensure inside an un-ignored work tree is refused (exit 5)
+  ok: message names the git work tree
+  ok: no CA key was written into the repository
+  ok: allowed once git ignores cert/
+  ok: git sees no cert files as untracked
+== usage errors exit 2 ==
+  ok: unknown cert command -> 2
+  ok: bad --mode -> 2
+== nothing written into the repository tree ==
+  ok: no key/cert files appeared in the repo
+test_certs_go_cli: ALL PASS

@@ -1,0 +1,23 @@
+[llmctl] wrote /home/milosvasic/llmctl-work/tmp/tmp.T8s9WPewT7/state/services/fast.env
+  ok: untenanted: env file uses the bare profile name
+  ok: untenanted: unit name unchanged (no LLMCTL_TENANT_ID)
+[llmctl] wrote /home/milosvasic/llmctl-work/tmp/tmp.T8s9WPewT7/state/services/tenant-a--fast.env
+  ok: tenant-a: env file is tenant-qualified, not a bare profile name
+  ok: tenant-a: env file carries its own real launch args
+[llmctl] wrote /home/milosvasic/llmctl-work/tmp/tmp.T8s9WPewT7/state/services/tenant-b--fast.env
+  ok: tenant-b: SAME profile name resolves to a DIFFERENT env file than tenant-a
+  ok: tenant-b: its own env file carries its own real launch args (not tenant-a's)
+  ok: tenant-a: env file still carries ITS OWN args after tenant-b registered the same profile name
+  ok: tenant-a: unit instance is tenant-qualified
+  ok: tenant-b: unit instance is tenant-qualified, distinct from tenant-a's
+  ok: tenant-a: dry-run enable targets the tenant-qualified unit
+  ok: tenant-a: dry-run start targets the tenant-qualified unit
+  ok: tenant-a: real systemd drop-in file was written for the tenant-qualified unit
+  ok: tenant-a: drop-in sets the real per-tenant Slice= property
+  ok: tenant-b: svc_start alone (not just svc_enable) also ensures the drop-in exists
+  ok: tenant-b: its own drop-in names its own slice, never tenant-a's
+  ok: malicious tenant ID (embedded ';') is rejected, not silently passed through (rc)
+  ok: malicious tenant ID (path traversal) is rejected (rc)
+  ok: malicious tenant ID (embedded '..' mid-string, not just a leading path-traversal) is rejected - same defense-in-depth internal/isolation/cgroup.go's Go-side validateTenantID applies beyond its charset check (rc)
+  ok: tenant ID containing '.' (accepted by Go's allow-list) is now ALSO accepted by bash's - the two languages' allow-lists genuinely match, not merely claimed to
+RESULT: PASS

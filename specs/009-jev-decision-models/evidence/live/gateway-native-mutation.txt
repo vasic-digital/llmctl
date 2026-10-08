@@ -1,0 +1,19 @@
+== GREEN (fix in place)
+ok  	github.com/vasic-digital/llmctl/internal/gateway	0.015s
+== MUTATION 1: blanket 500->422 on native (drop the message check)
+--- FAIL: TestNativeOther500StaysBackendFailed (0.00s)
+FAIL
+FAIL	github.com/vasic-digital/llmctl/internal/gateway	0.014s
+FAIL
+== MUTATION 2: batch mapping not restricted to /v1/systemone
+--- FAIL: TestBatchTooLargeMappingIsNativeOnly (0.00s)
+FAIL
+FAIL	github.com/vasic-digital/llmctl/internal/gateway	0.014s
+FAIL
+== MUTATION 3: 501 -> retryable 502
+--- FAIL: TestNative501NotADecisionModelIsNotRetryable (0.00s)
+FAIL
+FAIL	github.com/vasic-digital/llmctl/internal/gateway	0.018s
+FAIL
+== RESTORED
+ok  	github.com/vasic-digital/llmctl/internal/gateway	0.013s

@@ -1,0 +1,25 @@
+  ok: override env-var name for a simple profile
+  ok: override env-var name for a hyphenated profile (hyphens -> underscores, uppercased)
+  ok: override env-var name for another hyphenated profile
+  ok: catalog_bind_host fast (no override): LAN-accessible default, per operator mandate
+  ok: global LLMCTL_BIND_HOST=127.0.0.1 applies to fast
+  ok: global LLMCTL_BIND_HOST=127.0.0.1 applies to small too (unscoped)
+  ok: catalog_bind_host fast honors LLMCTL_BIND_HOST_FAST
+  ok: LLMCTL_BIND_HOST_FAST does not leak into an unrelated profile (small keeps the LAN-accessible default)
+  ok: per-profile override wins over the global override for the same profile
+  ok: an override for an unknown profile still dies (die() exits 1), never silently returns the override
+  ok: die() message is the same as the no-override unknown-profile path
+  ok: llama engine, no override: sched_build_launch binds fast to 0.0.0.0 (LAN-accessible default)
+  ok: llama engine: global LLMCTL_BIND_HOST=127.0.0.1 overrides fast back to localhost-only
+  ok: llama engine: LLMCTL_BIND_HOST_FAST plumbs into sched_build_launch's real --host flag
+WARN: profile 'colibri-qwen36' uses the colibri engine and will bind to 0.0.0.0 (non-loopback). colibri's own independent security guard will refuse to start under this combination unless COLI_ALLOW_INSECURE_BIND=1 is set for this launch, or LLMCTL_BIND_HOST_COLIBRI_QWEN36=127.0.0.1 reverts just this profile to loopback-only.
+  ok: colibri engine, no override: sched_build_launch binds colibri-qwen36 to 0.0.0.0 (LAN-accessible default)
+  ok: colibri engine: global LLMCTL_BIND_HOST=127.0.0.1 overrides colibri-qwen36 back to localhost-only
+  ok: colibri + non-loopback + no override: warning names the profile
+  ok: colibri + non-loopback + no override: warning names the first resolution path
+  ok: colibri + non-loopback + no override: warning names the second resolution path (per-profile override)
+  ok: COLI_ALLOW_INSECURE_BIND=1 suppresses the warning (operator already made the call)
+  ok: a loopback per-profile override suppresses the warning (nothing to warn about)
+  ok: non-colibri engine (fast, llama) under the same LAN-exposed default never fires the colibri-specific warning
+  ok: lib/download.sh's smoke-test launch is still hardcoded to 127.0.0.1 (untouched by design)
+RESULT: PASS

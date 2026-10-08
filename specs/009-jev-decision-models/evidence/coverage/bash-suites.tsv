@@ -1,0 +1,81 @@
+test_admit.sh	rc=0	34	
+test_agent_kit.sh	rc=0	31	
+test_apikey_lifecycle.sh	rc=0	8	
+test_archive_completeness.sh	rc=0	8	
+test_bin_llmctl_symlink_invocation.sh	rc=1	1	
+test_catalog_json.sh	rc=0	18	
+test_certs_go_cli.sh	rc=0	5	
+test_certs_go_mutation.sh	EXCLUDED	0	Go mutation suite (copies the tree, runs go test)
+test_cli.sh	rc=0	66	
+test_cluster_cli_args.sh	rc=0	0	
+test_cluster_join_leave.sh	rc=0	9	
+test_cluster_request_checked.sh	rc=0	0	
+test_constitution_inheritance.sh	rc=0	1	
+test_containers_submodule.sh	rc=0	1	
+test_create_release.sh	rc=0	0	
+test_ctx_kvtype_override.sh	rc=0	14	
+test_decide_cli.sh	rc=0	47	
+test_decide_download.sh	rc=0	47	
+test_decide_security_mutation.sh	EXCLUDED	0	Go mutation suite (copies the tree, runs many go test builds)
+test_decide_service.sh	rc=0	4	
+test_decide.sh	rc=0	56	
+test_decision_capacity.sh	rc=0	300	
+test_determinism.sh	rc=0	2	
+test_doc_reachability.sh	rc=0	20	
+test_docs_no_literal_keys.sh	rc=0	1	
+test_download_resume.sh	rc=0	9	
+test_download.sh	rc=0	21	
+test_dynamic_ports.sh	rc=0	141	
+test_engine_build_decide.sh	EXCLUDED	0	builds engines / Go binaries (heavy)
+test_engine_build_onnx.sh	EXCLUDED	0	builds/installs the ONNX engine (heavy)
+test_engine_build_safety.sh	EXCLUDED	0	engine build safety (heavy build tooling)
+test_engine_cpu_regression.sh	rc=0	36	
+test_engine.sh	rc=0	0	
+test_gate_hook_tmp.sh	rc=0	1	
+test_gateway_endpoints.sh	rc=0	29	
+test_gateway_mutation.sh	EXCLUDED	0	Go mutation suite (copies the tree, runs many go test builds)
+test_go_unit.sh	EXCLUDED	0	Go suite, measured separately by the Go stage
+test_gpu_throughput_ratio.sh	EXCLUDED	0	GPU suite (needs an NVIDIA GPU + llama-server)
+test_gpu_vram_delta.sh	EXCLUDED	0	GPU suite (needs an NVIDIA GPU + llama-server)
+test_hardware_probe.sh	rc=0	2	
+test_install_agents.sh	rc=0	17	
+test_install_script_e2e.sh	EXCLUDED	0	installs/enables real services + linger (systemd)
+test_keyring_go_cli.sh	rc=0	3	
+test_macos_plist.sh	rc=0	2	
+test_matrix_harness.sh	rc=0	73	
+test_mcp_stdio.sh	rc=0	13	
+test_no_retired_vars.sh	rc=0	1	
+test_normalize_agents.sh	rc=0	0	
+test_normalize_common.sh	rc=0	1	
+test_no_stray_binaries.sh	rc=0	15	
+test_onnx_download.sh	rc=0	0	
+test_onnx_runtime.sh	rc=0	1	
+test_onnx_server.sh	rc=1	3	
+test_planner.sh	rc=0	36	
+test_port_override.sh	rc=0	58	
+test_preflight_submodules.sh	rc=0	2	
+test_py_unit.sh	EXCLUDED	0	Python suite, measured separately by the Python stage
+test_registry_cli.sh	rc=0	10	
+test_registry_discovery.sh	rc=0	83	
+test_regression_defects.sh	rc=0	102	
+test_release_no_secrets.sh	rc=0	17	
+test_run_tests_format.sh	EXCLUDED	0	drives the whole run_tests.sh harness (recursion; would run the full suite)
+test_scheduler_bind_host.sh	rc=0	21	
+test_scheduler_lock.sh	rc=0	2	
+test_scheduler_reboot_reconciliation.sh	EXCLUDED	0	systemd service suite (service reconciliation)
+test_scheduler.sh	rc=0	187	
+test_scheduler_switch_safety.sh	EXCLUDED	0	systemd service suite (service switch)
+test_scheduler_wait_ready.sh	rc=0	5	
+test_service_ops_hardening.sh	EXCLUDED	0	systemd service suite (real units)
+test_services_crashloop.sh	EXCLUDED	0	systemd service suite
+test_services.sh	EXCLUDED	0	systemd service suite
+test_setup_e2e.sh	EXCLUDED	0	builds engines from source (multi-minute compile)
+test_small_profile_full_context.sh	rc=0	0	
+test_syntax.sh	rc=0	1	
+test_systemd_cleanliness.sh	EXCLUDED	0	systemd service suite
+test_tenant_list_quota.sh	rc=0	6	
+test_tenant_service_isolation.sh	rc=0	1	
+test_tls_server.sh	rc=0	4	
+test_unit_hardening.sh	EXCLUDED	0	systemd service suite (real systemctl stop/reset-failed)
+test_vantage_classifier.sh	rc=0	0	
+test_vantage.sh	EXCLUDED	0	podman suite (rootless containers)

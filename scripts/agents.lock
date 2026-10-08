@@ -1,0 +1,9 @@
+# agents.lock - exact pins for scripts/install_agents.sh (one per line, '#' comments).
+#   npm   <package> <version> sha512-<base64 integrity of the npm tarball>
+#   pypi  aider-chat <version> <sha256 hex of the py3-none-any wheel>
+# A pinned agent installs EXACTLY that version, and the artifact downloaded must match the digest
+# below (the registry is not consulted for the digest). An agent with no line here installs the
+# latest version after verifying the artifact against the registry's own digest, and records
+# pinned=false. Generate a pin from a verified install with:  scripts/install_agents.sh --write-lock
+# No digest in this file is ever guessed or copied from memory; entries are only ever written by
+# --write-lock from a digest that matched a real download.

@@ -1,0 +1,4 @@
+  ok: invoking bin/llmctl via a PATH-style symlink exits 0
+  ok: symlinked invocation did not fail resolving lib/
+  ok: symlinked invocation produced real plan JSON output
+RESULT: PASS

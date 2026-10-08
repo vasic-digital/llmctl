@@ -1,0 +1,26 @@
+## from anton (192.168.1.115) -> https://192.168.1.90:56945  (public CA only)
+--- GET /healthz via 192.168.1.90
+{"status":"ok"}
+http=200 remote=192.168.1.90 tls=0
+--- GET /v1/models no key via 192.168.1.90
+http=401
+--- GET /v1/models with key via 192.168.1.90
+{"object":"list","data":[{"id":"decide-tiny","aliases":["jev-latest","jev-1.13.0","jev-preview","llmctl-decide-tiny"],"protocol":"letter-logit","status":"ready","limits":{"max_options":20,"score_levels":[2,10]}}],"models":[{"name":"decide-tiny","description":"llmctl decision model (letter-logit prot
+http=200
+--- GET /healthz via nezha.local
+{"status":"ok"}
+http=200 remote=192.168.1.90 tls=0
+--- GET /v1/models no key via nezha.local
+http=401
+--- GET /v1/models with key via nezha.local
+{"object":"list","data":[{"id":"decide-tiny","aliases":["jev-latest","jev-1.13.0","jev-preview","llmctl-decide-tiny"],"protocol":"letter-logit","status":"ready","limits":{"max_options":20,"score_levels":[2,10]}}],"models":[{"name":"decide-tiny","description":"llmctl decision model (letter-logit prot
+http=200
+--- negative: no --cacert (system store) must be refused
+how to fix it, please visit the webpage mentioned above.
+http=000
+--- negative: name not in SAN (via 192.168.1.90 resolved as 'other.invalid')
+how to fix it, please visit the webpage mentioned above.
+http=000
+--- real decision call
+{"message":"Not found.","error_type":"invalid_request"}
+http=404

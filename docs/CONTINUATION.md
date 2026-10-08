@@ -1,7 +1,7 @@
 # CONTINUATION
 
-**Revision:** 21
-**Last modified:** 2026-09-18T11:19:00Z
+**Revision:** 22
+**Last modified:** 2026-10-06T00:00:00Z
 
 Per Constitution §12.10: this file reflects the live state of work on the
 `001-llmctl-completion` feature so any agent can resume exactly where the
@@ -1538,6 +1538,132 @@ clean_case_no_contamination.txt, red_repro_helixllm_export_ca_leak.txt,
 green_helixllm_export_ca_leak_fixed.txt, flake_rate_baseline.txt,
 final_74_of_74_x2.txt).
 
+## 10r. Decision-models feature: full documentation pass (2026-10-06)
+
+> **HISTORICAL (superseded 2026-10-07).** Written for the first candidate (Python gateway `lib/decide_gateway.py`, `LLMCTL_ONNX_FAKE` / `LLMCTL_DECIDE_BACKEND_*` seams, `tests/test_decide_gateway.sh`). That candidate was never released; the Go gateway replaced it and the Python files were retired (archive + git-history note: `specs/009-jev-decision-models/evidence/python-gateway-retired/`). Read as history only.
+
+**State: the "decision models" feature is fully implemented and tested;
+this session delivered its complete documentation set (design stage 5,
+docs-only — zero code/test/catalog changes).**
+
+What exists in code (documented as-is, code wins over the design where
+they differ): three decide-capable catalog profiles (`decide-tiny` 8092 /
+`decide` 8093 / `decide-pro` 8094, capability `decide`, pinned
+sha256/size/`hf_revision` dated 2026-10-06), `lib/decide.sh`
+(`llmctl decide ask|interactive|serve|capacity|status`),
+`lib/decide_gateway.py` (Jev/TypeSafe-shaped `POST /v1/systemone`
+gateway, default port 8095), planner `decision_instances` (read-only
+capacity report; `total_decision_slots = max(gpu,cpu) × parallel`), and
+`_dl_smoke_test_decision` capability dispatch in `lib/download.sh`.
+
+Docs created this session: `docs/decision-models.md`,
+`docs/decide-gateway.md`, `docs/scripts/decide.md`,
+`docs/scripts/decide_gateway.md`, `docs/scripts/test_decide.md`,
+`docs/scripts/test_decide_gateway.md`, `docs/scripts/test_decide_download.md`,
+`docs/research/` (new dir: the three research briefs copied in with
+attribution + a `README.md` index), and
+`docs/qa/decision-models-validation/` (evidence README + the two
+captured full-suite outputs). Docs updated: `README.md` (port map
++8092–8095, command table +`decide` row +`auto decide`, Documentation
+table rows for every new doc — no-orphan rule satisfied),
+`docs/architecture.md` (layout + two Mermaid diagrams + port map),
+`docs/hardware-tiers.md` (decide rows + `decision_instances` semantics),
+`docs/user-manual.md` (full `decide` chapter incl. the interactive-mode
+precedence rule), `docs/faq.md` (six new decision-model entries),
+`CHANGELOG.md` (`feat(decide):` under a new Unreleased section),
+`.specify/memory/constitution.md` (appendix port map +8092–8095).
+
+**Design-vs-code discrepancies documented (code wins):** wizard profile
+list falls back to ALL decide-capable profiles when none are downloaded
+(design implied downloaded-only); `/healthz` is auth-exempt; gateway
+`usage.input_tokens` is a `ceil(chars/4)` estimate (documented as an
+honesty note, not tokenizer-exact); multi-instance is
+capacity-report-only in v1 with the `LLMCTL_PORT_<PROFILE>`
+single-override workaround; StartLux-Decision (CC BY-NC-4.0 weights) is
+excluded from defaults. Assertion-count projection "43+15" for
+`test_decide.sh` vs real captured 55 recorded in the QA README.
+
+**Validation state:** two captured full-suite runs
+(`docs/qa/decision-models-validation/stage12-test-output.txt` PASS 33 /
+FAIL 7; `stage34-test-output.txt` PASS 34 / FAIL 7, two identical
+internal runs). All 7 failures are pre-existing environment-only: no Go
+toolchain (3 llmctld tests), empty/uninitialized submodules
+(constitution + 2 engine tests), not a full git checkout (setup e2e).
+The three new suites re-run standalone this session:
+`test_decide.sh` 55 assertions PASS, `test_decide_gateway.sh` 36 PASS,
+`test_decide_download.sh` 9 PASS.
+
+## 10s. Decision-models iteration 2: the `onnx` engine + three new profiles — implementation complete; documentation pass (2026-10-06)
+
+> **HISTORICAL (superseded 2026-10-07).** Written for the first candidate (Python gateway `lib/decide_gateway.py`, `LLMCTL_ONNX_FAKE` / `LLMCTL_DECIDE_BACKEND_*` seams, `tests/test_decide_gateway.sh`). That candidate was never released; the Go gateway replaced it and the Python files were retired (archive + git-history note: `specs/009-jev-decision-models/evidence/python-gateway-retired/`). Read as history only.
+
+**State: iteration 2 is fully implemented and tested; this entry records
+its documentation set (docs-only — zero code/test/catalog changes in this
+pass).**
+
+What exists in code (documented as-is, code wins): a third engine `onnx` —
+`lib/onnx_server.py`, a pure-python3 runner (stdlib-only hard deps;
+guarded optional `onnxruntime`/`numpy`/`sentencepiece`/`tokenizers`) for
+encoder-class decision models, speaking the Jev wire shape natively
+(`POST /v1/systemone`, one encoder forward pass per option, label order
+from `config.json` `id2label` with a logged canonical-order assumption).
+Three new decide-capable catalog profiles: `decide-nli`
+(MoritzLaurer/deberta-v3-large-zeroshot-v2.0 `onnx/model.onnx` fp32
+1.74 GB, MIT, port 8096, `min_tier below-minimum`, engine `onnx`,
+ctx 512 / parallel 1, planner footprint RAM = size × 1.5 + 512 MiB, VRAM
+0), `decide-2b` (JevK5 2B v0.2 Q8_0, Apache-2.0, port 8098, baseline),
+`decide-max` (JevK5 9B v0.3.3 Q8_0, Apache-2.0, port 8097 - moved from 8099, which another program holds, workstation) —
+all pinned sha256/size/`hf_revision` dated 2026-10-06. Engine dispatch:
+`catalog_engine` drives `decide_ask` (llama = client-side logprob readout;
+onnx = `decide_query_onnx` native passthrough) and `decide_serve`
+(`--backend-engine onnx` = single-loopback-hop proxy). Supporting pieces:
+scheduler `onnx` launch arm, `sched_rank_for_capability decide` extended
+to `decide-tiny > decide-nli > decide-2b > decide > decide-pro >
+decide-max`, planner onnx footprint + `decision_instances` onnx branch
+(instances_gpu always 0), `llmctl-onnx@.service` systemd template,
+`_dl_validate_onnx`/`_dl_smoke_test_onnx` (3 probes, SKIP-with-reason when
+deps missing), doctor WARN-level `onnxruntime`/`sentencepiece` checks,
+`llmctl build onnx` note (no build step), and the `LLMCTL_ONNX_FAKE=1`
+determinism test seam. Laya (`convaiinnovations/laya`) is honestly
+documented as NOT a shipped profile — no prebuilt ONNX upstream (verified
+2026-10-06) — with an exact BYO-ONNX custom-catalog path.
+
+Docs created this session: `docs/research/encoder-model-hashes.md`,
+`docs/scripts/onnx_server.md`, `docs/scripts/test_onnx_server.md`,
+`docs/scripts/test_onnx_download.md`. Docs updated: `README.md` (engines
+paragraph +`onnx`, port map +8092–8096/8098/8099 + gateway 8095, six
+decision profiles, build command row, onnx smoke bullet, Documentation
+table rows — no-orphan rule satisfied), `docs/decision-models.md` (six-
+profile table, engine dispatch, NLI semantics + cost model, Laya BYO-ONNX
+steps, fake seam, rank rationale, limitations), `docs/decide-gateway.md`
+(`--backend-engine` proxy mode), `docs/architecture.md` (layout, memory
+model onnx branch, engine-dispatch Mermaid, port map + Mermaid, three
+systemd units), `docs/hardware-tiers.md` (six-row table, onnx
+`decision_instances` semantics), `docs/user-manual.md` (decide chapter,
+build onnx, `LLMCTL_ONNX_FAKE`), `docs/faq.md` (accuracy-labels update,
+onnx-engine entry, Laya BYO-ONNX entry), `CHANGELOG.md`
+(`feat(engine): onnx runner for encoder-class decision models` under
+Unreleased), `.specify/memory/constitution.md` (appendix engines + port
+map), `docs/research/README.md` (index row), `docs/scripts/decide.md` /
+`decide_gateway.md` / `engine.md` / `service_linux.md` / `scheduler.md` /
+`download.md` / `doctor.md` (engine lists), and
+`docs/qa/decision-models-validation/README.md` (iteration-2 section +
+`iter2-test-output.txt` copied in).
+
+**Design-vs-code notes (code wins):** `bin/llmctl`'s usage line still
+prints `build [llama|colibri|all]` while `lib/engine.sh` accepts (and its
+error message names) `llama|colibri|onnx|all` — docs follow the code.
+`docs/architecture.md`'s port-map prose still says "bind to 127.0.0.1
+only" — pre-existing drift vs README's `0.0.0.0` default, left untouched
+(not iteration-2 scope).
+
+**Validation state:** captured full-suite run
+(`docs/qa/decision-models-validation/iter2-test-output.txt`): **36 PASS /
+7 FAIL** — the same 7 pre-existing environment-only failures as iteration
+1 (no Go toolchain ×3, empty/uninitialized submodules ×3, setup e2e ×1);
+the +2 PASS are the new suites. Standalone assertion counts from the
+captured file: `test_onnx_server.sh` 28, `test_onnx_download.sh` 21.
+
 ## 11. Binding constraints (unchanged, restated per §12.10)
 
 - Anti-bluff (Constitution §11.4 family): every PASS claim in this
@@ -1557,3 +1683,16 @@ final_74_of_74_x2.txt).
   public, irreversible GitHub+GitLab release. It has NEVER been run in
   that mode this session. It MUST NOT be run for real without explicit,
   separate operator instruction to actually cut a release.
+
+## 10t. Decision feature: Python gateway retired, smoke on Go, RED harness mapped (2026-10-07)
+
+Gap closure G-027 / G-047 / G-051 / G-052 (spec 009). State: the Python decision gateway
+(`lib/decide_gateway.py`, `tests/test_decide_gateway.sh`, the two stub-backend fixtures and their docs) is
+**retired** - never committed, never in a tag; archived with hashes and a git-history note under
+`specs/009-jev-decision-models/evidence/python-gateway-retired/`; assertion-by-assertion parity with the Go
+gateway: `evidence/python-gateway-parity.json`. The post-download decision smoke is `llmctl-decide smoke`
+(`internal/gateway/smoke.go`, `cmd/llmctl-decide/cmd_smoke.go`, exit 0/1/2/6); the five legacy shell/Python helpers
+of `lib/decide.sh` are gone. The 66 ids of the P1 RED register are all mapped (`evidence/red-to-green-map.json`,
+0 unmapped); ported guards: `tests/test_regression_defects.sh`; original results and the old harness:
+`evidence/p1-red-original/`. Retired names are removed from README/docs/help text (historical mentions are marked);
+`CHANGELOG.md` has the 3.1.0 draft with migration notes. Next: tag-time re-run of `scripts/doc_counts.sh --check --all`.

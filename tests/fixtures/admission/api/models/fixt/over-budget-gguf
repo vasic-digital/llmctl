@@ -1,0 +1,31 @@
+{
+ "id": "fixt/over-budget-gguf",
+ "modelId": "fixt/over-budget-gguf",
+ "author": "fixt",
+ "private": false,
+ "gated": false,
+ "disabled": false,
+ "sha": "0123456789abcdef0123456789abcdef01234567",
+ "lastModified": "2026-10-01T00:00:00.000Z",
+ "tags": [
+  "license:mit"
+ ],
+ "siblings": [
+  {
+   "rfilename": "big-Q8_0.gguf",
+   "blobId": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+   "size": 12669646592,
+   "lfs": {
+    "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+    "size": 12669646592,
+    "pointerSize": 134
+   }
+  }
+ ],
+ "cardData": {
+  "license": "mit"
+ },
+ "gguf": {
+  "architecture": "qwen35"
+ }
+}

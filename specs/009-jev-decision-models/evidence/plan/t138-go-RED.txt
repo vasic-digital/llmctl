@@ -1,0 +1,7 @@
+== RED (server, before implementation) ==
+# github.com/vasic-digital/llmctl/internal/server [github.com/vasic-digital/llmctl/internal/server.test]
+internal/server/maturity_test.go:50:17: h.be.models[0].Maturity undefined (type ModelInfo has no field or method Maturity)
+internal/server/maturity_test.go:50:39: undefined: MaturityInfo
+internal/server/maturity_test.go:81:17: h.be.models[0].Maturity undefined (type ModelInfo has no field or method Maturity)
+FAIL	github.com/vasic-digital/llmctl/internal/server [build failed]
+FAIL

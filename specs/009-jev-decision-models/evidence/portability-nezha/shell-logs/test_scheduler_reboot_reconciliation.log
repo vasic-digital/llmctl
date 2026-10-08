@@ -1,0 +1,19 @@
+[llmctl] wrote /home/milosvasic/llmctl-work/tmp/tmp.UXVDyWRmAs/state/services/small.env
+[llmctl] wrote /home/milosvasic/llmctl-work/tmp/tmp.UXVDyWRmAs/state/services/vision-pro.env
+  ok: sanity: fake systemctl reports small active
+  ok: sanity: fake systemctl reports vision-pro NOT active
+  ok: precondition: small has no reservation marker before reconciliation
+  ok: precondition: vision-pro has no reservation marker before reconciliation
+[llmctl] reconciled missing reservation for 'small' (enabled + genuinely active, no .run marker - likely a post-reboot state desync)
+  ok: sched_running() lists exactly 'small' after reboot-reconciliation (previously empty - the reported defect; also proves no log noise leaks onto its stdout data contract)
+  ok: sched_running() self-healed small's missing .run reservation record
+  ok: sched_running() did NOT fabricate a reservation for the non-active vision-pro
+  ok: reconstructed reservation: profile field
+  ok: reconstructed reservation: real port from a fresh plan lookup
+  ok: reconstructed reservation: ram_mb is a real numeric footprint from the plan
+  ok: reconstructed reservation: vram_mb is a real numeric footprint from the plan
+  ok: sched_running() is idempotent - an already-reconciled reservation is left untouched on a second call
+  ok: sched_reserved_field(ram_mb) accounts for the reconciled small reservation (>0, not the pre-fix 0)
+  ok: sched_reserved_field(ram_mb) == the reconciled reservation's own ram_mb (only 'small' is reserved)
+  ok: sched_reserved_field(vram_mb) == the reconciled reservation's own vram_mb (only 'small' is reserved)
+RESULT: PASS

@@ -175,6 +175,46 @@ LLMCTL_DRY_RUN=1 llmctl enable fast
   assertions in `tests/test_tenant_service_isolation.sh` do not apply to
   this backend.
 
+## Spec 009 additions (T081)
+
+* `svc_write_env` now writes the env record and the plist **0600** and adds the
+  registration metadata lines (see `lib/portreg.sh`); the encoder runtime's
+  plist carries `--api-key-file <path>` in a `ProgramArguments` array - never a
+  key.
+* `decide_service_enable|disable|status|main_pid` manage the gateway agent
+  `com.llmctl.decide-gateway` (`/bin/bash lib/svc_hook.sh run-gateway`,
+  `EnvironmentVariables` with paths only, `KeepAlive`, `ThrottleInterval` 30,
+  `RunAtLoad`, plist 0600).
+* **Respawn re-registration (C-13).** An engine plist's `ProgramArguments` are
+  `/bin/bash lib/svc_hook.sh run-engine <profile> -- <engine> <args...>`: the wrapper rotates the
+  service's key file, starts the detached registration waiter for its own pid and `exec`s the
+  engine, so a launchd `KeepAlive` respawn rotates the key and re-registers the service exactly
+  like a systemd `Restart=always` (the earlier gap "a respawn does not rotate / re-register" is
+  closed; `svc_start` therefore only `kickstart`s). `decide_service_disable` leaves the real agent
+  plist alone under `LLMCTL_DRY_RUN=1` (C-12). `svc_stale_units` is a no-op on launchd (plists are
+  regenerated per start). Fixture-tested: `tests/test_service_ops_hardening.sh` (the plist wrapper
+  and the wrapper's behaviour on Linux); launchd itself is still not exercised (no Mac).
+* `svc_main_pid` parses `launchctl print`.
+* **Honesty statement**: no Mac is available to the suite. The files and the
+  dry-run `launchctl` command lines are validated (`tests/test_decide_service.sh`,
+  `plistlib`); launchd actually loading and running them is **not** exercised.
+  Registry liveness on macOS uses `ps -o args=` (gap G-009), fixture-tested only.
+
+## Engine library path
+
+The plist wraps the engine in `svc_hook.sh run-engine`, which makes the engine resolve its own shared libraries first
+(`hk_engine_libpath`, G-129; see `svc_hook.md`). Verified on Linux with the same wrapper; not run on macOS.
+
 ## Last verified date
 
-2026-09-17
+2026-10-07
+
+## `EnvironmentVariables` in every agent (C2-04)
+
+The engine plist now carries the same `EnvironmentVariables` dict as the gateway plist
+(`LLMCTL_ROOT/STATE_DIR/LOG_DIR/SERVICES_DIR/CONFIG_DIR/DATA_DIR/RUNTIME_DIR`, plus `LLMCTL_DECIDE_BIN` when the registry
+binary resolves), built by `_svc_plist_env_dict`. launchd gives a job a minimal environment, so without it
+`svc_hook.sh run-engine` fell back to the default directories, found no env record, and neither rotated the key nor
+registered the service when `LLMCTL_STATE_DIR` & co. were overridden. Inline `<string>` paths are XML-escaped.
+`tests/test_macos_plist.sh` parses the plists with python `plistlib` and runs the wrapper under `env -i` with only the plist
+environment. **Not proven:** that launchd accepts and runs the plist (no Mac was available; file-level validation only).

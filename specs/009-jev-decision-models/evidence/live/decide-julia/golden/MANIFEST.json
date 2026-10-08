@@ -1,0 +1,35 @@
+{
+  "files": [
+    {
+      "path": "evidence.jsonl",
+      "sha256": "3b15348f2a30bbe85d7b2584e0991eb55197fabfa12867bbc3b2b7fa36e0088d",
+      "size": 2490
+    },
+    {
+      "path": "raw/EV-decide-julia-golden-0001-stdout.txt",
+      "sha256": "57e3d560b31e816569dbd9fedb609de47d7619041ef7536b34aea6f764c01d11",
+      "size": 16101
+    },
+    {
+      "path": "raw/EV-decide-julia-golden-0002-stdout.txt",
+      "sha256": "57e3d560b31e816569dbd9fedb609de47d7619041ef7536b34aea6f764c01d11",
+      "size": 16101
+    },
+    {
+      "path": "raw/EV-decide-julia-golden-0003-stdout.txt",
+      "sha256": "57e3d560b31e816569dbd9fedb609de47d7619041ef7536b34aea6f764c01d11",
+      "size": 16101
+    },
+    {
+      "path": "raw/responses.jsonl",
+      "sha256": "c738473f74da8b2e4b50fb0f2fe6e9cb23a6c1790dfe55eef4a4f3561b433914",
+      "size": 72765
+    },
+    {
+      "path": "results.json",
+      "sha256": "abd9e0c4392b64f63fe036b667ad6deb4c809159b57f274f5bf8ccecf2746468",
+      "size": 129401
+    }
+  ],
+  "schema": 1
+}

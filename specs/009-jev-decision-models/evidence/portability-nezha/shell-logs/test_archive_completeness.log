@@ -1,0 +1,13 @@
+  ok: build_archive produces a real .tar.gz
+  ok: build_archive produces a real .zip
+  ok: extracted tree includes the superproject's own .git directory
+  ok: extracted tree includes the submodule's REAL file content (not an empty placeholder dir - the exact git-archive gap this task fixes)
+  ok: extracted tree includes ARBITRARILY-NESTED submodule content
+  ok: build-output directories are excluded from the archive (matches the project's existing */build/* exclusion convention)
+  ok: git status on the relocated submodule succeeds (relative .git gitdir pointer survived relocation)
+  ok: relocated submodule reports a clean status (no unexpected diff introduced by archiving)
+  ok: git log inside the relocated submodule succeeds (it is a genuinely functional git repo, not just copied files)
+  ok: relocated submodule's real commit history is intact
+  ok: a RELATIVE output-basename resolves against the caller's cwd, not build_archive's internal cd target
+  ok: the .zip counterpart also resolves correctly for a relative output-basename
+RESULT: PASS

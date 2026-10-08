@@ -1,0 +1,2 @@
+Oct 08 11:00:40 anton systemd[2366]: /home/milosvasic/.config/systemd/user/llmctl-llama@.service:37: Unknown key 'StartLimitIntervalSec' in section [Service], ignoring.
+Oct 08 11:00:40 anton systemd[2366]: Started llmctl-llama@decide-laya.service - llmctl llama.cpp inference server (profile decide-laya).

@@ -1,0 +1,22 @@
+  ok: tenant create, no daemon at all: exits non-zero
+  ok: tenant create, no daemon at all: clear unreachable message
+  ok: tenant list, no daemon at all: exits non-zero
+  ok: tenant list, no daemon at all: clear unreachable message
+  ok: tenant quota (set), no daemon at all: exits non-zero
+  ok: tenant quota (set), no daemon at all: clear unreachable message
+  ok: tenant quota (view), no daemon at all: exits non-zero
+  ok: tenant quota (view), no daemon at all: clear unreachable message
+  ok: node: real READY line observed
+HOSTDEP-BEGIN: success path runs only when the host curl has HTTP3 (G-089/G-106)
+  ok: the bootstrap admin key exchanges for a JWT over the real transport
+  ok: tenant create: exit 0 against the real daemon
+  ok: tenant create: the daemon echoes the created tenant
+  ok: tenant list: exit 0
+  ok: tenant list: create-then-list shows the tenant (US3 Acceptance Scenario 1)
+  ok: tenant quota (set): exit 0
+  ok: tenant quota (set): the new limit is echoed
+  ok: tenant quota (view): exit 0
+  ok: tenant quota (view): the limit set above round-trips through the real enforcer state (US3 Acceptance Scenarios 2/3)
+HOSTDEP-END
+RESULT: PASS
+rc=0

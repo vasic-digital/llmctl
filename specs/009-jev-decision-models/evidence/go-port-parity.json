@@ -1,0 +1,43 @@
+{
+ "task": "T025b",
+ "python_prototype_tests": {
+  "unit_tier_total": "250 tests OK (27 skipped) before removal of: keyring 52, certs 40, contract/readout/audit/metrics 118"
+ },
+ "go_ports": {
+  "keyring": {
+   "pass": 81,
+   "fail": 0,
+   "skip": 0
+  },
+  "certs": {
+   "pass": 72,
+   "fail": 0,
+   "skip": 0
+  },
+  "contract": {
+   "pass": 88,
+   "fail": 0,
+   "skip": 27
+  },
+  "readout": {
+   "pass": 25,
+   "fail": 0,
+   "skip": 0
+  },
+  "audit": {
+   "pass": 30,
+   "fail": 0,
+   "skip": 0
+  },
+  "metrics": {
+   "pass": 17,
+   "fail": 0,
+   "skip": 0
+  }
+ },
+ "shell_parity": {
+  "keyring_cli": "tests/test_keyring_go_cli.sh PASS (53 assertions) replaces tests/test_keyring_cli.sh (60)",
+  "certs_cli": "tests/test_certs_go_cli.sh PASS + tests/test_certs_go_mutation.sh 13/13 mutants killed replaces tests/test_certs_cli.sh (31)"
+ },
+ "note": "Go ports were written from the prototypes' behaviour and tests; documented deviations are in each agent report; subtests are counted as separate PASS lines here."
+}

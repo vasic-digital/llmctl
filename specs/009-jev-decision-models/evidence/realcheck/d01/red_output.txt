@@ -1,0 +1,7 @@
+premise tokens: 600  hypothesis tokens: 16
+candidate encode_pair output length: 512
+last id is [SEP]: False
+hypothesis token ids present at the tail intact: False
+number of [SEP] ids in output: 0 (a well-formed pair has 2)
+hypothesis fully absent from the output: True
+DEFECT D-01 REPRODUCED

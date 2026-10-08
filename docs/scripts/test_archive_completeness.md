@@ -123,3 +123,8 @@ fresh-clone fixture, documented separately).
 ## Last verified date
 
 2026-09-17
+
+Round 3 adds (C2-01, C2-15, C2-17): the extracted tree's submodule is initialised, `git ls-files --recurse-submodules`
+matches the source's, a re-archive of the extracted release ships the submodule's files, a zero-file gitlink fails the
+build, a dirty tree is refused (and `--allow-dirty` / `BA_ALLOW_DIRTY=1` record `dirty` in the manifest), and no bare
+`"${arr[@]}"` expansion remains in `build_archive.sh` (instrument proven by a planted needle).

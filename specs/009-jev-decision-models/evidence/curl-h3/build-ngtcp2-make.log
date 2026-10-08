@@ -1,0 +1,85 @@
+make  all-recursive
+make[1]: Entering directory '/home/milosvasic/.local/share/llmctl/tools/curl-h3/src/ngtcp2-1.25.0'
+Making all in lib
+make[2]: Entering directory '/home/milosvasic/.local/share/llmctl/tools/curl-h3/src/ngtcp2-1.25.0/lib'
+Making all in includes
+make[3]: Entering directory '/home/milosvasic/.local/share/llmctl/tools/curl-h3/src/ngtcp2-1.25.0/lib/includes'
+make[3]: Nothing to be done for 'all'.
+make[3]: Leaving directory '/home/milosvasic/.local/share/llmctl/tools/curl-h3/src/ngtcp2-1.25.0/lib/includes'
+make[3]: Entering directory '/home/milosvasic/.local/share/llmctl/tools/curl-h3/src/ngtcp2-1.25.0/lib'
+  CC       ngtcp2_pkt.lo
+  CC       ngtcp2_conv.lo
+  CC       ngtcp2_str.lo
+  CC       ngtcp2_vec.lo
+  CC       ngtcp2_buf.lo
+  CC       ngtcp2_conn.lo
+  CC       ngtcp2_mem.lo
+  CC       ngtcp2_pq.lo
+  CC       ngtcp2_map.lo
+  CC       ngtcp2_rob.lo
+  CC       ngtcp2_ppe.lo
+  CC       ngtcp2_crypto.lo
+  CC       ngtcp2_err.lo
+  CC       ngtcp2_range.lo
+  CC       ngtcp2_acktr.lo
+  CC       ngtcp2_rtb.lo
+  CC       ngtcp2_frame_chain.lo
+  CC       ngtcp2_strm.lo
+  CC       ngtcp2_idtr.lo
+  CC       ngtcp2_gaptr.lo
+  CC       ngtcp2_ringbuf.lo
+  CC       ngtcp2_log.lo
+  CC       ngtcp2_qlog.lo
+  CC       ngtcp2_cid.lo
+  CC       ngtcp2_ksl.lo
+  CC       ngtcp2_cc.lo
+  CC       ngtcp2_bbr.lo
+  CC       ngtcp2_addr.lo
+  CC       ngtcp2_path.lo
+  CC       ngtcp2_pv.lo
+  CC       ngtcp2_pmtud.lo
+  CC       ngtcp2_version.lo
+  CC       ngtcp2_rst.lo
+  CC       ngtcp2_wf.lo
+  CC       ngtcp2_opl.lo
+  CC       ngtcp2_balloc.lo
+  CC       ngtcp2_objalloc.lo
+  CC       ngtcp2_unreachable.lo
+  CC       ngtcp2_transport_params.lo
+  CC       ngtcp2_settings.lo
+  CC       ngtcp2_callbacks.lo
+  CC       ngtcp2_dcidtr.lo
+  CC       ngtcp2_pcg.lo
+  CC       ngtcp2_ratelim.lo
+  CC       ngtcp2_conn_info.lo
+  CC       ngtcp2_fmt.lo
+  CCLD     libngtcp2.la
+make[3]: Leaving directory '/home/milosvasic/.local/share/llmctl/tools/curl-h3/src/ngtcp2-1.25.0/lib'
+make[2]: Leaving directory '/home/milosvasic/.local/share/llmctl/tools/curl-h3/src/ngtcp2-1.25.0/lib'
+Making all in tests
+make[2]: Entering directory '/home/milosvasic/.local/share/llmctl/tools/curl-h3/src/ngtcp2-1.25.0/tests'
+make[2]: Nothing to be done for 'all'.
+make[2]: Leaving directory '/home/milosvasic/.local/share/llmctl/tools/curl-h3/src/ngtcp2-1.25.0/tests'
+Making all in doc
+make[2]: Entering directory '/home/milosvasic/.local/share/llmctl/tools/curl-h3/src/ngtcp2-1.25.0/doc'
+make[2]: Nothing to be done for 'all'.
+make[2]: Leaving directory '/home/milosvasic/.local/share/llmctl/tools/curl-h3/src/ngtcp2-1.25.0/doc'
+Making all in crypto
+make[2]: Entering directory '/home/milosvasic/.local/share/llmctl/tools/curl-h3/src/ngtcp2-1.25.0/crypto'
+Making all in includes
+make[3]: Entering directory '/home/milosvasic/.local/share/llmctl/tools/curl-h3/src/ngtcp2-1.25.0/crypto/includes'
+make[3]: Nothing to be done for 'all'.
+make[3]: Leaving directory '/home/milosvasic/.local/share/llmctl/tools/curl-h3/src/ngtcp2-1.25.0/crypto/includes'
+Making all in ossl
+make[3]: Entering directory '/home/milosvasic/.local/share/llmctl/tools/curl-h3/src/ngtcp2-1.25.0/crypto/ossl'
+  CC       ossl.lo
+  CC       ../shared.lo
+  CCLD     libngtcp2_crypto_ossl.la
+make[3]: Leaving directory '/home/milosvasic/.local/share/llmctl/tools/curl-h3/src/ngtcp2-1.25.0/crypto/ossl'
+make[3]: Entering directory '/home/milosvasic/.local/share/llmctl/tools/curl-h3/src/ngtcp2-1.25.0/crypto'
+make[3]: Nothing to be done for 'all-am'.
+make[3]: Leaving directory '/home/milosvasic/.local/share/llmctl/tools/curl-h3/src/ngtcp2-1.25.0/crypto'
+make[2]: Leaving directory '/home/milosvasic/.local/share/llmctl/tools/curl-h3/src/ngtcp2-1.25.0/crypto'
+make[2]: Entering directory '/home/milosvasic/.local/share/llmctl/tools/curl-h3/src/ngtcp2-1.25.0'
+make[2]: Leaving directory '/home/milosvasic/.local/share/llmctl/tools/curl-h3/src/ngtcp2-1.25.0'
+make[1]: Leaving directory '/home/milosvasic/.local/share/llmctl/tools/curl-h3/src/ngtcp2-1.25.0'

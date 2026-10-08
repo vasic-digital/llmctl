@@ -1,0 +1,52 @@
+== usage errors exit 2 ==
+  ok: no subcommand arguments (rc)
+  ok: unknown port command (rc)
+  ok: allocate without name (rc)
+  ok: fixed allocation without a documented port (rc)
+  ok: register without --token (rc)
+  ok: register with pid 1 (rc)
+  ok: bad strategy (rc)
+== fixed strategy: documented port, taken port fails with number + variable ==
+  ok: documented port returned
+  ok: taken documented port exits 1
+  ok: message names the port
+  ok: message names the override variable
+== explicit numeric wins; =auto switches that profile to dynamic ==
+  ok: explicit numeric override wins
+  ok: auto -> dynamic port inside LLMCTL_PORT_RANGE (38900)
+== SC-015: three dynamic services, one default port occupied ==
+tests/test_registry_cli.sh: line 71: 194334 Killed                  python3 -c "import socket,time;s=socket.socket();s.bind(('127.0.0.1',${P1}));s.listen();time.sleep(30)"
+  ok: three distinct ports
+  ok: the occupied port was not handed out
+  ok: discover lists three services
+  ok: all healthy
+  ok: URL scheme+address present
+  ok: registry == live set
+== kill -9 one: gone from the registry after one reconcile ==
+  ok: reconcile reports the removal with a reason
+  ok: two services left
+  ok: registry == live set after the kill
+  ok: a live process with no row is reported (exit 1)
+  ok: other services keep their ports
+  ok: dead service's port hold released
+== clean stop: unregister + release ==
+  ok: one service left
+== sticky reuse ==
+  ok: same service gets the same port back after release
+== concurrent allocation from separate processes ==
+  ok: eight concurrent processes got eight distinct ports
+== two users: separate state dirs, disjoint ports ==
+  ok: two users: six distinct ports
+== discover never prints a key ==
+  ok: no key material in discover output
+  ok: nothing written into the repo tree
+test_registry_cli: ALL PASS
+tests/helpers.sh: line 102: 194373 Killed                  python3 -c "import socket,time;s=socket.socket();s.bind(('127.0.0.1',${LO}));s.listen();time.sleep(60)"
+tests/helpers.sh: line 102: 194384 Killed                  python3 -c "${LISTENER}" "$1" "$2" > /dev/null 2>&1
+tests/helpers.sh: line 102: 194418 Killed                  python3 -c "${LISTENER}" "$1" "$2" > /dev/null 2>&1
+tests/helpers.sh: line 102: 194621 Killed                  python3 -c "import socket,time;s=socket.socket();s.bind(('127.0.0.1',${p}));s.listen();time.sleep(30)"
+tests/helpers.sh: line 102: 194665 Killed                  python3 -c "import socket,time;s=socket.socket();s.bind(('127.0.0.1',${p}));s.listen();time.sleep(30)"
+tests/helpers.sh: line 102: 194677 Killed                  python3 -c "import socket,time;s=socket.socket();s.bind(('127.0.0.1',${p}));s.listen();time.sleep(30)"
+tests/helpers.sh: line 102: 194685 Killed                  python3 -c "import socket,time;s=socket.socket();s.bind(('127.0.0.1',${p}));s.listen();time.sleep(30)"
+tests/helpers.sh: line 102: 194693 Killed                  python3 -c "import socket,time;s=socket.socket();s.bind(('127.0.0.1',${p}));s.listen();time.sleep(30)"
+tests/helpers.sh: line 102: 194701 Killed                  python3 -c "import socket,time;s=socket.socket();s.bind(('127.0.0.1',${p}));s.listen();time.sleep(30)"

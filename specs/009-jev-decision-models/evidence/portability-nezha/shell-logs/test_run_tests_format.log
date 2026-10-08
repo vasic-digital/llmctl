@@ -1,0 +1,7 @@
+  ok: isolated harness exits 0 on an all-passing fake suite
+  ok: CMD: line names the real invoked command
+  ok: OUTPUT: label present (grep-parseable evidence marker, FR-002)
+  ok: raw subprocess output is captured
+  ok: EXIT: line present with the real captured exit code
+  ok: CMD: / OUTPUT: / EXIT: appear in that order for one test block
+RESULT: PASS

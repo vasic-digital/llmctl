@@ -1,0 +1,7 @@
+# direct llama-server, CPU (-ngl 0), -np 1 -b/-ub 4096; states of 50%/85%/97% of the window; VmHWM in kB
+model=Julia-1-Q8_0.gguf ctx=1024 idleHWM_kB=523796 peakHWM_kB=1476636 requests(frac_of_ctx:status)=[0.50:200 0.85:200 0.97:200]
+model=Julia-1-Q8_0.gguf ctx=2048 idleHWM_kB=525804 peakHWM_kB=2286000 requests(frac_of_ctx:status)=[0.50:200 0.85:200 0.97:200]
+model=Julia-1-Q8_0.gguf ctx=4096 idleHWM_kB=566780 peakHWM_kB=3790408 requests(frac_of_ctx:status)=[0.50:200 0.85:200 0.97:200]
+model=Laya-Q8_0.gguf ctx=1024 idleHWM_kB=697420 peakHWM_kB=1011024 requests(frac_of_ctx:status)=[0.50:200 0.85:200 0.97:200]
+model=Laya-Q8_0.gguf ctx=2048 idleHWM_kB=718300 peakHWM_kB=1191136 requests(frac_of_ctx:status)=[0.50:200 0.85:200 0.97:200]
+model=Laya-Q8_0.gguf ctx=4096 idleHWM_kB=783176 peakHWM_kB=1575624 requests(frac_of_ctx:status)=[0.50:200 0.85:200 0.97:200]

@@ -10,3 +10,6 @@
 [submodule "submodules/colibri"]
 	path = submodules/colibri
 	url = git@github.com:JustVugg/colibri.git
+[submodule "submodules/containers"]
+	path = submodules/containers
+	url = git@github.com:vasic-digital/Containers.git

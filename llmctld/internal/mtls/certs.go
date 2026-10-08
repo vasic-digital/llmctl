@@ -141,6 +141,7 @@ func (ca *CA) IssueNodeCert(nodeID string) (*NodeCert, error) {
 		return nil, err
 	}
 
+	dnsNames, ipAddrs := currentSANs()
 	template := &x509.Certificate{
 		SerialNumber: serial,
 		Subject:      pkix.Name{CommonName: nodeID},
@@ -148,6 +149,10 @@ func (ca *CA) IssueNodeCert(nodeID string) (*NodeCert, error) {
 		NotAfter:     time.Now().Add(certValidity),
 		KeyUsage:     x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
 		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth},
+		// G-106: SANs are what TLS clients (curl in lib/cluster.sh) validate;
+		// see sans.go for the policy.
+		DNSNames:    dnsNames,
+		IPAddresses: ipAddrs,
 	}
 
 	der, err := x509.CreateCertificate(rand.Reader, template, ca.cert, &key.PublicKey, ca.key)
@@ -160,6 +165,42 @@ func (ca *CA) IssueNodeCert(nodeID string) (*NodeCert, error) {
 		return nil, fmt.Errorf("mtls: marshal node key for %q: %w", nodeID, err)
 	}
 
+	return &NodeCert{
+		CertPEM: pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}),
+		KeyPEM:  pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: keyBytes}),
+	}, nil
+}
+
+// IssueClientCert issues a client-authentication-only leaf for an
+// out-of-process client (the llmctl shell CLI, lib/cluster.sh). Unlike
+// IssueNodeCert it carries no serverAuth usage and no SANs: it can prove
+// who the caller is to a daemon that demands mutual TLS but can never be
+// presented as a server certificate.
+func (ca *CA) IssueClientCert(name string) (*NodeCert, error) {
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		return nil, fmt.Errorf("mtls: generate client key for %q: %w", name, err)
+	}
+	serial, err := randomSerial()
+	if err != nil {
+		return nil, err
+	}
+	template := &x509.Certificate{
+		SerialNumber: serial,
+		Subject:      pkix.Name{CommonName: name},
+		NotBefore:    time.Now().Add(-time.Hour),
+		NotAfter:     time.Now().Add(certValidity),
+		KeyUsage:     x509.KeyUsageDigitalSignature,
+		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
+	}
+	der, err := x509.CreateCertificate(rand.Reader, template, ca.cert, &key.PublicKey, ca.key)
+	if err != nil {
+		return nil, fmt.Errorf("mtls: sign client certificate for %q: %w", name, err)
+	}
+	keyBytes, err := x509.MarshalECPrivateKey(key)
+	if err != nil {
+		return nil, fmt.Errorf("mtls: marshal client key for %q: %w", name, err)
+	}
 	return &NodeCert{
 		CertPEM: pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}),
 		KeyPEM:  pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: keyBytes}),

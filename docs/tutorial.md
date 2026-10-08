@@ -29,7 +29,7 @@ cd llmctl
 `--recursive` matters: llmctl vendors its two inference engines —
 `llama.cpp` and `colibri` — as pinned git submodules under `vendor/`
 (see `README.md`'s introduction). If you forget it, `git submodule update
---init` (or just running `llmctl build`, which initializes them itself)
+--init` (or just running `llmctl build all`, which initializes them itself)
 fixes it after the fact.
 
 `llmctl setup` runs three phases, each independently inspectable
@@ -186,8 +186,9 @@ export OPENAI_API_KEY="local"
 
 (`OPENAI_API_KEY` is required by aider's client library even though
 llmctl's servers don't check it — `"local"` or any non-empty string
-works, since everything binds to `127.0.0.1` and never leaves your
-machine per `README.md`'s "Local-only" safety guarantee.)
+works because the chat server does not check it. Note that chat servers bind `0.0.0.0` by default
+(reachable from your LAN, no authentication): see the README's "LAN-accessible by default" safety note
+and set `LLMCTL_BIND_HOST=127.0.0.1` if your network is not trusted.)
 
 The model id aider needs is whatever `GET /v1/models` reports for your
 running server (per `docs/integrations.md`'s top section) — for `coder`
@@ -254,15 +255,29 @@ another profile can use that budget.
 
 ## A note on what llmctl doesn't do yet
 
-`bin/llmctl` also has `cluster`, `tenant`, and `apikey` subcommands (e.g.
-`llmctl cluster status`, `llmctl tenant create <name>`, `llmctl apikey
-create <scope>`). These are real, present-in-the-CLI commands, but every
-one of them currently hard-fails with an explicit "not yet implemented"
-message citing the phase and user story that will land it (e.g. `llmctld
-reachable but 'cluster join' is not yet implemented (Phase 9, US7)`) —
-they're future multi-node/multi-tenant features, not something you can
-use today. Single-host usage (everything this tutorial covers) never
-depends on them.
+`bin/llmctl` also has `cluster`, `tenant` and `apikey` subcommands. They are clients of the opt-in `llmctld` daemon
+(HTTP/3 with mutual TLS, so they need a running `llmctld` and a `curl` that lists the `HTTP3` feature - check `curl --version`; many distribution builds lack it, see [llmctld-cluster-tls](llmctld-cluster-tls.md#getting-a-curl-that-lists-http3); otherwise they report `llmctld unreachable`).
+Single-host usage (everything this tutorial covers) never depends on them; see the user manual's `cluster | tenant | apikey` section.
+
+## Typed decisions (noul / choice / score), in a few commands
+
+The decision layer answers yes/no, pick-one and rate questions with probabilities from a small local model, behind an HTTPS gateway
+with a mandatory access key. It is a different service from the chat server above and needs Go >= 1.25 for its binary.
+
+```bash
+./bin/llmctl build decide                 # builds build/llmctl-decide
+./bin/llmctl models download decide-tiny  # verified download + a typed smoke question
+./bin/llmctl enable decide-tiny           # the engine (loopback only) behind the gateway
+./bin/llmctl decide serve                 # HTTPS on :8095; creates the CA, certificate and access key on first start
+./bin/llmctl decide ask --type noul --state "Arithmetic facts." --instructions "Is 2+2=4?"
+./bin/llmctl decide ask --type choice --state "Routing." --instructions "Which team handles invoices?" \
+    --criteria '{"billing":"handles invoices","legal":"contracts"}' --json
+```
+
+Each answer carries probabilities and a `confidence` (a shaping convention, **not** the chance of being right). Use `--min-confidence 0.7` to
+make a low-confidence answer exit 10 instead of being used. The key is never printed (`llmctl decide key show --yes-print` shows it on purpose).
+Read [`docs/limitations.md`](limitations.md) before using a decision as a gate: it is not a safety guardrail. Reference: [`docs/decide-gateway.md`](decide-gateway.md),
+[`docs/decision-models.md`](decision-models.md), operations: [`docs/runbooks.md`](runbooks.md), terms: [`docs/glossary.md`](glossary.md).
 
 ## Where to go next
 

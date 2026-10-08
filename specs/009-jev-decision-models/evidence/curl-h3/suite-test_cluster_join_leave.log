@@ -1,0 +1,17 @@
+  ok: cluster join, no daemon at all: exits non-zero
+  ok: cluster join, no daemon at all: clear unreachable message
+  ok: cluster leave, no daemon at all: exits non-zero
+  ok: cluster leave, no daemon at all: clear unreachable message
+  ok: leader node: real READY line observed
+HOSTDEP-BEGIN: success path runs only when the host curl has HTTP3 (G-089/G-106)
+  ok: cluster status over the real HTTP/3 transport: exit 0
+  ok: cluster status: the bootstrapped node reports itself leader (real 2xx round trip)
+  ok: cluster status: node n1 is listed in the cluster state
+  ok: cluster join: the daemon's own response is surfaced, not 'unreachable'
+  ok: cluster join: the response is the daemon's JSON
+  ok: cluster leave: the daemon's own response is surfaced, not 'unreachable'
+  SKIP: cluster join/leave with a second real peer (US1 Acceptance Scenarios 1/2, peer-list part)
+    reason: join genuinely reflected in a SECOND real peer's node list needs a second llmctld joined to this cluster; this suite drives one node
+HOSTDEP-END
+RESULT: PASS
+rc=0

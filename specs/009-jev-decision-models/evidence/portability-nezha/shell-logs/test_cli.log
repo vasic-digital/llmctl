@@ -1,0 +1,29 @@
+  ok: help exit code
+  ok: help shows usage
+  ok: version exit code
+  ok: version string
+  ok: unknown command exit code
+  ok: unknown command message
+  ok: switch without profile exits 1
+  ok: switch without profile names the real usage error
+  ok: models download without profile exits 1
+  ok: models download without profile names the real usage error
+  ok: unknown models subcommand exits 1
+  ok: unknown models subcommand names the real bad input
+  ok: models list contains fast
+  ok: models list contains coder
+  ok: models list contains vision
+  ok: models list contains vision-pro
+  ok: models list contains moe-fast
+  ok: models list contains small
+  ok: models list contains ws-dense-32b
+  ok: models list contains ws-moe-30b
+  ok: models list contains colibri-glm
+  ok: models list contains colibri-qwen36
+  ok: hw --json returns fixture
+  ok: hw human output shows GPU
+  ok: plan tier line
+  ok: plan co-residency group 1
+  ok: start unknown profile exits 1
+  ok: unknown profile message
+RESULT: PASS

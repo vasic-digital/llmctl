@@ -1,0 +1,25 @@
+  ok: download_profile toy-decide exit code
+  [llmctl] downloading model.gguf from toy/decide
+    % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                   Dload  Upload  Total   Spent   Left   Speed
+    0      0   0      0   0      0      0      0                              0100     61 100     61   0      0  62951      0                              0100     61 100     61   0      0  61306      0                              0100     61 100     61   0      0  58880      0                              0
+  verified: model.gguf
+  WARN: smoke test disabled (LLMCTL_SMOKE=0)
+  profile 'toy-decide' downloaded and verified. Evidence: /home/milosvasic/llmctl-work/tmp/tmp.wCnZkejOEm/state/verify/toy-decide.log
+  ok: model.gguf exists after download
+  ok: downloaded file sha256 matches
+  ok: evidence log records the DECISION smoke path (not the gguf smoke path)
+  ok: gguf smoke path NOT taken for a decide-capable profile
+  ok: evidence log records overall success
+  ok: download with smoke enabled but no llama-server: still rc 0 (skip-warn precedent)
+  ok: evidence log records the decision smoke SKIP-with-reason
+  ok: operator-facing skip warning
+  ok: download with a fake engine: decision smoke passes through llmctl-decide smoke
+  ok: evidence log records the Go-backed smoke probe
+  ok: evidence log records the typed billing answer
+  ok: evidence log records the smoke PASS
+  ok: download with a failing engine: decision smoke FAILS the download (rc=1)
+  ok: evidence log records the smoke FAIL
+  ok: download with an unusable LLMCTL_DECIDE_BIN fails (no silent skip)
+  ok: unusable binary: the error names LLMCTL_DECIDE_BIN
+RESULT: PASS

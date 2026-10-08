@@ -1,0 +1,12 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "name": "llmctl-gate",
+        "matcher": "^(bash|write|edit|multiedit)$",
+        "command": "$HOME/.config/llmctl/hooks/crush-pretool.sh",
+        "timeout": 60
+      }
+    ]
+  }
+}

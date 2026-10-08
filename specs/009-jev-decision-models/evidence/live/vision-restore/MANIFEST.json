@@ -1,0 +1,15 @@
+{
+  "files": [
+    {
+      "path": "check.txt",
+      "sha256": "307f0c3258015edfd693c0e6267adfb03bea9507e3696fe783e4bf4b35d268bd",
+      "size": 256
+    },
+    {
+      "path": "cmdline-before.txt",
+      "sha256": "c07e6d9712573d1d62da7d4a2b8363e961147e19fa3a8a770fca89d91df7524a",
+      "size": 385
+    }
+  ],
+  "schema": 1
+}

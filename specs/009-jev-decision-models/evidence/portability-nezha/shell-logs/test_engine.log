@@ -1,0 +1,9 @@
+  ok: LLMCTL_LLAMA_SRC resolves to the real git submodule, not the un-pinned vendor/ copy
+  ok: LLMCTL_COLIBRI_SRC resolves to the real git submodule, not the un-pinned vendor/ copy
+  ok: engine_ensure_submodules exits 0 when submodules/{llama.cpp,colibri}/.git are present
+  ok: no 'not initialized' warning when the real submodule paths are present
+  ok: missing submodule is reported at its real path (submodules/colibri), not the old vendor/colibri
+  ok: engine_build_llama prints [dry-run] instead of invoking cmake
+  ok: engine_build_llama's dry-run output names the cmake command it would run
+  ok: engine_build_colibri prints [dry-run] instead of invoking make
+RESULT: PASS

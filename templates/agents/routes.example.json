@@ -1,0 +1,11 @@
+{
+  "routes": {
+    "tool_selection": {
+      "switch": { "label_count_over": 50, "to": "tool_selection_large" },
+      "to": "tool_selection_small"
+    },
+    "tool_selection_small": { "model": "decide-tiny", "min_confidence": 0.7, "max_labels": 50, "fallback": "tool_selection_large" },
+    "tool_selection_large": { "model": "decide-tiny", "min_confidence": 0.7, "fallback": "escalate" },
+    "risk_gate": { "model": "decide-tiny", "min_confidence": 0.9, "fallback": "deny" }
+  }
+}

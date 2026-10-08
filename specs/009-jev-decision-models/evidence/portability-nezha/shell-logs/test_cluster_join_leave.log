@@ -1,0 +1,12 @@
+  ok: cluster join, no daemon at all: exits non-zero
+  ok: cluster join, no daemon at all: clear unreachable message
+  ok: cluster leave, no daemon at all: exits non-zero
+  ok: cluster leave, no daemon at all: clear unreachable message
+  ok: leader node: real READY line observed
+  ok: cluster join against a REAL running (but curl-unreachable) daemon: still exits non-zero, never hangs or crashes
+  ok: cluster join against a REAL running daemon: SAME unreachable message as no-daemon-at-all (no different, confusing failure mode)
+  ok: cluster leave against a REAL running daemon: exits non-zero
+  ok: cluster leave against a REAL running daemon: SAME unreachable message
+  SKIP: cluster join/leave success path (US1 Acceptance Scenarios 1/2)
+    reason: this host's curl has no HTTP/3 support and llmctld's cluster API is HTTP/3-QUIC-only (UDP), confirmed via ss+curl -v against the real node above - no curl-based request can complete a 2xx round trip in this environment, so US1 Acceptance Scenarios 1/2 (join genuinely reflected in the peer's node list, then genuinely removed) cannot be exercised here
+RESULT: PASS

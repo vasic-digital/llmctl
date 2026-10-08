@@ -1,0 +1,35 @@
+{
+  "files": [
+    {
+      "path": "evidence.jsonl",
+      "sha256": "e98a0fc7c3961e44fc6326f0947bf11323a89f750351594b2799dab7ccab9e4f",
+      "size": 2476
+    },
+    {
+      "path": "raw/EV-decide-laya-golden-0001-stdout.txt",
+      "sha256": "07172f489da2b8613293e4290dd94b81cb28ba69394a1898887860515011cb62",
+      "size": 15966
+    },
+    {
+      "path": "raw/EV-decide-laya-golden-0002-stdout.txt",
+      "sha256": "07172f489da2b8613293e4290dd94b81cb28ba69394a1898887860515011cb62",
+      "size": 15966
+    },
+    {
+      "path": "raw/EV-decide-laya-golden-0003-stdout.txt",
+      "sha256": "07172f489da2b8613293e4290dd94b81cb28ba69394a1898887860515011cb62",
+      "size": 15966
+    },
+    {
+      "path": "raw/responses.jsonl",
+      "sha256": "3f903289aee13c6efcebc36d8014b668744fbe1f48dc5dc67164a3d9832286b6",
+      "size": 70309
+    },
+    {
+      "path": "results.json",
+      "sha256": "a522741b2c347e81c5ca1a6e7c62fcedb4a3d38c4f36ae45f6e0ecaed0a4a860",
+      "size": 129219
+    }
+  ],
+  "schema": 1
+}

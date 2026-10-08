@@ -1,0 +1,2 @@
+{"model":"decide-kev-08b","answers":{"q":{"type":"choice","choice":"billing","probabilities":{"billing":0.738273751,"shipping":0.082004061,"technical":0.179722188},"confidence":0.607410626}},"usage":{"input_tokens":43,"output_tokens":0},"evidence":{"profile":"decide-kev-08b","port":8095,"latency_ms":506.429,"mode":"deterministic","instance":"decide-kev-08b"}}
+rc=0

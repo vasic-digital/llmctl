@@ -1,0 +1,3 @@
+  SKIP: GPU VRAM-delta measurement
+    reason: nvidia-smi not present on this host
+RESULT: PASS

@@ -89,6 +89,13 @@ test_setup_env() {
   # (test_scheduler_wait_ready.sh) exercises the real wait against a real,
   # deliberately-delayed HTTP fixture and sets its own non-zero timeout.
   export LLMCTL_READY_TIMEOUT=0
+  # Hermetic by default: the port allocator / registry adapter (lib/portreg.sh)
+  # is OFF for every test unless the test opts in (LLMCTL_PORTREG=1 plus an
+  # LLMCTL_DECIDE_BIN it built itself). Otherwise a host that happens to hold
+  # a built build/llmctl-decide would bind-test real documented ports (8080
+  # is routinely taken by sibling projects) and change unrelated results.
+  export LLMCTL_PORTREG=0
+  unset LLMCTL_DECIDE_BIN LLMCTL_PORT_STRATEGY LLMCTL_PORT_RANGE LLMCTL_SERVICE_BACKEND_FILE
   mkdir -p "${LLMCTL_STATE_DIR}" "${LLMCTL_RUNTIME_DIR}"
 }
 
@@ -103,6 +110,18 @@ test_teardown_env() {
   fi
 }
 
+# skip_suite <reason>
+# C2-06: skip a WHOLE suite (tests/run_tests.sh prints SKIP, not PASS). Only legal before any assertion
+# failed: a suite whose TEST_FAILS is already > 0 must not hide those failures behind a SKIP, so it exits 1.
+skip_suite() {
+  if [[ "${TEST_FAILS:-0}" -gt 0 ]]; then
+    printf '  FAIL: skip_suite("%s") called after %d assertion failure(s); a suite that already failed cannot skip\n' "$1" "${TEST_FAILS}" >&2
+    exit 1
+  fi
+  printf 'SKIP-SUITE: %s\n' "$1"
+  exit 0
+}
+
 # assert_skip <reason> <message>
 # 006-cli-daemon-wiring: an honest, printed, non-counted SKIP for an
 # assertion this test genuinely cannot make in the current environment
@@ -113,6 +132,53 @@ test_teardown_env() {
 assert_skip() {
   printf '  SKIP: %s\n    reason: %s\n' "$2" "$1" >&2
 }
+
+# curl_has_http3 - the SAME predicate lib/cluster.sh uses (_cluster_http3_supported): does this curl list
+# HTTP3 among its features? (G-089: a probe, never a hard-coded "this host has no HTTP/3".)
+curl_has_http3() { curl --version 2>/dev/null | grep -qiE '(^| )HTTP3( |$)'; }
+
+# cluster_cli_skip_reason <https://host:port>
+# G-089 + G-106: can the product's CLI transport (lib/cluster.sh = curl, HTTP/3 when the curl supports it,
+# explicit --cacert + client --cert/--key from the daemon's CLI certificate directory, full verification)
+# complete a 2xx round trip with the daemon at <endpoint>? Prints the MEASURED reason and returns 0 when it
+# cannot (callers then SKIP with that reason and keep the "unreachable" assertions); prints nothing and
+# returns 1 when it can (callers then run the success path).
+# Reasons: (1) the curl has no HTTP3 feature (parsed from `curl --version`); (2) HTTP3 curl present but a
+# real request through lib/cluster.sh's own transport fails (curl exit code + message are quoted, not guessed).
+# The probe goes through cluster::request itself - the SAME code the CLI uses - never a hand-built curl line.
+cluster_cli_skip_reason() {
+  local ep="$1" out rc=0
+  if ! curl_has_http3; then
+    printf 'curl --version lists no HTTP3 feature (Features: %s); llmctld serves its cluster API over HTTP/3-QUIC (UDP) only and this curl cannot speak QUIC (the certificate side - SANs, CA, client certificate - is provided by the daemon, G-106)' \
+      "$(curl --version 2>/dev/null | sed -n 's/^Features: //p')"
+    return 0
+  fi
+  out="$(LLMCTL_CLUSTER_ENDPOINT="${ep}" LLMCTL_CLUSTER_CERT_DIR="${LLMCTLD_CLI_CERT_DIR:-}" \
+    bash -c 'source "$1/lib/cluster.sh"; cluster::request GET /v1/cluster/status' _ "${LLMCTL_ROOT}" 2>&1)" || rc=$?
+  if [[ ${rc} -ne 0 ]]; then
+    printf 'this curl has HTTP3 but a request through lib/cluster.sh (cluster CA + CLI client certificate from %s) fails: curl exit %s: %s' \
+      "${LLMCTLD_CLI_CERT_DIR:-<unset>}" "${rc}" "$(printf '%s' "${out}" | head -c 240 | tr '\n' ' ')"
+    return 0
+  fi
+  return 1
+}
+
+# cluster_curl_h3 <curl args...>
+# Direct curl against the daemon with the SAME TLS inputs lib/cluster.sh uses (explicit --cacert and the CLI
+# client certificate/key from LLMCTLD_CLI_CERT_DIR, HTTP/3, full verification). For tests that call a daemon
+# route the CLI has no subcommand for (e.g. POST /v1/auth/token). Never passes -k.
+cluster_curl_h3() {
+  curl --http3 --cacert "${LLMCTLD_CLI_CERT_DIR}/ca.crt" --cert "${LLMCTLD_CLI_CERT_DIR}/client.crt" \
+    --key "${LLMCTLD_CLI_CERT_DIR}/client.key" "$@"
+}
+
+# hostdep_begin <reason> / hostdep_end
+# G-084: bracket assertions whose NUMBER depends on the host (a branch that runs only when llama-server
+# is/is not built, only when go is installed ...). scripts/doc_counts.sh excludes `  ok:` lines between
+# the markers from the count a docs page may claim, so documented counts compare host-independent
+# assertions only. The markers are plain lines on stdout; nothing else reads them.
+hostdep_begin() { printf 'HOSTDEP-BEGIN: %s\n' "$1"; }
+hostdep_end() { printf 'HOSTDEP-END\n'; }
 
 # llmctld_build
 # 006-cli-daemon-wiring: builds the REAL llmctld binary once into
@@ -133,7 +199,8 @@ llmctld_build() {
 # line (never a fixed sleep guess), and registers its PID + CA/state
 # directory for the caller to use. Sets (via global vars, since bash has
 # no struct return): LLMCTLD_PID, LLMCTLD_CA_CERT, LLMCTLD_CA_KEY,
-# LLMCTLD_ADMIN_KEY_ID, LLMCTLD_ADMIN_KEY_SECRET, LLMCTLD_API_ADDR,
+# LLMCTLD_ADMIN_KEY_ID, LLMCTLD_ADMIN_KEY_SECRET, LLMCTLD_API_ADDR, LLMCTLD_CLI_CERT_DIR (G-106: the
+# directory with ca.crt/client.crt/client.key the daemon wrote for the shell CLI),
 # LLMCTLD_LOG. Caller MUST kill LLMCTLD_PID (e.g. via a trap) before
 # exiting - see test_teardown_env's sibling discipline.
 llmctld_bootstrap() {
@@ -176,9 +243,10 @@ llmctld_bootstrap() {
   fi
 
   LLMCTLD_API_ADDR="$(grep -oP '(?<=api_addr=)\S+' "${LLMCTLD_LOG}" | head -1)"
+  LLMCTLD_CLI_CERT_DIR="$(grep -oP '(?<=^CLI_CERT_DIR=)\S+' "${LLMCTLD_LOG}" | head -1)"
   LLMCTLD_ADMIN_KEY_ID="$(grep -oP '(?<=BOOTSTRAP_ADMIN_KEY_ID=)\S+' "${LLMCTLD_LOG}" | head -1)"
   LLMCTLD_ADMIN_KEY_SECRET="$(grep -oP '(?<=BOOTSTRAP_ADMIN_KEY_SECRET=)\S+' "${LLMCTLD_LOG}" | head -1)"
-  export LLMCTLD_PID LLMCTLD_CA_CERT LLMCTLD_CA_KEY LLMCTLD_LOG LLMCTLD_API_ADDR LLMCTLD_ADMIN_KEY_ID LLMCTLD_ADMIN_KEY_SECRET
+  export LLMCTLD_PID LLMCTLD_CA_CERT LLMCTLD_CA_KEY LLMCTLD_CLI_CERT_DIR LLMCTLD_LOG LLMCTLD_API_ADDR LLMCTLD_ADMIN_KEY_ID LLMCTLD_ADMIN_KEY_SECRET
 }
 
 # Finish a test file: exit non-zero when any assertion failed.

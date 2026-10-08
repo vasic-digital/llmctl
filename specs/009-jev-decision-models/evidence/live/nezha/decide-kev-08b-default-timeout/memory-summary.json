@@ -1,0 +1,119 @@
+{
+ "profile": "decide-kev-08b",
+ "ctx": 2048,
+ "model_bytes": 812406304,
+ "model_MiB": 774.8,
+ "memory": [
+  {
+   "label": "after-health-cold",
+   "t": "09:46:27",
+   "VmRSS_kB": 1042304,
+   "VmHWM_kB": 1042304,
+   "VmSwap_kB": 0,
+   "Threads": 15,
+   "VmRSS_MiB": 1017.9,
+   "VmHWM_MiB": 1017.9
+  },
+  {
+   "label": "idle-warm-after-smoke",
+   "t": "09:46:27",
+   "VmRSS_kB": 1105136,
+   "VmHWM_kB": 1105136,
+   "VmSwap_kB": 0,
+   "Threads": 15,
+   "VmRSS_MiB": 1079.2,
+   "VmHWM_MiB": 1079.2
+  },
+  {
+   "label": "after-golden",
+   "t": "09:48:46",
+   "VmRSS_kB": 1528116,
+   "VmHWM_kB": 1528116,
+   "VmSwap_kB": 0,
+   "Threads": 15,
+   "VmRSS_MiB": 1492.3,
+   "VmHWM_MiB": 1492.3
+  },
+  {
+   "label": "after-probes",
+   "t": "09:49:00",
+   "VmRSS_kB": 1528116,
+   "VmHWM_kB": 1528116,
+   "VmSwap_kB": 0,
+   "Threads": 15,
+   "VmRSS_MiB": 1492.3,
+   "VmHWM_MiB": 1492.3
+  },
+  {
+   "label": "after-edges",
+   "t": "09:49:54",
+   "VmRSS_kB": 3749348,
+   "VmHWM_kB": 3749348,
+   "VmSwap_kB": 0,
+   "Threads": 15,
+   "VmRSS_MiB": 3661.5,
+   "VmHWM_MiB": 3661.5
+  },
+  {
+   "label": "after-gateway-2100",
+   "t": "09:49:55",
+   "VmRSS_kB": 3762452,
+   "VmHWM_kB": 3762452,
+   "VmSwap_kB": 0,
+   "Threads": 15,
+   "VmRSS_MiB": 3674.3,
+   "VmHWM_MiB": 3674.3
+  },
+  {
+   "label": "after-engine_direct_50pct_window",
+   "t": "09:50:08",
+   "VmRSS_kB": 3769328,
+   "VmHWM_kB": 3769328,
+   "VmSwap_kB": 0,
+   "Threads": 15,
+   "VmRSS_MiB": 3681.0,
+   "VmHWM_MiB": 3681.0
+  },
+  {
+   "label": "after-engine_direct_max_fit",
+   "t": "09:50:36",
+   "VmRSS_kB": 5032896,
+   "VmHWM_kB": 5032896,
+   "VmSwap_kB": 0,
+   "Threads": 15,
+   "VmRSS_MiB": 4914.9,
+   "VmHWM_MiB": 4914.9
+  },
+  {
+   "label": "after-engine_direct_over_window_by_64",
+   "t": "09:50:36",
+   "VmRSS_kB": 5039704,
+   "VmHWM_kB": 5039704,
+   "VmSwap_kB": 0,
+   "Threads": 15,
+   "VmRSS_MiB": 4921.6,
+   "VmHWM_MiB": 4921.6
+  },
+  {
+   "label": "after-gateway-115pct",
+   "t": "09:50:40",
+   "VmRSS_kB": 5045136,
+   "VmHWM_kB": 5045136,
+   "VmSwap_kB": 0,
+   "Threads": 15,
+   "VmRSS_MiB": 4926.9,
+   "VmHWM_MiB": 4926.9
+  },
+  {
+   "label": "final",
+   "t": "09:50:40",
+   "VmRSS_kB": 5045136,
+   "VmHWM_kB": 5045136,
+   "VmSwap_kB": 0,
+   "Threads": 15,
+   "VmRSS_MiB": 4926.9,
+   "VmHWM_MiB": 4926.9
+  }
+ ],
+ "overhead_mb_from_peak_HWM": 4152.1
+}

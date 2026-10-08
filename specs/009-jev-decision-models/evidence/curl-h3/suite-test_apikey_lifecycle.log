@@ -1,0 +1,19 @@
+  ok: apikey create, no daemon at all: exits non-zero
+  ok: apikey create, no daemon at all: clear unreachable message
+  ok: apikey rotate, no daemon at all: exits non-zero
+  ok: apikey rotate, no daemon at all: clear unreachable message
+  ok: node: real READY line observed
+  ok: node: a real BOOTSTRAP_ADMIN_KEY_ID was printed (proves auth.Store is genuinely live)
+HOSTDEP-BEGIN: success path runs only when the host curl has HTTP3 (G-089/G-106)
+  ok: the bootstrap admin key exchanges for a JWT over the real transport
+  ok: apikey create: exit 0 against the real daemon
+  ok: apikey create: the response carries the new key id
+  ok: apikey create: the response carries the one-time secret
+  ok: the freshly created key genuinely authenticates (token exchange 200)
+  ok: apikey rotate: exit 0 against the real daemon
+  ok: apikey rotate: a NEW secret is returned
+  ok: the OLD secret stops authenticating after rotation (status 401)
+  ok: the rotated secret authenticates
+HOSTDEP-END
+RESULT: PASS
+rc=0

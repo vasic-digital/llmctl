@@ -1,0 +1,26 @@
+{
+ "id": "fixt/non-lfs-model",
+ "modelId": "fixt/non-lfs-model",
+ "author": "fixt",
+ "private": false,
+ "gated": false,
+ "disabled": false,
+ "sha": "0123456789abcdef0123456789abcdef01234567",
+ "lastModified": "2026-10-01T00:00:00.000Z",
+ "tags": [
+  "license:apache-2.0"
+ ],
+ "siblings": [
+  {
+   "rfilename": "tiny-Q4_K_M.gguf",
+   "blobId": "cccccccccccccccccccccccccccccccccccccccc",
+   "size": 1000
+  }
+ ],
+ "cardData": {
+  "license": "apache-2.0"
+ },
+ "gguf": {
+  "architecture": "qwen35"
+ }
+}

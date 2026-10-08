@@ -1,0 +1,10 @@
+profile=decide-lev ctx=8192 port=52939 date=2026-10-08T10:05:04Z host=nezha nproc=8
+model_file=lev-Q4_K_M.gguf bytes=3011777440 (2872.3 MiB) sha256=3f61b27c00a098dbc79ed099cca3985cbe0b63d17ac7fedebf2dca1d84f7f3a8
+repo=ggml-org/lev-GGUF@3e9286a79ae857b4e1de051c92fab6dc574581ce
+ 12:05:04 up 16:40,  4 users,  load average: 0.31, 1.10, 1.78
+               total        used        free      shared  buff/cache   available
+Mem:           64086        4486       36954         271       24209       59600
+Swap:          48426           0       48426
+model name	: 11th Gen Intel(R) Core(TM) i7-1165G7 @ 2.80GHz
+version: 0.5.0-dev (build 1, commit 1537a0a)
+built with GNU 14.3.1 for Linux x86_64

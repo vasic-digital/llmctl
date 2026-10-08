@@ -1,0 +1,257 @@
+{
+ "date": "2026-10-07",
+ "engine": {
+  "binary": "/usr/bin/llama-server",
+  "version": "8681 (Debian)",
+  "device": "CPU only (-ngl 0)",
+  "port": 18931,
+  "model": "qwen2.5-coder-1.5b-instruct-q4_k_m.gguf (smallest instruct GGUF downloaded on this host)",
+  "args": "--ctx-size 2048 --parallel 2 -ngl 0 --threads 4 --jinja --no-webui",
+  "stopped": "by PID, after measurement; ports 8080/8082/8087/8099 and the GPU were not touched"
+ },
+ "per_slot_context": {
+  "launched_ctx_size": 2048,
+  "launched_parallel": 2,
+  "props_total_slots": 2,
+  "props_default_generation_settings_n_ctx": 1024,
+  "finding": "llama-server DIVIDES --ctx-size across slots (2048/2 = 1024 per slot). lib/scheduler.sh passes --ctx-size ctx*parallel so the per-slot context equals the catalog ctx in both modes; the gateway therefore budgets ctx per request = catalog defaults.ctx."
+ },
+ "template_overhead": {
+  "prompt": "<|im_start|>system\nYou are Qwen, created by Alibaba Cloud. You are a helpful assistant.<|im_end|>\n<|im_start|>user\nX<|im_end|>\n<|im_start|>assistant\n",
+  "tokens_for_a_one_character_user_message": 30,
+  "finding": "30 tokens of ChatML + default system prompt on this model; the gateway reserves 128 (TemplateOverheadTokens) for templates it cannot measure."
+ },
+ "context_overflow": {
+  "request_over_slot_context": {
+   "status": 400,
+   "body": "{\"error\":{\"code\":400,\"message\":\"request (3030 tokens) exceeds the available context size (1024 tokens), try increasing it\",\"type\":\"exceed_context_size_error\",\"n_prompt_tokens\":3030,\"n_ctx\":1024}}"
+  },
+  "request_1130_tokens_vs_1024": {
+   "status": 400,
+   "body": "{\"error\":{\"code\":400,\"message\":\"request (1130 tokens) exceeds the available context size (1024 tokens), try increasing it\",\"type\":\"exceed_context_size_error\",\"n_prompt_tokens\":1130,\"n_ctx\":1024}}"
+  },
+  "request_930_tokens_fits": {
+   "status": 200
+  },
+  "finding": "an over-long prompt is rejected by the engine with HTTP 400 and error.type 'exceed_context_size_error' (n_prompt_tokens, n_ctx included). It is deterministic: the gateway maps it to 422 validation_failed, never to the retryable 502."
+ },
+ "logprobs": {
+  "finding": "Observed: top_logprobs=8 (alone or together with n_probs=8) returns exactly 8 first-token entries; n_probs=8 WITHOUT top_logprobs returned 20 entries. The gateway sends both with the same value, so the profile's n_probs is the list length. The first-token list is choices[0].logprobs.content[0].top_logprobs and every entry carries a token id ('id'), so two ids that decode to the same text are separate probability mass.",
+  "top_logprobs_1000_status": 200,
+  "top_logprobs_only_entries": 8,
+  "n_probs_only_entries": 20,
+  "both_entries": 8
+ },
+ "token_classes": [
+  {
+   "class": "ascii_letters_space_prose",
+   "unit": "The quick brown fox jumps over the lazy dog while the invoice is processed by billing. ",
+   "repeat": 60,
+   "chars": 5220,
+   "tokens": 1021,
+   "natural": true
+  },
+  {
+   "class": "ascii_lower_random",
+   "unit": "qzxjvkwpyfbmgcdhnrstlaeiou",
+   "repeat": 100,
+   "chars": 2600,
+   "tokens": 1500,
+   "natural": false
+  },
+  {
+   "class": "ascii_upper_random",
+   "unit": "QZXJVKWPYFBMGCDHNRSTLAEIOU",
+   "repeat": 100,
+   "chars": 2600,
+   "tokens": 1600,
+   "natural": false
+  },
+  {
+   "class": "ascii_digits",
+   "unit": "3141592653589793238462643383279502884197",
+   "repeat": 50,
+   "chars": 2000,
+   "tokens": 2000,
+   "natural": true
+  },
+  {
+   "class": "ascii_punct",
+   "unit": "!@#$%^&*()_+-=[]{};':\",./<>?\\|`~",
+   "repeat": 60,
+   "chars": 1920,
+   "tokens": 1200,
+   "natural": true
+  },
+  {
+   "class": "newlines",
+   "unit": "\n",
+   "repeat": 2000,
+   "chars": 2000,
+   "tokens": 63,
+   "natural": true
+  },
+  {
+   "class": "spaces",
+   "unit": " ",
+   "repeat": 2000,
+   "chars": 2000,
+   "tokens": 16,
+   "natural": true
+  },
+  {
+   "class": "tabs",
+   "unit": "\t",
+   "repeat": 2000,
+   "chars": 2000,
+   "tokens": 125,
+   "natural": true
+  },
+  {
+   "class": "cyrillic",
+   "unit": "Быстрая коричневая лиса прыгает через ленивую собаку. ",
+   "repeat": 50,
+   "chars": 2700,
+   "tokens": 1151,
+   "natural": true
+  },
+  {
+   "class": "arabic",
+   "unit": "الثعلب البني السريع يقفز فوق الكلب الكسول. ",
+   "repeat": 50,
+   "chars": 2150,
+   "tokens": 852,
+   "natural": true
+  },
+  {
+   "class": "hindi",
+   "unit": "तेज़ भूरी लोमड़ी आलसी कुत्ते के ऊपर कूदती है। ",
+   "repeat": 50,
+   "chars": 2300,
+   "tokens": 2350,
+   "natural": true
+  },
+  {
+   "class": "cjk_common",
+   "unit": "这是一个用于测试分词器的句子，包含常见的汉字和标点符号。",
+   "repeat": 60,
+   "chars": 1680,
+   "tokens": 1020,
+   "natural": true
+  },
+  {
+   "class": "emoji_bmp_sym",
+   "unit": "☀☁☂☃☄★☆☎☏☐",
+   "repeat": 100,
+   "chars": 1000,
+   "tokens": 1000,
+   "natural": true
+  },
+  {
+   "class": "emoji_astral",
+   "unit": "😀🚀🔥👍🎉",
+   "repeat": 200,
+   "chars": 1000,
+   "tokens": 1000,
+   "natural": true
+  },
+  {
+   "class": "emoji_zwj",
+   "unit": "👨‍👩‍👧‍👦",
+   "repeat": 150,
+   "chars": 1050,
+   "tokens": 1500,
+   "natural": true
+  },
+  {
+   "class": "combining",
+   "unit": "é̂̃̄",
+   "repeat": 200,
+   "chars": 1000,
+   "tokens": 1600,
+   "natural": true
+  },
+  {
+   "class": "hex",
+   "unit": "deadbeefcafebabe0123456789abcdef",
+   "repeat": 60,
+   "chars": 1920,
+   "tokens": 1020,
+   "natural": true
+  },
+  {
+   "class": "base64",
+   "unit": "VGhpcyBpcyBhIGJhc2U2NCBlbmNvZGVkIHN0cmluZyB3aXRoIG5vIG1lYW5pbmcgYXQgYWxs",
+   "repeat": 40,
+   "chars": 2880,
+   "tokens": 2120,
+   "natural": true
+  },
+  {
+   "class": "code",
+   "unit": "def f(x):\n    return x*2 + 1  # comment\n",
+   "repeat": 60,
+   "chars": 2400,
+   "tokens": 960,
+   "natural": true
+  }
+ ],
+ "unmodelled_adversarial_classes": {
+  "ascii_lower_random": {
+   "chars": 2600,
+   "tokens": 1500,
+   "tokens_per_char": 0.577,
+   "chars_per_token": 1.733
+  },
+  "ascii_upper_random": {
+   "chars": 2600,
+   "tokens": 1600,
+   "tokens_per_char": 0.615,
+   "chars_per_token": 1.625
+  },
+  "cjk_rare_extB": {
+   "chars": 500,
+   "tokens": 1426,
+   "tokens_per_char": 2.852,
+   "chars_per_token": 0.351
+  },
+  "cjk_rare_bmp": {
+   "chars": 1000,
+   "tokens": 1595,
+   "tokens_per_char": 1.595,
+   "chars_per_token": 0.627
+  },
+  "private_use": {
+   "chars": 500,
+   "tokens": 1488,
+   "tokens_per_char": 2.976,
+   "chars_per_token": 0.336
+  },
+  "c1_ctrl": {
+   "chars": 800,
+   "tokens": 1525,
+   "tokens_per_char": 1.906,
+   "chars_per_token": 0.525
+  },
+  "nul_ctrl": {
+   "chars": 800,
+   "tokens": 800,
+   "tokens_per_char": 1.0,
+   "chars_per_token": 1.0
+  }
+ },
+ "estimator": {
+  "per_rune_tokens": {
+   "ascii_letter": 0.4,
+   "ascii_digit": 1.0,
+   "ascii_space_tab_newline": 0.1,
+   "ascii_other": 0.8,
+   "latin1_to_u07ff_letters": 0.6,
+   "u0800_to_u0fff_indic_thai": 1.1,
+   "cjk_kana_hangul_u2e80_to_ud7af": 1.0,
+   "other_bmp_incl_combining_zwj": 1.6,
+   "astral_gt_u_ffff": 3.0
+  },
+  "rule": "sum of per-rune costs, rounded up; the estimate must be >= the measured token count of every class flagged natural=true (test: TestEstimatorCoversMeasuredClasses). Adversarial classes (random letter soup 0.58-0.62 tokens/char, rare CJK extension B / private-use at ~3, C1 controls) are listed above; the first is not covered by the 0.40 letter cost on purpose (it would reject ordinary prose that fits) and such a request reaches the engine, whose 400 exceed_context_size_error is mapped to 422 (second layer)."
+ }
+}

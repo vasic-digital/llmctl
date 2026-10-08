@@ -1,0 +1,23 @@
+== control: unmutated copy is GREEN ==
+  ok: control run passes
+== mutations (each must turn the tests RED) ==
+  ok: mutation readout threshold ignored -> tests RED
+  ok: mutation deterministic seed dropped -> tests RED
+  ok: mutation unverified pid is signalled -> tests RED
+  ok: mutation pid <= 1 guard removed -> tests RED
+  ok: mutation bind default changed -> tests RED
+  ok: mutation global bind host ignored -> tests RED
+  ok: mutation loopback-only engine check removed -> tests RED
+  ok: mutation cache_prompt forced on -> tests RED
+  ok: mutation engine error text echoed -> tests RED
+  ok: mutation silent NLI truncation -> tests RED
+  ok: mutation overflow in deterministic mode ignores primary -> tests RED
+  ok: mutation NLI entailment read from a fixed column -> tests RED
+  ok: mutation NLI generic label_source accepted -> tests RED
+  ok: mutation NLI truncation not reported to the gateway -> tests RED
+  ok: mutation key file permission check removed -> tests RED
+  ok: mutation symlinked key file accepted -> tests RED
+  ok: mutation 401 retry reuses the same key -> tests RED
+  ok: mutation SDK model listing dropped -> tests RED
+  ok: mutation lingering drain removed -> tests RED
+RESULT: PASS

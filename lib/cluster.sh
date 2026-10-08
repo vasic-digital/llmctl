@@ -31,6 +31,103 @@ _cluster_http3_supported() {
   [[ "${_CLUSTER_HTTP3_SUPPORTED}" == "1" ]]
 }
 
+
+# --- TLS material (G-106 / OD-21 / T131) ------------------------------------
+# llmctld serves HTTPS over HTTP/3 with MUTUAL TLS: the daemon certificate is
+# issued by the cluster CA (with SANs for loopback/hostname/advertised names)
+# and the server demands a client certificate from the same CA. The CLI
+# therefore always passes an explicit trust anchor (--cacert) and, when one is
+# configured, a client certificate + key (--cert/--key). It NEVER disables
+# verification (no -k/--insecure, no --proxy-insecure, no
+# --doh-insecure, no --ssl-no-revoke games): a failed verification is a failure.
+#
+# Where the material comes from (first match wins, per item):
+#   LLMCTL_CLUSTER_CACERT / LLMCTL_CLUSTER_CERT / LLMCTL_CLUSTER_KEY   explicit files
+#   LLMCTL_CLUSTER_CERT_DIR   directory holding ca.crt, client.crt, client.key -
+#                             exactly what `llmctld cluster bootstrap|join`
+#                             writes (it prints CLI_CERT_DIR=<dir>) and
+#                             `llmctld cluster issue-cli-cert` re-issues
+#   CURL_CA_BUNDLE            (trust anchor only; kept for existing setups)
+# Only FILE PATHS ever reach curl's argv; key bytes are never read, echoed or
+# logged by this script, and a private key that is readable by group/others is
+# refused rather than used.
+_CLUSTER_TLS_ARGS=()
+
+_cluster_file_mode() {
+  local f="$1" m
+  m="$(stat -c '%a' "$f" 2>/dev/null)" || m="$(stat -f '%Lp' "$f" 2>/dev/null)" || return 1
+  printf '%s' "$m"
+}
+
+# _cluster_tls_prepare: fills _CLUSTER_TLS_ARGS for the current endpoint.
+# Returns 0 (arguments ready, possibly empty for plain http:// test doubles) or
+# 78 with a specific message on stderr (unusable material).
+_cluster_tls_prepare() {
+  _CLUSTER_TLS_ARGS=()
+  case "${LLMCTL_CLUSTER_ENDPOINT}" in
+    https://*) ;;
+    *) return 0 ;;
+  esac
+  local dir="${LLMCTL_CLUSTER_CERT_DIR:-}"
+  local ca="${LLMCTL_CLUSTER_CACERT:-}" cert="${LLMCTL_CLUSTER_CERT:-}" key="${LLMCTL_CLUSTER_KEY:-}"
+  if [[ -n "${dir}" ]]; then
+    [[ -n "${ca}" ]] || ca="${dir}/ca.crt"
+    [[ -n "${cert}" ]] || cert="${dir}/client.crt"
+    [[ -n "${key}" ]] || key="${dir}/client.key"
+  fi
+  [[ -n "${ca}" ]] || ca="${CURL_CA_BUNDLE:-}"
+
+  if [[ -n "${ca}" ]]; then
+    if [[ ! -r "${ca}" ]]; then
+      echo "llmctl: cluster CA certificate not readable: ${ca}" >&2
+      return 78
+    fi
+    _CLUSTER_TLS_ARGS+=(--cacert "${ca}")
+  fi
+  if [[ -n "${cert}" || -n "${key}" ]]; then
+    if [[ -z "${cert}" || -z "${key}" ]]; then
+      echo "llmctl: a client certificate needs both LLMCTL_CLUSTER_CERT and LLMCTL_CLUSTER_KEY (or LLMCTL_CLUSTER_CERT_DIR)" >&2
+      return 78
+    fi
+    if [[ ! -r "${cert}" || ! -r "${key}" ]]; then
+      echo "llmctl: client certificate or key not readable (cert: ${cert}, key: ${key})" >&2
+      return 78
+    fi
+    local mode
+    if mode="$(_cluster_file_mode "${key}")" && [[ "${mode}" =~ ^[0-9]+$ ]] && (( (8#${mode} & 8#077) != 0 )); then
+      echo "llmctl: refusing client key ${key}: mode ${mode} is accessible to group/others (needs 0600; fix with: chmod 600 '${key}')" >&2
+      return 78
+    fi
+    _CLUSTER_TLS_ARGS+=(--cert "${cert}" --key "${key}")
+  fi
+  return 0
+}
+
+# _cluster_auth_header_file: writes "Authorization: Bearer <token>" to a 0600
+# temp file and prints its path, so the token is handed to curl as `-H @file`
+# instead of appearing on the process command line (visible in `ps`).
+_cluster_auth_header_file() {
+  local f
+  f="$(umask 077; mktemp "${TMPDIR:-/tmp}/llmctl-hdr.XXXXXX")" || return 1
+  printf 'Authorization: Bearer %s\n' "${LLMCTL_CLUSTER_TOKEN}" >"${f}"
+  printf '%s' "${f}"
+}
+
+# _cluster_curl <curl args...>: runs curl with the TLS args and (when set) the
+# bearer token header from a private temp file, removing it afterwards.
+_cluster_curl() {
+  _cluster_tls_prepare || return $?
+  local -a args=("$@")
+  local hdr="" rc=0
+  if [[ -n "${LLMCTL_CLUSTER_TOKEN:-}" ]]; then
+    hdr="$(_cluster_auth_header_file)" || return 1
+    args+=(-H "@${hdr}")
+  fi
+  curl ${_CLUSTER_TLS_ARGS[@]+"${_CLUSTER_TLS_ARGS[@]}"} "${args[@]}" || rc=$?
+  [[ -z "${hdr}" ]] || rm -f "${hdr}"
+  return "${rc}"
+}
+
 # cluster::request <method> <path> [json-body]
 # Issues one HTTP request to llmctld's API. Opportunistically uses HTTP/3
 # when the local curl build supports it (verified via _cluster_http3_supported,
@@ -47,9 +144,8 @@ cluster::request() {
     -H 'Content-Type: application/json'
   )
   _cluster_http3_supported && curl_args+=(--http3)
-  [[ -n "${LLMCTL_CLUSTER_TOKEN:-}" ]] && curl_args+=(-H "Authorization: Bearer ${LLMCTL_CLUSTER_TOKEN}")
   [[ -n "${body}" ]] && curl_args+=(-d "${body}")
-  curl "${curl_args[@]}"
+  _cluster_curl "${curl_args[@]}"
 }
 
 # cluster::request_checked <method> <path> [json-body]
@@ -88,11 +184,10 @@ cluster::request_checked() {
     -H 'Content-Type: application/json'
   )
   _cluster_http3_supported && curl_args+=(--http3)
-  [[ -n "${LLMCTL_CLUSTER_TOKEN:-}" ]] && curl_args+=(-H "Authorization: Bearer ${LLMCTL_CLUSTER_TOKEN}")
   [[ -n "${body}" ]] && curl_args+=(-d "${body}")
 
   local raw
-  raw="$(curl "${curl_args[@]}")" || return $?
+  raw="$(_cluster_curl "${curl_args[@]}")" || return $?
 
   local resp_body="${raw%$'\n'*}"
   local status="${raw##*$'\n'}"
@@ -105,6 +200,11 @@ cluster::request_checked() {
 # llmctld answers its own status endpoint. Every cluster-mode subcommand
 # MUST call this before doing anything else.
 cluster::require_daemon() {
+  # Unusable TLS material is a configuration error, reported as such - never
+  # folded into the generic "unreachable" message below.
+  local prep_rc=0
+  _cluster_tls_prepare || prep_rc=$?
+  [[ "${prep_rc}" -eq 0 ]] || die "cluster TLS material is unusable (see message above); llmctl does not fall back to an unauthenticated or unverified connection."
   if cluster::request GET /v1/cluster/status >/dev/null 2>&1; then
     return 0
   fi

@@ -1,0 +1,5 @@
+import json
+import subprocess
+
+def run_command(command):
+    print(f"Running command: 

@@ -1,0 +1,10 @@
+profile=decide-kev-4b ctx=8192 port=42587 date=2026-10-08T11:10:58Z host=nezha nproc=8
+model_file=Kev-4B-Q4_K_M.gguf bytes=3033489824 (2893.0 MiB) sha256=33ae6b18926502b2209a1bf7d3b61a350d65938441515c686bb87d226a19eff9
+repo=ggml-org/Kev-4B-GGUF@d924f2e2c3872da8b8aaf3eb4453b4126deceb79
+ 13:10:58 up 17:46,  4 users,  load average: 3.72, 5.16, 5.48
+               total        used        free      shared  buff/cache   available
+Mem:           64086        4510       28245         271       32895       59576
+Swap:          48426           0       48426
+model name	: 11th Gen Intel(R) Core(TM) i7-1165G7 @ 2.80GHz
+version: 0.5.0-dev (build 1, commit 1537a0a)
+built with GNU 14.3.1 for Linux x86_64

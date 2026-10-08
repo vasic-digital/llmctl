@@ -1,0 +1,56 @@
+  ok: download_profile toy-decide exit code
+  [llmctl] downloading model.gguf from toy/decide
+    % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                   Dload  Upload  Total   Spent   Left   Speed
+    0      0   0      0   0      0      0      0                              0100     61 100     61   0      0   5059      0                              0100     61 100     61   0      0   4518      0                              0100     61 100     61   0      0   4267      0                              0
+  verified: model.gguf
+  WARN: smoke test disabled (LLMCTL_SMOKE=0)
+  profile 'toy-decide' downloaded and verified. Evidence: /tmp/tmp.9CeEQrkBbI/state/verify/toy-decide.log
+  ok: model.gguf exists after download
+  ok: downloaded file sha256 matches
+  ok: evidence log records the DECISION smoke path (not the gguf smoke path)
+  ok: gguf smoke path NOT taken for a decide-capable profile
+  ok: evidence log records overall success
+HOSTDEP-BEGIN: section 2 branches on whether a real llama-server is built on this host
+  SKIP: full decision smoke against a real llama-server
+    reason: llama-server is built but the toy payload is not a real GGUF; section 3 exercises the smoke path with a fake engine
+HOSTDEP-END
+HOSTDEP-BEGIN: section 3 runs only when the go toolchain is installed
+  ok: download with a fake engine: decision smoke passes through llmctl-decide smoke
+  ok: evidence log records the Go-backed smoke probe
+  ok: evidence log records the typed billing answer
+  ok: evidence log records the smoke PASS
+  ok: download with a failing engine: decision smoke FAILS the download (rc=1)
+  ok: evidence log records the smoke FAIL
+  ok: download with an unusable LLMCTL_DECIDE_BIN fails (no silent skip)
+  ok: unusable binary: the error names LLMCTL_DECIDE_BIN
+  [llmctl] downloading model.gguf from toy/decide
+    % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                   Dload  Upload  Total   Spent   Left   Speed
+    0      0   0      0   0      0      0      0                              0100     61 100     61   0      0  71764      0                              0100     61 100     61   0      0  68004      0                              0100     61 100     61   0      0  64075      0                              0
+  verified: model.gguf
+  [llmctl] decision smoke test: starting llama-server for toy-native on 127.0.0.1:44251
+  decision smoke test passed for toy-native (llmctl-decide smoke: choice probes)
+  profile 'toy-native' downloaded and verified. Evidence: /tmp/tmp.9CeEQrkBbI/state/verify/toy-native.log
+  ok: 3b native profile: download + decision smoke through /v1/systemone passes
+  FAIL: 3b native profile: the evidence log records a typed answer from the NATIVE protocol
+    smoke ok: protocol=systemone-native choice=billing not found in /tmp/tmp.9CeEQrkBbI/state/verify/toy-native.log
+  ok: 3b native profile: smoke PASS recorded
+  FAIL: 3b native profile: smoke engine gets a 4096 context (a native state is scored in one batch)
+    --ctx-size 4096 not found in /tmp/tmp.9CeEQrkBbI/smoke-args.log
+  ok: 3b native profile: the smoke engine was stopped after the probes
+HOSTDEP-END
+  ok: _dl_pid_owns_port: the listener's own pid owns its port
+  ok: _dl_pid_owns_port: another pid does NOT own it
+  ok: a foreign server answering /health is NOT accepted as the launched server's readiness
+  ok: ...and the reason names it
+  ok: control: the real owner of the answering port IS ready
+  ok: a launched process that died is never ready, whatever else answers
+  ok: ...with the exit reason
+  ok: the default smoke port is 'auto' (no fixed port that a foreign server can occupy)
+  ok: auto picks an ephemeral port (not the old fixed 18090): 47785
+  ok: a pinned LLMCTL_SMOKE_PORT already in use is refused
+  ok: ...with the reason
+  ok: auto smoke port: the decision smoke passes with a foreign server answering elsewhere
+  ok: ...on its own port (37389), never the foreign server's (43257)
+RESULT: FAIL (2 assertion failure(s))

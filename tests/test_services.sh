@@ -29,7 +29,17 @@ assert_file_contains "${UNIT}" "StartLimitIntervalSec=60" "llama unit: StartLimi
 assert_file_contains "${UNIT}" "MemoryMax=32768M" "llama unit: MemoryMax = full probed RAM, no artificial ceiling"
 assert_file_contains "${UNIT}" "MemoryHigh=32768M" "llama unit: MemoryHigh = MemoryMax (no soft-throttle zone below the max, for maximal performance)"
 assert_file_contains "${UNIT}" "EnvironmentFile=${LLMCTL_SERVICES_DIR}/%i.env" "llama unit: per-profile EnvironmentFile"
-assert_file_contains "${UNIT}" 'ExecStart=${LLMCTL_EXEC} ${LLMCTL_ARGS}' "llama unit: ExecStart from env file"
+assert_file_contains "${UNIT}" 'ExecStart=${LLMCTL_EXEC} ${LLMCTL_ARGS}' "llama unit: ExecStart from env file (documented in the template comment)"
+assert_file_contains "${UNIT}" "ExecStart=/bin/bash -c 'set -f; exec \"\$LLMCTL_EXEC\" \$LLMCTL_ARGS'" "llama unit: the real ExecStart execs LLMCTL_EXEC through a shell, globbing off"
+assert_file_contains "${UNIT}" "svc_hook.sh\" prestart %i" "llama unit: ExecStartPre rotates the internal key per start (G-028)"
+assert_file_contains "${UNIT}" "ExecStartPost=-/bin/bash" "llama unit: ExecStartPost publishes the service in the registry (non-fatal)"
+assert_file_contains "${UNIT}" "svc_hook.sh\" unregister %i" "llama unit: ExecStopPost removes the registry row"
+# FR-083: restart bounds live in [Unit] (systemd ignores StartLimitIntervalSec= in [Service])
+sect_of() { awk -v key="$2" 'BEGIN{s=""} /^\[/{s=$0} index($0,key"=")==1{print s; exit}' "$1"; }
+assert_eq "[Unit]" "$(sect_of "${UNIT}" StartLimitIntervalSec)" "llama unit: StartLimitIntervalSec is in [Unit]"
+assert_eq "[Unit]" "$(sect_of "${UNIT}" StartLimitBurst)" "llama unit: StartLimitBurst is in [Unit]"
+assert_file_contains "${UNIT}" "NoNewPrivileges=yes" "llama unit: verified-effective hardening (NoNewPrivileges)"
+assert_file_contains "${UNIT}" "ProtectSystem=full" "llama unit: verified-effective hardening (ProtectSystem=full)"
 assert_file_contains "${UNIT}" "append:${LLMCTL_LOG_DIR}/%i.log" "llama unit: log location"
 
 CUNIT="${LLMCTL_UNIT_DIR}/llmctl-colibri@.service"
@@ -47,6 +57,17 @@ assert_file_contains "${CUNIT}" "Description=llmctl colibri inference server" "c
 assert_file_contains "${LLMCTL_SERVICES_DIR}/fast.env" "LLMCTL_ENGINE=llama" "env file: engine"
 assert_file_contains "${LLMCTL_SERVICES_DIR}/fast.env" "--port 8080" "env file: port in args"
 assert_file_contains "${LLMCTL_SERVICES_DIR}/fast.env" "--n-gpu-layers 99" "env file: ngl in args"
+assert_file_contains "${LLMCTL_SERVICES_DIR}/fast.env" "LLMCTL_PORT=8080" "env file: port recorded for the registration hook"
+assert_file_contains "${LLMCTL_SERVICES_DIR}/fast.env" "LLMCTL_REG_TOKEN=llama-server" "env file: process-identity token for the registry"
+# D-03: the record is owner-only even under a permissive umask
+(
+  umask 022
+  source "${LLMCTL_ROOT}/lib/common.sh"
+  source "${LLMCTL_ROOT}/lib/service_linux.sh"
+  svc_write_env perm-check llama /opt/x/llama-server --port 9 --api-key-file /k/key
+)
+assert_eq "600" "$(stat -c %a "${LLMCTL_SERVICES_DIR}/perm-check.env")" "env file is mode 0600 under umask 022 (D-03)"
+assert_file_contains "${LLMCTL_SERVICES_DIR}/perm-check.env" "LLMCTL_KEY_FILE=/k/key" "env file names the key FILE path (never the key)"
 
 # dry-run lifecycle prints instead of executing
 captured="$(
@@ -73,6 +94,7 @@ assert_file_contains "${PLIST}" "<key>ThrottleInterval</key>" "plist: ThrottleIn
 assert_file_contains "${PLIST}" "<integer>60</integer>" "plist: throttle 60s (bounded restart rate, FR-044)"
 assert_file_contains "${PLIST}" "<string>--port</string>" "plist: arg present"
 assert_file_contains "${PLIST}" "<string>8080</string>" "plist: port present"
+assert_eq "600" "$(stat -c %a "${PLIST}")" "plist is mode 0600"
 assert_file_contains "${PLIST}" "${LLMCTL_LOG_DIR}/fast.log" "plist: log path"
 # plist is parseable XML
 rc=0

@@ -35,7 +35,7 @@ running profile see `docs/integrations.md`.
 | [`models list`](#models-list) | list catalog profiles |
 | [`models download`](#models-download-profile) | verified model download |
 | [`models verify`](#models-verify-profile) | re-verify a downloaded profile's checksums |
-| [`build`](#build-allllamacolibri) | build the inference engines from source |
+| [`build`](#build-allllamacolibrionnx) | build the inference engines from source (`onnx` has no build step) |
 | [`install`](#install) | install/refresh persistent-service unit templates |
 | [`enable`](#enable-profile) | enable a profile at login + start it now |
 | [`disable`](#disable-profile) | disable autostart + stop |
@@ -44,11 +44,10 @@ running profile see `docs/integrations.md`.
 | [`restart`](#restart-profile) | restart a service |
 | [`switch`](#switch-profile) | stop everything, start exactly one profile |
 | [`auto`](#auto-capability) | best-fitting set for a capability, with LRU eviction |
+| [`decide`](#decide) | typed decisions (noul/choice/score) against local decision models |
 | [`status`](#status) | running services, reservations, crash-loop state |
 | [`logs`](#logs-profile-lines) | tail a service log |
-| [`cluster`](#cluster-planned-not-yet-implemented) | **planned** — cluster join/leave/status |
-| [`tenant`](#tenant-planned-not-yet-implemented) | **planned** — tenant namespace management |
-| [`apikey`](#apikey-planned-not-yet-implemented) | **planned** — API key issuance/rotation |
+| [`cluster`, `tenant`, `apikey`](#cluster--tenant--apikey-opt-in-need-a-running-llmctld) | opt-in cluster client commands (need `llmctld` and an HTTP/3-capable curl) |
 | [`version`](#version) | print the llmctl version |
 | [`help`](#help) | print usage |
 
@@ -187,7 +186,7 @@ Verified download for one catalog profile (`download_profile` in
    — a checksum mismatch never lands at the destination.
 4. Runs a post-download validation appropriate to the engine:
    - `llama` (GGUF) profiles: a real smoke test — starts `llama-server`
-     against the downloaded model on `127.0.0.1:${LLMCTL_SMOKE_PORT}`
+     against the downloaded model on a free `127.0.0.1` port (`LLMCTL_SMOKE_PORT`, default `auto`)
      (default `18090`), waits for `/health`, then sends the deterministic
      prompt `"Reply with exactly: OK"` via `/v1/chat/completions` and
      requires the response to contain `OK`. Skipped with a warning (not a
@@ -214,13 +213,18 @@ re-running the smoke test. Fails with `die "profile <p> not downloaded (no
 <dir>)"` if the profile's model directory does not exist, and fails on the
 first file whose size or sha256 no longer matches the catalog.
 
-## build [all|llama|colibri]
+## build [all|llama|colibri|onnx]
 
 ```
-llmctl build            # both engines (default)
+llmctl build all        # llama + colibri + onnx + decide
 llmctl build llama      # llama.cpp only
 llmctl build colibri    # colibri only
+llmctl build onnx       # the hash-locked private venv of the onnx engine
+llmctl build decide     # the Go decision binary build/llmctl-decide (needs Go >= 1.25)
 ```
+
+A **target is required** (3.1.0): a bare `llmctl build` prints
+`usage: llmctl build <llama|colibri|onnx|decide|all>` and exits 2 (it used to start compiling everything).
 
 Builds the inference engines from the pinned `submodules/llama.cpp` and
 `submodules/colibri` git submodules (`engine_build` in `lib/engine.sh`),
@@ -235,12 +239,22 @@ either is not yet checked out.
   `-DGGML_NATIVE=ON` (host-native optimization). Job count comes from
   `llmctl_nproc`. After building it runs `llama-server --version` and dies
   if that fails, so a "successful" build always means a verified-runnable
-  binary.
+  binary. The llama.cpp pin is tag `b11379` (it was `b10969`); the build is shared-library with an RPATH
+  into `build/bin`, so run `llama-server` in place. `-DLLAMA_OPENSSL=ON` is passed when the OpenSSL headers exist,
+  and after the build llmctl reports whether the binary really has HTTPS support (CMake cache + linked `libssl`).
 - `colibri`: builds the C engine targets (`colibri`, `qwen36` by default)
   via `make -C submodules/colibri/c <target>`, verifying each resulting
   binary is executable, then optionally `pip install -e submodules/colibri`
   to install the `coli` Python launcher (a clear `warn`, not a failure, if
   `pip`/`pip3` is unavailable).
+- `onnx`: the `onnx` engine (`lib/onnx_server.py`, used by the `decide-nli`
+  decision profile) is a pure-python3 runner with no compile step. `llmctl build onnx` creates a private
+  venv (`LLMCTL_ONNX_VENV`, default `$LLMCTL_DATA_DIR/venv-onnx`) from the hash-locked requirements
+  `lib/lock/requirements-onnx.lock` (never a system-wide `pip`; needs Python >= 3.11 and PyPI access).
+  Without the venv, the encoder runtime's guarded imports fail with a clear error and the post-download
+  smoke test of `decide-nli` SKIPs with a recorded reason (the download is then NOT reported as fully verified).
+- `decide`: builds the Go binary `build/llmctl-decide` from `cmd/llmctl-decide` (override the output path with
+  `LLMCTL_DECIDE_BUILD_OUT`, the binary location with `LLMCTL_DECIDE_BIN`). Without Go the command says exactly what to run.
 
 `LLMCTL_DRY_RUN=1` prints every `cmake`/`make`/`pip` command instead of
 running it.
@@ -389,6 +403,236 @@ Real evidence (`tests/test_scheduler.sh`): `llmctl auto vision` prints
 prints `capability 'coder' -> profile '<name>'` for each capability
 resolved.
 
+## decide
+
+Typed decisions (`noul` yes/no probability, `choice` one-of-N with
+probabilities, `score` probability-weighted level) against the local
+decision profiles (capability `decide`; e.g. `decide-tiny` 8092, `decide` 8093,
+`decide-pro` 8094, `decide-nli` 8096 on the `onnx` engine, `decide-2b` 8098,
+`decide-max` 8097 — the current full table is in `docs/decision-models.md`). The logic is the **Go binary
+`llmctl-decide`** (`cmd/llmctl-decide`, built by `llmctl build decide`):
+an HTTPS gateway (`serve`), a client (`ask`, `batch`, `models`), access-key
+and certificate management (`key`, `cert`) and a one-question engine
+`smoke`. `lib/decide.sh` is a thin bash front end that delegates to it, plus
+the `capacity`/`status` reports and the interactive wizard. The profile's
+catalog `decision.protocol` selects the mechanism (`letter-logit`: shared
+lettered-option prompt + first-token logprob readout against `llama-server`;
+`nli-onnx`: one premise/hypothesis pair per option scored by the internal
+encoder runtime `lib/onnx_server.py`). Concept, mechanism, and honest
+limitations: `docs/decision-models.md`; gateway reference:
+`docs/decide-gateway.md`. Subcommands the shell front end (`cmd_decide`) accepts: `ask`, `batch`, `models`, `capacity`, `status`,
+`interactive`, `serve`, `key`, `cert`, `registry`, `port`, `discover`, `schema`, `smoke`, `mcp`, `vantage` and `help`; the last
+three are forwarded verbatim to the Go binary (in the first 3.1.0 candidate the front end answered `unknown decide subcommand` for them; that was fixed, and
+`tests/test_decide_cli.sh` compares the forwarded list with the commands the binary registers).
+
+### decide ask
+
+```
+llmctl decide ask --type {noul|choice|score} (--state S | --state-file F | --stdin) \
+    --instructions I [--criteria JSON | --criteria-file F] [--profile P] [--json]
+```
+
+Sends one typed question to the gateway over HTTPS (CA-verified; the access key
+is resolved by the client from `LLMCTL_API_KEY` or the installation `.env` and is
+never on a command line) and prints the typed answer as single-line JSON
+(pretty-printed only on a TTY without `--json`). The state travels as data
+(`--state-file`/`--stdin`), never as an argument. The answer carries the hosted shape
+plus `model` and `evidence: {profile, port, latency_ms}`.
+
+Flags: `--profile` (default: the gateway's default profile); `--type` (required);
+`--state` / `--state-file` / `--stdin`; `--instructions` (required - the question);
+`--criteria` (required for `choice`/`score`, optional for `noul`); `--endpoint`/`--cacert`;
+`--min-confidence X` (withhold a low-confidence answer: exit 10, JSON still printed);
+`--explain` (print the prompt/pairs and the per-option probabilities); `--dry-run`;
+`--json`; `--interactive` (delegate to the wizard, see below); `--question-file F` (one Typed Question JSON object
+instead of `--type/--instructions/--criteria`); `--permute K` (2..64: ask K cyclic option orders of every choice
+question and print the order-averaged answer with `evidence.permute.flip_rate`); `--retries N` (extra attempts after
+HTTP 429/503/529) and `--timeout SEC`.
+
+Criteria shapes:
+
+* `noul` — optional `{"true": "desc of yes", "false": "desc of no"}`.
+* `choice` — `{"option-key": "description", ...}`, 2..20 options
+  (`LLMCTL_DECIDE_MAX_OPTIONS`, hard cap 26 letters A..Z).
+* `score` — `["level 0 desc", "level 1 desc", ...]`, 2–10 ordered levels.
+
+Examples:
+
+```bash
+llmctl decide ask --type noul --state "Arithmetic facts." \
+    --instructions "Is 2+2=4?"
+# {"model":"decide-tiny","answers":{"q":{"type":"noul","noul":0.97...}},"evidence":{...}}
+
+llmctl decide ask --profile decide --type choice --state "Routing." \
+    --instructions "Which team handles invoices?" \
+    --criteria '{"billing":"handles invoices","legal":"contracts"}'
+# {"model":"decide","answers":{"q":{"type":"choice","choice":"billing","probabilities":{...},"confidence":...}},...}
+
+llmctl decide ask --type score --state "The deployment succeeded." \
+    --instructions "Rate the quality of this outcome." \
+    --criteria '["bad outcome","mixed outcome","excellent outcome"]'
+```
+
+Exit codes: 0 success; 1 backend/readout failure; 2 usage error (unknown
+type/flag, missing required flag, malformed criteria or numeric variable, option cap
+exceeded); 4 access-key problem; 5 certificate/TLS problem; 6 gateway not ready or
+unreachable; 10 abstained.
+
+### decide capacity
+
+```
+llmctl decide capacity [--json]
+```
+
+Renders the planner's `decision_instances` subtree: per decide profile,
+the max parallel instances in GPU mode and in CPU mode (**alternative
+placements, never additive**), slots per instance, per-instance RAM/VRAM,
+and tier-gate/fit reasons. This is a **read-only capacity report** — it
+reserves and starts nothing (v1 cannot launch N copies of one profile;
+`LLMCTL_PORT_<PROFILE>` gives one port override).
+
+Example (the `tests/fixtures/hw-baseline.json` fixture — asserted exactly
+by `tests/test_decide.sh`):
+
+```
+Host tier: baseline   RAM budget 25904 MiB, VRAM budget 10444 MiB
+profile        tier-ok  gpu-instances  cpu-instances  slots/instance  ram/instance      detail
+decide         yes      2              7              2               2048 MiB          VRAM 3671 MiB/instance
+decide-pro     no       0              0              2               2048 MiB          tier gate: host tier baseline below min_tier workstation
+decide-tiny    yes      6              16             4               2048 MiB          VRAM 1592 MiB/instance
+```
+
+(total_decision_slots: decide-tiny 64, decide 14, decide-pro 0.)
+
+### decide status
+
+```
+llmctl decide status [--json]
+```
+
+Table of every decide-capable catalog profile (`profile`, `port`, `running` = scheduler
+reservation exists, `enabled` = autostart marker exists), followed by the gateway
+(`llmctl-decide serve --status`, verified process identity) and the registry.
+`--json` prints `{"profiles": [...], "gateway": {"available", "running", "detail"},
+"registry": ...}`; when the binary is not built the gateway/registry parts are reported
+as unavailable, not as an error. Any other argument is exit 2.
+
+### decide interactive
+
+```
+llmctl decide interactive [--profile P] [--type T] [--state S]
+    [--state-file F] [--instructions I] [--criteria JSON] [--interactive]
+```
+
+A seven-step wizard (profile → type → state → instructions → criteria →
+confirmation → run) that is a **thin prompter over `decide ask`** — it
+contains no decision logic; every step has a flag/env equivalent and any
+step given that way is never prompted for. All prompts go to stderr;
+only the final single-line JSON lands on stdout (the wizard stays
+machine-pipeable).
+
+**Interactive-mode precedence rule (the project's single sanctioned
+interactive exception):** non-interactive is the default everywhere. The
+wizard activates only via: (1) the explicit
+`llmctl decide interactive` subcommand on a TTY; (2) the `--interactive`
+flag on `decide interactive` or `decide ask` (which also allows piped
+stdin, e.g. scripted heredocs); or (3) bare `llmctl decide` when both
+stdin and stdout are TTYs. Non-TTY stdin without `--interactive` is
+rc 2 (`interactive mode requires a TTY`), and
+`LLMCTL_DECIDE_NO_INTERACTIVE=1` makes every interactive path rc 2 — set
+it in CI.
+
+### decide serve
+
+```
+llmctl decide serve [--foreground] [--status] [--stop] [--bind H] [--port N]
+```
+
+Runs the Go HTTPS gateway (Jev/TypeSafe-shaped `POST /v1/systemone`; default port
+`LLMCTL_DECIDE_PORT`, 8095). It refuses to start without a valid access key (generated
+on first start into the installation `.env`, mode 0600) or certificate (created under
+`$LLMCTL_HOME/cert`). Default: detached, pidfile `$LLMCTL_STATE_DIR/decide/gateway.pid`;
+`--foreground` execs in place (for systemd/launchd); `--status` is rc 0 only for a
+verified running gateway; `--stop` signals only a process verified to be this gateway
+(a pidfile naming an unrelated process is refused; no pidfile is a clean no-op).
+Every `/v1/*` request needs `Authorization: Bearer <key>`; `/healthz` and `/readyz` stay
+open. Point a TypeSafe SDK at it with `TYPESAFE_BASE_URL=https://127.0.0.1:8095`,
+`TYPESAFE_API_KEY=$LLMCTL_API_KEY` and the local CA (`SSL_CERT_FILE`). Full reference:
+`docs/decide-gateway.md`.
+
+Real evidence (`tests/test_gateway_endpoints.sh`): the built binary serves HTTPS and
+answers every reachable row of the endpoint inventory (including `401` for an absent or
+wrong key), `serve --status` is 0 while running, `--stop` removes the pidfile and the
+port closes, and a pidfile naming an unrelated process is refused.
+`LLMCTL_DRY_RUN=1 llmctl decide serve ...` prints `DRY-RUN: <binary> serve <args>` and
+starts nothing (`tests/test_decide.sh`).
+
+### decide smoke
+
+(`llmctl decide smoke ...` forwards to the binary; `llmctl models download` calls the binary itself.)
+
+```
+llmctl decide smoke --url URL --protocol letter-logit|nli-onnx|systemone-native
+    [--key-file F] [--options N] [--expect-choice KEY] [--json]
+```
+
+Asks ONE engine a fixed deterministic choice question through the production driver
+for the protocol. Exit 0 only for a valid typed answer (finite probabilities summing to 1,
+and `--expect-choice` if given); 1 backend failure, 2 usage, 6 unreachable. The
+post-download decision smoke test of `llmctl models download` is built on it.
+
+### decide batch
+
+```
+llmctl decide batch [--in FILE|-] [--out FILE|-] [--profile P] [--min-confidence X] [--endpoint URL] [--cacert F]
+```
+
+Newline-delimited JSON in (`{"id":..., "state":..., "questions":{...}}`), newline-delimited JSON out in input order.
+A per-line failure is reported as `{"id":..., "error":{...}}` and the exit code is the highest-severity code seen.
+
+### decide models
+
+`llmctl decide models [--json]` lists the models the gateway serves (profile ids and aliases such as `jev-latest`,
+protocol, status and the advertised `limits`: `max_options`, `score_levels`, `max_state_chars`, `max_context_tokens`,
+`max_pairs`). Needs the access key.
+
+### decide key
+
+```
+llmctl decide key {doctor|show --yes-print|path|rotate [--grace N]|export --file F [--shell S] [--inline --yes-print]}
+```
+
+`doctor` reports the key source (`env`, `file`, `none`), the file mode and shadowing, never the value. `show --yes-print` is the only
+command that prints the key. `path` prints the `.env` path. `rotate` writes a new key atomically, prints a `scope:` line and an update
+checklist (see [runbooks](runbooks.md#rotate-the-access-key) for the environment-key caveat). `export` adds a managed block to a startup
+file (reference form by default). Exit 4 = key problem (including a weak operator-supplied key).
+
+### decide cert
+
+```
+llmctl decide cert {ensure [--mode ca-leaf|selfsigned|byo] [--san dns:N,ip:A] [--offline-ca-key DEST]|show [--json]|export DEST|renew [--reuse-key] [--san ...]|doctor [--json]}
+```
+
+`ensure` is idempotent; `show` prints paths, SHA-256 fingerprints, SANs and expiry; `export` copies the public CA (0644);
+`renew` re-issues the leaf and never touches the CA; `doctor` checks key/cert match, expiry (warns within 30 days), SAN drift and
+permissions. Exit 5 = certificate problem. There is no `cert reload`: send `SIGHUP` to the gateway or restart it.
+
+### decide registry | port | discover
+
+Service registry and port allocator (details: [registry-discovery](registry-discovery.md), recipes: [runbooks](runbooks.md#registry-reconcile)):
+`registry {register|unregister|list|reconcile|ack-corrupt|diff}`, `port {allocate|release|list}`, `discover [--json] [--kind K] [--label k=v] [--healthy-only]`.
+
+### decide schema
+
+`llmctl decide schema [--format json-schema|openai-tool|mcp]` prints the typed-question schema as a tool definition for coding agents
+(no network, no key). The MCP server itself is `build/llmctl-decide mcp` (stdio, one tool `decide`; a configuration problem becomes a tool error,
+never a default answer). See [agents](agents/README.md).
+
+### admit
+
+`llmctl admit <hf-repo> [--paper-only] [--json]` runs the candidate-model admission gates G1-G10; `llmctl admit --all` and `--summarize` cover the
+research register. It is a catalog-maintainer tool; gate G10 (a real run) is pending for 13 candidates ([limitations](limitations.md)).
+
 ## status
 
 ```
@@ -417,84 +661,31 @@ backends). Dies with `no log file yet: <path>` if the profile has never
 produced a log. `LLMCTL_DRY_RUN=1` prints the `tail` invocation instead of
 running it.
 
-## cluster (PLANNED, not yet implemented)
+## cluster | tenant | apikey (opt-in, need a running `llmctld`)
 
 ```
-llmctl cluster join <peer-addr>   # planned — not yet implemented
-llmctl cluster leave              # planned — not yet implemented
-llmctl cluster status             # real: queries a running llmctld daemon
+llmctl cluster join <peer-addr> | leave | status
+llmctl tenant create <name> | list | quota <name> [--requests-per-second N] [--max-concurrent-requests N] [--max-gpu-bytes N] [--max-cpu-cores N] [--max-ram-bytes N] [--max-storage-bytes N]
+llmctl apikey create <scope> | rotate <key-id>
 ```
 
-**Honest scope.** `cluster` is a real CLI surface today, but it is **not a
-functioning multi-node clustering feature**. Reading `bin/llmctl`'s actual
-`cluster)` case branch:
+These are thin clients of the opt-in cluster daemon `llmctld` (design: [cluster-architecture](cluster-architecture.md)). Every subcommand first calls
+`cluster::require_daemon`; when the daemon cannot be reached the command fails and names the endpoint - llmctl never silently falls back to single-host
+scheduling. Single-host usage never touches them.
 
-- Every `cluster` subcommand first calls `cluster::require_daemon`
-  (`lib/cluster.sh`), which hard-fails with a message naming the
-  unreachable endpoint and how to start `llmctld` if the daemon does not
-  answer its own `GET /v1/cluster/status`. **llmctl never silently falls
-  back to single-host scheduling when cluster mode is invoked but the
-  daemon is unreachable** — a silent fallback would misrepresent which
-  mode actually served the request (this is a deliberate anti-bluff
-  property of `cluster::require_daemon`, documented in its own header
-  comment).
-- `cluster join <peer-addr>`: once the daemon is confirmed reachable, the
-  command itself immediately `die`s with the literal message `llmctld
-  reachable but 'cluster join' is not yet implemented (Phase 9, US7)`.
-- `cluster leave`: same — dies with `llmctld reachable but 'cluster leave'
-  is not yet implemented (Phase 9, US7)`.
-- `cluster status`: this is the one subcommand with real behavior — once
-  the daemon is confirmed reachable, it issues a genuine HTTP request
-  (`cluster::request GET /v1/cluster/status`) against
-  `${LLMCTL_CLUSTER_ENDPOINT:-https://127.0.0.1:9443}` and prints the raw
-  response body. It requires a real running `llmctld` process; there is no
-  llmctl-side simulation of cluster state.
-
-Do not treat `cluster join`/`cluster leave` as working features — they are
-CLI stubs reserved for Phase 9 (User Story 7) and currently do nothing but
-fail with the message above, by design.
-
-## tenant (PLANNED, not yet implemented)
-
-```
-llmctl tenant create <name>
-llmctl tenant list
-llmctl tenant quota <name> [...]
-```
-
-**Honest scope: none of these are implemented.** Every `tenant` subcommand
-first calls `cluster::require_daemon` (same daemon-reachability hard-fail
-as `cluster`, above), and then — even with a reachable daemon —
-immediately `die`s:
-
-- `tenant create <name>`: `llmctld reachable but 'tenant create' is not
-  yet implemented (Phase 11, US9)`.
-- `tenant list`: `llmctld reachable but 'tenant list' is not yet
-  implemented (Phase 11, US9)`.
-- `tenant quota <name> [...]`: `llmctld reachable but 'tenant quota' is
-  not yet implemented (Phase 11, US9)`.
-
-There is no multi-tenancy capability in llmctl today. This surface exists
-only as a reserved CLI shape for Phase 11 (User Story 9).
-
-## apikey (PLANNED, not yet implemented)
-
-```
-llmctl apikey create <scope>
-llmctl apikey rotate <key-id>
-```
-
-**Honest scope: none of these are implemented.** Same pattern as `tenant`
-— `cluster::require_daemon` runs first, and then each subcommand `die`s
-unconditionally:
-
-- `apikey create <scope>`: `llmctld reachable but 'apikey create' is not
-  yet implemented (Phase 11, US9)`.
-- `apikey rotate <key-id>`: `llmctld reachable but 'apikey rotate' is not
-  yet implemented (Phase 11, US9)`.
-
-There is no API-key issuance or rotation capability in llmctl today. This
-surface exists only as a reserved CLI shape for Phase 11 (User Story 9).
+* **Transport (3.1.0).** The CLI talks to `${LLMCTL_CLUSTER_ENDPOINT:-https://127.0.0.1:9443}` with `curl` over **HTTP/3 with mutual TLS**, always verifying the
+  daemon certificate (never `-k`). Daemon certificates carry SANs (127.0.0.1, ::1, localhost, the hostname, the `-api-bind` host and the new `-advertise` name).
+  `llmctld cluster bootstrap|join` write `ca.crt`, `client.crt`, `client.key` into a 0700 directory (files 0600; default `cli/` next to the CA, `-cli-cert-dir`
+  overrides) and print `CLI_CERT_DIR=<dir>`; `llmctld cluster issue-cli-cert` re-issues them. Configure the CLI with `LLMCTL_CLUSTER_CERT_DIR` (that directory), or per item
+  `LLMCTL_CLUSTER_CACERT` / `LLMCTL_CLUSTER_CERT` / `LLMCTL_CLUSTER_KEY`, or `CURL_CA_BUNDLE` for the trust anchor only. A group/other-readable client key is refused.
+  The bearer token (`LLMCTL_CLUSTER_TOKEN`) never appears on the command line (needs curl >= 7.55). Full detail: [llmctld-cluster-tls](llmctld-cluster-tls.md).
+* **The one remaining limit.** The host `curl` must list the `HTTP3` feature (`curl --version`); many distribution builds do not. Otherwise these commands report `llmctld unreachable` and the cluster test
+  suites SKIP with a reason. How to get such a curl: [llmctld-cluster-tls](llmctld-cluster-tls.md#getting-a-curl-that-lists-http3). Client certificates are valid 365 days and stop being trusted after a finalised CA rotation: re-run `llmctld cluster issue-cli-cert`.
+* **What was verified.** The certificate/SAN/trust-bundle logic and the CLI argument construction are covered by tests, and the CLI was verified (2026-10-08) end to end with a
+  real curl 8.22.0 built with ngtcp2/nghttp3 in a private test prefix: `cluster status`, `cluster join/leave`, `apikey` and `tenant` suites passed on the success path (loopback, one node).
+  That curl is a private test build, not packaged by llmctl; the second-peer join scenario was not exercised.
+* `cluster join` sends this host's `hostname` as the peer id and `<peer-addr>` as the address; `apikey create <scope>` uses the scope as both owner id and sole scope entry.
+  Multi-node behaviour with a second real peer is covered by the Go integration tests of `llmctld`, not by a shell test.
 
 ## version
 
@@ -502,9 +693,9 @@ surface exists only as a reserved CLI shape for Phase 11 (User Story 9).
 llmctl version
 ```
 
-Prints `llmctl <version>`, e.g. `llmctl 0.1.0` (the `LLMCTL_VERSION`
-constant at the top of `bin/llmctl`). Real evidence (`tests/test_cli.sh`):
-the output contains the literal substring `llmctl 0.`.
+Prints `llmctl <version>`, e.g. `llmctl 3.1.0` (the `LLMCTL_VERSION`
+constant at the top of `bin/llmctl`, kept equal to the `VERSION` file at the repository root). Real evidence
+(`tests/test_cli.sh`): the output contains the literal substring `llmctl 3.1.0`.
 
 ## help
 
@@ -537,8 +728,17 @@ the relevant `lib/*.sh` module.
 | `LLMCTL_CLUSTER_TOKEN=<jwt>` | Bearer token sent as `Authorization: Bearer <jwt>` on cluster/tenant/apikey HTTP requests. |
 | `LLMCTL_SEED=<n>` | Appends `--seed <n> --temp 0` to a `llama` profile's launch arguments (deterministic live-challenge mode). Opt-in only; unset by default so everyday interactive sessions are unaffected. |
 | `LLMCTL_SMOKE=0` | Disables the post-download smoke test in `models download` (still logged as an explicit skip, never silently omitted). |
-| `LLMCTL_SMOKE_PORT` / `LLMCTL_SMOKE_TIMEOUT` | Port (default `18090`) and timeout in seconds (default `120`) for the post-download GGUF smoke test. |
+| `LLMCTL_SMOKE_PORT` / `LLMCTL_SMOKE_TIMEOUT` | Port (default `auto` = a free ephemeral port per smoke test; a number pins it and is refused when in use) and timeout in seconds (default `120`) for the post-download smoke tests (GGUF, decision, onnx). Readiness is proven against the launched process, never just "something answers". |
 | `LLMCTL_LLAMA_SERVER` | Override path to the `llama-server` binary (used by `start`/`enable`/`models download`'s smoke test). |
 | `LLMCTL_COLI_BIN` | Override the `coli` launcher binary name/path used by `colibri` profile launches. |
 | `LLMCTL_UNIT_DIR` (Linux) | Override the systemd `--user` unit directory `install` writes to. |
 | `LLMCTL_PLIST_DIR` (macOS) | Override the LaunchAgents directory `install`/`enable` writes to. |
+| `LLMCTL_DECIDE_PROFILE` | Default profile for `decide` commands (default: `decide-tiny` if downloaded, else `decide`). |
+| `LLMCTL_DECIDE_PORT` | Gateway port for `decide serve` (default `8095`). |
+| `LLMCTL_DECIDE_TEMPERATURE` | Calibration temperature dividing letter logprobs before renormalization in the gateway's `letter-logit` driver (default `1.0`). |
+| `LLMCTL_DECIDE_NO_INTERACTIVE=1` | Makes every `decide` interactive path exit 2 — set it in CI. |
+| `LLMCTL_DECIDE_MAX_OPTIONS` | Practical cap on choice options (default `20`; hard cap 26). |
+| `LLMCTL_DECIDE_TIMEOUT` | Seconds: the gateway's end-to-end budget per request (default `8`) and, for `decide ask`, the per-attempt wait (default `30`; `--timeout` overrides). |
+| `LLMCTL_API_KEY` | The one access key of the decision gateway and llmctl's own clients (environment, else installation `.env`, else generated on first `decide serve`). Never printed except by `decide key show --yes-print`. |
+| `LLMCTL_DECIDE_MAX_STATE_CHARS` | State budget for decoder profiles (default `8192`); over-budget is rejected with 422 unless `LLMCTL_DECIDE_TRUNCATE=1` (then head+tail shortened, header `x-llmctl-decide-truncated: true`). |
+| `LLMCTL_ONNX_MAX_PAIRS` / `LLMCTL_ONNX_MAX_BODY_BYTES` / `LLMCTL_ONNX_MAX_CONCURRENCY` / `LLMCTL_ONNX_SOCKET_TIMEOUT` | Limits of the internal encoder scoring runtime (`lib/onnx_server.py`; defaults 64 / 4 MiB / 4 / 30 s). (Historical: the retired `LLMCTL_ONNX_FAKE` seam no longer exists.) the runtime key comes from a 0600 `--api-key-file`, never the environment. |

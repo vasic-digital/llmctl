@@ -1,0 +1,80 @@
+  ok: scripts/install.sh exists (GREEN half of the RED/GREEN pair)
+  ok: bash -n scripts/install.sh (syntax check - tests/test_syntax.sh's own script glob does not currently enumerate top-level scripts/*.sh, only scripts/release/*.sh, so this file asserts it directly)
+  === Step 1: llmctl setup (doctor -> build engines -> hardware plan) ===
+  
+  === Step 2: download profile 'small' (idempotent - skips re-download when already present+verified) ===
+  
+  === Step 3: llmctl install (writes systemd --user unit templates / prepares launchd dir; also attempts 'loginctl enable-linger' on Linux) ===
+  
+  === Step 4: enable + start 'small' ===
+  
+  === Step 5: verify systemd --user lingering (reboot/logout survival) ===
+  PASS: linger is enabled for milosvasic - the profile(s) enabled above will survive both logout and reboot.
+  
+  === Step 6: final status ===
+  profile port mode RAM VRAM enabled state
+  
+  install complete: small
+  ok: happy path: exit code 0
+  ok: happy path: linger PASS reported
+  ok: happy path: default profile is 'small' when none given
+  ok: happy path: 'llmctl setup' was invoked
+  ok: happy path: 'llmctl models download small' was invoked (default profile)
+  ok: happy path: 'llmctl install' was invoked (writes the systemd unit TEMPLATE 'enable' depends on - see scripts/install.sh's own header for the real, root-caused reason this step exists)
+  ok: happy path: 'llmctl enable small' was invoked
+  ok: happy path: 'llmctl status' was invoked as the final step
+  ok: happy path: real invocation order is setup -> download -> install -> enable -> status (proves scripts/install.sh's own sequencing, not just that every subcommand happened to run somewhere)
+  === Step 1: llmctl setup (doctor -> build engines -> hardware plan) ===
+  
+  === Step 2: download profile 'vision' (idempotent - skips re-download when already present+verified) ===
+  
+  === Step 3: llmctl install (writes systemd --user unit templates / prepares launchd dir; also attempts 'loginctl enable-linger' on Linux) ===
+  
+  === Step 4: enable + start 'vision' ===
+  
+  === Step 5: verify systemd --user lingering (reboot/logout survival) ===
+  FAIL: linger is NOT confirmed enabled for milosvasic.
+    'llmctl install' already attempts 'loginctl enable-linger' automatically
+    (lib/service_linux.sh), but that call only WARNS on failure rather than
+    aborting - it can silently fail to take effect (e.g. missing polkit/D-Bus
+    permission) while every step above still reports success.
+  
+    ACTION REQUIRED (never attempted automatically - privilege escalation is
+    never performed unattended by this script or by llmctl itself):
+  
+        sudo loginctl enable-linger milosvasic
+  
+    Without confirmed lingering, the profile(s) enabled above will stop at the
+    next logout and will NOT restart automatically after a reboot.
+  ok: linger-not-confirmed path: exit code 1 (non-zero - never silently proceeds)
+  ok: linger-not-confirmed path: FAIL is reported
+  ok: linger-not-confirmed path: actionable sudo instruction is printed (never attempted automatically)
+  ok: linger-not-confirmed path: --profile vision was honored (not the default 'small')
+  ok: linger-not-confirmed path: enable ran for the requested profile before the linger check failed it
+  ok: linger-not-confirmed path: 'llmctl status' (Step 6) did not run after the Step 5 linger check failed
+  === Step 1: llmctl setup (doctor -> build engines -> hardware plan) ===
+  
+  === Step 2: download profile 'small' (idempotent - skips re-download when already present+verified) ===
+  
+  === Step 3: llmctl install (writes systemd --user unit templates / prepares launchd dir; also attempts 'loginctl enable-linger' on Linux) ===
+  
+  === Step 4: enable + start 'small' ===
+  
+  === Step 5: verify systemd --user lingering (reboot/logout survival) ===
+  [dry-run] would run: loginctl show-user $(id -un) -p Linger
+  
+  === Step 6: final status ===
+  profile port mode RAM VRAM enabled state
+  
+  install complete: small
+  ok: --dry-run: exit code 0
+  ok: --dry-run: linger step is honestly skipped, not silently fabricated
+  ok: --dry-run: LLMCTL_DRY_RUN=1 was genuinely exported into every llmctl invocation's environment
+  ok: --skip-setup: exit code 0
+  ok: --skip-setup: Step 1 is honestly reported as skipped
+  ok: --skip-setup: 'llmctl setup' was NOT invoked
+  ok: unknown flag: exit code 2
+  ok: --profile with no argument: exit code 2
+  SKIP: loginctl-absent SKIP branch
+    reason: loginctl is present even on the narrowed PATH on this host
+RESULT: PASS

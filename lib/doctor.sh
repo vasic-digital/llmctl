@@ -9,6 +9,8 @@ _doc_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${_doc_dir}/common.sh"
 # shellcheck source=os_detect.sh
 source "${_doc_dir}/os_detect.sh"
+# shellcheck source=portreg.sh
+source "${_doc_dir}/portreg.sh"
 
 DOCTOR_FAILS=0
 DOCTOR_WARNS=0
@@ -108,6 +110,73 @@ doctor_run() {
     _doc_pass "llama-server built"
   else
     _doc_warn "llama-server not built yet (llmctl build llama)"
+  fi
+
+  # Port allocator / service registry (FR-088..FR-091). Only meaningful when
+  # the llmctl-decide binary exists; WARN (never FAIL) when it is absent so a
+  # plain chat-only install keeps a clean report. When active, the registry
+  # rows MUST equal the live service set - a row without a live service, or a
+  # live service without a row, is a defect (FR-089).
+  if declare -F portreg_bin >/dev/null 2>&1; then
+    if portreg_bin >/dev/null 2>&1; then
+      local _doc_reg_out
+      if declare -F sched_load_backend >/dev/null 2>&1; then sched_load_backend 2>/dev/null || true; fi
+      if ! portreg_active; then
+        _doc_pass "service registry check skipped (adapter off: dry run or LLMCTL_PORTREG=0)"
+      elif _doc_reg_out="$(portreg_diff_report 2>&1)"; then
+        _doc_pass "service registry == live service set (${_doc_reg_out})"
+      else
+        _doc_fail "service registry differs from the live service set: $(printf '%s' "${_doc_reg_out}" | paste -sd';' -) (fix: llmctl-decide registry reconcile)"
+      fi
+    else
+      _doc_warn "llmctl-decide not built - dynamic ports and the service registry are unavailable (llmctl build decide)"
+    fi
+  fi
+
+  # Registry rows that stay "unknown" (an https service with no CA to verify it against) are never
+  # removed by default (a missing CA is not proof the service is gone, G-068); they pile up until a
+  # CA appears or the operator opts in to forgetting them (G-074).
+  if declare -F portreg_active >/dev/null 2>&1 && portreg_active 2>/dev/null; then
+    local _doc_unknown
+    _doc_unknown="$("$(portreg_bin)" registry list --json 2>/dev/null | python3 -c '
+import json, sys
+try:
+    rows = json.load(sys.stdin).get("services", [])
+except Exception:
+    rows = []
+u = [r["name"] + " (since " + r["unknown_since"] + ")" for r in rows if r.get("unknown_since")]
+print("; ".join(u))' 2>/dev/null || true)"
+    if [[ -n "${_doc_unknown}" ]]; then
+      _doc_warn "registry rows that cannot be certified (https, no CA found): ${_doc_unknown} - set LLMCTL_CACERT, or forget them with: llmctl-decide registry reconcile --prune-unknown-after 24h"
+    fi
+  fi
+
+  # Units installed by an earlier llmctl keep their old body until `llmctl install` is re-run
+  # (G-067: StartLimitIntervalSec in [Service] is ignored by systemd).
+  if declare -F sched_load_backend >/dev/null 2>&1; then sched_load_backend 2>/dev/null || true; fi
+  if declare -F svc_stale_units >/dev/null 2>&1; then
+    local _doc_stale
+    _doc_stale="$(svc_stale_units 2>/dev/null | paste -sd';' - || true)"
+    if [[ -n "${_doc_stale}" ]]; then
+      _doc_warn "stale service unit(s): ${_doc_stale}"
+    fi
+  fi
+
+  # onnx engine (encoder decision profiles, e.g. decide-nli): WARN not FAIL
+  # when the python deps are missing - the llama decision path (decide-tiny/
+  # decide/decide-pro/decide-2b/decide-max) remains fully functional without
+  # them, and the onnx runner dies with a clear message at launch anyway.
+  local _doc_onnx_py="${LLMCTL_DATA_DIR}/venv-onnx/bin/python"
+  [[ -x "${_doc_onnx_py}" ]] || _doc_onnx_py="python3"
+  if "${_doc_onnx_py}" -B -c 'import onnxruntime' 2>/dev/null; then
+    _doc_pass "onnx: onnxruntime importable (${_doc_onnx_py})"
+  else
+    _doc_warn "onnx: onnxruntime NOT importable - decide-nli (onnx engine) cannot run real inference (run: llmctl build onnx - hash-locked private venv; llama decision profiles are unaffected)"
+  fi
+  if "${_doc_onnx_py}" -B -c 'import sentencepiece' 2>/dev/null; then
+    _doc_pass "onnx: sentencepiece importable"
+  else
+    _doc_warn "onnx: sentencepiece NOT importable - DeBERTa-class spm.model tokenizers need it (run: llmctl build onnx; llama decision profiles are unaffected)"
   fi
 
   # Cluster mode (optional): only relevant when the operator enables llmctld.

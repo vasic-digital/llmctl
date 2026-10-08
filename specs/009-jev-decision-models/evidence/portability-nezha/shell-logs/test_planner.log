@@ -1,0 +1,94 @@
+  ok: baseline tier
+  ok: baseline RAM budget (30000-4096)
+  ok: baseline VRAM budget (12288*0.85)
+  ok: baseline recommended set (decide-tiny/decide + iter2 decide-nli/decide-2b recommended)
+  ok: baseline fast mode
+  ok: baseline coder mode (17.7GiB > 10444MiB VRAM)
+  ok: baseline fast VRAM footprint (4692 model + 1024 KV)
+  ok: baseline coder RAM footprint (17697 + 4096 KV)
+  ok: baseline gates ws-dense-32b by tier
+  ok: baseline co-residency groups (decide-nli joins group 2 as VRAM-0; decide-2b spills to group 3)
+  ok: decide-nli mode is always cpu (onnx encoder)
+  ok: decide-nli RAM reservation = 1663*3//2 + 512 = 3006 MiB
+  ok: decide-nli VRAM need is 0 (CPU inference)
+  ok: decide-nli ctx default 512 (encoder, not a generation ctx)
+  ok: decide-nli fits baseline (3006 <= 25904)
+  ok: decide-nli recommended on baseline (min_tier below-minimum)
+  ok: decide-2b GPU footprint (1918 weights + 1088 KV)
+  ok: decide-max tier-gated on baseline
+  ok: decide-max GPU footprint (9086 weights + 1088 KV)
+  ok: workstation fixture tier
+  ok: workstation recommended set (all 16 profiles: decide-pro/decide-max's workstation tier gate passes on a datacenter host)
+  ok: ws-dense-32b fully offloaded
+  ok: colibri-glm mode
+  ok: workstation co-residency groups (group 6 = all five remaining decide profiles)
+  ok: apple tier (64GB unified RAM)
+  ok: apple recommended set (colibri-glm gated to datacenter; all six decide profiles fit 64GB unified memory)
+  ok: apple gates colibri-glm
+  ok: apple fast uses unified-memory GPU
+  ok: human plan header
+  ok: human plan groups
+  ok: catalog_classify_tier: baseline fixture
+  ok: catalog_classify_tier: workstation fixture (actually computes datacenter, matching catalog_plan_json above)
+  ok: catalog_classify_tier: apple fixture
+  ok: catalog_classify_tier: constrained fixture (8 cores / 32768 MiB RAM sits exactly at the baseline threshold)
+  ok: vram-contended VRAM budget uses REAL FREE (3000*0.85), not total (12288*0.85=10444)
+  ok: small still fits this host overall (via cpu-mode RAM fallback), just no longer via gpu mode
+  ok: small correctly falls through to cpu mode instead of a gpu mode that would OOM
+  ok: baseline decide-tiny gpu instances (min(10444//1592, 25904//2048)=6)
+  ok: baseline decide-tiny cpu instances (25904//1592=16)
+  ok: baseline decide-tiny slots per instance (parallel=4)
+  ok: baseline decide-tiny total slots (max(6,16)*4=64)
+  ok: baseline decide gpu instances (min(10444//3671, 12)=2)
+  ok: baseline decide cpu instances (25904//3671=7)
+  ok: baseline decide total slots (max(2,7)*2=14)
+  ok: baseline decide-pro tier-gated to 0 gpu instances
+  ok: baseline decide-pro tier-gated to 0 cpu instances
+  ok: baseline decide-pro carries a tier-gate reason
+  ok: baseline decide-nli gpu instances ALWAYS 0 (CPU-only onnx encoder)
+  ok: baseline decide-nli cpu instances (25904//3006=8)
+  ok: baseline decide-nli per-instance VRAM 0
+  ok: baseline decide-nli per-instance RAM 3006 (1663*3//2+512)
+  ok: baseline decide-nli slots per instance (parallel=1: per-option forward passes)
+  ok: baseline decide-nli total slots (max(0,8)*1=8)
+  ok: baseline decide-2b gpu instances (min(10444//3006, 12)=3)
+  ok: baseline decide-2b cpu instances (25904//3006=8)
+  ok: baseline decide-2b total slots (max(3,8)*2=16)
+  ok: baseline decide-max tier-gated to 0
+  ok: baseline decide-max carries a tier-gate reason
+  ok: workstation decide-tiny gpu instances (min(27852//1592, 235904//2048)=17)
+  ok: workstation decide-tiny cpu instances (235904//1592=148)
+  ok: workstation decide gpu instances (min(27852//3671, 115)=7)
+  ok: workstation decide cpu instances (235904//3671=64)
+  ok: workstation decide-pro gpu instances (min(27852//5260, 115)=5)
+  ok: workstation decide-pro cpu instances (235904//5260=44)
+  ok: workstation decide-pro total slots (max(5,44)*2=88)
+  ok: tiny decide-tiny: 0 (0 MiB RAM budget vs 1592 MiB footprint)
+  ok: tiny decide-tiny: footprint reason (tier gate passes)
+  ok: tiny decide: 0 (tier-gated)
+  ok: tiny decide: tier-gate reason
+  ok: tiny decide-pro: 0 (tier-gated)
+  ok: tiny decide-nli: gpu ALWAYS 0 (CPU-only engine)
+  ok: tiny decide-nli: 0 (0 MiB RAM budget vs 3006 MiB reservation)
+  ok: tiny decide-nli: footprint reason (tier gate passes at below-minimum)
+  ok: vram-contended decide-tiny gpu instances (min(2550//1592, 12)=1, down from 6 on baseline)
+  ok: vram-contended decide-tiny cpu instances UNCHANGED (25904//1592=16)
+  ok: vram-contended decide gpu instances (2550 < 3671 -> 0, down from 2 on baseline)
+  ok: vram-contended decide cpu instances UNCHANGED (25904//3671=7)
+  ok: constrained decide-tiny gpu instances (min(6963//1592, 12)=4)
+  ok: constrained decide gpu instances (min(6963//3671, 12)=1)
+  ok: decide capacity --json decision_instances == plan --json decision_instances
+  ok: human plan: Decision capacity section header
+  ok: human plan: Decision capacity lists decide-tiny
+  ok: human plan: Decision capacity lists decide-nli (onnx profile)
+  ok: decision_instances.protocol: decide-tiny letter-logit (additive field)
+  ok: decision_instances.protocol: decide-nli nli-onnx
+  ok: decide-tiny best placement on baseline is cpu (16 cpu > 6 gpu instances)
+  ok: tier-gated decide-pro has no best placement (null)
+  ok: decide-pro tier_ok False on baseline (additive field)
+  ok: placements.cpu footprint exposed for the admission probe
+  ok: decide-nli has no gpu placement (CPU-only encoder)
+  SKIP: SC-012 planner comparison vs previous release
+    reason: git tag v3.0.2 (previous release catalog) not available in this checkout
+  ok: decide rank: tiny > nli > 2b > base > pro > max
+RESULT: PASS

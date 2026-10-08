@@ -1,0 +1,7 @@
+--- FAIL: TestNativeBatchTooLargeIs422 (0.00s)
+    native_engine_advance_test.go:41: want 422 validation_failed, got The decision backend failed.
+--- FAIL: TestNative501NotADecisionModelIsNotRetryable (0.00s)
+    native_engine_advance_test.go:74: want non-retryable 500, got The decision backend failed.
+FAIL
+FAIL	github.com/vasic-digital/llmctl/internal/gateway	0.014s
+FAIL

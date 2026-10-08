@@ -1,0 +1,72 @@
+  ok: smoke (2 options, expect billing) -> rc 0
+  ok: smoke: typed choice answer is the first option
+  ok: smoke: exact renormalised probabilities (computed in-test), finite, summing to 1
+  ok: smoke --options 4 -> rc 0
+  ok: smoke --options 4: four lettered options answered
+  ok: smoke human output names the typed answer
+  ok: smoke with a wrong expected choice -> rc 1 (backend failure, never a false PASS)
+  ok: smoke with an unknown protocol -> rc 2
+  ok: smoke against a closed port -> rc 6 (unreachable)
+  ok: retired helper decide_options_json is no longer defined
+  ok: retired helper _decide_opts_part is no longer defined
+  ok: retired helper decide_build_prompt is no longer defined
+  ok: retired helper decide_query_logprobs is no longer defined
+  ok: retired helper decide_shape_response is no longer defined
+  ok: lib/decide_gateway.py (retired Python gateway) is gone
+  ok: decide_ask delegates: exit 0
+  ok: decide_ask prints the Go client's answer unchanged
+  ok: decide_ask passes subcommand and every flag through verbatim (no flag parsing here)
+  ok: decide_ask returns the client's exit code 1 unchanged
+  ok: decide_ask returns the client's exit code 2 unchanged
+  ok: decide_ask returns the client's exit code 4 unchanged
+  ok: decide_ask returns the client's exit code 5 unchanged
+  ok: decide_ask returns the client's exit code 6 unchanged
+  ok: decide_ask returns the client's exit code 10 unchanged
+  ok: decide_batch delegates
+  ok: decide_models delegates
+  ok: decide_key delegates
+  ok: decide_cert delegates
+  ok: decide_serve delegates generically
+  ok: decide_serve honours LLMCTL_DRY_RUN
+  ok: dry-run shows the generic delegation
+  ok: cmd_decide delegates the other Go subcommands
+  ok: unknown decide subcommand -> rc 2
+  ok: lib/decide.sh never touches the access key (the Go client resolves it)
+  ok: unusable LLMCTL_DECIDE_BIN -> rc 1
+  ok: unusable LLMCTL_DECIDE_BIN: names the variable
+  ok: decide interactive (non-TTY) -> rc 2
+  ok: interactive non-TTY refusal message
+  ok: decide interactive with LLMCTL_DECIDE_NO_INTERACTIVE=1 -> rc 2
+  ok: interactive disabled message
+  ok: --interactive flag cannot override LLMCTL_DECIDE_NO_INTERACTIVE=1 -> rc 2
+  ok: wizard: end of input at a prompt -> rc 2
+  ok: wizard: end of input -> explanatory message
+  ok: wizard: prompt text is emitted with piped stdin
+  ok: decide ask --interactive (flag activation) -> rc 0
+  ok: decide ask --interactive: the client's answer is printed
+  ok: wizard calls the client with the state on --stdin, never as an argument
+  ok: wizard sends the state through the client's stdin
+  ok: wizard happy path (scripted heredoc) -> rc 0
+  ok: wizard stdout is single-line JSON (prompts went to stderr)
+  ok: wizard happy path: multi-line state read until the lone '.'
+  ok: wizard happy path: criteria built in option order, no --profile (gateway default)
+  ok: wizard returns the client's exit code (4)
+  ok: wizard prints no answer when the client failed
+  ok: wizard returns exit code 10 on abstention
+  ok: wizard prints the withheld answer's JSON on abstention
+  ok: wizard abort at Proceed? -> rc 0
+  ok: wizard abort: no JSON emitted on stdout
+  ok: decide capacity --json: tier
+  ok: decide capacity --json: decide-tiny gpu instances (10444//1592=6, 25904//2048=12 -> min=6)
+  ok: decide capacity human: lists decide-tiny
+  ok: decide capacity human: table header
+  ok: decide capacity: unknown argument -> rc 2 (N-07)
+  ok: decide status --json: decide profile row present
+  ok: decide status --json: decide not running in the isolated env
+  ok: decide status --json: gateway part present when the binary exists
+  ok: decide status --json: absent binary is tolerated, not an error
+  ok: decide status: unknown argument -> rc 2 (N-07)
+  ok: engine class: decide-nli is an onnx-engine profile
+  ok: engine class: decide stays llama-engine
+  ok: engine class: decide-2b is llama-engine
+RESULT: PASS

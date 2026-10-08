@@ -1,0 +1,5 @@
+== up (rootless, through the Containers submodule) ==
+  FAIL: vantage up succeeds (vantage up: vantage: no usable local image (offline, --pull=never): gcr.io/distroless/static-debian12:nonroot: exit 125: Error: gcr.io/distroless/static-debian12:nonroot: image not known; docker.io/library/alpine:3.20: exit 125: Error: docker.io/library/alpine:3.20: image not known; docker.io/librar)
+    expected: 0
+    actual:   1
+test_vantage: FAIL (up)

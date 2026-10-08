@@ -1,0 +1,9 @@
+{
+ "task": "T009",
+ "dependency": "github.com/gin-gonic/gin v1.12.0",
+ "operator_mandated": "2026-10-07 (Go + Gin Gonic for Go APIs)",
+ "existence_verdict": "VERIFIED",
+ "evidence": "go get resolved it from proxy.golang.org; `go mod verify` printed 'all modules verified' against go.sum; module graph size 56",
+ "vulnerability_scan": "UNKNOWN: govulncheck is not installed on this host",
+ "offline_build": "UNCONFIRMED: only partially in the local module cache (x/sys missing offline), so first build needs network or a warm cache"
+}

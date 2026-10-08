@@ -1,0 +1,66 @@
+  ok: binary built into the temp dir
+  ok: path: exit 0
+  ok: path: prints <root>/.env
+  ok: doctor (no key yet): exit 0
+  ok: doctor: reports source none
+  ok: doctor must not create/generate the key file
+  ok: show without --yes-print: usage exit 2
+  ok: show --yes-print with no key: exit 4
+  ok: rotate (first key): exit 0
+  ok: rotate created .env
+  ok: .env mode is 0600
+  ok: stored key matches format
+  ok: rotate output does not contain the key
+  ok: doctor (file key): exit 0
+  ok: doctor stdout/stderr never contains the key
+  ok: doctor: source file
+  ok: doctor: reports mode
+  ok: show --yes-print: exit 0
+  ok: show --yes-print prints exactly the stored key
+  ok: rotate --grace: exit 0
+  ok: rotated key differs
+  ok: previous key kept in file during grace
+  ok: previous key has an expiry
+  ok: .env stays 0600 after rotate
+  ok: rotate --grace output has no key values
+  ok: doctor with env key: exit 0
+  ok: doctor: source env
+  ok: doctor: reports .env shadowed by env
+  ok: doctor does not print env key
+  ok: doctor with malformed env key: exit 4
+  ok: blank env key is an error (exit 4), not 'no key'
+  ok: doctor on loose-mode .env: exit 0 after tightening
+  ok: loose .env tightened to 0600
+  ok: path honours LLMCTL_ENV_FILE
+  ok: rotate into overridden path: exit 0
+  ok: key written to LLMCTL_ENV_FILE
+  ok: default .env untouched when overridden
+  ok: export without --file: usage exit 2 (never guesses a startup file)
+  ok: startup file untouched without explicit command
+  ok: export --file: exit 0
+  ok: export shows exactly what it writes
+  ok: reference-form export does not print the key
+  ok: managed begin marker present
+  ok: second export: exit 0
+  ok: second export is idempotent (file byte-identical)
+  ok: exactly one managed block after two exports
+  ok: backup file made
+  ok: backup holds original content
+  ok: export --inline without --yes-print: usage exit 2
+  ok: inline refused: nothing written
+  ok: export --inline --yes-print: exit 0
+  ok: inline form carries the literal key
+  ok: inside git work tree, not ignored: refused (exit 4)
+  ok: refusal names the path
+  ok: refusal names the fix
+  ok: nothing created when refused
+  ok: inside git work tree, ignored: allowed
+  ok: ignored .env created 0600
+  ok: ignored .env is not tracked
+  ok: concurrent rotations leave exactly one key line
+  ok: concurrent writes leave 0600
+  ok: no temp files left behind
+  ok: symlinked .env refused (exit 4)
+  ok: unknown command: exit 2
+  ok: no binary dropped in the repo root
+RESULT: PASS

@@ -22,7 +22,10 @@ source "${_dl_dir}/common.sh"
 # shellcheck source=catalog.sh
 source "${_dl_dir}/catalog.sh"
 
-LLMCTL_SMOKE_PORT="${LLMCTL_SMOKE_PORT:-18090}"
+# LLMCTL_SMOKE_PORT: unset / "auto" (default) = a FREE ephemeral port is chosen for every smoke test;
+# a number pins it (refused when something already listens there). Either way readiness is proven
+# against THIS test's own server process (_dl_smoke_wait), never merely "something answers /health".
+LLMCTL_SMOKE_PORT="${LLMCTL_SMOKE_PORT:-auto}"
 LLMCTL_SMOKE_TIMEOUT="${LLMCTL_SMOKE_TIMEOUT:-120}"
 # LLMCTL_SMOKE=0 disables the smoke test explicitly (evidence still logged).
 LLMCTL_SMOKE="${LLMCTL_SMOKE:-1}"
@@ -249,6 +252,70 @@ _dl_download_file() {
 }
 
 # --- smoke test --------------------------------------------------------------
+# --- smoke-test port + readiness (C-06) -------------------------------------
+# A fixed port plus "curl /health succeeds" proved nothing about the process this test launched: if
+# anything else (another llmctl download, a sibling project) already listened there, /health
+# answered on the first poll, the probes ran against THAT foreign server, and the verdict was
+# recorded for the wrong model while the launched child died on bind.
+
+# _dl_port_in_use <port> -> rc 0 when something accepts connections on 127.0.0.1:<port>.
+_dl_port_in_use() { ( exec 3<>"/dev/tcp/127.0.0.1/$1" ) 2>/dev/null; }
+
+# _dl_smoke_pick_port -> prints the port for one smoke test (see LLMCTL_SMOKE_PORT above).
+_dl_smoke_pick_port() {
+  local p="${LLMCTL_SMOKE_PORT:-auto}"
+  if [[ "${p}" != "auto" && "${p}" != "0" ]]; then
+    [[ "${p}" =~ ^[0-9]+$ && "${p}" -ge 1 && "${p}" -le 65535 ]] || { err "LLMCTL_SMOKE_PORT='${p}' is not a port number (or 'auto')"; return 1; }
+    if _dl_port_in_use "${p}"; then err "LLMCTL_SMOKE_PORT=${p} is already in use by another program; use another port or 'auto'"; return 1; fi
+    printf '%s\n' "${p}"; return 0
+  fi
+  if have_cmd python3; then
+    python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1",0)); print(s.getsockname()[1])' && return 0
+  fi
+  local c
+  for (( c=18090; c<19090; c++ )); do _dl_port_in_use "${c}" || { printf '%s\n' "${c}"; return 0; }; done
+  err "no free port for the smoke test"; return 1
+}
+
+# _dl_pid_owns_port <pid> <port> -> rc 0: the process holds the LISTENING socket of that port;
+# rc 1: it does not; rc 2: this host offers no way to tell (no procfs, lsof or ss).
+_dl_pid_owns_port() {
+  local pid="$1" port="$2" hex ino fd
+  if [[ -r /proc/net/tcp ]]; then
+    hex="$(printf '%04X' "${port}")"
+    for ino in $(awk -v h=":${hex}" '$4=="0A" && substr($2, length($2)-length(h)+1)==h {print $10}' /proc/net/tcp /proc/net/tcp6 2>/dev/null); do
+      for fd in /proc/"${pid}"/fd/*; do
+        [[ "$(readlink "${fd}" 2>/dev/null)" == "socket:[${ino}]" ]] && return 0
+      done
+    done
+    return 1
+  fi
+  if have_cmd lsof; then lsof -nP -a -p "${pid}" -iTCP:"${port}" -sTCP:LISTEN >/dev/null 2>&1; return; fi
+  if have_cmd ss; then ss -ltnp "sport = :${port}" 2>/dev/null | grep -q "pid=${pid},"; return; fi
+  return 2
+}
+
+# _dl_smoke_wait <pid> <port> <path> - poll until THIS pid is alive, holds the listening socket of
+# <port> AND <path> answers. Sets _DL_SMOKE_WAITED (seconds) and _DL_SMOKE_WHY on failure.
+_dl_smoke_wait() {
+  local pid="$1" port="$2" path="$3" i own
+  _DL_SMOKE_WHY="did not become healthy within ${LLMCTL_SMOKE_TIMEOUT}s"
+  for (( i=0; i<LLMCTL_SMOKE_TIMEOUT; i++ )); do
+    _DL_SMOKE_WAITED="${i}"
+    if ! kill -0 "${pid}" 2>/dev/null; then _DL_SMOKE_WHY="the server process exited before becoming ready (port ${port} may have been taken)"; return 1; fi
+    if curl -fsS "http://127.0.0.1:${port}${path}" >/dev/null 2>&1; then
+      own=0; _dl_pid_owns_port "${pid}" "${port}" || own=$?
+      case "${own}" in
+        0) return 0 ;;
+        2) _DL_SMOKE_WHY="cannot verify which process owns port ${port} (no /proc, lsof or ss): not trusting /health"; return 1 ;;
+        *) _DL_SMOKE_WHY="port ${port} answers, but not from the server this test launched (another program holds it)" ;;
+      esac
+    fi
+    sleep 1
+  done
+  return 1
+}
+
 _dl_llama_server_bin() {
   if [[ -n "${LLMCTL_LLAMA_SERVER:-}" && -x "${LLMCTL_LLAMA_SERVER}" ]]; then
     echo "${LLMCTL_LLAMA_SERVER}"; return 0
@@ -273,10 +340,11 @@ _dl_smoke_test_gguf() {
     return 0
   fi
 
-  local args=(--model "${model}" --ctx-size 512 --n-gpu-layers 0 --host 127.0.0.1 --port "${LLMCTL_SMOKE_PORT}")
+  local port; port="$(_dl_smoke_pick_port)" || return 1
+  local args=(--model "${model}" --ctx-size 512 --n-gpu-layers 0 --host 127.0.0.1 --port "${port}")
   [[ -n "${mmproj}" ]] && args+=(--mmproj "${mmproj}")
 
-  log "smoke test: starting llama-server for ${profile} on 127.0.0.1:${LLMCTL_SMOKE_PORT}"
+  log "smoke test: starting llama-server for ${profile} on 127.0.0.1:${port}"
   _dl_log "smoke: ${server} ${args[*]}"
   local server_log="${LLMCTL_LOG_DIR}/smoke-${profile}.log"
   ensure_dir "${LLMCTL_LOG_DIR}"
@@ -294,24 +362,18 @@ _dl_smoke_test_gguf() {
     "${server}" "${args[@]}" > "${server_log}" 2>&1 &
   local pid=$!
 
-  local ready=0 i
-  for (( i=0; i<LLMCTL_SMOKE_TIMEOUT; i++ )); do
-    if curl -fsS "http://127.0.0.1:${LLMCTL_SMOKE_PORT}/health" >/dev/null 2>&1; then
-      ready=1; break
-    fi
-    kill -0 "${pid}" 2>/dev/null || break
-    sleep 1
-  done
+  local ready=0
+  if _dl_smoke_wait "${pid}" "${port}" "/health"; then ready=1; fi
 
   if [[ "${ready}" != "1" ]]; then
-    _dl_log "smoke FAILED: server did not become healthy within ${LLMCTL_SMOKE_TIMEOUT}s"
+    _dl_log "smoke FAILED: ${_DL_SMOKE_WHY}"
     sed 's/^/OUT: /' "${server_log}" >> "${_DL_EVIDENCE}" 2>/dev/null || true
     kill "${pid}" 2>/dev/null || true
     wait "${pid}" 2>/dev/null || true
-    err "smoke test failed: llama-server did not become healthy (see ${server_log})"
+    err "smoke test failed: llama-server ${_DL_SMOKE_WHY} (see ${server_log})"
     return 1
   fi
-  _dl_log "smoke: /health OK after ${i}s"
+  _dl_log "smoke: /health OK after ${_DL_SMOKE_WAITED}s"
 
   local payload response
   # max_tokens=64 (root-caused 2026-09-17, real repro against
@@ -331,7 +393,7 @@ _dl_smoke_test_gguf() {
   # this budget, so raising it does not slow down or change the outcome
   # for any non-reasoning profile already passing.
   payload='{"messages":[{"role":"user","content":"Reply with exactly: OK"}],"max_tokens":64,"temperature":0}'
-  response="$(curl -fsS -X POST "http://127.0.0.1:${LLMCTL_SMOKE_PORT}/v1/chat/completions" \
+  response="$(curl -fsS -X POST "http://127.0.0.1:${port}/v1/chat/completions" \
     -H 'Content-Type: application/json' -d "${payload}" 2>&1)" || {
     _dl_log "smoke FAILED: chat completion request errored"
     kill "${pid}" 2>/dev/null || true; wait "${pid}" 2>/dev/null || true
@@ -386,6 +448,291 @@ except Exception:
   return 1
 }
 
+# --- decision smoke test (decide-capable llama profiles) ---------------------
+# The probes below run the Go binary's `llmctl-decide smoke` (internal/gateway/smoke.go) against
+# the freshly-launched smoke server: the SAME production letter-logit driver `llmctl decide serve`
+# uses (prompt template, first-token logprob readout, finite-probability validation) - never a
+# shell/Python copy of it. Each probe prints the typed answer and returns the binary's exit code
+# (0 valid typed answer, 1 backend failure, 2 usage, 6 unreachable); _dl_evidence_run captures
+# RUN/EXIT/OUT around them. The binary is built by `llmctl build decide` when absent (clear error
+# when Go is missing - see decide_bin in lib/decide.sh).
+
+# _dl_decision_probe_choice <port> - invoice routing, 2 options: must pick "billing".
+_dl_decision_probe_choice() {
+  local port="$1" bin
+  bin="$(decide_bin)" || return 2
+  if [[ "${_DL_DECISION_PROTO:-letter-logit}" == "systemone-native" ]]; then
+    # a smoke answer is shape evidence (valid typed answer, finite probabilities summing to 1), never
+    # quality evidence: no --expect-choice (Julia-1 routes the "charged twice" invoice to shipping)
+    "${bin}" smoke --url "http://127.0.0.1:${port}" --protocol systemone-native --options 2
+    return
+  fi
+  "${bin}" smoke --url "http://127.0.0.1:${port}" --protocol letter-logit \
+    --options 2 --expect-choice billing
+}
+
+# _dl_decision_probe_options <port> - same question with 4 lettered options: a valid typed
+# answer (finite probabilities summing to 1) over a wider option set.
+_dl_decision_probe_options() {
+  local port="$1" bin
+  bin="$(decide_bin)" || return 2
+  "${bin}" smoke --url "http://127.0.0.1:${port}" --protocol "${_DL_DECISION_PROTO:-letter-logit}" --options 4
+}
+
+# _dl_smoke_test_decision <profile> <model_path>
+# Mirrors _dl_smoke_test_gguf's structure (launch the real llama-server on
+# 127.0.0.1:$LLMCTL_SMOKE_PORT, poll /health, then run a parsed check),
+# replacing the "reply OK" probe with the three deterministic decision
+# probes above. LLMCTL_SMOKE=0 disables; SKIP-warn when llama-server is
+# not built (same precedent as _dl_smoke_test_gguf).
+_dl_smoke_test_decision() {
+  local profile="$1" model="$2"
+  if [[ "${LLMCTL_SMOKE}" == "0" ]]; then
+    _dl_log "decision smoke test disabled via LLMCTL_SMOKE=0"
+    warn "smoke test disabled (LLMCTL_SMOKE=0)"
+    return 0
+  fi
+  local server
+  if ! server="$(_dl_llama_server_bin)"; then
+    _dl_log "decision smoke test SKIPPED: llama-server not built (run: llmctl build llama)"
+    warn "llama-server not built - skipping decision smoke test (run 'llmctl build llama' first)"
+    return 0
+  fi
+
+  local port; port="$(_dl_smoke_pick_port)" || return 1
+  # The probes follow the profile's decision protocol: a native (/v1/systemone) model has no chat
+  # endpoint, a letter-logit model has no /v1/systemone (501). A native engine scores the whole state in
+  # one batch, so its smoke gets a 4096 context (the default 512 cannot hold the encoder's window).
+  _DL_DECISION_PROTO="$(catalog_decision_protocol "${profile}")"; _DL_DECISION_PROTO="${_DL_DECISION_PROTO:-letter-logit}"
+  local ctx=512; [[ "${_DL_DECISION_PROTO}" == "systemone-native" ]] && ctx=4096
+  local args=(--model "${model}" --ctx-size "${ctx}" --n-gpu-layers 0 --host 127.0.0.1 --port "${port}")
+  log "decision smoke test: starting llama-server for ${profile} on 127.0.0.1:${port}"
+  _dl_log "smoke protocol: ${_DL_DECISION_PROTO}"
+  _dl_log "smoke: ${server} ${args[*]}"
+  local server_log="${LLMCTL_LOG_DIR}/smoke-${profile}.log"
+  ensure_dir "${LLMCTL_LOG_DIR}"
+  local server_dir; server_dir="$(cd "$(dirname "${server}")" && pwd)"
+  LD_LIBRARY_PATH="${server_dir}${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}" \
+    "${server}" "${args[@]}" > "${server_log}" 2>&1 &
+  local pid=$!
+
+  local ready=0
+  if _dl_smoke_wait "${pid}" "${port}" "/health"; then ready=1; fi
+
+  if [[ "${ready}" != "1" ]]; then
+    _dl_log "decision smoke FAILED: ${_DL_SMOKE_WHY}"
+    sed 's/^/OUT: /' "${server_log}" >> "${_DL_EVIDENCE}" 2>/dev/null || true
+    kill "${pid}" 2>/dev/null || true
+    wait "${pid}" 2>/dev/null || true
+    err "decision smoke test failed: llama-server ${_DL_SMOKE_WHY} (see ${server_log})"
+    return 1
+  fi
+  _dl_log "smoke: /health OK after ${_DL_SMOKE_WAITED}s"
+
+  local probes_ok=1
+  _dl_evidence_run _dl_decision_probe_choice "${port}" || probes_ok=0
+  _dl_evidence_run _dl_decision_probe_options "${port}" || probes_ok=0
+
+  kill "${pid}" 2>/dev/null || true
+  wait "${pid}" 2>/dev/null || true
+
+  if [[ "${probes_ok}" == "1" ]]; then
+    if [[ "${_DL_DECISION_PROTO}" == "systemone-native" ]]; then
+      _dl_log "decision smoke PASSED: valid typed answers over /v1/systemone (2 and 4 options; shape evidence only)"
+    else
+      _dl_log "decision smoke PASSED: choice == billing (2 options), valid typed answer (4 options)"
+    fi
+    info "decision smoke test passed for ${profile} (llmctl-decide smoke: choice probes)"
+    return 0
+  fi
+  _dl_log "decision smoke FAILED: one or more llmctl-decide smoke probes failed"
+  err "decision smoke test failed for ${profile} (see ${LLMCTL_VERIFY_DIR}/${profile}.log)"
+  return 1
+}
+
+
+# --- onnx engine validation + smoke (encoder decision profiles) --------------
+# _dl_validate_onnx <profile> <dest_dir>
+# Structural check first (model.onnx + a tokenizer file present and
+# non-empty), then the REAL smoke _dl_smoke_test_onnx - mirroring the
+# llama arm's _dl_smoke_test_decision, against lib/onnx_server.py instead
+# of llama-server.
+_dl_validate_onnx() {
+  local profile="$1" dest="$2"
+  local model=""
+  for cand in "${dest}/model.onnx" "${dest}/onnx/model.onnx"; do
+    [[ -s "${cand}" ]] && { model="${cand}"; break; }
+  done
+  [[ -n "${model}" ]] || { err "structural check failed: no non-empty model.onnx (or onnx/model.onnx) in ${dest}"; return 1; }
+  local tok=""
+  for cand in "${dest}/spm.model" "${dest}/onnx/spm.model" \
+              "${dest}/tokenizer.json" "${dest}/onnx/tokenizer.json"; do
+    [[ -s "${cand}" ]] && { tok="${cand}"; break; }
+  done
+  [[ -n "${tok}" ]] || { err "structural check failed: no tokenizer file (spm.model or tokenizer.json) in ${dest}"; return 1; }
+  _dl_log "structural check passed: model ${model}, tokenizer ${tok}"
+  info "structural validation passed for ${profile} (onnx model + tokenizer present)"
+  _dl_smoke_test_onnx "${profile}" "${dest}" \
+    || die "onnx smoke test failed for ${profile} (see ${LLMCTL_VERIFY_DIR}/${profile}.log)"
+}
+
+# --- onnx smoke: probes against the INTERNAL scoring runtime ---------------------
+# The runtime (lib/onnx_server.py) speaks only POST /v1/score (pairs in,
+# label-ordered probabilities out); typed-question logic lives in the Go
+# gateway, so the smoke asserts the encoder itself: the contract shape, and
+# that an entailed pair and a contradicted pair are scored differently.
+_dl_onnx_py() {
+  # The hash-locked venv python when `llmctl build onnx` has been run, else
+  # the system python3 (honours PYTHONPATH, so tests can inject stub backends).
+  local venv_py="${LLMCTL_DATA_DIR}/venv-onnx/bin/python"
+  if [[ -x "${venv_py}" ]]; then printf '%s' "${venv_py}"; else printf '%s' "${LLMCTL_PYTHON:-python3}"; fi
+}
+
+# _dl_onnx_score <port> <keyfile> <body-json> - POST helper (prints the raw response).
+# The key is passed to curl via a config file on stdin, never on argv.
+_dl_onnx_score() {
+  local port="$1" keyfile="$2" body="$3"
+  need_cmd curl
+  { printf 'header = "Authorization: Bearer '; tr -d '\n' < "${keyfile}"; printf '"\n'; } \
+    | curl -fsS --max-time "${LLMCTL_DECIDE_TIMEOUT:-30}" -K - \
+        -X POST "http://127.0.0.1:${port}/v1/score" \
+        -H 'Content-Type: application/json' -d "${body}"
+}
+
+# argmax label of pair 0 + structural checks. $1=port $2=keyfile $3=body $4=expect
+# ($4 = entail: argmax label must start with "entail"; contradict: must NOT).
+_dl_onnx_probe_pair() {
+  local port="$1" keyfile="$2" body="$3" expect="$4"
+  local resp; resp="$(_dl_onnx_score "${port}" "${keyfile}" "${body}")" || return 2
+  printf '%s' "${resp}" | python3 -c '
+import json, math, sys
+d = json.load(sys.stdin)
+labels, scores = d["labels"], d["scores"]
+row = scores[0]
+assert len(labels) == len(row) >= 2, "labels/scores width mismatch"
+assert all(math.isfinite(x) and 0 <= x <= 1 for x in row), "scores not finite probabilities"
+assert abs(sum(row) - 1.0) < 1e-6, "scores do not sum to 1"
+top = labels[max(range(len(row)), key=row.__getitem__)]
+src = d.get("label_source", "")
+print(json.dumps({"top": top, "label_source": src, "scores": [round(x, 6) for x in row], "truncated": d["truncated"]}))
+if src.startswith(("generic", "none")):
+    print("label_source %r carries no semantics: cannot judge the probe" % src, file=sys.stderr); sys.exit(3)
+want = sys.argv[1]
+ok = top.lower().startswith("entail") if want == "entail" else not top.lower().startswith("entail")
+sys.exit(0 if ok else 1)' "${expect}"
+}
+
+_dl_onnx_probe_entail() {
+  _dl_onnx_probe_pair "$1" "$2" '{"pairs":[{"premise":"The deployment succeeded and all checks passed.","hypothesis":"The deployment succeeded."}]}' entail
+}
+_dl_onnx_probe_contradict() {
+  _dl_onnx_probe_pair "$1" "$2" '{"pairs":[{"premise":"The deployment succeeded and all checks passed.","hypothesis":"The deployment did not succeed."}]}' contradict
+}
+_dl_onnx_probe_batch() {
+  local port="$1" keyfile="$2" resp
+  resp="$(_dl_onnx_score "${port}" "${keyfile}" \
+    '{"pairs":[{"premise":"It is raining.","hypothesis":"It is wet outside."},{"premise":"It is raining.","hypothesis":"The sun is out."}]}')" || return 2
+  printf '%s' "${resp}" | python3 -c '
+import json, sys
+d = json.load(sys.stdin)
+ok = len(d["scores"]) == 2 and len(d["truncated"]) == 2 and all(abs(sum(r) - 1.0) < 1e-6 for r in d["scores"])
+print(json.dumps({"rows": len(d["scores"]), "labels": d["labels"]}))
+sys.exit(0 if ok else 1)'
+}
+
+# _dl_smoke_test_onnx <profile> <dest_dir>
+# Launch lib/onnx_server.py on 127.0.0.1:$LLMCTL_SMOKE_PORT with a throwaway
+# 0600 key file, wait for /readyz (a real load-time inference), run the three
+# probes with RUN/EXIT/OUT evidence. SKIP-with-reason when the inference deps
+# are missing - and then _DL_SMOKE_NOTE is set so download_profile does NOT
+# claim "downloaded and verified" (D-12). The child is always reaped, also on
+# SIGTERM/SIGINT of this shell (D-14). No test seam: unit tests put stub
+# onnxruntime/sentencepiece modules on PYTHONPATH.
+_dl_smoke_test_onnx() {
+  local profile="$1" dest="$2"
+  if [[ "${LLMCTL_SMOKE}" == "0" ]]; then
+    _dl_log "onnx smoke test disabled via LLMCTL_SMOKE=0"
+    warn "smoke test disabled (LLMCTL_SMOKE=0)"
+    _DL_SMOKE_NOTE="smoke test disabled (LLMCTL_SMOKE=0)"
+    return 0
+  fi
+  local py; py="$(_dl_onnx_py)"
+  local missing="" m
+  for m in onnxruntime numpy sentencepiece; do
+    "${py}" -B -c "import ${m}" 2>/dev/null || missing="${missing:+$missing }${m}"
+  done
+  if [[ -n "${missing}" ]]; then
+    _dl_log "onnx smoke test SKIPPED: python package(s) not installed: ${missing} (run: llmctl build onnx)"
+    warn "onnx inference deps missing (${missing}) - smoke test SKIPPED, the model is NOT functionally verified (run: llmctl build onnx, then: llmctl models verify ${profile})"
+    _DL_SMOKE_NOTE="onnx smoke test SKIPPED: missing ${missing}"
+    return 0
+  fi
+
+  local tok="tokenizer.json" cand
+  for cand in "${dest}/spm.model" "${dest}/onnx/spm.model"; do
+    [[ -s "${cand}" ]] && tok="spm.model"
+  done
+  local runner="${_dl_dir}/onnx_server.py"
+  local port; port="$(_dl_smoke_pick_port)" || return 1
+  local keyfile; keyfile="$(umask 077; mktemp "${TMPDIR:-/tmp}/llmctl-smoke-key.XXXXXX")"
+  ( umask 077; python3 -c 'import secrets; print(secrets.token_hex(24))' > "${keyfile}" )
+  chmod 600 "${keyfile}"
+  log "onnx smoke test: starting onnx_server.py for ${profile} on 127.0.0.1:${port}"
+  _dl_log "smoke: ${py} ${runner} --model-dir ${dest} --host 127.0.0.1 --port ${port} --profile ${profile} --tokenizer ${tok} --api-key-file <throwaway 0600 file>"
+  local server_log="${LLMCTL_LOG_DIR}/smoke-${profile}.log"
+  ensure_dir "${LLMCTL_LOG_DIR}"
+  "${py}" -B "${runner}" --model-dir "${dest}" --host 127.0.0.1 \
+    --port "${port}" --profile "${profile}" --tokenizer "${tok}" \
+    --api-key-file "${keyfile}" > "${server_log}" 2>&1 &
+  local pid=$!
+  _DL_SMOKE_PID="${pid}"
+  _DL_SMOKE_KEYFILE="${keyfile}"
+  trap '_dl_onnx_smoke_cleanup; trap - TERM; kill -TERM $$' TERM
+  trap '_dl_onnx_smoke_cleanup; trap - INT; kill -INT $$' INT
+
+  local ready=0
+  if _dl_smoke_wait "${pid}" "${port}" "/readyz"; then ready=1; fi
+
+  if [[ "${ready}" != "1" ]]; then
+    _dl_log "onnx smoke FAILED: ${_DL_SMOKE_WHY}"
+    sed 's/^/OUT: /' "${server_log}" >> "${_DL_EVIDENCE}" 2>/dev/null || true
+    _dl_onnx_smoke_cleanup
+    err "onnx smoke test failed: onnx_server.py ${_DL_SMOKE_WHY} (see ${server_log})"
+    return 1
+  fi
+  _dl_log "smoke: /readyz OK after ${_DL_SMOKE_WAITED}s"
+
+  local probes_ok=1
+  _dl_evidence_run _dl_onnx_probe_entail "${port}" "${keyfile}" || probes_ok=0
+  _dl_evidence_run _dl_onnx_probe_contradict "${port}" "${keyfile}" || probes_ok=0
+  _dl_evidence_run _dl_onnx_probe_batch "${port}" "${keyfile}" || probes_ok=0
+  _dl_onnx_smoke_cleanup
+
+  if [[ "${probes_ok}" == "1" ]]; then
+    _dl_log "onnx smoke PASSED: entailed pair scores entailment, contradicted pair does not, batch contract holds"
+    info "onnx smoke test passed for ${profile} (entail/contradict/batch probes)"
+    return 0
+  fi
+  _dl_log "onnx smoke FAILED: one or more onnx probes did not meet its threshold"
+  err "onnx smoke test failed for ${profile} (see ${LLMCTL_VERIFY_DIR}/${profile}.log)"
+  return 1
+}
+
+# Reap the smoke runtime + throwaway key (also used by the TERM/INT traps).
+_dl_onnx_smoke_cleanup() {
+  if [[ -n "${_DL_SMOKE_PID:-}" ]]; then
+    kill "${_DL_SMOKE_PID}" 2>/dev/null || true
+    wait "${_DL_SMOKE_PID}" 2>/dev/null || true
+    _DL_SMOKE_PID=""
+  fi
+  if [[ -n "${_DL_SMOKE_KEYFILE:-}" ]]; then
+    rm -f "${_DL_SMOKE_KEYFILE}"
+    _DL_SMOKE_KEYFILE=""
+  fi
+  trap - TERM INT
+}
+
+
 _dl_validate_colibri() {
   # _dl_validate_colibri <profile> <dest_dir>
   local profile="$1" dest="$2"
@@ -426,6 +773,7 @@ download_profile() {
   local profile="$1"
   catalog_exists "${profile}" || die "unknown profile: ${profile} (see: llmctl models list)"
   ensure_state_dirs
+  _DL_SMOKE_NOTE=""
   _DL_EVIDENCE="${LLMCTL_VERIFY_DIR}/${profile}.log"
   : > "${_DL_EVIDENCE}"
   _dl_log "llmctl models download ${profile}"
@@ -455,14 +803,35 @@ download_profile() {
         esac
       done < <(catalog_files "${profile}")
       [[ -n "${model}" ]] || die "profile ${profile} has no model file"
-      _dl_smoke_test_gguf "${profile}" "${model}" "${mmproj}" \
-        || die "smoke test failed for ${profile} (see ${LLMCTL_VERIFY_DIR}/${profile}.log)"
+      # Capability-based smoke dispatch: decide-capable profiles get the
+      # typed-decision smoke (three deterministic noul/choice/score probes
+      # through the production decide_* path); every other llama profile
+      # keeps the existing _dl_smoke_test_gguf untouched.
+      if [[ " $(catalog_capability "${profile}") " == *" decide "* ]]; then
+        _dl_smoke_test_decision "${profile}" "${model}" \
+          || die "decision smoke test failed for ${profile} (see ${LLMCTL_VERIFY_DIR}/${profile}.log)"
+      else
+        _dl_smoke_test_gguf "${profile}" "${model}" "${mmproj}" \
+          || die "smoke test failed for ${profile} (see ${LLMCTL_VERIFY_DIR}/${profile}.log)"
+      fi
       ;;
     colibri)
       _dl_validate_colibri "${profile}" "${dest_dir}" \
         || die "colibri validation failed for ${profile}"
       ;;
+    onnx)
+      _dl_validate_onnx "${profile}" "${dest_dir}" \
+        || die "onnx validation failed for ${profile}"
+      ;;
   esac
+  if [[ -n "${_DL_SMOKE_NOTE:-}" ]]; then
+    # D-12: files are checksum-verified but the smoke did NOT run - never claim
+    # the profile is "verified".
+    _dl_log "download ${profile}: FILES-VERIFIED, smoke not run (${_DL_SMOKE_NOTE})"
+    warn "profile '${profile}' downloaded; file checksums verified but ${_DL_SMOKE_NOTE}. Evidence: ${LLMCTL_VERIFY_DIR}/${profile}.log"
+    _DL_SMOKE_NOTE=""
+    return 0
+  fi
   _dl_log "download ${profile}: SUCCESS"
   info "profile '${profile}' downloaded and verified. Evidence: ${LLMCTL_VERIFY_DIR}/${profile}.log"
 }

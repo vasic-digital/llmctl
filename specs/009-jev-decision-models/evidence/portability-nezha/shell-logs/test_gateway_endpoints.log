@@ -1,0 +1,162 @@
+== start gateway A (defaults, detached) ==
+  ok: serve --status is 0 while running
+  ok: banner prints the HTTPS URL
+  ok: banner prints the key LOCATION
+  ok: banner prints the CA fingerprint
+  ok: banner never prints the key
+  ok: pidfile is mode 0600
+  ok: key file is mode 0600
+== POST /v1/systemone: valid requests (EP-001..007) ==
+  ok: EP-001: status
+  ok: EP-001: noul probability from the letter readout
+  ok: EP-002: status
+  ok: EP-003: status
+  ok: EP-003: 20-option choice answered
+  ok: EP-004: status
+  ok: EP-004: score answer carries the legend
+  ok: EP-005: status
+  ok: EP-005: mixed questions all answered
+  ok: EP-006a: status
+  ok: EP-006b: status
+  ok: EP-007: status
+  ok: EP-007: hosted alias answered by the served profile id
+  ok: EP-005n: status
+  ok: NLI profile: entailment of the yes-hypothesis vs the no-hypothesis
+  ok: EP-005c: status
+== determinism (FR-010): repeats are byte-identical ==
+  ok: 8 repeats of one request give byte-identical bodies
+== validation and contract errors (EP-008..018) ==
+  ok: EP-008: status
+  ok: EP-008: error_type
+  ok: EP-011: status
+  ok: EP-011: error_type
+  ok: EP-012: status
+  ok: EP-012: error_type
+  ok: EP-013a: status
+  ok: EP-013a: error_type
+  ok: EP-013b: status
+  ok: EP-013b: error_type
+  ok: EP-014: oversize Content-Length answered 413 before any body byte was sent
+  ok: EP-015a: status
+  ok: EP-015a: error_type
+  ok: EP-015b: status
+  ok: EP-015b: error_type
+  ok: EP-015c: status
+  ok: EP-015c: error_type
+  ok: EP-015d: status
+  ok: EP-015d: error_type
+  ok: EP-015e: status
+  ok: EP-015e: error_type
+  ok: EP-016: status
+  ok: EP-016: error_type
+  ok: EP-017: status
+  ok: EP-017: error_type
+  ok: EP-018a: status
+  ok: EP-018a: error_type
+  ok: EP-018b: status
+  ok: EP-018b: error_type
+== authentication and methods (EP-009/010/025/031..033/041/051/052/060/061) ==
+  ok: EP-009: status
+  ok: EP-009: error_type
+  ok: EP-010: status
+  ok: EP-010: error_type
+  ok: EP-025: status
+  ok: EP-025: error_type
+  ok: EP-031: status
+  ok: EP-031: error_type
+  ok: EP-032: status
+  ok: EP-032: error_type
+  ok: EP-033: status
+  ok: EP-033: error_type
+  ok: EP-041: status
+  ok: EP-041: error_type
+  ok: EP-051: status
+  ok: EP-051: error_type
+  ok: EP-052: status
+  ok: EP-052: error_type
+  ok: EP-060: status
+  ok: EP-060: error_type
+  ok: EP-061: status
+  ok: EP-061: error_type
+== models, health, readiness, metrics (EP-030/040/045/050) ==
+  ok: EP-030: status
+  ok: EP-030: lists the served profile
+  ok: EP-030: lists the hosted alias
+  ok: EP-030: reports the protocol
+  ok: EP-030: per-profile limits
+  ok: EP-030: the SDK listing (models) rides along with object/data (G-038)
+  ok: EP-030: SDK entry name/description
+  ok: EP-030: aliases are listed as SDK model names too
+  ok: EP-030: release_date is a fixed YYYY-MM-DD
+  ok: EP-040: status
+  ok: EP-045: status
+  ok: EP-050: status
+  ok: EP-050: metrics carry no state or key
+== backend failures (EP-022/023) ==
+  ok: EP-022: status
+  ok: EP-022: error_type
+  ok: EP-023: status
+  ok: EP-023: error_type
+  ok: EP-023: generic body
+== plain HTTP to the TLS port (EP-070) ==
+  ok: EP-070: plain HTTP gets no answer (curl rc=56)
+== EP-019: failed-auth burst is throttled, the valid key never is ==
+  ok: EP-019: burst of wrong keys reaches 429
+  ok: EP-019: error_type rate_limited
+  ok: EP-019v: status
+== start gateway B (small limits, truncation opt-in) ==
+  ok: EP-008b: status
+  ok: EP-008b: truncation header set
+  ok: EP-008c: status
+  ok: EP-008c: error_type
+  ok: EP-008d: status
+  ok: EP-008d: the encoder runtime truncated the premise (opt-in) -> truncation header set (G-039)
+  ok: EP-008e: status
+  ok: EP-008e: no truncation header when nothing was truncated
+== EP-020: all slots busy and queue full -> 529 ==
+  ok: EP-020: status
+  ok: EP-020: error_type
+  ok: EP-020: the in-flight request still completed
+== EP-026: per-source connection cap sheds before TLS; a second source keeps succeeding ==
+  ok: EP-026: per-source cap closed the surplus connection, second source served
+== EP-024: slow client is cut at the read deadline, others unaffected ==
+  ok: EP-024: drip-fed request closed by the deadline
+  ok: EP-024o: status
+== gateway E: per-profile key files, no global file (G-040); unusable NLI labels (G-044) ==
+  ok: EP-001e: status
+  ok: G-040: the per-profile llama key file authenticates the gateway to the engine
+  ok: EP-005e: status
+  ok: G-044: entailment is taken from the permuted id2label column by NAME (0.7/(0.7+0.3))
+  ok: EP-005g: status
+  ok: EP-005g: error_type
+  ok: G-044: the client body stays generic
+  ok: EP-030e: status
+  ok: G-044: the mis-configured NLI instance is reported degraded, not served with guesses
+  ok: EP-005h: status
+  ok: EP-005h: error_type
+== gateway C: no engine reachable -> not_ready (EP-016b/034/046) ==
+  ok: EP-016b: status
+  ok: EP-016b: error_type
+  ok: EP-016b: Retry-After present
+  ok: EP-034: status
+  ok: EP-034: error_type
+  ok: EP-046: status
+  ok: EP-040c: status
+== serve --stop / --status safety (Helix 11.4.263) ==
+  ok: stop refuses a pidfile that names an unrelated process
+  ok: the unrelated process was NOT signalled
+  ok: status does not report an unverified pid as running
+  ok: stop refuses pid 1
+  ok: stop with no pidfile is a clean no-op
+  ok: gateway A: --stop verified and stopped it
+  ok: gateway B: --stop verified and stopped it
+  ok: gateway C: --stop verified and stopped it
+  ok: gateway E: --stop verified and stopped it
+  ok: gateway A process is gone
+  ok: pidfile removed after stop
+  ok: port closed after stop
+== the request log carries no state text and no key ==
+  ok: request log written
+  ok: request log is mode 0600
+  ok: no state text or key in the log
+RESULT: PASS

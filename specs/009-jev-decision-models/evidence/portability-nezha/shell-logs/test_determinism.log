@@ -1,0 +1,6 @@
+  ok: hw --json run 1 == run 2 (byte-identical)
+  ok: hw --json run 2 == run 3 (byte-identical)
+  ok: hw --json output is not empty/degenerate (sanity - it is real hardware JSON)
+  ok: plan --json run 1 == run 2 (byte-identical)
+  ok: plan --json run 2 == run 3 (byte-identical)
+RESULT: PASS

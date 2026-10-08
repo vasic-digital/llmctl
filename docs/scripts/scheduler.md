@@ -217,7 +217,10 @@ LLMCTL_BIND_HOST_FAST=127.0.0.1 llmctl start fast     # lock just "fast"; the de
    `common.sh`/`os_detect.sh`/`hardware.sh`/`catalog.sh`, and defines
    `sched_load_backend` (OS-dispatch to the right service backend) and
    `sched_rank_for_capability` (fixed, documented quality rankings per
-   capability: `chat`, `coder`, `vision`).
+   capability: `chat`, `coder`, `vision`, and `decide` — ascending
+   footprint/accuracy tradeoff: `decide-tiny` > `decide-nli` > `decide-2b`
+   > `decide` > `decide-pro` > `decide-max`, per-rung rationale in the
+   source comment).
 2. **Concurrency primitive** — `scheduler::with_lock <command> [args...]`
    opens the lock file on a dynamic fd (`exec {lock_fd}>...`), takes an
    exclusive `flock`, runs the command capturing its exit code without
@@ -235,9 +238,15 @@ LLMCTL_BIND_HOST_FAST=127.0.0.1 llmctl start fast     # lock just "fast"; the de
    `llama` (resolves model + optional mmproj file via `catalog_files`,
    resolves `--host` via `catalog_bind_host "${profile}"`, adds
    `--seed`/`--temp` when `LLMCTL_SEED` is set, adds `--slot-save-path` when
-   `LLMCTL_SLOT_SAVE_PATH` is set) or `colibri` (resolves the model
+   `LLMCTL_SLOT_SAVE_PATH` is set), `colibri` (resolves the model
    directory, resolves `--host` the identical way, builds a `coli serve`
-   command line). Dies on an unknown engine.
+   command line), or `onnx` (resolves the model directory, resolves
+   pins `--host 127.0.0.1`, builds a `lib/onnx_server.py --model-dir ... --port
+   ... --profile ... --max-tokens <ctx> --api-key-file <state>/keys/onnx-<profile>.key`
+   command line, adds `--tokenizer` from the catalog's tokenizer file, and
+   executes it with the hash-locked venv python when `llmctl build onnx` was
+   run. A real launch creates the 0600 key file; the key itself is never on
+   argv or in the environment). Dies on an unknown engine.
 5. **Public locking wrappers** — `sched_start`, `sched_stop`, `sched_auto`,
    `sched_enable` each call `scheduler::with_lock` around their respective
    `_impl` function.
@@ -279,6 +288,33 @@ LLMCTL_BIND_HOST_FAST=127.0.0.1 llmctl start fast     # lock just "fast"; the de
     table, marking enabled services and crash-looped ones with their last
     log line.
 
+### Decision-instance admission (`_sched_admission_fits`, `sched_decision_probe`)
+
+Spec 009 (FR-027/FR-028, SC-010). `_sched_admission_fits <ram> <vram>
+<used_ram> <used_vram> <ram_budget> <vram_budget>` is the one admission
+predicate (`used + need <= budget` on both RAM and VRAM); `_sched_start_impl`
+and `_enable_impl` decide with it, and so does the read-only
+`sched_decision_probe <decide-profile> <gpu|cpu> [plan-file]`, which starts
+instances of one decision profile "one at a time" against the budget seeded
+by `_sched_initial_used` and prints `accepted=<N>` plus
+`refused=cannot start instance <N+1> of '<p>' (<placement> placement):
+needs R MiB RAM + V MiB VRAM, but only a MiB RAM + b MiB VRAM remain`. It
+writes no reservation, env file or service. A tier-gated profile, and the
+GPU placement of the CPU-only onnx encoder, accept 0 and say why. The
+figures must equal `plan --json` `decision_instances[*].instances_gpu|cpu`
+(`tests/test_decision_capacity.sh`). The instance registry / multi-instance
+start path (not part of the scheduler in this release) is expected to call
+this predicate rather than re-implement the arithmetic.
+
+### `auto decide` explanation (FR-030)
+
+`llmctl auto decide` picks the first RECOMMENDED profile of
+`sched_rank_for_capability decide` (smallest footprint first) and logs why:
+`why: first recommended profile in the decide ranking [...] (smallest
+footprint first); <skipped profiles and reasons>`. The unknown-capability
+error lists `chat|coder|vision|decide`. See `docs/hardware-tiers.md`
+"Planner and `auto decide`".
+
 ## Related scripts
 
 * `bin/llmctl` sources this file directly and dispatches most of its
@@ -302,6 +338,37 @@ LLMCTL_BIND_HOST_FAST=127.0.0.1 llmctl start fast     # lock just "fast"; the de
   and `tests/test_tenant_service_isolation.sh` (which exercise the service
   backends this file loads and depends on).
 
+## Spec 009 additions (T077, G-030)
+
+* **Ports (FR-088)**: `_sched_start_impl` and `_enable_impl` resolve each port
+  through `portreg_allocate` (fixed by default, `LLMCTL_PORT_STRATEGY=dynamic`
+  or `LLMCTL_PORT_<PROFILE>=auto` for dynamic, a numeric override wins). The
+  assigned port is recorded in the start/enable output, the `.run` record,
+  the env record / launch arguments, the registry, and `plan --json`
+  (`assigned_port` of a running service). A taken port fails before anything
+  starts, naming the port and the variable.
+* **Registry (FR-089)**: a service is published after its health wait
+  succeeds (`_sched_registry_publish`, real pid via `svc_main_pid`), withdrawn
+  with its port hold on `stop`, `disable`, `switch` and `auto` eviction
+  (`sched_registry_withdraw`). Decision profiles are probed at the public
+  `/health` (keyed engines answer `/v1/models` with 401).
+* **Decision engines (FR-073/FR-074)**: loopback only, a per-profile key
+  **file** (`$LLMCTL_STATE_DIR/keys/llama-<profile>.key`, `--api-key-file`),
+  `--no-webui`; deterministic mode (default) launches `--parallel 1` with the
+  catalog's per-slot context, `LLMCTL_DECIDE_MODE=throughput` the catalog
+  parallel with `--ctx-size` scaled so each slot keeps that context.
+* `LLMCTL_SERVICE_BACKEND_FILE` (test seam): source that file instead of the OS
+  backend.
+* Verified by `tests/test_dynamic_ports.sh`, `tests/test_registry_discovery.sh`.
+
+## Native decision profiles (G-116)
+
+`sched_build_launch` adds `--batch-size 4096 --ubatch-size 4096 --no-cache-prompt` to a decision profile whose
+`decision.protocol` is `systemone-native` (`catalog_decision_protocol`). Reason: llama.cpp #30073 - the engine scores the
+whole state in one physical batch and answers HTTP 500 "input (N tokens) is too large" above `--ubatch-size` (default 512). A
+letter-logit decision profile and every chat profile keep their launch line unchanged. The `decide` ranking appends the six
+native profiles after `decide-max` (ascending footprint). Test: `tests/test_scheduler.sh` section 11b.
+
 ## Last verified date
 
-2026-09-22
+2026-10-07

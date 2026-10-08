@@ -1,0 +1,17 @@
+== baseline: unmutated copy passes ==
+  ok: baseline green
+== mutants ==
+  ok: killed - M1 name constraints dropped from the CA (--- FAIL: TestCAProperties)
+  ok: killed - M2 flock removed (no serialisation) (--- FAIL: TestConcurrentEnsureSingleIssuance)
+  ok: killed - M3 keys written world-readable (--- FAIL: TestLayoutModesAndSymlink)
+  ok: killed - M4 git placement guard skipped (--- FAIL: TestRefusedInsideUnignoredGitWorkTree)
+  ok: killed - M5 expiry not enforced (--- FAIL: TestExpiredLeafRefused)
+  ok: killed - M6 current swapped non-atomically (--- FAIL: TestCurrentSwapIsAtomicForReaders)
+  ok: killed - M7 new leaf not verified against the CA (--- FAIL: TestLaterExtraOutsideConstraintsRefusedAndStateKept)
+  ok: killed - M8 leaf also valid for clientAuth (--- FAIL: TestLeafProperties)
+  ok: killed - M9 out-of-range addresses not filtered (--- FAIL: TestPublicIPFilteredNotFatal)
+  ok: killed - M10 --reuse-key ignored (--- FAIL: TestRenewReuseKey)
+  ok: killed - M11 CA key not matched before signing (--- FAIL: TestOfflineCAKeyExportAndRemoval)
+  ok: killed - M13 mode switch accepted silently (--- FAIL: TestModeChangeViaEnsureRefused)
+  ok: killed - M14 key/cert mismatch not detected (--- FAIL: TestBYOMismatchedExpiredMissingRefused)
+test_certs_go_mutation: ALL MUTANTS KILLED

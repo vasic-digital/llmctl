@@ -1,0 +1,2 @@
+{"model":"decide-laya","answers":{"q":{"type":"choice","choice":"billing","probabilities":{"billing":0.990956012,"shipping":0.004872269,"technical":0.004171718},"confidence":0.986434018}},"usage":{"input_tokens":46,"output_tokens":0},"evidence":{"profile":"decide-laya","port":8095,"latency_ms":73.051,"mode":"deterministic","instance":"decide-laya"}}
+rc=0

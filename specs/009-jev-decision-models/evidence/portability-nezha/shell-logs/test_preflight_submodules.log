@@ -1,0 +1,17 @@
+  ok: a genuinely reachable pinned commit is detected as reachable
+  ok: fixture sanity: the orphaned commit is genuinely gone from upstream_bad after gc --prune
+  ok: a genuinely unreachable pinned commit is detected as unreachable
+  ok: preflight_run exits 1 when a submodule ref is unreachable
+  ok: failure message names the specific unreachable submodule
+  ok: failure message names the specific expected (unreachable) ref
+  ok: preflight_run exits 0 when the submodule ref is genuinely reachable
+  ok: preflight_check_ref returns 2 (could-not-verify) when the fetch itself fails, distinct from 1 (confirmed unreachable)
+  ok: preflight_run exits 2 (could-not-verify) when the fetch itself fails, never silently treated as reachable (rc 0) nor mis-reported as confirmed-unreachable (rc 1)
+  ok: could-not-verify case is reported with an honest UNKNOWN message, not a false FAIL/PASS claim
+  ok: a caller that invokes preflight_run twice in its own loop returns cleanly (no leaked RETURN-trap crash on the CALLER's own return)
+  ok: no 'unbound variable' text appears in the wrapper's output
+  ok: _preflight_walk checks a submodule whose .gitmodules SECTION NAME differs from its own path= value (previously silently skipped entirely)
+  ok: the mismatched-section-name submodule's genuinely-reachable ref is reported PASS, not silently omitted
+  ok: no false FAIL recorded for the mismatched-section-name submodule
+  ok: no false UNKNOWN recorded for the mismatched-section-name submodule
+RESULT: PASS

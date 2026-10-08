@@ -1,0 +1,31 @@
+{
+ "id": "fixt/gated-model",
+ "modelId": "fixt/gated-model",
+ "author": "fixt",
+ "private": false,
+ "gated": "manual",
+ "disabled": false,
+ "sha": "0123456789abcdef0123456789abcdef01234567",
+ "lastModified": "2026-10-01T00:00:00.000Z",
+ "tags": [
+  "license:apache-2.0"
+ ],
+ "siblings": [
+  {
+   "rfilename": "g-Q4_K_M.gguf",
+   "blobId": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+   "size": 529296864,
+   "lfs": {
+    "sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+    "size": 529296864,
+    "pointerSize": 134
+   }
+  }
+ ],
+ "cardData": {
+  "license": "apache-2.0"
+ },
+ "gguf": {
+  "architecture": "qwen35"
+ }
+}

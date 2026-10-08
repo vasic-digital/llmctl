@@ -1,0 +1,90 @@
+== control: unmutated copy is GREEN ==
+  ok: control run passes
+== the reviewer's seven mutations (A-17) ==
+  ok: killed - R-M1 duplicate Authorization guard removed (--- FAIL: TestDuplicateAuthorizationHeadersAreRefused)
+  ok: killed - R-M2 session tickets enabled (--- FAIL: TestSessionTicketsAreDisabledNoResumption)
+  ok: killed - R-M3 'serve' subcommand requirement dropped (--- FAIL: TestVerifyRequiresServeAsTheSubcommand)
+  ok: killed - R-M4 previous-key expiry ignored (--- FAIL: TestRotateWithGraceAcceptsPreviousUntilExpiry)
+  ok: killed - R-M5 present-but-wrong key never reaches the throttle (--- FAIL: TestThrottleNeverThrottlesTheValidKey)
+  ok: killed - R-M6 CGNAT range dropped from the CA name constraints (--- FAIL: TestCAProperties)
+  ok: killed - R-M7 binary-name match dropped (the reviewer's run hung) (--- FAIL: TestVerifyRejectsACarrierThatMentionsTheGateway)
+== A-01 admission ==
+  ok: killed - eviction removed: a full pool refuses the newcomer again (panic: test timed out after 5m0s)
+  ok: killed - unauthenticated budget not enforced (no reserve) (--- FAIL: TestSlotsUnauthenticatedPoolIsBoundedIndependentlyOfTheTotal)
+  ok: killed - authenticated connections can be evicted (--- FAIL: TestSlotsAuthenticatedAreProtectedAndReserved)
+  ok: killed - victim taken from the LIGHTEST source (--- FAIL: TestSlotsVictimWithinAnAggregateIsTheHeaviestSource)
+  ok: killed - IPv6 /48 aggregate cap off (--- FAIL: TestAcceptEnforcesThePer48AggregateCapAcrossDifferent64s)
+  ok: killed - a valid key never promotes the connection (--- FAIL: TestPreAuthTimeoutReapsUnauthenticatedConnections)
+  ok: killed - pre-auth timer never armed (--- FAIL: TestValidKeyClientIsServedWhileHostileSourcesHoldTheSlots)
+  ok: killed - pre-auth timer not stopped on authentication (--- FAIL: TestPreAuthTimeoutReapsUnauthenticatedConnections)
+  ok: killed - unauthenticated per-source cap off (--- FAIL: TestSlotsUnauthenticatedBudgetsAreSeparate)
+== A2-03 / A2-04 / A2-T1 admission (review 3) ==
+  ok: killed - A2-03 victim ranking ignores the /48 aggregate (--- FAIL: TestAcceptVictimRankingUsesTheAggregate)
+  ok: killed - A2-03 victim taken from the LIGHTEST aggregate (--- FAIL: TestAcceptVictimRankingUsesTheAggregate)
+  ok: killed - A2-04 per-source cap refuses the newcomer instead of evicting its own oldest (panic: test timed out after 5m0s)
+  ok: killed - A2-04 the source-cap victim may be an authenticated connection (--- FAIL: TestSlotsPerSourceCapEvictsTheSourcesOwnOldestNotTheNewcomer)
+  ok: killed - A2-T1 removeLocked never returns the aggregate share (IPv4 locked out forever) (--- FAIL: TestAcceptEnforcesThePer48AggregateCapAcrossDifferent64s)
+  ok: killed - A2-T1 promote never returns the aggregate share (--- FAIL: TestEarlyRejectWithUnreadBodyStillDeliversTheResponse)
+== A-06 / A-09 / A-14 server ==
+  ok: killed - failed auth never delayed (--- FAIL: TestWrongKeysAreSleptOnAndTheValidKeyNever)
+  ok: killed - throttled sources evicted for a newcomer (--- FAIL: TestThrottleKeepsThrottledSourcesAndFailsClosedWhenFullOfThem)
+  ok: killed - full table of throttled sources admits a newcomer (--- FAIL: TestThrottleKeepsThrottledSourcesAndFailsClosedWhenFullOfThem)
+  ok: killed - GetConfigForClient result not hardened (--- FAIL: TestGetConfigForClientCannotBypassTheTLSFloor)
+  ok: killed - audit write failure not counted (--- FAIL: TestAuditWriteFailuresAreCountedAndReportedOnce)
+  ok: killed - audit write failure never reported ()
+  ok: killed - credential gate shorter than the longest key ()
+== A-03 / A-06 / A-07 / A-12 keyring ==
+  ok: killed - rotate refuses a well-formed weak old key (the remedy fails) (--- FAIL: TestRotateReplacesAWeakFileKeyAndNeverKeepsItAsPrevious)
+  ok: killed - rotate keeps a weak old key as PREVIOUS (--- FAIL: TestRotateReplacesAWeakFileKeyAndNeverKeepsItAsPrevious)
+  ok: killed - rotate --grace keeps a key the environment shadowed ()
+  ok: killed - A2-01 PREVIOUS accepted although the key comes from the environment (CLI and gateway environments differ) (--- FAIL: TestRotateGraceWithDifferentCLIAndGatewayEnvironmentsDoesNotWidenTheAcceptedSet)
+  ok: killed - A2-01 a weak PREVIOUS is accepted (--- FAIL: TestAcceptedKeysIgnoresAWeakPrevious)
+  ok: killed - entropy floor off ()
+  ok: killed - comparison on raw (variable-length) bytes ()
+  ok: killed - env file opened following symlinks (--- FAIL: TestSymlinkRefused)
+  ok: killed - env file opened blocking (FIFO hangs) (--- FAIL: TestOpenPrivateRefusesFIFOWithoutBlocking)
+  ok: killed - tighten chmods the PATH, not the checked descriptor (--- FAIL: TestTightenChmodsTheCheckedDescriptorNotWhateverIsAtThePathNow)
+  ok: killed - key length bound removed (--- FAIL: TestKeyRegexHasAnUpperBound)
+== A-04 / A-05 placement and log key ==
+  ok: killed - placement guard fails OPEN on a git error (--- FAIL: TestFailsClosedOnEveryGitError)
+  ok: killed - placement guard fails OPEN on a git timeout (--- FAIL: TestFailsClosedOnEveryGitError)
+  ok: killed - ambient GIT_DIR not scrubbed (--- FAIL: TestAmbientGitEnvironmentIsScrubbed)
+  ok: killed - log key created without the placement guard (--- FAIL: TestLogKeyPlacementGuard)
+  ok: killed - log key opened blocking (FIFO hangs the start) (--- FAIL: TestLogKeyFIFONeverHangs)
+== B2-11 / B2-15 (merged into FIX-E) ==
+  ok: killed - B2-11 the instance header is never set (--- FAIL: TestInstanceHeaderIsSetOnlyWhenTheBackendNotedAnInstance)
+  ok: killed - B2-15 R2 legacy pidfile older than the process accepted (--- FAIL: TestLegacyPidfileOlderThanTheProcessIsRefusedAndNewerAccepted)
+== A2-05 / A2-06 / A2-08 certs ==
+  ok: killed - A2-05 placement guard consulted on every start/reload/renew (--- FAIL: TestPlacementGuardRunsOnlyWhenTheCertDirIsCreated)
+  ok: killed - A2-06 no fallback where link(2) is unsupported (--- FAIL: TestExportSecretFallsBackWhereLinkIsUnsupported)
+  ok: killed - A2-06 every link error triggers the fallback (--- FAIL: TestExportSecretDoesNotFallBackOnOtherLinkErrors)
+  ok: killed - A2-06 the key copy is left on the medium after a failed verification (--- FAIL: TestExportOfflineRemovesTheCopyWhenVerificationFails)
+  ok: killed - A2-06 verification judges the medium's mode bits (--- FAIL: TestExportOfflineVerifiesByContentNotByMediumMode)
+  ok: killed - A2-08 the served key is re-read by path (--- FAIL: TestTLSCertificateUsesTheValidatedKeyBytesNotARereadByPath)
+== A2-07 pidfd ==
+  ok: killed - A2-07 raw hard-coded pidfd_open syscall number in the linux file (--- FAIL: TestNoRawSyscallOutsideLinuxOnlyFiles)
+  ok: control: internal/gateway cross-builds for darwin/arm64
+  ok: control: internal/gateway cross-builds for darwin/amd64
+  ok: control: internal/gateway cross-builds for linux/arm64
+  ok: control: internal/gateway cross-builds for linux/mips
+  ok: killed - proc_other.go without //go:build !linux does not build for linux
+  ok: the darwin build does not include proc_linux.go
+== A2-02 serve start check ==
+  ok: killed - A2-02 the start no longer reads the accepted-key set once (--- FAIL: TestPrepareRefusesToStartWhenTheAcceptedKeySetCannotBeRead)
+== A-13 / A-15 serve ==
+  ok: killed - key cache keeps the last good set forever (--- FAIL: TestKeyCacheFailsClosedAfterTheGraceAndReports)
+  ok: killed - key source failure not counted (--- FAIL: TestKeyCacheFailsClosedAfterTheGraceAndReports)
+  ok: killed - key source failure not reported (--- FAIL: TestKeyCacheFailsClosedAfterTheGraceAndReports)
+  ok: killed - pidfile removed even when it names another process (--- FAIL: TestRemoveOwnPidfileOnlyWhenItNamesThisProcess)
+  ok: killed - detached child inherits the legacy key variable (--- FAIL: TestDetachedChildEnvironmentLacksTheLegacyKeyVariable)
+== A3 (review 4) ==
+  ok: killed - A3-T1/N13 Accept passes the source as its own /48 aggregate (--- FAIL: TestAcceptEnforcesThePer48AggregateCapAcrossDifferent64s)
+  ok: killed - A3-02 the entry is stored after it is visible (data race between two listeners) (--- FAIL: TestTwoListenersSharingOneSlotTableAreRaceFree)
+  ok: killed - A3-T2/N5 AcceptedKeys reads PREVIOUS when the key source is none (--- FAIL: TestRevokedKeyWithAnUnexpiredPreviousAcceptsNothing)
+  ok: killed - A3-T3/N7 an empty accepted-key set no longer refuses the start (--- FAIL: TestPrepareRefusesToStartWhenNoKeyIsAccepted)
+  ok: killed - A3-T4/N12 the instance label length bound removed (--- FAIL: TestInstanceNoteLabelLengthBound)
+  ok: killed - A3-01 placement guard never armed for key creation (pre-existing cert dir) (--- FAIL: TestKeyCreationIsRefusedWhenCertDirPreExistsInAnUnignoredWorkTree)
+  ok: killed - A3-01 placement guard armed on every start/reload/renew again (provisioned install stopped by a git fault) (--- FAIL: TestPlacementGuardRunsOnlyWhenTheCertDirIsCreated)
+  ok: killed - A3-01 symlinked cert dir not resolved before asking git (--- FAIL: TestKeyCreationIsRefusedWhenCertDirPreExistsInAnUnignoredWorkTree)
+  ok: killed - A3-03 rotate does not say an environment-sourced gateway is unaffected (--- FAIL: TestRotateAlwaysStatesThatAnEnvironmentSourcedGatewayIsUnaffected)
+RESULT: PASS

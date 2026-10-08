@@ -1,0 +1,12 @@
+ok  	github.com/vasic-digital/llmctl/llmctld/cmd/llmctld	12.084s	coverage: 7.3% of statements
+ok  	github.com/vasic-digital/llmctl/llmctld/internal/api	60.034s	coverage: 55.8% of statements
+ok  	github.com/vasic-digital/llmctl/llmctld/internal/audit	0.048s	coverage: 97.6% of statements
+ok  	github.com/vasic-digital/llmctl/llmctld/internal/auth	0.040s	coverage: 86.9% of statements
+ok  	github.com/vasic-digital/llmctl/llmctld/internal/authz	0.006s	coverage: 100.0% of statements
+ok  	github.com/vasic-digital/llmctl/llmctld/internal/cluster	0.307s	coverage: 92.9% of statements
+ok  	github.com/vasic-digital/llmctl/llmctld/internal/executor	11.275s	coverage: 93.7% of statements
+ok  	github.com/vasic-digital/llmctl/llmctld/internal/isolation	0.113s	coverage: 84.4% of statements
+ok  	github.com/vasic-digital/llmctl/llmctld/internal/mtls	0.095s	coverage: 84.9% of statements
+ok  	github.com/vasic-digital/llmctl/llmctld/internal/raft	48.871s	coverage: 76.3% of statements
+ok  	github.com/vasic-digital/llmctl/llmctld/internal/replication	11.116s	coverage: 88.4% of statements
+ok  	github.com/vasic-digital/llmctl/llmctld/internal/tenancy	0.004s	coverage: 97.7% of statements

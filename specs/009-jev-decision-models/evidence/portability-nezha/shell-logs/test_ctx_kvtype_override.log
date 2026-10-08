@@ -1,0 +1,28 @@
+  ok: ctx override env-var name for a simple profile
+  ok: ctx override env-var name for a hyphenated profile
+  ok: kv-type override env-var name for a simple profile
+  ok: kv-type override env-var name for a hyphenated profile
+  ok: no override: fast's ctx is still the catalog default (regression guard)
+  ok: no override: fast's kv_cache_type defaults to f16 (zero behavior change for every profile that doesn't opt in)
+  ok: LLMCTL_CTX_SMALL=65536 plumbs into catalog_plan_json's small ctx - the actual launch --ctx-size
+  ok: ctx override is scoped to 'small' only, 'fast' keeps its catalog ctx
+  ok: an invalid LLMCTL_CTX_SMALL value fails the plan instead of silently using garbage
+  ok: invalid ctx override reports a clear error naming the bad value
+  ok: LLMCTL_CTX_SMALL=0 fails the plan instead of silently using it (0 means something dangerously different to llama-server, not 'use the catalog default')
+  ok: zero ctx override reports a clear error naming the MIN_CTX floor
+  ok: LLMCTL_CTX_SMALL=-5 (negative) fails the plan instead of silently using it
+  ok: negative ctx override reports a clear error naming the MIN_CTX floor
+  ok: LLMCTL_KVTYPE_SMALL=q4_0 plumbs into catalog_plan_json's small kv_cache_type
+  ok: kv-type override is scoped to 'small' only, 'fast' keeps f16
+  ok: q4_0 KV quantization genuinely reduces the estimated vram_mb vs f16 at the same ctx (got f16=2949 q4_0=2213)
+  ok: an invalid LLMCTL_KVTYPE_SMALL value fails the plan instead of silently passing garbage to llama-server
+  ok: invalid kv-type override's error names the real allowed set (not a vague message)
+  ok: sanity: ctx=12000 at f16 genuinely does NOT fit on GPU in the contended fixture's real headroom - falls through to cpu mode (confirms the test fixture actually exercises the boundary, not a vacuous pass)
+  ok: the SAME ctx=12000, with q4_0 KV quantization accounted for, now correctly fits on GPU (mode=gpu, not the cpu fallback) - proving kv_mb() is genuinely type-aware in the admission-control path, not just cosmetically labeled
+  ok: llmctl plan --json without overrides still shows the catalog default (regression guard, using 'fast' - untouched by this feature's own catalog tuning)
+  ok: llmctl plan --json honors LLMCTL_CTX_SMALL end-to-end through the real CLI entrypoint
+  ok: llmctl plan --json honors LLMCTL_KVTYPE_SMALL end-to-end through the real CLI entrypoint
+  ok: f16 kv_type omits --cache-type-k/-v from the real launch command (byte-for-byte unchanged for every profile that does not opt in)
+  ok: q4_0 kv_type adds --cache-type-k q4_0 to the real launch command sched_build_launch constructs
+  ok: q4_0 kv_type adds --cache-type-v q4_0 to the real launch command sched_build_launch constructs
+RESULT: PASS

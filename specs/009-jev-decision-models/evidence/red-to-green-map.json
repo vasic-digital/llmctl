@@ -1,0 +1,456 @@
+{
+ "task": "G-027/G-052: every id of the P1 RED register maps to a regression guard, an existing test, or an explicit N/A",
+ "register": "p1-red-register.json (66 ids)",
+ "original_results": "p1-red-original/",
+ "counts": {
+  "ids": 66,
+  "regression-test": 16,
+  "covered by existing test": 41,
+  "N/A": 9,
+  "unmapped": 0
+ },
+ "map": {
+  "D-01": {
+   "disposition": "covered by existing test",
+   "guard": [
+    "tests/fixtures/onnx_rt_contract.py::F: the model saw the surviving hypothesis -> contradiction wins (hypothesis never truncated, D-01)",
+    "tests/test_onnx_server.sh::missing --model-dir -> rc 2"
+   ],
+   "note": "the SKIP was missing tokenizer files on the harness host; the truncation defect the id names is guarded in the runtime contract"
+  },
+  "D-02": {
+   "disposition": "covered by existing test",
+   "guard": [
+    "internal/gateway/keyfile_test.go::TestPostJSONReReadsTheKeyFileOnA401AndRetriesOnce",
+    "tests/test_gateway_endpoints.sh::G-040: the per-profile llama key file authenticates the gateway to the engine",
+    "tests/fixtures/onnx_rt_contract.py::auth: correct Bearer -> 200"
+   ]
+  },
+  "D-03": {
+   "disposition": "regression-test",
+   "guard": [
+    "tests/test_regression_defects.sh::D-03: serve --api-key is refused (no key on argv, rc 2)",
+    "tests/test_onnx_runtime.sh::process-level key/bind checks"
+   ]
+  },
+  "D-04": {
+   "disposition": "covered by existing test",
+   "guard": [
+    "tests/test_onnx_server.sh::--host ${h} refused (loopback 127.0.0.1 only)",
+    "tests/test_onnx_runtime.sh::process-level key/bind checks",
+    "tests/fixtures/onnx_rt_contract.py::legacy /health (profile-leaking, backend-less) no longer exists -> 404"
+   ]
+  },
+  "D-05": {
+   "disposition": "covered by existing test",
+   "guard": [
+    "cmd/llmctl-decide/cmd_serve_test.go::TestServeStopNeverSignalsUnrelatedProcess",
+    "tests/test_gateway_endpoints.sh::stop refuses a pidfile that names an unrelated process"
+   ]
+  },
+  "D-06": {
+   "disposition": "N/A",
+   "guard": "environment-gated, was SKIP: real-model inference needs onnxruntime + sentencepiece + the 1.7 GB model; not exercisable offline. Stays an OPEN live-validation item (US3), not a regression guard."
+  },
+  "D-07": {
+   "disposition": "covered by existing test",
+   "guard": [
+    "tests/fixtures/onnx_rt_contract.py::K2: logits count != id2label count -> 500 JSON (D-07, no SystemExit)"
+   ]
+  },
+  "D-08": {
+   "disposition": "covered by existing test",
+   "guard": [
+    "tests/fixtures/onnx_rt_contract.py::unsupported method -> 405 JSON (not an HTML page)",
+    "internal/contract/request_test.go::TestRejections400",
+    "tests/test_gateway_endpoints.sh::row EP-012"
+   ]
+  },
+  "D-09": {
+   "disposition": "covered by existing test",
+   "guard": [
+    "internal/server/server_test.go::TestBackendErrorMapping",
+    "tests/fixtures/onnx_rt_contract.py::half-sent headers: connection is closed by the socket timeout",
+    "internal/gateway/driver.go (engine text never reaches a client: backendFailed)"
+   ]
+  },
+  "D-10": {
+   "disposition": "covered by existing test",
+   "guard": [
+    "internal/contract/request_test.go::TestPerProfileLimitsOverride",
+    "internal/gateway/catalog_test.go::TestBuildProfilesCapsAtGlobalMaxOptions",
+    "internal/server/limits_test.go::TestFromEnvOverrides",
+    "tests/test_gateway_endpoints.sh::row EP-015"
+   ]
+  },
+  "D-11": {
+   "disposition": "regression-test",
+   "guard": [
+    "tests/test_regression_defects.sh::D-11/D-29: no production file reads a retired seam variable (lib bin cmd internal scripts)"
+   ]
+  },
+  "D-12": {
+   "disposition": "covered by existing test",
+   "guard": [
+    "tests/test_onnx_download.sh::skipped smoke: the output does NOT claim 'downloaded and verified' (D-12)",
+    "tests/test_onnx_download.sh::evidence log distinguishes files-verified from fully-verified"
+   ]
+  },
+  "D-13": {
+   "disposition": "regression-test",
+   "guard": [
+    "tests/test_regression_defects.sh::D-13: every file of every decide profile carries a pinned sha256"
+   ]
+  },
+  "D-14": {
+   "disposition": "covered by existing test",
+   "guard": [
+    "tests/test_onnx_download.sh::D-14: no orphaned onnx_server after SIGTERM to the smoke shell"
+   ]
+  },
+  "D-15": {
+   "disposition": "N/A",
+   "guard": "re-assessed as the recorded operator policy of 2026-09-15 (no artificial memory ceiling below physical RAM), not a defect; NOT-REPRODUCED in the archive. The policy itself is asserted in tests/test_services.sh (unit bodies)."
+  },
+  "D-16": {
+   "disposition": "covered by existing test",
+   "guard": [
+    "tests/test_onnx_server.sh::onnxruntime missing -> message points at the hash-locked build",
+    "tests/test_engine_build_onnx.sh::lock carries many real sha256 hashes",
+    "tests/test_engine_build_onnx.sh::dry-run prints the pinned onnxruntime version (D-16 hint carries a pin)"
+   ]
+  },
+  "D-17a": {
+   "disposition": "covered by existing test",
+   "guard": [
+    "tests/test_scheduler.sh::onnx arm: --tokenizer passed from the catalog files (D-17a)"
+   ]
+  },
+  "D-17b": {
+   "disposition": "covered by existing test",
+   "guard": [
+    "tests/fixtures/onnx_rt_contract.py::F:"
+   ],
+   "note": "runtime feeds exactly input_ids+attention_mask (+token_type_ids when the graph declares it) - see the two 'set(r) ==' checks in the contract"
+  },
+  "D-18": {
+   "disposition": "covered by existing test",
+   "guard": [
+    "tests/test_planner.sh::baseline recommended set (decide-tiny/decide + iter2 decide-nli/decide-2b recommended)"
+   ],
+   "note": "NOT-REPRODUCED: documented change, asserted by the planner test"
+  },
+  "D-19a": {
+   "disposition": "covered by existing test",
+   "guard": [
+    "cmd/llmctl-decide/cmd_serve_test.go::TestResolveBind",
+    "tests/test_gateway_endpoints.sh::banner prints the HTTPS URL"
+   ],
+   "note": "the Go serve waits on the address it actually bound"
+  },
+  "D-19b": {
+   "disposition": "regression-test",
+   "guard": [
+    "tests/test_regression_defects.sh::D-19b: a decision-gateway systemd unit body exists"
+   ]
+  },
+  "D-19c": {
+   "disposition": "N/A",
+   "guard": "HARDENING by design: python3 stays a hard dependency only of the encoder runtime (lib/onnx_server.py) and of test helpers; the decision path (gateway, client, smoke) is Go. A fallback would be a feature choice, not a defect."
+  },
+  "D-20": {
+   "disposition": "N/A",
+   "guard": "component removed: latency_ms was the Python gateway's whole-second debug field; the Go gateway reports durations through bounded metrics/audit records (internal/server TestMetricsBoundedAndClean, TestAuditRecordsHaveNoSecretsAndKeyedHash)"
+  },
+  "D-21": {
+   "disposition": "covered by existing test",
+   "guard": [
+    "internal/gateway/nli_test.go::TestNLINoulSendsOneYesAndOneNoPairWithTheKeyAndPath"
+   ]
+  },
+  "D-22": {
+   "disposition": "regression-test",
+   "guard": [
+    "tests/test_regression_defects.sh::D-22: decide-nli does not download an unused tokenizer.json"
+   ]
+  },
+  "D-23": {
+   "disposition": "covered by existing test",
+   "guard": [
+    "tests/test_onnx_runtime.sh::constant-time check: hmac.compare_digest was used for the key (D-23)",
+    "internal/server/auth_internal_test.go::TestKeyComparisonIsKeyringKeyMatches"
+   ]
+  },
+  "D-24": {
+   "disposition": "regression-test",
+   "guard": [
+    "tests/test_regression_defects.sh::D-24: 'auto <bogus>' lists decide among the capabilities",
+    "tests/test_regression_defects.sh::D-24: the build usage line names onnx",
+    "tests/test_regression_defects.sh::D-24: lib/decide.sh no longer says serve is coming 'when it lands'"
+   ]
+  },
+  "D-25": {
+   "disposition": "regression-test",
+   "guard": [
+    "tests/test_regression_defects.sh::D-25: __pycache__/*.pyc are gitignored",
+    "tests/test_regression_defects.sh::D-25: no compiled cache is tracked"
+   ]
+  },
+  "D-26": {
+   "disposition": "covered by existing test",
+   "guard": [
+    "tests/test_catalog_json.sh::/mnt/agen[t]s"
+   ]
+  },
+  "D-27": {
+   "disposition": "N/A",
+   "guard": "environment-gated, was SKIP: the macOS/launchd runtime path cannot run on this Linux host; the plist body is unit-asserted in tests/test_services.sh. Needs a macOS host."
+  },
+  "D-28": {
+   "disposition": "covered by existing test",
+   "guard": [
+    "internal/contract/prompt_test.go::TestForgedOptionLinesNeutralised",
+    "internal/contract/prompt_test.go::TestNeutraliseStateCases"
+   ]
+  },
+  "D-29": {
+   "disposition": "covered by existing test",
+   "guard": [
+    "cmd/llmctl-decide/cmd_ask_test.go::TestKeyIsReadFromTheEnvFileToo",
+    "internal/keyring/export_test.go (LLMCTL_API_KEY export line)",
+    "tests/fixtures/onnx_rt_contract.py::auth: LLMCTL_DECIDE_API_KEY in the environment is NOT accepted as the key",
+    "tests/test_regression_defects.sh::D-11/D-29: no production file reads a retired seam variable (lib bin cmd internal scripts)"
+   ],
+   "note": "LLMCTL_API_KEY is the one access-key variable; the retired LLMCTL_DECIDE_API_KEY is gone (D-11/D-29 group)"
+  },
+  "D-30": {
+   "disposition": "covered by existing test",
+   "guard": [
+    "tests/test_release_no_secrets.sh::D-30 RED scenario now NOT-REPRODUCED (exit 0)",
+    "tests/test_release_no_secrets.sh::planted untracked secret absent from both archives"
+   ]
+  },
+  "D-30/tar.gz": {
+   "disposition": "covered by existing test",
+   "guard": [
+    "tests/test_release_no_secrets.sh::D-30 RED scenario now NOT-REPRODUCED (exit 0)",
+    "tests/test_release_no_secrets.sh::planted untracked secret absent from both archives"
+   ]
+  },
+  "D-30/zip": {
+   "disposition": "covered by existing test",
+   "guard": [
+    "tests/test_release_no_secrets.sh::D-30 RED scenario now NOT-REPRODUCED (exit 0)",
+    "tests/test_release_no_secrets.sh::planted untracked secret absent from both archives"
+   ]
+  },
+  "D-31": {
+   "disposition": "N/A",
+   "guard": "NOT-REPRODUCED: no .env loader / HF_TOKEN handling exists in lib/*.sh or bin/llmctl beyond the documented admit.sh pass-through; HARDENING note only"
+  },
+  "D-32": {
+   "disposition": "N/A",
+   "guard": "not an implementable defect: the register row it names is present in source-findings.md (SKIP 'present=True' was the check that the row exists)"
+  },
+  "N-01": {
+   "disposition": "covered by existing test",
+   "guard": [
+    "cmd/llmctl-decide/cmd_ask_test.go::TestAskStateSources",
+    "cmd/llmctl-decide/cmd_ask_test.go::TestAskUsageErrorsExit2AndNeverReachTheNetwork"
+   ],
+   "note": "state travels by --state-file/--stdin, never argv: asserted by tests/test_decide.sh 'passes subcommand and every flag through verbatim'"
+  },
+  "N-02": {
+   "disposition": "covered by existing test",
+   "guard": [
+    "internal/contract/request_test.go::TestStateBudget",
+    "tests/test_gateway_endpoints.sh::row EP-008",
+    "cmd/llmctl-decide/cmd_ask_test.go::TestBackendAndReadinessExitCodes"
+   ]
+  },
+  "N-03": {
+   "disposition": "covered by existing test",
+   "guard": [
+    "internal/readout/readout_test.go::TestLowercaseAndOtherTokensDoNotCount"
+   ]
+  },
+  "N-04": {
+   "disposition": "covered by existing test",
+   "guard": [
+    "internal/readout/readout_test.go::TestMissingLetterFlaggedWithUpperBoundNotSilentZero",
+    "internal/readout/readout_test.go::TestSingleNegativeInfinityIsZeroMassNotMissing",
+    "internal/readout/readout_test.go::TestInvalidLogprobs",
+    "internal/readout/readout_test.go::TestNoLettersAtAllFails"
+   ]
+  },
+  "N-05": {
+   "disposition": "regression-test",
+   "guard": [
+    "tests/test_regression_defects.sh::N-05/N-16: ${v}=abc is refused at start with rc 2"
+   ],
+   "note": "the group loops over v in LLMCTL_SEED, LLMCTL_DECIDE_MAX_OPTIONS, LLMCTL_DECIDE_PORT"
+  },
+  "N-06": {
+   "disposition": "regression-test",
+   "guard": [
+    "tests/test_regression_defects.sh::N-06: EOF at a prompt returns rc 2 and the calling shell keeps running",
+    "tests/test_decide.sh::wizard: end of input at a prompt -> rc 2"
+   ]
+  },
+  "N-07": {
+   "disposition": "covered by existing test",
+   "guard": [
+    "tests/test_decide.sh::decide capacity: unknown argument -> rc 2 (N-07)",
+    "tests/test_decide.sh::decide status: unknown argument -> rc 2 (N-07)",
+    "tests/test_regression_defects.sh::N-07: decide status --jsno -> rc 2"
+   ]
+  },
+  "N-08": {
+   "disposition": "regression-test",
+   "guard": [
+    "tests/test_regression_defects.sh::N-08: docs/scripts/decide.md names only defined functions"
+   ]
+  },
+  "N-09": {
+   "disposition": "regression-test",
+   "guard": [
+    "tests/test_regression_defects.sh::N-09: prompt text reaches stderr with piped stdin",
+    "tests/test_decide.sh::wizard: prompt text is emitted with piped stdin"
+   ]
+  },
+  "N-10": {
+   "disposition": "N/A",
+   "guard": "environment-gated, was SKIP: whether a model's first generated token is a letter needs a real model per profile (UNCONFIRMED by design); live validation item (US3), not simulable by a stand-in"
+  },
+  "N-11": {
+   "disposition": "covered by existing test",
+   "guard": [
+    "tests/test_gateway_endpoints.sh::8 repeats of one request give byte-identical bodies"
+   ],
+   "note": "gateway-level determinism is asserted; SC-001 byte-identical logprobs across llama.cpp slot/batch compositions needs the real engine (live validation, SKIP in the archive)"
+  },
+  "N-12": {
+   "disposition": "covered by existing test",
+   "guard": [
+    "internal/server/server_test.go::TestKeepAliveAfterErrorResponses",
+    "tests/fixtures/onnx_rt_contract.py::auth: 401 on an unread body closes the connection (no mis-parsed leftover, N-12)"
+   ]
+  },
+  "N-13": {
+   "disposition": "covered by existing test",
+   "guard": [
+    "internal/gateway/keyfile_test.go::TestPostJSONReReadsTheKeyFileOnA401AndRetriesOnce",
+    "internal/server/server_test.go::TestBackendErrorMapping"
+   ]
+  },
+  "N-14": {
+   "disposition": "covered by existing test",
+   "guard": [
+    "internal/gateway/nli_test.go::TestNLITruncatedOnlyAllowedWhenOptedInAndThenReportedToTheGateway",
+    "tests/test_gateway_endpoints.sh::EP-008d: the encoder runtime truncated the premise (opt-in) -> truncation header set (G-039)"
+   ]
+  },
+  "N-15": {
+   "disposition": "covered by existing test",
+   "guard": [
+    "internal/contract/request_test.go::TestStateFormsDeterministic",
+    "tests/test_gateway_endpoints.sh::row EP-006"
+   ]
+  },
+  "N-16": {
+   "disposition": "regression-test",
+   "guard": [
+    "tests/test_regression_defects.sh::N-05/N-16: ${v}=abc is refused at start with rc 2",
+    "tests/test_regression_defects.sh::N-16: decide ask with a malformed LLMCTL_DECIDE_MAX_OPTIONS: no traceback",
+    "cmd/llmctl-decide/cmd_ask_test.go::TestBadNumericEnvIsAClearUsageError"
+   ]
+  },
+  "N-17": {
+   "disposition": "covered by existing test",
+   "guard": [
+    "internal/contract/request_test.go::TestUnknownModelNotEchoed",
+    "internal/contract/request_test.go::TestNonStringModel",
+    "tests/test_gateway_endpoints.sh::row EP-016"
+   ]
+  },
+  "N-18": {
+   "disposition": "covered by existing test",
+   "guard": [
+    "internal/contract/request_test.go::TestTooManyQuestions"
+   ]
+  },
+  "N-19": {
+   "disposition": "covered by existing test",
+   "guard": [
+    "internal/server/server_test.go::TestProbesAreMinimalEvenWithSecretProfiles"
+   ]
+  },
+  "N-20": {
+   "disposition": "covered by existing test",
+   "guard": [
+    "tests/fixtures/onnx_rt_contract.py::L: LLMCTL_CTX_<PROFILE>=24 honoured as max_tokens (N-20)"
+   ]
+  },
+  "N-21": {
+   "disposition": "covered by existing test",
+   "guard": [
+    "tests/fixtures/onnx_rt_contract.py::C: onnx/config.json BESIDE onnx/model.onnx beats the root config.json (N-21 precedence)",
+    "tests/fixtures/onnx_rt_contract.py::D: LABEL_n id2label is served but FLAGGED in label_source",
+    "internal/gateway/nli_test.go::TestNLIRefusesLabelsItCannotMapAndNeverGuesses",
+    "internal/gateway/nli_test.go::TestNLINoulUsesTheEntailmentColumnInEveryLabelOrder"
+   ]
+  },
+  "N-22": {
+   "disposition": "covered by existing test",
+   "guard": [
+    "internal/contract/request_test.go::TestPerProfileLimitsOverride",
+    "internal/contract/request_test.go::TestNoulCriteria"
+   ],
+   "note": "one validator (internal/contract) serves every protocol, so the engines can no longer disagree on the same request"
+  },
+  "N-23": {
+   "disposition": "covered by existing test",
+   "guard": [
+    "tests/fixtures/onnx_rt_contract.py::/readyz: ready after the load-time smoke ran a real stub inference",
+    "tests/test_onnx_runtime.sh::not-ready runtime logs the failed smoke"
+   ]
+  },
+  "N-24": {
+   "disposition": "covered by existing test",
+   "guard": [
+    "tests/fixtures/onnx_rt_contract.py::H: NaN logits -> 500 JSON error, NaN never serialised (N-24)",
+    "tests/fixtures/onnx_rt_contract.py::R: backend exception -> 500 JSON (N-24)"
+   ]
+  },
+  "N-25": {
+   "disposition": "regression-test",
+   "guard": [
+    "tests/test_regression_defects.sh::N-25: test_decide_download.sh / test_onnx_download.sh pick a free port (no PORT=<literal>)"
+   ]
+  },
+  "N-26": {
+   "disposition": "regression-test",
+   "guard": [
+    "tests/test_regression_defects.sh::N-26: no SUCCESS assertion sits in a skipped-smoke context",
+    "tests/test_onnx_download.sh::skipped smoke is NOT recorded as 'download toy-onnx: SUCCESS' (N-26)"
+   ]
+  },
+  "N-27": {
+   "disposition": "regression-test",
+   "guard": [
+    "tests/test_regression_defects.sh::N-27: scripts/doc_counts.sh --check reports no stale documented count"
+   ]
+  },
+  "N-28": {
+   "disposition": "regression-test",
+   "guard": [
+    "tests/test_regression_defects.sh::N-28: CONFIRMED hash claims cite huggingface.co, not only hf-mirror.com"
+   ]
+  },
+  "N-29": {
+   "disposition": "N/A",
+   "guard": "NOT-REPRODUCED: no suite-size claim other than HEAD/worktree counts exists in the normative specs"
+  }
+ },
+ "unresolved_refs": []
+}

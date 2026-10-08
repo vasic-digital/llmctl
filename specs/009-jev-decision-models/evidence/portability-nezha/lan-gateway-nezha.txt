@@ -1,0 +1,15 @@
+llmctl decide gateway
+  bind:   0.0.0.0:56945 (all interfaces; use this host's name or address from other machines)
+  URL:    https://127.0.0.1:56945
+  key:    /home/milosvasic/llmctl-work/lan/root/.env (source: generated; show it with `llmctl key show --yes-print`)
+  CA:     SHA-256 D8:E2:F6:EE:37:3C:09:A7:81:1B:FF:38:C8:12:8D:99:C8:61:75:12:CE:BD:48:C4:CF:7C:58:AF:A8:A9:E3:B5, expires 2036-10-04
+  models: 1 decision profile(s), default decide-tiny
+  pid:    226492 (log: /home/milosvasic/llmctl-work/lan/state/logs/decide-gateway.log)
+---
+llmctl decide gateway
+  bind:   0.0.0.0:56945 (all interfaces; use this host's name or address from other machines)
+  URL:    https://127.0.0.1:56945
+  key:    /home/milosvasic/llmctl-work/lan/root/.env (source: file; show it with `llmctl key show --yes-print`)
+  CA:     SHA-256 D8:E2:F6:EE:37:3C:09:A7:81:1B:FF:38:C8:12:8D:99:C8:61:75:12:CE:BD:48:C4:CF:7C:58:AF:A8:A9:E3:B5, expires 2036-10-04
+  models: 1 decision profile(s), default decide-tiny
+llmctl decide gateway: stopped

@@ -1,0 +1,130 @@
+{
+  "schema": "llmctl.admission/1",
+  "candidate": {
+    "name": "openjev-27b",
+    "repo": "openjev/openjev",
+    "pinned": "no",
+    "protocol_hint": "unsupported",
+    "known_issue": "",
+    "name_collision": "PyPI 'openjev' 0.0.1 has no licence metadata",
+    "kind": "weights"
+  },
+  "slug": "openjev__openjev",
+  "mode": "paper-only",
+  "retrieved_at": "2026-10-07T16:16:11Z",
+  "existence": {
+    "verdict": "VERIFIED",
+    "evidence": "HTTP 200 from <LLMCTL_HF_BASE>/api/models/openjev/openjev",
+    "http_status": 200,
+    "name_collision": "PyPI 'openjev' 0.0.1 has no licence metadata"
+  },
+  "api": {
+    "id": "openjev/openjev",
+    "sha": "ac97900fd034fdd7e7e536f3d4c21b836cae0750",
+    "lastModified": "2026-09-30T11:08:16.000Z",
+    "author": "openjev",
+    "gated": false,
+    "private": false,
+    "disabled": false
+  },
+  "pins": [],
+  "protocol": {
+    "class": "unsupported",
+    "source": "curated hint 'unsupported'"
+  },
+  "needs_engine_advance": false,
+  "tier": null,
+  "g10_subchecks": [
+    {
+      "check": "loadability",
+      "status": "SKIP",
+      "evidence": "not attempted: earlier gate(s) failed: ['G1', 'G3', 'G6']"
+    },
+    {
+      "check": "smoke_answer",
+      "status": "SKIP",
+      "evidence": "not attempted: earlier gate(s) failed: ['G1', 'G3', 'G6']"
+    },
+    {
+      "check": "determinism_repeats",
+      "status": "SKIP",
+      "evidence": "not attempted: earlier gate(s) failed: ['G1', 'G3', 'G6']"
+    },
+    {
+      "check": "option_order_sensitivity",
+      "status": "SKIP",
+      "evidence": "not attempted: earlier gate(s) failed: ['G1', 'G3', 'G6']"
+    },
+    {
+      "check": "memory_fit_measured",
+      "status": "SKIP",
+      "evidence": "not attempted: earlier gate(s) failed: ['G1', 'G3', 'G6']"
+    }
+  ],
+  "gates": [
+    {
+      "gate": "G1",
+      "name": "licence allow-list",
+      "status": "FAIL",
+      "evidence": "weights licence cc-by-nc-4.0 is not on the allow-list ['apache-2.0', 'mit', 'bsd-2-clause', 'bsd-3-clause', 'cc-by-4.0', 'cc0-1.0', 'isc', 'unlicense']; licence files in repo: ['LICENSE']"
+    },
+    {
+      "gate": "G2",
+      "name": "stable revision",
+      "status": "PASS",
+      "evidence": "immutable ref ac97900fd034fdd7e7e536f3d4c21b836cae0750, lastModified 2026-09-30T11:08:16.000Z; re-verify at release"
+    },
+    {
+      "gate": "G3",
+      "name": "pinned size+sha256",
+      "status": "FAIL",
+      "evidence": "no GGUF or ONNX file in the repo to pin (siblings: ['.gitattributes', 'LICENSE', 'LICENSE-APACHE-2.0', 'MANIFEST.json', 'NOTICE', 'README.md', 'SHA256SUMS', 'assets/distance_from_jev.png'])"
+    },
+    {
+      "gate": "G4",
+      "name": "loadable by pinned engine",
+      "status": "SKIP",
+      "evidence": "no supported runtime exists for an unclassified protocol (the failure is recorded at G6)"
+    },
+    {
+      "gate": "G5",
+      "name": "fits budgets",
+      "status": "SKIP",
+      "evidence": "no model file pinned, nothing to size (the failure is recorded at G3)"
+    },
+    {
+      "gate": "G6",
+      "name": "protocol classification",
+      "status": "FAIL",
+      "evidence": "unsupported / unclassified protocol (curated hint 'unsupported'); fail closed"
+    },
+    {
+      "gate": "G7",
+      "name": "supply chain",
+      "status": "PASS",
+      "evidence": "pin has no pickle files"
+    },
+    {
+      "gate": "G8",
+      "name": "provenance",
+      "status": "PASS",
+      "evidence": "API author 'openjev' == repo owner; HF-side cross-link to GitHub/PyPI not checked in paper mode; name collision noted: PyPI 'openjev' 0.0.1 has no licence metadata"
+    },
+    {
+      "gate": "G9",
+      "name": "known-issue sweep",
+      "status": "PENDING",
+      "evidence": "live upstream issue-tracker sweep not done by this driver (offline); none recorded in the research register"
+    },
+    {
+      "gate": "G10",
+      "name": "real run",
+      "status": "SKIP",
+      "evidence": "not attempted: earlier gate(s) failed: ['G1', 'G3', 'G6']"
+    }
+  ],
+  "disposition": "REJECTED",
+  "reasons": [
+    "G1: weights licence cc-by-nc-4.0 is not on the allow-list ['apache-2.0', 'mit', 'bsd-2-clause', 'bsd-3-clause', 'cc-by-4.0', 'cc0-1.0', 'isc', 'unlicense']; licence files in repo: ['LICENSE']"
+  ]
+}

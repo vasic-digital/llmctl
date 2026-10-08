@@ -1,0 +1,3 @@
+  SKIP: GPU throughput-ratio measurement
+    reason: nvidia-smi not present on this host
+RESULT: PASS

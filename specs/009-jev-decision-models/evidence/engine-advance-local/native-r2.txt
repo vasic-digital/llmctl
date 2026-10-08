@@ -1,0 +1,4 @@
+status codes [200, 200, 200, 200, 200, 200, 200, 200]
+byte-identical 8/8: True
+{"model":"/home/milosvasic/llmctl-engine-scratch/models/Julia-1-Q8_0.gguf","answers":{"route":{"type":"choice","choice":"shipping","probabilities":{"billing":0.024710317838482435,"shipping":0.9426720929696105,"technical":0.03261758919190694},"confidence":0.9140081394544156},"angry":{"type":"noul","noul":0.8160698285254093},"urgency":{"type":"score","score":1.1344814937143368,"legend":{"0":"can wait","1":"this week","2":"today","3":"right now"},"probabilities":{"0":7.743151146626727e-05,"1":0.8657763764618592,"2":0.13373345882754573,"3":0.00041273319912875676},"confidence":0.8653636432627305}},"usage":{"input_tokens":110,"output_tokens":0}}
+noauth -> 401 b'{"error":{"message":"Invalid API Key","type":"authentication_error","code":401}}'

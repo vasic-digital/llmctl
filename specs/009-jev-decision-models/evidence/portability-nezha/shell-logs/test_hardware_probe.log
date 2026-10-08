@@ -1,0 +1,14 @@
+  ok: real probe exit code
+  ok: probe JSON top-level keys
+  ok: probe reports a sane core count (8)
+  ok: probe reports total memory (64086 MiB)
+  ok: human output has CPU line
+  ok: human output has RAM line
+  ok: human output has Storage line
+  ok: fake probe returns fixture model
+  ok: fake probe returns fixture VRAM
+  ok: missing fixture file -> probe fails
+  ok: missing fixture file fails for the real stated reason
+  ok: invalid fixture JSON -> probe fails
+  ok: invalid fixture JSON fails for the real stated reason
+RESULT: PASS

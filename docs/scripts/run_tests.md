@@ -113,3 +113,31 @@ literal exit code being shown first.
 ## Last verified date
 
 2026-09-17
+
+## SKIP is not PASS (C-20)
+
+A test that cannot run on this host must say so in a way the harness can read:
+
+* **Whole suite skipped** - print a line starting exactly `SKIP-SUITE: <reason>` and exit 0 (no go, no podman,
+  no network ...). The summary shows `SKIP  <name> (<reason>)`, counts it under `SKIP:` and lists it under
+  `NOT RUN (skipped suites, not passes):`. A suite that prints `SKIP-SUITE:` but exits non-zero is a FAIL.
+* **A suite that asserted nothing and only skipped** (no `  ok:` line, at least one `  SKIP:` from
+  `assert_skip`) is classified SKIP too, whatever its `RESULT:` line says.
+* **A suite that ran and skipped some assertions** stays PASS but is shown as `PASS  <name> (<n> skipped
+  assertion(s))`, and the total is summarised.
+
+`PASS: N  FAIL: N  SKIP: N` is the final line. A SKIP never fails the run (exit 0) and is never hidden.
+Proof: `tests/test_run_tests_format.sh`.
+
+## Lost-counter and late-skip guard (C2-06)
+
+- A suite that exits 0 but printed a `  FAIL:` line is reported **FAIL** (`exit 0 but N '  FAIL:' line(s)`): the
+  assertion ran in a subshell and its `TEST_FAILS` increment was lost.
+- C3-11: an exit-0 suite that printed no `  ok:` line and no SKIP asserted nothing and is reported **FAIL**; one that
+  prints `RESULT: FAIL` yet exits 0, or keeps asserting AFTER `SKIP-SUITE:`, is **FAIL** too. A FAIL line may be
+  tab-indented, ANSI-coloured or lack the space after the colon.
+- `SKIP-SUITE:` is honoured only when no assertion line (`  ok:` / `  FAIL:`) precedes it. A suite that already
+  asserted something must not skip: SKIP-SUITE after an assertion is reported **FAIL**. `tests/helpers.sh`
+  `skip_suite <reason>` is the helper: it prints the marker and exits 0, or exits 1 when `TEST_FAILS` is already > 0.
+- Residual risk: a suite that legitimately prints a `  FAIL:` line from a nested child process it is demonstrating
+  would now be flagged. None was found by a static scan of `tests/`; the full `make test` was not run for this change.

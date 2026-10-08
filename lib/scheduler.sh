@@ -27,9 +27,24 @@ source "${_sch_dir}/os_detect.sh"
 source "${_sch_dir}/hardware.sh"
 # shellcheck source=catalog.sh
 source "${_sch_dir}/catalog.sh"
+# shellcheck source=portreg.sh
+source "${_sch_dir}/portreg.sh"
 
 # Load the service backend for this OS.
+#
+# LLMCTL_SERVICE_BACKEND_FILE (test seam, same family as LLMCTL_FAKE_HW /
+# LLMCTL_LLAMA_SERVER): when set, that file is sourced INSTEAD of the OS
+# backend. It must implement the svc_* interface (see service_linux.sh). It
+# lets the dynamic-port / registry tests drive the REAL scheduler start path
+# against a process backend that really spawns the (harmless) fake engine,
+# without touching the developer's systemd user manager. Never set in
+# production.
 sched_load_backend() {
+  if [[ -n "${LLMCTL_SERVICE_BACKEND_FILE:-}" ]]; then
+    # shellcheck source=/dev/null
+    source "${LLMCTL_SERVICE_BACKEND_FILE}"
+    return 0
+  fi
   case "$(llmctl_os)" in
     linux)  # shellcheck source=service_linux.sh
             source "${_sch_dir}/service_linux.sh" ;;
@@ -45,6 +60,18 @@ sched_rank_for_capability() {
     chat)   echo "colibri-glm ws-dense-32b ws-moe-30b coder moe-fast fast vision-pro vision colibri-qwen36 small" ;;
     coder)  echo "colibri-glm coder ws-moe-30b ws-dense-32b colibri-qwen36" ;;
     vision) echo "vision-pro vision" ;;
+    # decide: ascending footprint/accuracy tradeoff (best-first for `auto
+    # decide` = smallest that fits). Rationale per rung: decide-tiny (0.5
+    # GiB, calibrated for exactly this workload) > decide-nli (1.7 GiB
+    # fp32 ONNX encoder; CPU-only but NLI entailment needs no generation,
+    # one forward pass per option) > decide-2b (1.9 GiB generative,
+    # Q8_0 > decide-tiny's Q4_K_M at similar size) > decide (2.6 GiB,
+    # JevBench #1) > decide-pro (4.2 GiB Q8_0, probability-shape tuned) >
+    # decide-max (9.1 GiB, workstation tier, highest capacity) > the six NATIVE
+    # /v1/systemone profiles (llama.cpp >= b11379; the gateway serves them only
+    # with LLMCTL_DECIDE_NATIVE=1), appended in ascending footprint order so that
+    # `auto decide` never prefers an engine-gated profile over a proven one.
+    decide) echo "decide-tiny decide-nli decide-2b decide decide-pro decide-max decide-julia decide-laya decide-kev-08b decide-lev decide-kev-4b decide-kev-9b" ;;
     *)      return 1 ;;
   esac
 }
@@ -225,6 +252,11 @@ _sched_reconcile_reservations() {
     port="$(json_query "${plan_file}" "d[\"profiles\"][\"${profile}\"][\"port\"]")"
     ram="$(json_query "${plan_file}" "d[\"profiles\"][\"${profile}\"][\"ram_mb\"]")"
     vram="$(json_query "${plan_file}" "d[\"profiles\"][\"${profile}\"][\"vram_mb\"]")"
+    # The port the unit really runs on is the one in its env record (a dynamic
+    # assignment differs from the plan's documented port) - FR-088.
+    local rec_port
+    rec_port="$(sed -n 's/^LLMCTL_PORT=//p' "${LLMCTL_SERVICES_DIR}/$(_sched_reg_name "${profile}").env" 2>/dev/null | head -1)"
+    [[ "${rec_port}" =~ ^[0-9]+$ ]] && port="${rec_port}"
     _sched_write_reservation "${profile}" "${mode}" "${port}" "${ram}" "${vram}"
     # >&2: sched_running() is a data-producing function whose stdout callers
     # parse as a bare list of profile names (e.g. _sched_stop_impl's
@@ -245,6 +277,75 @@ _sched_reconcile_reservations() {
   if [[ -n "${plan_file}" ]]; then
     rm -f "${plan_file}"
   fi
+}
+
+# --- port / registry helpers (FR-088..FR-091) ---------------------------------
+# _sched_reg_name <profile> -> the registry / port-hold key of the service
+# (the backend's instance key: tenant-qualified when LLMCTL_TENANT_ID is set).
+_sched_reg_name() {
+  if declare -F _svc_instance_key >/dev/null 2>&1; then _svc_instance_key "$1"; else printf '%s\n' "$1"; fi
+}
+
+# _sched_is_decision <profile> -> rc 0 for a decision-capability profile.
+_sched_is_decision() {
+  case " $(catalog_capability "$1") " in *" decide "*) return 0 ;; *) return 1 ;; esac
+}
+
+# _sched_ensure_key_file <path> - create the per-profile internal key file
+# (0600, directory 0700) when absent. The key never appears on argv or in the
+# environment; the unit's ExecStartPre (lib/svc_hook.sh prestart) rotates it on
+# every start (G-028). Skipped in dry-run (no file is touched).
+_sched_ensure_key_file() {
+  local keyfile="$1"
+  [[ "${LLMCTL_DRY_RUN}" != "1" && ! -s "${keyfile}" ]] || return 0
+  ( umask 077; mkdir -p "$(dirname "${keyfile}")" \
+    && python3 -c 'import secrets; print(secrets.token_hex(32))' > "${keyfile}" ) \
+    || die "cannot create the internal key file ${keyfile}"
+  chmod 600 "${keyfile}"
+}
+
+# _sched_svc_write_env <profile> - svc_write_env with the profile's registration
+# metadata (kind) passed through the environment of that one call.
+_sched_svc_write_env() {
+  local p="$1" kind=chat
+  _sched_is_decision "${p}" && kind=decide
+  local -x LLMCTL_SVC_KIND="${kind}"
+  svc_write_env "${p}" "$(catalog_engine "${p}")" "${SCHED_EXEC}" "${SCHED_ARGS[@]}"
+}
+
+# _sched_registry_publish <profile> <port> - publish a READY service in the
+# registry with its real process identity. Never fatal: the engine is up and
+# serving; a registry failure is reported loudly, not hidden.
+_sched_registry_publish() {
+  local p="$1" port="$2" name pid token engine kind="chat" health="/health" loop=0 keyf=""
+  portreg_active || return 0
+  name="$(_sched_reg_name "${p}")"
+  pid="$(svc_main_pid "${p}" 2>/dev/null || true)"
+  if [[ -z "${pid}" ]]; then
+    warn "registry: cannot determine the process id of '${p}'; it is NOT published (llmctl discover will not list it)"
+    return 0
+  fi
+  engine="$(catalog_engine "${p}")"
+  token="$(basename "${SCHED_EXEC:-}")"
+  case "${token}" in python|python3|python3.*) token="$(basename "${SCHED_ARGS[0]:-}")" ;; esac
+  [[ "${engine}" == "colibri" ]] && health="/v1/models"
+  if _sched_is_decision "${p}"; then kind=decide; loop=1; fi
+  local i
+  for (( i=0; i<${#SCHED_ARGS[@]}; i++ )); do
+    [[ "${SCHED_ARGS[i]}" == "--api-key-file" ]] && keyf="${SCHED_ARGS[i+1]:-}"
+    [[ "${SCHED_ARGS[i]}" == "--host" ]] && case "${SCHED_ARGS[i+1]:-}" in 127.*|localhost|::1) loop=1 ;; esac
+  done
+  if ! portreg_register "${name}" "${port}" "${pid}" "${token}" http "${health}" "${kind}" "${p}" "${name}" "${loop}" "${keyf}"; then
+    warn "registry: registering '${p}' (port ${port}, pid ${pid}) failed; it is running but not discoverable (see: llmctl-decide registry list)"
+  fi
+}
+
+# sched_registry_withdraw <profile> - remove the registry row and free the port
+# hold (the service is stopped / disabled). Idempotent.
+sched_registry_withdraw() {
+  local name; name="$(_sched_reg_name "$1")"
+  portreg_unregister "${name}"
+  portreg_release "${name}"
 }
 
 # --- launch argument construction --------------------------------------------
@@ -268,9 +369,41 @@ sched_build_launch() {
       if [[ "${LLMCTL_DRY_RUN}" != "1" && ! -f "${model}" ]]; then
         die "model not downloaded: ${model}. Run: llmctl models download ${profile}"
       fi
-      SCHED_ARGS=(--model "${model}" --host "$(catalog_bind_host "${profile}")" --port "${port}"
-                  --ctx-size "${ctx}" --n-gpu-layers "${ngl}"
-                  --flash-attn "${fa}" --parallel "${parallel}" --jinja)
+      if _sched_is_decision "${profile}"; then
+        # Decision engines (FR-073/FR-074, G-030, D-04): loopback-only behind
+        # the gateway, per-profile internal key FILE (never argv/env), no
+        # web UI. Deterministic mode (the default) runs exactly ONE slot
+        # (-np 1) with the catalog's per-slot context preserved; throughput
+        # mode (opt-in LLMCTL_DECIDE_MODE=throughput) uses the catalog's
+        # parallel slots and scales --ctx-size so each slot keeps the same
+        # context (llama-server divides --ctx-size across slots).
+        local dmode="${LLMCTL_DECIDE_MODE:-deterministic}"
+        case "${dmode}" in
+          deterministic) parallel=1 ;;
+          throughput)    ;;
+          *) die "LLMCTL_DECIDE_MODE='${dmode}' is not valid (deterministic|throughput)" ;;
+        esac
+        local dkey="${LLMCTL_STATE_DIR}/keys/llama-${profile}.key"
+        _sched_ensure_key_file "${dkey}"
+        SCHED_ARGS=(--model "${model}" --host 127.0.0.1 --port "${port}"
+                    --ctx-size "$(( ctx * parallel ))" --n-gpu-layers "${ngl}"
+                    --flash-attn "${fa}" --parallel "${parallel}" --jinja
+                    --api-key-file "${dkey}" --no-webui)
+        if [[ "$(catalog_decision_protocol "${profile}")" == "systemone-native" ]]; then
+          # Native /v1/systemone profiles (G-116, llama.cpp #30073): the engine renders and scores the
+          # whole state in ONE physical batch, and a state longer than --ubatch-size (default 512) is
+          # rejected with HTTP 500 "input (N tokens) is too large" (measured: a ~2100-token state at the
+          # default). 4096 covers the gateway state budget (LLMCTL_DECIDE_MAX_STATE_CHARS=8192 chars is
+          # ~2100 tokens). No prompt cache: every request is scored from scratch, so repeats are
+          # byte-identical (deterministic mode). Decision-only flags: the chat template (--jinja) is
+          # harmless but unused by /v1/systemone.
+          SCHED_ARGS+=(--batch-size 4096 --ubatch-size 4096 --no-cache-prompt)
+        fi
+      else
+        SCHED_ARGS=(--model "${model}" --host "$(catalog_bind_host "${profile}")" --port "${port}"
+                    --ctx-size "${ctx}" --n-gpu-layers "${ngl}"
+                    --flash-attn "${fa}" --parallel "${parallel}" --jinja)
+      fi
       [[ -n "${mmproj}" && -f "${mmproj}" ]] && SCHED_ARGS+=(--mmproj "${mmproj}")
       # KV-cache-type quantization (root-caused 2026-10-03: a profile's
       # context was always f16-only, which uses ~4x the VRAM per token
@@ -395,8 +528,108 @@ sched_build_launch() {
       # OWN default, and belongs to the operator, not to this scheduler.
       # See README.md "Safety guarantees" for the full disclosure.
       ;;
+    onnx)
+      # Encoder-class scoring runtime (lib/onnx_server.py): CPU inference only; the
+      # planner's onnx footprint branch reserves RAM = size*1.5 + 512 MiB
+      # and 0 VRAM for this mode.
+      local dir="${LLMCTL_MODELS_DIR}/${profile}"
+      if [[ "${LLMCTL_DRY_RUN}" != "1" && ! -d "${dir}" ]]; then
+        die "model not downloaded: ${dir}. Run: llmctl models download ${profile}"
+      fi
+      # Internal encoder scoring runtime (lib/onnx_server.py): loopback-only,
+      # no typed-question logic (the Go gateway owns the public API). Python
+      # is the hash-locked private venv built by `llmctl build onnx`
+      # ($LLMCTL_DATA_DIR/venv-onnx); without it we fall back to the system
+      # interpreter and the runtime then fails loudly with the build hint.
+      local venv_py="${LLMCTL_DATA_DIR}/venv-onnx/bin/python"
+      if [[ -x "${venv_py}" ]]; then
+        SCHED_EXEC="${venv_py}"
+      else
+        SCHED_EXEC="${LLMCTL_PYTHON:-$(command -v python3)}"
+      fi
+      # Tokenizer file from the catalog (D-17a): spm.model preferred, else
+      # tokenizer.json (the runtime resolves the bare name in <dir> or <dir>/onnx).
+      local tok="" fname frole
+      while IFS='|' read -r fname _ _ frole; do
+        [[ "${frole}" == "tokenizer" ]] || continue
+        case "${fname##*/}" in
+          spm.model) tok="spm.model"; break ;;
+          tokenizer.json) [[ -n "${tok}" ]] || tok="tokenizer.json" ;;
+        esac
+      done < <(catalog_files "${profile}")
+      # Per-profile internal key file (0600, dir 0700): the key itself never
+      # appears on argv or in the environment. Created on first real launch;
+      # rotate by deleting the file and restarting the service. The Go
+      # gateway reads the SAME file.
+      local keyfile="${LLMCTL_ONNX_KEY_FILE:-${LLMCTL_STATE_DIR}/keys/onnx-${profile}.key}"
+      _sched_ensure_key_file "${keyfile}"
+      SCHED_ARGS=("${_sch_dir}/onnx_server.py" --model-dir "${dir}"
+                  --host 127.0.0.1 --port "${port}"
+                  --profile "${profile}" --max-tokens "${ctx}"
+                  --api-key-file "${keyfile}")
+      if [[ -n "${tok}" ]]; then
+        SCHED_ARGS+=(--tokenizer "${tok}")
+      fi
+      ;;
     *) die "unknown engine for profile ${profile}: ${engine}" ;;
   esac
+}
+
+# _sched_admission_fits <ram_mb> <vram_mb> <used_ram> <used_vram> <ram_budget> <vram_budget>
+# -> rc 0 when one more reservation of (ram, vram) fits next to what is
+# already used, rc 1 otherwise. THE single admission predicate: start,
+# enable and the decision-instance probe below all decide with it, so the
+# decision-capacity report (catalog.sh) and what admission accepts cannot
+# drift apart (spec 009 FR-027/FR-028, SC-010; tests/test_decision_capacity.sh).
+_sched_admission_fits() {
+  local ram="$1" vram="$2" used_ram="$3" used_vram="$4" ram_budget="$5" vram_budget="$6"
+  (( used_ram + ram <= ram_budget )) && (( used_vram + vram <= vram_budget ))
+}
+
+# sched_decision_probe <profile> <gpu|cpu> [plan-file]
+# Read-only SC-010 probe: starting instances of ONE decision profile in ONE
+# placement, one at a time, against the current budget seeded exactly as
+# _sched_start_impl seeds it (_sched_initial_used), counting how many the
+# admission predicate accepts. Prints
+#   accepted=<N>
+#   refused=<message with the exact numbers>      (the refusal of instance N+1)
+# Never writes a reservation, env file or service. A tier-gated profile and
+# a placement that does not apply (the CPU-only onnx encoder has no GPU
+# placement) accept 0 and say why - the same 0 the capacity report shows.
+# Returns 1 (message on stderr) for an unknown/non-decision profile or placement.
+sched_decision_probe() {
+  local profile="${1:-}" placement="${2:-}" plan_file="${3:-}" own_plan=0
+  [[ -n "${profile}" && -n "${placement}" ]] || { err "usage: sched_decision_probe <profile> <gpu|cpu> [plan-file]"; return 1; }
+  case "${placement}" in gpu|cpu) ;; *) err "unknown placement '${placement}' (gpu|cpu)"; return 1 ;; esac
+  catalog_exists "${profile}" || { err "unknown profile: ${profile}"; return 1; }
+  case " $(catalog_capability "${profile}") " in
+    *" decide "*) ;;
+    *) err "'${profile}' is not a decision profile"; return 1 ;;
+  esac
+  if [[ -z "${plan_file}" ]]; then
+    plan_file="$(mktemp)"; own_plan=1
+    hw_probe_json | catalog_plan_json > "${plan_file}"
+  fi
+  local di="d['decision_instances']['${profile}']" pl="d['decision_instances']['${profile}']['placements']['${placement}']"
+  local ram vram ram_budget vram_budget tier_ok host_tier min_tier used_ram used_vram
+  read -r ram vram ram_budget vram_budget tier_ok host_tier min_tier < <(json_query "${plan_file}" \
+    "' '.join(str(x) for x in ((${pl} or {}).get('ram_mb', -1), (${pl} or {}).get('vram_mb', -1), d['budgets']['ram_mb'], d['budgets']['vram_mb'], int(bool(${di}['tier_ok'])), d['tier'], d['profiles']['${profile}']['min_tier']))")
+  read -r used_ram used_vram < <(_sched_initial_used "${plan_file}")
+  [[ "${own_plan}" == 1 ]] && rm -f "${plan_file}"
+  if (( ram < 0 )); then
+    printf 'accepted=0\nrefused=%s placement is not applicable to %s (CPU-only engine)\n' "${placement}" "${profile}"
+    return 0
+  fi
+  if (( tier_ok == 0 )); then
+    printf 'accepted=0\nrefused=tier gate: host tier %s below min_tier %s for %s\n' "${host_tier}" "${min_tier}" "${profile}"
+    return 0
+  fi
+  local n=0
+  while (( n < 100000 )) && _sched_admission_fits "${ram}" "${vram}" "${used_ram}" "${used_vram}" "${ram_budget}" "${vram_budget}"; do
+    n=$(( n + 1 )); used_ram=$(( used_ram + ram )); used_vram=$(( used_vram + vram ))
+  done
+  printf 'accepted=%s\nrefused=cannot start instance %s of '"'"'%s'"'"' (%s placement): needs %s MiB RAM + %s MiB VRAM, but only %s MiB RAM + %s MiB VRAM remain\n' \
+    "${n}" "$(( n + 1 ))" "${profile}" "${placement}" "${ram}" "${vram}" "$(( ram_budget - used_ram ))" "$(( vram_budget - used_vram ))"
 }
 
 # --- core operations ----------------------------------------------------------
@@ -504,7 +737,9 @@ _sched_diagnose_bind_failure() {
 }
 
 _sched_wait_ready() {
-  local port="$1"
+  # <path> defaults to the OpenAI-compatible /v1/models; keyed (decision)
+  # engines answer that with 401, so they are probed at their public /health.
+  local port="$1" path="${2:-/v1/models}"
   [[ "${LLMCTL_DRY_RUN:-0}" == "1" ]] && return 0
   local timeout="${LLMCTL_READY_TIMEOUT:-60}"
   local interval="${LLMCTL_READY_POLL_INTERVAL:-1}"
@@ -512,7 +747,7 @@ _sched_wait_ready() {
   command -v curl >/dev/null 2>&1 || return 0
   local waited=0
   while (( waited < timeout )); do
-    curl -sf --max-time 1 "http://127.0.0.1:${port}/v1/models" >/dev/null 2>&1 && return 0
+    curl -sf --max-time 1 "http://127.0.0.1:${port}${path}" >/dev/null 2>&1 && return 0
     sleep "${interval}"
     waited=$(( waited + interval ))
   done
@@ -550,8 +785,7 @@ _sched_start_impl() {
     ram="$(json_query "${plan_file}" "d[\"profiles\"][\"${p}\"][\"ram_mb\"]")"
     vram="$(json_query "${plan_file}" "d[\"profiles\"][\"${p}\"][\"vram_mb\"]")"
     if [[ "${fits}" != "True" ]] || \
-       (( used_ram + ram > ram_budget )) || \
-       (( used_vram + vram > vram_budget )); then
+       ! _sched_admission_fits "${ram}" "${vram}" "${used_ram}" "${used_vram}" "${ram_budget}" "${vram_budget}"; then
       local suggestion=""
       local alt
       for alt in $(json_query "${plan_file}" 'd["recommended"]'); do
@@ -596,8 +830,19 @@ _sched_start_impl() {
     parallel="$(json_query "${plan_file}" "d[\"profiles\"][\"${p}\"][\"parallel\"]")"
     fa="$(json_query "${plan_file}" "d[\"profiles\"][\"${p}\"][\"flash_attn\"]")"
     kv_type="$(json_query "${plan_file}" "d[\"profiles\"][\"${p}\"].get(\"kv_cache_type\", \"f16\")")"
+    # FR-088: the port is resolved through the registry allocator (fixed =
+    # the documented port, dynamic = a bind-tested free port of
+    # LLMCTL_PORT_RANGE; an explicit LLMCTL_PORT_<PROFILE> always wins). A
+    # taken port fails HERE, naming the port and the override variable,
+    # before anything is written or started.
+    local reg_name; reg_name="$(_sched_reg_name "${p}")"
+    if ! port="$(portreg_allocate "${reg_name}" "${p}" "${port}")"; then
+      err "cannot start '${p}': no usable port"
+      rm -f "${plan_file}"
+      return 1
+    fi
     sched_build_launch "${p}" "${mode}" "${port}" "${ctx}" "${ngl}" "${parallel}" "${fa}" "${kv_type}"
-    svc_write_env "${p}" "$(catalog_engine "${p}")" "${SCHED_EXEC}" "${SCHED_ARGS[@]}"
+    _sched_svc_write_env "${p}"
     # Root-caused 2026-09-17 (real repro, not guessed): this whole function
     # runs as the `command` operand of `scheduler::with_lock`'s
     # `"$@" || rc=$?`, and bash disables `set -e` propagation for the ENTIRE
@@ -617,6 +862,7 @@ _sched_start_impl() {
     # reported honestly and NEVER reserved as running.
     if ! svc_start "${p}"; then
       err "failed to start '${p}': the service backend refused to start it (see: llmctl logs ${p}; on Linux, check 'llmctl install' has been run and 'systemctl --user status llmctl-$(catalog_engine "${p}")@${p}.service')"
+      portreg_release "${reg_name}"
       rm -f "${plan_file}"
       return 1
     fi
@@ -628,18 +874,22 @@ _sched_start_impl() {
     # SAME failure shape `_sched_switch_impl`'s existing rollback wrapper
     # already handles, so a switch whose target never becomes ready
     # correctly rolls back to the previously-running profile too.
-    if ! _sched_wait_ready "${port}"; then
+    local ready_path="/v1/models"
+    _sched_is_decision "${p}" && ready_path="/health"
+    if ! _sched_wait_ready "${port}" "${ready_path}"; then
       local diag
       if diag="$(_sched_diagnose_bind_failure "${p}" "${port}")"; then
         err "failed to start '${p}': ${diag} (see: llmctl logs ${p})"
       else
-        err "started '${p}' but it never answered http://127.0.0.1:${port}/v1/models within ${LLMCTL_READY_TIMEOUT:-60}s (see: llmctl logs ${p})"
+        err "started '${p}' but it never answered http://127.0.0.1:${port}${ready_path} within ${LLMCTL_READY_TIMEOUT:-60}s (see: llmctl logs ${p})"
       fi
       svc_stop "${p}" || true
+      portreg_release "${reg_name}"
       rm -f "${plan_file}"
       return 1
     fi
     _sched_write_reservation "${p}" "${mode}" "${port}" "${ram}" "${vram}"
+    _sched_registry_publish "${p}" "${port}"
     info "started ${p} (mode=${mode}, port=${port}, reserved ${ram} MiB RAM + ${vram} MiB VRAM)"
   done
   rm -f "${plan_file}"
@@ -702,24 +952,54 @@ _enable_impl() {
     ram_budget="$(json_query "${plan_file}" 'd["budgets"]["ram_mb"]')"
     vram_budget="$(json_query "${plan_file}" 'd["budgets"]["vram_mb"]')"
     read -r used_ram used_vram < <(_sched_initial_used "${plan_file}")
-    if (( used_ram + ram > ram_budget )) || (( used_vram + vram > vram_budget )); then
+    if ! _sched_admission_fits "${ram}" "${vram}" "${used_ram}" "${used_vram}" "${ram_budget}" "${vram_budget}"; then
       rm -f "${plan_file}"
       err "cannot enable '${profile}': needs ${ram} MiB RAM + ${vram} MiB VRAM, but only $(( ram_budget - used_ram )) MiB RAM + $(( vram_budget - used_vram )) MiB VRAM remain within the host budget (stop another enabled profile first, e.g. 'llmctl disable <profile>', or use 'llmctl start ${profile}' on demand instead of a persistent enable)"
       return 1
     fi
   fi
   rm -f "${plan_file}"
+  # FR-088: resolve the port through the registry allocator - unless the
+  # service is ALREADY running (re-enable): it then keeps the port it holds
+  # (re-allocating would bind-test a port its own process is listening on).
+  local reg_name allocated=0 held=""
+  reg_name="$(_sched_reg_name "${profile}")"
+  if sched_is_running "${profile}"; then
+    held="$(sed -n 's/^port=//p' "$(_sched_run_file "${profile}")" | head -1)"
+  elif svc_is_active "${profile}" 2>/dev/null; then
+    held="$(sed -n 's/^LLMCTL_PORT=//p' "${LLMCTL_SERVICES_DIR}/${reg_name}.env" 2>/dev/null | head -1)"
+  fi
+  if [[ "${held}" =~ ^[0-9]+$ ]]; then
+    port="${held}"
+  else
+    port="$(portreg_allocate "${reg_name}" "${profile}" "${port}")" || { err "cannot enable '${profile}': no usable port"; return 1; }
+    allocated=1
+  fi
   sched_build_launch "${profile}" "${mode}" "${port}" "${ctx}" "${ngl}" "${parallel}" "${fa}" "${kv_type}"
-  svc_write_env "${profile}" "$(catalog_engine "${profile}")" "${SCHED_EXEC}" "${SCHED_ARGS[@]}"
+  _sched_svc_write_env "${profile}"
   touch "${LLMCTL_SERVICES_DIR}/${profile}.enabled"
   if ! svc_enable "${profile}"; then
     err "failed to enable '${profile}': the service backend refused to enable/start it (see: llmctl logs ${profile})"
+    [[ "${allocated}" == 1 ]] && portreg_release "${reg_name}"
     return 1
   fi
   # Record the reservation so the scheduler budgets correctly (enable
   # implies start).
   ensure_dir "${LLMCTL_RUNTIME_DIR}"
   _sched_write_reservation "${profile}" "${mode}" "${port}" "${ram}" "${vram}"
+  # Publish once ready. A slow model load must not make `enable` fail (the
+  # unit stays enabled and restarts on its own), so a timeout only defers the
+  # publication: the unit's ExecStartPost waiter (lib/svc_hook.sh) registers
+  # the service the moment it answers.
+  local ready_path="/v1/models"
+  _sched_is_decision "${profile}" && ready_path="/health"
+  if ! portreg_active; then
+    :   # no registry: enable returns as before (no readiness wait added)
+  elif _sched_wait_ready "${port}" "${ready_path}"; then
+    _sched_registry_publish "${profile}" "${port}"
+  else
+    warn "enabled '${profile}' but it does not answer http://127.0.0.1:${port}${ready_path} yet; it is published to the registry when it becomes ready"
+  fi
   info "enabled and started ${profile} (mode=${mode}, port=${port})"
 }
 
@@ -734,7 +1014,9 @@ _sched_stop_impl() {
   fi
   local p
   for p in ${targets[@]+"${targets[@]}"}; do
-    svc_stop "${p}" || true
+    if svc_stop "${p}"; then
+      sched_registry_withdraw "${p}"
+    fi
     rm -f "$(_sched_run_file "${p}")"
     info "stopped ${p}"
   done
@@ -811,11 +1093,23 @@ _sched_switch_impl() {
   return "${start_rc}"
 }
 
+# _sched_why_not_recommended <plan_file> <profile> -> short human reason
+# (tier gate / footprint) for a profile the plan does not recommend.
+_sched_why_not_recommended() {
+  local pf="$1" p="$2"
+  if [[ "$(json_query "${pf}" "str(d[\"profiles\"][\"${p}\"][\"tier_ok\"])")" != "True" ]]; then
+    printf 'tier gate: host tier %s below min_tier %s' "$(json_query "${pf}" 'd["tier"]')" \
+      "$(json_query "${pf}" "d[\"profiles\"][\"${p}\"][\"min_tier\"]")"
+  else
+    printf 'footprint exceeds the RAM and VRAM budgets'
+  fi
+}
+
 # _sched_auto_impl <capability...> - call sched_auto (above) from outside
 # this file; this unlocked form exists so the eviction loop and the final
 # start happen under one lock acquisition instead of two.
 _sched_auto_impl() {
-  [[ "$#" -ge 1 ]] || die "usage: llmctl auto <chat|coder|vision> [...]"
+  [[ "$#" -ge 1 ]] || die "usage: llmctl auto <chat|coder|vision|decide> [...]"
   sched_load_backend
   ensure_state_dirs
 
@@ -834,17 +1128,28 @@ _sched_auto_impl() {
   local cap p ranked found
   for cap in "$@"; do
     ranked="$(sched_rank_for_capability "${cap}")" \
-      || { rm -f "${plan_file}"; die "unknown capability: ${cap} (chat|coder|vision)"; }
+      || { rm -f "${plan_file}"; die "unknown capability: ${cap} (chat|coder|vision|decide)"; }
     found=""
+    local skipped_why=""
     for p in ${ranked}; do
       catalog_exists "${p}" || continue
       [[ " $(catalog_capability "${p}") " == *" ${cap} "* ]] || continue
-      [[ "$(json_query "${plan_file}" "d[\"profiles\"][\"${p}\"][\"recommended\"]")" == "True" ]] || continue
+      if [[ "$(json_query "${plan_file}" "d[\"profiles\"][\"${p}\"][\"recommended\"]")" != "True" ]]; then
+        skipped_why+="${p} (not recommended on this host: $(_sched_why_not_recommended "${plan_file}" "${p}")); "
+        continue
+      fi
       found="${p}"; break
     done
     [[ -n "${found}" ]] || { rm -f "${plan_file}"; die "no catalog profile for capability '${cap}' fits this host (see: llmctl plan)"; }
     want+=("${found}")
     log "capability '${cap}' -> profile '${found}'"
+    # FR-030 / SC-012: the decision capability explains its choice. The rule
+    # is fixed and documented (docs/hardware-tiers.md "Planner and `auto
+    # decide`"): the FIRST recommended profile of the ranked list wins, and
+    # the list is smallest-footprint-first, not "highest accuracy".
+    if [[ "${cap}" == "decide" ]]; then
+      log "  why: first recommended profile in the decide ranking [${ranked}] (smallest footprint first); ${skipped_why:-no higher-ranked profile was skipped}"
+    fi
   done
 
   # Eviction loop: try to fit; if not, evict the LRU non-enabled service.
@@ -932,6 +1237,7 @@ _sched_auto_impl() {
     freed_ram="$(sed -n 's/^ram_mb=//p' "${lru_run}" | head -1)"
     freed_vram="$(sed -n 's/^vram_mb=//p' "${lru_run}" | head -1)"
     if svc_stop "${lru}"; then
+      sched_registry_withdraw "${lru}"
       _sched_auto_ram_credit=$(( _sched_auto_ram_credit + ${freed_ram:-0} ))
       [[ "${vram_live}" == "True" ]] && _sched_auto_vram_credit=$(( _sched_auto_vram_credit + ${freed_vram:-0} ))
       rm -f "${lru_run}"

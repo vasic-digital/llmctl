@@ -111,6 +111,8 @@ func TestWrapCommand_RejectsMaliciousTenantID(t *testing.T) {
 		{"embedded-parent-dir", "acme/../other"},
 		{"space", "acme evil"},
 		{"empty", ""},
+		{"double-dash-C3-08", "acme--eu"},
+		{"trailing-dash-C3-08", "acme-"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -236,6 +238,24 @@ func TestWrapCommand_RealSystemdRunInvocation(t *testing.T) {
 	if err != nil {
 		t.Skipf("systemd-run not found on PATH (exec.LookPath: %v) - this build host has no usable systemd-run, SKIPping per Constitution §11.4.3 rather than fabricating a PASS", err)
 	}
+
+	// G-088: systemd keeps a slice active after its last scope exits, so this test would leave
+	// llmctl-tenant-cgrouptest.slice (and its implicit parents llmctl-tenant.slice, llmctl.slice) behind in
+	// the user manager. Record which of these EXACT slices were not active before the run and stop exactly
+	// those afterwards (deepest first); a slice already active before (a real tenant's, another run's) is
+	// never touched.
+	sliceNames := []string{"llmctl-tenant-cgrouptest.slice", "llmctl-tenant.slice", "llmctl.slice"}
+	var createdSlices []string
+	for _, n := range sliceNames {
+		if err := exec.Command("systemctl", "--user", "is-active", "--quiet", n).Run(); err != nil {
+			createdSlices = append(createdSlices, n)
+		}
+	}
+	t.Cleanup(func() {
+		for _, n := range createdSlices {
+			_ = exec.Command("systemctl", "--user", "stop", n).Run()
+		}
+	})
 
 	// A distinct, greppable slice name for this test run so a failure's
 	// captured evidence is unambiguous about which invocation produced it.

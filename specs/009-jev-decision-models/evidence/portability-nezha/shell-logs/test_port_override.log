@@ -1,0 +1,19 @@
+  ok: override env-var name for a simple profile
+  ok: override env-var name for a hyphenated profile (hyphens -> underscores, uppercased)
+  ok: override env-var name for another hyphenated profile
+  ok: catalog_port fast (no override) is the catalog default
+  ok: catalog_port fast honors LLMCTL_PORT_FAST
+  ok: LLMCTL_PORT_FAST does not leak into an unrelated profile (small unchanged)
+  ok: an override for an unknown profile still dies (die() exits 1), never silently returns the override
+  ok: die() message is the same as the no-override unknown-profile path
+  ok: no override: plan's fast port is still the catalog default (regression guard)
+  ok: LLMCTL_PORT_FAST=18080 plumbs into catalog_plan_json's fast port - the actual launch port
+  ok: plan: override is scoped to 'fast' only, 'small' keeps its catalog port
+  ok: plan: override is scoped to 'fast' only, 'coder' keeps its catalog port
+  ok: hyphenated profile name (ws-dense-32b) override plumbs through catalog_plan_json
+  ok: an invalid LLMCTL_PORT_FAST value fails the plan instead of silently using garbage
+  ok: invalid override reports a clear error naming the bad value
+  ok: llmctl models list shows the overridden port for fast
+  ok: llmctl plan --json without the override still shows the catalog default (regression guard)
+  ok: llmctl plan --json with LLMCTL_PORT_FAST=18080 shows the overridden port - this is the exact value 'llmctl start/enable fast' would bind to
+RESULT: PASS

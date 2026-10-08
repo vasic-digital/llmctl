@@ -1,0 +1,14 @@
+  ok: control needles: every planted key shape is flagged, no allowed form is
+  ok: the scanner sees all planted shapes and no allowed form
+  ok: a planted key in a scanned tree fails the scan
+  ok: the same line with an environment reference passes
+    hits=0
+  ok: docs/ and templates/ carry no literal key
+  ok: docs/agents/opencode.md exists (and is inside the scanned tree)
+  ok: docs/agents/pi.md exists (and is inside the scanned tree)
+  ok: docs/agents/crush.md exists (and is inside the scanned tree)
+  ok: docs/agents/claude-code.md exists (and is inside the scanned tree)
+  ok: docs/agents/aider.md exists (and is inside the scanned tree)
+  ok: docs/agents/continue.md exists (and is inside the scanned tree)
+  ok: docs/agents/cline.md exists (and is inside the scanned tree)
+RESULT: PASS

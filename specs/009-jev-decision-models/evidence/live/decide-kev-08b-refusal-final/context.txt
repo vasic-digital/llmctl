@@ -1,0 +1,38 @@
+profile=decide-kev-08b port=8104 date=2026-10-08T09:17:43Z host=anton
+engine: version: 0.5.0-dev (build 11379, commit 1537a0a8b)
+llama.cpp submodule: 1537a0a8b2f8711d840878b0a0677ab2213c882c b11379
+model: ggml-org/Kev-0.8B-GGUF e551e319d483ff57e1ff208924b349d397cffc1c [('Kev-0.8B-Q8_0.gguf', 812406304, '27278f34eb3273bceea4c053dc50dd61a5161da21a718c4aacdf8fd5830771d0')]
+--- memory before
+               total        used        free      shared  buff/cache   available
+Mem:           30974       25196         602       15059       20627        5778
+Swap:           8191        8191           0
+6954 MiB, 12288 MiB
+--- plan row
+{
+ "budgets": {
+  "ram_mb": 1635,
+  "vram_mb": 4213,
+  "vram_live": true,
+  "storage_free_mb": 33183
+ },
+ "profile": {
+  "mode": "none",
+  "ram_mb": 2570,
+  "vram_mb": 0,
+  "storage_mb": 774,
+  "ctx": 2048,
+  "ngl": 0,
+  "parallel": 1,
+  "flash_attn": "auto",
+  "kv_cache_type": "f16",
+  "fits": false,
+  "port": 8104,
+  "engine": "llama",
+  "capability": [
+   "decide"
+  ],
+  "min_tier": "below-minimum",
+  "tier_ok": true,
+  "recommended": false
+ }
+}

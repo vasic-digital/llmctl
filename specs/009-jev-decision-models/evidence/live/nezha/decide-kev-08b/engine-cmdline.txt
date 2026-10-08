@@ -1,0 +1,1 @@
+/home/milosvasic/llmctl-work-live/llama.cpp/build/bin/llama-server --model /home/milosvasic/llmctl-work-live/models/decide-kev-08b/Kev-0.8B-Q8_0.gguf --host 127.0.0.1 --port 35563 --ctx-size 2048 --n-gpu-layers 0 --flash-attn auto --parallel 1 --jinja --api-key-file <keyfile> --no-webui --batch-size 4096 --ubatch-size 4096 --no-cache-prompt 

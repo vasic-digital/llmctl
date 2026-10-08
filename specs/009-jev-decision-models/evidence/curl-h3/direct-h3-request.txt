@@ -1,0 +1,19 @@
+# direct HTTP/3 request, new curl
+* SSL connection using TLSv1.3 / TLS_AES_128_GCM_SHA256 / X25519MLKEM768 / id-ecPublicKey
+* using HTTP/3
+* [HTTP/3] [0] OPENED stream for https://127.0.0.1:18443/
+* [HTTP/3] [0] [:method: GET]
+* [HTTP/3] [0] [:scheme: https]
+* [HTTP/3] [0] [:authority: 127.0.0.1:18443]
+* [HTTP/3] [0] [:path: /]
+* [HTTP/3] [0] [user-agent: curl/8.22.0]
+* [HTTP/3] [0] [accept: */*]
+> GET / HTTP/3
+< HTTP/3 200 
+proto=HTTP/3.0
+# negative control: system curl --http3-only
+curl: option --http3-only: the installed libcurl version does not support this
+curl: try 'curl --help' or 'curl --manual' for more information
+# negative control: wrong CA
+curl: (60) Failed to connect to 127.0.0.1:18443 after 11 ms: SSL peer certificate or SSH remote key was not OK
+More details here: https://curl.se/docs/sslcerts.html

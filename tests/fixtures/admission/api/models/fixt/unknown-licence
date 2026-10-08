@@ -1,0 +1,26 @@
+{
+ "id": "fixt/unknown-licence",
+ "modelId": "fixt/unknown-licence",
+ "author": "fixt",
+ "private": false,
+ "gated": false,
+ "disabled": false,
+ "sha": "0123456789abcdef0123456789abcdef01234567",
+ "lastModified": "2026-10-01T00:00:00.000Z",
+ "tags": [],
+ "siblings": [
+  {
+   "rfilename": "u-Q4_K_M.gguf",
+   "blobId": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+   "size": 529296864,
+   "lfs": {
+    "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "size": 529296864,
+    "pointerSize": 134
+   }
+  }
+ ],
+ "gguf": {
+  "architecture": "qwen35"
+ }
+}

@@ -1,0 +1,8 @@
+0.00.000.753 I srv  llama_server: initializing ...
+0.00.002.111 I cmn  common_param: common_params_print_info: verbosity = 3 (adjust with the `-lv N` CLI arg)
+0.00.003.854 I srv    load_model: loading model 'models/Llama-3.2-3B-Instruct-Q4_K_M.gguf'
+0.01.588.008 I cmn          init: llama threadpool init, n_threads = 4
+0.01.775.610 I srv    load_model: initializing, n_slots = 1, n_ctx_slot = 2048, kv_unified = 'false'
+0.01.780.962 I srv  llama_server: model loaded
+0.01.780.968 I srv  llama_server: listening on http://127.0.0.1:44271
+0.02.013.323 I srv    operator(): operator(): cleaning up before exit...

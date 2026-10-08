@@ -1,0 +1,2 @@
+profile 'decide-laya' passed checksum verification
+rc=0

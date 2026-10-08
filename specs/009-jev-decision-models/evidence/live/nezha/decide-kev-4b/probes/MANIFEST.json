@@ -1,0 +1,35 @@
+{
+  "files": [
+    {
+      "path": "evidence.jsonl",
+      "sha256": "6a592169326a6862a9e7cf46e5a023d1c0f6c35e9631c821a7feba5641dfbd20",
+      "size": 2540
+    },
+    {
+      "path": "raw/EV-decide-kev-4b-probes-0001-stdout.txt",
+      "sha256": "dd378760d6768140b7c6d7eb74216a2bf3f5e2ee53514a70c044c091006e85e9",
+      "size": 4304
+    },
+    {
+      "path": "raw/EV-decide-kev-4b-probes-0002-stdout.txt",
+      "sha256": "dd378760d6768140b7c6d7eb74216a2bf3f5e2ee53514a70c044c091006e85e9",
+      "size": 4304
+    },
+    {
+      "path": "raw/EV-decide-kev-4b-probes-0003-stdout.txt",
+      "sha256": "dd378760d6768140b7c6d7eb74216a2bf3f5e2ee53514a70c044c091006e85e9",
+      "size": 4304
+    },
+    {
+      "path": "raw/responses.jsonl",
+      "sha256": "a20f591aa89b9cfe402f98281c333ce1e840a360325a2507752684851cbe4a1c",
+      "size": 8503
+    },
+    {
+      "path": "results.json",
+      "sha256": "78910c6f7a6c9fda2d0a86aa2a1bbf72e40d6f82cc4ca0330879855d18b71655",
+      "size": 19982
+    }
+  ],
+  "schema": 1
+}

@@ -1,0 +1,47 @@
+{
+ "id": "fixt/good-letter-gguf",
+ "modelId": "fixt/good-letter-gguf",
+ "author": "fixt",
+ "private": false,
+ "gated": false,
+ "disabled": false,
+ "sha": "0123456789abcdef0123456789abcdef01234567",
+ "lastModified": "2026-10-01T00:00:00.000Z",
+ "tags": [
+  "license:apache-2.0"
+ ],
+ "siblings": [
+  {
+   "rfilename": "LICENSE",
+   "blobId": "cccccccccccccccccccccccccccccccccccccccc",
+   "size": 11
+  },
+  {
+   "rfilename": "good-Q4_K_M.gguf",
+   "blobId": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+   "size": 529296864,
+   "lfs": {
+    "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "size": 529296864,
+    "pointerSize": 134
+   }
+  },
+  {
+   "rfilename": "good-BF16.gguf",
+   "blobId": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+   "size": 1600000000,
+   "lfs": {
+    "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "size": 1600000000,
+    "pointerSize": 134
+   }
+  }
+ ],
+ "cardData": {
+  "license": "apache-2.0"
+ },
+ "gguf": {
+  "architecture": "qwen35",
+  "total": 752000000
+ }
+}

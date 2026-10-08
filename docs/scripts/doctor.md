@@ -157,6 +157,14 @@ LLMCTL_DRY_RUN=1 llmctl setup   # doctor_run runs for real; build/plan are dry-r
   over HTTP/2 — this same detection expression is duplicated (independently)
   in `lib/cluster.sh`'s `_cluster_http3_supported`, so a change to one must be
   checked against the other (see Related scripts).
+* **Missing `onnxruntime`/`sentencepiece` is a `WARN`, not a `FAIL`** — the
+  `onnx` engine (`lib/onnx_server.py`, e.g. the `decide-nli` profile) needs
+  these deps for real inference (checked in the hash-locked
+  `$LLMCTL_DATA_DIR/venv-onnx` python when it exists, else `python3`), but every llama-engine
+  decision profile (`decide`/`decide-pro`/`decide-2b`/`decide-max`) is
+  fully functional without them, and the runner dies with a clear,
+  actionable message at launch anyway; each WARN points at
+  `llmctl build onnx`.
 * **No Go toolchain is a `WARN`, explicitly scoped to the opt-in daemon** —
   the warning states single-host llmctl is unaffected; `go` is only needed to
   run `make llmctld-build` (see the `Makefile`'s own guard for the same
@@ -233,6 +241,29 @@ LLMCTL_DRY_RUN=1 llmctl setup   # doctor_run runs for real; build/plan are dry-r
   `json_query` here re-validates a narrower slice of), and `lib/os_detect.sh`
   (the OS/arch/package-manager detection this file depends on directly).
 
+## Spec 009 addition
+
+When `llmctl-decide` is built, `doctor_run` compares the service registry with
+the live service set (`portreg_diff_report`): **PASS** when they are equal,
+**FAIL** naming each "registry row without a live service" / "live service
+without a registry row" (FR-089); WARN when the binary is absent.
+
 ## Last verified date
 
-2026-09-17
+2026-10-07
+
+## Registry rows that stay "unknown", and stale units (G-074, G-067)
+
+* **WARN** `registry rows that cannot be certified (https, no CA found): ...` when
+  a registry row carries `unknown_since` (an https service no CA could verify;
+  such rows are kept, never removed by default). Remedy: set `LLMCTL_CACERT`,
+  or opt in to forgetting them with `llmctl-decide registry reconcile
+  --prune-unknown-after 24h`.
+* **WARN** `stale service unit(s): ...` when an installed unit still carries
+  `StartLimitIntervalSec=`/`StartLimitBurst=` inside `[Service]` (systemd
+  ignores them there). Remedy: `llmctl install`, which regenerates every engine
+  unit and, when installed, the decision-gateway unit.
+* **FAIL** `registry differs from the live service set` also covers an
+  unacknowledged "registry was corrupt" note (`registry ack-corrupt` clears it).
+
+Tests: `tests/test_service_ops_hardening.sh`, `tests/test_registry_cli.sh`.

@@ -1,0 +1,23 @@
+all modules verified
+ok  	github.com/vasic-digital/llmctl/cmd/llmctl-decide	2.450s	coverage: 79.1% of statements
+ok  	github.com/vasic-digital/llmctl/internal/audit	0.121s	coverage: 87.7% of statements
+ok  	github.com/vasic-digital/llmctl/internal/certs	1.264s	coverage: 88.6% of statements
+ok  	github.com/vasic-digital/llmctl/internal/client	3.372s	coverage: 88.1% of statements
+	github.com/vasic-digital/llmctl/internal/client/internal/clienttest		coverage: 0.0% of statements
+ok  	github.com/vasic-digital/llmctl/internal/contract	0.010s	coverage: 98.4% of statements
+ok  	github.com/vasic-digital/llmctl/internal/gateway	1.062s	coverage: 89.1% of statements
+	github.com/vasic-digital/llmctl/internal/gateway/internal/fakebackends		coverage: 0.0% of statements
+ok  	github.com/vasic-digital/llmctl/internal/keyring	0.736s	coverage: 87.5% of statements
+ok  	github.com/vasic-digital/llmctl/internal/mcpserver	0.006s	coverage: 92.4% of statements
+ok  	github.com/vasic-digital/llmctl/internal/metrics	0.015s	coverage: 99.0% of statements
+ok  	github.com/vasic-digital/llmctl/internal/readout	0.004s	coverage: 92.9% of statements
+ok  	github.com/vasic-digital/llmctl/internal/registry	11.677s	coverage: 91.7% of statements
+ok  	github.com/vasic-digital/llmctl/internal/schema	0.016s	coverage: 92.9% of statements
+ok  	github.com/vasic-digital/llmctl/internal/server	6.956s	coverage: 95.1% of statements
+	github.com/vasic-digital/llmctl/internal/server/internal/servetest		coverage: 0.0% of statements
+	github.com/vasic-digital/llmctl/internal/server/internal/testpki		coverage: 0.0% of statements
+ok  	github.com/vasic-digital/llmctl/internal/vantage	3.290s	coverage: 83.4% of statements
+	github.com/vasic-digital/llmctl/internal/vantage/cmd/vantage-probe		coverage: 0.0% of statements
+	github.com/vasic-digital/llmctl/internal/vantage/internal/fixture		coverage: 0.0% of statements
+ok  	github.com/vasic-digital/llmctl/internal/vantage/probecore	0.556s	coverage: 93.1% of statements
+go unit tier OK

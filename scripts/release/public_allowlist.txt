@@ -1,0 +1,19 @@
+# public_allowlist.txt - EXACT repo-relative paths that look like key material but are public.
+# One path per line; '#' starts a comment. No globs, no '..', no leading '/': an entry names ONE
+# file, so an exemption can never widen into a subtree (scripts/release/build_archive.sh,
+# scripts/release/scan_archive.py both refuse a malformed entry).
+#
+# Keynote slide deck of the vendored llama.cpp documentation (a *.key extension, not key material).
+submodules/llama.cpp/docs/development/llama-star/idea-arch.key
+# The same Keynote deck under the paths it had earlier in history (the shipped .git carries the whole HEAD
+# history, and it is judged by path too - C2-05) and inside the tracked legacy archive/llmctl.zip (C2-16).
+vendor/llama.cpp/docs/development/llama-star/idea-arch.key
+submodules/llama.cpp/docs/llama-star/idea-arch.key
+# Test-configuration templates of the Containers submodule (CONTAINERS_REMOTE_* host settings;
+# reviewed: no password, token or key material in any of them).
+submodules/containers/tests/configs/.env.docker
+submodules/containers/tests/configs/.env.local
+submodules/containers/tests/configs/.env.podman
+submodules/containers/tests/configs/.env.remote-cluster
+submodules/containers/tests/configs/.env.remote-single
+submodules/containers/tests/configs/.env.scheduler-roundrobin

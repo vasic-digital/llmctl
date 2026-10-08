@@ -1,0 +1,34 @@
+directives emitted by lib/service_linux.sh (_svc_hardening):
+    LockPersonality=yes
+    NoNewPrivileges=yes
+    ProtectSystem=full
+    RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+    RestrictRealtime=yes
+    RestrictSUIDSGID=yes
+    SystemCallArchitectures=native
+    UMask=0077
+  ok: control: NoNewPrivs is 0 without the property
+  ok: control: no seccomp filter without a seccomp-backed property
+  ok: NoNewPrivileges=yes takes effect in the user manager (observed in a live service, rc=0)
+  ok: ProtectSystem=full takes effect in the user manager (observed in a live service, rc=0)
+  ok: UMask=0077 takes effect in the user manager (observed in a live service, rc=0)
+  ok: RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 takes effect in the user manager (observed in a live service, rc=0)
+  ok: RestrictSUIDSGID=yes takes effect in the user manager (observed in a live service, rc=0)
+  ok: LockPersonality=yes takes effect in the user manager (observed in a live service, rc=0)
+  ok: RestrictRealtime=yes takes effect in the user manager (observed in a live service, rc=0)
+  ok: SystemCallArchitectures=native takes effect in the user manager (observed in a live service, rc=0)
+== directives deliberately not written (must be un-honoured or refused here) ==
+  FAIL: PrivateDevices=yes works here; it could now be written to the units (update _svc_hardening)
+  FAIL: ProtectClock=yes works here; it could now be written to the units (update _svc_hardening)
+  ok: CapabilityBoundingSet= makes the unit fail to start in the user manager (rc=218) - correctly not written
+  FAIL: PrivateTmp=yes: the host /tmp marker stays visible inside the service (not honoured) - correctly not written
+    expected: VISIBLE
+    actual:   HIDDEN
+  FAIL: ProtectHome=read-only: home stays writable inside the service (not honoured) - correctly not written
+    expected: WRITABLE
+    actual:   RO
+  ok: ProtectProc=invisible: other processes stay visible (not honoured) - correctly not written
+  FAIL: ProtectControlGroups=yes: cgroup fs stays read-write (not honoured) - correctly not written
+    expected: 1
+    actual:   0
+RESULT: FAIL (5 assertion failure(s))

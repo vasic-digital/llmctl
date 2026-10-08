@@ -31,8 +31,17 @@ honestly-disclosed implementation boundary).
   - `LLMCTL_CLUSTER_ENDPOINT` — the `llmctld` API base URL. Defaults to
     `https://127.0.0.1:9443` via a `:-` parameter-expansion default,
     evaluated once when the file is sourced (see Edge cases).
-  - `LLMCTL_CLUSTER_TOKEN` — optional bearer token; when non-empty,
-    `cluster::request` adds an `Authorization: Bearer <token>` header.
+  - `LLMCTL_CLUSTER_TOKEN` — optional bearer token; when non-empty it is
+    sent as an `Authorization: Bearer <token>` header read by curl from a
+    private (`0600`) temporary file (`-H @file`), never placed on the
+    command line.
+  - TLS material (G-106; see `docs/llmctld-cluster-tls.md`):
+    `LLMCTL_CLUSTER_CERT_DIR` (a directory with `ca.crt`, `client.crt`,
+    `client.key`, as written by `llmctld cluster bootstrap|join`), or the
+    per-item `LLMCTL_CLUSTER_CACERT` / `LLMCTL_CLUSTER_CERT` /
+    `LLMCTL_CLUSTER_KEY`; `CURL_CA_BUNDLE` is accepted as the trust anchor.
+    They become `--cacert` / `--cert` / `--key` for `https://` endpoints.
+    Verification is never disabled (no `-k`/`--insecure`).
 * Network access: every `cluster::request` call makes a real outbound HTTPS
   (or HTTP/3-over-QUIC, when supported) request to `${LLMCTL_CLUSTER_ENDPOINT}`
   — there is no offline/dry-run mode for this file specifically (unlike
@@ -112,6 +121,16 @@ cluster::request POST /v1/cluster/join '{"peer_addr":"10.0.0.5:9443"}'
   and memoizes the boolean result (`"1"`/`"0"`) into that global, so a
   script issuing many `cluster::request` calls in one process only pays for
   spawning `curl --version` once, not once per request.
+* **Mutual TLS is explicit and fail-closed (G-106)** — for an `https://`
+  endpoint, `_cluster_tls_prepare` assembles `--cacert`, and `--cert`/`--key`
+  when configured. A client certificate without its key, an unreadable file,
+  or a private key that is accessible to group/others (mode & 077) makes the
+  request return 78 with a specific message and curl is not invoked;
+  `cluster::require_daemon` then dies with "cluster TLS material is
+  unusable" instead of the generic "unreachable" text. `http://` endpoints
+  (test doubles) get no TLS arguments. `tests/test_cluster_cli_args.sh`
+  asserts all of this with a fake curl and also greps `lib/` and `bin/` for
+  verification-disabling switches.
 * **`--http3` is opportunistic, never required** — `cluster::request` only
   appends `--http3` to curl's arguments when `_cluster_http3_supported`
   reports true; otherwise it silently falls back to whatever protocol curl
@@ -157,9 +176,11 @@ cluster::request POST /v1/cluster/join '{"peer_addr":"10.0.0.5:9443"}'
    lower-level primitive. Builds a `curl_args` array
    (`-sS --max-time 5 -X <method> <endpoint><path> -H 'Content-Type:
    application/json'`), conditionally appends `--http3` (via step 2),
-   conditionally appends the `Authorization: Bearer` header (if
-   `LLMCTL_CLUSTER_TOKEN` is set), conditionally appends `-d <body>` (if a
-   body was passed), and finally execs `curl "${curl_args[@]}"` — the
+   conditionally appends `-d <body>` (if a body was passed), and finally runs
+   `_cluster_curl`, which prepends the TLS arguments from
+   `_cluster_tls_prepare` and, when `LLMCTL_CLUSTER_TOKEN` is set, adds the
+   `Authorization: Bearer` header as `-H @<private temp file>` (removed
+   afterwards) — the
    response body goes to stdout on success; curl's own exit code propagates
    as the function's exit code on failure.
 4. **`cluster::require_daemon`** — the public gate every cluster-mode
@@ -205,4 +226,4 @@ cluster::request POST /v1/cluster/join '{"peer_addr":"10.0.0.5:9443"}'
 
 ## Last verified date
 
-2026-09-17
+2026-10-08 (TLS material handling added for G-106)

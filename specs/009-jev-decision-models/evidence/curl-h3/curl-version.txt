@@ -1,0 +1,4 @@
+curl 8.22.0 (x86_64-pc-linux-gnu) libcurl/8.22.0 OpenSSL/3.5.5 zlib/1.3.1 ngtcp2/1.25.0 nghttp3/1.18.0
+Release-Date: 2026-09-02
+Protocols: dict file ftp ftps gopher gophers http https imap imaps ipfs ipns mqtt mqtts pop3 pop3s rtsp smtp smtps telnet tftp ws wss
+Features: alt-svc AsynchDNS HSTS HTTP3 HTTPS-proxy IPv6 Largefile libz SSL threadsafe UnixSockets

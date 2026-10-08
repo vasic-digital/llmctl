@@ -1,0 +1,15 @@
+date=2026-10-08T11:37:13Z host=anton
+python=Python 3.12.14 sentencepiece=0.2.2 tokenizers=0.23.2 numpy=2.5.3
+spm.model: source https://huggingface.co/MoritzLaurer/deberta-v3-large-zeroshot-v2.0/resolve/cf44676c28ba7312e5c5f8f8d2c22b3e0c9cdae2/onnx/spm.model
+spm.model sha256 (downloaded): c679fbf93643d19aab7ee10c0b99e460bdbc02fedf34b92b05af343b4af586fd  size 2464616
+spm.model pinned (models/catalog.json decide-nli): c679fbf93643d19aab7ee10c0b99e460bdbc02fedf34b92b05af343b4af586fd size 2464616
+HF tree API (revision cf44676c...) onnx/spm.model: lfs oid c679fbf93643d19aab7ee10c0b99e460bdbc02fedf34b92b05af343b4af586fd size 2464616 (queried 2026-10-08T11:37:14Z)
+tokenizer.json sha256 (equivalence check only, not shipped): bfead76cd475f67849a6710fdd16497f75732773e4d90e40d3b5bb5d3f031df9
+candidate onnx_server.py: /home/milosvasic/Projects/jev/llmctl/llmctl/lib/onnx_server.py sha256 81595e3afcaf8cbb2b37dbb54389d16cc7490fb95bd2810f688fe0cac39f1b8a
+shipped lib/onnx_server.py sha256 97f48ddb3dc0b6d0c6a5b201e059f445f89bdf80d0b512e13f9074dbf5838646
+
+COMMANDS (cwd = this directory; PY = scratch venv python with sentencepiece/numpy/tokenizers):
+  PY -I d01_red_candidate.py ~/Projects/jev/llmctl/llmctl/lib/onnx_server.py spm.model > red_output.txt
+  PY -I d01_green_shipped.py <repo>/lib/onnx_server.py spm.model > green_output.txt
+  PY -I d01_tokenizer_equivalence.py <repo>/lib/onnx_server.py spm.model tokenizer.json > equivalence_output.txt
+  LLMCTL_REAL_SPM=spm.model LLMCTL_ONNX_PY=PY bash tests/test_onnx_real_tokenizer.sh   (see test_output.txt)

@@ -1,0 +1,14 @@
+installed systemd user units into /home/milosvasic/llmctl-work/tmp/tmp.97ny1S9MwQ/systemd-user (MemoryHigh=32768M MemoryMax=32768M)
+[dry-run] systemctl --user daemon-reload
+[dry-run] loginctl enable-linger milosvasic
+  ok: llama unit: bounded restart burst (5 attempts)
+  ok: llama unit: bounded restart interval (60s window)
+  ok: colibri unit: bounded restart burst (5 attempts)
+  ok: colibri unit: bounded restart interval (60s window)
+[llmctl] wrote /home/milosvasic/llmctl-work/tmp/tmp.97ny1S9MwQ/LaunchAgents/com.llmctl.fast.plist
+  ok: plist: throttle widened to 60s (launchd has no native give-up-after-N; this bounds the RATE, not the total attempts)
+  ok: status lists the healthy profile
+  ok: healthy profile reported as running
+  ok: crash-looped profile reported as failed (crash-loop)
+  ok: crash-looped profile's last log line surfaced
+RESULT: PASS

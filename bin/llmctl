@@ -4,7 +4,7 @@
 # Portable bash targeting Linux (systemd --user) and macOS (launchd).
 set -euo pipefail
 
-LLMCTL_VERSION="0.1.0"
+LLMCTL_VERSION="3.1.0"
 
 # Resolve symlinks manually (portable across Linux + macOS/BSD, unlike
 # GNU-only `readlink -f` or a `realpath` that may not be installed) so
@@ -29,6 +29,10 @@ source "${LLMCTL_ROOT}/lib/os_detect.sh"
 source "${LLMCTL_ROOT}/lib/hardware.sh"
 # shellcheck source=../lib/catalog.sh
 source "${LLMCTL_ROOT}/lib/catalog.sh"
+# shellcheck source=../lib/decide.sh
+source "${LLMCTL_ROOT}/lib/decide.sh"
+# shellcheck source=../lib/admit.sh
+source "${LLMCTL_ROOT}/lib/admit.sh"
 # shellcheck source=../lib/download.sh
 source "${LLMCTL_ROOT}/lib/download.sh"
 # shellcheck source=../lib/engine.sh
@@ -62,7 +66,7 @@ MODELS
   models verify <profile>     re-verify checksums of a downloaded profile
 
 ENGINES
-  build [llama|colibri|all]   build engines from vendor/ submodules
+  build <llama|colibri|onnx|decide|all>   build engines (a target is required; decide = Go decision binary)
                               (backend auto-detect: CUDA / Metal / ROCm / CPU)
 
 RUNTIME (multi-model co-residency)
@@ -73,6 +77,22 @@ RUNTIME (multi-model co-residency)
                               services when room is needed
   status                      show running services and reservations
   logs <profile> [lines]      tail a service log
+
+DECISION MODELS (typed noul/choice/score decisions)
+  decide ask --type {noul|choice|score} (--state S | --state-file F | --stdin) \
+      --instructions I [--criteria JSON] [--profile P] [--json]
+                              one typed decision through the HTTPS gateway
+  decide batch|models|key|cert|smoke ...   batch asks, served models, access
+                              key, certificates, one-question engine smoke
+  decide capacity [--json]    parallel-instance plan per decision profile
+  decide status [--json]      profiles, gateway and registry state
+  decide interactive          wizard (TTY, or decide ask --interactive)
+  decide serve [--stop|--status]   HTTPS gateway (POST /v1/systemone, port 8095)
+                              (full reference: llmctl decide help)
+  auto decide                 pick the best fitting decision profile
+                              (works via the existing 'auto' mechanism)
+  admit <hf-repo> [--paper-only] [--json]   run admission gates G1-G10 on a
+                              candidate model (also: admit --all | --summarize)
 
 PERSISTENT SERVICES (systemd --user on Linux, launchd on macOS)
   install                     install/refresh unit templates (Linux) or
@@ -162,7 +182,14 @@ main() {
         *)        die "unknown models subcommand: ${sub} (list|download|verify)" ;;
       esac
       ;;
-    build)    engine_build "${@:-all}" ;;
+    build)
+      if [[ "$#" -eq 0 ]]; then
+        # G-078: a bare `llmctl build` used to start compiling everything (hours of CPU). It now
+        # prints usage; `llmctl build all` is the explicit spelling.
+        echo "usage: llmctl build <llama|colibri|onnx|decide|all>   (a target is required; 'all' builds llama + colibri + onnx + decide)" >&2
+        exit 2
+      fi
+      engine_build "$@" ;;
     install)  sched_load_backend; svc_install ;;
     enable)
       [[ "$#" -eq 1 ]] || die "usage: llmctl enable <profile>"
@@ -176,6 +203,7 @@ main() {
     disable)
       [[ "$#" -eq 1 ]] || die "usage: llmctl disable <profile>"
       sched_load_backend; svc_disable "$1"
+      sched_registry_withdraw "$1"
       rm -f "${LLMCTL_SERVICES_DIR}/$1.enabled" "${LLMCTL_RUNTIME_DIR}/$1.run"
       ;;
     start)    sched_start "$@" ;;
@@ -186,6 +214,8 @@ main() {
       ;;
     switch)   [[ "$#" -eq 1 ]] || die "usage: llmctl switch <profile>"; sched_switch "$1" ;;
     auto)     sched_auto "$@" ;;
+    decide)   cmd_decide "$@" ;;
+    admit)    cmd_admit "$@" ;;
     status)
       if [[ "${1:-}" == "--json" ]]; then
         sched_status_json

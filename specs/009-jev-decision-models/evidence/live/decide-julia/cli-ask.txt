@@ -1,0 +1,2 @@
+{"model":"decide-julia","answers":{"q":{"type":"choice","choice":"billing","probabilities":{"billing":0.990868174,"shipping":0.00357401,"technical":0.005557816},"confidence":0.986302261}},"usage":{"input_tokens":38,"output_tokens":0},"evidence":{"profile":"decide-julia","port":8095,"latency_ms":130.618,"mode":"deterministic","instance":"decide-julia"}}
+rc=0

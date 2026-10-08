@@ -256,6 +256,7 @@ echo
 echo "=== INHERITANCE VERIFICATION SUMMARY ==="
 if [[ ${#FAILURES[@]} -eq 0 ]]; then
     echo "ALL INVARIANTS PASSED ✓"
+    echo "  ok: all constitution inheritance invariants passed"
     exit 0
 else
     echo "FAILURES (${#FAILURES[@]}):"

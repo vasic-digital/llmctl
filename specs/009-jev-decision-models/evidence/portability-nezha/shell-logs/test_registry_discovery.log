@@ -1,0 +1,47 @@
+== 1. a service is published when it becomes READY, never before ==
+  ok: observed the window where the engine was alive but not yet answering (and unpublished)
+  ok: the registry row never appeared before the engine answered
+  ok: the row is present once the engine answers
+  ok: the row carries the engine's real pid
+  ok: the row carries the health path
+  ok: discover returns the URL clients should use
+== 2. unregistered on stop ==
+  ok: stop removed the row
+== 3. kill -9, then reconcile removes the dead service (real process identity) ==
+  ok: before reconcile the dead service still has a (stale) row
+  ok: reconcile reports the dead service removed
+  ok: dead service no longer registered
+  ok: the live service is untouched by reconcile
+  ok: discover no longer lists it
+== 4. registry == live set, both directions (doctor + diff) ==
+  ok: running set equals the registry
+  ok: diff says so
+  ok: llmctl doctor reports PASS for the in-sync registry
+  ok: a live service without a row is reported (rc 1)
+  ok: …naming the service
+  ok: doctor FAILs on the discrepancy
+  ok: …with the registry message
+  ok: a registry row without a live service is reported (rc 1)
+  ok: …naming the service
+  ok: after stop all: registry empty == live set empty
+== 5. 20 random start/stop/kill sequences keep registry == live set (SC-015) ==
+  ok: registry == live set after each of 20 random steps
+== 6. the gateway: own port (fixed, then dynamic), self-registration, registry-resolved backends ==
+  ok: the decision engine is registered at its assigned port before the gateway starts
+  ok: gateway started through the unit wrapper and registered itself
+  ok: fixed strategy: the gateway listens on its configured port
+  ok: registry kind label = gateway
+  ok: the wrapper exec'd exactly: llmctl-decide serve --foreground
+  ok: the row carries the gateway's pid
+  ok: the gateway answers HTTPS on the registered port
+  ok: the gateway resolves backends from the registry, not from a static port table
+    gateway status of decide-tiny with its engine registered: ready
+    gateway status of decide-tiny after its engine stopped and left the registry: absent
+  ok: the gateway stopped routing to the removed engine without a restart (ready -> absent)
+  ok: measured gateway peak RSS 22136 KiB (VmHWM, FR-083)
+  ok: the gateway row is removed when the gateway process ends
+  ok: gateway started under the dynamic strategy and registered itself
+  ok: dynamic gateway port 44002 is inside LLMCTL_PORT_RANGE
+  ok: the dynamically-ported gateway answers HTTPS
+  ok: the entry says https
+RESULT: PASS

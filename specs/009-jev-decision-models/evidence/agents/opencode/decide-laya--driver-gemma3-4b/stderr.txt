@@ -1,0 +1,27 @@
+timestamp=2026-10-08T10:32:32.537Z level=INFO run=207334bf message="creating instance" directory=/tmp/claude-1000/-home-milosvasic-Projects-llmctl/09f54cd2-bbc4-42e2-81e6-8e453f2c3261/scratchpad/proj
+timestamp=2026-10-08T10:32:32.542Z level=INFO run=207334bf message=fromDirectory directory=/tmp/claude-1000/-home-milosvasic-Projects-llmctl/09f54cd2-bbc4-42e2-81e6-8e453f2c3261/scratchpad/proj
+timestamp=2026-10-08T10:32:32.564Z level=INFO run=207334bf message=bootstrapping directory=/tmp/claude-1000/-home-milosvasic-Projects-llmctl/09f54cd2-bbc4-42e2-81e6-8e453f2c3261/scratchpad/proj
+timestamp=2026-10-08T10:32:32.578Z level=INFO run=207334bf message=loading path=/tmp/claude-1000/-home-milosvasic-Projects-llmctl/09f54cd2-bbc4-42e2-81e6-8e453f2c3261/scratchpad/xdg/oc/opencode/config.json
+timestamp=2026-10-08T10:32:32.579Z level=INFO run=207334bf message=loading path=/tmp/claude-1000/-home-milosvasic-Projects-llmctl/09f54cd2-bbc4-42e2-81e6-8e453f2c3261/scratchpad/xdg/oc/opencode/opencode.json
+timestamp=2026-10-08T10:32:32.588Z level=INFO run=207334bf message=loading path=/tmp/claude-1000/-home-milosvasic-Projects-llmctl/09f54cd2-bbc4-42e2-81e6-8e453f2c3261/scratchpad/xdg/oc/opencode/opencode.jsonc
+timestamp=2026-10-08T10:32:32.734Z level=INFO run=207334bf message="all LSPs are disabled"
+timestamp=2026-10-08T10:32:32.736Z level=INFO run=207334bf message="all formatters are disabled"
+timestamp=2026-10-08T10:32:32.736Z level=INFO run=207334bf message=init
+timestamp=2026-10-08T10:32:33.006Z level=INFO run=207334bf message=created id=ses_ee4ed9a13ffebNfmgiGI5oFHAM slug=silent-mountain version=1.18.30 projectID=global directory=/tmp/claude-1000/-home-milosvasic-Projects-llmctl/09f54cd2-bbc4-42e2-81e6-8e453f2c3261/scratchpad/proj path=tmp/claude-1000/-home-milosvasic-Projects-llmctl/09f54cd2-bbc4-42e2-81e6-8e453f2c3261/scratchpad/proj workspaceID=undefined parentID=undefined title="New session - 2026-10-08T10:32:33.006Z" agent=undefined model=undefined metadata=undefined permission="[{\"permission\":\"question\",\"pattern\":\"*\",\"action\":\"deny\"},{\"permission\":\"plan_enter\",\"pattern\":\"*\",\"action\":\"deny\"},{\"permission\":\"plan_exit\",\"pattern\":\"*\",\"action\":\"deny\"}]" cost=0 tokens.input=0 tokens.output=0 tokens.reasoning=0 tokens.cache.read=0 tokens.cache.write=0 time.created=1791455553006 time.updated=1791455553006
+timestamp=2026-10-08T10:32:33.027Z level=INFO run=207334bf message="event connected"
+timestamp=2026-10-08T10:32:33.848Z level=INFO run=207334bf message=loop session.id=ses_ee4ed9a13ffebNfmgiGI5oFHAM step=0
+timestamp=2026-10-08T10:32:33.867Z level=INFO run=207334bf message="shell tool using shell" shell=/bin/bash
+timestamp=2026-10-08T10:32:33.882Z level=INFO run=207334bf message=init count=1
+timestamp=2026-10-08T10:32:33.925Z level=INFO run=207334bf message=stream providerID=llmctlvision modelID=gemma session.id=ses_ee4ed9a13ffebNfmgiGI5oFHAM small=true agent=title mode=primary
+timestamp=2026-10-08T10:32:33.951Z level=INFO run=207334bf message="llm runtime selected" llm.runtime=ai-sdk llm.provider=llmctlvision llm.model=gemma
+timestamp=2026-10-08T10:32:34.128Z level=INFO run=207334bf message="watcher backend" directory=/tmp/claude-1000/-home-milosvasic-Projects-llmctl/09f54cd2-bbc4-42e2-81e6-8e453f2c3261/scratchpad/proj platform=linux backend=inotify
+timestamp=2026-10-08T10:32:34.145Z level=INFO run=207334bf message="project copy refresh started" projectID=global
+timestamp=2026-10-08T10:32:34.148Z level=INFO run=207334bf message="project copy refresh done" projectID=global updated=[] removed=[]
+timestamp=2026-10-08T10:32:34.198Z level=ERROR run=207334bf message="stream error" providerID=llmctlvision modelID=gemma session.id=ses_ee4ed9a13ffebNfmgiGI5oFHAM small=true agent=title mode=primary error.error="AI_APICallError: Unable to generate parser for this template. Automatic parser generation failed: \n------------\nWhile executing CallExpression at line 19, column 27 in source:\n...% 2 == 0) -%}↵        {{ raise_exception(\"Conversation roles must alternate user...\n                                           ^\nError: Jinja Exception: Conversation roles must alternate user/assistant/user/assistant/..."
+timestamp=2026-10-08T10:32:34.207Z level=INFO run=207334bf message="booting location services" directory=/tmp/claude-1000/-home-milosvasic-Projects-llmctl/09f54cd2-bbc4-42e2-81e6-8e453f2c3261/scratchpad/proj workspaceID=undefined
+timestamp=2026-10-08T10:32:34.921Z level=INFO run=207334bf message=process session.id=ses_ee4ed9a13ffebNfmgiGI5oFHAM messageID=msg_11b12693c001J4QsaRatbjB6C9
+timestamp=2026-10-08T10:32:34.924Z level=INFO run=207334bf message=stream providerID=llmctlvision modelID=gemma session.id=ses_ee4ed9a13ffebNfmgiGI5oFHAM small=false agent=build mode=primary
+timestamp=2026-10-08T10:32:34.947Z level=INFO run=207334bf message="llm runtime selected" llm.runtime=ai-sdk llm.provider=llmctlvision llm.model=gemma
+timestamp=2026-10-08T10:32:35.380Z level=INFO run=207334bf message=loop session.id=ses_ee4ed9a13ffebNfmgiGI5oFHAM step=1
+timestamp=2026-10-08T10:32:35.383Z level=INFO run=207334bf message="exiting loop" session.id=ses_ee4ed9a13ffebNfmgiGI5oFHAM
+timestamp=2026-10-08T10:32:35.392Z level=INFO run=207334bf message="disposing instance" directory=/tmp/claude-1000/-home-milosvasic-Projects-llmctl/09f54cd2-bbc4-42e2-81e6-8e453f2c3261/scratchpad/proj

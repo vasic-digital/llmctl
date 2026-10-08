@@ -1,0 +1,23 @@
+  ok: download_profile toy exit code
+  [llmctl] downloading model.bin from toy/repo
+    % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                   Dload  Upload  Total   Spent   Left   Speed
+    0      0   0      0   0      0      0      0                              0100     52 100     52   0      0  50000      0                              0100     52 100     52   0      0  48417      0                              0100     52 100     52   0      0  46345      0                              0
+  verified: model.bin
+  WARN: smoke test disabled (LLMCTL_SMOKE=0)
+  profile 'toy' downloaded and verified. Evidence: /home/milosvasic/llmctl-work/tmp/tmp.21My2fDvGU/state/verify/toy.log
+  ok: model.bin exists after download
+  ok: downloaded file sha256 matches
+  ok: evidence log records verification
+  ok: evidence log records exit code
+  ok: second download skips verified file
+  ok: no .part file left behind (atomic rename)
+  ok: re-download of corrupted file succeeds
+  ok: corruption detected before re-download
+  ok: re-downloaded file verified
+  ok: sha256 mismatch -> hard failure
+  ok: mismatch reported
+  ok: mismatched content never lands at the final path
+  ok: verify_profile exit code
+  ok: verify_profile success message
+RESULT: PASS

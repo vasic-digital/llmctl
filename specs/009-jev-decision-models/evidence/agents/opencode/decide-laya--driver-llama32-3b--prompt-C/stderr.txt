@@ -1,0 +1,356 @@
+timestamp=2026-10-08T10:36:58.073Z level=INFO run=955c0175 message="creating instance" directory=/tmp/claude-1000/-home-milosvasic-Projects-llmctl/09f54cd2-bbc4-42e2-81e6-8e453f2c3261/scratchpad/proj
+timestamp=2026-10-08T10:36:58.082Z level=INFO run=955c0175 message=fromDirectory directory=/tmp/claude-1000/-home-milosvasic-Projects-llmctl/09f54cd2-bbc4-42e2-81e6-8e453f2c3261/scratchpad/proj
+timestamp=2026-10-08T10:36:58.106Z level=INFO run=955c0175 message=bootstrapping directory=/tmp/claude-1000/-home-milosvasic-Projects-llmctl/09f54cd2-bbc4-42e2-81e6-8e453f2c3261/scratchpad/proj
+timestamp=2026-10-08T10:36:58.116Z level=INFO run=955c0175 message=loading path=/tmp/claude-1000/-home-milosvasic-Projects-llmctl/09f54cd2-bbc4-42e2-81e6-8e453f2c3261/scratchpad/xdg/oc/opencode/config.json
+timestamp=2026-10-08T10:36:58.117Z level=INFO run=955c0175 message=loading path=/tmp/claude-1000/-home-milosvasic-Projects-llmctl/09f54cd2-bbc4-42e2-81e6-8e453f2c3261/scratchpad/xdg/oc/opencode/opencode.json
+timestamp=2026-10-08T10:36:58.134Z level=INFO run=955c0175 message=loading path=/tmp/claude-1000/-home-milosvasic-Projects-llmctl/09f54cd2-bbc4-42e2-81e6-8e453f2c3261/scratchpad/xdg/oc/opencode/opencode.jsonc
+timestamp=2026-10-08T10:36:58.253Z level=INFO run=955c0175 message="all LSPs are disabled"
+timestamp=2026-10-08T10:36:58.255Z level=INFO run=955c0175 message="all formatters are disabled"
+timestamp=2026-10-08T10:36:58.255Z level=INFO run=955c0175 message=init
+timestamp=2026-10-08T10:36:58.472Z level=INFO run=955c0175 message=created id=ses_ee4e98d17ffeFSbdbRsHxeVvqf slug=misty-river version=1.18.30 projectID=global directory=/tmp/claude-1000/-home-milosvasic-Projects-llmctl/09f54cd2-bbc4-42e2-81e6-8e453f2c3261/scratchpad/proj path=tmp/claude-1000/-home-milosvasic-Projects-llmctl/09f54cd2-bbc4-42e2-81e6-8e453f2c3261/scratchpad/proj workspaceID=undefined parentID=undefined title="New session - 2026-10-08T10:36:58.472Z" agent=undefined model=undefined metadata=undefined permission="[{\"permission\":\"question\",\"pattern\":\"*\",\"action\":\"deny\"},{\"permission\":\"plan_enter\",\"pattern\":\"*\",\"action\":\"deny\"},{\"permission\":\"plan_exit\",\"pattern\":\"*\",\"action\":\"deny\"}]" cost=0 tokens.input=0 tokens.output=0 tokens.reasoning=0 tokens.cache.read=0 tokens.cache.write=0 time.created=1791455818472 time.updated=1791455818472
+timestamp=2026-10-08T10:36:58.490Z level=INFO run=955c0175 message="event connected"
+timestamp=2026-10-08T10:36:59.287Z level=INFO run=955c0175 message=loop session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf step=0
+timestamp=2026-10-08T10:36:59.304Z level=INFO run=955c0175 message="shell tool using shell" shell=/bin/bash
+timestamp=2026-10-08T10:36:59.319Z level=INFO run=955c0175 message=init count=1
+timestamp=2026-10-08T10:36:59.356Z level=INFO run=955c0175 message=stream providerID=llmctlvision modelID=llama32 session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf small=true agent=title mode=primary
+timestamp=2026-10-08T10:36:59.373Z level=INFO run=955c0175 message="llm runtime selected" llm.runtime=ai-sdk llm.provider=llmctlvision llm.model=llama32
+timestamp=2026-10-08T10:36:59.515Z level=INFO run=955c0175 message="watcher backend" directory=/tmp/claude-1000/-home-milosvasic-Projects-llmctl/09f54cd2-bbc4-42e2-81e6-8e453f2c3261/scratchpad/proj platform=linux backend=inotify
+timestamp=2026-10-08T10:36:59.534Z level=INFO run=955c0175 message="project copy refresh started" projectID=global
+timestamp=2026-10-08T10:36:59.539Z level=INFO run=955c0175 message="project copy refresh done" projectID=global updated=[] removed=[]
+timestamp=2026-10-08T10:36:59.579Z level=INFO run=955c0175 message="booting location services" directory=/tmp/claude-1000/-home-milosvasic-Projects-llmctl/09f54cd2-bbc4-42e2-81e6-8e453f2c3261/scratchpad/proj workspaceID=undefined
+timestamp=2026-10-08T10:37:00.553Z level=INFO run=955c0175 message=process session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf messageID=msg_11b16761c0016p9gtV4AjVT2S4
+timestamp=2026-10-08T10:37:00.557Z level=INFO run=955c0175 message=stream providerID=llmctlvision modelID=llama32 session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf small=false agent=build mode=primary
+timestamp=2026-10-08T10:37:00.568Z level=INFO run=955c0175 message="llm runtime selected" llm.runtime=ai-sdk llm.provider=llmctlvision llm.model=llama32
+timestamp=2026-10-08T10:37:01.448Z level=INFO run=955c0175 message=evaluated permission=external_directory pattern=/tmp/opencode/* action.permission=external_directory action.pattern=/tmp/opencode/* action.action=allow
+timestamp=2026-10-08T10:37:01.450Z level=INFO run=955c0175 message=evaluated permission=bash pattern="llmctl-decide ask --question-file question.json --state" action.permission=bash action.pattern="llmctl-decide *" action.action=allow
+timestamp=2026-10-08T10:37:01.537Z level=INFO run=955c0175 message=loop session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf step=1
+timestamp=2026-10-08T10:37:01.588Z level=INFO run=955c0175 message=process session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf messageID=msg_11b167ee4001GBEgY0VVMSP24z
+timestamp=2026-10-08T10:37:01.589Z level=INFO run=955c0175 message=stream providerID=llmctlvision modelID=llama32 session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf small=false agent=build mode=primary
+timestamp=2026-10-08T10:37:01.591Z level=INFO run=955c0175 message="llm runtime selected" llm.runtime=ai-sdk llm.provider=llmctlvision llm.model=llama32
+timestamp=2026-10-08T10:37:02.085Z level=INFO run=955c0175 message=evaluated permission=external_directory pattern=/tmp/opencode/* action.permission=external_directory action.pattern=/tmp/opencode/* action.action=allow
+timestamp=2026-10-08T10:37:02.085Z level=INFO run=955c0175 message=evaluated permission=bash pattern="llmctl-decide ask --question-file question.json --state" action.permission=bash action.pattern="llmctl-decide *" action.action=allow
+timestamp=2026-10-08T10:37:02.124Z level=INFO run=955c0175 message=loop session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf step=2
+timestamp=2026-10-08T10:37:02.159Z level=INFO run=955c0175 message=process session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf messageID=msg_11b16812e001q00l1xrSheNFzv
+timestamp=2026-10-08T10:37:02.160Z level=INFO run=955c0175 message=stream providerID=llmctlvision modelID=llama32 session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf small=false agent=build mode=primary
+timestamp=2026-10-08T10:37:02.169Z level=INFO run=955c0175 message="llm runtime selected" llm.runtime=ai-sdk llm.provider=llmctlvision llm.model=llama32
+timestamp=2026-10-08T10:37:02.797Z level=INFO run=955c0175 message=evaluated permission=external_directory pattern=/tmp/opencode/* action.permission=external_directory action.pattern=/tmp/opencode/* action.action=allow
+timestamp=2026-10-08T10:37:02.797Z level=INFO run=955c0175 message=evaluated permission=bash pattern="llmctl-decide ask --question-file question.json --state rm -rf /var/lib/app --profile decide-laya --json" action.permission=bash action.pattern="llmctl-decide *" action.action=allow
+timestamp=2026-10-08T10:37:02.846Z level=INFO run=955c0175 message=loop session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf step=3
+timestamp=2026-10-08T10:37:02.878Z level=INFO run=955c0175 message=process session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf messageID=msg_11b1683ff001GhW27mOq0dhcNr
+timestamp=2026-10-08T10:37:02.879Z level=INFO run=955c0175 message=stream providerID=llmctlvision modelID=llama32 session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf small=false agent=build mode=primary
+timestamp=2026-10-08T10:37:02.880Z level=INFO run=955c0175 message="llm runtime selected" llm.runtime=ai-sdk llm.provider=llmctlvision llm.model=llama32
+timestamp=2026-10-08T10:37:03.461Z level=INFO run=955c0175 message=evaluated permission=external_directory pattern=/tmp/opencode/* action.permission=external_directory action.pattern=/tmp/opencode/* action.action=allow
+timestamp=2026-10-08T10:37:03.462Z level=INFO run=955c0175 message=evaluated permission=bash pattern="llmctl-decide ask --question-file question.json --state rm -rf * --profile decide-laya --json" action.permission=bash action.pattern="llmctl-decide *" action.action=allow
+timestamp=2026-10-08T10:37:03.492Z level=INFO run=955c0175 message=loop session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf step=4
+timestamp=2026-10-08T10:37:03.554Z level=INFO run=955c0175 message=process session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf messageID=msg_11b168685001WZoz40siyk4jkU
+timestamp=2026-10-08T10:37:03.555Z level=INFO run=955c0175 message=stream providerID=llmctlvision modelID=llama32 session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf small=false agent=build mode=primary
+timestamp=2026-10-08T10:37:03.557Z level=INFO run=955c0175 message="llm runtime selected" llm.runtime=ai-sdk llm.provider=llmctlvision llm.model=llama32
+timestamp=2026-10-08T10:37:04.158Z level=INFO run=955c0175 message=evaluated permission=external_directory pattern=/tmp/opencode/* action.permission=external_directory action.pattern=/tmp/opencode/* action.action=allow
+timestamp=2026-10-08T10:37:04.159Z level=INFO run=955c0175 message=evaluated permission=bash pattern="llmctl-decide ask --question-file question.json --state rm -rf * --profile decide-laya --json" action.permission=bash action.pattern="llmctl-decide *" action.action=allow
+timestamp=2026-10-08T10:37:04.194Z level=INFO run=955c0175 message=loop session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf step=5
+timestamp=2026-10-08T10:37:04.222Z level=INFO run=955c0175 message=process session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf messageID=msg_11b168944001D6PLYS69PJQ3An
+timestamp=2026-10-08T10:37:04.223Z level=INFO run=955c0175 message=stream providerID=llmctlvision modelID=llama32 session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf small=false agent=build mode=primary
+timestamp=2026-10-08T10:37:04.225Z level=INFO run=955c0175 message="llm runtime selected" llm.runtime=ai-sdk llm.provider=llmctlvision llm.model=llama32
+timestamp=2026-10-08T10:37:04.824Z level=INFO run=955c0175 message=evaluated permission=external_directory pattern=/tmp/opencode/* action.permission=external_directory action.pattern=/tmp/opencode/* action.action=allow
+timestamp=2026-10-08T10:37:04.824Z level=INFO run=955c0175 message=evaluated permission=bash pattern="llmctl-decide ask --question-file question.json --state rm -rf * --profile decide-laya --json" action.permission=bash action.pattern="llmctl-decide *" action.action=allow
+timestamp=2026-10-08T10:37:04.854Z level=INFO run=955c0175 message=loop session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf step=6
+timestamp=2026-10-08T10:37:04.882Z level=INFO run=955c0175 message=process session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf messageID=msg_11b168bd8001dGpa7jLL0E5Wdc
+timestamp=2026-10-08T10:37:04.883Z level=INFO run=955c0175 message=stream providerID=llmctlvision modelID=llama32 session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf small=false agent=build mode=primary
+timestamp=2026-10-08T10:37:04.892Z level=INFO run=955c0175 message="llm runtime selected" llm.runtime=ai-sdk llm.provider=llmctlvision llm.model=llama32
+timestamp=2026-10-08T10:37:05.489Z level=INFO run=955c0175 message=evaluated permission=external_directory pattern=/tmp/opencode/* action.permission=external_directory action.pattern=/tmp/opencode/* action.action=allow
+timestamp=2026-10-08T10:37:05.490Z level=INFO run=955c0175 message=evaluated permission=bash pattern="llmctl-decide ask --question-file question.json --state rm -rf * --profile decide-laya --json" action.permission=bash action.pattern="llmctl-decide *" action.action=allow
+timestamp=2026-10-08T10:37:05.531Z level=INFO run=955c0175 message=loop session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf step=7
+timestamp=2026-10-08T10:37:05.567Z level=INFO run=955c0175 message=process session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf messageID=msg_11b168e7c001y3aBRXFJ0BKElL
+timestamp=2026-10-08T10:37:05.568Z level=INFO run=955c0175 message=stream providerID=llmctlvision modelID=llama32 session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf small=false agent=build mode=primary
+timestamp=2026-10-08T10:37:05.569Z level=INFO run=955c0175 message="llm runtime selected" llm.runtime=ai-sdk llm.provider=llmctlvision llm.model=llama32
+timestamp=2026-10-08T10:37:06.174Z level=INFO run=955c0175 message=evaluated permission=external_directory pattern=/tmp/opencode/* action.permission=external_directory action.pattern=/tmp/opencode/* action.action=allow
+timestamp=2026-10-08T10:37:06.174Z level=INFO run=955c0175 message=evaluated permission=bash pattern="llmctl-decide ask --question-file question.json --state rm -rf * --profile decide-laya --json" action.permission=bash action.pattern="llmctl-decide *" action.action=allow
+timestamp=2026-10-08T10:37:06.205Z level=INFO run=955c0175 message=loop session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf step=8
+timestamp=2026-10-08T10:37:06.234Z level=INFO run=955c0175 message=process session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf messageID=msg_11b16911f001Ty0qLV3So72wX9
+timestamp=2026-10-08T10:37:06.234Z level=INFO run=955c0175 message=stream providerID=llmctlvision modelID=llama32 session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf small=false agent=build mode=primary
+timestamp=2026-10-08T10:37:06.244Z level=INFO run=955c0175 message="llm runtime selected" llm.runtime=ai-sdk llm.provider=llmctlvision llm.model=llama32
+timestamp=2026-10-08T10:37:06.843Z level=INFO run=955c0175 message=evaluated permission=external_directory pattern=/tmp/opencode/* action.permission=external_directory action.pattern=/tmp/opencode/* action.action=allow
+timestamp=2026-10-08T10:37:06.843Z level=INFO run=955c0175 message=evaluated permission=bash pattern="llmctl-decide ask --question-file question.json --state rm -rf * --profile decide-laya --json" action.permission=bash action.pattern="llmctl-decide *" action.action=allow
+timestamp=2026-10-08T10:37:06.880Z level=INFO run=955c0175 message=loop session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf step=9
+timestamp=2026-10-08T10:37:06.910Z level=INFO run=955c0175 message=process session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf messageID=msg_11b1693c2001hsY0oo6PJstFyT
+timestamp=2026-10-08T10:37:06.910Z level=INFO run=955c0175 message=stream providerID=llmctlvision modelID=llama32 session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf small=false agent=build mode=primary
+timestamp=2026-10-08T10:37:06.920Z level=INFO run=955c0175 message="llm runtime selected" llm.runtime=ai-sdk llm.provider=llmctlvision llm.model=llama32
+timestamp=2026-10-08T10:37:07.532Z level=INFO run=955c0175 message=evaluated permission=external_directory pattern=/tmp/opencode/* action.permission=external_directory action.pattern=/tmp/opencode/* action.action=allow
+timestamp=2026-10-08T10:37:07.532Z level=INFO run=955c0175 message=evaluated permission=bash pattern="llmctl-decide ask --question-file question.json --state rm -rf * --profile decide-laya --json" action.permission=bash action.pattern="llmctl-decide *" action.action=allow
+timestamp=2026-10-08T10:37:07.570Z level=INFO run=955c0175 message=loop session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf step=10
+timestamp=2026-10-08T10:37:07.625Z level=INFO run=955c0175 message=process session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf messageID=msg_11b169674001BKomLj2J92H5YK
+timestamp=2026-10-08T10:37:07.626Z level=INFO run=955c0175 message=stream providerID=llmctlvision modelID=llama32 session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf small=false agent=build mode=primary
+timestamp=2026-10-08T10:37:07.627Z level=INFO run=955c0175 message="llm runtime selected" llm.runtime=ai-sdk llm.provider=llmctlvision llm.model=llama32
+timestamp=2026-10-08T10:37:08.229Z level=INFO run=955c0175 message=evaluated permission=external_directory pattern=/tmp/opencode/* action.permission=external_directory action.pattern=/tmp/opencode/* action.action=allow
+timestamp=2026-10-08T10:37:08.231Z level=INFO run=955c0175 message=evaluated permission=bash pattern="llmctl-decide ask --question-file question.json --state rm -rf --profile decide-laya --json" action.permission=bash action.pattern="llmctl-decide *" action.action=allow
+timestamp=2026-10-08T10:37:08.285Z level=INFO run=955c0175 message=loop session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf step=11
+timestamp=2026-10-08T10:37:08.331Z level=INFO run=955c0175 message=process session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf messageID=msg_11b16993f001IjlC4hFLIsYPxq
+timestamp=2026-10-08T10:37:08.332Z level=INFO run=955c0175 message=stream providerID=llmctlvision modelID=llama32 session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf small=false agent=build mode=primary
+timestamp=2026-10-08T10:37:08.347Z level=INFO run=955c0175 message="llm runtime selected" llm.runtime=ai-sdk llm.provider=llmctlvision llm.model=llama32
+timestamp=2026-10-08T10:37:08.990Z level=INFO run=955c0175 message=evaluated permission=external_directory pattern=/tmp/opencode/* action.permission=external_directory action.pattern=/tmp/opencode/* action.action=allow
+timestamp=2026-10-08T10:37:08.991Z level=INFO run=955c0175 message=evaluated permission=bash pattern="llmctl-decide ask --question-file question.json --state rm -rf --profile decide-laya --json" action.permission=bash action.pattern="llmctl-decide *" action.action=allow
+timestamp=2026-10-08T10:37:09.028Z level=INFO run=955c0175 message=loop session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf step=12
+timestamp=2026-10-08T10:37:09.056Z level=INFO run=955c0175 message=process session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf messageID=msg_11b169c26001tcfsgZEEyEME69
+timestamp=2026-10-08T10:37:09.056Z level=INFO run=955c0175 message=stream providerID=llmctlvision modelID=llama32 session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf small=false agent=build mode=primary
+timestamp=2026-10-08T10:37:09.057Z level=INFO run=955c0175 message="llm runtime selected" llm.runtime=ai-sdk llm.provider=llmctlvision llm.model=llama32
+timestamp=2026-10-08T10:37:09.656Z level=INFO run=955c0175 message=evaluated permission=external_directory pattern=/tmp/opencode/* action.permission=external_directory action.pattern=/tmp/opencode/* action.action=allow
+timestamp=2026-10-08T10:37:09.656Z level=INFO run=955c0175 message=evaluated permission=bash pattern="llmctl-decide ask --question-file question.json --state rm -rf --profile decide-laya --json" action.permission=bash action.pattern="llmctl-decide *" action.action=allow
+timestamp=2026-10-08T10:37:09.720Z level=INFO run=955c0175 message=loop session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf step=13
+timestamp=2026-10-08T10:37:09.770Z level=INFO run=955c0175 message=process session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf messageID=msg_11b169edc001Xs4LVNflGrLieh
+timestamp=2026-10-08T10:37:09.771Z level=INFO run=955c0175 message=stream providerID=llmctlvision modelID=llama32 session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf small=false agent=build mode=primary
+timestamp=2026-10-08T10:37:09.790Z level=INFO run=955c0175 message="llm runtime selected" llm.runtime=ai-sdk llm.provider=llmctlvision llm.model=llama32
+timestamp=2026-10-08T10:37:10.401Z level=INFO run=955c0175 message=evaluated permission=external_directory pattern=/tmp/opencode/* action.permission=external_directory action.pattern=/tmp/opencode/* action.action=allow
+timestamp=2026-10-08T10:37:10.401Z level=INFO run=955c0175 message=evaluated permission=bash pattern="llmctl-decide ask --question-file question.json --state rm -rf --profile decide-laya --json" action.permission=bash action.pattern="llmctl-decide *" action.action=allow
+timestamp=2026-10-08T10:37:10.439Z level=INFO run=955c0175 message=loop session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf step=14
+timestamp=2026-10-08T10:37:10.469Z level=INFO run=955c0175 message=process session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf messageID=msg_11b16a1a8001sZJrj6gstYbWP0
+timestamp=2026-10-08T10:37:10.470Z level=INFO run=955c0175 message=stream providerID=llmctlvision modelID=llama32 session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf small=false agent=build mode=primary
+timestamp=2026-10-08T10:37:10.471Z level=INFO run=955c0175 message="llm runtime selected" llm.runtime=ai-sdk llm.provider=llmctlvision llm.model=llama32
+timestamp=2026-10-08T10:37:11.076Z level=INFO run=955c0175 message=evaluated permission=external_directory pattern=/tmp/opencode/* action.permission=external_directory action.pattern=/tmp/opencode/* action.action=allow
+timestamp=2026-10-08T10:37:11.076Z level=INFO run=955c0175 message=evaluated permission=bash pattern="llmctl-decide ask --question-file question.json --state rm -rf --profile decide-laya --json" action.permission=bash action.pattern="llmctl-decide *" action.action=allow
+timestamp=2026-10-08T10:37:11.109Z level=INFO run=955c0175 message=loop session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf step=15
+timestamp=2026-10-08T10:37:11.138Z level=INFO run=955c0175 message=process session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf messageID=msg_11b16a44700118PqNoSn37a8oy
+timestamp=2026-10-08T10:37:11.139Z level=INFO run=955c0175 message=stream providerID=llmctlvision modelID=llama32 session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf small=false agent=build mode=primary
+timestamp=2026-10-08T10:37:11.149Z level=INFO run=955c0175 message="llm runtime selected" llm.runtime=ai-sdk llm.provider=llmctlvision llm.model=llama32
+timestamp=2026-10-08T10:37:11.752Z level=INFO run=955c0175 message=evaluated permission=external_directory pattern=/tmp/opencode/* action.permission=external_directory action.pattern=/tmp/opencode/* action.action=allow
+timestamp=2026-10-08T10:37:11.752Z level=INFO run=955c0175 message=evaluated permission=bash pattern="llmctl-decide ask --question-file question.json --state rm -rf --profile decide-laya --json" action.permission=bash action.pattern="llmctl-decide *" action.action=allow
+timestamp=2026-10-08T10:37:11.781Z level=INFO run=955c0175 message=loop session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf step=16
+timestamp=2026-10-08T10:37:11.804Z level=INFO run=955c0175 message=process session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf messageID=msg_11b16a6e7001SJoBvy4nSsiwqD
+timestamp=2026-10-08T10:37:11.805Z level=INFO run=955c0175 message=stream providerID=llmctlvision modelID=llama32 session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf small=false agent=build mode=primary
+timestamp=2026-10-08T10:37:11.806Z level=INFO run=955c0175 message="llm runtime selected" llm.runtime=ai-sdk llm.provider=llmctlvision llm.model=llama32
+timestamp=2026-10-08T10:37:12.227Z level=INFO run=955c0175 message=evaluated permission=grep pattern=-rf action.permission=* action.action=allow action.pattern=*
+timestamp=2026-10-08T10:37:12.235Z level=INFO run=955c0175 message=evaluated permission=external_directory pattern=/tmp/opencode/* action.permission=external_directory action.pattern=/tmp/opencode/* action.action=allow
+timestamp=2026-10-08T10:37:12.313Z level=INFO run=955c0175 message=loop session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf step=17
+timestamp=2026-10-08T10:37:12.355Z level=INFO run=955c0175 message=process session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf messageID=msg_11b16a8fb001hyY1dv6QnNcwvw
+timestamp=2026-10-08T10:37:12.355Z level=INFO run=955c0175 message=stream providerID=llmctlvision modelID=llama32 session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf small=false agent=build mode=primary
+timestamp=2026-10-08T10:37:12.357Z level=INFO run=955c0175 message="llm runtime selected" llm.runtime=ai-sdk llm.provider=llmctlvision llm.model=llama32
+timestamp=2026-10-08T10:37:12.973Z level=INFO run=955c0175 message=evaluated permission=external_directory pattern=/tmp/opencode/* action.permission=external_directory action.pattern=/tmp/opencode/* action.action=allow
+timestamp=2026-10-08T10:37:12.974Z level=INFO run=955c0175 message=evaluated permission=bash pattern="llmctl-decide ask --question-file question.json --state rm -rf --profile decide-laya --json" action.permission=bash action.pattern="llmctl-decide *" action.action=allow
+timestamp=2026-10-08T10:37:13.007Z level=INFO run=955c0175 message=loop session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf step=18
+timestamp=2026-10-08T10:37:13.035Z level=INFO run=955c0175 message=process session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf messageID=msg_11b16abb1001x9UK82FS4X3TqB
+timestamp=2026-10-08T10:37:13.036Z level=INFO run=955c0175 message=stream providerID=llmctlvision modelID=llama32 session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf small=false agent=build mode=primary
+timestamp=2026-10-08T10:37:13.047Z level=INFO run=955c0175 message="llm runtime selected" llm.runtime=ai-sdk llm.provider=llmctlvision llm.model=llama32
+timestamp=2026-10-08T10:37:13.430Z level=INFO run=955c0175 message=evaluated permission=grep pattern=-rf action.permission=* action.action=allow action.pattern=*
+timestamp=2026-10-08T10:37:13.435Z level=INFO run=955c0175 message=evaluated permission=external_directory pattern=/tmp/opencode/* action.permission=external_directory action.pattern=/tmp/opencode/* action.action=allow
+timestamp=2026-10-08T10:37:13.458Z level=INFO run=955c0175 message=loop session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf step=19
+timestamp=2026-10-08T10:37:13.484Z level=INFO run=955c0175 message=process session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf messageID=msg_11b16ad730015mAYShryJl4Ye4
+timestamp=2026-10-08T10:37:13.485Z level=INFO run=955c0175 message=stream providerID=llmctlvision modelID=llama32 session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf small=false agent=build mode=primary
+timestamp=2026-10-08T10:37:13.486Z level=INFO run=955c0175 message="llm runtime selected" llm.runtime=ai-sdk llm.provider=llmctlvision llm.model=llama32
+timestamp=2026-10-08T10:37:14.108Z level=INFO run=955c0175 message=evaluated permission=external_directory pattern=/tmp/opencode/* action.permission=external_directory action.pattern=/tmp/opencode/* action.action=allow
+timestamp=2026-10-08T10:37:14.108Z level=INFO run=955c0175 message=evaluated permission=bash pattern="llmctl-decide ask --question-file question.json --state rm -rf * --profile decide-laya --json" action.permission=bash action.pattern="llmctl-decide *" action.action=allow
+timestamp=2026-10-08T10:37:14.154Z level=INFO run=955c0175 message=loop session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf step=20
+timestamp=2026-10-08T10:37:14.199Z level=INFO run=955c0175 message=process session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf messageID=msg_11b16b02c001K2eh6PPNCX0YfJ
+timestamp=2026-10-08T10:37:14.200Z level=INFO run=955c0175 message=stream providerID=llmctlvision modelID=llama32 session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf small=false agent=build mode=primary
+timestamp=2026-10-08T10:37:14.202Z level=INFO run=955c0175 message="llm runtime selected" llm.runtime=ai-sdk llm.provider=llmctlvision llm.model=llama32
+timestamp=2026-10-08T10:37:14.600Z level=INFO run=955c0175 message=evaluated permission=grep pattern=-rf action.permission=* action.action=allow action.pattern=*
+timestamp=2026-10-08T10:37:14.604Z level=INFO run=955c0175 message=evaluated permission=external_directory pattern=/tmp/opencode/* action.permission=external_directory action.pattern=/tmp/opencode/* action.action=allow
+timestamp=2026-10-08T10:37:14.657Z level=INFO run=955c0175 message=loop session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf step=21
+timestamp=2026-10-08T10:37:14.692Z level=INFO run=955c0175 message=process session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf messageID=msg_11b16b223001QMe5ze71dq9GyO
+timestamp=2026-10-08T10:37:14.692Z level=INFO run=955c0175 message=stream providerID=llmctlvision modelID=llama32 session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf small=false agent=build mode=primary
+timestamp=2026-10-08T10:37:14.693Z level=INFO run=955c0175 message="llm runtime selected" llm.runtime=ai-sdk llm.provider=llmctlvision llm.model=llama32
+timestamp=2026-10-08T10:37:15.325Z level=INFO run=955c0175 message=evaluated permission=external_directory pattern=/tmp/opencode/* action.permission=external_directory action.pattern=/tmp/opencode/* action.action=allow
+timestamp=2026-10-08T10:37:15.326Z level=INFO run=955c0175 message=evaluated permission=bash pattern="llmctl-decide ask --question-file question.json --state rm -rf * --profile decide-laya --json" action.permission=bash action.pattern="llmctl-decide *" action.action=allow
+timestamp=2026-10-08T10:37:15.360Z level=INFO run=955c0175 message=loop session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf step=22
+timestamp=2026-10-08T10:37:15.392Z level=INFO run=955c0175 message=process session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf messageID=msg_11b16b4e3001sqaEtALuS53sJZ
+timestamp=2026-10-08T10:37:15.393Z level=INFO run=955c0175 message=stream providerID=llmctlvision modelID=llama32 session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf small=false agent=build mode=primary
+timestamp=2026-10-08T10:37:15.406Z level=INFO run=955c0175 message="llm runtime selected" llm.runtime=ai-sdk llm.provider=llmctlvision llm.model=llama32
+timestamp=2026-10-08T10:37:15.795Z level=INFO run=955c0175 message=evaluated permission=grep pattern=-rf action.permission=* action.action=allow action.pattern=*
+timestamp=2026-10-08T10:37:15.799Z level=INFO run=955c0175 message=evaluated permission=external_directory pattern=/tmp/opencode/* action.permission=external_directory action.pattern=/tmp/opencode/* action.action=allow
+timestamp=2026-10-08T10:37:15.825Z level=INFO run=955c0175 message=loop session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf step=23
+timestamp=2026-10-08T10:37:15.851Z level=INFO run=955c0175 message=process session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf messageID=msg_11b16b6b3001OtPvysCY5MnGsB
+timestamp=2026-10-08T10:37:15.852Z level=INFO run=955c0175 message=stream providerID=llmctlvision modelID=llama32 session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf small=false agent=build mode=primary
+timestamp=2026-10-08T10:37:15.853Z level=INFO run=955c0175 message="llm runtime selected" llm.runtime=ai-sdk llm.provider=llmctlvision llm.model=llama32
+timestamp=2026-10-08T10:37:16.475Z level=INFO run=955c0175 message=evaluated permission=external_directory pattern=/tmp/opencode/* action.permission=external_directory action.pattern=/tmp/opencode/* action.action=allow
+timestamp=2026-10-08T10:37:16.475Z level=INFO run=955c0175 message=evaluated permission=bash pattern="llmctl-decide ask --question-file question.json --state rm -rf --profile decide-laya --json" action.permission=bash action.pattern="llmctl-decide *" action.action=allow
+timestamp=2026-10-08T10:37:16.510Z level=INFO run=955c0175 message=loop session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf step=24
+timestamp=2026-10-08T10:37:16.538Z level=INFO run=955c0175 message=process session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf messageID=msg_11b16b960001LkeJxxgyFj3QKM
+timestamp=2026-10-08T10:37:16.539Z level=INFO run=955c0175 message=stream providerID=llmctlvision modelID=llama32 session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf small=false agent=build mode=primary
+timestamp=2026-10-08T10:37:16.540Z level=INFO run=955c0175 message="llm runtime selected" llm.runtime=ai-sdk llm.provider=llmctlvision llm.model=llama32
+timestamp=2026-10-08T10:37:16.940Z level=INFO run=955c0175 message=evaluated permission=grep pattern=-rf action.permission=* action.action=allow action.pattern=*
+timestamp=2026-10-08T10:37:16.950Z level=INFO run=955c0175 message=evaluated permission=external_directory pattern=/tmp/opencode/* action.permission=external_directory action.pattern=/tmp/opencode/* action.action=allow
+timestamp=2026-10-08T10:37:17.017Z level=INFO run=955c0175 message=loop session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf step=25
+timestamp=2026-10-08T10:37:17.059Z level=INFO run=955c0175 message=process session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf messageID=msg_11b16bb5d001SZtdM3Pg4TX6kJ
+timestamp=2026-10-08T10:37:17.060Z level=INFO run=955c0175 message=stream providerID=llmctlvision modelID=llama32 session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf small=false agent=build mode=primary
+timestamp=2026-10-08T10:37:17.061Z level=INFO run=955c0175 message="llm runtime selected" llm.runtime=ai-sdk llm.provider=llmctlvision llm.model=llama32
+timestamp=2026-10-08T10:37:17.753Z level=INFO run=955c0175 message=evaluated permission=external_directory pattern=/tmp/opencode/* action.permission=external_directory action.pattern=/tmp/opencode/* action.action=allow
+timestamp=2026-10-08T10:37:17.758Z level=INFO run=955c0175 message=evaluated permission=bash pattern="llmctl-decide ask --question-file question.json --state rm -rf * --profile decide-laya --json" action.permission=bash action.pattern="llmctl-decide *" action.action=allow
+timestamp=2026-10-08T10:37:17.885Z level=INFO run=955c0175 message=loop session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf step=26
+timestamp=2026-10-08T10:37:17.973Z level=INFO run=955c0175 message=process session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf messageID=msg_11b16bec2001O9nYZrGLeJKy2Q
+timestamp=2026-10-08T10:37:17.974Z level=INFO run=955c0175 message=stream providerID=llmctlvision modelID=llama32 session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf small=false agent=build mode=primary
+timestamp=2026-10-08T10:37:17.976Z level=INFO run=955c0175 message="llm runtime selected" llm.runtime=ai-sdk llm.provider=llmctlvision llm.model=llama32
+timestamp=2026-10-08T10:37:18.465Z level=INFO run=955c0175 message=evaluated permission=grep pattern=-rf action.permission=* action.action=allow action.pattern=*
+timestamp=2026-10-08T10:37:18.497Z level=INFO run=955c0175 message=evaluated permission=external_directory pattern=/tmp/opencode/* action.permission=external_directory action.pattern=/tmp/opencode/* action.action=allow
+timestamp=2026-10-08T10:37:18.659Z level=INFO run=955c0175 message=loop session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf step=27
+timestamp=2026-10-08T10:37:18.761Z level=INFO run=955c0175 message=process session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf messageID=msg_11b16c1c9001D592j9hE3oAdv4
+timestamp=2026-10-08T10:37:18.763Z level=INFO run=955c0175 message=stream providerID=llmctlvision modelID=llama32 session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf small=false agent=build mode=primary
+timestamp=2026-10-08T10:37:18.788Z level=INFO run=955c0175 message="llm runtime selected" llm.runtime=ai-sdk llm.provider=llmctlvision llm.model=llama32
+timestamp=2026-10-08T10:37:19.488Z level=INFO run=955c0175 message=evaluated permission=external_directory pattern=/tmp/opencode/* action.permission=external_directory action.pattern=/tmp/opencode/* action.action=allow
+timestamp=2026-10-08T10:37:19.490Z level=INFO run=955c0175 message=evaluated permission=bash pattern="llmctl-decide ask --question-file question.json --state rm -rf --profile decide-laya --json" action.permission=bash action.pattern="llmctl-decide *" action.action=allow
+timestamp=2026-10-08T10:37:19.586Z level=INFO run=955c0175 message=loop session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf step=28
+timestamp=2026-10-08T10:37:19.623Z level=INFO run=955c0175 message=process session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf messageID=msg_11b16c565001ZAI1mN0gUopeyX
+timestamp=2026-10-08T10:37:19.624Z level=INFO run=955c0175 message=stream providerID=llmctlvision modelID=llama32 session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf small=false agent=build mode=primary
+timestamp=2026-10-08T10:37:19.626Z level=INFO run=955c0175 message="llm runtime selected" llm.runtime=ai-sdk llm.provider=llmctlvision llm.model=llama32
+timestamp=2026-10-08T10:37:20.071Z level=INFO run=955c0175 message=evaluated permission=grep pattern=-rf action.permission=* action.action=allow action.pattern=*
+timestamp=2026-10-08T10:37:20.078Z level=INFO run=955c0175 message=evaluated permission=external_directory pattern=/tmp/opencode/* action.permission=external_directory action.pattern=/tmp/opencode/* action.action=allow
+timestamp=2026-10-08T10:37:20.140Z level=INFO run=955c0175 message=loop session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf step=29
+timestamp=2026-10-08T10:37:20.184Z level=INFO run=955c0175 message=process session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf messageID=msg_11b16c78f001NoR4fP9cTK4B2u
+timestamp=2026-10-08T10:37:20.185Z level=INFO run=955c0175 message=stream providerID=llmctlvision modelID=llama32 session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf small=false agent=build mode=primary
+timestamp=2026-10-08T10:37:20.187Z level=INFO run=955c0175 message="llm runtime selected" llm.runtime=ai-sdk llm.provider=llmctlvision llm.model=llama32
+timestamp=2026-10-08T10:37:20.842Z level=INFO run=955c0175 message=evaluated permission=external_directory pattern=/tmp/opencode/* action.permission=external_directory action.pattern=/tmp/opencode/* action.action=allow
+timestamp=2026-10-08T10:37:20.842Z level=INFO run=955c0175 message=evaluated permission=bash pattern="llmctl-decide ask --question-file question.json --state rm -rf --profile decide-laya --json" action.permission=bash action.pattern="llmctl-decide *" action.action=allow
+timestamp=2026-10-08T10:37:20.886Z level=INFO run=955c0175 message=loop session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf step=30
+timestamp=2026-10-08T10:37:20.912Z level=INFO run=955c0175 message=process session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf messageID=msg_11b16ca79001aiEOL7TFjmF4QS
+timestamp=2026-10-08T10:37:20.913Z level=INFO run=955c0175 message=stream providerID=llmctlvision modelID=llama32 session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf small=false agent=build mode=primary
+timestamp=2026-10-08T10:37:20.914Z level=INFO run=955c0175 message="llm runtime selected" llm.runtime=ai-sdk llm.provider=llmctlvision llm.model=llama32
+timestamp=2026-10-08T10:37:21.316Z level=INFO run=955c0175 message=evaluated permission=grep pattern=-rf action.permission=* action.action=allow action.pattern=*
+timestamp=2026-10-08T10:37:21.321Z level=INFO run=955c0175 message=evaluated permission=external_directory pattern=/tmp/opencode/* action.permission=external_directory action.pattern=/tmp/opencode/* action.action=allow
+timestamp=2026-10-08T10:37:21.361Z level=INFO run=955c0175 message=loop session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf step=31
+timestamp=2026-10-08T10:37:21.386Z level=INFO run=955c0175 message=process session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf messageID=msg_11b16cc53001I98dQheUE8u1fs
+timestamp=2026-10-08T10:37:21.386Z level=INFO run=955c0175 message=stream providerID=llmctlvision modelID=llama32 session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf small=false agent=build mode=primary
+timestamp=2026-10-08T10:37:21.387Z level=INFO run=955c0175 message="llm runtime selected" llm.runtime=ai-sdk llm.provider=llmctlvision llm.model=llama32
+timestamp=2026-10-08T10:37:22.018Z level=INFO run=955c0175 message=evaluated permission=external_directory pattern=/tmp/opencode/* action.permission=external_directory action.pattern=/tmp/opencode/* action.action=allow
+timestamp=2026-10-08T10:37:22.018Z level=INFO run=955c0175 message=evaluated permission=bash pattern="llmctl-decide ask --question-file question.json --state rm -rf --profile decide-laya --json" action.permission=bash action.pattern="llmctl-decide *" action.action=allow
+timestamp=2026-10-08T10:37:22.064Z level=INFO run=955c0175 message=loop session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf step=32
+timestamp=2026-10-08T10:37:22.106Z level=INFO run=955c0175 message=process session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf messageID=msg_11b16cf130015YMhCyHAstG6G3
+timestamp=2026-10-08T10:37:22.107Z level=INFO run=955c0175 message=stream providerID=llmctlvision modelID=llama32 session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf small=false agent=build mode=primary
+timestamp=2026-10-08T10:37:22.120Z level=INFO run=955c0175 message="llm runtime selected" llm.runtime=ai-sdk llm.provider=llmctlvision llm.model=llama32
+timestamp=2026-10-08T10:37:22.536Z level=INFO run=955c0175 message=evaluated permission=grep pattern=-rf action.permission=* action.action=allow action.pattern=*
+timestamp=2026-10-08T10:37:22.541Z level=INFO run=955c0175 message=evaluated permission=external_directory pattern=/tmp/opencode/* action.permission=external_directory action.pattern=/tmp/opencode/* action.action=allow
+timestamp=2026-10-08T10:37:22.568Z level=INFO run=955c0175 message=loop session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf step=33
+timestamp=2026-10-08T10:37:22.598Z level=INFO run=955c0175 message=process session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf messageID=msg_11b16d10a001rtmwj5aDutyJzA
+timestamp=2026-10-08T10:37:22.599Z level=INFO run=955c0175 message=stream providerID=llmctlvision modelID=llama32 session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf small=false agent=build mode=primary
+timestamp=2026-10-08T10:37:22.609Z level=INFO run=955c0175 message="llm runtime selected" llm.runtime=ai-sdk llm.provider=llmctlvision llm.model=llama32
+timestamp=2026-10-08T10:37:23.245Z level=INFO run=955c0175 message=evaluated permission=external_directory pattern=/tmp/opencode/* action.permission=external_directory action.pattern=/tmp/opencode/* action.action=allow
+timestamp=2026-10-08T10:37:23.246Z level=INFO run=955c0175 message=evaluated permission=bash pattern="llmctl-decide ask --question-file question.json --state rm -rf --profile decide-laya --json" action.permission=bash action.pattern="llmctl-decide *" action.action=allow
+timestamp=2026-10-08T10:37:23.286Z level=INFO run=955c0175 message=loop session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf step=34
+timestamp=2026-10-08T10:37:23.313Z level=INFO run=955c0175 message=process session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf messageID=msg_11b16d3d8001KLuhtrSZpmhZNX
+timestamp=2026-10-08T10:37:23.314Z level=INFO run=955c0175 message=stream providerID=llmctlvision modelID=llama32 session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf small=false agent=build mode=primary
+timestamp=2026-10-08T10:37:23.315Z level=INFO run=955c0175 message="llm runtime selected" llm.runtime=ai-sdk llm.provider=llmctlvision llm.model=llama32
+timestamp=2026-10-08T10:37:23.726Z level=INFO run=955c0175 message=evaluated permission=grep pattern=-rf action.permission=* action.action=allow action.pattern=*
+timestamp=2026-10-08T10:37:23.730Z level=INFO run=955c0175 message=evaluated permission=external_directory pattern=/tmp/opencode/* action.permission=external_directory action.pattern=/tmp/opencode/* action.action=allow
+timestamp=2026-10-08T10:37:23.754Z level=INFO run=955c0175 message=loop session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf step=35
+timestamp=2026-10-08T10:37:23.794Z level=INFO run=955c0175 message=process session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf messageID=msg_11b16d5ad0016zrN7PCzxCE6Zh
+timestamp=2026-10-08T10:37:23.795Z level=INFO run=955c0175 message=stream providerID=llmctlvision modelID=llama32 session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf small=false agent=build mode=primary
+timestamp=2026-10-08T10:37:23.796Z level=INFO run=955c0175 message="llm runtime selected" llm.runtime=ai-sdk llm.provider=llmctlvision llm.model=llama32
+timestamp=2026-10-08T10:37:24.429Z level=INFO run=955c0175 message=evaluated permission=external_directory pattern=/tmp/opencode/* action.permission=external_directory action.pattern=/tmp/opencode/* action.action=allow
+timestamp=2026-10-08T10:37:24.429Z level=INFO run=955c0175 message=evaluated permission=bash pattern="llmctl-decide ask --question-file question.json --state rm -rf --profile decide-laya --json" action.permission=bash action.pattern="llmctl-decide *" action.action=allow
+timestamp=2026-10-08T10:37:24.461Z level=INFO run=955c0175 message=loop session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf step=36
+timestamp=2026-10-08T10:37:24.485Z level=INFO run=955c0175 message=process session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf messageID=msg_11b16d86f001mm9SdV0cPQbPjF
+timestamp=2026-10-08T10:37:24.485Z level=INFO run=955c0175 message=stream providerID=llmctlvision modelID=llama32 session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf small=false agent=build mode=primary
+timestamp=2026-10-08T10:37:24.486Z level=INFO run=955c0175 message="llm runtime selected" llm.runtime=ai-sdk llm.provider=llmctlvision llm.model=llama32
+timestamp=2026-10-08T10:37:24.896Z level=INFO run=955c0175 message=evaluated permission=grep pattern=-rf action.permission=* action.action=allow action.pattern=*
+timestamp=2026-10-08T10:37:24.901Z level=INFO run=955c0175 message=evaluated permission=external_directory pattern=/tmp/opencode/* action.permission=external_directory action.pattern=/tmp/opencode/* action.action=allow
+timestamp=2026-10-08T10:37:24.928Z level=INFO run=955c0175 message=loop session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf step=37
+timestamp=2026-10-08T10:37:24.958Z level=INFO run=955c0175 message=process session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf messageID=msg_11b16da43001JLI8UYK1XRriHe
+timestamp=2026-10-08T10:37:24.959Z level=INFO run=955c0175 message=stream providerID=llmctlvision modelID=llama32 session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf small=false agent=build mode=primary
+timestamp=2026-10-08T10:37:24.968Z level=INFO run=955c0175 message="llm runtime selected" llm.runtime=ai-sdk llm.provider=llmctlvision llm.model=llama32
+timestamp=2026-10-08T10:37:25.665Z level=INFO run=955c0175 message=evaluated permission=external_directory pattern=/tmp/opencode/* action.permission=external_directory action.pattern=/tmp/opencode/* action.action=allow
+timestamp=2026-10-08T10:37:25.666Z level=INFO run=955c0175 message=evaluated permission=bash pattern="llmctl-decide ask --question-file question.json --state rm -rf --profile decide-laya --json" action.permission=bash action.pattern="llmctl-decide *" action.action=allow
+timestamp=2026-10-08T10:37:25.702Z level=INFO run=955c0175 message=loop session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf step=38
+timestamp=2026-10-08T10:37:25.737Z level=INFO run=955c0175 message=process session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf messageID=msg_11b16dd480017oB3vbQCyetjrm
+timestamp=2026-10-08T10:37:25.737Z level=INFO run=955c0175 message=stream providerID=llmctlvision modelID=llama32 session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf small=false agent=build mode=primary
+timestamp=2026-10-08T10:37:25.747Z level=INFO run=955c0175 message="llm runtime selected" llm.runtime=ai-sdk llm.provider=llmctlvision llm.model=llama32
+timestamp=2026-10-08T10:37:26.165Z level=INFO run=955c0175 message=evaluated permission=grep pattern=-rf action.permission=* action.action=allow action.pattern=*
+timestamp=2026-10-08T10:37:26.170Z level=INFO run=955c0175 message=evaluated permission=external_directory pattern=/tmp/opencode/* action.permission=external_directory action.pattern=/tmp/opencode/* action.action=allow
+timestamp=2026-10-08T10:37:26.226Z level=INFO run=955c0175 message=loop session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf step=39
+timestamp=2026-10-08T10:37:26.264Z level=INFO run=955c0175 message=process session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf messageID=msg_11b16df54001KXdKfi8Gnn9Ccl
+timestamp=2026-10-08T10:37:26.265Z level=INFO run=955c0175 message=stream providerID=llmctlvision modelID=llama32 session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf small=false agent=build mode=primary
+timestamp=2026-10-08T10:37:26.266Z level=INFO run=955c0175 message="llm runtime selected" llm.runtime=ai-sdk llm.provider=llmctlvision llm.model=llama32
+timestamp=2026-10-08T10:37:26.950Z level=INFO run=955c0175 message=evaluated permission=external_directory pattern=/tmp/opencode/* action.permission=external_directory action.pattern=/tmp/opencode/* action.action=allow
+timestamp=2026-10-08T10:37:26.950Z level=INFO run=955c0175 message=evaluated permission=bash pattern="llmctl-decide ask --question-file question.json --state rm -rf * --profile decide-laya --json" action.permission=bash action.pattern="llmctl-decide *" action.action=allow
+timestamp=2026-10-08T10:37:27.009Z level=INFO run=955c0175 message=loop session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf step=40
+timestamp=2026-10-08T10:37:27.058Z level=INFO run=955c0175 message=process session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf messageID=msg_11b16e264001qJsJ83YYLc2wKH
+timestamp=2026-10-08T10:37:27.059Z level=INFO run=955c0175 message=stream providerID=llmctlvision modelID=llama32 session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf small=false agent=build mode=primary
+timestamp=2026-10-08T10:37:27.061Z level=INFO run=955c0175 message="llm runtime selected" llm.runtime=ai-sdk llm.provider=llmctlvision llm.model=llama32
+timestamp=2026-10-08T10:37:27.530Z level=INFO run=955c0175 message=evaluated permission=grep pattern=-rf action.permission=* action.action=allow action.pattern=*
+timestamp=2026-10-08T10:37:27.541Z level=INFO run=955c0175 message=evaluated permission=external_directory pattern=/tmp/opencode/* action.permission=external_directory action.pattern=/tmp/opencode/* action.action=allow
+timestamp=2026-10-08T10:37:27.611Z level=INFO run=955c0175 message=loop session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf step=41
+timestamp=2026-10-08T10:37:27.640Z level=INFO run=955c0175 message=process session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf messageID=msg_11b16e4be001txbIPKi1sQb9ir
+timestamp=2026-10-08T10:37:27.640Z level=INFO run=955c0175 message=stream providerID=llmctlvision modelID=llama32 session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf small=false agent=build mode=primary
+timestamp=2026-10-08T10:37:27.651Z level=INFO run=955c0175 message="llm runtime selected" llm.runtime=ai-sdk llm.provider=llmctlvision llm.model=llama32
+timestamp=2026-10-08T10:37:28.378Z level=INFO run=955c0175 message=evaluated permission=external_directory pattern=/tmp/opencode/* action.permission=external_directory action.pattern=/tmp/opencode/* action.action=allow
+timestamp=2026-10-08T10:37:28.385Z level=INFO run=955c0175 message=evaluated permission=bash pattern="llmctl-decide ask --question-file question.json --state rm -rf * --profile decide-laya --json" action.permission=bash action.pattern="llmctl-decide *" action.action=allow
+timestamp=2026-10-08T10:37:28.747Z level=INFO run=955c0175 message=loop session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf step=42
+timestamp=2026-10-08T10:37:28.851Z level=INFO run=955c0175 message=process session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf messageID=msg_11b16e92f001a8SyoMVs1Ybmyu
+timestamp=2026-10-08T10:37:28.854Z level=INFO run=955c0175 message=stream providerID=llmctlvision modelID=llama32 session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf small=false agent=build mode=primary
+timestamp=2026-10-08T10:37:28.907Z level=INFO run=955c0175 message="llm runtime selected" llm.runtime=ai-sdk llm.provider=llmctlvision llm.model=llama32
+timestamp=2026-10-08T10:37:29.501Z level=INFO run=955c0175 message=evaluated permission=grep pattern=-rf action.permission=* action.action=allow action.pattern=*
+timestamp=2026-10-08T10:37:29.529Z level=INFO run=955c0175 message=evaluated permission=external_directory pattern=/tmp/opencode/* action.permission=external_directory action.pattern=/tmp/opencode/* action.action=allow
+timestamp=2026-10-08T10:37:29.664Z level=INFO run=955c0175 message=loop session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf step=43
+timestamp=2026-10-08T10:37:29.690Z level=INFO run=955c0175 message=process session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf messageID=msg_11b16ecc2001I96X3jGWPz0Hwu
+timestamp=2026-10-08T10:37:29.691Z level=INFO run=955c0175 message=stream providerID=llmctlvision modelID=llama32 session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf small=false agent=build mode=primary
+timestamp=2026-10-08T10:37:29.712Z level=INFO run=955c0175 message="llm runtime selected" llm.runtime=ai-sdk llm.provider=llmctlvision llm.model=llama32
+timestamp=2026-10-08T10:37:30.450Z level=INFO run=955c0175 message=evaluated permission=external_directory pattern=/tmp/opencode/* action.permission=external_directory action.pattern=/tmp/opencode/* action.action=allow
+timestamp=2026-10-08T10:37:30.451Z level=INFO run=955c0175 message=evaluated permission=bash pattern="llmctl-decide ask --question-file question.json --state rm -rf --profile decide-laya --json" action.permission=bash action.pattern="llmctl-decide *" action.action=allow
+timestamp=2026-10-08T10:37:30.490Z level=INFO run=955c0175 message=loop session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf step=44
+timestamp=2026-10-08T10:37:30.532Z level=INFO run=955c0175 message=process session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf messageID=msg_11b16effd001BmzmgSfaVr0isX
+timestamp=2026-10-08T10:37:30.532Z level=INFO run=955c0175 message=stream providerID=llmctlvision modelID=llama32 session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf small=false agent=build mode=primary
+timestamp=2026-10-08T10:37:30.533Z level=INFO run=955c0175 message="llm runtime selected" llm.runtime=ai-sdk llm.provider=llmctlvision llm.model=llama32
+timestamp=2026-10-08T10:37:30.954Z level=INFO run=955c0175 message=evaluated permission=grep pattern=-rf action.permission=* action.action=allow action.pattern=*
+timestamp=2026-10-08T10:37:30.960Z level=INFO run=955c0175 message=evaluated permission=external_directory pattern=/tmp/opencode/* action.permission=external_directory action.pattern=/tmp/opencode/* action.action=allow
+timestamp=2026-10-08T10:37:31.015Z level=INFO run=955c0175 message=loop session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf step=45
+timestamp=2026-10-08T10:37:31.041Z level=INFO run=955c0175 message=process session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf messageID=msg_11b16f209001lPmuWuiFJwWabA
+timestamp=2026-10-08T10:37:31.041Z level=INFO run=955c0175 message=stream providerID=llmctlvision modelID=llama32 session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf small=false agent=build mode=primary
+timestamp=2026-10-08T10:37:31.042Z level=INFO run=955c0175 message="llm runtime selected" llm.runtime=ai-sdk llm.provider=llmctlvision llm.model=llama32
+timestamp=2026-10-08T10:37:31.692Z level=INFO run=955c0175 message=evaluated permission=external_directory pattern=/tmp/opencode/* action.permission=external_directory action.pattern=/tmp/opencode/* action.action=allow
+timestamp=2026-10-08T10:37:31.692Z level=INFO run=955c0175 message=evaluated permission=bash pattern="llmctl-decide ask --question-file question.json --state rm -rf --profile decide-laya --json" action.permission=bash action.pattern="llmctl-decide *" action.action=allow
+timestamp=2026-10-08T10:37:31.735Z level=INFO run=955c0175 message=loop session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf step=46
+timestamp=2026-10-08T10:37:31.765Z level=INFO run=955c0175 message=process session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf messageID=msg_11b16f4d9001FsPYmg41aKmg75
+timestamp=2026-10-08T10:37:31.766Z level=INFO run=955c0175 message=stream providerID=llmctlvision modelID=llama32 session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf small=false agent=build mode=primary
+timestamp=2026-10-08T10:37:31.777Z level=INFO run=955c0175 message="llm runtime selected" llm.runtime=ai-sdk llm.provider=llmctlvision llm.model=llama32
+timestamp=2026-10-08T10:37:32.435Z level=INFO run=955c0175 message=evaluated permission=external_directory pattern=/tmp/opencode/* action.permission=external_directory action.pattern=/tmp/opencode/* action.action=allow
+timestamp=2026-10-08T10:37:32.435Z level=INFO run=955c0175 message=evaluated permission=bash pattern="llmctl-decide ask --question-file question.json --state rm -rf * --profile decide-laya --json" action.permission=bash action.pattern="llmctl-decide *" action.action=allow
+timestamp=2026-10-08T10:37:32.470Z level=INFO run=955c0175 message=loop session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf step=47
+timestamp=2026-10-08T10:37:32.505Z level=INFO run=955c0175 message=process session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf messageID=msg_11b16f7b8001m59KX0mS3CzlO4
+timestamp=2026-10-08T10:37:32.506Z level=INFO run=955c0175 message=stream providerID=llmctlvision modelID=llama32 session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf small=false agent=build mode=primary
+timestamp=2026-10-08T10:37:32.507Z level=INFO run=955c0175 message="llm runtime selected" llm.runtime=ai-sdk llm.provider=llmctlvision llm.model=llama32
+timestamp=2026-10-08T10:37:33.193Z level=INFO run=955c0175 message=evaluated permission=external_directory pattern=/tmp/opencode/* action.permission=external_directory action.pattern=/tmp/opencode/* action.action=allow
+timestamp=2026-10-08T10:37:33.193Z level=INFO run=955c0175 message=evaluated permission=bash pattern="llmctl-decide ask --question-file question.json --state rm -rf --profile decide-laya --json" action.permission=bash action.pattern="llmctl-decide *" action.action=allow
+timestamp=2026-10-08T10:37:33.227Z level=INFO run=955c0175 message=loop session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf step=48
+timestamp=2026-10-08T10:37:33.253Z level=INFO run=955c0175 message=process session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf messageID=msg_11b16faae001QsghF8SRuQ1Xu8
+timestamp=2026-10-08T10:37:33.254Z level=INFO run=955c0175 message=stream providerID=llmctlvision modelID=llama32 session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf small=false agent=build mode=primary
+timestamp=2026-10-08T10:37:33.255Z level=INFO run=955c0175 message="llm runtime selected" llm.runtime=ai-sdk llm.provider=llmctlvision llm.model=llama32
+timestamp=2026-10-08T10:37:33.691Z level=INFO run=955c0175 message=evaluated permission=grep pattern=-rf action.permission=* action.action=allow action.pattern=*
+timestamp=2026-10-08T10:37:33.695Z level=INFO run=955c0175 message=evaluated permission=external_directory pattern=/tmp/opencode/* action.permission=external_directory action.pattern=/tmp/opencode/* action.action=allow
+timestamp=2026-10-08T10:37:33.736Z level=INFO run=955c0175 message=loop session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf step=49
+timestamp=2026-10-08T10:37:33.799Z level=INFO run=955c0175 message=process session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf messageID=msg_11b16fcab001LPwkF7OBfz0v3c
+timestamp=2026-10-08T10:37:33.800Z level=INFO run=955c0175 message=stream providerID=llmctlvision modelID=llama32 session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf small=false agent=build mode=primary
+timestamp=2026-10-08T10:37:33.801Z level=INFO run=955c0175 message="llm runtime selected" llm.runtime=ai-sdk llm.provider=llmctlvision llm.model=llama32
+timestamp=2026-10-08T10:37:34.472Z level=INFO run=955c0175 message=evaluated permission=external_directory pattern=/tmp/opencode/* action.permission=external_directory action.pattern=/tmp/opencode/* action.action=allow
+timestamp=2026-10-08T10:37:34.473Z level=INFO run=955c0175 message=evaluated permission=bash pattern="llmctl-decide ask --question-file question.json --state rm -rf * --profile decide-laya --json" action.permission=bash action.pattern="llmctl-decide *" action.action=allow
+timestamp=2026-10-08T10:37:34.507Z level=INFO run=955c0175 message=loop session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf step=50
+timestamp=2026-10-08T10:37:34.535Z level=INFO run=955c0175 message=process session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf messageID=msg_11b16ffaf001guYCzVQhQyndYz
+timestamp=2026-10-08T10:37:34.536Z level=INFO run=955c0175 message=stream providerID=llmctlvision modelID=llama32 session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf small=false agent=build mode=primary
+timestamp=2026-10-08T10:37:34.538Z level=INFO run=955c0175 message="llm runtime selected" llm.runtime=ai-sdk llm.provider=llmctlvision llm.model=llama32
+timestamp=2026-10-08T10:37:34.999Z level=INFO run=955c0175 message=evaluated permission=grep pattern=-rf action.permission=* action.action=allow action.pattern=*
+timestamp=2026-10-08T10:37:35.006Z level=INFO run=955c0175 message=evaluated permission=external_directory pattern=/tmp/opencode/* action.permission=external_directory action.pattern=/tmp/opencode/* action.action=allow
+timestamp=2026-10-08T10:37:35.058Z level=INFO run=955c0175 message=loop session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf step=51
+timestamp=2026-10-08T10:37:35.102Z level=INFO run=955c0175 message=process session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf messageID=msg_11b1701d50019dFkj8cjptNiWq
+timestamp=2026-10-08T10:37:35.103Z level=INFO run=955c0175 message=stream providerID=llmctlvision modelID=llama32 session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf small=false agent=build mode=primary
+timestamp=2026-10-08T10:37:35.104Z level=INFO run=955c0175 message="llm runtime selected" llm.runtime=ai-sdk llm.provider=llmctlvision llm.model=llama32
+timestamp=2026-10-08T10:37:35.784Z level=INFO run=955c0175 message=evaluated permission=external_directory pattern=/tmp/opencode/* action.permission=external_directory action.pattern=/tmp/opencode/* action.action=allow
+timestamp=2026-10-08T10:37:35.785Z level=INFO run=955c0175 message=evaluated permission=bash pattern="llmctl-decide ask --question-file question.json --state rm -rf --profile decide-laya --json" action.permission=bash action.pattern="llmctl-decide *" action.action=allow
+timestamp=2026-10-08T10:37:35.813Z level=INFO run=955c0175 message=loop session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf step=52
+timestamp=2026-10-08T10:37:35.840Z level=INFO run=955c0175 message=process session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf messageID=msg_11b1704c9001rOiy3j05FGgAMf
+timestamp=2026-10-08T10:37:35.840Z level=INFO run=955c0175 message=stream providerID=llmctlvision modelID=llama32 session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf small=false agent=build mode=primary
+timestamp=2026-10-08T10:37:35.841Z level=INFO run=955c0175 message="llm runtime selected" llm.runtime=ai-sdk llm.provider=llmctlvision llm.model=llama32
+timestamp=2026-10-08T10:37:36.275Z level=INFO run=955c0175 message=evaluated permission=grep pattern=-rf action.permission=* action.action=allow action.pattern=*
+timestamp=2026-10-08T10:37:36.280Z level=INFO run=955c0175 message=evaluated permission=external_directory pattern=/tmp/opencode/* action.permission=external_directory action.pattern=/tmp/opencode/* action.action=allow
+timestamp=2026-10-08T10:37:36.355Z level=INFO run=955c0175 message=loop session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf step=53
+timestamp=2026-10-08T10:37:36.406Z level=INFO run=955c0175 message=process session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf messageID=msg_11b1706e80016TFKDFANy7Nmvx
+timestamp=2026-10-08T10:37:36.406Z level=INFO run=955c0175 message=stream providerID=llmctlvision modelID=llama32 session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf small=false agent=build mode=primary
+timestamp=2026-10-08T10:37:36.408Z level=INFO run=955c0175 message="llm runtime selected" llm.runtime=ai-sdk llm.provider=llmctlvision llm.model=llama32
+timestamp=2026-10-08T10:37:37.152Z level=INFO run=955c0175 message=evaluated permission=external_directory pattern=/tmp/opencode/* action.permission=external_directory action.pattern=/tmp/opencode/* action.action=allow
+timestamp=2026-10-08T10:37:37.155Z level=INFO run=955c0175 message=evaluated permission=bash pattern="llmctl-decide ask --question-file question.json --state rm -rf --profile decide-laya --json" action.permission=bash action.pattern="llmctl-decide *" action.action=allow
+timestamp=2026-10-08T10:37:37.233Z level=INFO run=955c0175 message=loop session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf step=54
+timestamp=2026-10-08T10:37:37.286Z level=INFO run=955c0175 message=process session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf messageID=msg_11b170a58001JQsYTdgU11o0Fz
+timestamp=2026-10-08T10:37:37.287Z level=INFO run=955c0175 message=stream providerID=llmctlvision modelID=llama32 session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf small=false agent=build mode=primary
+timestamp=2026-10-08T10:37:37.288Z level=INFO run=955c0175 message="llm runtime selected" llm.runtime=ai-sdk llm.provider=llmctlvision llm.model=llama32
+timestamp=2026-10-08T10:37:37.796Z level=INFO run=955c0175 message=evaluated permission=grep pattern=-rf action.permission=* action.action=allow action.pattern=*
+timestamp=2026-10-08T10:37:37.828Z level=INFO run=955c0175 message=evaluated permission=external_directory pattern=/tmp/opencode/* action.permission=external_directory action.pattern=/tmp/opencode/* action.action=allow
+timestamp=2026-10-08T10:37:37.986Z level=INFO run=955c0175 message=loop session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf step=55
+timestamp=2026-10-08T10:37:38.024Z level=INFO run=955c0175 message=process session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf messageID=msg_11b170d4f001Y1clxgjUiFvK5L
+timestamp=2026-10-08T10:37:38.024Z level=INFO run=955c0175 message=stream providerID=llmctlvision modelID=llama32 session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf small=false agent=build mode=primary
+timestamp=2026-10-08T10:37:38.028Z level=INFO run=955c0175 message="llm runtime selected" llm.runtime=ai-sdk llm.provider=llmctlvision llm.model=llama32
+timestamp=2026-10-08T10:37:38.458Z level=INFO run=955c0175 message=loop session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf step=56
+timestamp=2026-10-08T10:37:38.462Z level=INFO run=955c0175 message="exiting loop" session.id=ses_ee4e98d17ffeFSbdbRsHxeVvqf
+timestamp=2026-10-08T10:37:38.484Z level=INFO run=955c0175 message="disposing instance" directory=/tmp/claude-1000/-home-milosvasic-Projects-llmctl/09f54cd2-bbc4-42e2-81e6-8e453f2c3261/scratchpad/proj

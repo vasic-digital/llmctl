@@ -1,0 +1,116 @@
+  [llmctl] llmctl setup: doctor -> build -> plan
+  llmctl doctor - environment self-diagnosis
+  PASS OS: linux (x86_64)
+  PASS command 'bash' -> /bin/bash
+  PASS command 'curl' -> /bin/curl
+  PASS command 'git' -> /bin/git
+  PASS command 'python3' -> /bin/python3
+  PASS command 'cmake' -> /bin/cmake
+  PASS command 'make' -> /bin/make
+  PASS C compiler available
+  PASS sha256 tool available
+  WARN submodule submodules/llama.cpp not initialized (run: llmctl build)
+  WARN submodule submodules/colibri not initialized (run: llmctl build)
+  PASS catalog valid JSON (16 profiles)
+  PASS state dir writable: /home/milosvasic/llmctl-work/tmp/tmp.EtrMwzct2E/state
+  WARN no GPU tooling detected - CPU-only inference
+  PASS systemd --user session available
+  WARN llama-server not built yet (llmctl build llama)
+  WARN llmctl-decide not built - dynamic ports and the service registry are unavailable (llmctl build decide)
+  WARN onnx: onnxruntime NOT importable - decide-nli (onnx engine) cannot run real inference (run: llmctl build onnx - hash-locked private venv; llama decision profiles are unaffected)
+  WARN onnx: sentencepiece NOT importable - DeBERTa-class spm.model tokenizers need it (run: llmctl build onnx; llama decision profiles are unaffected)
+  PASS curl supports HTTP/3 - llmctld client calls can use --http3
+  PASS go toolchain available (go1.26.2-X:nodwarf5) - can build llmctld from source (make llmctld-build)
+  
+  doctor: 0 failure(s), 7 warning(s)
+  WARN: submodule submodules/llama.cpp not initialized
+  WARN: submodule submodules/colibri not initialized
+  [llmctl] initializing submodules (git submodule update --init)
+  [llmctl] no GPU toolchain detected -> CPU build (GGML_NATIVE=ON, host-native)
+  [llmctl] [dry-run] cmake -S /home/milosvasic/llmctl-work/llmctl/submodules/llama.cpp -B /home/milosvasic/llmctl-work/llmctl/submodules/llama.cpp/build -DCMAKE_BUILD_TYPE=Release -DGGML_NATIVE=ON
+  [llmctl] [dry-run] cmake --build /home/milosvasic/llmctl-work/llmctl/submodules/llama.cpp/build --config Release --target llama-server -j 8
+  WARN: submodule submodules/llama.cpp not initialized
+  WARN: submodule submodules/colibri not initialized
+  [llmctl] initializing submodules (git submodule update --init)
+  [llmctl] [dry-run] make -C /home/milosvasic/llmctl-work/llmctl/submodules/colibri/c colibri
+  [llmctl] [dry-run] make -C /home/milosvasic/llmctl-work/llmctl/submodules/colibri/c qwen36
+  [llmctl] [dry-run] pip install -e /home/milosvasic/llmctl-work/llmctl/submodules/colibri
+  building the onnx encoder runtime venv at /home/milosvasic/llmctl-work/tmp/tmp.EtrMwzct2E/data/venv-onnx
+  [llmctl] hash-locked pins: numpy==2.4.6 numpy==2.5.3 onnxruntime==1.30.0 sentencepiece==0.2.2 tokenizers==0.23.2 (every file verified with --require-hashes; lock: /home/milosvasic/llmctl-work/llmctl/lib/lock/requirements-onnx.lock)
+  [llmctl] dry-run: would create /home/milosvasic/llmctl-work/tmp/tmp.EtrMwzct2E/data/venv-onnx and install from /home/milosvasic/llmctl-work/llmctl/lib/lock/requirements-onnx.lock
+  
+  Host tier:   baseline
+  Budgets:     RAM 25904 MiB (avail - 4GiB), VRAM 10444 MiB (total - 15%), storage 500000 MiB free
+  
+  profile          port   verdict   mode     RAM MiB  VRAM   ctx   ngl  why
+  fast             8080   FITS      gpu      2048     5716   8192  99   recommended
+  coder            8081   FITS      cpu      21793    0      32768 0    recommended
+  vision           8082   FITS      gpu      2048     4030   24000 99   recommended
+  vision-pro       8083   GATED     gpu      2048     9824   16384 99   needs min_tier=workstation
+  moe-fast         8084   FITS      cpu      15644    0      16384 0    recommended
+  small            8085   FITS      gpu      2048     3859   55000 99   recommended
+  ws-dense-32b     8086   GATED     cpu      23027    0      32768 0    needs min_tier=workstation
+  ws-moe-30b       8087   GATED     cpu      25889    0      32768 0    needs min_tier=workstation
+  colibri-glm      8090   GATED     colibri  24576    0      8192  0    needs min_tier=datacenter
+  colibri-qwen36   8091   GATED     colibri  8192     0      8192  0    needs min_tier=workstation
+  decide-tiny      8092   FITS      gpu      2048     1592   4096  99   recommended
+  decide           8093   FITS      gpu      2048     3671   8192  99   recommended
+  decide-pro       8094   GATED     gpu      2048     5260   8192  99   needs min_tier=workstation
+  decide-nli       8096   FITS      cpu      3006     0      512   0    recommended
+  decide-max       8097   GATED     gpu      2048     10174  8192  99   needs min_tier=workstation
+  decide-2b        8098   FITS      gpu      2048     3006   8192  99   recommended
+  
+  Co-residency groups (profiles that can run at the same time):
+    group 1: fast, coder, vision  (RAM 25889 MiB, VRAM 9746 MiB)
+    group 2: moe-fast, small, decide-tiny, decide, decide-nli  (RAM 24794 MiB, VRAM 9122 MiB)
+    group 3: decide-2b  (RAM 2048 MiB, VRAM 3006 MiB)
+  
+  Decision capacity (max parallel instances per decide profile; capacity report, nothing reserved):
+  profile        tier-ok  gpu-instances  cpu-instances  slots/instance  detail
+  decide         yes      2              7              2               RAM 2048 MiB / VRAM 3671 MiB per instance
+  decide-2b      yes      3              8              2               RAM 2048 MiB / VRAM 3006 MiB per instance
+  decide-max     no       0              0              2               tier gate: host tier baseline below min_tier workstation
+  decide-nli     yes      0              8              1               RAM 3006 MiB / VRAM 0 MiB per instance
+  decide-pro     no       0              0              2               tier gate: host tier baseline below min_tier workstation
+  decide-tiny    yes      6              16             4               RAM 2048 MiB / VRAM 1592 MiB per instance
+  
+  setup complete. Next: llmctl models download <profile>, then llmctl start <profile>
+  ok: llmctl setup exit code (fresh-clone simulation)
+  ok: setup announces its own orchestration sequence
+  ok: doctor phase: hardware/OS probe ran
+  FAIL: doctor phase: real submodule path checked (not the removed vendor/ path)
+    needle not found: submodule submodules/llama.cpp initialized
+    haystack: [llmctl] llmctl setup: doctor -> build -> plan
+llmctl doctor - environment self-diagnosis
+PASS OS: linux (x86_64)
+PASS command 'bash' -> /bin/bash
+PASS command 'curl' -> /bin/curl
+PASS command 'git' -> /bin/git
+PASS command 'python3' -> /bin/python3
+PASS command 'cmake' -> /bin/cmake
+PASS command 'make' -> /bin/make
+PASS C compiler available
+PASS sha256 tool available
+WARN submodule submodules/llama.cpp not initialized (run: llmctl build)
+WARN submodule submodules/colibri not initialized (run: l
+  FAIL: doctor phase: real submodule path checked (not the removed vendor/ path)
+    needle not found: submodule submodules/colibri initialized
+    haystack: [llmctl] llmctl setup: doctor -> build -> plan
+llmctl doctor - environment self-diagnosis
+PASS OS: linux (x86_64)
+PASS command 'bash' -> /bin/bash
+PASS command 'curl' -> /bin/curl
+PASS command 'git' -> /bin/git
+PASS command 'python3' -> /bin/python3
+PASS command 'cmake' -> /bin/cmake
+PASS command 'make' -> /bin/make
+PASS C compiler available
+PASS sha256 tool available
+WARN submodule submodules/llama.cpp not initialized (run: llmctl build)
+WARN submodule submodules/colibri not initialized (run: l
+  ok: doctor phase: model catalog validated
+  ok: build phase: llama.cpp engine build was invoked (dry-run)
+  ok: build phase: colibri engine build was invoked (dry-run)
+  ok: plan phase: catalog profiles considered
+  ok: setup reports completion
+RESULT: FAIL (2 assertion failure(s))

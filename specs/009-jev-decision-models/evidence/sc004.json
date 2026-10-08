@@ -1,0 +1,1027 @@
+{
+ "generated_by": "scripts/spec_closure_audit.py",
+ "green_log": "specs/009-jev-decision-models/evidence/p7-make-test.log",
+ "counts": {
+  "H": {
+   "OPEN": 2,
+   "FIXED": 7
+  },
+  "M": {
+   "FIXED": 28,
+   "DEMOTED": 1,
+   "OPEN": 2
+  },
+  "L": {
+   "DEMOTED": 4,
+   "FIXED": 15,
+   "ACCEPTED-LIMITATION": 1
+  }
+ },
+ "open_high": [
+  "D-01",
+  "D-06"
+ ],
+ "rows": [
+  {
+   "id": "D-01",
+   "sev": "H",
+   "source": "source-findings.md",
+   "components": [
+    "D-01"
+   ],
+   "p1": "D-01=SKIP",
+   "red": "specs/009-jev-decision-models/evidence/p1-red-original/d01_d15.jsonl:1",
+   "guards": [],
+   "green": "",
+   "closure": "OPEN",
+   "reason": "D-01: RED was SKIPPED (environment) - no RED observed; guard exists"
+  },
+  {
+   "id": "D-02",
+   "sev": "H",
+   "source": "source-findings.md",
+   "components": [
+    "D-02"
+   ],
+   "p1": "D-02=RED",
+   "red": "specs/009-jev-decision-models/evidence/p1-red-original/d01_d15.jsonl:2",
+   "guards": [
+    "OK internal/gateway/keyfile_test.go::TestPostJSONReReadsTheKeyFileOnA401AndRetriesOnce",
+    "OK tests/test_gateway_endpoints.sh::G-040: the per-profile llama key file authenticates the g",
+    "OK tests/fixtures/onnx_rt_contract.py::auth: correct Bearer -> 200"
+   ],
+   "green": "PASS (go:internal/gateway, test_gateway_endpoints.sh, test_no_retired_vars.sh)",
+   "closure": "FIXED",
+   "reason": "RED observed, guard exists, GREEN recorded"
+  },
+  {
+   "id": "D-03",
+   "sev": "H",
+   "source": "source-findings.md",
+   "components": [
+    "D-03"
+   ],
+   "p1": "D-03=RED",
+   "red": "specs/009-jev-decision-models/evidence/p1-red-original/d01_d15.jsonl:3",
+   "guards": [
+    "OK tests/test_regression_defects.sh::D-03: serve --api-key is refused (no key on argv, rc 2)",
+    "OK tests/test_onnx_runtime.sh::process-level key/bind checks"
+   ],
+   "green": "PASS (test_onnx_runtime.sh, test_regression_defects.sh)",
+   "closure": "FIXED",
+   "reason": "RED observed, guard exists, GREEN recorded"
+  },
+  {
+   "id": "D-04",
+   "sev": "H",
+   "source": "source-findings.md",
+   "components": [
+    "D-04"
+   ],
+   "p1": "D-04=RED",
+   "red": "specs/009-jev-decision-models/evidence/p1-red-original/d01_d15.jsonl:4",
+   "guards": [
+    "OK tests/test_onnx_server.sh::--host ${h} refused (loopback 127.0.0.1 only)",
+    "OK tests/test_onnx_runtime.sh::process-level key/bind checks",
+    "OK tests/fixtures/onnx_rt_contract.py::legacy /health (profile-leaking, backend-less) no long"
+   ],
+   "green": "PASS (test_no_retired_vars.sh, test_onnx_runtime.sh, test_onnx_server.sh)",
+   "closure": "FIXED",
+   "reason": "RED observed, guard exists, GREEN recorded"
+  },
+  {
+   "id": "D-05",
+   "sev": "H",
+   "source": "source-findings.md",
+   "components": [
+    "D-05"
+   ],
+   "p1": "D-05=RED",
+   "red": "specs/009-jev-decision-models/evidence/p1-red-original/d01_d15.jsonl:5",
+   "guards": [
+    "OK cmd/llmctl-decide/cmd_serve_test.go::TestServeStopNeverSignalsUnrelatedProcess",
+    "OK tests/test_gateway_endpoints.sh::stop refuses a pidfile that names an unrelated process"
+   ],
+   "green": "PASS (go:cmd/llmctl-decide, test_gateway_endpoints.sh)",
+   "closure": "FIXED",
+   "reason": "RED observed, guard exists, GREEN recorded"
+  },
+  {
+   "id": "D-06",
+   "sev": "H",
+   "source": "source-findings.md",
+   "components": [
+    "D-06"
+   ],
+   "p1": "D-06=SKIP",
+   "red": "specs/009-jev-decision-models/evidence/p1-red-original/d01_d15.jsonl:6",
+   "guards": [],
+   "green": "",
+   "closure": "OPEN",
+   "reason": "D-06: needs a live/real-model run: environment-gated, was SKIP: real-model inference needs onnxruntime + sentencepiece + the 1.7 GB model; not exercisable offline. Stays an OPEN live-va"
+  },
+  {
+   "id": "D-07",
+   "sev": "M",
+   "source": "source-findings.md",
+   "components": [
+    "D-07"
+   ],
+   "p1": "D-07=RED",
+   "red": "specs/009-jev-decision-models/evidence/p1-red-original/d01_d15.jsonl:7",
+   "guards": [
+    "OK tests/fixtures/onnx_rt_contract.py::K2: logits count != id2label count -> 500 JSON (D-07, "
+   ],
+   "green": "PASS (test_no_retired_vars.sh, test_onnx_runtime.sh)",
+   "closure": "FIXED",
+   "reason": "RED observed, guard exists, GREEN recorded"
+  },
+  {
+   "id": "D-08",
+   "sev": "M",
+   "source": "source-findings.md",
+   "components": [
+    "D-08"
+   ],
+   "p1": "D-08=RED",
+   "red": "specs/009-jev-decision-models/evidence/p1-red-original/d01_d15.jsonl:8",
+   "guards": [
+    "OK tests/fixtures/onnx_rt_contract.py::unsupported method -> 405 JSON (not an HTML page)",
+    "OK internal/contract/request_test.go::TestRejections400",
+    "OK tests/test_gateway_endpoints.sh::row EP-012"
+   ],
+   "green": "PASS (go:internal/contract, test_gateway_endpoints.sh, test_no_retired_vars.sh)",
+   "closure": "FIXED",
+   "reason": "RED observed, guard exists, GREEN recorded"
+  },
+  {
+   "id": "D-09",
+   "sev": "M",
+   "source": "source-findings.md",
+   "components": [
+    "D-09"
+   ],
+   "p1": "D-09=RED",
+   "red": "specs/009-jev-decision-models/evidence/p1-red-original/d01_d15.jsonl:9",
+   "guards": [
+    "OK internal/server/server_test.go::TestBackendErrorMapping",
+    "OK tests/fixtures/onnx_rt_contract.py::half-sent headers: connection is closed by the socket ",
+    "OK internal/gateway/driver.go (engine text never reaches a client: backendFailed)"
+   ],
+   "green": "PASS (go:internal/gateway, go:internal/server, test_no_retired_vars.sh)",
+   "closure": "FIXED",
+   "reason": "RED observed, guard exists, GREEN recorded"
+  },
+  {
+   "id": "D-10",
+   "sev": "M",
+   "source": "source-findings.md",
+   "components": [
+    "D-10"
+   ],
+   "p1": "D-10=RED",
+   "red": "specs/009-jev-decision-models/evidence/p1-red-original/d01_d15.jsonl:10",
+   "guards": [
+    "OK internal/contract/request_test.go::TestPerProfileLimitsOverride",
+    "OK internal/gateway/catalog_test.go::TestBuildProfilesCapsAtGlobalMaxOptions",
+    "OK internal/server/limits_test.go::TestFromEnvOverrides",
+    "OK tests/test_gateway_endpoints.sh::row EP-015"
+   ],
+   "green": "PASS (go:internal/contract, go:internal/gateway, go:internal/server)",
+   "closure": "FIXED",
+   "reason": "RED observed, guard exists, GREEN recorded"
+  },
+  {
+   "id": "D-11",
+   "sev": "M",
+   "source": "source-findings.md",
+   "components": [
+    "D-11"
+   ],
+   "p1": "D-11=RED",
+   "red": "specs/009-jev-decision-models/evidence/p1-red-original/d01_d15.jsonl:11",
+   "guards": [
+    "OK tests/test_regression_defects.sh::D-11/D-29: no production file reads a retired seam varia"
+   ],
+   "green": "PASS (test_regression_defects.sh)",
+   "closure": "FIXED",
+   "reason": "RED observed, guard exists, GREEN recorded"
+  },
+  {
+   "id": "D-12",
+   "sev": "M",
+   "source": "source-findings.md",
+   "components": [
+    "D-12"
+   ],
+   "p1": "D-12=RED",
+   "red": "specs/009-jev-decision-models/evidence/p1-red-original/d01_d15.jsonl:12",
+   "guards": [
+    "OK tests/test_onnx_download.sh::skipped smoke: the output does NOT claim 'downloaded and veri",
+    "OK tests/test_onnx_download.sh::evidence log distinguishes files-verified from fully-verified"
+   ],
+   "green": "PASS (test_onnx_download.sh)",
+   "closure": "FIXED",
+   "reason": "RED observed, guard exists, GREEN recorded"
+  },
+  {
+   "id": "D-13",
+   "sev": "M",
+   "source": "source-findings.md",
+   "components": [
+    "D-13"
+   ],
+   "p1": "D-13=RED",
+   "red": "specs/009-jev-decision-models/evidence/p1-red-original/d01_d15.jsonl:13",
+   "guards": [
+    "OK tests/test_regression_defects.sh::D-13: every file of every decide profile carries a pinne"
+   ],
+   "green": "PASS (test_regression_defects.sh)",
+   "closure": "FIXED",
+   "reason": "RED observed, guard exists, GREEN recorded"
+  },
+  {
+   "id": "D-14",
+   "sev": "M",
+   "source": "source-findings.md",
+   "components": [
+    "D-14"
+   ],
+   "p1": "D-14=RED",
+   "red": "specs/009-jev-decision-models/evidence/p1-red-original/d01_d15.jsonl:14",
+   "guards": [
+    "OK tests/test_onnx_download.sh::D-14: no orphaned onnx_server after SIGTERM to the smoke shel"
+   ],
+   "green": "PASS (test_onnx_download.sh)",
+   "closure": "FIXED",
+   "reason": "RED observed, guard exists, GREEN recorded"
+  },
+  {
+   "id": "D-15",
+   "sev": "L",
+   "source": "source-findings.md",
+   "components": [
+    "D-15"
+   ],
+   "p1": "D-15=NOT-REPRODUCED",
+   "red": "specs/009-jev-decision-models/evidence/p1-red-original/d01_d15.jsonl:15",
+   "guards": [],
+   "green": "",
+   "closure": "DEMOTED",
+   "reason": "re-assessed as the recorded operator policy of 2026-09-15 (no artificial memory ceiling below physical RAM), not a defect; NOT-REPRODUCED in the archive. The policy itself is asserted in tests/test_se"
+  },
+  {
+   "id": "D-16",
+   "sev": "M",
+   "source": "source-findings.md",
+   "components": [
+    "D-16"
+   ],
+   "p1": "D-16=RED",
+   "red": "specs/009-jev-decision-models/evidence/p1-red-original/d16_d32.jsonl:1",
+   "guards": [
+    "OK tests/test_onnx_server.sh::onnxruntime missing -> message points at the hash-locked build",
+    "OK tests/test_engine_build_onnx.sh::lock carries many real sha256 hashes",
+    "OK tests/test_engine_build_onnx.sh::dry-run prints the pinned onnxruntime version (D-16 hint "
+   ],
+   "green": "PASS (test_engine_build_onnx.sh, test_onnx_server.sh)",
+   "closure": "FIXED",
+   "reason": "RED observed, guard exists, GREEN recorded"
+  },
+  {
+   "id": "D-17",
+   "sev": "M",
+   "source": "source-findings.md",
+   "components": [
+    "D-17a",
+    "D-17b"
+   ],
+   "p1": "D-17a=RED,D-17b=RED",
+   "red": "specs/009-jev-decision-models/evidence/p1-red-original/d16_d32.jsonl:2; specs/009-jev-decision-models/evidence/p1-red-original/d16_d32.jsonl:3",
+   "guards": [
+    "OK tests/test_scheduler.sh::onnx arm: --tokenizer passed from the catalog files (D-17a)",
+    "OK tests/fixtures/onnx_rt_contract.py::F:"
+   ],
+   "green": "PASS (test_scheduler.sh); PASS (test_no_retired_vars.sh, test_onnx_runtime.sh)",
+   "closure": "FIXED",
+   "reason": "RED observed, guard exists, GREEN recorded; RED observed, guard exists, GREEN recorded"
+  },
+  {
+   "id": "D-18",
+   "sev": "M",
+   "source": "source-findings.md",
+   "components": [
+    "D-18"
+   ],
+   "p1": "D-18=NOT-REPRODUCED",
+   "red": "specs/009-jev-decision-models/evidence/p1-red-original/d16_d32.jsonl:4",
+   "guards": [
+    "OK tests/test_planner.sh::baseline recommended set (decide-tiny/decide + iter2 decide-nli/dec"
+   ],
+   "green": "PASS (test_planner.sh)",
+   "closure": "DEMOTED",
+   "reason": "NOT-REPRODUCED; pinned by an existing test"
+  },
+  {
+   "id": "D-19",
+   "sev": "M",
+   "source": "source-findings.md",
+   "components": [
+    "D-19a",
+    "D-19b",
+    "D-19c"
+   ],
+   "p1": "D-19a=RED,D-19b=RED,D-19c=HARDENING",
+   "red": "specs/009-jev-decision-models/evidence/p1-red-original/d16_d32.jsonl:5; specs/009-jev-decision-models/evidence/p1-red-original/d16_d32.jsonl:6; specs/009-jev-decision-models/evidence/p1-red-original/d16_d32.jsonl:7",
+   "guards": [
+    "OK cmd/llmctl-decide/cmd_serve_test.go::TestResolveBind",
+    "OK tests/test_gateway_endpoints.sh::banner prints the HTTPS URL",
+    "OK tests/test_regression_defects.sh::D-19b: a decision-gateway systemd unit body exists"
+   ],
+   "green": "PASS (go:cmd/llmctl-decide, test_gateway_endpoints.sh); PASS (test_regression_defects.sh)",
+   "closure": "FIXED",
+   "reason": "RED observed, guard exists, GREEN recorded; RED observed, guard exists, GREEN recorded; HARDENING by design: python3 stays a hard dependency only of the encoder runtime (lib/onnx_server.py) and of test helpers; the decision path (gateway, client, smoke) is Go. A fallback would be a featu"
+  },
+  {
+   "id": "D-20",
+   "sev": "L",
+   "source": "source-findings.md",
+   "components": [
+    "D-20"
+   ],
+   "p1": "D-20=RED",
+   "red": "specs/009-jev-decision-models/evidence/p1-red-original/d16_d32.jsonl:8",
+   "guards": [],
+   "green": "",
+   "closure": "DEMOTED",
+   "reason": "RED observed; not applicable now: component removed: latency_ms was the Python gateway's whole-second debug field; the Go gateway reports durations through bounded metrics/audit records (internal/server T"
+  },
+  {
+   "id": "D-21",
+   "sev": "L",
+   "source": "source-findings.md",
+   "components": [
+    "D-21"
+   ],
+   "p1": "D-21=RED",
+   "red": "specs/009-jev-decision-models/evidence/p1-red-original/d16_d32.jsonl:9",
+   "guards": [
+    "OK internal/gateway/nli_test.go::TestNLINoulSendsOneYesAndOneNoPairWithTheKeyAndPath"
+   ],
+   "green": "PASS (go:internal/gateway)",
+   "closure": "FIXED",
+   "reason": "RED observed, guard exists, GREEN recorded"
+  },
+  {
+   "id": "D-22",
+   "sev": "L",
+   "source": "source-findings.md",
+   "components": [
+    "D-22"
+   ],
+   "p1": "D-22=RED",
+   "red": "specs/009-jev-decision-models/evidence/p1-red-original/d16_d32.jsonl:10",
+   "guards": [
+    "OK tests/test_regression_defects.sh::D-22: decide-nli does not download an unused tokenizer.j"
+   ],
+   "green": "PASS (test_regression_defects.sh)",
+   "closure": "FIXED",
+   "reason": "RED observed, guard exists, GREEN recorded"
+  },
+  {
+   "id": "D-23",
+   "sev": "L",
+   "source": "source-findings.md",
+   "components": [
+    "D-23"
+   ],
+   "p1": "D-23=RED",
+   "red": "specs/009-jev-decision-models/evidence/p1-red-original/d16_d32.jsonl:11",
+   "guards": [
+    "OK tests/test_onnx_runtime.sh::constant-time check: hmac.compare_digest was used for the key ",
+    "OK internal/server/auth_internal_test.go::TestKeyComparisonIsKeyringKeyMatches"
+   ],
+   "green": "PASS (go:internal/server, test_onnx_runtime.sh)",
+   "closure": "FIXED",
+   "reason": "RED observed, guard exists, GREEN recorded"
+  },
+  {
+   "id": "D-24",
+   "sev": "L",
+   "source": "source-findings.md",
+   "components": [
+    "D-24"
+   ],
+   "p1": "D-24=RED",
+   "red": "specs/009-jev-decision-models/evidence/p1-red-original/d16_d32.jsonl:12",
+   "guards": [
+    "OK tests/test_regression_defects.sh::D-24: 'auto <bogus>' lists decide among the capabilities",
+    "OK tests/test_regression_defects.sh::D-24: the build usage line names onnx",
+    "OK tests/test_regression_defects.sh::D-24: lib/decide.sh no longer says serve is coming 'when"
+   ],
+   "green": "PASS (test_regression_defects.sh)",
+   "closure": "FIXED",
+   "reason": "RED observed, guard exists, GREEN recorded"
+  },
+  {
+   "id": "D-25",
+   "sev": "L",
+   "source": "source-findings.md",
+   "components": [
+    "D-25"
+   ],
+   "p1": "D-25=RED",
+   "red": "specs/009-jev-decision-models/evidence/p1-red-original/d16_d32.jsonl:13",
+   "guards": [
+    "OK tests/test_regression_defects.sh::D-25: __pycache__/*.pyc are gitignored",
+    "OK tests/test_regression_defects.sh::D-25: no compiled cache is tracked"
+   ],
+   "green": "PASS (test_regression_defects.sh)",
+   "closure": "FIXED",
+   "reason": "RED observed, guard exists, GREEN recorded"
+  },
+  {
+   "id": "D-26",
+   "sev": "L",
+   "source": "source-findings.md",
+   "components": [
+    "D-26"
+   ],
+   "p1": "D-26=RED",
+   "red": "specs/009-jev-decision-models/evidence/p1-red-original/d16_d32.jsonl:14",
+   "guards": [
+    "OK tests/test_catalog_json.sh::/mnt/agen[t]s"
+   ],
+   "green": "PASS (test_catalog_json.sh)",
+   "closure": "FIXED",
+   "reason": "RED observed, guard exists, GREEN recorded"
+  },
+  {
+   "id": "D-27",
+   "sev": "L",
+   "source": "source-findings.md",
+   "components": [
+    "D-27"
+   ],
+   "p1": "D-27=SKIP",
+   "red": "specs/009-jev-decision-models/evidence/p1-red-original/d16_d32.jsonl:15",
+   "guards": [],
+   "green": "",
+   "closure": "ACCEPTED-LIMITATION",
+   "reason": "environment-gated, was SKIP: the macOS/launchd runtime path cannot run on this Linux host; the plist body is unit-asserted in tests/test_services.sh. "
+  },
+  {
+   "id": "D-28",
+   "sev": "M",
+   "source": "source-findings.md",
+   "components": [
+    "D-28"
+   ],
+   "p1": "D-28=RED",
+   "red": "specs/009-jev-decision-models/evidence/p1-red-original/d16_d32.jsonl:16",
+   "guards": [
+    "OK internal/contract/prompt_test.go::TestForgedOptionLinesNeutralised",
+    "OK internal/contract/prompt_test.go::TestNeutraliseStateCases"
+   ],
+   "green": "PASS (go:internal/contract)",
+   "closure": "FIXED",
+   "reason": "RED observed, guard exists, GREEN recorded"
+  },
+  {
+   "id": "D-29",
+   "sev": "H",
+   "source": "source-findings.md",
+   "components": [
+    "D-29"
+   ],
+   "p1": "D-29=RED",
+   "red": "specs/009-jev-decision-models/evidence/p1-red-original/d16_d32.jsonl:17",
+   "guards": [
+    "OK cmd/llmctl-decide/cmd_ask_test.go::TestKeyIsReadFromTheEnvFileToo",
+    "OK internal/keyring/export_test.go (LLMCTL_API_KEY export line)",
+    "OK tests/fixtures/onnx_rt_contract.py::auth: LLMCTL_DECIDE_API_KEY in the environment is NOT ",
+    "OK tests/test_regression_defects.sh::D-11/D-29: no production file reads a retired seam varia"
+   ],
+   "green": "PASS (go:cmd/llmctl-decide, go:internal/keyring, test_no_retired_vars.sh)",
+   "closure": "FIXED",
+   "reason": "RED observed, guard exists, GREEN recorded"
+  },
+  {
+   "id": "D-30",
+   "sev": "H",
+   "source": "source-findings.md",
+   "components": [
+    "D-30/tar.gz",
+    "D-30/zip"
+   ],
+   "p1": "D-30/tar.gz=RED,D-30/zip=RED",
+   "red": "specs/009-jev-decision-models/evidence/p1-red-original/d30.jsonl:1; specs/009-jev-decision-models/evidence/p1-red-original/d30.jsonl:2",
+   "guards": [
+    "OK tests/test_release_no_secrets.sh::D-30 RED scenario now NOT-REPRODUCED (exit 0)",
+    "OK tests/test_release_no_secrets.sh::planted untracked secret absent from both archives",
+    "OK tests/test_release_no_secrets.sh::D-30 RED scenario now NOT-REPRODUCED (exit 0)",
+    "OK tests/test_release_no_secrets.sh::planted untracked secret absent from both archives"
+   ],
+   "green": "PASS (test_release_no_secrets.sh); PASS (test_release_no_secrets.sh)",
+   "closure": "FIXED",
+   "reason": "RED observed, guard exists, GREEN recorded; RED observed, guard exists, GREEN recorded"
+  },
+  {
+   "id": "D-31",
+   "sev": "L",
+   "source": "source-findings.md",
+   "components": [
+    "D-31"
+   ],
+   "p1": "D-31=NOT-REPRODUCED",
+   "red": "specs/009-jev-decision-models/evidence/p1-red-original/d16_d32.jsonl:19",
+   "guards": [],
+   "green": "",
+   "closure": "DEMOTED",
+   "reason": "NOT-REPRODUCED: no .env loader / HF_TOKEN handling exists in lib/*.sh or bin/llmctl beyond the documented admit.sh pass-through; HARDENING note only"
+  },
+  {
+   "id": "N-01",
+   "sev": "H",
+   "source": "research/jev-llmctl-new-files.md",
+   "components": [
+    "N-01"
+   ],
+   "p1": "N-01=RED",
+   "red": "specs/009-jev-decision-models/evidence/p1-red-original/n01_n29.jsonl:1",
+   "guards": [
+    "OK cmd/llmctl-decide/cmd_ask_test.go::TestAskStateSources",
+    "OK cmd/llmctl-decide/cmd_ask_test.go::TestAskUsageErrorsExit2AndNeverReachTheNetwork"
+   ],
+   "green": "PASS (go:cmd/llmctl-decide)",
+   "closure": "FIXED",
+   "reason": "RED observed, guard exists, GREEN recorded"
+  },
+  {
+   "id": "N-02",
+   "sev": "M",
+   "source": "research/jev-llmctl-new-files.md",
+   "components": [
+    "N-02"
+   ],
+   "p1": "N-02=RED",
+   "red": "specs/009-jev-decision-models/evidence/p1-red-original/n01_n29.jsonl:2",
+   "guards": [
+    "OK internal/contract/request_test.go::TestStateBudget",
+    "OK tests/test_gateway_endpoints.sh::row EP-008",
+    "OK cmd/llmctl-decide/cmd_ask_test.go::TestBackendAndReadinessExitCodes"
+   ],
+   "green": "PASS (go:cmd/llmctl-decide, go:internal/contract, test_gateway_endpoints.sh)",
+   "closure": "FIXED",
+   "reason": "RED observed, guard exists, GREEN recorded"
+  },
+  {
+   "id": "N-03",
+   "sev": "M",
+   "source": "research/jev-llmctl-new-files.md",
+   "components": [
+    "N-03"
+   ],
+   "p1": "N-03=RED",
+   "red": "specs/009-jev-decision-models/evidence/p1-red-original/n01_n29.jsonl:3",
+   "guards": [
+    "OK internal/readout/readout_test.go::TestLowercaseAndOtherTokensDoNotCount"
+   ],
+   "green": "PASS (go:internal/readout)",
+   "closure": "FIXED",
+   "reason": "RED observed, guard exists, GREEN recorded"
+  },
+  {
+   "id": "N-04",
+   "sev": "M",
+   "source": "research/jev-llmctl-new-files.md",
+   "components": [
+    "N-04"
+   ],
+   "p1": "N-04=RED",
+   "red": "specs/009-jev-decision-models/evidence/p1-red-original/n01_n29.jsonl:4",
+   "guards": [
+    "OK internal/readout/readout_test.go::TestMissingLetterFlaggedWithUpperBoundNotSilentZero",
+    "OK internal/readout/readout_test.go::TestSingleNegativeInfinityIsZeroMassNotMissing",
+    "OK internal/readout/readout_test.go::TestInvalidLogprobs",
+    "OK internal/readout/readout_test.go::TestNoLettersAtAllFails"
+   ],
+   "green": "PASS (go:internal/readout)",
+   "closure": "FIXED",
+   "reason": "RED observed, guard exists, GREEN recorded"
+  },
+  {
+   "id": "N-05",
+   "sev": "M",
+   "source": "research/jev-llmctl-new-files.md",
+   "components": [
+    "N-05"
+   ],
+   "p1": "N-05=RED",
+   "red": "specs/009-jev-decision-models/evidence/p1-red-original/n01_n29.jsonl:5",
+   "guards": [
+    "OK tests/test_regression_defects.sh::N-05/N-16: ${v}=abc is refused at start with rc 2"
+   ],
+   "green": "PASS (test_regression_defects.sh)",
+   "closure": "FIXED",
+   "reason": "RED observed, guard exists, GREEN recorded"
+  },
+  {
+   "id": "N-06",
+   "sev": "M",
+   "source": "research/jev-llmctl-new-files.md",
+   "components": [
+    "N-06"
+   ],
+   "p1": "N-06=RED",
+   "red": "specs/009-jev-decision-models/evidence/p1-red-original/n01_n29.jsonl:6",
+   "guards": [
+    "OK tests/test_regression_defects.sh::N-06: EOF at a prompt returns rc 2 and the calling shell",
+    "OK tests/test_decide.sh::wizard: end of input at a prompt -> rc 2"
+   ],
+   "green": "PASS (test_decide.sh, test_regression_defects.sh)",
+   "closure": "FIXED",
+   "reason": "RED observed, guard exists, GREEN recorded"
+  },
+  {
+   "id": "N-07",
+   "sev": "L",
+   "source": "research/jev-llmctl-new-files.md",
+   "components": [
+    "N-07"
+   ],
+   "p1": "N-07=RED",
+   "red": "specs/009-jev-decision-models/evidence/p1-red-original/n01_n29.jsonl:7",
+   "guards": [
+    "OK tests/test_decide.sh::decide capacity: unknown argument -> rc 2 (N-07)",
+    "OK tests/test_decide.sh::decide status: unknown argument -> rc 2 (N-07)",
+    "OK tests/test_regression_defects.sh::N-07: decide status --jsno -> rc 2"
+   ],
+   "green": "PASS (test_decide.sh, test_regression_defects.sh)",
+   "closure": "FIXED",
+   "reason": "RED observed, guard exists, GREEN recorded"
+  },
+  {
+   "id": "N-08",
+   "sev": "L",
+   "source": "research/jev-llmctl-new-files.md",
+   "components": [
+    "N-08"
+   ],
+   "p1": "N-08=RED",
+   "red": "specs/009-jev-decision-models/evidence/p1-red-original/n01_n29.jsonl:8",
+   "guards": [
+    "OK tests/test_regression_defects.sh::N-08: docs/scripts/decide.md names only defined function"
+   ],
+   "green": "PASS (test_regression_defects.sh)",
+   "closure": "FIXED",
+   "reason": "RED observed, guard exists, GREEN recorded"
+  },
+  {
+   "id": "N-09",
+   "sev": "L",
+   "source": "research/jev-llmctl-new-files.md",
+   "components": [
+    "N-09"
+   ],
+   "p1": "N-09=RED",
+   "red": "specs/009-jev-decision-models/evidence/p1-red-original/n01_n29.jsonl:9",
+   "guards": [
+    "OK tests/test_regression_defects.sh::N-09: prompt text reaches stderr with piped stdin",
+    "OK tests/test_decide.sh::wizard: prompt text is emitted with piped stdin"
+   ],
+   "green": "PASS (test_decide.sh, test_regression_defects.sh)",
+   "closure": "FIXED",
+   "reason": "RED observed, guard exists, GREEN recorded"
+  },
+  {
+   "id": "N-10",
+   "sev": "M",
+   "source": "research/jev-llmctl-new-files.md",
+   "components": [
+    "N-10"
+   ],
+   "p1": "N-10=SKIP",
+   "red": "specs/009-jev-decision-models/evidence/p1-red-original/n01_n29.jsonl:10",
+   "guards": [],
+   "green": "",
+   "closure": "OPEN",
+   "reason": "N-10: needs a live/real-model run: environment-gated, was SKIP: whether a model's first generated token is a letter needs a real model per profile (UNCONFIRMED by design); live validati"
+  },
+  {
+   "id": "N-11",
+   "sev": "M",
+   "source": "research/jev-llmctl-new-files.md",
+   "components": [
+    "N-11"
+   ],
+   "p1": "N-11=SKIP",
+   "red": "specs/009-jev-decision-models/evidence/p1-red-original/n01_n29.jsonl:11",
+   "guards": [],
+   "green": "",
+   "closure": "OPEN",
+   "reason": "N-11: RED was SKIPPED (environment) - no RED observed; guard exists"
+  },
+  {
+   "id": "N-12",
+   "sev": "M",
+   "source": "research/jev-llmctl-new-files.md",
+   "components": [
+    "N-12"
+   ],
+   "p1": "N-12=RED",
+   "red": "specs/009-jev-decision-models/evidence/p1-red-original/n01_n29.jsonl:12",
+   "guards": [
+    "OK internal/server/server_test.go::TestKeepAliveAfterErrorResponses",
+    "OK tests/fixtures/onnx_rt_contract.py::auth: 401 on an unread body closes the connection (no "
+   ],
+   "green": "PASS (go:internal/server, test_no_retired_vars.sh, test_onnx_runtime.sh)",
+   "closure": "FIXED",
+   "reason": "RED observed, guard exists, GREEN recorded"
+  },
+  {
+   "id": "N-13",
+   "sev": "M",
+   "source": "research/jev-llmctl-new-files.md",
+   "components": [
+    "N-13"
+   ],
+   "p1": "N-13=RED",
+   "red": "specs/009-jev-decision-models/evidence/p1-red-original/n01_n29.jsonl:13",
+   "guards": [
+    "OK internal/gateway/keyfile_test.go::TestPostJSONReReadsTheKeyFileOnA401AndRetriesOnce",
+    "OK internal/server/server_test.go::TestBackendErrorMapping"
+   ],
+   "green": "PASS (go:internal/gateway, go:internal/server)",
+   "closure": "FIXED",
+   "reason": "RED observed, guard exists, GREEN recorded"
+  },
+  {
+   "id": "N-14",
+   "sev": "M",
+   "source": "research/jev-llmctl-new-files.md",
+   "components": [
+    "N-14"
+   ],
+   "p1": "N-14=RED",
+   "red": "specs/009-jev-decision-models/evidence/p1-red-original/n01_n29.jsonl:14",
+   "guards": [
+    "OK internal/gateway/nli_test.go::TestNLITruncatedOnlyAllowedWhenOptedInAndThenReportedToTheGa",
+    "OK tests/test_gateway_endpoints.sh::EP-008d: the encoder runtime truncated the premise (opt-i"
+   ],
+   "green": "PASS (go:internal/gateway, test_gateway_endpoints.sh)",
+   "closure": "FIXED",
+   "reason": "RED observed, guard exists, GREEN recorded"
+  },
+  {
+   "id": "N-15",
+   "sev": "M",
+   "source": "research/jev-llmctl-new-files.md",
+   "components": [
+    "N-15"
+   ],
+   "p1": "N-15=RED",
+   "red": "specs/009-jev-decision-models/evidence/p1-red-original/n01_n29.jsonl:15",
+   "guards": [
+    "OK internal/contract/request_test.go::TestStateFormsDeterministic",
+    "OK tests/test_gateway_endpoints.sh::row EP-006"
+   ],
+   "green": "PASS (go:internal/contract, test_gateway_endpoints.sh)",
+   "closure": "FIXED",
+   "reason": "RED observed, guard exists, GREEN recorded"
+  },
+  {
+   "id": "N-16",
+   "sev": "L",
+   "source": "research/jev-llmctl-new-files.md",
+   "components": [
+    "N-16"
+   ],
+   "p1": "N-16=RED",
+   "red": "specs/009-jev-decision-models/evidence/p1-red-original/n01_n29.jsonl:16",
+   "guards": [
+    "OK tests/test_regression_defects.sh::N-05/N-16: ${v}=abc is refused at start with rc 2",
+    "OK tests/test_regression_defects.sh::N-16: decide ask with a malformed LLMCTL_DECIDE_MAX_OPTI",
+    "OK cmd/llmctl-decide/cmd_ask_test.go::TestBadNumericEnvIsAClearUsageError"
+   ],
+   "green": "PASS (go:cmd/llmctl-decide, test_regression_defects.sh)",
+   "closure": "FIXED",
+   "reason": "RED observed, guard exists, GREEN recorded"
+  },
+  {
+   "id": "N-17",
+   "sev": "L",
+   "source": "research/jev-llmctl-new-files.md",
+   "components": [
+    "N-17"
+   ],
+   "p1": "N-17=RED",
+   "red": "specs/009-jev-decision-models/evidence/p1-red-original/n01_n29.jsonl:17",
+   "guards": [
+    "OK internal/contract/request_test.go::TestUnknownModelNotEchoed",
+    "OK internal/contract/request_test.go::TestNonStringModel",
+    "OK tests/test_gateway_endpoints.sh::row EP-016"
+   ],
+   "green": "PASS (go:internal/contract, test_gateway_endpoints.sh)",
+   "closure": "FIXED",
+   "reason": "RED observed, guard exists, GREEN recorded"
+  },
+  {
+   "id": "N-18",
+   "sev": "M",
+   "source": "research/jev-llmctl-new-files.md",
+   "components": [
+    "N-18"
+   ],
+   "p1": "N-18=RED",
+   "red": "specs/009-jev-decision-models/evidence/p1-red-original/n01_n29.jsonl:18",
+   "guards": [
+    "OK internal/contract/request_test.go::TestTooManyQuestions"
+   ],
+   "green": "PASS (go:internal/contract)",
+   "closure": "FIXED",
+   "reason": "RED observed, guard exists, GREEN recorded"
+  },
+  {
+   "id": "N-19",
+   "sev": "L",
+   "source": "research/jev-llmctl-new-files.md",
+   "components": [
+    "N-19"
+   ],
+   "p1": "N-19=RED",
+   "red": "specs/009-jev-decision-models/evidence/p1-red-original/n01_n29.jsonl:19",
+   "guards": [
+    "OK internal/server/server_test.go::TestProbesAreMinimalEvenWithSecretProfiles"
+   ],
+   "green": "PASS (go:internal/server)",
+   "closure": "FIXED",
+   "reason": "RED observed, guard exists, GREEN recorded"
+  },
+  {
+   "id": "N-20",
+   "sev": "M",
+   "source": "research/jev-llmctl-new-files.md",
+   "components": [
+    "N-20"
+   ],
+   "p1": "N-20=RED",
+   "red": "specs/009-jev-decision-models/evidence/p1-red-original/n01_n29.jsonl:20",
+   "guards": [
+    "OK tests/fixtures/onnx_rt_contract.py::L: LLMCTL_CTX_<PROFILE>=24 honoured as max_tokens (N-2"
+   ],
+   "green": "PASS (test_no_retired_vars.sh, test_onnx_runtime.sh)",
+   "closure": "FIXED",
+   "reason": "RED observed, guard exists, GREEN recorded"
+  },
+  {
+   "id": "N-21",
+   "sev": "M",
+   "source": "research/jev-llmctl-new-files.md",
+   "components": [
+    "N-21"
+   ],
+   "p1": "N-21=RED",
+   "red": "specs/009-jev-decision-models/evidence/p1-red-original/n01_n29.jsonl:21",
+   "guards": [
+    "OK tests/fixtures/onnx_rt_contract.py::C: onnx/config.json BESIDE onnx/model.onnx beats the r",
+    "OK tests/fixtures/onnx_rt_contract.py::D: LABEL_n id2label is served but FLAGGED in label_sou",
+    "OK internal/gateway/nli_test.go::TestNLIRefusesLabelsItCannotMapAndNeverGuesses",
+    "OK internal/gateway/nli_test.go::TestNLINoulUsesTheEntailmentColumnInEveryLabelOrder"
+   ],
+   "green": "PASS (go:internal/gateway, test_no_retired_vars.sh, test_onnx_runtime.sh)",
+   "closure": "FIXED",
+   "reason": "RED observed, guard exists, GREEN recorded"
+  },
+  {
+   "id": "N-22",
+   "sev": "M",
+   "source": "research/jev-llmctl-new-files.md",
+   "components": [
+    "N-22"
+   ],
+   "p1": "N-22=RED",
+   "red": "specs/009-jev-decision-models/evidence/p1-red-original/n01_n29.jsonl:22",
+   "guards": [
+    "OK internal/contract/request_test.go::TestPerProfileLimitsOverride",
+    "OK internal/contract/request_test.go::TestNoulCriteria"
+   ],
+   "green": "PASS (go:internal/contract)",
+   "closure": "FIXED",
+   "reason": "RED observed, guard exists, GREEN recorded"
+  },
+  {
+   "id": "N-23",
+   "sev": "L",
+   "source": "research/jev-llmctl-new-files.md",
+   "components": [
+    "N-23"
+   ],
+   "p1": "N-23=RED",
+   "red": "specs/009-jev-decision-models/evidence/p1-red-original/n01_n29.jsonl:23",
+   "guards": [
+    "OK tests/fixtures/onnx_rt_contract.py::/readyz: ready after the load-time smoke ran a real st",
+    "OK tests/test_onnx_runtime.sh::not-ready runtime logs the failed smoke"
+   ],
+   "green": "PASS (test_no_retired_vars.sh, test_onnx_runtime.sh)",
+   "closure": "FIXED",
+   "reason": "RED observed, guard exists, GREEN recorded"
+  },
+  {
+   "id": "N-24",
+   "sev": "M",
+   "source": "research/jev-llmctl-new-files.md",
+   "components": [
+    "N-24"
+   ],
+   "p1": "N-24=RED",
+   "red": "specs/009-jev-decision-models/evidence/p1-red-original/n01_n29.jsonl:24",
+   "guards": [
+    "OK tests/fixtures/onnx_rt_contract.py::H: NaN logits -> 500 JSON error, NaN never serialised ",
+    "OK tests/fixtures/onnx_rt_contract.py::R: backend exception -> 500 JSON (N-24)"
+   ],
+   "green": "PASS (test_no_retired_vars.sh, test_onnx_runtime.sh)",
+   "closure": "FIXED",
+   "reason": "RED observed, guard exists, GREEN recorded"
+  },
+  {
+   "id": "N-25",
+   "sev": "M",
+   "source": "research/jev-llmctl-new-files.md",
+   "components": [
+    "N-25"
+   ],
+   "p1": "N-25=RED",
+   "red": "specs/009-jev-decision-models/evidence/p1-red-original/n01_n29.jsonl:25",
+   "guards": [
+    "OK tests/test_regression_defects.sh::N-25: test_decide_download.sh / test_onnx_download.sh pi"
+   ],
+   "green": "PASS (test_regression_defects.sh)",
+   "closure": "FIXED",
+   "reason": "RED observed, guard exists, GREEN recorded"
+  },
+  {
+   "id": "N-26",
+   "sev": "M",
+   "source": "research/jev-llmctl-new-files.md",
+   "components": [
+    "N-26"
+   ],
+   "p1": "N-26=RED",
+   "red": "specs/009-jev-decision-models/evidence/p1-red-original/n01_n29.jsonl:26",
+   "guards": [
+    "OK tests/test_regression_defects.sh::N-26: no SUCCESS assertion sits in a skipped-smoke conte",
+    "OK tests/test_onnx_download.sh::skipped smoke is NOT recorded as 'download toy-onnx: SUCCESS'"
+   ],
+   "green": "PASS (test_onnx_download.sh, test_regression_defects.sh)",
+   "closure": "FIXED",
+   "reason": "RED observed, guard exists, GREEN recorded"
+  },
+  {
+   "id": "N-27",
+   "sev": "L",
+   "source": "research/jev-llmctl-new-files.md",
+   "components": [
+    "N-27"
+   ],
+   "p1": "N-27=RED",
+   "red": "specs/009-jev-decision-models/evidence/p1-red-original/n01_n29.jsonl:27",
+   "guards": [
+    "OK tests/test_regression_defects.sh::N-27: scripts/doc_counts.sh --check reports no stale doc"
+   ],
+   "green": "PASS (test_regression_defects.sh)",
+   "closure": "FIXED",
+   "reason": "RED observed, guard exists, GREEN recorded"
+  },
+  {
+   "id": "N-28",
+   "sev": "L",
+   "source": "research/jev-llmctl-new-files.md",
+   "components": [
+    "N-28"
+   ],
+   "p1": "N-28=RED",
+   "red": "specs/009-jev-decision-models/evidence/p1-red-original/n01_n29.jsonl:28",
+   "guards": [
+    "OK tests/test_regression_defects.sh::N-28: CONFIRMED hash claims cite huggingface.co, not onl"
+   ],
+   "green": "PASS (test_regression_defects.sh)",
+   "closure": "FIXED",
+   "reason": "RED observed, guard exists, GREEN recorded"
+  },
+  {
+   "id": "N-29",
+   "sev": "L",
+   "source": "research/jev-llmctl-new-files.md",
+   "components": [
+    "N-29"
+   ],
+   "p1": "N-29=NOT-REPRODUCED",
+   "red": "specs/009-jev-decision-models/evidence/p1-red-original/n01_n29.jsonl:29",
+   "guards": [],
+   "green": "",
+   "closure": "DEMOTED",
+   "reason": "NOT-REPRODUCED: no suite-size claim other than HEAD/worktree counts exists in the normative specs"
+  }
+ ]
+}

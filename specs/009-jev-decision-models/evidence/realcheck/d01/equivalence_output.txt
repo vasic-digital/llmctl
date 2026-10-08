@@ -1,0 +1,6 @@
+MATCH 'The server restarted twice overnight.' 13 13
+MATCH 'Disk usage is at 91% on /var.' 17 17
+MATCH 'Der Dienst ist ausgefallen.' 19 19
+MATCH 'Prices rose 3.5% (year over year), cost 25 25
+MATCH '  multiple   spaces\tand\nnewlines ' 11 11
+pairs: 5 mismatches: 0

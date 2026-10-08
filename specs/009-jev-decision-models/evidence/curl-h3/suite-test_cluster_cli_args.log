@@ -1,0 +1,33 @@
+  ok: request with a cert dir succeeds against the fake curl
+  ok: --cacert <dir>/ca.crt
+  ok: --cert <dir>/client.crt
+  ok: --key <dir>/client.key
+  ok: --http3 used when the curl lists HTTP3
+  ok: no -k
+  ok: no --insecure
+  ok: no --proxy-insecure
+  ok: no --doh-insecure
+  ok: no --ssl-no-revoke
+  ok: no --ssl-revoke-best-effort
+  ok: key bytes never appear on argv (only the file path)
+  ok: request_checked with a cert dir succeeds
+  ok: request_checked passes --cacert/--cert/--key
+  ok: LLMCTL_CLUSTER_CACERT overrides the dir's ca.crt
+  ok: bearer token is not on argv
+  ok: curl received the Authorization header via -H @file
+  ok: the temporary header file is removed after the call
+  ok: world-readable client key: request refuses (78)
+  ok: refusal names the permission problem
+  ok: curl was not invoked with a loose key
+  ok: require_daemon dies on unusable TLS material
+  ok: require_daemon says TLS material is the problem, not 'unreachable'
+  ok: client cert without a key: refused
+  ok: message explains cert+key pairing
+  ok: missing CA file: refused
+  ok: CURL_CA_BUNDLE becomes an explicit --cacert
+  ok: no client cert when none is configured
+  ok: http:// endpoint carries no TLS args
+  ok: no TLS-verification-disabling switch in lib/*.sh or bin/llmctl
+  ok: guard pattern detects a planted -k (control needle)
+RESULT: PASS
+rc=0

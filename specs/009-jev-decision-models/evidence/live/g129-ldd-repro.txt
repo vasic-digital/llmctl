@@ -1,0 +1,13 @@
+# G-129 reproduction 2026-10-08T08:44:28Z on anton; engine version: 0.5.0-dev (build 11379, commit 1537a0a8b)
+ambient LD_LIBRARY_PATH of the invoking shell: /usr/lib/x86_64-linux-gnu
+--- LD_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu
+	libggml.so.0 => /usr/lib/x86_64-linux-gnu/libggml.so.0 (0x000077c8e575b000)
+	libggml-base.so.0 => /usr/lib/x86_64-linux-gnu/libggml-base.so.0 (0x000077c8e5384000)
+--- LD_LIBRARY_PATH=/home/milosvasic/Projects/llmctl/submodules/llama.cpp/build/bin:/usr/lib/x86_64-linux-gnu
+	libggml.so.0 => /home/milosvasic/Projects/llmctl/submodules/llama.cpp/build/bin/libggml.so.0 (0x0000760876afc000)
+	libggml-base.so.0 => /home/milosvasic/Projects/llmctl/submodules/llama.cpp/build/bin/libggml-base.so.0 (0x0000760876725000)
+--- unset
+	libggml.so.0 => /home/milosvasic/Projects/llmctl/submodules/llama.cpp/build/bin/libggml.so.0 (0x000077caecdc0000)
+	libggml-base.so.0 => /home/milosvasic/Projects/llmctl/submodules/llama.cpp/build/bin/libggml-base.so.0 (0x000077caec125000)
+--- polluted launch (model load) :
+submodules/llama.cpp/build/bin/llama-server: symbol lookup error: /home/milosvasic/Projects/llmctl/submodules/llama.cpp/build/bin/libllama.so.0: undefined symbol: ggml_flash_attn_ext_set_n_kv_max

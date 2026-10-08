@@ -3,8 +3,10 @@
 `lib/service_linux.sh` is llmctl's Linux service backend: it implements the
 `svc_*` interface `lib/scheduler.sh` calls through after
 `sched_load_backend` detects Linux, using **systemd `--user`** as the
-process-supervision mechanism. It installs two parameterized (`@`) template
-units — `llmctl-llama@.service` and `llmctl-colibri@.service` — writes a
+process-supervision mechanism. It installs three parameterized (`@`)
+template units — `llmctl-llama@.service`, `llmctl-colibri@.service`, and
+`llmctl-onnx@.service` (the `onnx` engine's encoder decision runner) —
+writes a
 per-profile `EnvironmentFile` that carries the real executable and argument
 list, and drives the unit lifecycle (`enable`/`disable`/`start`/`stop`/
 `restart`/`status`/`logs`) via `systemctl --user`. It also implements
@@ -231,6 +233,72 @@ LLMCTL_DRY_RUN=1 llmctl enable fast
   `tests/test_tenant_service_isolation.sh` (per-tenant env/unit-name
   isolation).
 
+## Spec 009 additions (decision gateway, registry hooks, hardening)
+
+* **Engine templates** are produced by one body (`_svc_engine_unit_body`) for
+  `llmctl-llama@`, `llmctl-onnx@` and `llmctl-colibri@`: `StartLimitBurst`/
+  `StartLimitIntervalSec` now sit in `[Unit]` (systemd ignores
+  `StartLimitIntervalSec` in `[Service]` - reproduced with
+  `systemd-analyze --user verify`), `ExecStartPre=` rotates the engine's key
+  file on every start (G-028), `ExecStartPost=-`/`ExecStopPost=-` publish and
+  withdraw the registry row (`lib/svc_hook.sh`), and `Environment=` lines pin the
+  state/log/services dirs so hooks and CLI agree. Instance keys such as
+  `decide-tiny.2` flow through `%i` unchanged.
+* **Hardening (FR-083)** - only directives verified to take effect in the user
+  manager: `NoNewPrivileges`, `ProtectSystem=full` everywhere; plus `UMask=0077`,
+  `RestrictAddressFamilies`, `RestrictSUIDSGID`, `LockPersonality`,
+  `RestrictRealtime`, `SystemCallArchitectures=native` on decision components.
+  `PrivateTmp`, `ProtectHome`, `ProtectControlGroups`, `ProtectProc`,
+  `PrivateDevices`, `ProtectClock`, `CapabilityBoundingSet` are **not** honoured
+  by the user manager on the reference host and are deliberately not written
+  (`tests/test_unit_hardening.sh` re-proves both lists live).
+* **Memory policy (OD-14)**: unchanged - no ceiling below physical RAM
+  (`MemoryHigh=MemoryMax=` probed total); the measured peak of the gateway is
+  recorded in `docs/qa/dynamic-ports-validation/`.
+* **Env record** is created 0600 (D-03) and carries registration metadata
+  (`LLMCTL_PORT`, `LLMCTL_REG_*`, `LLMCTL_KEY_FILE` = a PATH, never a key).
+* `svc_main_pid <profile>` and `svc_peak_rss_kb <pid>` (new).
+* **Gateway service (G-041)**: `decide_service_enable` writes
+  `llmctl-decide-gateway.service` (`ExecStart` = `lib/svc_hook.sh run-gateway`,
+  which ends in `exec llmctl-decide serve --foreground`; `Restart=always`;
+  optional operator overrides in `$LLMCTL_STATE_DIR/decide/gateway.conf`),
+  reloads, enables and starts it; `decide_service_disable` stops, disables,
+  removes the unit and the gateway's registry/port state;
+  `decide_service_status`, `decide_service_main_pid`. `llmctl decide serve
+  --enable|--disable` (the thin front end in `lib/decide.sh`) calls these.
+* Verified by `tests/test_decide_service.sh`, `tests/test_unit_hardening.sh`,
+  `tests/test_services.sh`, `tests/test_dynamic_ports.sh`,
+  `tests/test_registry_discovery.sh`.
+
+## Review-2 hardening (C-05, C-12, C-18, G-067)
+
+* **Systemd quoting (C-18).** Paths are written as one systemd word: `Environment="KEY=value"` with `\\`
+  and `\"` escaped and every `%` doubled (`_svc_q`/`_svc_env`), `EnvironmentFile=`/`StandardOutput=append:`
+  paths with `%` doubled (`_svc_pct`), and the hook script path quoted in `ExecStart*=` -
+  bash `%q` is not systemd quoting. A state dir with a space or a `%` now produces a unit systemd
+  reads back unchanged (`tests/test_service_ops_hardening.sh`, including a live transient unit).
+* **Tenant mode (C-05).** `svc_known_profiles` yields this tenant's PROFILE names (the env files are named by
+  instance key `<tenant>--<profile>`); the doctor's live set is reported under the registry row name
+  (`portreg_live_set`). The tenant prefix is applied once.
+* **Dry run (C-12).** `decide_service_disable` under `LLMCTL_DRY_RUN=1` prints the `rm` it would do and
+  leaves the real unit file alone (the service keeps running).
+* **Stale units (G-067).** `svc_stale_units` lists installed `llmctl-*.service` files whose body predates the
+  `[Unit]` StartLimit fix; `llmctl doctor` WARNs about them; `llmctl install` (`svc_install`) regenerates the
+  engine templates and, when installed, `llmctl-decide-gateway.service`.
+
 ## Last verified date
 
-2026-09-17
+2026-10-07
+
+## Round-3 hardening (C2-11, C2-12)
+
+- **`svc_stale_units` compares against the current generator (C2-11).** Besides the historical `StartLimit*=` in
+  `[Service]` check, the directive NAMES (`[Section]/Key`, `Environment:VAR` for environment lines) the current
+  generator writes for that unit class are rendered fresh (`_svc_engine_unit_body` basic/strict, `_decide_gateway_unit_body`)
+  and every missing name is reported (`lacks directive(s) the current generator writes (ExecStartPre, ...)`).
+  Values (memory limits, paths, descriptions) and extra directives never make a unit stale; `Environment:LLMCTL_DECIDE_BIN`
+  is exempt (the generator writes a comment when the binary was not built at install time).
+- **`$` in ExecStart words (C2-12).** `_svc_qx` doubles `$` (`$$`) as well as `%`, `\` and `"` for the hook command
+  lines, because systemd expands `$VAR`/`${VAR}` inside ExecStart words even when quoted. `Environment=` values
+  (`_svc_env`) keep a single `$`: systemd takes them literally. Proven textually; a live systemd read-back of an
+  ExecStart word is not possible with `systemd-run` (it escapes `$` itself and rejects an ExecStart property).

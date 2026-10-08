@@ -1,0 +1,160 @@
+  ok: start fast small (co-resident) exit code
+  ok: fast started
+  ok: small started
+  ok: fast reservation written
+  ok: small reservation written
+  ok: status lists fast
+  ok: status lists small
+  ok: status --json: valid JSON array, exact field set, fast+small both state=running with no log line
+  ok: status --json's profile set matches the plain-text table's (single source of truth, not a second parse)
+  ok: sanity: the plain-text table itself still lists exactly fast+small (unchanged by the refactor)
+  ok: start vision refused (exit 1)
+  ok: refusal message
+  ok: alternative suggested
+  ok: switch fallback suggested
+  ok: fast kept after refusal
+  ok: small kept after refusal
+  ok: vision not started after refusal
+  ok: auto vision exit code
+  ok: LRU eviction of fast announced
+  ok: fast reservation removed after eviction
+  ok: small kept after eviction
+  ok: vision running after eviction
+  ok: constrained: start fast
+  ok: constrained: auto vision fails (exit 1)
+  ok: protection message
+  ok: protected service untouched
+  ok: vision not started (protected)
+  ok: switch moe-fast exit code
+  ok: switch leaves exactly one service running
+  ok: stop is a dry-run action
+  ok: auto coder vision exit code (US1 Acceptance Scenario 3)
+  ok: co-residency computation: coder capability resolved to a profile
+  ok: co-residency computation: vision capability resolved to a profile
+  ok: at least one service started (budgets allow on this abundant fixture)
+  ok: no eviction needed - both profiles fit the abundant budget directly
+  ok: both resolved profiles (coder + vision capabilities) ended up running
+  ok: LLMCTL_SEED unset: no --seed flag added (default interactive behavior unchanged)
+  ok: LLMCTL_SEED=42: llama launch includes --seed 42
+  ok: LLMCTL_SEED set: llama launch includes --temp 0 (FR-012 fixed-seed + temperature-0 pair)
+  ok: LLMCTL_SLOT_SAVE_PATH unset: no --slot-save-path flag added (default launch unchanged)
+  ok: LLMCTL_SLOT_SAVE_PATH set: llama launch includes a per-profile --slot-save-path subdirectory
+  ok: the per-profile slot-save directory is created before the engine is launched
+  ok: co-resident double-count regression: starting 'small' alone succeeds
+  ok: small reservation written
+  ok: co-resident double-count regression: 'vision' is NOT wrongly refused while 'small' is already running (would be 7159 > 5100 under the old double-count; is 4210 <= 5100 under the fix)
+  ok: vision genuinely started alongside small
+  ok: vision reservation written
+  ok: small's own reservation is untouched by starting vision
+  ok: 10b: same-call multi-profile demand (small+vision=7159) still correctly exceeds the 5100 budget and is refused
+  ok: 10b: the SECOND profile in the call is the one named as refused (small, selected first, already fit on its own)
+  ok: 10b: nothing starts when the batch's validation phase refuses any member (atomic start, pre-existing design)
+  ok: 10b: vision (the one that overflows the combined demand) is correctly refused, never started
+  ok: 10c: 'small' starts alone
+  ok: 10c: small reservation written
+  ok: 10c: auto chat vision succeeds after evicting small (9904 RAM budget + 2949 credited back >= fast(5716)+vision(4210)=9926)
+  ok: 10c: small is the one evicted (LRU, not enabled, not in the wanted set)
+  ok: 10c: fast genuinely started
+  ok: 10c: vision genuinely started
+  ok: 10c: small's reservation removed by the eviction
+  ok: 10c: fast reservation written
+  ok: 10c: vision reservation written
+  ok: 10d: 'small' starts alone
+  ok: 10d: small reservation written
+  ok: 10d: the forced stop failure is reported, not silently swallowed
+  ok: 10d: small's reservation SURVIVES -- it is still running, never credited as freed
+  ok: 10d: auto chat vision does NOT wrongly succeed via a bogus credit for memory that was never actually freed
+  ok: 10d: fails via the LOOP's own exclusion-aware message, not merely _sched_start_impl's independent rescue
+  ok: 10e: 'small' starts alone
+  ok: 10e: with only 1 attempt allowed, the call fails cleanly rather than falling through unverified
+  ok: 10e: the new loop-level exhaustion message fires, naming the real attempt bound
+  ok: 10e: small WAS evicted (the single allowed attempt's eviction genuinely ran)
+  ok: 10e: small's reservation is gone -- the eviction itself succeeded
+  ok: 10e: fast was NEVER started -- _sched_start_impl must not be reached on the non-converged path
+  ok: 10e: vision was NEVER started, for the same reason
+  ok: onnx arm: exec is python3 when no hash-locked venv exists
+  ok: onnx arm: argv[0] is lib/onnx_server.py
+  ok: onnx arm: --model-dir points at the profile dir
+  ok: onnx arm: always loopback
+  ok: onnx arm: --port
+  ok: onnx arm: --profile
+  ok: onnx arm: ctx passed as --max-tokens (N-20)
+  ok: onnx arm: --tokenizer passed from the catalog files (D-17a)
+  ok: onnx arm: --api-key-file under the state dir
+  ok: onnx arm: no --api-key <value> on argv
+  ok: onnx arm: an env key never reaches the runtime argv
+  ok: onnx arm: dry-run creates no key file
+  ok: onnx arm: the hash-locked venv python is used when 'llmctl build onnx' was run
+  ok: onnx arm: real launch creates the per-profile key file
+  ok: onnx arm: key file mode is 0600
+  ok: onnx arm: not-downloaded model dir -> rc 1 (real mode)
+  ok: onnx arm: not-downloaded message names the download command
+  FAIL: 11b decide-julia: native launch carries -b/-ub 4096 and no prompt cache
+    needle not found: --batch-size 4096 --ubatch-size 4096 --no-cache-prompt
+    haystack: --model /tmp/tmp.P9aNgwSBNI/models/decide-julia/Julia-1-Q8_0.gguf --host 127.0.0.1 --port 8103 --ctx-size 8192 --n-gpu-layers 99 --flash-attn auto --parallel 1 --jinja --api-key-file /tmp/tmp.P9aNgwSBNI/state/keys/llama-decide-julia.key --no-webui 
+  ok: 11b decide-julia: loopback only
+  ok: 11b decide-julia: deterministic single slot
+  ok: 11b decide-julia: per-slot context preserved
+  ok: 11b decide-julia: per-profile key file
+  ok: 11b decide-julia: no key value on argv
+  FAIL: 11b decide-laya: native launch carries -b/-ub 4096 and no prompt cache
+    needle not found: --batch-size 4096 --ubatch-size 4096 --no-cache-prompt
+    haystack: --model /tmp/tmp.P9aNgwSBNI/models/decide-laya/Laya-Q8_0.gguf --host 127.0.0.1 --port 8107 --ctx-size 8192 --n-gpu-layers 99 --flash-attn auto --parallel 1 --jinja --api-key-file /tmp/tmp.P9aNgwSBNI/state/keys/llama-decide-laya.key --no-webui 
+  ok: 11b decide-laya: loopback only
+  ok: 11b decide-laya: deterministic single slot
+  ok: 11b decide-laya: per-slot context preserved
+  ok: 11b decide-laya: per-profile key file
+  ok: 11b decide-laya: no key value on argv
+  FAIL: 11b decide-kev-08b: native launch carries -b/-ub 4096 and no prompt cache
+    needle not found: --batch-size 4096 --ubatch-size 4096 --no-cache-prompt
+    haystack: --model /tmp/tmp.P9aNgwSBNI/models/decide-kev-08b/Kev-0.8B-Q8_0.gguf --host 127.0.0.1 --port 8104 --ctx-size 8192 --n-gpu-layers 99 --flash-attn auto --parallel 1 --jinja --api-key-file /tmp/tmp.P9aNgwSBNI/state/keys/llama-decide-kev-08b.key --no-webui 
+  ok: 11b decide-kev-08b: loopback only
+  ok: 11b decide-kev-08b: deterministic single slot
+  ok: 11b decide-kev-08b: per-slot context preserved
+  ok: 11b decide-kev-08b: per-profile key file
+  ok: 11b decide-kev-08b: no key value on argv
+  FAIL: 11b decide-kev-4b: native launch carries -b/-ub 4096 and no prompt cache
+    needle not found: --batch-size 4096 --ubatch-size 4096 --no-cache-prompt
+    haystack: --model /tmp/tmp.P9aNgwSBNI/models/decide-kev-4b/Kev-4B-Q4_K_M.gguf --host 127.0.0.1 --port 8105 --ctx-size 8192 --n-gpu-layers 99 --flash-attn auto --parallel 1 --jinja --api-key-file /tmp/tmp.P9aNgwSBNI/state/keys/llama-decide-kev-4b.key --no-webui 
+  ok: 11b decide-kev-4b: loopback only
+  ok: 11b decide-kev-4b: deterministic single slot
+  ok: 11b decide-kev-4b: per-slot context preserved
+  ok: 11b decide-kev-4b: per-profile key file
+  ok: 11b decide-kev-4b: no key value on argv
+  FAIL: 11b decide-kev-9b: native launch carries -b/-ub 4096 and no prompt cache
+    needle not found: --batch-size 4096 --ubatch-size 4096 --no-cache-prompt
+    haystack: --model /tmp/tmp.P9aNgwSBNI/models/decide-kev-9b/Kev-9B-Q4_K_M.gguf --host 127.0.0.1 --port 8106 --ctx-size 8192 --n-gpu-layers 99 --flash-attn auto --parallel 1 --jinja --api-key-file /tmp/tmp.P9aNgwSBNI/state/keys/llama-decide-kev-9b.key --no-webui 
+  ok: 11b decide-kev-9b: loopback only
+  ok: 11b decide-kev-9b: deterministic single slot
+  ok: 11b decide-kev-9b: per-slot context preserved
+  ok: 11b decide-kev-9b: per-profile key file
+  ok: 11b decide-kev-9b: no key value on argv
+  FAIL: 11b decide-lev: native launch carries -b/-ub 4096 and no prompt cache
+    needle not found: --batch-size 4096 --ubatch-size 4096 --no-cache-prompt
+    haystack: --model /tmp/tmp.P9aNgwSBNI/models/decide-lev/lev-Q4_K_M.gguf --host 127.0.0.1 --port 8108 --ctx-size 8192 --n-gpu-layers 99 --flash-attn auto --parallel 1 --jinja --api-key-file /tmp/tmp.P9aNgwSBNI/state/keys/llama-decide-lev.key --no-webui 
+  ok: 11b decide-lev: loopback only
+  ok: 11b decide-lev: deterministic single slot
+  ok: 11b decide-lev: per-slot context preserved
+  ok: 11b decide-lev: per-profile key file
+  ok: 11b decide-lev: no key value on argv
+  ok: 11b: a letter-logit decision profile gets NO native batch flags
+  ok: 11b: a chat profile gets NO native batch flags
+  ok: 12: auto decide on the baseline fixture succeeds
+  ok: 12: auto decide picks decide-tiny (first recommended in the ranking)
+  ok: 12: the choice is explained with the full ranking (FR-030)
+  ok: 12: the explanation states the rule (smallest first, not highest accuracy)
+  ok: 12: decide-tiny reserved by the real admission path
+  ok: 12: auto <unknown capability> fails
+  ok: 12: D-24 the error lists decide among the capabilities
+  ok: 12: auto chat still succeeds
+  ok: 12: auto chat never selects a decision profile (FR-006)
+  ok: 12: the chat ranking contains no decision profile (FR-006)
+  ok: 12: the coder ranking contains no decision profile (FR-006)
+  ok: 12: the vision ranking contains no decision profile (FR-006)
+  ok: 12: auto decide on a host where no decision profile fits fails
+  ok: 12: ...with the explicit no-fit message
+  ok: 12: _sched_admission_fits accepts an exact fit (rc)
+  ok: 12: _sched_admission_fits refuses one MiB over on RAM (rc)
+  ok: 12: _sched_admission_fits refuses one MiB over on VRAM (rc)
+  ok: 12: explicit start of a tier-gated profile that fits is still allowed (tier gate is advisory for start)
+RESULT: FAIL (6 assertion failure(s))

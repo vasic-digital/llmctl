@@ -1,0 +1,1 @@
+rollback: git -C submodules/llama.cpp checkout 391fac16460f15233a7740550d858ac96df3419d (b10969); old build kept at submodules/llama.cpp/build until replaced

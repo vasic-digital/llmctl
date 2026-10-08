@@ -1,0 +1,15 @@
+    ok   premise is long enough to need truncation (>512 tokens)
+    ok   length is exactly 512
+    ok   truncated flag is True
+    ok   starts with [CLS]
+    ok   exactly two [SEP]
+    ok   hypothesis tokens intact before the final [SEP]
+    ok   ends with [SEP]
+    ok   premise is the part that was cut (kept prefix matches)
+    ok   token_type 1 covers hypothesis + final [SEP]
+    ok   short pair is not truncated
+  ok: shipped runtime keeps hypothesis + both [SEP], truncates only the premise (real tokenizer)
+  ok: hypothesis-intact check actually ran
+  ok: mutant (end-truncation, candidate defect D-01) FAILS the real-tokenizer guard
+  ok: mutant is caught by the hypothesis-intact check
+RESULT: PASS

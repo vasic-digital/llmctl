@@ -164,14 +164,9 @@ func TestDDoS_FloodDuringLegitimateTraffic_BaselineObservation(t *testing.T) {
 // captured file, not from eyeballing the test log.
 func writeDDoSBaselineObservation(t *testing.T, flood windowResult, legitAttempted, legitSucceeded, legitFailed int64, legitSuccessRate float64, legitLatencies []time.Duration) {
 	t.Helper()
-	root, err := repoRootForEvidence()
+	dir, err := evidenceOutputDir(t)
 	if err != nil {
-		t.Logf("writeDDoSBaselineObservation: could not locate repo root, evidence file not written: %v", err)
-		return
-	}
-	dir := filepath.Join(root, "docs", "qa", "008-full-test-coverage")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		t.Logf("writeDDoSBaselineObservation: mkdir %s: %v", dir, err)
+		t.Logf("writeDDoSBaselineObservation: evidence dir unavailable, observation not written: %v", err)
 		return
 	}
 	path := filepath.Join(dir, "ddos_baseline_observation.txt")

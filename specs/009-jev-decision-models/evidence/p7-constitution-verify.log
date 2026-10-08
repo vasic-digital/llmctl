@@ -1,0 +1,538 @@
+=== Constitution Validation & Verification Harness ===
+Constitution root: /home/milosvasic/Projects/llmctl/constitution
+Submodules dir: /home/milosvasic/Projects/llmctl/constitution/submodules
+
+=== Required Submodules Check ===
+  ✓ Required submodule present: verification
+  ✓ Required submodule present: verify
+  ✓ Required submodule present: repo-qa
+  ✓ Required submodule present: repo-proof
+  ✓ Required submodule present: donespec
+  ✓ Required submodule present: kedge
+  ✓ Required submodule present: agentic-validation
+  ✓ Required submodule present: skill-doctor
+  ✓ Required submodule present: verfix
+  ✓ Required submodule present: MVT
+  ✓ Required submodule present: wave-dpctf
+  ✓ Required submodule present: mcp-audio-tweaker
+  ✓ Required submodule present: video-quality-mcp
+  ✓ Required submodule present: polyscreen-mcp
+  ✓ Required submodule present: claude-video
+  ✓ Required submodule present: watch-skill
+  ✓ Required submodule present: anti_bluff
+
+=== Core Verification Frameworks ===
+→ verification (agent-skills)
+total 52
+drwxrwxr-x  8 milosvasic milosvasic 4096 Sep 15 00:00 .
+drwxrwxr-x 26 milosvasic milosvasic 4096 Oct  8 02:22 ..
+drwxrwxr-x  3 milosvasic milosvasic 4096 Sep 14 19:34 .agents
+drwxrwxr-x  3 milosvasic milosvasic 4096 Sep 14 19:34 .claude
+drwxrwxr-x  2 milosvasic milosvasic 4096 Oct  3 14:57 .claude-plugin
+-rw-rw-r--  1 milosvasic milosvasic   75 Sep 14 19:34 .git
+drwxrwxr-x  3 milosvasic milosvasic 4096 Sep 14 19:34 .github
+-rw-rw-r--  1 milosvasic milosvasic  585 Sep 14 19:34 .gitignore
+-rw-rw-r--  1 milosvasic milosvasic 1065 Sep 14 19:34 LICENSE
+-rw-rw-r--  1 milosvasic milosvasic 3406 Sep 14 19:34 README-zh.md
+-rw-rw-r--  1 milosvasic milosvasic 3711 Sep 14 19:34 README.md
+drwxrwxr-x  2 milosvasic milosvasic 4096 Sep 14 19:34 docs
+drwxrwxr-x 10 milosvasic milosvasic 4096 Sep 14 19:34 plugins
+  ✓ PASS
+
+→ verify (maestro)
+total 152
+drwxrwxr-x 15 milosvasic milosvasic  4096 Sep 14 19:35 .
+drwxrwxr-x 26 milosvasic milosvasic  4096 Oct  8 02:22 ..
+-rw-rw-r--  1 milosvasic milosvasic    69 Sep 14 19:35 .git
+-rw-rw-r--  1 milosvasic milosvasic   705 Sep 14 19:35 .gitignore
+drwxrwxr-x  2 milosvasic milosvasic  4096 Sep 14 19:35 .maestro
+-rw-rw-r--  1 milosvasic milosvasic   268 Sep 14 19:35 AGENTS.md
+-rw-rw-r--  1 milosvasic milosvasic  2443 Sep 14 19:35 ATTRIBUTIONS.md
+-rw-rw-r--  1 milosvasic milosvasic 20947 Sep 14 19:35 CLAUDE.md
+-rw-rw-r--  1 milosvasic milosvasic  1082 Sep 14 19:35 LICENSE
+-rw-rw-r--  1 milosvasic milosvasic 32022 Sep 14 19:35 README.md
+-rw-rw-r--  1 milosvasic milosvasic  1948 Sep 14 19:35 THIRD_PARTY.md
+drwxrwxr-x  2 milosvasic milosvasic  4096 Sep 14 19:35 agents
+drwxrwxr-x  2 milosvasic milosvasic  4096 Sep 14 19:35 assets
+drwxrwxr-x  2 milosvasic milosvasic  4096 Sep 14 19:35 bin
+drwxrwxr-x  2 milosvasic milosvasic  4096 Sep 14 19:35 commands
+drwxrwxr-x  2 milosvasic milosvasic  4096 Sep 14 19:35 docs
+drwxrwxr-x  4 milosvasic milosvasic  4096 Sep 14 19:35 engine
+-rwxrwxr-x  1 milosvasic milosvasic  9664 Sep 14 19:35 install.sh
+drwxrwxr-x  2 milosvasic milosvasic  4096 Sep 14 19:35 licenses
+drwxrwxr-x  2 milosvasic milosvasic  4096 Sep 14 19:35 scripts
+drwxrwxr-x  5 milosvasic milosvasic  4096 Sep 14 19:35 skills
+drwxrwxr-x  3 milosvasic milosvasic  4096 Sep 14 19:35 testdata
+drwxrwxr-x  2 milosvasic milosvasic  4096 Sep 14 19:35 ui
+drwxrwxr-x  2 milosvasic milosvasic  4096 Sep 14 19:35 workflows
+  ✓ PASS
+
+→ repo-qa (skills-runtime-sdk)
+total 88
+drwxrwxr-x  9 milosvasic milosvasic  4096 Sep 14 20:51 .
+drwxrwxr-x 26 milosvasic milosvasic  4096 Oct  8 02:22 ..
+-rw-rw-r--  1 milosvasic milosvasic    70 Sep 14 19:36 .git
+drwxrwxr-x  3 milosvasic milosvasic  4096 Sep 14 19:36 .github
+-rw-rw-r--  1 milosvasic milosvasic  1562 Sep 14 19:36 .gitignore
+-rw-rw-r--  1 milosvasic milosvasic   507 Sep 14 20:51 AGENTS.md
+-rw-rw-r--  1 milosvasic milosvasic   309 Sep 14 20:49 CLAUDE.md
+-rw-rw-r--  1 milosvasic milosvasic 11357 Sep 14 19:36 LICENSE
+-rw-rw-r--  1 milosvasic milosvasic  8154 Sep 14 19:36 README.cn.md
+-rw-rw-r--  1 milosvasic milosvasic  8513 Sep 14 19:36 README.md
+drwxrwxr-x  3 milosvasic milosvasic  4096 Sep 14 19:36 docs_for_coding_agent
+drwxrwxr-x  5 milosvasic milosvasic  4096 Sep 14 19:36 examples
+drwxrwxr-x  3 milosvasic milosvasic  4096 Sep 14 19:36 help
+drwxrwxr-x  3 milosvasic milosvasic  4096 Sep 14 19:36 packages
+-rw-rw-r--  1 milosvasic milosvasic   164 Sep 14 19:36 pytest.ini
+drwxrwxr-x  4 milosvasic milosvasic  4096 Sep 14 19:36 scripts
+drwxrwxr-x  2 milosvasic milosvasic  4096 Sep 14 19:36 tests
+  ✓ PASS
+
+→ repo-proof
+total 116
+drwxrwxr-x 12 milosvasic milosvasic 4096 Sep 15 00:00 .
+drwxrwxr-x 26 milosvasic milosvasic 4096 Oct  8 02:22 ..
+-rw-rw-r--  1 milosvasic milosvasic  162 Sep 14 19:38 .env.example
+-rw-rw-r--  1 milosvasic milosvasic   73 Sep 14 19:38 .git
+-rw-rw-r--  1 milosvasic milosvasic   20 Sep 14 19:38 .gitattributes
+-rw-rw-r--  1 milosvasic milosvasic   65 Sep 14 19:38 .gitignore
+-rw-rw-r--  1 milosvasic milosvasic   75 Sep 14 19:38 .npmignore
+-rw-rw-r--  1 milosvasic milosvasic  524 Sep 14 19:38 AGENTS.md
+-rw-rw-r--  1 milosvasic milosvasic  539 Sep 14 19:38 CHANGELOG.md
+-rw-rw-r--  1 milosvasic milosvasic  265 Sep 14 19:38 CITATION.cff
+-rw-rw-r--  1 milosvasic milosvasic  709 Sep 14 19:38 CONTRIBUTING.md
+-rw-rw-r--  1 milosvasic milosvasic  633 Sep 14 19:38 LICENSE
+-rw-rw-r--  1 milosvasic milosvasic 6068 Sep 14 19:38 README.md
+-rw-rw-r--  1 milosvasic milosvasic 3779 Sep 14 19:38 README.zh-CN.md
+-rw-rw-r--  1 milosvasic milosvasic  608 Sep 14 19:38 SECURITY.md
+-rw-rw-r--  1 milosvasic milosvasic 1998 Sep 14 19:38 SKILL.md
+drwxrwxr-x  2 milosvasic milosvasic 4096 Sep 14 19:38 action
+drwxrwxr-x  2 milosvasic milosvasic 4096 Sep 14 19:38 agents
+drwxrwxr-x  2 milosvasic milosvasic 4096 Sep 14 19:38 assets
+drwxrwxr-x  2 milosvasic milosvasic 4096 Sep 14 19:38 docs
+drwxrwxr-x  2 milosvasic milosvasic 4096 Sep 14 19:38 evals
+drwxrwxr-x  6 milosvasic milosvasic 4096 Sep 14 19:38 fixtures
+-rw-rw-r--  1 milosvasic milosvasic 2156 Sep 14 19:38 package.json
+-rw-rw-r--  1 milosvasic milosvasic  114 Sep 14 19:38 pnpm-lock.yaml
+drwxrwxr-x  2 milosvasic milosvasic 4096 Sep 14 19:38 references
+drwxrwxr-x  3 milosvasic milosvasic 4096 Sep 14 19:38 reports
+drwxrwxr-x  3 milosvasic milosvasic 4096 Sep 14 19:38 scripts
+drwxrwxr-x  2 milosvasic milosvasic 4096 Sep 14 19:38 tests
+  ✓ PASS
+
+→ donespec
+total 172
+drwxrwxr-x 10 milosvasic milosvasic  4096 Sep 14 19:39 .
+drwxrwxr-x 26 milosvasic milosvasic  4096 Oct  8 02:22 ..
+-rw-rw-r--  1 milosvasic milosvasic    71 Sep 14 19:39 .git
+-rw-rw-r--  1 milosvasic milosvasic   308 Sep 14 19:39 .gitattributes
+drwxrwxr-x  2 milosvasic milosvasic  4096 Sep 14 19:39 .githooks
+drwxrwxr-x  4 milosvasic milosvasic  4096 Sep 14 19:39 .github
+-rw-rw-r--  1 milosvasic milosvasic   152 Sep 14 19:39 .gitignore
+drwxrwxr-x  2 milosvasic milosvasic  4096 Sep 14 19:39 .vscode
+-rw-rw-r--  1 milosvasic milosvasic  2947 Sep 14 19:39 AGENTS.md
+-rw-rw-r--  1 milosvasic milosvasic  5776 Sep 14 19:39 CHANGELOG.md
+-rw-rw-r--  1 milosvasic milosvasic   712 Sep 14 19:39 CLAUDE.md
+-rw-rw-r--  1 milosvasic milosvasic  2941 Sep 14 19:39 CONTRIBUTING.md
+-rw-rw-r--  1 milosvasic milosvasic  1078 Sep 14 19:39 LICENSE
+-rw-rw-r--  1 milosvasic milosvasic 11207 Sep 14 19:39 README.md
+-rw-rw-r--  1 milosvasic milosvasic  1713 Sep 14 19:39 SECURITY.md
+-rw-rw-r--  1 milosvasic milosvasic  1317 Sep 14 19:39 action.yml
+drwxrwxr-x  6 milosvasic milosvasic  4096 Sep 14 19:39 docs
+-rw-rw-r--  1 milosvasic milosvasic 62891 Sep 14 19:39 done.json
+-rw-rw-r--  1 milosvasic milosvasic  7711 Sep 14 19:39 done.schema.json
+drwxrwxr-x  8 milosvasic milosvasic  4096 Sep 14 19:39 examples
+-rw-rw-r--  1 milosvasic milosvasic  1811 Sep 14 19:39 pyproject.toml
+drwxrwxr-x  2 milosvasic milosvasic  4096 Sep 14 19:39 scripts
+drwxrwxr-x  3 milosvasic milosvasic  4096 Sep 14 19:39 src
+drwxrwxr-x  2 milosvasic milosvasic  4096 Sep 14 19:39 tests
+  ✓ PASS
+
+→ kedge
+total 184
+drwxrwxr-x  9 milosvasic milosvasic  4096 Sep 15 00:00 .
+drwxrwxr-x 26 milosvasic milosvasic  4096 Oct  8 02:22 ..
+-rw-rw-r--  1 milosvasic milosvasic    68 Sep 14 19:43 .git
+drwxrwxr-x  2 milosvasic milosvasic  4096 Sep 14 19:43 .githooks
+drwxrwxr-x  3 milosvasic milosvasic  4096 Sep 14 19:43 .github
+-rw-rw-r--  1 milosvasic milosvasic   294 Sep 14 19:43 .gitignore
+-rw-rw-r--  1 milosvasic milosvasic  4753 Sep 14 19:43 BACKLOG.md
+-rw-rw-r--  1 milosvasic milosvasic  2946 Sep 14 19:43 CHANGELOG.md
+-rw-rw-r--  1 milosvasic milosvasic  2134 Sep 14 19:43 CONTRIBUTING.md
+-rw-rw-r--  1 milosvasic milosvasic 73549 Sep 14 19:43 Cargo.lock
+-rw-rw-r--  1 milosvasic milosvasic  4860 Sep 14 19:43 Cargo.toml
+-rw-rw-r--  1 milosvasic milosvasic  4854 Sep 14 19:43 LICENSE
+-rw-rw-r--  1 milosvasic milosvasic 18715 Sep 14 19:43 README.md
+-rw-rw-r--  1 milosvasic milosvasic  4874 Sep 14 19:43 SECURITY.md
+-rw-rw-r--  1 milosvasic milosvasic   708 Sep 14 19:43 audit.toml
+drwxrwxr-x 22 milosvasic milosvasic  4096 Sep 14 19:43 crates
+drwxrwxr-x  4 milosvasic milosvasic  4096 Sep 14 19:43 docs
+-rw-rw-r--  1 milosvasic milosvasic   450 Sep 14 19:43 rust-toolchain.toml
+drwxrwxr-x  2 milosvasic milosvasic  4096 Sep 14 19:43 scripts
+drwxrwxr-x  2 milosvasic milosvasic  4096 Sep 14 19:43 src
+drwxrwxr-x  2 milosvasic milosvasic  4096 Sep 14 19:43 tests
+  ✓ PASS
+
+→ agentic-validation
+total 68
+drwxrwxr-x  9 milosvasic milosvasic 4096 Sep 15 00:00 .
+drwxrwxr-x 26 milosvasic milosvasic 4096 Oct  8 02:22 ..
+drwxrwxr-x  3 milosvasic milosvasic 4096 Sep 14 19:44 .agents
+drwxrwxr-x  2 milosvasic milosvasic 4096 Sep 14 19:44 .devcontainer
+-rw-rw-r--  1 milosvasic milosvasic   81 Sep 14 19:44 .git
+drwxrwxr-x  4 milosvasic milosvasic 4096 Sep 14 19:44 .github
+-rw-rw-r--  1 milosvasic milosvasic  216 Sep 14 19:44 .gitignore
+-rw-rw-r--  1 milosvasic milosvasic  744 Sep 14 19:44 AGENTS.md
+-rw-rw-r--  1 milosvasic milosvasic 1071 Sep 14 19:44 LICENSE
+-rw-rw-r--  1 milosvasic milosvasic 3763 Sep 14 19:44 README.md
+drwxrwxr-x  2 milosvasic milosvasic 4096 Sep 14 19:44 notebooks
+-rw-rw-r--  1 milosvasic milosvasic  603 Sep 14 19:44 plugin.json
+-rw-rw-r--  1 milosvasic milosvasic  764 Sep 14 19:44 pyproject.toml
+-rw-rw-r--  1 milosvasic milosvasic   51 Sep 14 19:44 requirements.txt
+drwxrwxr-x  3 milosvasic milosvasic 4096 Sep 14 19:44 skills
+drwxrwxr-x  3 milosvasic milosvasic 4096 Sep 14 19:44 src
+drwxrwxr-x  2 milosvasic milosvasic 4096 Sep 14 19:44 tests
+  ✓ PASS
+
+→ skill-doctor
+total 328
+drwxrwxr-x 17 milosvasic milosvasic   4096 Sep 15 00:00 .
+drwxrwxr-x 26 milosvasic milosvasic   4096 Oct  8 02:22 ..
+drwxrwxr-x  3 milosvasic milosvasic   4096 Sep 14 19:45 .agents
+-rw-rw-r--  1 milosvasic milosvasic     75 Sep 14 19:45 .git
+drwxrwxr-x  4 milosvasic milosvasic   4096 Sep 14 19:45 .github
+-rw-rw-r--  1 milosvasic milosvasic    160 Sep 14 19:45 .gitignore
+-rw-rw-r--  1 milosvasic milosvasic    855 Sep 14 19:45 .gitleaks.toml
+drwxrwxr-x  2 milosvasic milosvasic   4096 Sep 14 19:45 .semgrep
+-rw-rw-r--  1 milosvasic milosvasic    595 Sep 14 19:45 ADOPTERS.md
+-rw-rw-r--  1 milosvasic milosvasic   5213 Sep 14 19:45 AGENTS.md
+-rw-rw-r--  1 milosvasic milosvasic   3423 Sep 14 19:45 CHANGELOG.md
+-rw-rw-r--  1 milosvasic milosvasic    999 Sep 14 19:45 CITATION.cff
+-rw-rw-r--  1 milosvasic milosvasic   5197 Sep 14 19:45 CODE_OF_CONDUCT.md
+-rw-rw-r--  1 milosvasic milosvasic   7519 Sep 14 19:45 CONTEXT.md
+-rw-rw-r--  1 milosvasic milosvasic   5399 Sep 14 19:45 CONTRIBUTING.md
+-rw-rw-r--  1 milosvasic milosvasic 105506 Sep 14 19:45 Cargo.lock
+-rw-rw-r--  1 milosvasic milosvasic   2234 Sep 14 19:45 Cargo.toml
+-rw-rw-r--  1 milosvasic milosvasic   6472 Sep 14 19:45 DEPENDENCIES.md
+-rw-rw-r--  1 milosvasic milosvasic  10781 Sep 14 19:45 LICENSE
+-rw-rw-r--  1 milosvasic milosvasic  21188 Sep 14 19:45 README.md
+-rw-rw-r--  1 milosvasic milosvasic   4602 Sep 14 19:45 SECURITY.md
+-rw-rw-r--  1 milosvasic milosvasic   1652 Sep 14 19:45 SUPPORT.md
+-rw-rw-r--  1 milosvasic milosvasic   5622 Sep 14 19:45 TESTING.md
+-rw-rw-r--  1 milosvasic milosvasic   5872 Sep 14 19:45 action.yml
+drwxrwxr-x  2 milosvasic milosvasic   4096 Sep 14 19:45 audit
+drwxrwxr-x  2 milosvasic milosvasic   4096 Sep 14 19:45 bin
+drwxrwxr-x  8 milosvasic milosvasic   4096 Sep 14 19:45 crates
+-rw-rw-r--  1 milosvasic milosvasic   1285 Sep 14 19:45 deny.toml
+drwxrwxr-x  2 milosvasic milosvasic   4096 Sep 14 19:45 docs
+drwxrwxr-x  3 milosvasic milosvasic   4096 Sep 14 19:45 examples
+-rw-rw-r--  1 milosvasic milosvasic    933 Sep 14 19:45 hyperexecute.yaml
+-rw-rw-r--  1 milosvasic milosvasic    544 Sep 14 19:45 package-lock.json
+-rw-rw-r--  1 milosvasic milosvasic    805 Sep 14 19:45 package.json
+drwxrwxr-x  2 milosvasic milosvasic   4096 Sep 14 19:45 paper
+drwxrwxr-x  2 milosvasic milosvasic   4096 Sep 14 19:45 public
+drwxrwxr-x  2 milosvasic milosvasic   4096 Sep 14 19:45 rules
+-rw-rw-r--  1 milosvasic milosvasic     86 Sep 14 19:45 rust-toolchain.toml
+drwxrwxr-x  2 milosvasic milosvasic   4096 Sep 14 19:45 scripts
+drwxrwxr-x  3 milosvasic milosvasic   4096 Sep 14 19:45 sd-bench
+drwxrwxr-x 31 milosvasic milosvasic   4096 Sep 14 19:45 skills
+-rw-rw-r--  1 milosvasic milosvasic    527 Sep 14 19:45 skills-lock.json
+drwxrwxr-x  3 milosvasic milosvasic   4096 Sep 14 19:45 tests
+  ✓ PASS
+
+=== Web Validation ===
+→ verfix
+total 388
+drwxrwxr-x 14 milosvasic milosvasic  4096 Sep 14 19:47 .
+drwxrwxr-x 26 milosvasic milosvasic  4096 Oct  8 02:22 ..
+drwxrwxr-x  3 milosvasic milosvasic  4096 Sep 14 19:47 .agents
+drwxrwxr-x  2 milosvasic milosvasic  4096 Sep 14 19:47 .clinerules
+-rw-rw-r--  1 milosvasic milosvasic  1398 Sep 14 19:47 .dockerignore
+-rw-rw-r--  1 milosvasic milosvasic    69 Sep 14 19:47 .git
+drwxrwxr-x  3 milosvasic milosvasic  4096 Sep 14 19:47 .github
+-rw-rw-r--  1 milosvasic milosvasic   532 Sep 14 19:47 .gitignore
+-rw-rw-r--  1 milosvasic milosvasic  2716 Sep 14 19:47 AGENTS.md
+-rw-rw-r--  1 milosvasic milosvasic 10976 Sep 14 19:47 ARCHITECTURE_REVIEW.md
+-rw-rw-r--  1 milosvasic milosvasic 16774 Sep 14 19:47 ARCHITECTURE_TARGET.md
+-rw-rw-r--  1 milosvasic milosvasic 44964 Sep 14 19:47 CHANGELOG.md
+-rw-rw-r--  1 milosvasic milosvasic 10344 Sep 14 19:47 CLAUDE.md
+-rw-rw-r--  1 milosvasic milosvasic 22694 Sep 14 19:47 CONTRIBUTING.md
+-rw-rw-r--  1 milosvasic milosvasic 10548 Sep 14 19:47 Dockerfile.server
+-rw-rw-r--  1 milosvasic milosvasic   190 Sep 14 19:47 LICENSE.md
+-rw-rw-r--  1 milosvasic milosvasic  9489 Sep 14 19:47 LOCAL_FIRST.md
+-rw-rw-r--  1 milosvasic milosvasic   328 Sep 14 19:47 Makefile
+-rw-rw-r--  1 milosvasic milosvasic  6265 Sep 14 19:47 NORTH_STAR.md
+-rw-rw-r--  1 milosvasic milosvasic 17949 Sep 14 19:47 PHASES.md
+-rw-rw-r--  1 milosvasic milosvasic 11675 Sep 14 19:47 README.md
+-rw-rw-r--  1 milosvasic milosvasic 11794 Sep 14 19:47 REPLAY_UI.md
+-rw-rw-r--  1 milosvasic milosvasic 29786 Sep 14 19:47 ROADMAP.md
+-rw-rw-r--  1 milosvasic milosvasic   851 Sep 14 19:47 SECURITY.md
+drwxrwxr-x  2 milosvasic milosvasic  4096 Sep 14 19:47 api
+drwxrwxr-x  4 milosvasic milosvasic  4096 Sep 14 19:47 benchmark
+drwxrwxr-x  5 milosvasic milosvasic  4096 Sep 14 19:47 cli
+drwxrwxr-x  4 milosvasic milosvasic  4096 Sep 14 19:47 dashboard
+-rw-rw-r--  1 milosvasic milosvasic   325 Sep 14 19:47 docker-compose.yml
+drwxrwxr-x  8 milosvasic milosvasic  4096 Sep 14 19:47 docs
+-rw-rw-r--  1 milosvasic milosvasic 59063 Sep 14 19:47 package-lock.json
+-rw-rw-r--  1 milosvasic milosvasic   517 Sep 14 19:47 package.json
+drwxrwxr-x  2 milosvasic milosvasic  4096 Sep 14 19:47 scripts
+drwxrwxr-x  3 milosvasic milosvasic  4096 Sep 14 19:47 sdk
+-rw-rw-r--  1 milosvasic milosvasic   284 Sep 14 19:47 skills-lock.json
+drwxrwxr-x  2 milosvasic milosvasic  4096 Sep 14 19:47 testbed
+-rw-rw-r--  1 milosvasic milosvasic 11137 Sep 14 19:47 verfix_server_image_guide.md
+drwxrwxr-x  5 milosvasic milosvasic  4096 Sep 14 19:47 workers
+  ✓ PASS
+
+=== Media Validation ===
+→ MVT (Media Validation Tool)
+total 224
+drwxrwxr-x 10 milosvasic milosvasic  4096 Sep 15 00:00 .
+drwxrwxr-x 26 milosvasic milosvasic  4096 Oct  8 02:22 ..
+-rw-rw-r--  1 milosvasic milosvasic    43 Sep 14 19:55 .dockerignore
+-rw-rw-r--  1 milosvasic milosvasic    66 Sep 14 19:55 .git
+drwxrwxr-x  3 milosvasic milosvasic  4096 Sep 14 19:55 .github
+-rw-rw-r--  1 milosvasic milosvasic    98 Sep 14 19:55 .gitignore
+-rw-rw-r--  1 milosvasic milosvasic   130 Sep 14 19:55 .gitmodules
+-rw-rw-r--  1 milosvasic milosvasic    52 Sep 14 19:55 .prettierignore
+-rw-rw-r--  1 milosvasic milosvasic    16 Sep 14 19:55 .prettierrc.yml
+-rw-rw-r--  1 milosvasic milosvasic 21875 Sep 14 19:55 CHANGELOG.md
+-rw-rw-r--  1 milosvasic milosvasic   266 Sep 14 19:55 CONTRIBUTING.md
+lrwxrwxrwx  1 milosvasic milosvasic     7 Sep 14 19:55 COPYING -> LICENSE
+-rw-rw-r--  1 milosvasic milosvasic   951 Sep 14 19:55 Dockerfile
+-rw-rw-r--  1 milosvasic milosvasic 11357 Sep 14 19:55 LICENSE
+-rw-rw-r--  1 milosvasic milosvasic   633 Sep 14 19:55 NOTICE
+-rw-rw-r--  1 milosvasic milosvasic 19889 Sep 14 19:55 README.md
+drwxrwxr-x  2 milosvasic milosvasic  4096 Sep 14 19:55 anyplayer
+-rw-rw-r--  1 milosvasic milosvasic  3934 Sep 14 19:55 application_memory.html
+-rw-rw-r--  1 milosvasic milosvasic  2404 Sep 14 19:55 coverage.html
+-rw-rw-r--  1 milosvasic milosvasic  2610 Sep 14 19:55 css-tests.html
+-rw-rw-r--  1 milosvasic milosvasic  1946 Sep 14 19:55 custompagestyle.css
+-rwxrwxr-x  1 milosvasic milosvasic   743 Sep 14 19:55 docker_build.sh
+-rwxrwxr-x  1 milosvasic milosvasic   769 Sep 14 19:55 docker_prepare_assets.sh
+-rwxrwxr-x  1 milosvasic milosvasic  1161 Sep 14 19:55 docker_run.sh
+drwxrwxr-x  2 milosvasic milosvasic  4096 Sep 14 19:55 docs
+-rw-rw-r--  1 milosvasic milosvasic   318 Sep 14 19:55 favicon.ico
+-rw-rw-r--  1 milosvasic milosvasic  4440 Sep 14 19:55 fonts.html
+-rw-rw-r--  1 milosvasic milosvasic  3732 Sep 14 19:55 gfx-test.html
+-rw-rw-r--  1 milosvasic milosvasic  2638 Sep 14 19:55 html-tests.html
+-rw-rw-r--  1 milosvasic milosvasic  2543 Sep 14 19:55 httpd.conf
+-rw-rw-r--  1 milosvasic milosvasic   997 Sep 14 19:55 index.html
+-rw-rw-r--  1 milosvasic milosvasic  2671 Sep 14 19:55 js-tests.html
+drwxrwxr-x  5 milosvasic milosvasic  4096 Sep 14 23:51 js_mse_eme
+-rw-rw-r--  1 milosvasic milosvasic  2364 Sep 14 19:55 licenses.html
+-rw-rw-r--  1 milosvasic milosvasic  4357 Sep 14 19:55 lightningjs_test.html
+drwxrwxr-x  2 milosvasic milosvasic  4096 Sep 14 19:55 media
+-rw-rw-r--  1 milosvasic milosvasic  2826 Sep 14 19:55 mixed-content.html
+drwxrwxr-x  2 milosvasic milosvasic  4096 Sep 14 19:55 patches
+drwxrwxr-x  2 milosvasic milosvasic  4096 Sep 14 19:55 platform
+-rwxrwxr-x  1 milosvasic milosvasic   774 Sep 14 19:55 prepare_submodule.sh
+drwxrwxr-x  2 milosvasic milosvasic  4096 Sep 14 19:55 src
+-rw-rw-r--  1 milosvasic milosvasic  1400 Sep 14 19:55 style.css
+-rw-rw-r--  1 milosvasic milosvasic  2021 Sep 14 19:55 system-fonts.html
+-rw-rw-r--  1 milosvasic milosvasic  2604 Sep 14 19:55 wpt-tests.html
+  ✓ PASS
+
+→ WAVE DPCTF
+total 456
+drwxrwxr-x  7 milosvasic milosvasic   4096 Sep 15 00:00 .
+drwxrwxr-x 26 milosvasic milosvasic   4096 Oct  8 02:22 ..
+-rw-rw-r--  1 milosvasic milosvasic     73 Sep 14 19:57 .git
+-rw-rw-r--  1 milosvasic milosvasic   1013 Sep 14 19:57 LICENSE
+-rw-rw-r--  1 milosvasic milosvasic  12626 Sep 14 19:57 README.md
+-rw-rw-r--  1 milosvasic milosvasic 163061 Sep 14 19:57 THIRD-PARTY-LICENSES.txt
+-rw-rw-r--  1 milosvasic milosvasic   1028 Sep 14 19:57 __init__.py
+-rw-rw-r--  1 milosvasic milosvasic  12846 Sep 14 19:57 audio_file_reader.py
+drwxrwxr-x  2 milosvasic milosvasic   4096 Sep 14 19:57 audio_mezzanine
+-rw-rw-r--  1 milosvasic milosvasic  13467 Sep 14 19:57 camera_calibration_helper.py
+-rw-rw-r--  1 milosvasic milosvasic   5611 Sep 14 19:57 config.ini
+-rw-rw-r--  1 milosvasic milosvasic  27591 Sep 14 19:57 configuration_parser.py
+-rw-rw-r--  1 milosvasic milosvasic  16394 Sep 14 19:57 dpctf_audio_decoder.py
+-rw-rw-r--  1 milosvasic milosvasic   9130 Sep 14 19:57 dpctf_qr_decoder.py
+-rw-rw-r--  1 milosvasic milosvasic   1886 Sep 14 19:57 exceptions.py
+-rwxrwxr-x  1 milosvasic milosvasic     84 Sep 14 19:57 frame_rate_map.json
+-rw-rw-r--  1 milosvasic milosvasic  16496 Sep 14 19:57 global_configurations.py
+-rwxrwxr-x  1 milosvasic milosvasic   2168 Sep 14 19:57 install.sh
+-rw-rw-r--  1 milosvasic milosvasic   2833 Sep 14 19:57 install_win.bat
+-rw-rw-r--  1 milosvasic milosvasic   3890 Sep 14 19:57 log_handler.py
+drwxrwxr-x  2 milosvasic milosvasic   4096 Sep 14 19:57 logs
+-rw-rw-r--  1 milosvasic milosvasic  26581 Sep 14 19:57 observation_framework.py
+-rw-rw-r--  1 milosvasic milosvasic  42831 Sep 14 19:57 observation_framework_processor.py
+-rw-rw-r--  1 milosvasic milosvasic   9653 Sep 14 19:57 observation_result_handler.py
+drwxrwxr-x  2 milosvasic milosvasic   4096 Sep 14 19:57 observations
+-rw-rw-r--  1 milosvasic milosvasic   3751 Sep 14 19:57 of_testname_map.json
+-rw-rw-r--  1 milosvasic milosvasic   6041 Sep 14 19:57 output_file_handler.py
+drwxrwxr-x  2 milosvasic milosvasic   4096 Sep 14 19:57 qr_recognition
+drwxrwxr-x  2 milosvasic milosvasic   4096 Sep 14 19:57 test_code
+-rw-rw-r--  1 milosvasic milosvasic    600 Sep 14 19:57 utils.py
+  ✓ PASS
+
+→ mcp-audio-tweaker
+total 328
+drwxrwxr-x  7 milosvasic milosvasic   4096 Sep 15 00:00 .
+drwxrwxr-x 26 milosvasic milosvasic   4096 Oct  8 02:22 ..
+-rw-rw-r--  1 milosvasic milosvasic     80 Sep 14 19:58 .git
+-rw-rw-r--  1 milosvasic milosvasic    723 Sep 14 19:58 .gitignore
+-rw-rw-r--  1 milosvasic milosvasic   1068 Sep 14 19:58 LICENSE
+-rw-rw-r--  1 milosvasic milosvasic   9711 Sep 14 19:58 README.md
+drwxrwxr-x  2 milosvasic milosvasic   4096 Sep 14 19:58 docs
+drwxrwxr-x  2 milosvasic milosvasic   4096 Sep 14 19:58 examples
+-rw-rw-r--  1 milosvasic milosvasic   2570 Sep 14 19:58 jest.config.js
+-rw-rw-r--  1 milosvasic milosvasic 262022 Sep 14 19:58 package-lock.json
+-rw-rw-r--  1 milosvasic milosvasic   3735 Sep 14 19:58 package.json
+-rw-rw-r--  1 milosvasic milosvasic    667 Sep 14 19:58 prepare-repo.bat
+-rw-rw-r--  1 milosvasic milosvasic    678 Sep 14 19:58 prepare-repo.sh
+drwxrwxr-x  2 milosvasic milosvasic   4096 Sep 14 19:58 scripts
+drwxrwxr-x  7 milosvasic milosvasic   4096 Sep 14 19:58 src
+drwxrwxr-x  5 milosvasic milosvasic   4096 Sep 14 19:58 tests
+-rw-rw-r--  1 milosvasic milosvasic    790 Sep 14 19:58 tsconfig.json
+  ✓ PASS
+
+→ video-quality-mcp
+total 56
+drwxrwxr-x  4 milosvasic milosvasic 4096 Sep 15 00:00 .
+drwxrwxr-x 26 milosvasic milosvasic 4096 Oct  8 02:22 ..
+-rw-rw-r--  1 milosvasic milosvasic   80 Sep 14 20:02 .git
+-rw-rw-r--  1 milosvasic milosvasic  343 Sep 14 20:02 .gitignore
+-rw-rw-r--  1 milosvasic milosvasic 3175 Sep 14 20:02 README.md
+-rw-rw-r--  1 milosvasic milosvasic 2916 Sep 14 20:02 README.zh.md
+-rw-rw-r--  1 milosvasic milosvasic  415 Sep 14 20:02 main.py
+-rw-rw-r--  1 milosvasic milosvasic 8340 Sep 14 20:02 mcp_server.py
+-rw-rw-r--  1 milosvasic milosvasic  368 Sep 14 20:02 pyproject.toml
+-rw-rw-r--  1 milosvasic milosvasic   76 Sep 14 20:02 requirements.txt
+drwxrwxr-x  2 milosvasic milosvasic 4096 Sep 14 20:02 tools
+drwxrwxr-x  2 milosvasic milosvasic 4096 Sep 14 20:02 utils
+  ✓ PASS
+
+=== Multi-Display Validation ===
+→ polyscreen-mcp
+total 224
+drwxrwxr-x  8 milosvasic milosvasic  4096 Oct  3 14:57 .
+drwxrwxr-x 26 milosvasic milosvasic  4096 Oct  8 02:22 ..
+-rw-rw-r--  1 milosvasic milosvasic    77 Sep 14 19:59 .git
+drwxrwxr-x  3 milosvasic milosvasic  4096 Sep 14 19:59 .github
+-rw-rw-r--  1 milosvasic milosvasic   119 Sep 14 19:59 .gitignore
+-rw-rw-r--  1 milosvasic milosvasic   109 Sep 14 19:59 .npmignore
+-rw-rw-r--  1 milosvasic milosvasic    79 Sep 14 19:59 .prettierignore
+-rw-rw-r--  1 milosvasic milosvasic 16727 Sep 14 19:59 LICENSE
+-rw-rw-r--  1 milosvasic milosvasic 23390 Oct  3 14:57 README.ar.md
+-rw-rw-r--  1 milosvasic milosvasic 36087 Oct  3 14:57 README.md
+-rw-rw-r--  1 milosvasic milosvasic  1672 Sep 14 19:59 SECURITY.md
+drwxrwxr-x  3 milosvasic milosvasic  4096 Sep 14 19:59 assets
+drwxrwxr-x  4 milosvasic milosvasic  4096 Sep 14 19:59 companion
+-rw-rw-r--  1 milosvasic milosvasic   444 Sep 14 19:59 eslint.config.js
+-rw-rw-r--  1 milosvasic milosvasic  2178 Oct  3 14:57 package.json
+-rw-rw-r--  1 milosvasic milosvasic 69736 Sep 14 19:59 pnpm-lock.yaml
+-rw-rw-r--  1 milosvasic milosvasic    29 Sep 14 19:59 pnpm-workspace.yaml
+drwxrwxr-x  2 milosvasic milosvasic  4096 Sep 14 19:59 scripts
+drwxrwxr-x  7 milosvasic milosvasic  4096 Sep 14 19:59 src
+drwxrwxr-x  2 milosvasic milosvasic  4096 Oct  3 14:57 test
+-rw-rw-r--  1 milosvasic milosvasic   251 Sep 14 19:59 tsconfig.build.json
+-rw-rw-r--  1 milosvasic milosvasic   481 Sep 14 19:59 tsconfig.json
+  ✓ PASS
+
+=== Content Quality & Media Understanding ===
+→ claude-video (watch skill)
+total 112
+drwxrwxr-x 10 milosvasic milosvasic  4096 Oct  3 14:57 .
+drwxrwxr-x 26 milosvasic milosvasic  4096 Oct  8 02:22 ..
+drwxrwxr-x  3 milosvasic milosvasic  4096 Sep 14 20:04 .agents
+drwxrwxr-x  2 milosvasic milosvasic  4096 Oct  3 14:57 .claude-plugin
+drwxrwxr-x  2 milosvasic milosvasic  4096 Oct  3 14:57 .codex-plugin
+-rw-rw-r--  1 milosvasic milosvasic    75 Sep 14 20:04 .git
+-rw-rw-r--  1 milosvasic milosvasic  1475 Oct  3 14:57 .gitattributes
+drwxrwxr-x  3 milosvasic milosvasic  4096 Sep 14 20:04 .github
+-rw-rw-r--  1 milosvasic milosvasic   277 Oct  3 14:57 .gitignore
+-rw-rw-r--  1 milosvasic milosvasic   623 Sep 14 20:04 .skillignore
+-rw-rw-r--  1 milosvasic milosvasic  3943 Oct  3 14:57 AGENTS.md
+-rw-rw-r--  1 milosvasic milosvasic  9216 Oct  3 14:57 CHANGELOG.md
+-rw-rw-r--  1 milosvasic milosvasic    11 Sep 14 20:04 CLAUDE.md
+-rw-rw-r--  1 milosvasic milosvasic  1072 Sep 14 20:04 LICENSE
+-rw-rw-r--  1 milosvasic milosvasic 27715 Oct  3 14:57 README.md
+-rwxrwxr-x  1 milosvasic milosvasic  2627 Sep 14 20:04 dev-sync.sh
+drwxrwxr-x  3 milosvasic milosvasic  4096 Oct  3 14:57 docs
+drwxrwxr-x  3 milosvasic milosvasic  4096 Oct  3 14:57 hooks
+drwxrwxr-x  3 milosvasic milosvasic  4096 Sep 14 20:04 skills
+drwxrwxr-x  2 milosvasic milosvasic  4096 Oct  3 14:57 tests
+  ✓ PASS
+
+→ watch-skill
+total 1616
+drwxrwxr-x 16 milosvasic milosvasic    4096 Sep 14 20:49 .
+drwxrwxr-x 26 milosvasic milosvasic    4096 Oct  8 02:22 ..
+drwxrwxr-x  2 milosvasic milosvasic    4096 Sep 14 20:05 .claude-plugin
+-rw-rw-r--  1 milosvasic milosvasic      74 Sep 14 20:05 .git
+-rw-rw-r--  1 milosvasic milosvasic      71 Sep 14 20:05 .gitattributes
+drwxrwxr-x  4 milosvasic milosvasic    4096 Sep 14 20:05 .github
+-rw-rw-r--  1 milosvasic milosvasic    1568 Sep 14 20:05 .gitignore
+-rw-rw-r--  1 milosvasic milosvasic     126 Sep 14 20:05 .mcp.json
+-rw-rw-r--  1 milosvasic milosvasic       5 Sep 14 20:05 .python-version
+-rw-rw-r--  1 milosvasic milosvasic    5435 Sep 14 20:05 AGENTS.md
+-rw-rw-r--  1 milosvasic milosvasic  103841 Sep 14 20:05 CHANGELOG.md
+-rw-rw-r--  1 milosvasic milosvasic     313 Sep 14 20:49 CLAUDE.md
+-rw-rw-r--  1 milosvasic milosvasic    6002 Sep 14 20:05 CONTRIBUTING.md
+-rw-rw-r--  1 milosvasic milosvasic    1842 Sep 14 20:05 Dockerfile
+-rw-rw-r--  1 milosvasic milosvasic    1063 Sep 14 20:05 LICENSE
+-rw-rw-r--  1 milosvasic milosvasic   39608 Sep 14 20:05 README.md
+-rw-rw-r--  1 milosvasic milosvasic    5603 Sep 14 20:05 SECURITY.md
+drwxrwxr-x  4 milosvasic milosvasic    4096 Sep 14 20:05 app
+drwxrwxr-x  6 milosvasic milosvasic    4096 Sep 14 20:05 benchmarks
+drwxrwxr-x  2 milosvasic milosvasic    4096 Sep 14 20:05 commands
+drwxrwxr-x  7 milosvasic milosvasic    4096 Sep 14 20:05 docs
+drwxrwxr-x 22 milosvasic milosvasic    4096 Sep 14 20:05 examples
+-rw-rw-r--  1 milosvasic milosvasic    6278 Sep 14 20:05 llms.txt
+-rw-rw-r--  1 milosvasic milosvasic    9435 Sep 14 20:05 pyproject.toml
+-rw-rw-r--  1 milosvasic milosvasic    3066 Sep 14 20:05 release-surface-fixtures.json
+-rw-rw-r--  1 milosvasic milosvasic    6132 Sep 14 20:05 release-surface-rules.json
+drwxrwxr-x  3 milosvasic milosvasic    4096 Sep 14 20:05 schemas
+drwxrwxr-x  2 milosvasic milosvasic    4096 Sep 14 20:05 scripts
+-rw-rw-r--  1 milosvasic milosvasic    1236 Sep 14 20:05 server.json
+drwxrwxr-x 12 milosvasic milosvasic    4096 Sep 14 20:05 skills
+-rw-rw-r--  1 milosvasic milosvasic     419 Sep 14 20:05 skills.sh.json
+drwxrwxr-x  3 milosvasic milosvasic    4096 Sep 14 20:05 src
+drwxrwxr-x  3 milosvasic milosvasic    4096 Sep 14 20:05 templates
+drwxrwxr-x 26 milosvasic milosvasic    4096 Sep 14 20:05 tests
+-rw-rw-r--  1 milosvasic milosvasic 1342254 Sep 14 20:05 uv.lock
+drwxrwxr-x 10 milosvasic milosvasic    4096 Sep 14 20:05 workspace
+  ✓ PASS
+
+=== Anti-Bluff (Existing) ===
+→ anti_bluff
+total 52
+drwxrwxr-x  5 milosvasic milosvasic  4096 Sep 15 00:00 .
+drwxrwxr-x 26 milosvasic milosvasic  4096 Oct  8 02:22 ..
+-rw-rw-r--  1 milosvasic milosvasic    73 Sep 14 18:12 .git
+-rw-rw-r--  1 milosvasic milosvasic   163 Sep 14 18:12 .gitignore
+-rw-rw-r--  1 milosvasic milosvasic  1070 Sep 14 18:12 LICENSE
+-rw-rw-r--  1 milosvasic milosvasic 10870 Sep 14 18:12 README.md
+-rw-rw-r--  1 milosvasic milosvasic  1039 Sep 14 18:12 helix-deps.yaml
+-rwxrwxr-x  1 milosvasic milosvasic  3156 Sep 14 18:12 install.sh
+drwxrwxr-x  2 milosvasic milosvasic  4096 Sep 14 18:12 lib
+drwxrwxr-x  4 milosvasic milosvasic  4096 Sep 14 18:12 seams
+drwxrwxr-x  3 milosvasic milosvasic  4096 Sep 14 18:12 test
+  ✓ PASS
+
+=== SUMMARY ===
+Passed: 17
+  ✓ verification (agent-skills)
+  ✓ verify (maestro)
+  ✓ repo-qa (skills-runtime-sdk)
+  ✓ repo-proof
+  ✓ donespec
+  ✓ kedge
+  ✓ agentic-validation
+  ✓ skill-doctor
+  ✓ verfix
+  ✓ MVT (Media Validation Tool)
+  ✓ WAVE DPCTF
+  ✓ mcp-audio-tweaker
+  ✓ video-quality-mcp
+  ✓ polyscreen-mcp
+  ✓ claude-video (watch skill)
+  ✓ watch-skill
+  ✓ anti_bluff
+
+Failed: 0
+
+Skipped: 0
+
+ALL VERIFICATIONS PASSED

@@ -1,0 +1,6 @@
+# vision restore check 2026-10-08T09:09:01Z
+content: 'pong' finish: stop usage: {'completion_tokens': 2, 'prompt_tokens': 17, 'total_tokens': 19, 'prompt_tokens_details': {'cached_tokens': 0}}
+health: {"status":"ok"}
+active
+2574, 3046 MiB
+444277, 3752 MiB

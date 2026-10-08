@@ -1,0 +1,393 @@
+{
+ "summary": {
+  "go": "84.3% (11208/13294 statements, root + llmctld unit packages)",
+  "bash": "71.5% (2311/3230 lines, 22 measured files; 1 files NOT measured)",
+  "python": "65.8% (1371/2083 statements)"
+ },
+ "below_floor": [
+  {
+   "lang": "go",
+   "file": "llmctld/cmd/llmctld/cli_certs.go",
+   "pct": 30.3,
+   "detail": "23/76 stmts"
+  },
+  {
+   "lang": "go",
+   "file": "llmctld/cmd/llmctld/hardware_probe.go",
+   "pct": 0.0,
+   "detail": "0/11 stmts"
+  },
+  {
+   "lang": "go",
+   "file": "llmctld/cmd/llmctld/main.go",
+   "pct": 2.5,
+   "detail": "9/353 stmts"
+  },
+  {
+   "lang": "go",
+   "file": "llmctld/internal/api/client.go",
+   "pct": 39.6,
+   "detail": "53/134 stmts"
+  },
+  {
+   "lang": "go",
+   "file": "llmctld/internal/api/middleware_auth.go",
+   "pct": 60.0,
+   "detail": "3/5 stmts"
+  },
+  {
+   "lang": "go",
+   "file": "llmctld/internal/api/routes_auth.go",
+   "pct": 77.4,
+   "detail": "41/53 stmts"
+  },
+  {
+   "lang": "go",
+   "file": "llmctld/internal/api/routes_cluster.go",
+   "pct": 40.8,
+   "detail": "20/49 stmts"
+  },
+  {
+   "lang": "go",
+   "file": "llmctld/internal/api/routes_models.go",
+   "pct": 36.4,
+   "detail": "79/217 stmts"
+  },
+  {
+   "lang": "go",
+   "file": "llmctld/internal/api/routes_mtls.go",
+   "pct": 52.2,
+   "detail": "129/247 stmts"
+  },
+  {
+   "lang": "go",
+   "file": "llmctld/internal/api/routes_replication.go",
+   "pct": 77.2,
+   "detail": "88/114 stmts"
+  },
+  {
+   "lang": "go",
+   "file": "llmctld/internal/api/routes_tenants.go",
+   "pct": 79.8,
+   "detail": "79/99 stmts"
+  },
+  {
+   "lang": "go",
+   "file": "llmctld/internal/api/server.go",
+   "pct": 82.6,
+   "detail": "19/23 stmts"
+  },
+  {
+   "lang": "go",
+   "file": "llmctld/internal/auth/jwt.go",
+   "pct": 84.6,
+   "detail": "11/13 stmts"
+  },
+  {
+   "lang": "go",
+   "file": "llmctld/internal/auth/oidc.go",
+   "pct": 80.0,
+   "detail": "32/40 stmts"
+  },
+  {
+   "lang": "go",
+   "file": "llmctld/internal/isolation/cgroup.go",
+   "pct": 84.4,
+   "detail": "27/32 stmts"
+  },
+  {
+   "lang": "go",
+   "file": "llmctld/internal/mtls/certs.go",
+   "pct": 73.1,
+   "detail": "49/67 stmts"
+  },
+  {
+   "lang": "go",
+   "file": "llmctld/internal/mtls/truststore.go",
+   "pct": 79.6,
+   "detail": "39/49 stmts"
+  },
+  {
+   "lang": "go",
+   "file": "llmctld/internal/raft/lock.go",
+   "pct": 69.7,
+   "detail": "23/33 stmts"
+  },
+  {
+   "lang": "go",
+   "file": "llmctld/internal/raft/node.go",
+   "pct": 62.7,
+   "detail": "74/118 stmts"
+  },
+  {
+   "lang": "go",
+   "file": "llmctld/internal/raft/replication_commands.go",
+   "pct": 71.4,
+   "detail": "10/14 stmts"
+  },
+  {
+   "lang": "go",
+   "file": "llmctld/internal/raft/running_profile.go",
+   "pct": 80.0,
+   "detail": "12/15 stmts"
+  },
+  {
+   "lang": "go",
+   "file": "llmctld/internal/replication/checkpoint.go",
+   "pct": 84.2,
+   "detail": "64/76 stmts"
+  },
+  {
+   "lang": "go",
+   "file": "llmctld/internal/replication/crypto.go",
+   "pct": 75.0,
+   "detail": "18/24 stmts"
+  },
+  {
+   "lang": "go",
+   "file": "cmd/llmctl-decide/cmd_key.go",
+   "pct": 83.3,
+   "detail": "10/12 stmts"
+  },
+  {
+   "lang": "go",
+   "file": "cmd/llmctl-decide/cmd_serve.go",
+   "pct": 67.8,
+   "detail": "244/360 stmts"
+  },
+  {
+   "lang": "go",
+   "file": "internal/audit/logkey.go",
+   "pct": 80.7,
+   "detail": "46/57 stmts"
+  },
+  {
+   "lang": "go",
+   "file": "internal/calibrate/fromprofile.go",
+   "pct": 83.9,
+   "detail": "47/56 stmts"
+  },
+  {
+   "lang": "go",
+   "file": "internal/calibrate/profile.go",
+   "pct": 76.1,
+   "detail": "35/46 stmts"
+  },
+  {
+   "lang": "go",
+   "file": "internal/certs/ca.go",
+   "pct": 84.4,
+   "detail": "130/154 stmts"
+  },
+  {
+   "lang": "go",
+   "file": "internal/certs/leaf.go",
+   "pct": 71.7,
+   "detail": "71/99 stmts"
+  },
+  {
+   "lang": "go",
+   "file": "internal/certs/secfile.go",
+   "pct": 81.7,
+   "detail": "76/93 stmts"
+  },
+  {
+   "lang": "go",
+   "file": "internal/client/errors.go",
+   "pct": 76.5,
+   "detail": "39/51 stmts"
+  },
+  {
+   "lang": "go",
+   "file": "internal/client/permute.go",
+   "pct": 81.0,
+   "detail": "188/232 stmts"
+  },
+  {
+   "lang": "go",
+   "file": "internal/client/probe.go",
+   "pct": 80.6,
+   "detail": "112/139 stmts"
+  },
+  {
+   "lang": "go",
+   "file": "internal/gateway/proc.go",
+   "pct": 82.5,
+   "detail": "141/171 stmts"
+  },
+  {
+   "lang": "go",
+   "file": "internal/gateway/tick.go",
+   "pct": 0.0,
+   "detail": "0/1 stmts"
+  },
+  {
+   "lang": "go",
+   "file": "internal/keyring/export.go",
+   "pct": 79.8,
+   "detail": "67/84 stmts"
+  },
+  {
+   "lang": "go",
+   "file": "internal/registry/inode_unix.go",
+   "pct": 66.7,
+   "detail": "2/3 stmts"
+  },
+  {
+   "lang": "go",
+   "file": "internal/registry/lock.go",
+   "pct": 83.3,
+   "detail": "15/18 stmts"
+  },
+  {
+   "lang": "go",
+   "file": "internal/registry/process.go",
+   "pct": 75.4,
+   "detail": "43/57 stmts"
+  },
+  {
+   "lang": "go",
+   "file": "internal/vantage/cli.go",
+   "pct": 80.0,
+   "detail": "96/120 stmts"
+  },
+  {
+   "lang": "go",
+   "file": "internal/vantage/cmd/vantage-probe/main.go",
+   "pct": 0.0,
+   "detail": "0/2 stmts"
+  },
+  {
+   "lang": "go",
+   "file": "internal/vantage/probebin.go",
+   "pct": 83.1,
+   "detail": "54/65 stmts"
+  },
+  {
+   "lang": "go",
+   "file": "internal/vantage/vantage.go",
+   "pct": 82.9,
+   "detail": "214/258 stmts"
+  },
+  {
+   "lang": "bash",
+   "file": "bin/llmctl",
+   "pct": 54.9,
+   "detail": "67/122 lines"
+  },
+  {
+   "lang": "bash",
+   "file": "lib/catalog.sh",
+   "pct": 78.9,
+   "detail": "60/76 lines"
+  },
+  {
+   "lang": "bash",
+   "file": "lib/common.sh",
+   "pct": 75.4,
+   "detail": "43/57 lines"
+  },
+  {
+   "lang": "bash",
+   "file": "lib/decide.sh",
+   "pct": 78.0,
+   "detail": "191/245 lines"
+  },
+  {
+   "lang": "bash",
+   "file": "lib/doctor.sh",
+   "pct": 75.0,
+   "detail": "72/96 lines"
+  },
+  {
+   "lang": "bash",
+   "file": "lib/download.sh",
+   "pct": 50.4,
+   "detail": "201/399 lines"
+  },
+  {
+   "lang": "bash",
+   "file": "lib/engine.sh",
+   "pct": 38.1,
+   "detail": "67/176 lines"
+  },
+  {
+   "lang": "bash",
+   "file": "lib/hardware.sh",
+   "pct": 37.8,
+   "detail": "87/230 lines"
+  },
+  {
+   "lang": "bash",
+   "file": "lib/os_detect.sh",
+   "pct": 44.0,
+   "detail": "11/25 lines"
+  },
+  {
+   "lang": "bash",
+   "file": "lib/service_linux.sh",
+   "pct": 75.0,
+   "detail": "147/196 lines"
+  },
+  {
+   "lang": "bash",
+   "file": "lib/service_macos.sh",
+   "pct": 64.7,
+   "detail": "88/136 lines"
+  },
+  {
+   "lang": "bash",
+   "file": "lib/svc_hook.sh",
+   "pct": 39.6,
+   "detail": "38/96 lines"
+  },
+  {
+   "lang": "bash",
+   "file": "scripts/doc_counts.sh",
+   "pct": 84.8,
+   "detail": "39/46 lines"
+  },
+  {
+   "lang": "bash",
+   "file": "scripts/release/preflight_submodules.sh",
+   "pct": 73.7,
+   "detail": "42/57 lines"
+  },
+  {
+   "lang": "python",
+   "file": "lib/onnx_server.py",
+   "pct": 26.3,
+   "detail": "113/430 stmts"
+  },
+  {
+   "lang": "python",
+   "file": "scripts/coverage/make_report.py",
+   "pct": 0.0,
+   "detail": "0/204 stmts"
+  },
+  {
+   "lang": "python",
+   "file": "scripts/golden/build_manifest.py",
+   "pct": 67.9,
+   "detail": "19/28 stmts"
+  },
+  {
+   "lang": "python",
+   "file": "scripts/golden/similarity.py",
+   "pct": 68.6,
+   "detail": "48/70 stmts"
+  },
+  {
+   "lang": "python",
+   "file": "scripts/release/scan_archive.py",
+   "pct": 83.7,
+   "detail": "211/252 stmts"
+  },
+  {
+   "lang": "python",
+   "file": "tests/evidence/manifest.py",
+   "pct": 82.9,
+   "detail": "68/82 stmts"
+  }
+ ]
+}

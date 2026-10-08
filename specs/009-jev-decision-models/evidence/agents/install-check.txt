@@ -1,0 +1,7 @@
+opencode installed=yes version=1.18.30 headless=opencode run TEXT path=/home/milosvasic/.opencode/bin/opencode
+pi installed=yes version=0.85.1 headless=pi -p TEXT path=/home/milosvasic/.nvm/versions/node/v26.8.1/bin/pi
+crush installed=yes version=crush version v0.91.2 headless=crush run TEXT path=/home/milosvasic/.nvm/versions/node/v26.8.1/bin/crush
+claude installed=yes version=2.1.293 (Claude Code) headless=claude -p TEXT path=/home/milosvasic/.local/bin/claude
+aider installed=yes version=aider 0.86.2 headless=aider --message TEXT --yes-always path=/home/milosvasic/.local/bin/aider
+cn installed=yes version=1.5.47 headless=cn -p TEXT path=/home/milosvasic/.local/bin/cn
+cline installed=yes version=3.0.69 headless=cline -y TEXT path=/home/milosvasic/.local/bin/cline

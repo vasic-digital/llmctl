@@ -1,0 +1,27 @@
+[2026-10-08T08:57:23Z] llmctl models download decide-kev-9b
+[2026-10-08T08:57:23Z] engine: llama  repo: ggml-org/Kev-9B-GGUF
+[2026-10-08T08:57:24Z] download: https://huggingface.co/ggml-org/Kev-9B-GGUF/resolve/ec2bbfe6620218aee2e01cc93bb78dee2a96ed58/Kev-9B-Q4_K_M.gguf -> /home/milosvasic/.local/share/llmctl/models/decide-kev-9b/Kev-9B-Q4_K_M.gguf.part
+[2026-10-08T09:14:14Z] curl exit: 0
+[2026-10-08T09:14:14Z] RUN: _dl_verify_file /home/milosvasic/.local/share/llmctl/models/decide-kev-9b/Kev-9B-Q4_K_M.gguf.part 6358923744 86a6084984a6ef6818eb12c07cdc67ed3c47b00208d41a8816c64301bc6bcbda
+[2026-10-08T09:14:37Z] EXIT: 0
+[2026-10-08T09:14:37Z] renamed /home/milosvasic/.local/share/llmctl/models/decide-kev-9b/Kev-9B-Q4_K_M.gguf.part -> /home/milosvasic/.local/share/llmctl/models/decide-kev-9b/Kev-9B-Q4_K_M.gguf (atomic, verified)
+[2026-10-08T09:14:37Z] smoke protocol: systemone-native
+[2026-10-08T09:14:37Z] smoke: /home/milosvasic/Projects/llmctl/submodules/llama.cpp/build/bin/llama-server --model /home/milosvasic/.local/share/llmctl/models/decide-kev-9b/Kev-9B-Q4_K_M.gguf --ctx-size 4096 --n-gpu-layers 0 --host 127.0.0.1 --port 35935
+[2026-10-08T09:15:01Z] smoke: /health OK after 22s
+[2026-10-08T09:15:01Z] RUN: _dl_decision_probe_choice 35935
+[2026-10-08T09:15:05Z] EXIT: 0
+OUT: smoke ok: protocol=systemone-native choice=billing confidence=0.8068
+OUT:   billing=0.903419
+OUT:   legal=0.096581
+[2026-10-08T09:15:05Z] RUN: _dl_decision_probe_options 35935
+[2026-10-08T09:15:14Z] EXIT: 0
+OUT: smoke ok: protocol=systemone-native choice=billing confidence=0.2504
+OUT:   billing=0.437831
+OUT:   legal=0.041589
+OUT:   team3=0.282847
+OUT:   team4=0.237734
+[2026-10-08T09:15:14Z] decision smoke PASSED: valid typed answers over /v1/systemone (2 and 4 options; shape evidence only)
+[2026-10-08T09:15:14Z] download decide-kev-9b: SUCCESS
+[2026-10-08T09:17:21Z] llmctl models verify decide-kev-9b
+[2026-10-08T09:17:21Z] RUN: _dl_verify_file /home/milosvasic/.local/share/llmctl/models/decide-kev-9b/Kev-9B-Q4_K_M.gguf 6358923744 86a6084984a6ef6818eb12c07cdc67ed3c47b00208d41a8816c64301bc6bcbda
+[2026-10-08T09:17:42Z] EXIT: 0

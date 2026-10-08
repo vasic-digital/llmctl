@@ -102,6 +102,12 @@ func validateTenantID(tenantID string) error {
 	if strings.Contains(tenantID, "..") {
 		return fmt.Errorf("isolation: invalid tenant ID %q: must not contain \"..\"", tenantID)
 	}
+	// C3-08: the registry names a tenant's service rows "<tenant>--<profile>" (the FIRST "--" is the separator), so a
+	// tenant ID holding "--" or ending in "-" would make a row name ambiguous between tenants. lib/service_linux.sh
+	// applies the same two rules.
+	if strings.Contains(tenantID, "--") || strings.HasSuffix(tenantID, "-") {
+		return fmt.Errorf("isolation: invalid tenant ID %q: must not contain \"--\" or end with \"-\"", tenantID)
+	}
 	return nil
 }
 

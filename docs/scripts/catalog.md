@@ -227,6 +227,20 @@ echo "${plan_json}" | catalog_plan_get fast mode
    (from `common.sh`) for pulling one field out of a plan document that's
    already been computed and piped in.
 
+### Decision capacity fields (spec 009)
+
+`catalog_plan_json`'s `decision_instances[<profile>]` keeps the original
+candidate shape (`instances_gpu`, `instances_cpu`, `per_instance{ram_mb,
+vram_mb, slots}`, `total_decision_slots`, optional `reason`) and adds
+`protocol` (from the catalog entry's `decision.protocol`), `best_placement`
+(`gpu` on a tie, `cpu`, or `null`), `placements{gpu,cpu}` (per-instance
+footprints; `gpu` is `null` for the CPU-only onnx encoder) and `tier_ok`.
+Each profile is computed alone against the full budgets; `total_decision_slots
+= max(instances_gpu, instances_cpu) x slots` (data-model section 10).
+`reason` appears only when nothing fits. The catalog schema for decision
+profiles (`license`, `provenance`, `decision{...}`, mandatory 64-hex
+sha256, 40-hex `hf_revision`) is enforced by `tests/test_catalog_json.sh`.
+
 ## Related scripts
 
 * Sources `lib/common.sh`.
@@ -247,6 +261,30 @@ echo "${plan_json}" | catalog_plan_get fast mode
   `LLMCTL_BIND_HOST_<PROFILE>` mechanism, both engine paths), and
   end-to-end via `tests/test_cli.sh`'s `plan`/`models list` assertions.
 
+## Spec 009 additions
+
+* `LLMCTL_PORT_<PROFILE>=auto` is accepted (dynamic port; the plan keeps the
+  documented port as ordering key) and `plan --json` adds `assigned_port` for a
+  running service.
+* `decision_instances[*]` now states the decision mode: `mode`,
+  `slots_assume_mode` (`throughput`: `per_instance.slots` and
+  `total_decision_slots` use the catalog's parallel), and the
+  `effective_slots_per_instance` / `effective_total_decision_slots` for the
+  active mode (deterministic = one slot for llama engines); top-level
+  `decision_mode`. `LLMCTL_DECIDE_MODE` other than `deterministic|throughput`
+  is an error.
+* The decision profiles' `readout.spellings` are upper-case single letters only
+  (`"A"`, `" A"`); `tests/test_catalog_json.sh` rejects anything else (N-03,
+  G-031).
+
+## Native profiles and `defaults.overhead_mb`
+
+`catalog_decision_protocol <profile>` prints `decision.protocol` ("" for a non-decision profile). The planner adds an optional
+`defaults.overhead_mb` (integer 0..65536, absent = 0) to the KV term of a llama profile: RAM footprint in cpu mode, VRAM
+footprint in gpu mode, and the decision-capacity subtree. It carries a MEASURED working set above weights + the flat `ctx/8`
+rule (activation buffers of encoder-class native models; evidence: `specs/009-jev-decision-models/evidence/live/`). An invalid
+value stops the plan with exit 1. Tests: `tests/test_planner.sh` (overhead section), `tests/test_catalog_json.sh` (section 7).
+
 ## Last verified date
 
-2026-09-22
+2026-10-07

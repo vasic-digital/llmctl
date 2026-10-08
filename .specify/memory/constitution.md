@@ -88,6 +88,7 @@ This is the historical origin of the project's anti-bluff covenant. Every test, 
 | Service macOS | Bash (lib/service_macos.sh) | launchd LaunchAgents |
 | Doctor | Bash (lib/doctor.sh) | Environment self-diagnosis (PASS/WARN/FAIL + evidence) |
 | Inference Engines | llama.cpp v0.4.0, colibri v1.11.0 | Git submodules (vendor/), pinned to stable tags |
+| Decision Layer | **Go + Gin Gonic** (`cmd/llmctl-decide/`, `internal/`; module `github.com/vasic-digital/llmctl`) | Amendment 2.1.0: HTTPS decision gateway, `decide` client, key and certificate handling, typed-answer contract. Operator rule (2026-10-07): the main language for anything bigger stays Go and the framework for Go APIs is Gin Gonic. Python survives only as the encoder-model runtime shim (`lib/onnx_server.py`; onnxruntime has no Go equivalent here), run in a hash-locked private venv on loopback behind the gateway. Bash stays the thin dispatcher |
 | Test Harness | Bash (tests/run_tests.sh) | Deterministic: fixtures, dry-run, local HTTP, exact commands + exit codes + raw output |
 
 ## Development Workflow
@@ -185,7 +186,7 @@ Catalog checksums captured from HF API (`/api/models/<repo>?blobs=true`, `lfs.sh
 - **Smoke tests**: GGUF profiles booted in real `llama-server` and must answer deterministic prompt
 - **Budget refusals**: Scheduler never overcommits; refuses with exact numbers + suggested alternative
 - **OS-level protection**: systemd units carry `MemoryHigh`/`MemoryMax` from probed RAM, `Restart=always`, unbounded restarts (`StartLimitIntervalSec=0`); launchd agents use `KeepAlive` + `ThrottleInterval`
-- **Local-only**: All servers bind to `127.0.0.1`
+- **Local-only by default**: every chat/coder/vision server and every inference engine or runtime bind to `127.0.0.1`. **One exception (amendment 2.1.0, operator decision 2026-10-07, spec `009-jev-decision-models` Clarifications 1-4):** the decision gateway (`llmctl decide serve`) is the single network-facing decision endpoint; it listens on all interfaces by default (`LLMCTL_DECIDE_BIND`, falling back to the global `LLMCTL_BIND_HOST`; set `127.0.0.1` to restrict it), speaks HTTPS only with a locally generated, name-constrained certificate authority, and requires the access key `LLMCTL_API_KEY` on every request except the minimal liveness/readiness probes. The engines and runtimes behind it stay loopback-only. The key protects decision endpoints only; the chat servers are unchanged (no key, loopback).
 
 ## Governance
 
@@ -204,7 +205,9 @@ This constitution extends the **Helix Universal Constitution** at `constitution/
 - All gates pass (`make test`, `make lint`, `make validate`, constitution harness, meta-test)
 - Submodule commits propagate first; tags mirrored
 
-**Version**: 2.0.0 | **Ratified**: 2026-04-28 | **Last Amended**: 2026-09-14
+**Version**: 2.1.0 | **Ratified**: 2026-04-28 | **Last Amended**: 2026-10-07
+
+**Amendment 2.1.0 (2026-10-07)** — MINOR: adds the Decision Layer (Go + Gin) to the Technology Stack and carves the decision gateway out of the "all servers bind 127.0.0.1" guarantee (see Safety Guarantees). Rationale: the operator's decisions recorded as Clarifications 1-4 of `specs/009-jev-decision-models/spec.md` (network-wide HTTPS gateway, single access key, locally generated certificate authority) and the operator's language rule of 2026-10-07 (Go + Gin for anything bigger). No universal Helix clause is weakened: credentials handling (§11.4.10), host safety (§12) and data safety (§9) are unchanged; memory-limit policy for decision units follows the recorded 2026-09-15 decision (`lib/service_linux.sh`). Reviewed by: pending independent review (§11.4.142) — until then this amendment is uncommitted.
 
 ---
 
@@ -213,8 +216,9 @@ This constitution extends the **Helix Universal Constitution** at `constitution/
 ### Engines (vendored as git submodules, pinned to stable tags)
 - [llama.cpp](https://github.com/ggml-org/llama.cpp) — GGUF models, OpenAI-compatible `llama-server` (CUDA / ROCm / Metal / CPU backends)
 - [colibri](https://github.com/JustVugg/colibri) — pure-C engines for very large MoE models memory-mapped from NVMe (no GPU required); OpenAI- and Anthropic-compatible API
+- `onnx` — pure-python3 runner (`lib/onnx_server.py`, no submodule, no build step) for encoder-class decision models (e.g. `decide-nli`); CPU-only, guarded optional pip deps (`onnxruntime`/`numpy`/`sentencepiece`/`tokenizers`)
 
-### Port Map (Fixed per profile — all bind to 127.0.0.1)
+### Port Map (Fixed per profile — all bind to 127.0.0.1, except the decision gateway on 8095, see Safety Guarantees)
 - 8080: fast
 - 8081: coder
 - 8082: vision
@@ -225,6 +229,19 @@ This constitution extends the **Helix Universal Constitution** at `constitution/
 - 8087: ws-moe-30b
 - 8090: colibri-glm
 - 8091: colibri-qwen36
+- 8092: decide-tiny
+- 8093: decide
+- 8094: decide-pro
+- 8095: decide gateway (`llmctl decide serve`)
+- 8096: decide-nli (onnx engine, `lib/onnx_server.py`)
+- 8097: decide-max
+- 8098: decide-2b
+- 8103: decide-julia (native `/v1/systemone`)
+- 8104: decide-kev-08b (native)
+- 8105: decide-kev-4b (native)
+- 8106: decide-kev-9b (native)
+- 8107: decide-laya (native)
+- 8108: decide-lev (native)
 
 ### Development Commands
 ```bash

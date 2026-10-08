@@ -1,0 +1,8 @@
+# TRACKED_BINARIES_ALLOWLIST.txt - EXACT repo-relative paths of native executables larger than 1 MiB that are
+# deliberately tracked (read by tests/test_no_stray_binaries.sh, C3-12). One path per line, '#' starts a comment.
+# A path in a submodule is written with its submodule prefix.
+#
+# Vendored prebuilt helper of the constitution submodule (tracked upstream in vasic-digital/HelixConstitution; this
+# project consumes the submodule by reference and does not own these files).
+constitution/scripts/workable-items/bin/workable-items
+constitution/scripts/workable-items/bin/workable-items-linux

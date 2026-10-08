@@ -1,0 +1,133 @@
+##### test_go_unit.sh
+all modules verified
+ok  	github.com/vasic-digital/llmctl/cmd/llmctl-decide	2.144s	coverage: 81.6% of statements
+ok  	github.com/vasic-digital/llmctl/internal/audit	0.226s	coverage: 88.0% of statements
+ok  	github.com/vasic-digital/llmctl/internal/certs	1.614s	coverage: 88.1% of statements
+ok  	github.com/vasic-digital/llmctl/internal/client	3.619s	coverage: 86.3% of statements
+	github.com/vasic-digital/llmctl/internal/client/internal/clienttest		coverage: 0.0% of statements
+ok  	github.com/vasic-digital/llmctl/internal/contract	0.083s	coverage: 96.2% of statements
+ok  	github.com/vasic-digital/llmctl/internal/gateway	4.320s	coverage: 89.2% of statements
+	github.com/vasic-digital/llmctl/internal/gateway/internal/fakebackends		coverage: 0.0% of statements
+ok  	github.com/vasic-digital/llmctl/internal/keyring	0.749s	coverage: 88.5% of statements
+ok  	github.com/vasic-digital/llmctl/internal/mcpserver	0.052s	coverage: 93.1% of statements
+ok  	github.com/vasic-digital/llmctl/internal/metrics	0.044s	coverage: 99.2% of statements
+ok  	github.com/vasic-digital/llmctl/internal/placement	0.586s	coverage: 93.2% of statements
+ok  	github.com/vasic-digital/llmctl/internal/readout	0.015s	coverage: 92.5% of statements
+ok  	github.com/vasic-digital/llmctl/internal/registry	12.451s	coverage: 91.4% of statements
+ok  	github.com/vasic-digital/llmctl/internal/schema	0.040s	coverage: 92.9% of statements
+ok  	github.com/vasic-digital/llmctl/internal/server	22.190s	coverage: 94.0% of statements
+	github.com/vasic-digital/llmctl/internal/server/internal/servetest		coverage: 0.0% of statements
+	github.com/vasic-digital/llmctl/internal/server/internal/testpki		coverage: 0.0% of statements
+ok  	github.com/vasic-digital/llmctl/internal/vantage	6.298s	coverage: 82.6% of statements
+	github.com/vasic-digital/llmctl/internal/vantage/cmd/vantage-probe		coverage: 0.0% of statements
+	github.com/vasic-digital/llmctl/internal/vantage/internal/fixture		coverage: 0.0% of statements
+ok  	github.com/vasic-digital/llmctl/internal/vantage/probecore	0.573s	coverage: 93.1% of statements
+go unit tier OK
+##### rc=0
+##### test_decide_security_mutation.sh
+== control: unmutated copy is GREEN ==
+  ok: control run passes
+== the reviewer's seven mutations (A-17) ==
+  ok: killed - R-M1 duplicate Authorization guard removed (--- FAIL: TestDuplicateAuthorizationHeadersAreRefused)
+  ok: killed - R-M2 session tickets enabled (--- FAIL: TestSessionTicketsAreDisabledNoResumption)
+  ok: killed - R-M3 'serve' subcommand requirement dropped (--- FAIL: TestVerifyRequiresServeAsTheSubcommand)
+  ok: killed - R-M4 previous-key expiry ignored (--- FAIL: TestRotateWithGraceAcceptsPreviousUntilExpiry)
+  ok: killed - R-M5 present-but-wrong key never reaches the throttle (--- FAIL: TestThrottleNeverThrottlesTheValidKey)
+  ok: killed - R-M6 CGNAT range dropped from the CA name constraints (--- FAIL: TestCAProperties)
+  ok: killed - R-M7 binary-name match dropped (the reviewer's run hung) (--- FAIL: TestVerifyRejectsACarrierThatMentionsTheGateway)
+== A-01 admission ==
+  ok: killed - eviction removed: a full pool refuses the newcomer again (--- FAIL: TestGlobalCapEvictsUnauthenticatedHoldersInsteadOfRefusingTheNewcomer)
+  ok: killed - unauthenticated budget not enforced (no reserve) (--- FAIL: TestSlotsUnauthenticatedPoolIsBoundedIndependentlyOfTheTotal)
+  ok: killed - authenticated connections can be evicted (--- FAIL: TestSlotsAuthenticatedAreProtectedAndReserved)
+  ok: killed - victim taken from the LIGHTEST source (--- FAIL: TestSlotsVictimWithinAnAggregateIsTheHeaviestSource)
+  ok: killed - IPv6 /48 aggregate cap off (--- FAIL: TestSlotsUnauthenticatedBudgetsAreSeparate)
+  ok: killed - a valid key never promotes the connection (--- FAIL: TestPreAuthTimeoutReapsUnauthenticatedConnections)
+  ok: killed - pre-auth timer never armed (--- FAIL: TestValidKeyClientIsServedWhileHostileSourcesHoldTheSlots)
+  ok: killed - pre-auth timer not stopped on authentication (--- FAIL: TestPreAuthTimeoutReapsUnauthenticatedConnections)
+  ok: killed - unauthenticated per-source cap off (--- FAIL: TestSlotsUnauthenticatedBudgetsAreSeparate)
+== A2-03 / A2-04 / A2-T1 admission (review 3) ==
+  ok: killed - A2-03 victim ranking ignores the /48 aggregate (--- FAIL: TestSlotsVictimRankingUsesTheAggregateFirst)
+  ok: killed - A2-03 victim taken from the LIGHTEST aggregate (--- FAIL: TestGlobalCapEvictsUnauthenticatedHoldersInsteadOfRefusingTheNewcomer)
+  ok: killed - A2-04 per-source cap refuses the newcomer instead of evicting its own oldest (--- FAIL: TestPerSourceCapEvictsTheSourcesOwnOldestAndSparesOthers)
+  ok: killed - A2-04 the source-cap victim may be an authenticated connection (--- FAIL: TestSlotsPerSourceCapEvictsTheSourcesOwnOldestNotTheNewcomer)
+  ok: killed - A2-T1 removeLocked never returns the aggregate share (IPv4 locked out forever) (--- FAIL: TestSlotsUnauthenticatedBudgetsAreSeparate)
+  ok: killed - A2-T1 promote never returns the aggregate share (--- FAIL: TestEarlyRejectWithUnreadBodyStillDeliversTheResponse)
+== A-06 / A-09 / A-14 server ==
+  ok: killed - failed auth never delayed (--- FAIL: TestWrongKeysAreSleptOnAndTheValidKeyNever)
+  ok: killed - throttled sources evicted for a newcomer (--- FAIL: TestThrottleKeepsThrottledSourcesAndFailsClosedWhenFullOfThem)
+  ok: killed - full table of throttled sources admits a newcomer (--- FAIL: TestThrottleKeepsThrottledSourcesAndFailsClosedWhenFullOfThem)
+  ok: killed - GetConfigForClient result not hardened (--- FAIL: TestGetConfigForClientCannotBypassTheTLSFloor)
+  ok: killed - audit write failure not counted (--- FAIL: TestAuditWriteFailuresAreCountedAndReportedOnce)
+  ok: killed - audit write failure never reported ()
+  ok: killed - credential gate shorter than the longest key ()
+== A-03 / A-06 / A-07 / A-12 keyring ==
+  ok: killed - rotate refuses a well-formed weak old key (the remedy fails) (--- FAIL: TestRotateReplacesAWeakFileKeyAndNeverKeepsItAsPrevious)
+  ok: killed - rotate keeps a weak old key as PREVIOUS (--- FAIL: TestRotateReplacesAWeakFileKeyAndNeverKeepsItAsPrevious)
+  ok: killed - rotate --grace keeps a key the environment shadowed ()
+  ok: killed - A2-01 PREVIOUS accepted although the key comes from the environment (CLI and gateway environments differ) (--- FAIL: TestRotateGraceWithDifferentCLIAndGatewayEnvironmentsDoesNotWidenTheAcceptedSet)
+  ok: killed - A2-01 a weak PREVIOUS is accepted (--- FAIL: TestAcceptedKeysIgnoresAWeakPrevious)
+  ok: killed - entropy floor off ()
+  ok: killed - comparison on raw (variable-length) bytes ()
+  ok: killed - env file opened following symlinks (--- FAIL: TestSymlinkRefused)
+  ok: killed - env file opened blocking (FIFO hangs) (--- FAIL: TestOpenPrivateRefusesFIFOWithoutBlocking)
+  ok: killed - tighten chmods the PATH, not the checked descriptor (--- FAIL: TestTightenChmodsTheCheckedDescriptorNotWhateverIsAtThePathNow)
+  ok: killed - key length bound removed (--- FAIL: TestKeyRegexHasAnUpperBound)
+== A-04 / A-05 placement and log key ==
+  ok: killed - placement guard fails OPEN on a git error (--- FAIL: TestFailsClosedOnEveryGitError)
+  ok: killed - placement guard fails OPEN on a git timeout (--- FAIL: TestFailsClosedOnEveryGitError)
+  ok: killed - ambient GIT_DIR not scrubbed (--- FAIL: TestAmbientGitEnvironmentIsScrubbed)
+  ok: killed - log key created without the placement guard (--- FAIL: TestLogKeyPlacementGuard)
+  ok: killed - log key opened blocking (FIFO hangs the start) (--- FAIL: TestLogKeyFIFONeverHangs)
+== B2-11 / B2-15 (merged into FIX-E) ==
+  ok: killed - B2-11 the instance header is never set (--- FAIL: TestInstanceHeaderIsSetOnlyWhenTheBackendNotedAnInstance)
+  ok: killed - B2-15 R2 legacy pidfile older than the process accepted (--- FAIL: TestLegacyPidfileOlderThanTheProcessIsRefusedAndNewerAccepted)
+== A2-05 / A2-06 / A2-08 certs ==
+  ok: killed - A2-05 placement guard consulted on every start/reload/renew (--- FAIL: TestPlacementGuardRunsOnlyWhenTheCertDirIsCreated)
+  ok: killed - A2-06 no fallback where link(2) is unsupported (--- FAIL: TestExportSecretFallsBackWhereLinkIsUnsupported)
+  ok: killed - A2-06 every link error triggers the fallback (--- FAIL: TestExportSecretDoesNotFallBackOnOtherLinkErrors)
+  ok: killed - A2-06 the key copy is left on the medium after a failed verification (--- FAIL: TestExportOfflineRemovesTheCopyWhenVerificationFails)
+  ok: killed - A2-06 verification judges the medium's mode bits (--- FAIL: TestExportOfflineVerifiesByContentNotByMediumMode)
+  ok: killed - A2-08 the served key is re-read by path (--- FAIL: TestTLSCertificateUsesTheValidatedKeyBytesNotARereadByPath)
+== A2-07 pidfd ==
+  ok: killed - A2-07 raw hard-coded pidfd_open syscall number in the linux file (--- FAIL: TestNoRawSyscallOutsideLinuxOnlyFiles)
+  ok: control: internal/gateway cross-builds for darwin/arm64
+  ok: control: internal/gateway cross-builds for darwin/amd64
+  ok: control: internal/gateway cross-builds for linux/arm64
+  ok: control: internal/gateway cross-builds for linux/mips
+  ok: killed - proc_other.go without //go:build !linux does not build for linux
+  ok: the darwin build does not include proc_linux.go
+== A2-02 serve start check ==
+  ok: killed - A2-02 the start no longer reads the accepted-key set once (--- FAIL: TestPrepareRefusesToStartWhenTheAcceptedKeySetCannotBeRead)
+== A-13 / A-15 serve ==
+  ok: killed - key cache keeps the last good set forever (--- FAIL: TestKeyCacheFailsClosedAfterTheGraceAndReports)
+  ok: killed - key source failure not counted (--- FAIL: TestKeyCacheFailsClosedAfterTheGraceAndReports)
+  ok: killed - key source failure not reported (--- FAIL: TestKeyCacheFailsClosedAfterTheGraceAndReports)
+  ok: killed - pidfile removed even when it names another process (--- FAIL: TestRemoveOwnPidfileOnlyWhenItNamesThisProcess)
+  ok: killed - detached child inherits the legacy key variable (--- FAIL: TestDetachedChildEnvironmentLacksTheLegacyKeyVariable)
+RESULT: PASS
+##### rc=0
+##### test_gateway_mutation.sh
+== control: unmutated copy is GREEN ==
+  ok: control run passes
+== mutations (each must turn the tests RED) ==
+  ok: mutation readout threshold ignored -> tests RED
+  ok: mutation deterministic seed dropped -> tests RED
+  ok: mutation unverified pid is signalled -> tests RED
+  ok: mutation pid <= 1 guard removed -> tests RED
+  ok: mutation bind default changed -> tests RED
+  ok: mutation global bind host ignored -> tests RED
+  ok: mutation loopback-only engine check removed -> tests RED
+  ok: mutation cache_prompt forced on -> tests RED
+  ok: mutation engine error text echoed -> tests RED
+  ok: mutation silent NLI truncation -> tests RED
+  ok: mutation overflow in deterministic mode ignores primary -> tests RED
+  ok: mutation NLI entailment read from a fixed column -> tests RED
+  ok: mutation NLI generic label_source accepted -> tests RED
+  ok: mutation NLI truncation not reported to the gateway -> tests RED
+  ok: mutation key file permission check removed -> tests RED
+  ok: mutation symlinked key file accepted -> tests RED
+  ok: mutation 401 retry reuses the same key -> tests RED
+  ok: mutation SDK model listing dropped -> tests RED
+  ok: mutation lingering drain removed -> tests RED
+RESULT: PASS
+##### rc=0

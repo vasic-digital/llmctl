@@ -1,0 +1,9 @@
+[llmctl] verifying existing file: /home/milosvasic/.local/share/llmctl/models/decide-julia/Julia-1-Q8_0.gguf
+[llmctl] already present and verified: Julia-1-Q8_0.gguf (skipped)
+[llmctl] decision smoke test: starting llama-server for decide-julia on 127.0.0.1:54517
+decision smoke test passed for decide-julia (llmctl-decide smoke: choice probes)
+profile 'decide-julia' downloaded and verified. Evidence: /home/milosvasic/.local/state/llmctl/verify/decide-julia.log
+
+real	0m7.004s
+user	0m6.618s
+sys	0m1.787s

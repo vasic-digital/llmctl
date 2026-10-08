@@ -1,0 +1,38 @@
+dry-run
+  ok: dry-run rc
+  ok: dry-run announces the install
+  ok: dry-run installs nothing
+  ok: dry-run writes no download record
+install
+  ok: install rc
+  ok: cn shim
+  ok: cline shim
+  ok: aider shim
+  ok: cn shim runs the installed bin
+  ok: one download record per agent
+  ok: record names the package
+  ok: npm tarball integrity verified
+  ok: record carries the version
+idempotent
+  ok: second run is a no-op
+  ok: no new record on a no-op
+check
+  FAIL: check rc
+    expected: 0
+    actual:   1
+  ok: check reports cn
+  ok: check reports aider
+  ok: check reports the headless capability
+check on empty prefix
+  ok: check rc 1 when missing
+  ok: check reports absence
+integrity mismatch is refused
+  ok: mismatch rc
+  ok: mismatch reported
+  ok: no shim after a mismatch
+usage
+  ok: unknown agent (rc)
+  ok: unknown flag (rc)
+  SKIP: real network install
+    reason: LLMCTL_TEST_NETWORK!=1
+RESULT: FAIL (1 assertion failure(s))

@@ -2,8 +2,11 @@ package executor
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -341,21 +344,38 @@ func TestNew_DefaultsLLMCtlPath(t *testing.T) {
 //	    LLMCTL_STATE_DIR=<scratch>/state ... ./bin/llmctl start small
 //	started small (mode=gpu, port=8085, reserved 2048 MiB RAM + 2949 MiB VRAM)
 //
-// 2949 is the CURRENT, real, correct value catalog_plan_json computes for
-// this exact fixed hardware fixture today - this test's job is to track
-// whatever the real subprocess produces, never a frozen number.
+// G-086: the expected figures are NOT hardcoded (2949 went stale when the catalog's small ctx was raised
+// 2026-10-03: the real value is now 3859). They are derived from an INDEPENDENT real code path of the same
+// script: `bin/llmctl start small` (dry-run) prints "reserved <RAM> MiB RAM + <VRAM> MiB VRAM" from
+// lib/scheduler.sh's start-time reservation, whereas Footprint reads `plan --json` (catalog_plan_json).
+// Two code paths agreeing on the same fixed hardware fixture is the assertion; a catalog edit moves both.
 func TestLocalExecutor_Footprint_RealDryRunSubprocess(t *testing.T) {
 	e := newDryRunExecutor(t)
+
+	cmd := exec.Command(llmctlBinPath(t), "start", "small")
+	startOut, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("reference `bin/llmctl start small` (dry-run) failed: %v\n%s", err, startOut)
+	}
+	m := regexp.MustCompile(`reserved (\d+) MiB RAM \+ (\d+) MiB VRAM`).FindStringSubmatch(string(startOut))
+	if m == nil {
+		t.Fatalf("reference start output has no 'reserved N MiB RAM + N MiB VRAM' line; got:\n%s", startOut)
+	}
+	wantRAM, _ := strconv.ParseInt(m[1], 10, 64)
+	wantVRAM, _ := strconv.ParseInt(m[2], 10, 64)
+	if wantRAM <= 0 || wantVRAM <= 0 {
+		t.Fatalf("reference reservation is not positive (ram=%d vram=%d): the oracle is blind", wantRAM, wantVRAM)
+	}
 
 	ramMB, vramMB, err := e.Footprint("small")
 	if err != nil {
 		t.Fatalf("Footprint(small): %v", err)
 	}
-	if ramMB != 2048 {
-		t.Errorf("Footprint(small) ramMB = %d, want 2048", ramMB)
+	if ramMB != wantRAM {
+		t.Errorf("Footprint(small) ramMB = %d, want %d (the start-time reservation)", ramMB, wantRAM)
 	}
-	if vramMB != 2949 {
-		t.Errorf("Footprint(small) vramMB = %d, want 2949", vramMB)
+	if vramMB != wantVRAM {
+		t.Errorf("Footprint(small) vramMB = %d, want %d (the start-time reservation)", vramMB, wantVRAM)
 	}
 }
 

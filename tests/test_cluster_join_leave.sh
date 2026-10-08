@@ -37,6 +37,16 @@
 # What this test does NOT (and, on this host, cannot) prove: the
 # success path (join genuinely reflected in the peer's own node list) -
 # explicitly SKIPPED below with assert_skip, never silently omitted.
+#
+# G-106 UPDATE (OD-21 / T131): the certificate side of the HTTP/3 round trip
+# is fixed. The daemon's certificates carry SANs (127.0.0.1, ::1, localhost,
+# hostname, -api-bind host, -advertise names), `llmctld cluster bootstrap|join`
+# writes ca.crt + client.crt + client.key (0700 dir, 0600 files, CLI_CERT_DIR=
+# on stdout) and lib/cluster.sh passes --cacert/--cert/--key (never -k). The
+# suite exports LLMCTL_CLUSTER_CERT_DIR=$LLMCTLD_CLI_CERT_DIR on a curl that
+# has the HTTP3 feature and runs the success path; on a curl without HTTP3
+# (this host) it still SKIPs, with the measured Features line. The remaining
+# limit is the host's curl, not the daemon or the CLI.
 set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/helpers.sh"
 test_setup_env
@@ -69,15 +79,36 @@ trap 'kill "${LEADER_PID}" 2>/dev/null || true' EXIT
 
 assert_file_contains "${LLMCTLD_LOG}" "READY node_id=n1" "leader node: real READY line observed"
 
-run_llmctl_cluster "https://${LEADER_ADDR}" join "127.0.0.1:9999"
-assert_eq 1 "${RC}" "cluster join against a REAL running (but curl-unreachable) daemon: still exits non-zero, never hangs or crashes"
-assert_contains "${OUT}" "llmctld unreachable" "cluster join against a REAL running daemon: SAME unreachable message as no-daemon-at-all (no different, confusing failure mode)"
+# G-089: probe the capability instead of assuming it. The CLI transport either can or cannot complete a
+# 2xx round trip with this daemon on THIS host; the measured reason is what a SKIP prints.
+hostdep_begin "success path runs only when the host curl has HTTP3 (G-089/G-106)"
+if SKIP_WHY="$(cluster_cli_skip_reason "https://${LEADER_ADDR}")"; then
+  run_llmctl_cluster "https://${LEADER_ADDR}" join "127.0.0.1:9999"
+  assert_eq 1 "${RC}" "cluster join against a REAL running (but CLI-unreachable) daemon: still exits non-zero, never hangs or crashes"
+  assert_contains "${OUT}" "llmctld unreachable" "cluster join against a REAL running daemon: SAME unreachable message as no-daemon-at-all (no different, confusing failure mode)"
 
-run_llmctl_cluster "https://${LEADER_ADDR}" leave
-assert_eq 1 "${RC}" "cluster leave against a REAL running daemon: exits non-zero"
-assert_contains "${OUT}" "llmctld unreachable" "cluster leave against a REAL running daemon: SAME unreachable message"
+  run_llmctl_cluster "https://${LEADER_ADDR}" leave
+  assert_eq 1 "${RC}" "cluster leave against a REAL running daemon: exits non-zero"
+  assert_contains "${OUT}" "llmctld unreachable" "cluster leave against a REAL running daemon: SAME unreachable message"
 
-assert_skip "this host's curl has no HTTP/3 support and llmctld's cluster API is HTTP/3-QUIC-only (UDP), confirmed via ss+curl -v against the real node above - no curl-based request can complete a 2xx round trip in this environment, so US1 Acceptance Scenarios 1/2 (join genuinely reflected in the peer's node list, then genuinely removed) cannot be exercised here" \
-  "cluster join/leave success path (US1 Acceptance Scenarios 1/2)"
+  assert_skip "${SKIP_WHY} - so no curl-based request can complete a 2xx round trip here, and US1 Acceptance Scenarios 1/2 (join genuinely reflected in the peer's node list, then genuinely removed) cannot be exercised on this host" \
+    "cluster join/leave success path (US1 Acceptance Scenarios 1/2)"
+else
+  # The CLI transport works on this host: run the success path against the real daemon.
+  export LLMCTL_CLUSTER_CERT_DIR="${LLMCTLD_CLI_CERT_DIR}"
+  run_llmctl_cluster "https://${LEADER_ADDR}" status
+  assert_eq 0 "${RC}" "cluster status over the real HTTP/3 transport: exit 0"
+  assert_contains "${OUT}" '"is_leader":true' "cluster status: the bootstrapped node reports itself leader (real 2xx round trip)"
+  assert_contains "${OUT}" '"id":"n1"' "cluster status: node n1 is listed in the cluster state"
+  # join of a peer that does not exist: the DAEMON answers (its own JSON), the CLI does not claim 'unreachable'
+  run_llmctl_cluster "https://${LEADER_ADDR}" join "127.0.0.1:9999"
+  case "${OUT}" in *"llmctld unreachable"*) TEST_FAILS=$((TEST_FAILS+1)); echo "  FAIL: join reached the daemon but the CLI reported it unreachable: ${OUT}" >&2 ;; *) echo "  ok: cluster join: the daemon's own response is surfaced, not 'unreachable'" ;; esac
+  assert_contains "${OUT}" '{' "cluster join: the response is the daemon's JSON"
+  run_llmctl_cluster "https://${LEADER_ADDR}" leave
+  case "${OUT}" in *"llmctld unreachable"*) TEST_FAILS=$((TEST_FAILS+1)); echo "  FAIL: leave reached the daemon but the CLI reported it unreachable: ${OUT}" >&2 ;; *) echo "  ok: cluster leave: the daemon's own response is surfaced, not 'unreachable'" ;; esac
+  assert_skip "join genuinely reflected in a SECOND real peer's node list needs a second llmctld joined to this cluster; this suite drives one node" \
+    "cluster join/leave with a second real peer (US1 Acceptance Scenarios 1/2, peer-list part)"
+fi
 
+hostdep_end
 test_finish

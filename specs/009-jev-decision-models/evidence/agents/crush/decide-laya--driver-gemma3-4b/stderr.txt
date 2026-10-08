@@ -1,0 +1,11 @@
+          
+   ERROR  
+          
+  Agent processing failed: failed to start agent processing stream: bad request: Unable to generate parser for this   
+  template. Automatic parser generation failed:                                                                       
+  ------------                                                                                                        
+  While executing CallExpression at line 19, column 27 in source:                                                     
+  ...% 2 == 0) -%}↵        {{ raise_exception("Conversation roles must alternate user...                              
+                                             ^                                                                        
+  Error: Jinja Exception: Conversation roles must alternate user/assistant/user/assistant/....                        
+

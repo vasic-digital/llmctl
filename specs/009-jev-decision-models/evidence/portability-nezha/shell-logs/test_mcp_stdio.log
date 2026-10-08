@@ -1,0 +1,42 @@
+== schema emitters ==
+  ok: schema --format json-schema is a JSON object
+  ok: schema --format openai-tool is a JSON object
+  ok: schema --format mcp is a JSON object
+  ok: mcp tool is named decide
+  ok: openai tool is a function
+  ok: schema rejects an unknown format (rc)
+  ok: schema output is deterministic
+== mcp over stdio against a real gateway ==
+  ok: three responses (the notification gets none)
+  ok: initialize negotiates 2025-06-18
+  ok: tools/list lists decide
+  ok: tools/list equals the schema emitter output
+  ok: decide succeeds against the gateway
+  ok: structured answer is the gateway's (first option, peaked backend)
+  ok: evidence names the served profile
+  ok: the key never appears on stdout
+  ok: the key never appears on stderr
+== min_confidence withholds (fail closed) ==
+  ok: low confidence is an error result
+  ok: no structured answer when withheld
+== fail closed: gateway down, wrong key, not ready, readout ==
+  ok: unreachable gateway: isError
+  ok: unreachable gateway: exit code 6 named
+  ok: wrong key (401): isError
+  ok: wrong key: no structured answer
+  ok: wrong key is reported as a key problem (exit code 4)
+  ok: not-ready gateway (503): isError
+  ok: not-ready: classified failure
+  ok: not-ready: classified failure
+  ok: readout failure (422): isError
+== no key at all: the server still starts and refuses every call ==
+  ok: server exits 0 on EOF even when misconfigured
+  ok: unconfigured: isError
+== malformed input never kills the server ==
+  ok: one response per message
+  ok: bad JSON -> -32700
+  ok: batch -> -32600
+  ok: unknown method -> -32601
+  ok: the server answered after the garbage
+  ok: every stdout line is valid JSON
+RESULT: PASS

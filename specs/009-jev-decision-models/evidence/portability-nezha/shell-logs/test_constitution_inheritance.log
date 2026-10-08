@@ -1,0 +1,59 @@
+=== Constitution Inheritance Verification ===
+Project root: /home/milosvasic/llmctl-work/llmctl
+Constitution dir: /home/milosvasic/llmctl-work/llmctl/constitution
+
+Invariant 1: constitution/ directory exists
+  ✓ constitution/ directory exists
+
+Invariant 2: constitution/Constitution.md exists with §11.4 anchor
+  ✓ Constitution.md: /home/milosvasic/llmctl-work/llmctl/constitution/Constitution.md
+  ✓ §11.4 End-user quality guarantee anchor found in /home/milosvasic/llmctl-work/llmctl/constitution/Constitution.md
+
+Invariant 3: constitution/CLAUDE.md exists with MANDATORY ANTI-BLUFF COVENANT anchor
+  ✓ CLAUDE.md: /home/milosvasic/llmctl-work/llmctl/constitution/CLAUDE.md
+  ✓ MANDATORY ANTI-BLUFF COVENANT anchor found in /home/milosvasic/llmctl-work/llmctl/constitution/CLAUDE.md
+
+Invariant 4: constitution/AGENTS.md exists with Anti-bluff covenant anchor
+  ✓ AGENTS.md: /home/milosvasic/llmctl-work/llmctl/constitution/AGENTS.md
+  ✓ Anti-bluff covenant anchor found in /home/milosvasic/llmctl-work/llmctl/constitution/AGENTS.md
+
+Invariant 5: Parent CLAUDE.md references constitution submodule
+  ✓ Parent CLAUDE.md: /home/milosvasic/llmctl-work/llmctl/CLAUDE.md
+  ✓ CLAUDE.md inheritance pointer found in /home/milosvasic/llmctl-work/llmctl/CLAUDE.md
+
+Invariant 5b: Parent AGENTS.md references constitution submodule
+  ✓ Parent AGENTS.md: /home/milosvasic/llmctl-work/llmctl/AGENTS.md
+  ✓ AGENTS.md inheritance pointer found in /home/milosvasic/llmctl-work/llmctl/AGENTS.md
+
+Invariant 5c: Project Constitution references submodule
+  ✓ Project validation doc: /home/milosvasic/llmctl-work/llmctl/docs/validation_and_verification.md
+
+Invariant 6: Nested third-party submodules are documented, never modified
+  - submodules/superspec: Not found
+  - submodules/llama.cpp: Not found
+  Checking submodules/colibri...
+  - submodules/colibri: No CLAUDE.md or AGENTS.md upstream (nothing to report - not injected either, by design)
+
+Invariant 7: Constitution submodule has all required files
+  ✓ constitution/Constitution.md: /home/milosvasic/llmctl-work/llmctl/constitution/Constitution.md
+  ✓ constitution/CLAUDE.md: /home/milosvasic/llmctl-work/llmctl/constitution/CLAUDE.md
+  ✓ constitution/AGENTS.md: /home/milosvasic/llmctl-work/llmctl/constitution/AGENTS.md
+  ✓ constitution/install_upstreams.sh: /home/milosvasic/llmctl-work/llmctl/constitution/install_upstreams.sh
+  ✓ constitution/find_constitution.sh: /home/milosvasic/llmctl-work/llmctl/constitution/find_constitution.sh
+
+Invariant 8: Constitution submodule has 4+ upstream remotes configured
+  Upstream remotes (excluding origin): 0
+  Origin push URLs: 0
+  ✗ Insufficient upstream remotes (need 4+, or constitution/ directory missing)
+
+Invariant 9: Constitution verification harness executes successfully
+  ✓ Verification harness exists
+  ✓ Verification harness executes successfully
+
+Invariant 10: Meta-test mutation proves gate is not a bluff
+  ✓ Meta-test mutation script exists
+  ✓ Meta-test mutation passes (gate catches regressions)
+
+=== INHERITANCE VERIFICATION SUMMARY ===
+FAILURES (1):
+  ✗ Insufficient upstream remotes or constitution/ directory missing

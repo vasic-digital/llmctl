@@ -41,8 +41,20 @@ _kv_var="LLMCTL_KVTYPE_$(printf '%s' "${PROFILE}" | tr '[:lower:]-' '[:upper:]_'
 export "${_ctx_var}=${!_ctx_var:-8192}"
 export "${_kv_var}=${!_kv_var:-f16}"
 QA_DIR="${LLMCTL_ROOT}/docs/qa/005-cuda-gpu-inference"
-mkdir -p "${QA_DIR}"
-EVIDENCE="${QA_DIR}/vram_delta.txt"
+# Tracked QA evidence is only (re)written when the operator asks for it: a plain
+# `make test` must never clobber docs/qa/** (gap G-015). Host facts are probed live.
+if [[ "${LLMCTL_QA_EVIDENCE:-0}" == "1" ]]; then
+  mkdir -p "${QA_DIR}"
+  EVIDENCE="${QA_DIR}/vram_delta.txt"
+else
+  EVIDENCE="${TEST_TMP}/vram_delta.txt"
+fi
+# Free VRAM at decision time (live probe; never hard-coded).
+_free_vram_mib() { nvidia-smi --query-gpu=memory.total,memory.used --format=csv,noheader,nounits 2>/dev/null | head -1 | awk -F', *' '{print $1-$2}'; }
+_qa_host_line() {
+  printf 'host: %s | gpu: %s | date: %s\n' "$(hostname 2>/dev/null || echo unknown)" \
+    "$(nvidia-smi --query-gpu=name,memory.total --format=csv,noheader 2>/dev/null | head -1 || echo none)" "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+}
 
 if ! have_cmd nvidia-smi; then
   assert_skip "nvidia-smi not present on this host" "GPU VRAM-delta measurement"
@@ -104,6 +116,14 @@ PLANNED_NGL="$(cd "${LLMCTL_ROOT}" && real_env bash -c '
   source lib/common.sh; source lib/os_detect.sh; source lib/hardware.sh; source lib/catalog.sh
   hw_probe_json | catalog_plan_json
 ' | python3 -c "import json,sys; d=json.load(sys.stdin); print(d['profiles']['${PROFILE}']['ngl'])")"
+
+if [[ "${PLANNED_NGL}" == "0" ]]; then
+  # No GPU offload was planned (the planner saw too little free VRAM): a VRAM delta of a
+  # CPU-only run cannot be >= 500 MiB, so the property is untestable right now - honest SKIP.
+  assert_skip "planner chose CPU-only (ngl=0) for '${PROFILE}': free VRAM is $(_free_vram_mib) MiB right now" "GPU VRAM-delta measurement"
+  echo "SKIPPED: planner chose ngl=0 for ${PROFILE} on $(hostname); free VRAM $(_free_vram_mib) MiB at $(date -u +%Y-%m-%dT%H:%M:%SZ)" > "${EVIDENCE}"
+  test_finish
+fi
 
 TEST_PORT="${LLMCTL_TEST_GPU_PORT:-18095}"
 SERVER_LOG="${TEST_TMP}/vram-delta-server.log"
@@ -186,6 +206,7 @@ except Exception:
 ' "${RESPONSE_FILE}" 2>/dev/null || true)"
 
 {
+  _qa_host_line
   echo "profile: ${PROFILE}"
   echo "model: ${MODEL_PATH}"
   echo "planned ngl (from hw_probe_json | catalog_plan_json): ${PLANNED_NGL}"

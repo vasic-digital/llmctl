@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"testing"
 )
 
 // newHTTPTestServerImpl starts a real, locally-listening HTTP/1.1 server
@@ -80,4 +81,25 @@ func mustGetwd() string {
 func hostSummary() string {
 	return fmt.Sprintf("GOOS=%s GOARCH=%s GOMAXPROCS=%d NumCPU=%d",
 		runtime.GOOS, runtime.GOARCH, runtime.GOMAXPROCS(0), runtime.NumCPU())
+}
+
+// evidenceOutputDir returns the directory a load-test observation file is
+// written to. Tracked QA evidence under docs/qa/ must not be rewritten by
+// an ordinary test run (it would churn with this host's numbers), so the
+// default is a per-test temp dir; the tracked directory is used ONLY when
+// LLMCTL_QA_EVIDENCE=1 (same convention as the tests/test_gpu_*.sh suites).
+func evidenceOutputDir(t *testing.T) (string, error) {
+	t.Helper()
+	if os.Getenv("LLMCTL_QA_EVIDENCE") != "1" {
+		return t.TempDir(), nil
+	}
+	root, err := repoRootForEvidence()
+	if err != nil {
+		return "", err
+	}
+	dir := filepath.Join(root, "docs", "qa", "008-full-test-coverage")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return "", err
+	}
+	return dir, nil
 }

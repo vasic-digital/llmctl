@@ -1,0 +1,54 @@
+name	hf_repo	pinned	pins	protocol	known_issue	name_collision	kind
+# Candidate register inputs for `llmctl admit --all` (T090/T091). Curated columns are from
+# specs/009-jev-decision-models/research/web-candidate-models.md (2026-10-07); every gate verdict is
+# recomputed from the live Hugging Face API. First 41 rows = the 41 HF-hosted candidates (the pinned
+# JevK5 repo is one row carrying both pinned files); last 7 = named tools with no HF weights repo.
+# Columns: protocol = curated hint (G6 prefers the API's gguf.decision_type); known_issue = block:/note:/none-verified:/-.
+decide-tiny	chaoliangUNSW/Jev-Style-0.8B-Decision-v3-GGUF	yes	Jev-Style-0.8B-Decision-v3-Q4_K_M.gguf	letter-logit	-	-	weights
+decide	Mapika/decider-4b-GGUF	yes	decider-4b-v2.1-Q4_K_M.gguf,decider_config.json	letter-logit	-	-	weights
+decide-pro	rizzoaiacademy/rizzo-flow	yes	spark-x2.5-4b-rizzo-flow-lora-q8_0.gguf	letter-logit	-	-	weights
+decide-nli	MoritzLaurer/deberta-v3-large-zeroshot-v2.0	yes	onnx/model.onnx,onnx/spm.model	nli-onnx	-	-	weights
+decide-2b+max	alibiserikbay/JevK5-GGUF	yes	jevk5-2b-v0.2-Q8_0.gguf,jevk5-9b-v0.3.3-Q8_0.gguf	letter-logit	-	-	weights
+kev-0.8b	ggml-org/Kev-0.8B-GGUF	no	Kev-0.8B-Q8_0.gguf	systemone-native	note:llama.cpp#30073 large inputs rejected at default physical batch 512 (open at 2026-10-07; -b must be >= prompt length)	PyPI 'kev' is an unrelated 2021 ORM	weights
+kev-4b	ggml-org/Kev-4B-GGUF	no	Kev-4B-Q4_K_M.gguf	systemone-native	note:llama.cpp#30073 large inputs rejected at default physical batch 512 (open at 2026-10-07; -b must be >= prompt length)	PyPI 'kev' is an unrelated 2021 ORM	weights
+kev-9b	ggml-org/Kev-9B-GGUF	no	Kev-9B-Q4_K_M.gguf	systemone-native	note:llama.cpp#30073 large inputs rejected at default physical batch 512 (open at 2026-10-07; -b must be >= prompt length)	PyPI 'kev' is an unrelated 2021 ORM	weights
+laya	ggml-org/Laya-GGUF	no	Laya-Q8_0.gguf	systemone-native	note:llama.cpp#30073 large inputs rejected at default physical batch 512 (open at 2026-10-07; -b must be >= prompt length)	-	weights
+julia-1	ggml-org/Julia-1-GGUF	no	Julia-1-Q8_0.gguf	systemone-native	note:llama.cpp#30073 large inputs rejected at default physical batch 512 (open at 2026-10-07; -b must be >= prompt length)	-	weights
+lev	ggml-org/lev-GGUF	no	lev-Q4_K_M.gguf	systemone-native	note:llama.cpp#30073 large inputs rejected at default physical batch 512 (open at 2026-10-07; -b must be >= prompt length)	-	weights
+decider-2b	Mapika/decider-2b-GGUF	no	decider-2b-v11-Q4_K_M.gguf,decider_config.json	letter-logit	-	-	weights
+apus-openjev-4b	apus-ailab/APUS-OpenJev-v1-4B-GGUF	no	APUS-OpenJev-v1-4B-Q8_0.gguf	letter-logit	-	-	weights
+clef-flash	ggml-org/Clef-Flash-GGUF	no	auto	systemone-native	block:llama.cpp#30064 Q8_0 head quantisation collapses probabilities toward uniform (open at 2026-10-07); also needs b11371+	-	weights
+openjev-gguf	ggml-org/OpenJev-GGUF	no	auto	systemone-native	-	PyPI 'openjev' 0.0.1 has no licence metadata	weights
+bespoke-nimble-9b	ggml-org/Bespoke-Nimble-9B-v3-GGUF	no	auto	systemone-native	-	-	weights
+verdict-151m	heman10x/rlcd-modernbert-151m	no	auto	unsupported	-	-	weights
+verdictml-small	Manav2op/verdict-small	no	auto	unsupported	-	-	weights
+strands-decider-2b-v21	StrandsAgents/strands-decider-2B-hobson-v21	no	auto	unsupported	-	-	weights
+neohorse-jev-4b	TokenRhythm/NeoHorse-Jev-4B-GGUF	no	auto	unsupported	-	-	weights
+opendecider-small	manjunathshiva/opendecider-small-GGUF	no	auto	unsupported	-	-	weights
+opendecider-nano	manjunathshiva/opendecider-nano	no	auto	unsupported	-	-	weights
+gliner2.5-decide	fastino/GLiNER2.5-Decide	no	auto	unsupported	-	-	weights
+gliner2.5-decide-gguf	3ntr0py-t4m3r/GLiNER2.5-Decide-GGUF	no	auto	unsupported	-	-	weights
+rsi-jev	shgao/rsi-jev-v1.0-qwen3.5-2b	no	auto	unsupported	-	-	weights
+fern	reoring/fern	no	auto	unsupported	-	-	weights
+winnow-12b	EldanRing/Winnow-12B	no	auto	unsupported	-	PyPI 'winnow' is an unrelated JSON-schema library	weights
+winnow-e4b	EldanRing/Winnow-E4B	no	auto	unsupported	-	PyPI 'winnow' is an unrelated JSON-schema library	weights
+typecastlm	mihailgribov/typecastlm-qwen3.5-3.8b	no	auto	unsupported	-	-	weights
+startlux-decision-4b	startlux-models/StartLux-Decision-4B-Q8_0-GGUF	no	auto	unsupported	-	-	weights
+jevhome-b	jevhome/jevhome-B	no	auto	unsupported	-	-	weights
+bev-decider-0.4b	avbiswas/bev-decider-0.4B	no	auto	unsupported	-	-	weights
+kestrel-decider-230m	Kestrelyn/kestrel-decider-230m	no	auto	unsupported	-	-	weights
+openjev-27b	openjev/openjev	no	auto	unsupported	-	PyPI 'openjev' 0.0.1 has no licence metadata	weights
+kev-4b-upstream	jaredpalmer/kev-4b	no	auto	unsupported	-	PyPI 'kev' is an unrelated 2021 ORM	weights
+kev-onnx	onnx-community/kev-4b-ONNX	no	auto	unsupported	-	npm 'kev-onnx' does not exist (404)	weights
+open-jev-deberta	com-kotobalabs/open-jev-deberta-v3-large	no	auto	unsupported	-	-	weights
+pplx-decider-27b	perplexity-ai/pplx-decider-v1-27b	no	auto	unsupported	-	-	weights
+autotrust-jev-9b	autotrust/JEV-9B	no	auto	unsupported	-	-	weights
+verdict-2.0	heman10x/openJev-verdict-2.0	no	auto	unsupported	-	-	weights
+laya-typed-decisions-gguf	mys/laya-typed-decisions-GGUF	no	auto	unsupported	-	-	weights
+local-jev	-	no	-	unsupported	-	PyPI 'local-jev' does not exist (404)	harness
+semif	-	no	-	unsupported	-	-	harness
+poorjev	-	no	-	unsupported	-	-	harness
+anyjev	-	no	-	unsupported	-	-	harness
+edgejev	-	no	-	unsupported	-	-	harness
+djev	-	no	-	unsupported	-	-	harness
+clm	-	no	-	unsupported	-	-	harness

@@ -1,0 +1,3 @@
+[llmctl] wrote /home/milosvasic/.local/state/llmctl/services/decide-julia.env
+started decide-julia (mode=cpu, port=8103, reserved 1448 MiB RAM + 0 MiB VRAM)
+rc=0

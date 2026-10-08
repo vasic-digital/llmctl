@@ -133,7 +133,7 @@ suite.
   helpers.
 * Discovered and run by `tests/run_tests.sh`.
 * Relates to the project's real, pinned git submodules
-  `submodules/llama.cpp` (v0.4.0) and `submodules/colibri` (v1.11.0), and
+  `submodules/llama.cpp` (tag b11379 since 3.1.0) and `submodules/colibri` (v1.11.0), and
   to `llmctl setup`'s full orchestration (`bin/llmctl`), whose dry-run
   path this test's dry-run assertions specifically make fast-testable.
 

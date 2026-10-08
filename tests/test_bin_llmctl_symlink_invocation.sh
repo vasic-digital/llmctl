@@ -34,7 +34,9 @@ case "${out}" in
     ;;
 esac
 
-echo "${out}" | grep -q '"tier"' \
+# a here-string, not `echo | grep -q`: under pipefail grep -q exits at the first match and the echo of a large
+# (now ~18 KB) output dies of SIGPIPE, turning a MATCH into a failed pipeline
+grep -q '"tier"' <<<"${out}" \
   && assert_eq 0 0 "symlinked invocation produced real plan JSON output" \
   || assert_eq 0 1 "symlinked invocation produced real plan JSON output (got: ${out:0:200})"
 

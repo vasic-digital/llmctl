@@ -1,0 +1,1056 @@
+=== module .
+vet-rc=0
+ok  	github.com/vasic-digital/llmctl/cmd/llmctl-decide	4.411s
+ok  	github.com/vasic-digital/llmctl/internal/audit	1.410s
+ok  	github.com/vasic-digital/llmctl/internal/certs	2.423s
+ok  	github.com/vasic-digital/llmctl/internal/client	5.431s
+?   	github.com/vasic-digital/llmctl/internal/client/internal/clienttest	[no test files]
+ok  	github.com/vasic-digital/llmctl/internal/contract	1.049s
+ok  	github.com/vasic-digital/llmctl/internal/gateway	2.203s
+?   	github.com/vasic-digital/llmctl/internal/gateway/internal/fakebackends	[no test files]
+ok  	github.com/vasic-digital/llmctl/internal/keyring	1.733s
+ok  	github.com/vasic-digital/llmctl/internal/mcpserver	1.033s
+ok  	github.com/vasic-digital/llmctl/internal/metrics	1.108s
+ok  	github.com/vasic-digital/llmctl/internal/readout	1.008s
+ok  	github.com/vasic-digital/llmctl/internal/registry	20.222s
+ok  	github.com/vasic-digital/llmctl/internal/schema	1.056s
+ok  	github.com/vasic-digital/llmctl/internal/server	9.995s
+?   	github.com/vasic-digital/llmctl/internal/server/internal/servetest	[no test files]
+?   	github.com/vasic-digital/llmctl/internal/server/internal/testpki	[no test files]
+ok  	github.com/vasic-digital/llmctl/internal/vantage	4.392s
+?   	github.com/vasic-digital/llmctl/internal/vantage/cmd/vantage-probe	[no test files]
+?   	github.com/vasic-digital/llmctl/internal/vantage/internal/fixture	[no test files]
+ok  	github.com/vasic-digital/llmctl/internal/vantage/probecore	1.616s
+=== module llmctld
+vet-rc=0
+?   	github.com/vasic-digital/llmctl/llmctld/cmd/llmctld	[no test files]
+ok  	github.com/vasic-digital/llmctl/llmctld/internal/api	62.285s
+ok  	github.com/vasic-digital/llmctl/llmctld/internal/audit	1.164s
+ok  	github.com/vasic-digital/llmctl/llmctld/internal/auth	1.089s
+ok  	github.com/vasic-digital/llmctl/llmctld/internal/authz	1.012s
+ok  	github.com/vasic-digital/llmctl/llmctld/internal/cluster	1.316s
+--- FAIL: TestLocalExecutor_Footprint_RealDryRunSubprocess (0.11s)
+    local_test.go:358: Footprint(small) vramMB = 3859, want 2949
+FAIL
+FAIL	github.com/vasic-digital/llmctl/llmctld/internal/executor	3.597s
+ok  	github.com/vasic-digital/llmctl/llmctld/internal/isolation	1.040s
+ok  	github.com/vasic-digital/llmctl/llmctld/internal/mtls	1.095s
+ok  	github.com/vasic-digital/llmctl/llmctld/internal/raft	50.878s
+ok  	github.com/vasic-digital/llmctl/llmctld/internal/replication	13.480s
+ok  	github.com/vasic-digital/llmctl/llmctld/internal/tenancy	1.009s
+2026/10/07 20:43:46 failed to sufficiently increase receive buffer size (was: 208 kiB, wanted: 7168 kiB, got: 416 kiB). See https://github.com/quic-go/quic-go/wiki/UDP-Buffer-Sizes for details.
+2026-10-07T20:43:46.644+0200 [INFO]  raft: initial configuration: index=1 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:44051}]"
+2026-10-07T20:43:46.644+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:44051 [Follower]" leader-address= leader-id=
+2026-10-07T20:43:48.118+0200 [WARN]  raft: heartbeat timeout reached, starting election: last-leader-addr= last-leader-id=
+2026-10-07T20:43:48.118+0200 [INFO]  raft: entering candidate state: node="Node at 127.0.0.1:44051 [Candidate]" term=2
+2026-10-07T20:43:48.118+0200 [DEBUG] raft: pre-voting for self: term=2 id=node-a
+2026-10-07T20:43:48.118+0200 [DEBUG] raft: calculated votes needed: needed=1 term=2
+2026-10-07T20:43:48.118+0200 [DEBUG] raft: pre-vote received: from=node-a term=2 tally=0
+2026-10-07T20:43:48.118+0200 [DEBUG] raft: pre-vote granted: from=node-a term=2 tally=1
+2026-10-07T20:43:48.118+0200 [INFO]  raft: pre-vote successful, starting election: term=2 tally=1 refused=0 votesNeeded=1
+2026-10-07T20:43:48.118+0200 [DEBUG] raft: voting for self: term=2 id=node-a
+2026-10-07T20:43:48.118+0200 [DEBUG] raft: vote granted: from=node-a term=2 tally=1
+2026-10-07T20:43:48.118+0200 [INFO]  raft: election won: term=2 tally=1
+2026-10-07T20:43:48.118+0200 [INFO]  raft: entering leader state: leader="Node at 127.0.0.1:44051 [Leader]"
+2026/10/07 20:43:48 failed to sufficiently increase receive buffer size (was: 208 kiB, wanted: 7168 kiB, got: 416 kiB). See https://github.com/quic-go/quic-go/wiki/UDP-Buffer-Sizes for details.
+2026-10-07T20:43:48.222+0200 [INFO]  raft: initial configuration: index=0 servers=[]
+2026-10-07T20:43:48.222+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:33608 [Follower]" leader-address= leader-id=
+2026-10-07T20:43:48.309+0200 [INFO]  raft: updating configuration: command=AddVoter server-id=node-b server-addr=127.0.0.1:33608 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:44051} {Suffrage:Voter ID:node-b Address:127.0.0.1:33608}]"
+2026-10-07T20:43:48.309+0200 [INFO]  raft: added peer, starting replication: peer=node-b
+2026-10-07T20:43:48.312+0200 [WARN]  raft: failed to get previous log: previous-index=4 last-index=0 error="log not found"
+2026-10-07T20:43:48.312+0200 [WARN]  raft: appendEntries rejected, sending older logs: peer="{Voter node-b 127.0.0.1:33608}" next=1
+2026-10-07T20:43:48.312+0200 [INFO]  raft: pipelining replication: peer="{Voter node-b 127.0.0.1:33608}"
+2026/10/07 20:43:48 failed to sufficiently increase receive buffer size (was: 208 kiB, wanted: 7168 kiB, got: 416 kiB). See https://github.com/quic-go/quic-go/wiki/UDP-Buffer-Sizes for details.
+2026-10-07T20:43:48.316+0200 [INFO]  raft: initial configuration: index=0 servers=[]
+2026-10-07T20:43:48.316+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:60184 [Follower]" leader-address= leader-id=
+2026-10-07T20:43:48.408+0200 [INFO]  raft: updating configuration: command=AddVoter server-id=node-c server-addr=127.0.0.1:60184 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:44051} {Suffrage:Voter ID:node-b Address:127.0.0.1:33608} {Suffrage:Voter ID:node-c Address:127.0.0.1:60184}]"
+2026-10-07T20:43:48.408+0200 [INFO]  raft: added peer, starting replication: peer=node-c
+2026-10-07T20:43:48.411+0200 [WARN]  raft: failed to get previous log: previous-index=6 last-index=0 error="log not found"
+2026/10/07 20:43:48 failed to sufficiently increase receive buffer size (was: 208 kiB, wanted: 7168 kiB, got: 416 kiB). See https://github.com/quic-go/quic-go/wiki/UDP-Buffer-Sizes for details.
+2026-10-07T20:43:48.411+0200 [WARN]  raft: appendEntries rejected, sending older logs: peer="{Voter node-c 127.0.0.1:60184}" next=1
+2026-10-07T20:43:48.411+0200 [INFO]  raft: pipelining replication: peer="{Voter node-c 127.0.0.1:60184}"
+2026-10-07T20:43:48.419+0200 [INFO]  raft: aborting pipeline replication: peer="{Voter node-c 127.0.0.1:60184}"
+2026-10-07T20:43:48.419+0200 [INFO]  raft: aborting pipeline replication: peer="{Voter node-b 127.0.0.1:33608}"
+2026/10/07 20:43:49 failed to sufficiently increase receive buffer size (was: 208 kiB, wanted: 7168 kiB, got: 416 kiB). See https://github.com/quic-go/quic-go/wiki/UDP-Buffer-Sizes for details.
+2026-10-07T20:43:49.344+0200 [INFO]  raft: initial configuration: index=1 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:48121}]"
+2026-10-07T20:43:49.344+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:48121 [Follower]" leader-address= leader-id=
+2026-10-07T20:43:51.074+0200 [WARN]  raft: heartbeat timeout reached, starting election: last-leader-addr= last-leader-id=
+2026-10-07T20:43:51.074+0200 [INFO]  raft: entering candidate state: node="Node at 127.0.0.1:48121 [Candidate]" term=2
+2026-10-07T20:43:51.074+0200 [DEBUG] raft: pre-voting for self: term=2 id=node-a
+2026-10-07T20:43:51.074+0200 [DEBUG] raft: calculated votes needed: needed=1 term=2
+2026-10-07T20:43:51.074+0200 [DEBUG] raft: pre-vote received: from=node-a term=2 tally=0
+2026-10-07T20:43:51.074+0200 [DEBUG] raft: pre-vote granted: from=node-a term=2 tally=1
+2026-10-07T20:43:51.074+0200 [INFO]  raft: pre-vote successful, starting election: term=2 tally=1 refused=0 votesNeeded=1
+2026-10-07T20:43:51.074+0200 [DEBUG] raft: voting for self: term=2 id=node-a
+2026-10-07T20:43:51.074+0200 [DEBUG] raft: vote granted: from=node-a term=2 tally=1
+2026-10-07T20:43:51.074+0200 [INFO]  raft: election won: term=2 tally=1
+2026-10-07T20:43:51.074+0200 [INFO]  raft: entering leader state: leader="Node at 127.0.0.1:48121 [Leader]"
+2026/10/07 20:43:51 failed to sufficiently increase receive buffer size (was: 208 kiB, wanted: 7168 kiB, got: 416 kiB). See https://github.com/quic-go/quic-go/wiki/UDP-Buffer-Sizes for details.
+2026-10-07T20:43:51.181+0200 [INFO]  raft: initial configuration: index=0 servers=[]
+2026-10-07T20:43:51.181+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:60482 [Follower]" leader-address= leader-id=
+2026-10-07T20:43:51.282+0200 [INFO]  raft: updating configuration: command=AddVoter server-id=node-b server-addr=127.0.0.1:60482 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:48121} {Suffrage:Voter ID:node-b Address:127.0.0.1:60482}]"
+2026-10-07T20:43:51.282+0200 [INFO]  raft: added peer, starting replication: peer=node-b
+2026-10-07T20:43:51.283+0200 [WARN]  raft: failed to get previous log: previous-index=4 last-index=0 error="log not found"
+2026-10-07T20:43:51.284+0200 [WARN]  raft: appendEntries rejected, sending older logs: peer="{Voter node-b 127.0.0.1:60482}" next=1
+2026-10-07T20:43:51.284+0200 [INFO]  raft: pipelining replication: peer="{Voter node-b 127.0.0.1:60482}"
+2026/10/07 20:43:51 failed to sufficiently increase receive buffer size (was: 208 kiB, wanted: 7168 kiB, got: 416 kiB). See https://github.com/quic-go/quic-go/wiki/UDP-Buffer-Sizes for details.
+2026-10-07T20:43:51.289+0200 [INFO]  raft: initial configuration: index=0 servers=[]
+2026-10-07T20:43:51.290+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:41815 [Follower]" leader-address= leader-id=
+2026-10-07T20:43:51.374+0200 [INFO]  raft: updating configuration: command=AddVoter server-id=node-c server-addr=127.0.0.1:41815 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:48121} {Suffrage:Voter ID:node-b Address:127.0.0.1:60482} {Suffrage:Voter ID:node-c Address:127.0.0.1:41815}]"
+2026-10-07T20:43:51.374+0200 [INFO]  raft: added peer, starting replication: peer=node-c
+2026-10-07T20:43:51.376+0200 [WARN]  raft: failed to get previous log: previous-index=6 last-index=0 error="log not found"
+2026-10-07T20:43:51.376+0200 [WARN]  raft: appendEntries rejected, sending older logs: peer="{Voter node-c 127.0.0.1:41815}" next=1
+2026-10-07T20:43:51.377+0200 [INFO]  raft: pipelining replication: peer="{Voter node-c 127.0.0.1:41815}"
+2026-10-07T20:43:52.825+0200 [WARN]  raft: heartbeat timeout reached, starting election: last-leader-addr=127.0.0.1:48121 last-leader-id=node-a
+2026-10-07T20:43:52.825+0200 [INFO]  raft: entering candidate state: node="Node at 127.0.0.1:41815 [Candidate]" term=3
+2026-10-07T20:43:52.825+0200 [DEBUG] raft: asking for pre-vote: term=3 from=node-a address=127.0.0.1:48121
+2026-10-07T20:43:52.825+0200 [DEBUG] raft: asking for pre-vote: term=3 from=node-b address=127.0.0.1:60482
+2026-10-07T20:43:52.825+0200 [DEBUG] raft: pre-voting for self: term=3 id=node-c
+2026-10-07T20:43:52.825+0200 [DEBUG] raft: calculated votes needed: needed=2 term=3
+2026-10-07T20:43:52.825+0200 [DEBUG] raft: pre-vote received: from=node-c term=3 tally=0
+2026-10-07T20:43:52.825+0200 [DEBUG] raft: pre-vote granted: from=node-c term=3 tally=1
+2026-10-07T20:43:52.827+0200 [WARN]  raft: rejecting pre-vote request since we have a leader: from=127.0.0.1:41815 leader=127.0.0.1:48121 leader-id=node-a
+2026-10-07T20:43:52.827+0200 [DEBUG] raft: pre-vote received: from=node-b term=2 tally=1
+2026-10-07T20:43:52.827+0200 [DEBUG] raft: pre-vote denied: from=node-b term=2 tally=1
+2026-10-07T20:43:52.914+0200 [WARN]  raft: heartbeat timeout reached, starting election: last-leader-addr=127.0.0.1:48121 last-leader-id=node-a
+2026-10-07T20:43:52.914+0200 [INFO]  raft: entering candidate state: node="Node at 127.0.0.1:60482 [Candidate]" term=3
+2026-10-07T20:43:52.914+0200 [DEBUG] raft: asking for pre-vote: term=3 from=node-a address=127.0.0.1:48121
+2026-10-07T20:43:52.914+0200 [DEBUG] raft: pre-voting for self: term=3 id=node-b
+2026-10-07T20:43:52.914+0200 [DEBUG] raft: asking for pre-vote: term=3 from=node-c address=127.0.0.1:41815
+2026-10-07T20:43:52.914+0200 [DEBUG] raft: calculated votes needed: needed=2 term=3
+2026-10-07T20:43:52.914+0200 [DEBUG] raft: pre-vote received: from=node-b term=3 tally=0
+2026-10-07T20:43:52.914+0200 [DEBUG] raft: pre-vote granted: from=node-b term=3 tally=1
+2026-10-07T20:43:52.916+0200 [DEBUG] raft: received a requestPreVote with a newer term, grant the pre-vote
+2026-10-07T20:43:52.916+0200 [DEBUG] raft: pre-vote received: from=node-c term=3 tally=1
+2026-10-07T20:43:52.916+0200 [DEBUG] raft: pre-vote granted: from=node-c term=3 tally=2
+2026-10-07T20:43:52.916+0200 [INFO]  raft: pre-vote successful, starting election: term=3 tally=2 refused=0 votesNeeded=2
+2026-10-07T20:43:52.916+0200 [DEBUG] raft: asking for vote: term=3 from=node-a address=127.0.0.1:48121
+2026-10-07T20:43:52.916+0200 [DEBUG] raft: voting for self: term=3 id=node-b
+2026-10-07T20:43:52.916+0200 [DEBUG] raft: asking for vote: term=3 from=node-c address=127.0.0.1:41815
+2026-10-07T20:43:52.916+0200 [DEBUG] raft: vote granted: from=node-b term=3 tally=1
+2026-10-07T20:43:52.916+0200 [DEBUG] raft: lost leadership because received a requestVote with a newer term
+2026-10-07T20:43:52.917+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:41815 [Follower]" leader-address= leader-id=
+2026-10-07T20:43:52.917+0200 [DEBUG] raft: vote granted: from=node-c term=3 tally=2
+2026-10-07T20:43:52.917+0200 [INFO]  raft: election won: term=3 tally=2
+2026-10-07T20:43:52.917+0200 [INFO]  raft: entering leader state: leader="Node at 127.0.0.1:60482 [Leader]"
+2026-10-07T20:43:52.917+0200 [INFO]  raft: added peer, starting replication: peer=node-a
+2026-10-07T20:43:52.917+0200 [INFO]  raft: added peer, starting replication: peer=node-c
+2026-10-07T20:43:52.917+0200 [INFO]  raft: pipelining replication: peer="{Voter node-c 127.0.0.1:41815}"
+2026-10-07T20:43:52.928+0200 [INFO]  raft: aborting pipeline replication: peer="{Voter node-c 127.0.0.1:41815}"
+2026-10-07T20:43:57.827+0200 [ERROR] raft: failed to make requestVote RPC: target="{Voter node-a 127.0.0.1:48121}" error="timeout: no recent network activity" term=3
+2026-10-07T20:43:57.915+0200 [ERROR] raft: failed to make requestVote RPC: target="{Voter node-a 127.0.0.1:48121}" error="timeout: no recent network activity" term=3
+2026-10-07T20:43:57.918+0200 [ERROR] raft: failed to appendEntries to: peer="{Voter node-a 127.0.0.1:48121}" error="timeout: no recent network activity"
+2026-10-07T20:43:57.918+0200 [ERROR] raft: failed to make requestVote RPC: target="{Voter node-a 127.0.0.1:48121}" error="timeout: no recent network activity" term=3
+2026-10-07T20:43:58.097+0200 [ERROR] raft: failed to heartbeat to: peer=127.0.0.1:48121 backoff time=10ms error="timeout: no recent network activity"
+2026/10/07 20:43:59 failed to sufficiently increase receive buffer size (was: 208 kiB, wanted: 7168 kiB, got: 416 kiB). See https://github.com/quic-go/quic-go/wiki/UDP-Buffer-Sizes for details.
+2026-10-07T20:43:59.135+0200 [INFO]  raft: initial configuration: index=1 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:36064}]"
+2026-10-07T20:43:59.135+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:36064 [Follower]" leader-address= leader-id=
+2026-10-07T20:44:00.547+0200 [WARN]  raft: heartbeat timeout reached, starting election: last-leader-addr= last-leader-id=
+2026-10-07T20:44:00.547+0200 [INFO]  raft: entering candidate state: node="Node at 127.0.0.1:36064 [Candidate]" term=2
+2026-10-07T20:44:00.547+0200 [DEBUG] raft: pre-voting for self: term=2 id=node-a
+2026-10-07T20:44:00.547+0200 [DEBUG] raft: calculated votes needed: needed=1 term=2
+2026-10-07T20:44:00.547+0200 [DEBUG] raft: pre-vote received: from=node-a term=2 tally=0
+2026-10-07T20:44:00.547+0200 [DEBUG] raft: pre-vote granted: from=node-a term=2 tally=1
+2026-10-07T20:44:00.547+0200 [INFO]  raft: pre-vote successful, starting election: term=2 tally=1 refused=0 votesNeeded=1
+2026-10-07T20:44:00.547+0200 [DEBUG] raft: voting for self: term=2 id=node-a
+2026-10-07T20:44:00.547+0200 [DEBUG] raft: vote granted: from=node-a term=2 tally=1
+2026-10-07T20:44:00.547+0200 [INFO]  raft: election won: term=2 tally=1
+2026-10-07T20:44:00.547+0200 [INFO]  raft: entering leader state: leader="Node at 127.0.0.1:36064 [Leader]"
+2026/10/07 20:44:00 failed to sufficiently increase receive buffer size (was: 208 kiB, wanted: 7168 kiB, got: 416 kiB). See https://github.com/quic-go/quic-go/wiki/UDP-Buffer-Sizes for details.
+2026-10-07T20:44:00.608+0200 [INFO]  raft: initial configuration: index=0 servers=[]
+2026-10-07T20:44:00.608+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:50103 [Follower]" leader-address= leader-id=
+2026-10-07T20:44:00.664+0200 [INFO]  raft: updating configuration: command=AddVoter server-id=node-b server-addr=127.0.0.1:50103 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:36064} {Suffrage:Voter ID:node-b Address:127.0.0.1:50103}]"
+2026-10-07T20:44:00.664+0200 [INFO]  raft: added peer, starting replication: peer=node-b
+2026-10-07T20:44:00.667+0200 [WARN]  raft: failed to get previous log: previous-index=4 last-index=0 error="log not found"
+2026-10-07T20:44:00.667+0200 [WARN]  raft: appendEntries rejected, sending older logs: peer="{Voter node-b 127.0.0.1:50103}" next=1
+2026-10-07T20:44:00.667+0200 [INFO]  raft: pipelining replication: peer="{Voter node-b 127.0.0.1:50103}"
+2026/10/07 20:44:00 failed to sufficiently increase receive buffer size (was: 208 kiB, wanted: 7168 kiB, got: 416 kiB). See https://github.com/quic-go/quic-go/wiki/UDP-Buffer-Sizes for details.
+2026-10-07T20:44:00.671+0200 [INFO]  raft: initial configuration: index=0 servers=[]
+2026-10-07T20:44:00.671+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:56233 [Follower]" leader-address= leader-id=
+2026-10-07T20:44:00.730+0200 [INFO]  raft: updating configuration: command=AddVoter server-id=node-c server-addr=127.0.0.1:56233 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:36064} {Suffrage:Voter ID:node-b Address:127.0.0.1:50103} {Suffrage:Voter ID:node-c Address:127.0.0.1:56233}]"
+2026-10-07T20:44:00.730+0200 [INFO]  raft: added peer, starting replication: peer=node-c
+2026-10-07T20:44:00.732+0200 [WARN]  raft: failed to get previous log: previous-index=6 last-index=0 error="log not found"
+2026-10-07T20:44:00.732+0200 [WARN]  raft: appendEntries rejected, sending older logs: peer="{Voter node-c 127.0.0.1:56233}" next=1
+2026-10-07T20:44:00.732+0200 [INFO]  raft: pipelining replication: peer="{Voter node-c 127.0.0.1:56233}"
+2026-10-07T20:44:01.822+0200 [INFO]  raft: aborting pipeline replication: peer="{Voter node-c 127.0.0.1:56233}"
+2026-10-07T20:44:01.823+0200 [INFO]  raft: aborting pipeline replication: peer="{Voter node-b 127.0.0.1:50103}"
+2026/10/07 20:44:02 failed to sufficiently increase receive buffer size (was: 208 kiB, wanted: 7168 kiB, got: 416 kiB). See https://github.com/quic-go/quic-go/wiki/UDP-Buffer-Sizes for details.
+2026-10-07T20:44:02.748+0200 [INFO]  raft: initial configuration: index=1 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:60049}]"
+2026-10-07T20:44:02.749+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:60049 [Follower]" leader-address= leader-id=
+2026-10-07T20:44:04.328+0200 [WARN]  raft: heartbeat timeout reached, starting election: last-leader-addr= last-leader-id=
+2026-10-07T20:44:04.328+0200 [INFO]  raft: entering candidate state: node="Node at 127.0.0.1:60049 [Candidate]" term=2
+2026-10-07T20:44:04.328+0200 [DEBUG] raft: pre-voting for self: term=2 id=node-a
+2026-10-07T20:44:04.328+0200 [DEBUG] raft: calculated votes needed: needed=1 term=2
+2026-10-07T20:44:04.328+0200 [DEBUG] raft: pre-vote received: from=node-a term=2 tally=0
+2026-10-07T20:44:04.328+0200 [DEBUG] raft: pre-vote granted: from=node-a term=2 tally=1
+2026-10-07T20:44:04.328+0200 [INFO]  raft: pre-vote successful, starting election: term=2 tally=1 refused=0 votesNeeded=1
+2026-10-07T20:44:04.328+0200 [DEBUG] raft: voting for self: term=2 id=node-a
+2026-10-07T20:44:04.328+0200 [DEBUG] raft: vote granted: from=node-a term=2 tally=1
+2026-10-07T20:44:04.328+0200 [INFO]  raft: election won: term=2 tally=1
+2026-10-07T20:44:04.328+0200 [INFO]  raft: entering leader state: leader="Node at 127.0.0.1:60049 [Leader]"
+2026/10/07 20:44:04 failed to sufficiently increase receive buffer size (was: 208 kiB, wanted: 7168 kiB, got: 416 kiB). See https://github.com/quic-go/quic-go/wiki/UDP-Buffer-Sizes for details.
+2026-10-07T20:44:04.385+0200 [INFO]  raft: initial configuration: index=0 servers=[]
+2026-10-07T20:44:04.385+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:53220 [Follower]" leader-address= leader-id=
+2026-10-07T20:44:04.440+0200 [INFO]  raft: updating configuration: command=AddVoter server-id=node-b server-addr=127.0.0.1:53220 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:60049} {Suffrage:Voter ID:node-b Address:127.0.0.1:53220}]"
+2026-10-07T20:44:04.440+0200 [INFO]  raft: added peer, starting replication: peer=node-b
+2026-10-07T20:44:04.443+0200 [WARN]  raft: failed to get previous log: previous-index=4 last-index=0 error="log not found"
+2026-10-07T20:44:04.443+0200 [WARN]  raft: appendEntries rejected, sending older logs: peer="{Voter node-b 127.0.0.1:53220}" next=1
+2026-10-07T20:44:04.443+0200 [INFO]  raft: pipelining replication: peer="{Voter node-b 127.0.0.1:53220}"
+2026/10/07 20:44:04 failed to sufficiently increase receive buffer size (was: 208 kiB, wanted: 7168 kiB, got: 416 kiB). See https://github.com/quic-go/quic-go/wiki/UDP-Buffer-Sizes for details.
+2026-10-07T20:44:04.447+0200 [INFO]  raft: initial configuration: index=0 servers=[]
+2026-10-07T20:44:04.448+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:35172 [Follower]" leader-address= leader-id=
+2026-10-07T20:44:04.507+0200 [INFO]  raft: updating configuration: command=AddVoter server-id=node-c server-addr=127.0.0.1:35172 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:60049} {Suffrage:Voter ID:node-b Address:127.0.0.1:53220} {Suffrage:Voter ID:node-c Address:127.0.0.1:35172}]"
+2026-10-07T20:44:04.507+0200 [INFO]  raft: added peer, starting replication: peer=node-c
+2026-10-07T20:44:04.509+0200 [WARN]  raft: failed to get previous log: previous-index=6 last-index=0 error="log not found"
+2026-10-07T20:44:04.510+0200 [WARN]  raft: appendEntries rejected, sending older logs: peer="{Voter node-c 127.0.0.1:35172}" next=1
+2026-10-07T20:44:04.510+0200 [INFO]  raft: pipelining replication: peer="{Voter node-c 127.0.0.1:35172}"
+2026-10-07T20:44:04.626+0200 [INFO]  raft: aborting pipeline replication: peer="{Voter node-c 127.0.0.1:35172}"
+2026-10-07T20:44:04.626+0200 [INFO]  raft: aborting pipeline replication: peer="{Voter node-b 127.0.0.1:53220}"
+2026/10/07 20:44:05 failed to sufficiently increase receive buffer size (was: 208 kiB, wanted: 7168 kiB, got: 416 kiB). See https://github.com/quic-go/quic-go/wiki/UDP-Buffer-Sizes for details.
+2026-10-07T20:44:05.558+0200 [INFO]  raft: initial configuration: index=1 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:52548}]"
+2026-10-07T20:44:05.558+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:52548 [Follower]" leader-address= leader-id=
+2026-10-07T20:44:07.536+0200 [WARN]  raft: heartbeat timeout reached, starting election: last-leader-addr= last-leader-id=
+2026-10-07T20:44:07.536+0200 [INFO]  raft: entering candidate state: node="Node at 127.0.0.1:52548 [Candidate]" term=2
+2026-10-07T20:44:07.536+0200 [DEBUG] raft: pre-voting for self: term=2 id=node-a
+2026-10-07T20:44:07.536+0200 [DEBUG] raft: calculated votes needed: needed=1 term=2
+2026-10-07T20:44:07.536+0200 [DEBUG] raft: pre-vote received: from=node-a term=2 tally=0
+2026-10-07T20:44:07.536+0200 [DEBUG] raft: pre-vote granted: from=node-a term=2 tally=1
+2026-10-07T20:44:07.536+0200 [INFO]  raft: pre-vote successful, starting election: term=2 tally=1 refused=0 votesNeeded=1
+2026-10-07T20:44:07.536+0200 [DEBUG] raft: voting for self: term=2 id=node-a
+2026-10-07T20:44:07.536+0200 [DEBUG] raft: vote granted: from=node-a term=2 tally=1
+2026-10-07T20:44:07.536+0200 [INFO]  raft: election won: term=2 tally=1
+2026-10-07T20:44:07.536+0200 [INFO]  raft: entering leader state: leader="Node at 127.0.0.1:52548 [Leader]"
+2026/10/07 20:44:07 failed to sufficiently increase receive buffer size (was: 208 kiB, wanted: 7168 kiB, got: 416 kiB). See https://github.com/quic-go/quic-go/wiki/UDP-Buffer-Sizes for details.
+2026-10-07T20:44:07.603+0200 [INFO]  raft: initial configuration: index=0 servers=[]
+2026-10-07T20:44:07.603+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:46670 [Follower]" leader-address= leader-id=
+2026-10-07T20:44:07.665+0200 [INFO]  raft: updating configuration: command=AddVoter server-id=node-b server-addr=127.0.0.1:46670 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:52548} {Suffrage:Voter ID:node-b Address:127.0.0.1:46670}]"
+2026-10-07T20:44:07.665+0200 [INFO]  raft: added peer, starting replication: peer=node-b
+2026-10-07T20:44:07.667+0200 [WARN]  raft: failed to get previous log: previous-index=4 last-index=0 error="log not found"
+2026-10-07T20:44:07.667+0200 [WARN]  raft: appendEntries rejected, sending older logs: peer="{Voter node-b 127.0.0.1:46670}" next=1
+2026-10-07T20:44:07.668+0200 [INFO]  raft: pipelining replication: peer="{Voter node-b 127.0.0.1:46670}"
+2026/10/07 20:44:07 failed to sufficiently increase receive buffer size (was: 208 kiB, wanted: 7168 kiB, got: 416 kiB). See https://github.com/quic-go/quic-go/wiki/UDP-Buffer-Sizes for details.
+2026-10-07T20:44:07.672+0200 [INFO]  raft: initial configuration: index=0 servers=[]
+2026-10-07T20:44:07.672+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:54281 [Follower]" leader-address= leader-id=
+2026-10-07T20:44:07.731+0200 [INFO]  raft: updating configuration: command=AddVoter server-id=node-c server-addr=127.0.0.1:54281 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:52548} {Suffrage:Voter ID:node-b Address:127.0.0.1:46670} {Suffrage:Voter ID:node-c Address:127.0.0.1:54281}]"
+2026-10-07T20:44:07.731+0200 [INFO]  raft: added peer, starting replication: peer=node-c
+2026-10-07T20:44:07.733+0200 [WARN]  raft: failed to get previous log: previous-index=6 last-index=0 error="log not found"
+2026-10-07T20:44:07.733+0200 [WARN]  raft: appendEntries rejected, sending older logs: peer="{Voter node-c 127.0.0.1:54281}" next=1
+2026-10-07T20:44:07.734+0200 [INFO]  raft: pipelining replication: peer="{Voter node-c 127.0.0.1:54281}"
+2026-10-07T20:44:09.032+0200 [INFO]  raft: aborting pipeline replication: peer="{Voter node-c 127.0.0.1:54281}"
+2026-10-07T20:44:09.032+0200 [INFO]  raft: aborting pipeline replication: peer="{Voter node-b 127.0.0.1:46670}"
+2026/10/07 20:44:10 failed to sufficiently increase receive buffer size (was: 208 kiB, wanted: 7168 kiB, got: 416 kiB). See https://github.com/quic-go/quic-go/wiki/UDP-Buffer-Sizes for details.
+2026-10-07T20:44:10.033+0200 [INFO]  raft: initial configuration: index=1 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:50558}]"
+2026-10-07T20:44:10.033+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:50558 [Follower]" leader-address= leader-id=
+2026-10-07T20:44:11.174+0200 [WARN]  raft: heartbeat timeout reached, starting election: last-leader-addr= last-leader-id=
+2026-10-07T20:44:11.174+0200 [INFO]  raft: entering candidate state: node="Node at 127.0.0.1:50558 [Candidate]" term=2
+2026-10-07T20:44:11.174+0200 [DEBUG] raft: pre-voting for self: term=2 id=node-a
+2026-10-07T20:44:11.174+0200 [DEBUG] raft: calculated votes needed: needed=1 term=2
+2026-10-07T20:44:11.174+0200 [DEBUG] raft: pre-vote received: from=node-a term=2 tally=0
+2026-10-07T20:44:11.174+0200 [DEBUG] raft: pre-vote granted: from=node-a term=2 tally=1
+2026-10-07T20:44:11.174+0200 [INFO]  raft: pre-vote successful, starting election: term=2 tally=1 refused=0 votesNeeded=1
+2026-10-07T20:44:11.174+0200 [DEBUG] raft: voting for self: term=2 id=node-a
+2026-10-07T20:44:11.174+0200 [DEBUG] raft: vote granted: from=node-a term=2 tally=1
+2026-10-07T20:44:11.174+0200 [INFO]  raft: election won: term=2 tally=1
+2026-10-07T20:44:11.174+0200 [INFO]  raft: entering leader state: leader="Node at 127.0.0.1:50558 [Leader]"
+2026/10/07 20:44:11 failed to sufficiently increase receive buffer size (was: 208 kiB, wanted: 7168 kiB, got: 416 kiB). See https://github.com/quic-go/quic-go/wiki/UDP-Buffer-Sizes for details.
+2026-10-07T20:44:11.233+0200 [INFO]  raft: initial configuration: index=0 servers=[]
+2026-10-07T20:44:11.233+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:44173 [Follower]" leader-address= leader-id=
+2026-10-07T20:44:11.293+0200 [INFO]  raft: updating configuration: command=AddVoter server-id=node-b server-addr=127.0.0.1:44173 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:50558} {Suffrage:Voter ID:node-b Address:127.0.0.1:44173}]"
+2026-10-07T20:44:11.293+0200 [INFO]  raft: added peer, starting replication: peer=node-b
+2026-10-07T20:44:11.294+0200 [WARN]  raft: failed to get previous log: previous-index=4 last-index=0 error="log not found"
+2026-10-07T20:44:11.295+0200 [WARN]  raft: appendEntries rejected, sending older logs: peer="{Voter node-b 127.0.0.1:44173}" next=1
+2026-10-07T20:44:11.295+0200 [INFO]  raft: pipelining replication: peer="{Voter node-b 127.0.0.1:44173}"
+2026/10/07 20:44:11 failed to sufficiently increase receive buffer size (was: 208 kiB, wanted: 7168 kiB, got: 416 kiB). See https://github.com/quic-go/quic-go/wiki/UDP-Buffer-Sizes for details.
+2026-10-07T20:44:11.299+0200 [INFO]  raft: initial configuration: index=0 servers=[]
+2026-10-07T20:44:11.299+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:58973 [Follower]" leader-address= leader-id=
+2026-10-07T20:44:11.358+0200 [INFO]  raft: updating configuration: command=AddVoter server-id=node-c server-addr=127.0.0.1:58973 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:50558} {Suffrage:Voter ID:node-b Address:127.0.0.1:44173} {Suffrage:Voter ID:node-c Address:127.0.0.1:58973}]"
+2026-10-07T20:44:11.358+0200 [INFO]  raft: added peer, starting replication: peer=node-c
+2026-10-07T20:44:11.361+0200 [WARN]  raft: failed to get previous log: previous-index=6 last-index=0 error="log not found"
+2026-10-07T20:44:11.361+0200 [WARN]  raft: appendEntries rejected, sending older logs: peer="{Voter node-c 127.0.0.1:58973}" next=1
+2026-10-07T20:44:11.361+0200 [INFO]  raft: pipelining replication: peer="{Voter node-c 127.0.0.1:58973}"
+2026-10-07T20:44:13.837+0200 [INFO]  raft: aborting pipeline replication: peer="{Voter node-c 127.0.0.1:58973}"
+2026-10-07T20:44:13.837+0200 [INFO]  raft: aborting pipeline replication: peer="{Voter node-b 127.0.0.1:44173}"
+2026/10/07 20:44:14 failed to sufficiently increase receive buffer size (was: 208 kiB, wanted: 7168 kiB, got: 416 kiB). See https://github.com/quic-go/quic-go/wiki/UDP-Buffer-Sizes for details.
+2026-10-07T20:44:14.775+0200 [INFO]  raft: initial configuration: index=1 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:55300}]"
+2026-10-07T20:44:14.775+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:55300 [Follower]" leader-address= leader-id=
+2026-10-07T20:44:16.108+0200 [WARN]  raft: heartbeat timeout reached, starting election: last-leader-addr= last-leader-id=
+2026-10-07T20:44:16.109+0200 [INFO]  raft: entering candidate state: node="Node at 127.0.0.1:55300 [Candidate]" term=2
+2026-10-07T20:44:16.109+0200 [DEBUG] raft: pre-voting for self: term=2 id=node-a
+2026-10-07T20:44:16.109+0200 [DEBUG] raft: calculated votes needed: needed=1 term=2
+2026-10-07T20:44:16.109+0200 [DEBUG] raft: pre-vote received: from=node-a term=2 tally=0
+2026-10-07T20:44:16.109+0200 [DEBUG] raft: pre-vote granted: from=node-a term=2 tally=1
+2026-10-07T20:44:16.109+0200 [INFO]  raft: pre-vote successful, starting election: term=2 tally=1 refused=0 votesNeeded=1
+2026-10-07T20:44:16.109+0200 [DEBUG] raft: voting for self: term=2 id=node-a
+2026-10-07T20:44:16.109+0200 [DEBUG] raft: vote granted: from=node-a term=2 tally=1
+2026-10-07T20:44:16.109+0200 [INFO]  raft: election won: term=2 tally=1
+2026-10-07T20:44:16.109+0200 [INFO]  raft: entering leader state: leader="Node at 127.0.0.1:55300 [Leader]"
+2026/10/07 20:44:16 failed to sufficiently increase receive buffer size (was: 208 kiB, wanted: 7168 kiB, got: 416 kiB). See https://github.com/quic-go/quic-go/wiki/UDP-Buffer-Sizes for details.
+2026-10-07T20:44:16.175+0200 [INFO]  raft: initial configuration: index=0 servers=[]
+2026-10-07T20:44:16.175+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:49409 [Follower]" leader-address= leader-id=
+2026-10-07T20:44:16.232+0200 [INFO]  raft: updating configuration: command=AddVoter server-id=node-b server-addr=127.0.0.1:49409 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:55300} {Suffrage:Voter ID:node-b Address:127.0.0.1:49409}]"
+2026-10-07T20:44:16.232+0200 [INFO]  raft: added peer, starting replication: peer=node-b
+2026-10-07T20:44:16.234+0200 [WARN]  raft: failed to get previous log: previous-index=4 last-index=0 error="log not found"
+2026-10-07T20:44:16.234+0200 [WARN]  raft: appendEntries rejected, sending older logs: peer="{Voter node-b 127.0.0.1:49409}" next=1
+2026-10-07T20:44:16.235+0200 [INFO]  raft: pipelining replication: peer="{Voter node-b 127.0.0.1:49409}"
+2026/10/07 20:44:16 failed to sufficiently increase receive buffer size (was: 208 kiB, wanted: 7168 kiB, got: 416 kiB). See https://github.com/quic-go/quic-go/wiki/UDP-Buffer-Sizes for details.
+2026-10-07T20:44:16.239+0200 [INFO]  raft: initial configuration: index=0 servers=[]
+2026-10-07T20:44:16.239+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:44361 [Follower]" leader-address= leader-id=
+2026-10-07T20:44:16.295+0200 [INFO]  raft: updating configuration: command=AddVoter server-id=node-c server-addr=127.0.0.1:44361 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:55300} {Suffrage:Voter ID:node-b Address:127.0.0.1:49409} {Suffrage:Voter ID:node-c Address:127.0.0.1:44361}]"
+2026-10-07T20:44:16.295+0200 [INFO]  raft: added peer, starting replication: peer=node-c
+2026-10-07T20:44:16.299+0200 [WARN]  raft: failed to get previous log: previous-index=6 last-index=0 error="log not found"
+2026-10-07T20:44:16.299+0200 [WARN]  raft: appendEntries rejected, sending older logs: peer="{Voter node-c 127.0.0.1:44361}" next=1
+2026-10-07T20:44:16.300+0200 [INFO]  raft: pipelining replication: peer="{Voter node-c 127.0.0.1:44361}"
+2026-10-07T20:44:29.317+0200 [INFO]  raft: aborting pipeline replication: peer="{Voter node-c 127.0.0.1:44361}"
+2026-10-07T20:44:29.317+0200 [INFO]  raft: aborting pipeline replication: peer="{Voter node-b 127.0.0.1:49409}"
+2026/10/07 20:44:30 failed to sufficiently increase receive buffer size (was: 208 kiB, wanted: 7168 kiB, got: 416 kiB). See https://github.com/quic-go/quic-go/wiki/UDP-Buffer-Sizes for details.
+2026-10-07T20:44:30.268+0200 [INFO]  raft: initial configuration: index=1 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:49551}]"
+2026-10-07T20:44:30.268+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:49551 [Follower]" leader-address= leader-id=
+2026-10-07T20:44:31.710+0200 [WARN]  raft: heartbeat timeout reached, starting election: last-leader-addr= last-leader-id=
+2026-10-07T20:44:31.710+0200 [INFO]  raft: entering candidate state: node="Node at 127.0.0.1:49551 [Candidate]" term=2
+2026-10-07T20:44:31.710+0200 [DEBUG] raft: pre-voting for self: term=2 id=node-a
+2026-10-07T20:44:31.710+0200 [DEBUG] raft: calculated votes needed: needed=1 term=2
+2026-10-07T20:44:31.710+0200 [DEBUG] raft: pre-vote received: from=node-a term=2 tally=0
+2026-10-07T20:44:31.710+0200 [DEBUG] raft: pre-vote granted: from=node-a term=2 tally=1
+2026-10-07T20:44:31.710+0200 [INFO]  raft: pre-vote successful, starting election: term=2 tally=1 refused=0 votesNeeded=1
+2026-10-07T20:44:31.710+0200 [DEBUG] raft: voting for self: term=2 id=node-a
+2026-10-07T20:44:31.710+0200 [DEBUG] raft: vote granted: from=node-a term=2 tally=1
+2026-10-07T20:44:31.710+0200 [INFO]  raft: election won: term=2 tally=1
+2026-10-07T20:44:31.710+0200 [INFO]  raft: entering leader state: leader="Node at 127.0.0.1:49551 [Leader]"
+2026/10/07 20:44:31 failed to sufficiently increase receive buffer size (was: 208 kiB, wanted: 7168 kiB, got: 416 kiB). See https://github.com/quic-go/quic-go/wiki/UDP-Buffer-Sizes for details.
+2026-10-07T20:44:31.775+0200 [INFO]  raft: initial configuration: index=0 servers=[]
+2026-10-07T20:44:31.775+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:42743 [Follower]" leader-address= leader-id=
+2026-10-07T20:44:31.833+0200 [INFO]  raft: updating configuration: command=AddVoter server-id=node-b server-addr=127.0.0.1:42743 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:49551} {Suffrage:Voter ID:node-b Address:127.0.0.1:42743}]"
+2026-10-07T20:44:31.833+0200 [INFO]  raft: added peer, starting replication: peer=node-b
+2026-10-07T20:44:31.835+0200 [WARN]  raft: failed to get previous log: previous-index=4 last-index=0 error="log not found"
+2026-10-07T20:44:31.835+0200 [WARN]  raft: appendEntries rejected, sending older logs: peer="{Voter node-b 127.0.0.1:42743}" next=1
+2026-10-07T20:44:31.835+0200 [INFO]  raft: pipelining replication: peer="{Voter node-b 127.0.0.1:42743}"
+2026/10/07 20:44:31 failed to sufficiently increase receive buffer size (was: 208 kiB, wanted: 7168 kiB, got: 416 kiB). See https://github.com/quic-go/quic-go/wiki/UDP-Buffer-Sizes for details.
+2026-10-07T20:44:31.842+0200 [INFO]  raft: initial configuration: index=0 servers=[]
+2026-10-07T20:44:31.842+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:48258 [Follower]" leader-address= leader-id=
+2026-10-07T20:44:31.902+0200 [INFO]  raft: updating configuration: command=AddVoter server-id=node-c server-addr=127.0.0.1:48258 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:49551} {Suffrage:Voter ID:node-b Address:127.0.0.1:42743} {Suffrage:Voter ID:node-c Address:127.0.0.1:48258}]"
+2026-10-07T20:44:31.902+0200 [INFO]  raft: added peer, starting replication: peer=node-c
+2026-10-07T20:44:31.905+0200 [WARN]  raft: failed to get previous log: previous-index=6 last-index=0 error="log not found"
+2026-10-07T20:44:31.905+0200 [WARN]  raft: appendEntries rejected, sending older logs: peer="{Voter node-c 127.0.0.1:48258}" next=1
+2026-10-07T20:44:31.906+0200 [INFO]  raft: pipelining replication: peer="{Voter node-c 127.0.0.1:48258}"
+2026-10-07T20:44:33.015+0200 [INFO]  raft: aborting pipeline replication: peer="{Voter node-c 127.0.0.1:48258}"
+2026-10-07T20:44:33.015+0200 [INFO]  raft: aborting pipeline replication: peer="{Voter node-b 127.0.0.1:42743}"
+2026/10/07 20:44:33 failed to sufficiently increase receive buffer size (was: 208 kiB, wanted: 7168 kiB, got: 416 kiB). See https://github.com/quic-go/quic-go/wiki/UDP-Buffer-Sizes for details.
+2026-10-07T20:44:33.979+0200 [INFO]  raft: initial configuration: index=1 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:46358}]"
+2026-10-07T20:44:33.979+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:46358 [Follower]" leader-address= leader-id=
+2026-10-07T20:44:35.166+0200 [WARN]  raft: heartbeat timeout reached, starting election: last-leader-addr= last-leader-id=
+2026-10-07T20:44:35.166+0200 [INFO]  raft: entering candidate state: node="Node at 127.0.0.1:46358 [Candidate]" term=2
+2026-10-07T20:44:35.166+0200 [DEBUG] raft: pre-voting for self: term=2 id=node-a
+2026-10-07T20:44:35.166+0200 [DEBUG] raft: calculated votes needed: needed=1 term=2
+2026-10-07T20:44:35.166+0200 [DEBUG] raft: pre-vote received: from=node-a term=2 tally=0
+2026-10-07T20:44:35.166+0200 [DEBUG] raft: pre-vote granted: from=node-a term=2 tally=1
+2026-10-07T20:44:35.166+0200 [INFO]  raft: pre-vote successful, starting election: term=2 tally=1 refused=0 votesNeeded=1
+2026-10-07T20:44:35.166+0200 [DEBUG] raft: voting for self: term=2 id=node-a
+2026-10-07T20:44:35.166+0200 [DEBUG] raft: vote granted: from=node-a term=2 tally=1
+2026-10-07T20:44:35.166+0200 [INFO]  raft: election won: term=2 tally=1
+2026-10-07T20:44:35.166+0200 [INFO]  raft: entering leader state: leader="Node at 127.0.0.1:46358 [Leader]"
+2026/10/07 20:44:35 failed to sufficiently increase receive buffer size (was: 208 kiB, wanted: 7168 kiB, got: 416 kiB). See https://github.com/quic-go/quic-go/wiki/UDP-Buffer-Sizes for details.
+2026-10-07T20:44:35.341+0200 [INFO]  raft: initial configuration: index=0 servers=[]
+2026-10-07T20:44:35.341+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:53281 [Follower]" leader-address= leader-id=
+2026-10-07T20:44:35.500+0200 [INFO]  raft: updating configuration: command=AddVoter server-id=node-b server-addr=127.0.0.1:53281 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:46358} {Suffrage:Voter ID:node-b Address:127.0.0.1:53281}]"
+2026-10-07T20:44:35.500+0200 [INFO]  raft: added peer, starting replication: peer=node-b
+2026-10-07T20:44:35.503+0200 [WARN]  raft: failed to get previous log: previous-index=4 last-index=0 error="log not found"
+2026-10-07T20:44:35.503+0200 [WARN]  raft: appendEntries rejected, sending older logs: peer="{Voter node-b 127.0.0.1:53281}" next=1
+2026-10-07T20:44:35.504+0200 [INFO]  raft: pipelining replication: peer="{Voter node-b 127.0.0.1:53281}"
+2026/10/07 20:44:35 failed to sufficiently increase receive buffer size (was: 208 kiB, wanted: 7168 kiB, got: 416 kiB). See https://github.com/quic-go/quic-go/wiki/UDP-Buffer-Sizes for details.
+2026-10-07T20:44:35.509+0200 [INFO]  raft: initial configuration: index=0 servers=[]
+2026-10-07T20:44:35.509+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:59679 [Follower]" leader-address= leader-id=
+2026-10-07T20:44:35.626+0200 [INFO]  raft: updating configuration: command=AddVoter server-id=node-c server-addr=127.0.0.1:59679 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:46358} {Suffrage:Voter ID:node-b Address:127.0.0.1:53281} {Suffrage:Voter ID:node-c Address:127.0.0.1:59679}]"
+2026-10-07T20:44:35.626+0200 [INFO]  raft: added peer, starting replication: peer=node-c
+2026-10-07T20:44:35.629+0200 [WARN]  raft: failed to get previous log: previous-index=6 last-index=0 error="log not found"
+2026-10-07T20:44:35.629+0200 [WARN]  raft: appendEntries rejected, sending older logs: peer="{Voter node-c 127.0.0.1:59679}" next=1
+2026-10-07T20:44:35.630+0200 [INFO]  raft: pipelining replication: peer="{Voter node-c 127.0.0.1:59679}"
+2026-10-07T20:44:41.100+0200 [WARN]  raft: failed to contact: server-id=node-c time=500.189888ms
+2026-10-07T20:44:41.596+0200 [WARN]  raft: failed to contact: server-id=node-c time=996.445308ms
+2026-10-07T20:44:42.046+0200 [WARN]  raft: failed to contact: server-id=node-c time=1.446389515s
+2026-10-07T20:44:42.526+0200 [DEBUG] raft: failed to contact: server-id=node-c time=1.926476758s
+2026-10-07T20:44:42.612+0200 [WARN]  raft: failed to contact: server-id=node-b time=500.068605ms
+2026-10-07T20:44:42.612+0200 [DEBUG] raft: failed to contact: server-id=node-c time=2.012136053s
+2026-10-07T20:44:42.612+0200 [WARN]  raft: failed to contact quorum of nodes, stepping down
+2026-10-07T20:44:42.612+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:46358 [Follower]" leader-address= leader-id=
+2026-10-07T20:44:50.667+0200 [INFO]  raft: aborting pipeline replication: peer="{Voter node-c 127.0.0.1:59679}"
+2026-10-07T20:44:50.767+0200 [ERROR] raft: failed to heartbeat to: peer=127.0.0.1:59679 backoff time=10ms error="msgpack decode error [pos 2970]: deadline exceeded"
+2026-10-07T20:44:52.175+0200 [ERROR] raft: failed to heartbeat to: peer=127.0.0.1:53281 backoff time=10ms error="msgpack decode error [pos 3870]: deadline exceeded"
+2026-10-07T20:44:52.202+0200 [INFO]  raft: aborting pipeline replication: peer="{Voter node-b 127.0.0.1:53281}"
+--- FAIL: TestFailoverState_KVCacheSurvivesPrimaryKill (19.19s)
+    failover_state_test.go:242: primary (current Raft leader) is "node-a"
+    failover_state_test.go:270: POST /v1/replication/append to 127.0.0.1:50053: Post "https://127.0.0.1:50053/v1/replication/append": context deadline exceeded (Client.Timeout exceeded while awaiting headers)
+2026/10/07 20:44:53 failed to sufficiently increase receive buffer size (was: 208 kiB, wanted: 7168 kiB, got: 416 kiB). See https://github.com/quic-go/quic-go/wiki/UDP-Buffer-Sizes for details.
+2026-10-07T20:44:53.140+0200 [INFO]  raft: initial configuration: index=1 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:55905}]"
+2026-10-07T20:44:53.140+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:55905 [Follower]" leader-address= leader-id=
+2026-10-07T20:44:55.120+0200 [WARN]  raft: heartbeat timeout reached, starting election: last-leader-addr= last-leader-id=
+2026-10-07T20:44:55.120+0200 [INFO]  raft: entering candidate state: node="Node at 127.0.0.1:55905 [Candidate]" term=2
+2026-10-07T20:44:55.120+0200 [DEBUG] raft: pre-voting for self: term=2 id=node-a
+2026-10-07T20:44:55.120+0200 [DEBUG] raft: calculated votes needed: needed=1 term=2
+2026-10-07T20:44:55.120+0200 [DEBUG] raft: pre-vote received: from=node-a term=2 tally=0
+2026-10-07T20:44:55.120+0200 [DEBUG] raft: pre-vote granted: from=node-a term=2 tally=1
+2026-10-07T20:44:55.120+0200 [INFO]  raft: pre-vote successful, starting election: term=2 tally=1 refused=0 votesNeeded=1
+2026-10-07T20:44:55.120+0200 [DEBUG] raft: voting for self: term=2 id=node-a
+2026-10-07T20:44:55.120+0200 [DEBUG] raft: vote granted: from=node-a term=2 tally=1
+2026-10-07T20:44:55.120+0200 [INFO]  raft: election won: term=2 tally=1
+2026-10-07T20:44:55.120+0200 [INFO]  raft: entering leader state: leader="Node at 127.0.0.1:55905 [Leader]"
+2026/10/07 20:44:55 failed to sufficiently increase receive buffer size (was: 208 kiB, wanted: 7168 kiB, got: 416 kiB). See https://github.com/quic-go/quic-go/wiki/UDP-Buffer-Sizes for details.
+2026-10-07T20:44:55.215+0200 [INFO]  raft: initial configuration: index=0 servers=[]
+2026-10-07T20:44:55.215+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:36189 [Follower]" leader-address= leader-id=
+2026-10-07T20:44:55.304+0200 [INFO]  raft: updating configuration: command=AddVoter server-id=node-b server-addr=127.0.0.1:36189 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:55905} {Suffrage:Voter ID:node-b Address:127.0.0.1:36189}]"
+2026-10-07T20:44:55.304+0200 [INFO]  raft: added peer, starting replication: peer=node-b
+2026-10-07T20:44:55.307+0200 [WARN]  raft: failed to get previous log: previous-index=4 last-index=0 error="log not found"
+2026-10-07T20:44:55.308+0200 [WARN]  raft: appendEntries rejected, sending older logs: peer="{Voter node-b 127.0.0.1:36189}" next=1
+2026-10-07T20:44:55.308+0200 [INFO]  raft: pipelining replication: peer="{Voter node-b 127.0.0.1:36189}"
+2026/10/07 20:44:55 failed to sufficiently increase receive buffer size (was: 208 kiB, wanted: 7168 kiB, got: 416 kiB). See https://github.com/quic-go/quic-go/wiki/UDP-Buffer-Sizes for details.
+2026-10-07T20:44:55.312+0200 [INFO]  raft: initial configuration: index=0 servers=[]
+2026-10-07T20:44:55.312+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:58443 [Follower]" leader-address= leader-id=
+2026-10-07T20:44:55.402+0200 [INFO]  raft: updating configuration: command=AddVoter server-id=node-c server-addr=127.0.0.1:58443 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:55905} {Suffrage:Voter ID:node-b Address:127.0.0.1:36189} {Suffrage:Voter ID:node-c Address:127.0.0.1:58443}]"
+2026-10-07T20:44:55.402+0200 [INFO]  raft: added peer, starting replication: peer=node-c
+2026-10-07T20:44:55.405+0200 [WARN]  raft: failed to get previous log: previous-index=6 last-index=0 error="log not found"
+2026-10-07T20:44:55.405+0200 [WARN]  raft: appendEntries rejected, sending older logs: peer="{Voter node-c 127.0.0.1:58443}" next=1
+2026-10-07T20:44:55.406+0200 [INFO]  raft: pipelining replication: peer="{Voter node-c 127.0.0.1:58443}"
+2026-10-07T20:45:01.216+0200 [WARN]  raft: heartbeat timeout reached, starting election: last-leader-addr=127.0.0.1:55905 last-leader-id=node-a
+2026-10-07T20:45:01.216+0200 [INFO]  raft: entering candidate state: node="Node at 127.0.0.1:36189 [Candidate]" term=3
+2026-10-07T20:45:01.216+0200 [DEBUG] raft: asking for pre-vote: term=3 from=node-a address=127.0.0.1:55905
+2026-10-07T20:45:01.216+0200 [DEBUG] raft: pre-voting for self: term=3 id=node-b
+2026-10-07T20:45:01.216+0200 [DEBUG] raft: asking for pre-vote: term=3 from=node-c address=127.0.0.1:58443
+2026-10-07T20:45:01.216+0200 [DEBUG] raft: calculated votes needed: needed=2 term=3
+2026-10-07T20:45:01.216+0200 [DEBUG] raft: pre-vote received: from=node-b term=3 tally=0
+2026-10-07T20:45:01.216+0200 [DEBUG] raft: pre-vote granted: from=node-b term=3 tally=1
+2026-10-07T20:45:01.219+0200 [WARN]  raft: rejecting pre-vote request since we have a leader: from=127.0.0.1:36189 leader=127.0.0.1:55905 leader-id=node-a
+2026-10-07T20:45:01.219+0200 [DEBUG] raft: pre-vote received: from=node-c term=2 tally=1
+2026-10-07T20:45:01.219+0200 [DEBUG] raft: pre-vote denied: from=node-c term=2 tally=1
+2026-10-07T20:45:01.633+0200 [WARN]  raft: heartbeat timeout reached, starting election: last-leader-addr=127.0.0.1:55905 last-leader-id=node-a
+2026-10-07T20:45:01.633+0200 [INFO]  raft: entering candidate state: node="Node at 127.0.0.1:58443 [Candidate]" term=3
+2026-10-07T20:45:01.633+0200 [DEBUG] raft: asking for pre-vote: term=3 from=node-a address=127.0.0.1:55905
+2026-10-07T20:45:01.633+0200 [DEBUG] raft: asking for pre-vote: term=3 from=node-b address=127.0.0.1:36189
+2026-10-07T20:45:01.633+0200 [DEBUG] raft: pre-voting for self: term=3 id=node-c
+2026-10-07T20:45:01.633+0200 [DEBUG] raft: calculated votes needed: needed=2 term=3
+2026-10-07T20:45:01.633+0200 [DEBUG] raft: pre-vote received: from=node-c term=3 tally=0
+2026-10-07T20:45:01.633+0200 [DEBUG] raft: pre-vote granted: from=node-c term=3 tally=1
+2026-10-07T20:45:01.635+0200 [DEBUG] raft: received a requestPreVote with a newer term, grant the pre-vote
+2026-10-07T20:45:01.635+0200 [DEBUG] raft: pre-vote received: from=node-b term=3 tally=1
+2026-10-07T20:45:01.635+0200 [DEBUG] raft: pre-vote granted: from=node-b term=3 tally=2
+2026-10-07T20:45:01.635+0200 [INFO]  raft: pre-vote successful, starting election: term=3 tally=2 refused=0 votesNeeded=2
+2026-10-07T20:45:01.635+0200 [DEBUG] raft: asking for vote: term=3 from=node-a address=127.0.0.1:55905
+2026-10-07T20:45:01.635+0200 [DEBUG] raft: asking for vote: term=3 from=node-b address=127.0.0.1:36189
+2026-10-07T20:45:01.635+0200 [DEBUG] raft: voting for self: term=3 id=node-c
+2026-10-07T20:45:01.635+0200 [DEBUG] raft: vote granted: from=node-c term=3 tally=1
+2026-10-07T20:45:01.635+0200 [DEBUG] raft: lost leadership because received a requestVote with a newer term
+2026-10-07T20:45:01.635+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:36189 [Follower]" leader-address= leader-id=
+2026-10-07T20:45:01.635+0200 [DEBUG] raft: vote granted: from=node-b term=3 tally=2
+2026-10-07T20:45:01.635+0200 [INFO]  raft: election won: term=3 tally=2
+2026-10-07T20:45:01.635+0200 [INFO]  raft: entering leader state: leader="Node at 127.0.0.1:58443 [Leader]"
+2026-10-07T20:45:01.635+0200 [INFO]  raft: added peer, starting replication: peer=node-a
+2026-10-07T20:45:01.635+0200 [INFO]  raft: added peer, starting replication: peer=node-b
+2026-10-07T20:45:01.635+0200 [INFO]  raft: pipelining replication: peer="{Voter node-b 127.0.0.1:36189}"
+2026-10-07T20:45:01.676+0200 [INFO]  raft: aborting pipeline replication: peer="{Voter node-b 127.0.0.1:36189}"
+2026-10-07T20:45:06.218+0200 [ERROR] raft: failed to make requestVote RPC: target="{Voter node-a 127.0.0.1:55905}" error="timeout: no recent network activity" term=3
+2026-10-07T20:45:06.634+0200 [ERROR] raft: failed to make requestVote RPC: target="{Voter node-a 127.0.0.1:55905}" error="timeout: no recent network activity" term=3
+2026-10-07T20:45:06.635+0200 [ERROR] raft: failed to appendEntries to: peer="{Voter node-a 127.0.0.1:55905}" error="timeout: no recent network activity"
+2026-10-07T20:45:06.635+0200 [ERROR] raft: failed to make requestVote RPC: target="{Voter node-a 127.0.0.1:55905}" error="timeout: no recent network activity" term=3
+2026-10-07T20:45:06.826+0200 [ERROR] raft: failed to heartbeat to: peer=127.0.0.1:55905 backoff time=10ms error="timeout: no recent network activity"
+2026/10/07 20:45:07 failed to sufficiently increase receive buffer size (was: 208 kiB, wanted: 7168 kiB, got: 416 kiB). See https://github.com/quic-go/quic-go/wiki/UDP-Buffer-Sizes for details.
+2026-10-07T20:45:07.742+0200 [INFO]  raft: initial configuration: index=1 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:55106}]"
+2026-10-07T20:45:07.742+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:55106 [Follower]" leader-address= leader-id=
+2026-10-07T20:45:09.739+0200 [WARN]  raft: heartbeat timeout reached, starting election: last-leader-addr= last-leader-id=
+2026-10-07T20:45:09.739+0200 [INFO]  raft: entering candidate state: node="Node at 127.0.0.1:55106 [Candidate]" term=2
+2026-10-07T20:45:09.739+0200 [DEBUG] raft: pre-voting for self: term=2 id=node-a
+2026-10-07T20:45:09.739+0200 [DEBUG] raft: calculated votes needed: needed=1 term=2
+2026-10-07T20:45:09.739+0200 [DEBUG] raft: pre-vote received: from=node-a term=2 tally=0
+2026-10-07T20:45:09.739+0200 [DEBUG] raft: pre-vote granted: from=node-a term=2 tally=1
+2026-10-07T20:45:09.739+0200 [INFO]  raft: pre-vote successful, starting election: term=2 tally=1 refused=0 votesNeeded=1
+2026-10-07T20:45:09.739+0200 [DEBUG] raft: voting for self: term=2 id=node-a
+2026-10-07T20:45:09.739+0200 [DEBUG] raft: vote granted: from=node-a term=2 tally=1
+2026-10-07T20:45:09.739+0200 [INFO]  raft: election won: term=2 tally=1
+2026-10-07T20:45:09.739+0200 [INFO]  raft: entering leader state: leader="Node at 127.0.0.1:55106 [Leader]"
+2026/10/07 20:45:09 failed to sufficiently increase receive buffer size (was: 208 kiB, wanted: 7168 kiB, got: 416 kiB). See https://github.com/quic-go/quic-go/wiki/UDP-Buffer-Sizes for details.
+2026-10-07T20:45:09.839+0200 [INFO]  raft: initial configuration: index=0 servers=[]
+2026-10-07T20:45:09.839+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:43490 [Follower]" leader-address= leader-id=
+2026-10-07T20:45:09.933+0200 [INFO]  raft: updating configuration: command=AddVoter server-id=node-b server-addr=127.0.0.1:43490 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:55106} {Suffrage:Voter ID:node-b Address:127.0.0.1:43490}]"
+2026-10-07T20:45:09.933+0200 [INFO]  raft: added peer, starting replication: peer=node-b
+2026-10-07T20:45:09.935+0200 [WARN]  raft: failed to get previous log: previous-index=4 last-index=0 error="log not found"
+2026-10-07T20:45:09.935+0200 [WARN]  raft: appendEntries rejected, sending older logs: peer="{Voter node-b 127.0.0.1:43490}" next=1
+2026-10-07T20:45:09.936+0200 [INFO]  raft: pipelining replication: peer="{Voter node-b 127.0.0.1:43490}"
+2026/10/07 20:45:09 failed to sufficiently increase receive buffer size (was: 208 kiB, wanted: 7168 kiB, got: 416 kiB). See https://github.com/quic-go/quic-go/wiki/UDP-Buffer-Sizes for details.
+2026-10-07T20:45:09.940+0200 [INFO]  raft: initial configuration: index=0 servers=[]
+2026-10-07T20:45:09.940+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:56715 [Follower]" leader-address= leader-id=
+2026-10-07T20:45:10.027+0200 [INFO]  raft: updating configuration: command=AddVoter server-id=node-c server-addr=127.0.0.1:56715 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:55106} {Suffrage:Voter ID:node-b Address:127.0.0.1:43490} {Suffrage:Voter ID:node-c Address:127.0.0.1:56715}]"
+2026-10-07T20:45:10.027+0200 [INFO]  raft: added peer, starting replication: peer=node-c
+2026-10-07T20:45:10.029+0200 [WARN]  raft: failed to get previous log: previous-index=6 last-index=0 error="log not found"
+2026-10-07T20:45:10.029+0200 [WARN]  raft: appendEntries rejected, sending older logs: peer="{Voter node-c 127.0.0.1:56715}" next=1
+2026-10-07T20:45:10.030+0200 [INFO]  raft: pipelining replication: peer="{Voter node-c 127.0.0.1:56715}"
+2026-10-07T20:45:12.291+0200 [WARN]  raft: heartbeat timeout reached, starting election: last-leader-addr=127.0.0.1:55106 last-leader-id=node-a
+2026-10-07T20:45:12.291+0200 [INFO]  raft: entering candidate state: node="Node at 127.0.0.1:43490 [Candidate]" term=3
+2026-10-07T20:45:12.291+0200 [DEBUG] raft: asking for pre-vote: term=3 from=node-a address=127.0.0.1:55106
+2026-10-07T20:45:12.291+0200 [DEBUG] raft: pre-voting for self: term=3 id=node-b
+2026-10-07T20:45:12.291+0200 [DEBUG] raft: asking for pre-vote: term=3 from=node-c address=127.0.0.1:56715
+2026-10-07T20:45:12.291+0200 [DEBUG] raft: calculated votes needed: needed=2 term=3
+2026-10-07T20:45:12.291+0200 [DEBUG] raft: pre-vote received: from=node-b term=3 tally=0
+2026-10-07T20:45:12.291+0200 [DEBUG] raft: pre-vote granted: from=node-b term=3 tally=1
+2026-10-07T20:45:12.293+0200 [WARN]  raft: rejecting pre-vote request since we have a leader: from=127.0.0.1:43490 leader=127.0.0.1:55106 leader-id=node-a
+2026-10-07T20:45:12.293+0200 [DEBUG] raft: pre-vote received: from=node-c term=2 tally=1
+2026-10-07T20:45:12.293+0200 [DEBUG] raft: pre-vote denied: from=node-c term=2 tally=1
+2026-10-07T20:45:13.318+0200 [WARN]  raft: heartbeat timeout reached, starting election: last-leader-addr=127.0.0.1:55106 last-leader-id=node-a
+2026-10-07T20:45:13.318+0200 [INFO]  raft: entering candidate state: node="Node at 127.0.0.1:56715 [Candidate]" term=3
+2026-10-07T20:45:13.318+0200 [DEBUG] raft: asking for pre-vote: term=3 from=node-a address=127.0.0.1:55106
+2026-10-07T20:45:13.318+0200 [DEBUG] raft: asking for pre-vote: term=3 from=node-b address=127.0.0.1:43490
+2026-10-07T20:45:13.318+0200 [DEBUG] raft: pre-voting for self: term=3 id=node-c
+2026-10-07T20:45:13.318+0200 [DEBUG] raft: calculated votes needed: needed=2 term=3
+2026-10-07T20:45:13.318+0200 [DEBUG] raft: pre-vote received: from=node-c term=3 tally=0
+2026-10-07T20:45:13.318+0200 [DEBUG] raft: pre-vote granted: from=node-c term=3 tally=1
+2026-10-07T20:45:13.321+0200 [DEBUG] raft: received a requestPreVote with a newer term, grant the pre-vote
+2026-10-07T20:45:13.321+0200 [DEBUG] raft: pre-vote received: from=node-b term=3 tally=1
+2026-10-07T20:45:13.321+0200 [DEBUG] raft: pre-vote granted: from=node-b term=3 tally=2
+2026-10-07T20:45:13.321+0200 [INFO]  raft: pre-vote successful, starting election: term=3 tally=2 refused=0 votesNeeded=2
+2026-10-07T20:45:13.321+0200 [DEBUG] raft: asking for vote: term=3 from=node-a address=127.0.0.1:55106
+2026-10-07T20:45:13.321+0200 [DEBUG] raft: asking for vote: term=3 from=node-b address=127.0.0.1:43490
+2026-10-07T20:45:13.321+0200 [DEBUG] raft: voting for self: term=3 id=node-c
+2026-10-07T20:45:13.321+0200 [DEBUG] raft: vote granted: from=node-c term=3 tally=1
+2026-10-07T20:45:13.321+0200 [DEBUG] raft: lost leadership because received a requestVote with a newer term
+2026-10-07T20:45:13.321+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:43490 [Follower]" leader-address= leader-id=
+2026-10-07T20:45:13.321+0200 [DEBUG] raft: vote granted: from=node-b term=3 tally=2
+2026-10-07T20:45:13.321+0200 [INFO]  raft: election won: term=3 tally=2
+2026-10-07T20:45:13.321+0200 [INFO]  raft: entering leader state: leader="Node at 127.0.0.1:56715 [Leader]"
+2026-10-07T20:45:13.321+0200 [INFO]  raft: added peer, starting replication: peer=node-a
+2026-10-07T20:45:13.321+0200 [INFO]  raft: added peer, starting replication: peer=node-b
+2026-10-07T20:45:13.321+0200 [INFO]  raft: pipelining replication: peer="{Voter node-b 127.0.0.1:43490}"
+2026-10-07T20:45:13.340+0200 [INFO]  raft: aborting pipeline replication: peer="{Voter node-b 127.0.0.1:43490}"
+2026-10-07T20:45:17.293+0200 [ERROR] raft: failed to make requestVote RPC: target="{Voter node-a 127.0.0.1:55106}" error="timeout: no recent network activity" term=3
+2026-10-07T20:45:18.320+0200 [ERROR] raft: failed to make requestVote RPC: target="{Voter node-a 127.0.0.1:55106}" error="timeout: no recent network activity" term=3
+2026-10-07T20:45:18.322+0200 [ERROR] raft: failed to make requestVote RPC: target="{Voter node-a 127.0.0.1:55106}" error="timeout: no recent network activity" term=3
+2026-10-07T20:45:18.322+0200 [ERROR] raft: failed to appendEntries to: peer="{Voter node-a 127.0.0.1:55106}" error="timeout: no recent network activity"
+2026-10-07T20:45:18.451+0200 [ERROR] raft: failed to heartbeat to: peer=127.0.0.1:55106 backoff time=10ms error="timeout: no recent network activity"
+2026/10/07 20:45:19 failed to sufficiently increase receive buffer size (was: 208 kiB, wanted: 7168 kiB, got: 416 kiB). See https://github.com/quic-go/quic-go/wiki/UDP-Buffer-Sizes for details.
+2026-10-07T20:45:19.337+0200 [INFO]  raft: initial configuration: index=1 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:55258}]"
+2026-10-07T20:45:19.337+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:55258 [Follower]" leader-address= leader-id=
+2026-10-07T20:45:20.445+0200 [WARN]  raft: heartbeat timeout reached, starting election: last-leader-addr= last-leader-id=
+2026-10-07T20:45:20.445+0200 [INFO]  raft: entering candidate state: node="Node at 127.0.0.1:55258 [Candidate]" term=2
+2026-10-07T20:45:20.445+0200 [DEBUG] raft: pre-voting for self: term=2 id=node-a
+2026-10-07T20:45:20.445+0200 [DEBUG] raft: calculated votes needed: needed=1 term=2
+2026-10-07T20:45:20.445+0200 [DEBUG] raft: pre-vote received: from=node-a term=2 tally=0
+2026-10-07T20:45:20.445+0200 [DEBUG] raft: pre-vote granted: from=node-a term=2 tally=1
+2026-10-07T20:45:20.445+0200 [INFO]  raft: pre-vote successful, starting election: term=2 tally=1 refused=0 votesNeeded=1
+2026-10-07T20:45:20.445+0200 [DEBUG] raft: voting for self: term=2 id=node-a
+2026-10-07T20:45:20.445+0200 [DEBUG] raft: vote granted: from=node-a term=2 tally=1
+2026-10-07T20:45:20.445+0200 [INFO]  raft: election won: term=2 tally=1
+2026-10-07T20:45:20.445+0200 [INFO]  raft: entering leader state: leader="Node at 127.0.0.1:55258 [Leader]"
+2026/10/07 20:45:20 failed to sufficiently increase receive buffer size (was: 208 kiB, wanted: 7168 kiB, got: 416 kiB). See https://github.com/quic-go/quic-go/wiki/UDP-Buffer-Sizes for details.
+2026-10-07T20:45:20.542+0200 [INFO]  raft: initial configuration: index=0 servers=[]
+2026-10-07T20:45:20.542+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:47358 [Follower]" leader-address= leader-id=
+2026-10-07T20:45:20.632+0200 [INFO]  raft: updating configuration: command=AddVoter server-id=node-b server-addr=127.0.0.1:47358 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:55258} {Suffrage:Voter ID:node-b Address:127.0.0.1:47358}]"
+2026-10-07T20:45:20.632+0200 [INFO]  raft: added peer, starting replication: peer=node-b
+2026-10-07T20:45:20.634+0200 [WARN]  raft: failed to get previous log: previous-index=4 last-index=0 error="log not found"
+2026-10-07T20:45:20.634+0200 [WARN]  raft: appendEntries rejected, sending older logs: peer="{Voter node-b 127.0.0.1:47358}" next=1
+2026-10-07T20:45:20.635+0200 [INFO]  raft: pipelining replication: peer="{Voter node-b 127.0.0.1:47358}"
+2026/10/07 20:45:20 failed to sufficiently increase receive buffer size (was: 208 kiB, wanted: 7168 kiB, got: 416 kiB). See https://github.com/quic-go/quic-go/wiki/UDP-Buffer-Sizes for details.
+2026-10-07T20:45:20.639+0200 [INFO]  raft: initial configuration: index=0 servers=[]
+2026-10-07T20:45:20.639+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:41087 [Follower]" leader-address= leader-id=
+2026-10-07T20:45:20.726+0200 [INFO]  raft: updating configuration: command=AddVoter server-id=node-c server-addr=127.0.0.1:41087 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:55258} {Suffrage:Voter ID:node-b Address:127.0.0.1:47358} {Suffrage:Voter ID:node-c Address:127.0.0.1:41087}]"
+2026-10-07T20:45:20.726+0200 [INFO]  raft: added peer, starting replication: peer=node-c
+2026-10-07T20:45:20.728+0200 [WARN]  raft: failed to get previous log: previous-index=6 last-index=0 error="log not found"
+2026-10-07T20:45:20.728+0200 [WARN]  raft: appendEntries rejected, sending older logs: peer="{Voter node-c 127.0.0.1:41087}" next=1
+2026-10-07T20:45:20.728+0200 [INFO]  raft: pipelining replication: peer="{Voter node-c 127.0.0.1:41087}"
+2026-10-07T20:45:23.366+0200 [WARN]  raft: heartbeat timeout reached, starting election: last-leader-addr=127.0.0.1:55258 last-leader-id=node-a
+2026-10-07T20:45:23.366+0200 [INFO]  raft: entering candidate state: node="Node at 127.0.0.1:47358 [Candidate]" term=3
+2026-10-07T20:45:23.366+0200 [DEBUG] raft: asking for pre-vote: term=3 from=node-a address=127.0.0.1:55258
+2026-10-07T20:45:23.367+0200 [DEBUG] raft: pre-voting for self: term=3 id=node-b
+2026-10-07T20:45:23.367+0200 [DEBUG] raft: asking for pre-vote: term=3 from=node-c address=127.0.0.1:41087
+2026-10-07T20:45:23.367+0200 [DEBUG] raft: calculated votes needed: needed=2 term=3
+2026-10-07T20:45:23.367+0200 [DEBUG] raft: pre-vote received: from=node-b term=3 tally=0
+2026-10-07T20:45:23.367+0200 [DEBUG] raft: pre-vote granted: from=node-b term=3 tally=1
+2026-10-07T20:45:23.369+0200 [WARN]  raft: rejecting pre-vote request since we have a leader: from=127.0.0.1:47358 leader=127.0.0.1:55258 leader-id=node-a
+2026-10-07T20:45:23.369+0200 [DEBUG] raft: pre-vote received: from=node-c term=2 tally=1
+2026-10-07T20:45:23.369+0200 [DEBUG] raft: pre-vote denied: from=node-c term=2 tally=1
+2026-10-07T20:45:24.316+0200 [WARN]  raft: heartbeat timeout reached, starting election: last-leader-addr=127.0.0.1:55258 last-leader-id=node-a
+2026-10-07T20:45:24.316+0200 [INFO]  raft: entering candidate state: node="Node at 127.0.0.1:41087 [Candidate]" term=3
+2026-10-07T20:45:24.316+0200 [DEBUG] raft: asking for pre-vote: term=3 from=node-a address=127.0.0.1:55258
+2026-10-07T20:45:24.316+0200 [DEBUG] raft: asking for pre-vote: term=3 from=node-b address=127.0.0.1:47358
+2026-10-07T20:45:24.316+0200 [DEBUG] raft: pre-voting for self: term=3 id=node-c
+2026-10-07T20:45:24.316+0200 [DEBUG] raft: calculated votes needed: needed=2 term=3
+2026-10-07T20:45:24.316+0200 [DEBUG] raft: pre-vote received: from=node-c term=3 tally=0
+2026-10-07T20:45:24.316+0200 [DEBUG] raft: pre-vote granted: from=node-c term=3 tally=1
+2026-10-07T20:45:24.318+0200 [DEBUG] raft: received a requestPreVote with a newer term, grant the pre-vote
+2026-10-07T20:45:24.318+0200 [DEBUG] raft: pre-vote received: from=node-b term=3 tally=1
+2026-10-07T20:45:24.318+0200 [DEBUG] raft: pre-vote granted: from=node-b term=3 tally=2
+2026-10-07T20:45:24.318+0200 [INFO]  raft: pre-vote successful, starting election: term=3 tally=2 refused=0 votesNeeded=2
+2026-10-07T20:45:24.318+0200 [DEBUG] raft: asking for vote: term=3 from=node-a address=127.0.0.1:55258
+2026-10-07T20:45:24.318+0200 [DEBUG] raft: asking for vote: term=3 from=node-b address=127.0.0.1:47358
+2026-10-07T20:45:24.318+0200 [DEBUG] raft: voting for self: term=3 id=node-c
+2026-10-07T20:45:24.318+0200 [DEBUG] raft: vote granted: from=node-c term=3 tally=1
+2026-10-07T20:45:24.318+0200 [DEBUG] raft: lost leadership because received a requestVote with a newer term
+2026-10-07T20:45:24.318+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:47358 [Follower]" leader-address= leader-id=
+2026-10-07T20:45:24.318+0200 [DEBUG] raft: vote granted: from=node-b term=3 tally=2
+2026-10-07T20:45:24.318+0200 [INFO]  raft: election won: term=3 tally=2
+2026-10-07T20:45:24.318+0200 [INFO]  raft: entering leader state: leader="Node at 127.0.0.1:41087 [Leader]"
+2026-10-07T20:45:24.318+0200 [INFO]  raft: added peer, starting replication: peer=node-a
+2026-10-07T20:45:24.318+0200 [INFO]  raft: added peer, starting replication: peer=node-b
+2026-10-07T20:45:24.321+0200 [INFO]  raft: pipelining replication: peer="{Voter node-b 127.0.0.1:47358}"
+2026-10-07T20:45:24.819+0200 [WARN]  raft: failed to contact: server-id=node-a time=501.00159ms
+2026-10-07T20:45:25.308+0200 [WARN]  raft: failed to contact: server-id=node-a time=990.514995ms
+2026-10-07T20:45:25.807+0200 [WARN]  raft: failed to contact: server-id=node-a time=1.489337394s
+2026-10-07T20:45:26.299+0200 [DEBUG] raft: failed to contact: server-id=node-a time=1.981061999s
+2026-10-07T20:45:26.754+0200 [DEBUG] raft: failed to contact: server-id=node-a time=2.436319361s
+2026-10-07T20:45:27.224+0200 [DEBUG] raft: failed to contact: server-id=node-a time=2.9061821s
+2026-10-07T20:45:27.708+0200 [DEBUG] raft: failed to contact: server-id=node-a time=3.389580733s
+2026-10-07T20:45:28.177+0200 [DEBUG] raft: failed to contact: server-id=node-a time=3.858916217s
+2026-10-07T20:45:28.368+0200 [ERROR] raft: failed to make requestVote RPC: target="{Voter node-a 127.0.0.1:55258}" error="timeout: no recent network activity" term=3
+2026-10-07T20:45:28.652+0200 [DEBUG] raft: failed to contact: server-id=node-a time=4.334532354s
+2026-10-07T20:45:29.128+0200 [DEBUG] raft: failed to contact: server-id=node-a time=4.809686275s
+2026-10-07T20:45:29.316+0200 [ERROR] raft: failed to make requestVote RPC: target="{Voter node-a 127.0.0.1:55258}" error="timeout: no recent network activity" term=3
+2026-10-07T20:45:29.319+0200 [ERROR] raft: failed to appendEntries to: peer="{Voter node-a 127.0.0.1:55258}" error="timeout: no recent network activity"
+2026-10-07T20:45:29.319+0200 [ERROR] raft: failed to make requestVote RPC: target="{Voter node-a 127.0.0.1:55258}" error="timeout: no recent network activity" term=3
+2026-10-07T20:45:29.447+0200 [ERROR] raft: failed to heartbeat to: peer=127.0.0.1:55258 backoff time=10ms error="timeout: no recent network activity"
+2026-10-07T20:45:29.609+0200 [DEBUG] raft: failed to contact: server-id=node-a time=5.291360823s
+2026-10-07T20:45:30.085+0200 [DEBUG] raft: failed to contact: server-id=node-a time=5.767184475s
+2026-10-07T20:45:30.515+0200 [DEBUG] raft: failed to contact: server-id=node-a time=6.197413123s
+2026-10-07T20:45:30.938+0200 [DEBUG] raft: failed to contact: server-id=node-a time=6.620181376s
+2026-10-07T20:45:31.400+0200 [DEBUG] raft: failed to contact: server-id=node-a time=7.082259433s
+2026-10-07T20:45:31.886+0200 [DEBUG] raft: failed to contact: server-id=node-a time=7.568433377s
+2026-10-07T20:45:32.345+0200 [DEBUG] raft: failed to contact: server-id=node-a time=8.027527354s
+2026-10-07T20:45:32.839+0200 [DEBUG] raft: failed to contact: server-id=node-a time=8.520692825s
+2026-10-07T20:45:33.149+0200 [INFO]  raft: aborting pipeline replication: peer="{Voter node-b 127.0.0.1:47358}"
+2026-10-07T20:45:34.425+0200 [ERROR] raft: failed to appendEntries to: peer="{Voter node-a 127.0.0.1:55258}" error="timeout: no recent network activity"
+2026-10-07T20:45:34.578+0200 [ERROR] raft: failed to heartbeat to: peer=127.0.0.1:55258 backoff time=10ms error="timeout: no recent network activity"
+2026-10-07T20:45:39.427+0200 [ERROR] raft: failed to appendEntries to: peer="{Voter node-a 127.0.0.1:55258}" error="timeout: no recent network activity"
+2026-10-07T20:45:39.733+0200 [ERROR] raft: failed to heartbeat to: peer=127.0.0.1:55258 backoff time=10ms error="timeout: no recent network activity"
+2026/10/07 20:45:40 failed to sufficiently increase receive buffer size (was: 208 kiB, wanted: 7168 kiB, got: 416 kiB). See https://github.com/quic-go/quic-go/wiki/UDP-Buffer-Sizes for details.
+2026-10-07T20:45:40.613+0200 [INFO]  raft: initial configuration: index=1 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:54746}]"
+2026-10-07T20:45:40.613+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:54746 [Follower]" leader-address= leader-id=
+2026-10-07T20:45:42.238+0200 [WARN]  raft: heartbeat timeout reached, starting election: last-leader-addr= last-leader-id=
+2026-10-07T20:45:42.238+0200 [INFO]  raft: entering candidate state: node="Node at 127.0.0.1:54746 [Candidate]" term=2
+2026-10-07T20:45:42.238+0200 [DEBUG] raft: pre-voting for self: term=2 id=node-a
+2026-10-07T20:45:42.238+0200 [DEBUG] raft: calculated votes needed: needed=1 term=2
+2026-10-07T20:45:42.238+0200 [DEBUG] raft: pre-vote received: from=node-a term=2 tally=0
+2026-10-07T20:45:42.238+0200 [DEBUG] raft: pre-vote granted: from=node-a term=2 tally=1
+2026-10-07T20:45:42.238+0200 [INFO]  raft: pre-vote successful, starting election: term=2 tally=1 refused=0 votesNeeded=1
+2026-10-07T20:45:42.238+0200 [DEBUG] raft: voting for self: term=2 id=node-a
+2026-10-07T20:45:42.238+0200 [DEBUG] raft: vote granted: from=node-a term=2 tally=1
+2026-10-07T20:45:42.238+0200 [INFO]  raft: election won: term=2 tally=1
+2026-10-07T20:45:42.238+0200 [INFO]  raft: entering leader state: leader="Node at 127.0.0.1:54746 [Leader]"
+2026/10/07 20:45:42 failed to sufficiently increase receive buffer size (was: 208 kiB, wanted: 7168 kiB, got: 416 kiB). See https://github.com/quic-go/quic-go/wiki/UDP-Buffer-Sizes for details.
+2026-10-07T20:45:42.351+0200 [INFO]  raft: initial configuration: index=0 servers=[]
+2026-10-07T20:45:42.351+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:38782 [Follower]" leader-address= leader-id=
+2026-10-07T20:45:42.439+0200 [INFO]  raft: updating configuration: command=AddVoter server-id=node-b server-addr=127.0.0.1:38782 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:54746} {Suffrage:Voter ID:node-b Address:127.0.0.1:38782}]"
+2026-10-07T20:45:42.439+0200 [INFO]  raft: added peer, starting replication: peer=node-b
+2026-10-07T20:45:42.441+0200 [WARN]  raft: failed to get previous log: previous-index=4 last-index=0 error="log not found"
+2026-10-07T20:45:42.441+0200 [WARN]  raft: appendEntries rejected, sending older logs: peer="{Voter node-b 127.0.0.1:38782}" next=1
+2026-10-07T20:45:42.442+0200 [INFO]  raft: pipelining replication: peer="{Voter node-b 127.0.0.1:38782}"
+2026/10/07 20:45:42 failed to sufficiently increase receive buffer size (was: 208 kiB, wanted: 7168 kiB, got: 416 kiB). See https://github.com/quic-go/quic-go/wiki/UDP-Buffer-Sizes for details.
+2026-10-07T20:45:42.447+0200 [INFO]  raft: initial configuration: index=0 servers=[]
+2026-10-07T20:45:42.447+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:35714 [Follower]" leader-address= leader-id=
+2026-10-07T20:45:42.542+0200 [INFO]  raft: updating configuration: command=AddVoter server-id=node-c server-addr=127.0.0.1:35714 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:54746} {Suffrage:Voter ID:node-b Address:127.0.0.1:38782} {Suffrage:Voter ID:node-c Address:127.0.0.1:35714}]"
+2026-10-07T20:45:42.542+0200 [INFO]  raft: added peer, starting replication: peer=node-c
+2026-10-07T20:45:42.544+0200 [WARN]  raft: failed to get previous log: previous-index=6 last-index=0 error="log not found"
+2026-10-07T20:45:42.544+0200 [WARN]  raft: appendEntries rejected, sending older logs: peer="{Voter node-c 127.0.0.1:35714}" next=1
+2026-10-07T20:45:42.545+0200 [INFO]  raft: pipelining replication: peer="{Voter node-c 127.0.0.1:35714}"
+2026-10-07T20:45:42.693+0200 [INFO]  raft: aborting pipeline replication: peer="{Voter node-b 127.0.0.1:38782}"
+2026-10-07T20:45:42.693+0200 [INFO]  raft: aborting pipeline replication: peer="{Voter node-c 127.0.0.1:35714}"
+2026/10/07 20:45:43 failed to sufficiently increase receive buffer size (was: 208 kiB, wanted: 7168 kiB, got: 416 kiB). See https://github.com/quic-go/quic-go/wiki/UDP-Buffer-Sizes for details.
+2026-10-07T20:45:43.597+0200 [INFO]  raft: initial configuration: index=1 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:43462}]"
+2026-10-07T20:45:43.597+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:43462 [Follower]" leader-address= leader-id=
+2026-10-07T20:45:45.060+0200 [WARN]  raft: heartbeat timeout reached, starting election: last-leader-addr= last-leader-id=
+2026-10-07T20:45:45.060+0200 [INFO]  raft: entering candidate state: node="Node at 127.0.0.1:43462 [Candidate]" term=2
+2026-10-07T20:45:45.060+0200 [DEBUG] raft: pre-voting for self: term=2 id=node-a
+2026-10-07T20:45:45.060+0200 [DEBUG] raft: calculated votes needed: needed=1 term=2
+2026-10-07T20:45:45.060+0200 [DEBUG] raft: pre-vote received: from=node-a term=2 tally=0
+2026-10-07T20:45:45.060+0200 [DEBUG] raft: pre-vote granted: from=node-a term=2 tally=1
+2026-10-07T20:45:45.060+0200 [INFO]  raft: pre-vote successful, starting election: term=2 tally=1 refused=0 votesNeeded=1
+2026-10-07T20:45:45.060+0200 [DEBUG] raft: voting for self: term=2 id=node-a
+2026-10-07T20:45:45.060+0200 [DEBUG] raft: vote granted: from=node-a term=2 tally=1
+2026-10-07T20:45:45.060+0200 [INFO]  raft: election won: term=2 tally=1
+2026-10-07T20:45:45.060+0200 [INFO]  raft: entering leader state: leader="Node at 127.0.0.1:43462 [Leader]"
+2026/10/07 20:45:46 failed to sufficiently increase receive buffer size (was: 208 kiB, wanted: 7168 kiB, got: 416 kiB). See https://github.com/quic-go/quic-go/wiki/UDP-Buffer-Sizes for details.
+2026-10-07T20:45:46.073+0200 [INFO]  raft: initial configuration: index=1 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:52913}]"
+2026-10-07T20:45:46.074+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:52913 [Follower]" leader-address= leader-id=
+2026-10-07T20:45:47.995+0200 [WARN]  raft: heartbeat timeout reached, starting election: last-leader-addr= last-leader-id=
+2026-10-07T20:45:47.995+0200 [INFO]  raft: entering candidate state: node="Node at 127.0.0.1:52913 [Candidate]" term=2
+2026-10-07T20:45:47.995+0200 [DEBUG] raft: pre-voting for self: term=2 id=node-a
+2026-10-07T20:45:47.995+0200 [DEBUG] raft: calculated votes needed: needed=1 term=2
+2026-10-07T20:45:47.995+0200 [DEBUG] raft: pre-vote received: from=node-a term=2 tally=0
+2026-10-07T20:45:47.995+0200 [DEBUG] raft: pre-vote granted: from=node-a term=2 tally=1
+2026-10-07T20:45:47.995+0200 [INFO]  raft: pre-vote successful, starting election: term=2 tally=1 refused=0 votesNeeded=1
+2026-10-07T20:45:47.995+0200 [DEBUG] raft: voting for self: term=2 id=node-a
+2026-10-07T20:45:47.995+0200 [DEBUG] raft: vote granted: from=node-a term=2 tally=1
+2026-10-07T20:45:47.995+0200 [INFO]  raft: election won: term=2 tally=1
+2026-10-07T20:45:47.995+0200 [INFO]  raft: entering leader state: leader="Node at 127.0.0.1:52913 [Leader]"
+2026/10/07 20:45:48 failed to sufficiently increase receive buffer size (was: 208 kiB, wanted: 7168 kiB, got: 416 kiB). See https://github.com/quic-go/quic-go/wiki/UDP-Buffer-Sizes for details.
+2026-10-07T20:45:48.097+0200 [INFO]  raft: initial configuration: index=0 servers=[]
+2026-10-07T20:45:48.097+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:36872 [Follower]" leader-address= leader-id=
+2026-10-07T20:45:48.185+0200 [INFO]  raft: updating configuration: command=AddVoter server-id=node-b server-addr=127.0.0.1:36872 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:52913} {Suffrage:Voter ID:node-b Address:127.0.0.1:36872}]"
+2026-10-07T20:45:48.185+0200 [INFO]  raft: added peer, starting replication: peer=node-b
+2026-10-07T20:45:48.186+0200 [WARN]  raft: failed to get previous log: previous-index=5 last-index=0 error="log not found"
+2026-10-07T20:45:48.187+0200 [WARN]  raft: appendEntries rejected, sending older logs: peer="{Voter node-b 127.0.0.1:36872}" next=1
+2026-10-07T20:45:48.187+0200 [INFO]  raft: pipelining replication: peer="{Voter node-b 127.0.0.1:36872}"
+2026-10-07T20:45:48.197+0200 [INFO]  raft: aborting pipeline replication: peer="{Voter node-b 127.0.0.1:36872}"
+2026/10/07 20:45:49 failed to sufficiently increase receive buffer size (was: 208 kiB, wanted: 7168 kiB, got: 416 kiB). See https://github.com/quic-go/quic-go/wiki/UDP-Buffer-Sizes for details.
+2026-10-07T20:45:49.109+0200 [INFO]  raft: initial configuration: index=1 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:55899}]"
+2026-10-07T20:45:49.109+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:55899 [Follower]" leader-address= leader-id=
+2026-10-07T20:45:50.706+0200 [WARN]  raft: heartbeat timeout reached, starting election: last-leader-addr= last-leader-id=
+2026-10-07T20:45:50.706+0200 [INFO]  raft: entering candidate state: node="Node at 127.0.0.1:55899 [Candidate]" term=2
+2026-10-07T20:45:50.706+0200 [DEBUG] raft: pre-voting for self: term=2 id=node-a
+2026-10-07T20:45:50.706+0200 [DEBUG] raft: calculated votes needed: needed=1 term=2
+2026-10-07T20:45:50.706+0200 [DEBUG] raft: pre-vote received: from=node-a term=2 tally=0
+2026-10-07T20:45:50.706+0200 [DEBUG] raft: pre-vote granted: from=node-a term=2 tally=1
+2026-10-07T20:45:50.706+0200 [INFO]  raft: pre-vote successful, starting election: term=2 tally=1 refused=0 votesNeeded=1
+2026-10-07T20:45:50.706+0200 [DEBUG] raft: voting for self: term=2 id=node-a
+2026-10-07T20:45:50.706+0200 [DEBUG] raft: vote granted: from=node-a term=2 tally=1
+2026-10-07T20:45:50.706+0200 [INFO]  raft: election won: term=2 tally=1
+2026-10-07T20:45:50.706+0200 [INFO]  raft: entering leader state: leader="Node at 127.0.0.1:55899 [Leader]"
+2026/10/07 20:45:50 failed to sufficiently increase receive buffer size (was: 208 kiB, wanted: 7168 kiB, got: 416 kiB). See https://github.com/quic-go/quic-go/wiki/UDP-Buffer-Sizes for details.
+2026-10-07T20:45:50.804+0200 [INFO]  raft: initial configuration: index=0 servers=[]
+2026-10-07T20:45:50.804+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:41031 [Follower]" leader-address= leader-id=
+2026-10-07T20:45:50.903+0200 [INFO]  raft: updating configuration: command=AddVoter server-id=node-b server-addr=127.0.0.1:41031 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:55899} {Suffrage:Voter ID:node-b Address:127.0.0.1:41031}]"
+2026-10-07T20:45:50.903+0200 [INFO]  raft: added peer, starting replication: peer=node-b
+2026-10-07T20:45:50.906+0200 [WARN]  raft: failed to get previous log: previous-index=4 last-index=0 error="log not found"
+2026-10-07T20:45:50.907+0200 [WARN]  raft: appendEntries rejected, sending older logs: peer="{Voter node-b 127.0.0.1:41031}" next=1
+2026-10-07T20:45:50.907+0200 [INFO]  raft: pipelining replication: peer="{Voter node-b 127.0.0.1:41031}"
+2026-10-07T20:45:50.920+0200 [INFO]  raft: aborting pipeline replication: peer="{Voter node-b 127.0.0.1:41031}"
+2026/10/07 20:45:51 failed to sufficiently increase receive buffer size (was: 208 kiB, wanted: 7168 kiB, got: 416 kiB). See https://github.com/quic-go/quic-go/wiki/UDP-Buffer-Sizes for details.
+2026-10-07T20:45:51.840+0200 [INFO]  raft: initial configuration: index=1 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:53997}]"
+2026-10-07T20:45:51.840+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:53997 [Follower]" leader-address= leader-id=
+2026-10-07T20:45:53.479+0200 [WARN]  raft: heartbeat timeout reached, starting election: last-leader-addr= last-leader-id=
+2026-10-07T20:45:53.479+0200 [INFO]  raft: entering candidate state: node="Node at 127.0.0.1:53997 [Candidate]" term=2
+2026-10-07T20:45:53.479+0200 [DEBUG] raft: pre-voting for self: term=2 id=node-a
+2026-10-07T20:45:53.479+0200 [DEBUG] raft: calculated votes needed: needed=1 term=2
+2026-10-07T20:45:53.479+0200 [DEBUG] raft: pre-vote received: from=node-a term=2 tally=0
+2026-10-07T20:45:53.479+0200 [DEBUG] raft: pre-vote granted: from=node-a term=2 tally=1
+2026-10-07T20:45:53.479+0200 [INFO]  raft: pre-vote successful, starting election: term=2 tally=1 refused=0 votesNeeded=1
+2026-10-07T20:45:53.479+0200 [DEBUG] raft: voting for self: term=2 id=node-a
+2026-10-07T20:45:53.479+0200 [DEBUG] raft: vote granted: from=node-a term=2 tally=1
+2026-10-07T20:45:53.479+0200 [INFO]  raft: election won: term=2 tally=1
+2026-10-07T20:45:53.479+0200 [INFO]  raft: entering leader state: leader="Node at 127.0.0.1:53997 [Leader]"
+2026/10/07 20:45:53 failed to sufficiently increase receive buffer size (was: 208 kiB, wanted: 7168 kiB, got: 416 kiB). See https://github.com/quic-go/quic-go/wiki/UDP-Buffer-Sizes for details.
+2026-10-07T20:45:53.566+0200 [INFO]  raft: initial configuration: index=0 servers=[]
+2026-10-07T20:45:53.566+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:32899 [Follower]" leader-address= leader-id=
+2026-10-07T20:45:53.660+0200 [INFO]  raft: updating configuration: command=AddVoter server-id=node-b server-addr=127.0.0.1:32899 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:53997} {Suffrage:Voter ID:node-b Address:127.0.0.1:32899}]"
+2026-10-07T20:45:53.660+0200 [INFO]  raft: added peer, starting replication: peer=node-b
+2026-10-07T20:45:53.662+0200 [WARN]  raft: failed to get previous log: previous-index=4 last-index=0 error="log not found"
+2026-10-07T20:45:53.662+0200 [WARN]  raft: appendEntries rejected, sending older logs: peer="{Voter node-b 127.0.0.1:32899}" next=1
+2026-10-07T20:45:53.662+0200 [INFO]  raft: pipelining replication: peer="{Voter node-b 127.0.0.1:32899}"
+2026-10-07T20:45:53.683+0200 [INFO]  raft: aborting pipeline replication: peer="{Voter node-b 127.0.0.1:32899}"
+2026/10/07 20:45:54 failed to sufficiently increase receive buffer size (was: 208 kiB, wanted: 7168 kiB, got: 416 kiB). See https://github.com/quic-go/quic-go/wiki/UDP-Buffer-Sizes for details.
+2026-10-07T20:45:54.585+0200 [INFO]  raft: initial configuration: index=1 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:47882}]"
+2026-10-07T20:45:54.585+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:47882 [Follower]" leader-address= leader-id=
+2026-10-07T20:45:55.628+0200 [WARN]  raft: heartbeat timeout reached, starting election: last-leader-addr= last-leader-id=
+2026-10-07T20:45:55.628+0200 [INFO]  raft: entering candidate state: node="Node at 127.0.0.1:47882 [Candidate]" term=2
+2026-10-07T20:45:55.628+0200 [DEBUG] raft: pre-voting for self: term=2 id=node-a
+2026-10-07T20:45:55.628+0200 [DEBUG] raft: calculated votes needed: needed=1 term=2
+2026-10-07T20:45:55.628+0200 [DEBUG] raft: pre-vote received: from=node-a term=2 tally=0
+2026-10-07T20:45:55.628+0200 [DEBUG] raft: pre-vote granted: from=node-a term=2 tally=1
+2026-10-07T20:45:55.628+0200 [INFO]  raft: pre-vote successful, starting election: term=2 tally=1 refused=0 votesNeeded=1
+2026-10-07T20:45:55.628+0200 [DEBUG] raft: voting for self: term=2 id=node-a
+2026-10-07T20:45:55.628+0200 [DEBUG] raft: vote granted: from=node-a term=2 tally=1
+2026-10-07T20:45:55.628+0200 [INFO]  raft: election won: term=2 tally=1
+2026-10-07T20:45:55.628+0200 [INFO]  raft: entering leader state: leader="Node at 127.0.0.1:47882 [Leader]"
+2026/10/07 20:45:55 failed to sufficiently increase receive buffer size (was: 208 kiB, wanted: 7168 kiB, got: 416 kiB). See https://github.com/quic-go/quic-go/wiki/UDP-Buffer-Sizes for details.
+2026-10-07T20:45:55.720+0200 [INFO]  raft: initial configuration: index=0 servers=[]
+2026-10-07T20:45:55.720+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:36653 [Follower]" leader-address= leader-id=
+2026-10-07T20:45:55.808+0200 [INFO]  raft: updating configuration: command=AddVoter server-id=node-b server-addr=127.0.0.1:36653 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:47882} {Suffrage:Voter ID:node-b Address:127.0.0.1:36653}]"
+2026-10-07T20:45:55.808+0200 [INFO]  raft: added peer, starting replication: peer=node-b
+2026-10-07T20:45:55.810+0200 [WARN]  raft: failed to get previous log: previous-index=4 last-index=0 error="log not found"
+2026-10-07T20:45:55.810+0200 [WARN]  raft: appendEntries rejected, sending older logs: peer="{Voter node-b 127.0.0.1:36653}" next=1
+2026-10-07T20:45:55.810+0200 [INFO]  raft: pipelining replication: peer="{Voter node-b 127.0.0.1:36653}"
+2026/10/07 20:45:55 failed to sufficiently increase receive buffer size (was: 208 kiB, wanted: 7168 kiB, got: 416 kiB). See https://github.com/quic-go/quic-go/wiki/UDP-Buffer-Sizes for details.
+2026-10-07T20:45:55.814+0200 [INFO]  raft: initial configuration: index=0 servers=[]
+2026-10-07T20:45:55.815+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:37628 [Follower]" leader-address= leader-id=
+2026-10-07T20:45:55.913+0200 [INFO]  raft: updating configuration: command=AddVoter server-id=node-c server-addr=127.0.0.1:37628 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:47882} {Suffrage:Voter ID:node-b Address:127.0.0.1:36653} {Suffrage:Voter ID:node-c Address:127.0.0.1:37628}]"
+2026-10-07T20:45:55.913+0200 [INFO]  raft: added peer, starting replication: peer=node-c
+2026-10-07T20:45:55.916+0200 [WARN]  raft: failed to get previous log: previous-index=6 last-index=0 error="log not found"
+2026-10-07T20:45:55.916+0200 [WARN]  raft: appendEntries rejected, sending older logs: peer="{Voter node-c 127.0.0.1:37628}" next=1
+2026-10-07T20:45:55.917+0200 [INFO]  raft: pipelining replication: peer="{Voter node-c 127.0.0.1:37628}"
+2026-10-07T20:45:56.076+0200 [INFO]  raft: aborting pipeline replication: peer="{Voter node-b 127.0.0.1:36653}"
+2026-10-07T20:45:56.076+0200 [INFO]  raft: aborting pipeline replication: peer="{Voter node-c 127.0.0.1:37628}"
+2026/10/07 20:45:57 failed to sufficiently increase receive buffer size (was: 208 kiB, wanted: 7168 kiB, got: 416 kiB). See https://github.com/quic-go/quic-go/wiki/UDP-Buffer-Sizes for details.
+2026-10-07T20:45:57.003+0200 [INFO]  raft: initial configuration: index=1 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:47934}]"
+2026-10-07T20:45:57.003+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:47934 [Follower]" leader-address= leader-id=
+2026-10-07T20:45:58.489+0200 [WARN]  raft: heartbeat timeout reached, starting election: last-leader-addr= last-leader-id=
+2026-10-07T20:45:58.489+0200 [INFO]  raft: entering candidate state: node="Node at 127.0.0.1:47934 [Candidate]" term=2
+2026-10-07T20:45:58.489+0200 [DEBUG] raft: pre-voting for self: term=2 id=node-a
+2026-10-07T20:45:58.489+0200 [DEBUG] raft: calculated votes needed: needed=1 term=2
+2026-10-07T20:45:58.489+0200 [DEBUG] raft: pre-vote received: from=node-a term=2 tally=0
+2026-10-07T20:45:58.489+0200 [DEBUG] raft: pre-vote granted: from=node-a term=2 tally=1
+2026-10-07T20:45:58.489+0200 [INFO]  raft: pre-vote successful, starting election: term=2 tally=1 refused=0 votesNeeded=1
+2026-10-07T20:45:58.489+0200 [DEBUG] raft: voting for self: term=2 id=node-a
+2026-10-07T20:45:58.489+0200 [DEBUG] raft: vote granted: from=node-a term=2 tally=1
+2026-10-07T20:45:58.489+0200 [INFO]  raft: election won: term=2 tally=1
+2026-10-07T20:45:58.489+0200 [INFO]  raft: entering leader state: leader="Node at 127.0.0.1:47934 [Leader]"
+2026/10/07 20:45:58 failed to sufficiently increase receive buffer size (was: 208 kiB, wanted: 7168 kiB, got: 416 kiB). See https://github.com/quic-go/quic-go/wiki/UDP-Buffer-Sizes for details.
+2026-10-07T20:45:58.583+0200 [INFO]  raft: initial configuration: index=0 servers=[]
+2026-10-07T20:45:58.583+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:41516 [Follower]" leader-address= leader-id=
+2026-10-07T20:45:58.676+0200 [INFO]  raft: updating configuration: command=AddVoter server-id=node-b server-addr=127.0.0.1:41516 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:47934} {Suffrage:Voter ID:node-b Address:127.0.0.1:41516}]"
+2026-10-07T20:45:58.676+0200 [INFO]  raft: added peer, starting replication: peer=node-b
+2026-10-07T20:45:58.678+0200 [WARN]  raft: failed to get previous log: previous-index=4 last-index=0 error="log not found"
+2026-10-07T20:45:58.678+0200 [WARN]  raft: appendEntries rejected, sending older logs: peer="{Voter node-b 127.0.0.1:41516}" next=1
+2026-10-07T20:45:58.678+0200 [INFO]  raft: pipelining replication: peer="{Voter node-b 127.0.0.1:41516}"
+2026/10/07 20:45:58 failed to sufficiently increase receive buffer size (was: 208 kiB, wanted: 7168 kiB, got: 416 kiB). See https://github.com/quic-go/quic-go/wiki/UDP-Buffer-Sizes for details.
+2026-10-07T20:45:58.682+0200 [INFO]  raft: initial configuration: index=0 servers=[]
+2026-10-07T20:45:58.682+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:52893 [Follower]" leader-address= leader-id=
+2026-10-07T20:45:58.783+0200 [INFO]  raft: updating configuration: command=AddVoter server-id=node-c server-addr=127.0.0.1:52893 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:47934} {Suffrage:Voter ID:node-b Address:127.0.0.1:41516} {Suffrage:Voter ID:node-c Address:127.0.0.1:52893}]"
+2026-10-07T20:45:58.783+0200 [INFO]  raft: added peer, starting replication: peer=node-c
+2026-10-07T20:45:58.785+0200 [WARN]  raft: failed to get previous log: previous-index=6 last-index=0 error="log not found"
+2026-10-07T20:45:58.785+0200 [WARN]  raft: appendEntries rejected, sending older logs: peer="{Voter node-c 127.0.0.1:52893}" next=1
+2026-10-07T20:45:58.785+0200 [INFO]  raft: pipelining replication: peer="{Voter node-c 127.0.0.1:52893}"
+2026-10-07T20:45:58.941+0200 [INFO]  raft: aborting pipeline replication: peer="{Voter node-b 127.0.0.1:41516}"
+2026-10-07T20:45:58.941+0200 [INFO]  raft: aborting pipeline replication: peer="{Voter node-c 127.0.0.1:52893}"
+2026/10/07 20:45:59 failed to sufficiently increase receive buffer size (was: 208 kiB, wanted: 7168 kiB, got: 416 kiB). See https://github.com/quic-go/quic-go/wiki/UDP-Buffer-Sizes for details.
+2026-10-07T20:45:59.836+0200 [INFO]  raft: initial configuration: index=1 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:45909}]"
+2026-10-07T20:45:59.836+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:45909 [Follower]" leader-address= leader-id=
+2026-10-07T20:46:01.072+0200 [WARN]  raft: heartbeat timeout reached, starting election: last-leader-addr= last-leader-id=
+2026-10-07T20:46:01.072+0200 [INFO]  raft: entering candidate state: node="Node at 127.0.0.1:45909 [Candidate]" term=2
+2026-10-07T20:46:01.072+0200 [DEBUG] raft: pre-voting for self: term=2 id=node-a
+2026-10-07T20:46:01.072+0200 [DEBUG] raft: calculated votes needed: needed=1 term=2
+2026-10-07T20:46:01.072+0200 [DEBUG] raft: pre-vote received: from=node-a term=2 tally=0
+2026-10-07T20:46:01.072+0200 [DEBUG] raft: pre-vote granted: from=node-a term=2 tally=1
+2026-10-07T20:46:01.072+0200 [INFO]  raft: pre-vote successful, starting election: term=2 tally=1 refused=0 votesNeeded=1
+2026-10-07T20:46:01.072+0200 [DEBUG] raft: voting for self: term=2 id=node-a
+2026-10-07T20:46:01.072+0200 [DEBUG] raft: vote granted: from=node-a term=2 tally=1
+2026-10-07T20:46:01.072+0200 [INFO]  raft: election won: term=2 tally=1
+2026-10-07T20:46:01.072+0200 [INFO]  raft: entering leader state: leader="Node at 127.0.0.1:45909 [Leader]"
+2026/10/07 20:46:01 failed to sufficiently increase receive buffer size (was: 208 kiB, wanted: 7168 kiB, got: 416 kiB). See https://github.com/quic-go/quic-go/wiki/UDP-Buffer-Sizes for details.
+2026-10-07T20:46:01.171+0200 [INFO]  raft: initial configuration: index=0 servers=[]
+2026-10-07T20:46:01.172+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:35205 [Follower]" leader-address= leader-id=
+2026-10-07T20:46:01.255+0200 [INFO]  raft: updating configuration: command=AddVoter server-id=node-b server-addr=127.0.0.1:35205 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:45909} {Suffrage:Voter ID:node-b Address:127.0.0.1:35205}]"
+2026-10-07T20:46:01.255+0200 [INFO]  raft: added peer, starting replication: peer=node-b
+2026-10-07T20:46:01.257+0200 [WARN]  raft: failed to get previous log: previous-index=4 last-index=0 error="log not found"
+2026-10-07T20:46:01.257+0200 [WARN]  raft: appendEntries rejected, sending older logs: peer="{Voter node-b 127.0.0.1:35205}" next=1
+2026-10-07T20:46:01.258+0200 [INFO]  raft: pipelining replication: peer="{Voter node-b 127.0.0.1:35205}"
+2026/10/07 20:46:01 failed to sufficiently increase receive buffer size (was: 208 kiB, wanted: 7168 kiB, got: 416 kiB). See https://github.com/quic-go/quic-go/wiki/UDP-Buffer-Sizes for details.
+2026-10-07T20:46:01.262+0200 [INFO]  raft: initial configuration: index=0 servers=[]
+2026-10-07T20:46:01.262+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:46553 [Follower]" leader-address= leader-id=
+2026-10-07T20:46:01.353+0200 [INFO]  raft: updating configuration: command=AddVoter server-id=node-c server-addr=127.0.0.1:46553 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:45909} {Suffrage:Voter ID:node-b Address:127.0.0.1:35205} {Suffrage:Voter ID:node-c Address:127.0.0.1:46553}]"
+2026-10-07T20:46:01.353+0200 [INFO]  raft: added peer, starting replication: peer=node-c
+2026-10-07T20:46:01.355+0200 [WARN]  raft: failed to get previous log: previous-index=6 last-index=0 error="log not found"
+2026-10-07T20:46:01.355+0200 [WARN]  raft: appendEntries rejected, sending older logs: peer="{Voter node-c 127.0.0.1:46553}" next=1
+2026-10-07T20:46:01.356+0200 [INFO]  raft: pipelining replication: peer="{Voter node-c 127.0.0.1:46553}"
+2026-10-07T20:46:01.630+0200 [INFO]  raft: aborting pipeline replication: peer="{Voter node-c 127.0.0.1:46553}"
+2026-10-07T20:46:01.630+0200 [INFO]  raft: aborting pipeline replication: peer="{Voter node-b 127.0.0.1:35205}"
+2026-10-07T20:46:11.632+0200 [ERROR] raft: failed to heartbeat to: peer=127.0.0.1:35205 backoff time=10ms error="msgpack decode error [pos 90]: deadline exceeded"
+2026-10-07T20:46:11.632+0200 [ERROR] raft: failed to heartbeat to: peer=127.0.0.1:46553 backoff time=10ms error="msgpack decode error [pos 90]: deadline exceeded"
+2026/10/07 20:46:12 failed to sufficiently increase receive buffer size (was: 208 kiB, wanted: 7168 kiB, got: 416 kiB). See https://github.com/quic-go/quic-go/wiki/UDP-Buffer-Sizes for details.
+2026-10-07T20:46:12.529+0200 [INFO]  raft: initial configuration: index=1 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:42881}]"
+2026-10-07T20:46:12.529+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:42881 [Follower]" leader-address= leader-id=
+2026-10-07T20:46:14.195+0200 [WARN]  raft: heartbeat timeout reached, starting election: last-leader-addr= last-leader-id=
+2026-10-07T20:46:14.195+0200 [INFO]  raft: entering candidate state: node="Node at 127.0.0.1:42881 [Candidate]" term=2
+2026-10-07T20:46:14.195+0200 [DEBUG] raft: pre-voting for self: term=2 id=node-a
+2026-10-07T20:46:14.195+0200 [DEBUG] raft: calculated votes needed: needed=1 term=2
+2026-10-07T20:46:14.195+0200 [DEBUG] raft: pre-vote received: from=node-a term=2 tally=0
+2026-10-07T20:46:14.195+0200 [DEBUG] raft: pre-vote granted: from=node-a term=2 tally=1
+2026-10-07T20:46:14.195+0200 [INFO]  raft: pre-vote successful, starting election: term=2 tally=1 refused=0 votesNeeded=1
+2026-10-07T20:46:14.195+0200 [DEBUG] raft: voting for self: term=2 id=node-a
+2026-10-07T20:46:14.195+0200 [DEBUG] raft: vote granted: from=node-a term=2 tally=1
+2026-10-07T20:46:14.195+0200 [INFO]  raft: election won: term=2 tally=1
+2026-10-07T20:46:14.195+0200 [INFO]  raft: entering leader state: leader="Node at 127.0.0.1:42881 [Leader]"
+2026/10/07 20:46:14 failed to sufficiently increase receive buffer size (was: 208 kiB, wanted: 7168 kiB, got: 416 kiB). See https://github.com/quic-go/quic-go/wiki/UDP-Buffer-Sizes for details.
+2026-10-07T20:46:14.294+0200 [INFO]  raft: initial configuration: index=0 servers=[]
+2026-10-07T20:46:14.294+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:48753 [Follower]" leader-address= leader-id=
+2026-10-07T20:46:14.378+0200 [INFO]  raft: updating configuration: command=AddVoter server-id=node-b server-addr=127.0.0.1:48753 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:42881} {Suffrage:Voter ID:node-b Address:127.0.0.1:48753}]"
+2026-10-07T20:46:14.378+0200 [INFO]  raft: added peer, starting replication: peer=node-b
+2026-10-07T20:46:14.380+0200 [WARN]  raft: failed to get previous log: previous-index=4 last-index=0 error="log not found"
+2026-10-07T20:46:14.380+0200 [WARN]  raft: appendEntries rejected, sending older logs: peer="{Voter node-b 127.0.0.1:48753}" next=1
+2026-10-07T20:46:14.381+0200 [INFO]  raft: pipelining replication: peer="{Voter node-b 127.0.0.1:48753}"
+2026/10/07 20:46:14 failed to sufficiently increase receive buffer size (was: 208 kiB, wanted: 7168 kiB, got: 416 kiB). See https://github.com/quic-go/quic-go/wiki/UDP-Buffer-Sizes for details.
+2026-10-07T20:46:14.385+0200 [INFO]  raft: initial configuration: index=0 servers=[]
+2026-10-07T20:46:14.385+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:46039 [Follower]" leader-address= leader-id=
+2026-10-07T20:46:14.476+0200 [INFO]  raft: updating configuration: command=AddVoter server-id=node-c server-addr=127.0.0.1:46039 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:42881} {Suffrage:Voter ID:node-b Address:127.0.0.1:48753} {Suffrage:Voter ID:node-c Address:127.0.0.1:46039}]"
+2026-10-07T20:46:14.476+0200 [INFO]  raft: added peer, starting replication: peer=node-c
+2026-10-07T20:46:14.478+0200 [WARN]  raft: failed to get previous log: previous-index=6 last-index=0 error="log not found"
+2026-10-07T20:46:14.478+0200 [WARN]  raft: appendEntries rejected, sending older logs: peer="{Voter node-c 127.0.0.1:46039}" next=1
+2026-10-07T20:46:14.479+0200 [INFO]  raft: pipelining replication: peer="{Voter node-c 127.0.0.1:46039}"
+2026-10-07T20:46:14.504+0200 [INFO]  raft: aborting pipeline replication: peer="{Voter node-c 127.0.0.1:46039}"
+2026-10-07T20:46:14.504+0200 [INFO]  raft: aborting pipeline replication: peer="{Voter node-b 127.0.0.1:48753}"
+2026/10/07 20:46:15 failed to sufficiently increase receive buffer size (was: 208 kiB, wanted: 7168 kiB, got: 416 kiB). See https://github.com/quic-go/quic-go/wiki/UDP-Buffer-Sizes for details.
+2026-10-07T20:46:15.403+0200 [INFO]  raft: initial configuration: index=1 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:42198}]"
+2026-10-07T20:46:15.403+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:42198 [Follower]" leader-address= leader-id=
+2026-10-07T20:46:17.018+0200 [WARN]  raft: heartbeat timeout reached, starting election: last-leader-addr= last-leader-id=
+2026-10-07T20:46:17.018+0200 [INFO]  raft: entering candidate state: node="Node at 127.0.0.1:42198 [Candidate]" term=2
+2026-10-07T20:46:17.019+0200 [DEBUG] raft: pre-voting for self: term=2 id=node-a
+2026-10-07T20:46:17.019+0200 [DEBUG] raft: calculated votes needed: needed=1 term=2
+2026-10-07T20:46:17.019+0200 [DEBUG] raft: pre-vote received: from=node-a term=2 tally=0
+2026-10-07T20:46:17.019+0200 [DEBUG] raft: pre-vote granted: from=node-a term=2 tally=1
+2026-10-07T20:46:17.019+0200 [INFO]  raft: pre-vote successful, starting election: term=2 tally=1 refused=0 votesNeeded=1
+2026-10-07T20:46:17.019+0200 [DEBUG] raft: voting for self: term=2 id=node-a
+2026-10-07T20:46:17.019+0200 [DEBUG] raft: vote granted: from=node-a term=2 tally=1
+2026-10-07T20:46:17.019+0200 [INFO]  raft: election won: term=2 tally=1
+2026-10-07T20:46:17.019+0200 [INFO]  raft: entering leader state: leader="Node at 127.0.0.1:42198 [Leader]"
+2026/10/07 20:46:17 failed to sufficiently increase receive buffer size (was: 208 kiB, wanted: 7168 kiB, got: 416 kiB). See https://github.com/quic-go/quic-go/wiki/UDP-Buffer-Sizes for details.
+2026-10-07T20:46:17.115+0200 [INFO]  raft: initial configuration: index=0 servers=[]
+2026-10-07T20:46:17.115+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:41278 [Follower]" leader-address= leader-id=
+2026-10-07T20:46:17.206+0200 [INFO]  raft: updating configuration: command=AddVoter server-id=node-b server-addr=127.0.0.1:41278 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:42198} {Suffrage:Voter ID:node-b Address:127.0.0.1:41278}]"
+2026-10-07T20:46:17.206+0200 [INFO]  raft: added peer, starting replication: peer=node-b
+2026-10-07T20:46:17.208+0200 [WARN]  raft: failed to get previous log: previous-index=4 last-index=0 error="log not found"
+2026-10-07T20:46:17.208+0200 [WARN]  raft: appendEntries rejected, sending older logs: peer="{Voter node-b 127.0.0.1:41278}" next=1
+2026-10-07T20:46:17.208+0200 [INFO]  raft: pipelining replication: peer="{Voter node-b 127.0.0.1:41278}"
+2026/10/07 20:46:17 failed to sufficiently increase receive buffer size (was: 208 kiB, wanted: 7168 kiB, got: 416 kiB). See https://github.com/quic-go/quic-go/wiki/UDP-Buffer-Sizes for details.
+2026-10-07T20:46:17.213+0200 [INFO]  raft: initial configuration: index=0 servers=[]
+2026-10-07T20:46:17.213+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:34360 [Follower]" leader-address= leader-id=
+2026-10-07T20:46:17.312+0200 [INFO]  raft: updating configuration: command=AddVoter server-id=node-c server-addr=127.0.0.1:34360 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:42198} {Suffrage:Voter ID:node-b Address:127.0.0.1:41278} {Suffrage:Voter ID:node-c Address:127.0.0.1:34360}]"
+2026-10-07T20:46:17.312+0200 [INFO]  raft: added peer, starting replication: peer=node-c
+2026-10-07T20:46:17.315+0200 [WARN]  raft: failed to get previous log: previous-index=6 last-index=0 error="log not found"
+2026-10-07T20:46:17.315+0200 [WARN]  raft: appendEntries rejected, sending older logs: peer="{Voter node-c 127.0.0.1:34360}" next=1
+2026-10-07T20:46:17.316+0200 [INFO]  raft: pipelining replication: peer="{Voter node-c 127.0.0.1:34360}"
+2026-10-07T20:46:17.826+0200 [WARN]  raft: failed to contact: server-id=node-b time=500.803015ms
+2026-10-07T20:46:18.284+0200 [WARN]  raft: failed to contact: server-id=node-b time=958.097656ms
+2026-10-07T20:46:18.719+0200 [WARN]  raft: failed to contact: server-id=node-b time=1.393542753s
+2026-10-07T20:46:19.184+0200 [DEBUG] raft: failed to contact: server-id=node-b time=1.858596919s
+2026-10-07T20:46:19.679+0200 [DEBUG] raft: failed to contact: server-id=node-b time=2.353124237s
+2026-10-07T20:46:20.152+0200 [DEBUG] raft: failed to contact: server-id=node-b time=2.826399914s
+2026-10-07T20:46:20.590+0200 [DEBUG] raft: failed to contact: server-id=node-b time=3.264631372s
+2026-10-07T20:46:21.079+0200 [DEBUG] raft: failed to contact: server-id=node-b time=3.753506545s
+2026-10-07T20:46:21.563+0200 [DEBUG] raft: failed to contact: server-id=node-b time=4.237105012s
+2026-10-07T20:46:22.038+0200 [DEBUG] raft: failed to contact: server-id=node-b time=4.71221187s
+2026-10-07T20:46:22.344+0200 [INFO]  raft: aborting pipeline replication: peer="{Voter node-c 127.0.0.1:34360}"
+2026-10-07T20:46:27.403+0200 [INFO]  raft: aborting pipeline replication: peer="{Voter node-b 127.0.0.1:41278}"
+2026-10-07T20:46:27.525+0200 [ERROR] raft: failed to heartbeat to: peer=127.0.0.1:41278 backoff time=10ms error="msgpack decode error [pos 90]: deadline exceeded"
+2026/10/07 20:46:28 failed to sufficiently increase receive buffer size (was: 208 kiB, wanted: 7168 kiB, got: 416 kiB). See https://github.com/quic-go/quic-go/wiki/UDP-Buffer-Sizes for details.
+2026-10-07T20:46:28.427+0200 [INFO]  raft: initial configuration: index=1 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:41750}]"
+2026-10-07T20:46:28.427+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:41750 [Follower]" leader-address= leader-id=
+2026-10-07T20:46:30.102+0200 [WARN]  raft: heartbeat timeout reached, starting election: last-leader-addr= last-leader-id=
+2026-10-07T20:46:30.102+0200 [INFO]  raft: entering candidate state: node="Node at 127.0.0.1:41750 [Candidate]" term=2
+2026-10-07T20:46:30.102+0200 [DEBUG] raft: pre-voting for self: term=2 id=node-a
+2026-10-07T20:46:30.102+0200 [DEBUG] raft: calculated votes needed: needed=1 term=2
+2026-10-07T20:46:30.102+0200 [DEBUG] raft: pre-vote received: from=node-a term=2 tally=0
+2026-10-07T20:46:30.102+0200 [DEBUG] raft: pre-vote granted: from=node-a term=2 tally=1
+2026-10-07T20:46:30.102+0200 [INFO]  raft: pre-vote successful, starting election: term=2 tally=1 refused=0 votesNeeded=1
+2026-10-07T20:46:30.102+0200 [DEBUG] raft: voting for self: term=2 id=node-a
+2026-10-07T20:46:30.102+0200 [DEBUG] raft: vote granted: from=node-a term=2 tally=1
+2026-10-07T20:46:30.102+0200 [INFO]  raft: election won: term=2 tally=1
+2026-10-07T20:46:30.102+0200 [INFO]  raft: entering leader state: leader="Node at 127.0.0.1:41750 [Leader]"
+2026/10/07 20:46:30 failed to sufficiently increase receive buffer size (was: 208 kiB, wanted: 7168 kiB, got: 416 kiB). See https://github.com/quic-go/quic-go/wiki/UDP-Buffer-Sizes for details.
+2026-10-07T20:46:30.195+0200 [INFO]  raft: initial configuration: index=0 servers=[]
+2026-10-07T20:46:30.195+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:42482 [Follower]" leader-address= leader-id=
+2026-10-07T20:46:30.288+0200 [INFO]  raft: updating configuration: command=AddVoter server-id=node-b server-addr=127.0.0.1:42482 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:41750} {Suffrage:Voter ID:node-b Address:127.0.0.1:42482}]"
+2026-10-07T20:46:30.288+0200 [INFO]  raft: added peer, starting replication: peer=node-b
+2026-10-07T20:46:30.290+0200 [WARN]  raft: failed to get previous log: previous-index=4 last-index=0 error="log not found"
+2026-10-07T20:46:30.290+0200 [WARN]  raft: appendEntries rejected, sending older logs: peer="{Voter node-b 127.0.0.1:42482}" next=1
+2026-10-07T20:46:30.290+0200 [INFO]  raft: pipelining replication: peer="{Voter node-b 127.0.0.1:42482}"
+2026/10/07 20:46:30 failed to sufficiently increase receive buffer size (was: 208 kiB, wanted: 7168 kiB, got: 416 kiB). See https://github.com/quic-go/quic-go/wiki/UDP-Buffer-Sizes for details.
+2026-10-07T20:46:30.294+0200 [INFO]  raft: initial configuration: index=0 servers=[]
+2026-10-07T20:46:30.294+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:48971 [Follower]" leader-address= leader-id=
+2026-10-07T20:46:30.390+0200 [INFO]  raft: updating configuration: command=AddVoter server-id=node-c server-addr=127.0.0.1:48971 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:41750} {Suffrage:Voter ID:node-b Address:127.0.0.1:42482} {Suffrage:Voter ID:node-c Address:127.0.0.1:48971}]"
+2026-10-07T20:46:30.390+0200 [INFO]  raft: added peer, starting replication: peer=node-c
+2026-10-07T20:46:30.392+0200 [WARN]  raft: failed to get previous log: previous-index=6 last-index=0 error="log not found"
+2026-10-07T20:46:30.392+0200 [WARN]  raft: appendEntries rejected, sending older logs: peer="{Voter node-c 127.0.0.1:48971}" next=1
+2026-10-07T20:46:30.392+0200 [INFO]  raft: pipelining replication: peer="{Voter node-c 127.0.0.1:48971}"
+2026-10-07T20:46:30.655+0200 [INFO]  raft: aborting pipeline replication: peer="{Voter node-c 127.0.0.1:48971}"
+2026-10-07T20:46:30.655+0200 [INFO]  raft: aborting pipeline replication: peer="{Voter node-b 127.0.0.1:42482}"
+2026/10/07 20:46:31 failed to sufficiently increase receive buffer size (was: 208 kiB, wanted: 7168 kiB, got: 416 kiB). See https://github.com/quic-go/quic-go/wiki/UDP-Buffer-Sizes for details.
+2026-10-07T20:46:31.562+0200 [INFO]  raft: initial configuration: index=1 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:55766}]"
+2026-10-07T20:46:31.562+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:55766 [Follower]" leader-address= leader-id=
+2026-10-07T20:46:33.146+0200 [WARN]  raft: heartbeat timeout reached, starting election: last-leader-addr= last-leader-id=
+2026-10-07T20:46:33.146+0200 [INFO]  raft: entering candidate state: node="Node at 127.0.0.1:55766 [Candidate]" term=2
+2026-10-07T20:46:33.147+0200 [DEBUG] raft: pre-voting for self: term=2 id=node-a
+2026-10-07T20:46:33.147+0200 [DEBUG] raft: calculated votes needed: needed=1 term=2
+2026-10-07T20:46:33.147+0200 [DEBUG] raft: pre-vote received: from=node-a term=2 tally=0
+2026-10-07T20:46:33.147+0200 [DEBUG] raft: pre-vote granted: from=node-a term=2 tally=1
+2026-10-07T20:46:33.147+0200 [INFO]  raft: pre-vote successful, starting election: term=2 tally=1 refused=0 votesNeeded=1
+2026-10-07T20:46:33.147+0200 [DEBUG] raft: voting for self: term=2 id=node-a
+2026-10-07T20:46:33.147+0200 [DEBUG] raft: vote granted: from=node-a term=2 tally=1
+2026-10-07T20:46:33.147+0200 [INFO]  raft: election won: term=2 tally=1
+2026-10-07T20:46:33.147+0200 [INFO]  raft: entering leader state: leader="Node at 127.0.0.1:55766 [Leader]"
+2026/10/07 20:46:34 failed to sufficiently increase receive buffer size (was: 208 kiB, wanted: 7168 kiB, got: 416 kiB). See https://github.com/quic-go/quic-go/wiki/UDP-Buffer-Sizes for details.
+2026-10-07T20:46:34.169+0200 [INFO]  raft: initial configuration: index=1 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:34480}]"
+2026-10-07T20:46:34.169+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:34480 [Follower]" leader-address= leader-id=
+2026-10-07T20:46:35.767+0200 [WARN]  raft: heartbeat timeout reached, starting election: last-leader-addr= last-leader-id=
+2026-10-07T20:46:35.767+0200 [INFO]  raft: entering candidate state: node="Node at 127.0.0.1:34480 [Candidate]" term=2
+2026-10-07T20:46:35.767+0200 [DEBUG] raft: pre-voting for self: term=2 id=node-a
+2026-10-07T20:46:35.767+0200 [DEBUG] raft: calculated votes needed: needed=1 term=2
+2026-10-07T20:46:35.767+0200 [DEBUG] raft: pre-vote received: from=node-a term=2 tally=0
+2026-10-07T20:46:35.767+0200 [DEBUG] raft: pre-vote granted: from=node-a term=2 tally=1
+2026-10-07T20:46:35.767+0200 [INFO]  raft: pre-vote successful, starting election: term=2 tally=1 refused=0 votesNeeded=1
+2026-10-07T20:46:35.767+0200 [DEBUG] raft: voting for self: term=2 id=node-a
+2026-10-07T20:46:35.767+0200 [DEBUG] raft: vote granted: from=node-a term=2 tally=1
+2026-10-07T20:46:35.767+0200 [INFO]  raft: election won: term=2 tally=1
+2026-10-07T20:46:35.767+0200 [INFO]  raft: entering leader state: leader="Node at 127.0.0.1:34480 [Leader]"
+2026/10/07 20:46:35 failed to sufficiently increase receive buffer size (was: 208 kiB, wanted: 7168 kiB, got: 416 kiB). See https://github.com/quic-go/quic-go/wiki/UDP-Buffer-Sizes for details.
+2026-10-07T20:46:35.869+0200 [INFO]  raft: initial configuration: index=0 servers=[]
+2026-10-07T20:46:35.869+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:40613 [Follower]" leader-address= leader-id=
+2026-10-07T20:46:35.958+0200 [INFO]  raft: updating configuration: command=AddVoter server-id=node-b server-addr=127.0.0.1:40613 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:34480} {Suffrage:Voter ID:node-b Address:127.0.0.1:40613}]"
+2026-10-07T20:46:35.958+0200 [INFO]  raft: added peer, starting replication: peer=node-b
+2026-10-07T20:46:35.960+0200 [WARN]  raft: failed to get previous log: previous-index=4 last-index=0 error="log not found"
+2026-10-07T20:46:35.960+0200 [WARN]  raft: appendEntries rejected, sending older logs: peer="{Voter node-b 127.0.0.1:40613}" next=1
+2026-10-07T20:46:35.961+0200 [INFO]  raft: pipelining replication: peer="{Voter node-b 127.0.0.1:40613}"
+2026/10/07 20:46:35 failed to sufficiently increase receive buffer size (was: 208 kiB, wanted: 7168 kiB, got: 416 kiB). See https://github.com/quic-go/quic-go/wiki/UDP-Buffer-Sizes for details.
+2026-10-07T20:46:35.966+0200 [INFO]  raft: initial configuration: index=0 servers=[]
+2026-10-07T20:46:35.966+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:44004 [Follower]" leader-address= leader-id=
+2026-10-07T20:46:36.056+0200 [INFO]  raft: updating configuration: command=AddVoter server-id=node-c server-addr=127.0.0.1:44004 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:34480} {Suffrage:Voter ID:node-b Address:127.0.0.1:40613} {Suffrage:Voter ID:node-c Address:127.0.0.1:44004}]"
+2026-10-07T20:46:36.056+0200 [INFO]  raft: added peer, starting replication: peer=node-c
+2026-10-07T20:46:36.059+0200 [WARN]  raft: failed to get previous log: previous-index=6 last-index=0 error="log not found"
+2026-10-07T20:46:36.059+0200 [WARN]  raft: appendEntries rejected, sending older logs: peer="{Voter node-c 127.0.0.1:44004}" next=1
+2026-10-07T20:46:36.059+0200 [INFO]  raft: pipelining replication: peer="{Voter node-c 127.0.0.1:44004}"
+2026-10-07T20:46:36.302+0200 [INFO]  raft: aborting pipeline replication: peer="{Voter node-c 127.0.0.1:44004}"
+2026-10-07T20:46:36.302+0200 [INFO]  raft: aborting pipeline replication: peer="{Voter node-b 127.0.0.1:40613}"
+2026/10/07 20:46:37 failed to sufficiently increase receive buffer size (was: 208 kiB, wanted: 7168 kiB, got: 416 kiB). See https://github.com/quic-go/quic-go/wiki/UDP-Buffer-Sizes for details.
+2026-10-07T20:46:37.184+0200 [INFO]  raft: initial configuration: index=1 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:45214}]"
+2026-10-07T20:46:37.184+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:45214 [Follower]" leader-address= leader-id=
+2026-10-07T20:46:39.033+0200 [WARN]  raft: heartbeat timeout reached, starting election: last-leader-addr= last-leader-id=
+2026-10-07T20:46:39.033+0200 [INFO]  raft: entering candidate state: node="Node at 127.0.0.1:45214 [Candidate]" term=2
+2026-10-07T20:46:39.033+0200 [DEBUG] raft: pre-voting for self: term=2 id=node-a
+2026-10-07T20:46:39.033+0200 [DEBUG] raft: calculated votes needed: needed=1 term=2
+2026-10-07T20:46:39.033+0200 [DEBUG] raft: pre-vote received: from=node-a term=2 tally=0
+2026-10-07T20:46:39.033+0200 [DEBUG] raft: pre-vote granted: from=node-a term=2 tally=1
+2026-10-07T20:46:39.033+0200 [INFO]  raft: pre-vote successful, starting election: term=2 tally=1 refused=0 votesNeeded=1
+2026-10-07T20:46:39.033+0200 [DEBUG] raft: voting for self: term=2 id=node-a
+2026-10-07T20:46:39.033+0200 [DEBUG] raft: vote granted: from=node-a term=2 tally=1
+2026-10-07T20:46:39.033+0200 [INFO]  raft: election won: term=2 tally=1
+2026-10-07T20:46:39.033+0200 [INFO]  raft: entering leader state: leader="Node at 127.0.0.1:45214 [Leader]"
+2026/10/07 20:46:39 failed to sufficiently increase receive buffer size (was: 208 kiB, wanted: 7168 kiB, got: 416 kiB). See https://github.com/quic-go/quic-go/wiki/UDP-Buffer-Sizes for details.
+2026-10-07T20:46:39.130+0200 [INFO]  raft: initial configuration: index=0 servers=[]
+2026-10-07T20:46:39.130+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:57222 [Follower]" leader-address= leader-id=
+2026-10-07T20:46:39.222+0200 [INFO]  raft: updating configuration: command=AddVoter server-id=node-b server-addr=127.0.0.1:57222 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:45214} {Suffrage:Voter ID:node-b Address:127.0.0.1:57222}]"
+2026-10-07T20:46:39.222+0200 [INFO]  raft: added peer, starting replication: peer=node-b
+2026-10-07T20:46:39.224+0200 [WARN]  raft: failed to get previous log: previous-index=4 last-index=0 error="log not found"
+2026-10-07T20:46:39.224+0200 [WARN]  raft: appendEntries rejected, sending older logs: peer="{Voter node-b 127.0.0.1:57222}" next=1
+2026-10-07T20:46:39.225+0200 [INFO]  raft: pipelining replication: peer="{Voter node-b 127.0.0.1:57222}"
+2026/10/07 20:46:39 failed to sufficiently increase receive buffer size (was: 208 kiB, wanted: 7168 kiB, got: 416 kiB). See https://github.com/quic-go/quic-go/wiki/UDP-Buffer-Sizes for details.
+2026-10-07T20:46:39.229+0200 [INFO]  raft: initial configuration: index=0 servers=[]
+2026-10-07T20:46:39.229+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:51291 [Follower]" leader-address= leader-id=
+2026-10-07T20:46:39.323+0200 [INFO]  raft: updating configuration: command=AddVoter server-id=node-c server-addr=127.0.0.1:51291 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:45214} {Suffrage:Voter ID:node-b Address:127.0.0.1:57222} {Suffrage:Voter ID:node-c Address:127.0.0.1:51291}]"
+2026-10-07T20:46:39.323+0200 [INFO]  raft: added peer, starting replication: peer=node-c
+2026-10-07T20:46:39.326+0200 [WARN]  raft: failed to get previous log: previous-index=6 last-index=0 error="log not found"
+2026-10-07T20:46:39.326+0200 [WARN]  raft: appendEntries rejected, sending older logs: peer="{Voter node-c 127.0.0.1:51291}" next=1
+2026-10-07T20:46:39.326+0200 [INFO]  raft: pipelining replication: peer="{Voter node-c 127.0.0.1:51291}"
+2026-10-07T20:46:40.224+0200 [WARN]  raft: failed to contact: server-id=node-b time=500.298368ms
+2026-10-07T20:46:40.682+0200 [WARN]  raft: failed to contact: server-id=node-b time=958.337576ms
+2026-10-07T20:46:41.163+0200 [WARN]  raft: failed to contact: server-id=node-b time=1.439120155s
+2026-10-07T20:46:41.646+0200 [DEBUG] raft: failed to contact: server-id=node-b time=1.922281585s
+2026-10-07T20:46:41.822+0200 [WARN]  raft: heartbeat timeout reached, starting election: last-leader-addr=127.0.0.1:45214 last-leader-id=node-a
+2026-10-07T20:46:41.822+0200 [INFO]  raft: entering candidate state: node="Node at 127.0.0.1:57222 [Candidate]" term=3
+2026-10-07T20:46:41.822+0200 [DEBUG] raft: asking for pre-vote: term=3 from=node-a address=127.0.0.1:45214
+2026-10-07T20:46:41.822+0200 [DEBUG] raft: pre-voting for self: term=3 id=node-b
+2026-10-07T20:46:41.822+0200 [DEBUG] raft: asking for pre-vote: term=3 from=node-c address=127.0.0.1:51291
+2026-10-07T20:46:41.822+0200 [DEBUG] raft: calculated votes needed: needed=2 term=3
+2026-10-07T20:46:41.822+0200 [DEBUG] raft: pre-vote received: from=node-b term=3 tally=0
+2026-10-07T20:46:41.822+0200 [DEBUG] raft: pre-vote granted: from=node-b term=3 tally=1
+2026-10-07T20:46:41.822+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:57222 [Follower]" leader-address=127.0.0.1:45214 leader-id=node-a
+2026-10-07T20:46:41.825+0200 [WARN]  raft: rejecting pre-vote request since we have a leader: from=127.0.0.1:57222 leader=127.0.0.1:45214 leader-id=node-a
+2026-10-07T20:46:41.825+0200 [WARN]  raft: rejecting pre-vote request since we have a leader: from=127.0.0.1:57222 leader=127.0.0.1:45214 leader-id=node-a
+2026-10-07T20:46:41.859+0200 [INFO]  raft: aborting pipeline replication: peer="{Voter node-c 127.0.0.1:51291}"
+2026-10-07T20:46:41.859+0200 [INFO]  raft: aborting pipeline replication: peer="{Voter node-b 127.0.0.1:57222}"
+2026/10/07 20:46:42 failed to sufficiently increase receive buffer size (was: 208 kiB, wanted: 7168 kiB, got: 416 kiB). See https://github.com/quic-go/quic-go/wiki/UDP-Buffer-Sizes for details.
+2026-10-07T20:46:42.761+0200 [INFO]  raft: initial configuration: index=1 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:40085}]"
+2026-10-07T20:46:42.761+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:40085 [Follower]" leader-address= leader-id=
+2026-10-07T20:46:44.272+0200 [WARN]  raft: heartbeat timeout reached, starting election: last-leader-addr= last-leader-id=
+2026-10-07T20:46:44.272+0200 [INFO]  raft: entering candidate state: node="Node at 127.0.0.1:40085 [Candidate]" term=2
+2026-10-07T20:46:44.272+0200 [DEBUG] raft: pre-voting for self: term=2 id=node-a
+2026-10-07T20:46:44.272+0200 [DEBUG] raft: calculated votes needed: needed=1 term=2
+2026-10-07T20:46:44.272+0200 [DEBUG] raft: pre-vote received: from=node-a term=2 tally=0
+2026-10-07T20:46:44.272+0200 [DEBUG] raft: pre-vote granted: from=node-a term=2 tally=1
+2026-10-07T20:46:44.272+0200 [INFO]  raft: pre-vote successful, starting election: term=2 tally=1 refused=0 votesNeeded=1
+2026-10-07T20:46:44.272+0200 [DEBUG] raft: voting for self: term=2 id=node-a
+2026-10-07T20:46:44.272+0200 [DEBUG] raft: vote granted: from=node-a term=2 tally=1
+2026-10-07T20:46:44.272+0200 [INFO]  raft: election won: term=2 tally=1
+2026-10-07T20:46:44.272+0200 [INFO]  raft: entering leader state: leader="Node at 127.0.0.1:40085 [Leader]"
+2026/10/07 20:46:44 failed to sufficiently increase receive buffer size (was: 208 kiB, wanted: 7168 kiB, got: 416 kiB). See https://github.com/quic-go/quic-go/wiki/UDP-Buffer-Sizes for details.
+2026-10-07T20:46:44.341+0200 [INFO]  raft: initial configuration: index=0 servers=[]
+2026-10-07T20:46:44.341+0200 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:36535 [Follower]" leader-address= leader-id=
+2026-10-07T20:46:44.403+0200 [INFO]  raft: updating configuration: command=AddVoter server-id=node-b server-addr=127.0.0.1:36535 servers="[{Suffrage:Voter ID:node-a Address:127.0.0.1:40085} {Suffrage:Voter ID:node-b Address:127.0.0.1:36535}]"
+2026-10-07T20:46:44.403+0200 [INFO]  raft: added peer, starting replication: peer=node-b
+2026-10-07T20:46:44.406+0200 [WARN]  raft: failed to get previous log: previous-index=4 last-index=0 error="log not found"
+2026-10-07T20:46:44.406+0200 [WARN]  raft: appendEntries rejected, sending older logs: peer="{Voter node-b 127.0.0.1:36535}" next=1
+2026-10-07T20:46:44.407+0200 [INFO]  raft: pipelining replication: peer="{Voter node-b 127.0.0.1:36535}"
+2026-10-07T20:46:52.894+0200 [INFO]  raft: aborting pipeline replication: peer="{Voter node-b 127.0.0.1:36535}"
+FAIL
+FAIL	github.com/vasic-digital/llmctl/llmctld/test/integration	187.311s
+FAIL
+GODONE

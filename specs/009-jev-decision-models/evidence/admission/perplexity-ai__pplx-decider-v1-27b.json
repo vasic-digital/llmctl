@@ -1,0 +1,130 @@
+{
+  "schema": "llmctl.admission/1",
+  "candidate": {
+    "name": "pplx-decider-27b",
+    "repo": "perplexity-ai/pplx-decider-v1-27b",
+    "pinned": "no",
+    "protocol_hint": "unsupported",
+    "known_issue": "",
+    "name_collision": "",
+    "kind": "weights"
+  },
+  "slug": "perplexity-ai__pplx-decider-v1-27b",
+  "mode": "paper-only",
+  "retrieved_at": "2026-10-07T16:16:17Z",
+  "existence": {
+    "verdict": "VERIFIED",
+    "evidence": "HTTP 200 from <LLMCTL_HF_BASE>/api/models/perplexity-ai/pplx-decider-v1-27b",
+    "http_status": 200
+  },
+  "api": {
+    "id": "perplexity-ai/pplx-decider-v1-27b",
+    "sha": "5117a6c7fe73b19308dc1a6b0fb529a40c2ecad4",
+    "lastModified": "2026-10-01T21:24:15.000Z",
+    "author": "perplexity-ai",
+    "gated": false,
+    "private": false,
+    "disabled": false
+  },
+  "pins": [],
+  "protocol": {
+    "class": "unsupported",
+    "source": "curated hint 'unsupported'"
+  },
+  "needs_engine_advance": false,
+  "tier": null,
+  "g10_subchecks": [
+    {
+      "check": "loadability",
+      "status": "SKIP",
+      "evidence": "not attempted: earlier gate(s) failed: ['G3', 'G6']"
+    },
+    {
+      "check": "smoke_answer",
+      "status": "SKIP",
+      "evidence": "not attempted: earlier gate(s) failed: ['G3', 'G6']"
+    },
+    {
+      "check": "determinism_repeats",
+      "status": "SKIP",
+      "evidence": "not attempted: earlier gate(s) failed: ['G3', 'G6']"
+    },
+    {
+      "check": "option_order_sensitivity",
+      "status": "SKIP",
+      "evidence": "not attempted: earlier gate(s) failed: ['G3', 'G6']"
+    },
+    {
+      "check": "memory_fit_measured",
+      "status": "SKIP",
+      "evidence": "not attempted: earlier gate(s) failed: ['G3', 'G6']"
+    }
+  ],
+  "gates": [
+    {
+      "gate": "G1",
+      "name": "licence allow-list",
+      "status": "PASS",
+      "evidence": "weights licence apache-2.0 (SPDX, from the HF API) is on the allow-list; licence files in repo: ['LICENSE']"
+    },
+    {
+      "gate": "G2",
+      "name": "stable revision",
+      "status": "PASS",
+      "evidence": "immutable ref 5117a6c7fe73b19308dc1a6b0fb529a40c2ecad4, lastModified 2026-10-01T21:24:15.000Z; re-verify at release"
+    },
+    {
+      "gate": "G3",
+      "name": "pinned size+sha256",
+      "status": "FAIL",
+      "evidence": "no GGUF or ONNX file in the repo to pin (siblings: ['.gitattributes', 'LICENSE', 'NOTICE', 'README.md', 'chat_template.jinja', 'config.json', 'decision_config.json', 'inference.py'])"
+    },
+    {
+      "gate": "G4",
+      "name": "loadable by pinned engine",
+      "status": "SKIP",
+      "evidence": "no supported runtime exists for an unclassified protocol (the failure is recorded at G6)"
+    },
+    {
+      "gate": "G5",
+      "name": "fits budgets",
+      "status": "SKIP",
+      "evidence": "no model file pinned, nothing to size (the failure is recorded at G3)"
+    },
+    {
+      "gate": "G6",
+      "name": "protocol classification",
+      "status": "FAIL",
+      "evidence": "unsupported / unclassified protocol (curated hint 'unsupported'); fail closed"
+    },
+    {
+      "gate": "G7",
+      "name": "supply chain",
+      "status": "PASS",
+      "evidence": "pin has no pickle files"
+    },
+    {
+      "gate": "G8",
+      "name": "provenance",
+      "status": "PASS",
+      "evidence": "API author 'perplexity-ai' == repo owner; HF-side cross-link to GitHub/PyPI not checked in paper mode"
+    },
+    {
+      "gate": "G9",
+      "name": "known-issue sweep",
+      "status": "PENDING",
+      "evidence": "live upstream issue-tracker sweep not done by this driver (offline); none recorded in the research register"
+    },
+    {
+      "gate": "G10",
+      "name": "real run",
+      "status": "SKIP",
+      "evidence": "not attempted: earlier gate(s) failed: ['G3', 'G6']"
+    }
+  ],
+  "disposition": "USER-ONLY",
+  "reasons": [
+    "G3: no GGUF or ONNX file in the repo to pin (siblings: ['.gitattributes', 'LICENSE', 'NOTICE', 'README.md', 'chat_template.jinja', 'config.json', 'decision_config.json', 'inference.py'])",
+    "G6: unsupported / unclassified protocol (curated hint 'unsupported'); fail closed"
+  ]
+}

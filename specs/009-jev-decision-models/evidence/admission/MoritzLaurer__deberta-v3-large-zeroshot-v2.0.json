@@ -1,0 +1,144 @@
+{
+  "schema": "llmctl.admission/1",
+  "candidate": {
+    "name": "decide-nli",
+    "repo": "MoritzLaurer/deberta-v3-large-zeroshot-v2.0",
+    "pinned": "yes",
+    "protocol_hint": "nli-onnx",
+    "known_issue": "",
+    "name_collision": "",
+    "kind": "weights"
+  },
+  "slug": "MoritzLaurer__deberta-v3-large-zeroshot-v2.0",
+  "mode": "paper-only",
+  "retrieved_at": "2026-10-07T16:15:31Z",
+  "existence": {
+    "verdict": "VERIFIED",
+    "evidence": "HTTP 200 from <LLMCTL_HF_BASE>/api/models/MoritzLaurer/deberta-v3-large-zeroshot-v2.0",
+    "http_status": 200
+  },
+  "api": {
+    "id": "MoritzLaurer/deberta-v3-large-zeroshot-v2.0",
+    "sha": "cf44676c28ba7312e5c5f8f8d2c22b3e0c9cdae2",
+    "lastModified": "2024-04-11T13:42:28.000Z",
+    "author": "MoritzLaurer",
+    "gated": false,
+    "private": false,
+    "disabled": false
+  },
+  "pins": [
+    {
+      "name": "onnx/model.onnx",
+      "size": 1741985401,
+      "sha256": "beded3d71421ceb718861af381d1a0d29037b3679c7350ebd41edbf79cdced1e",
+      "role": "model"
+    },
+    {
+      "name": "onnx/spm.model",
+      "size": 2464616,
+      "sha256": "c679fbf93643d19aab7ee10c0b99e460bdbc02fedf34b92b05af343b4af586fd",
+      "role": "aux"
+    }
+  ],
+  "protocol": {
+    "class": "nli-onnx",
+    "source": "curated hint (research/web-candidate-models.md; VENDOR-CLAIM / paper)"
+  },
+  "needs_engine_advance": false,
+  "tier": "baseline",
+  "est_memory_bytes": 3149849013,
+  "g10_subchecks": [
+    {
+      "check": "loadability",
+      "status": "PENDING",
+      "evidence": "paper-only mode: needs a real run on a host with the pinned engine"
+    },
+    {
+      "check": "smoke_answer",
+      "status": "PENDING",
+      "evidence": "paper-only mode: needs a real run on a host with the pinned engine"
+    },
+    {
+      "check": "determinism_repeats",
+      "status": "PENDING",
+      "evidence": "paper-only mode: needs a real run on a host with the pinned engine"
+    },
+    {
+      "check": "option_order_sensitivity",
+      "status": "PENDING",
+      "evidence": "paper-only mode: needs a real run on a host with the pinned engine"
+    },
+    {
+      "check": "memory_fit_measured",
+      "status": "PENDING",
+      "evidence": "paper-only mode: needs a real run on a host with the pinned engine"
+    }
+  ],
+  "gates": [
+    {
+      "gate": "G1",
+      "name": "licence allow-list",
+      "status": "PASS",
+      "evidence": "weights licence mit (SPDX, from the HF API) is on the allow-list; licence files in repo: none"
+    },
+    {
+      "gate": "G2",
+      "name": "stable revision",
+      "status": "PASS",
+      "evidence": "immutable ref cf44676c28ba7312e5c5f8f8d2c22b3e0c9cdae2, lastModified 2024-04-11T13:42:28.000Z; re-verify at release"
+    },
+    {
+      "gate": "G3",
+      "name": "pinned size+sha256",
+      "status": "PASS",
+      "evidence": "2 file(s) with size+sha256 from the HF API LFS oid: onnx/model.onnx 1741985401 B sha256:beded3d71421..., onnx/spm.model 2464616 B sha256:c679fbf93643..."
+    },
+    {
+      "gate": "G4",
+      "name": "loadable by pinned engine",
+      "status": "PASS",
+      "evidence": "ONNX encoder runnable by lib/onnx_server.py (NLI contract only); real load proven only by the G10 run"
+    },
+    {
+      "gate": "G5",
+      "name": "fits budgets",
+      "status": "PASS",
+      "evidence": "largest model file onnx/model.onnx = 1741985401 B (cap 10737418240 B), tier baseline, memory ESTIMATE 3149849013 B (onnx: size*1.5+512MiB) vs budget 19487261491 B (60% of /proc/meminfo MemTotal (Constitution 12.6))"
+    },
+    {
+      "gate": "G6",
+      "name": "protocol classification",
+      "status": "PASS",
+      "evidence": "nli-onnx (curated hint (research/web-candidate-models.md; VENDOR-CLAIM / paper)); tokenizer pinned: ['onnx/spm.model']"
+    },
+    {
+      "gate": "G7",
+      "name": "supply chain",
+      "status": "PASS",
+      "evidence": "pin has no pickle files; repo also holds pickle file(s) ['training_args.bin'] which the explicit pin excludes"
+    },
+    {
+      "gate": "G8",
+      "name": "provenance",
+      "status": "PASS",
+      "evidence": "API author 'MoritzLaurer' == repo owner; HF-side cross-link to GitHub/PyPI not checked in paper mode"
+    },
+    {
+      "gate": "G9",
+      "name": "known-issue sweep",
+      "status": "PENDING",
+      "evidence": "live upstream issue-tracker sweep not done by this driver (offline); none recorded in the research register"
+    },
+    {
+      "gate": "G10",
+      "name": "real run",
+      "status": "PENDING",
+      "evidence": "paper-only mode: needs a real run on a host with the pinned engine"
+    }
+  ],
+  "disposition": "ADMIT-CANDIDATE",
+  "reasons": [
+    "G9 PENDING: live upstream issue-tracker sweep not done by this driver (offline); none recorded in the research register",
+    "G10 PENDING: paper-only mode: needs a real run on a host with the pinned engine"
+  ]
+}

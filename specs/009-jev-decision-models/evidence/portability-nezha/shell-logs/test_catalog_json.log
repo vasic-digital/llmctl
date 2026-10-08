@@ -1,0 +1,35 @@
+  ok: catalog parses as JSON (python3 json.load)
+profiles: 16
+  ok: catalog cross-check (fields, unique ports, known profiles)
+  ok: all GGUF files carry a real sha256
+
+  ok: decide profiles: present, llama engine, decide capability, real sha256 pins, ports 8092-8094
+
+  ok: iter2 profiles: decide-nli (onnx), decide-2b, decide-max pinned and consistent (ports 8096/8098/8097)
+
+  ok: decision schema contract + huggingface.co pin evidence cross-check
+  ok: decide-max port is 8097 in ports map and profile
+  ok: no 8099 anywhere in the catalog
+  ok: no document still advertises decide-max on 8099
+  ok: constitution Port Map lists decide-max on 8097
+  ok: no test cites the out-of-tree research path (D-26)
+  ok: mutation 'null one sha256' is rejected by the validator
+  ok: mutation 'flip one revision char' is rejected by the validator
+  ok: mutation 'main as revision' is rejected by the validator
+  ok: mutation 'non-commercial licence' is rejected by the validator
+  ok: mutation 'missing licence' is rejected by the validator
+  ok: mutation 'chat capability on a decision profile' is rejected by the validator
+  ok: mutation 'duplicate port' is rejected by the validator
+  ok: mutation 'decide-max back on 8099' is rejected by the validator
+  ok: mutation 'onnx engine with letter-logit protocol' is rejected by the validator
+  ok: mutation 'unknown protocol' is rejected by the validator
+  ok: mutation 'benchmark class invented' is rejected by the validator
+  ok: mutation 'decision object removed' is rejected by the validator
+  ok: mutation 'size differs from huggingface.co' is rejected by the validator
+  ok: mutation 'sha256 differs from huggingface.co' is rejected by the validator
+  ok: mutation 'tokenizer.json re-added next to spm.model' is rejected by the validator
+  ok: mutation 'lower-case spelling a (G-031)' is rejected by the validator
+  ok: mutation 'lower-case spelling with a leading space (G-031)' is rejected by the validator
+  ok: mutation 'multi-letter spelling (G-031)' is rejected by the validator
+  ok: mutation 'profile name with a dot' is rejected by the validator
+RESULT: PASS

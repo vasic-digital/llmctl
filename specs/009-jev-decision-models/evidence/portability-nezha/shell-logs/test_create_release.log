@@ -1,0 +1,29 @@
+  ok: v1.0.0 is valid SemVer
+  ok: v1.0.0-rc.1 (pre-release) is valid SemVer
+  ok: 1.2.3 (no leading v) is valid SemVer
+  ok: v1.0 (missing PATCH) is rejected
+  ok: garbage string is rejected
+  ok: changelog includes the real feat commit
+  ok: changelog includes the real fix commit
+  ok: changelog includes the real docs commit
+  ok: changelog groups feat: commits under a Features heading
+  ok: changelog groups fix: commits under a Fixes heading
+  ok: a forge with no recorded state defaults to pending
+  ok: release_state_set persists real state, read back correctly
+  ok: a DIFFERENT forge's state is independent (not accidentally shared)
+  ok: release_publish_forge github invoked the real gh binary with 'release create'
+  ok: successful github publish is recorded as done
+  ok: fresh tag v9.9.10: github genuinely starts pending (sanity - proves the next failure is real)
+PASS gitlab: release v9.9.10 published
+  ok: whole release is treated as failed when github fails (even if gitlab succeeds)
+  ok: failed github publish is recorded as failed, not done
+  ok: gitlab's independent success is still recorded as done despite github's failure
+PASS github: release v9.9.10 published
+SKIP gitlab: already published (idempotent retry-only-the-failed-forge)
+  ok: github IS retried on re-run (1 failed attempt + 1 retry attempt = 2 real invocations total)
+  ok: retry after a github-only failure does NOT re-invoke glab (already succeeded, idempotent retry-only-the-failed-forge)
+  ok: retried github publish now recorded as done
+  ok: dry-run makes ZERO calls to gh
+  ok: dry-run makes ZERO calls to glab
+  ok: dry-run output announces itself as a dry run
+RESULT: PASS

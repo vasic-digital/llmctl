@@ -1,0 +1,7 @@
+premise tokens: 600  hypothesis tokens: 16
+shipped encode length: 512  truncated flag: True
+hypothesis intact before final [SEP]: True
+[SEP] count: 2  starts with [CLS]: True
+premise kept tokens: 493 of 600
+token_type 1 count == len(hyp)+1: True
+GREEN HOLDS

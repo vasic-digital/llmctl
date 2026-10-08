@@ -1,0 +1,3 @@
+  ok: no lost updates across 200 concurrent flock-serialized increments
+  ok: second acquirer waits for the first to release before proceeding
+RESULT: PASS

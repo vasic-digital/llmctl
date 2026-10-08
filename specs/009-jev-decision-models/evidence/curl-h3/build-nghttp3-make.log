@@ -1,0 +1,59 @@
+make  all-recursive
+make[1]: Entering directory '/home/milosvasic/.local/share/llmctl/tools/curl-h3/src/nghttp3-1.18.0'
+Making all in lib
+make[2]: Entering directory '/home/milosvasic/.local/share/llmctl/tools/curl-h3/src/nghttp3-1.18.0/lib'
+Making all in includes
+make[3]: Entering directory '/home/milosvasic/.local/share/llmctl/tools/curl-h3/src/nghttp3-1.18.0/lib/includes'
+make[3]: Nothing to be done for 'all'.
+make[3]: Leaving directory '/home/milosvasic/.local/share/llmctl/tools/curl-h3/src/nghttp3-1.18.0/lib/includes'
+make[3]: Entering directory '/home/milosvasic/.local/share/llmctl/tools/curl-h3/src/nghttp3-1.18.0/lib'
+  CC       nghttp3_rcbuf.lo
+  CC       nghttp3_mem.lo
+  CC       nghttp3_str.lo
+  CC       nghttp3_conv.lo
+  CC       nghttp3_buf.lo
+  CC       nghttp3_ringbuf.lo
+  CC       nghttp3_pq.lo
+  CC       nghttp3_map.lo
+  CC       nghttp3_ksl.lo
+  CC       nghttp3_qpack.lo
+  CC       nghttp3_qpack_huffman.lo
+  CC       nghttp3_qpack_huffman_data.lo
+  CC       nghttp3_err.lo
+  CC       nghttp3_debug.lo
+  CC       nghttp3_conn.lo
+  CC       nghttp3_stream.lo
+  CC       nghttp3_frame.lo
+  CC       nghttp3_tnode.lo
+  CC       nghttp3_vec.lo
+  CC       nghttp3_gaptr.lo
+  CC       nghttp3_idtr.lo
+  CC       nghttp3_range.lo
+  CC       nghttp3_http.lo
+  CC       nghttp3_version.lo
+  CC       nghttp3_balloc.lo
+  CC       nghttp3_opl.lo
+  CC       nghttp3_objalloc.lo
+  CC       nghttp3_unreachable.lo
+  CC       nghttp3_settings.lo
+  CC       nghttp3_callbacks.lo
+  CC       nghttp3_ratelim.lo
+  CC       sfparse/sfparse.lo
+  CCLD     libnghttp3.la
+make[3]: Leaving directory '/home/milosvasic/.local/share/llmctl/tools/curl-h3/src/nghttp3-1.18.0/lib'
+make[2]: Leaving directory '/home/milosvasic/.local/share/llmctl/tools/curl-h3/src/nghttp3-1.18.0/lib'
+Making all in tests
+make[2]: Entering directory '/home/milosvasic/.local/share/llmctl/tools/curl-h3/src/nghttp3-1.18.0/tests'
+make[2]: Nothing to be done for 'all'.
+make[2]: Leaving directory '/home/milosvasic/.local/share/llmctl/tools/curl-h3/src/nghttp3-1.18.0/tests'
+Making all in doc
+make[2]: Entering directory '/home/milosvasic/.local/share/llmctl/tools/curl-h3/src/nghttp3-1.18.0/doc'
+make[2]: Nothing to be done for 'all'.
+make[2]: Leaving directory '/home/milosvasic/.local/share/llmctl/tools/curl-h3/src/nghttp3-1.18.0/doc'
+Making all in examples
+make[2]: Entering directory '/home/milosvasic/.local/share/llmctl/tools/curl-h3/src/nghttp3-1.18.0/examples'
+make[2]: Nothing to be done for 'all'.
+make[2]: Leaving directory '/home/milosvasic/.local/share/llmctl/tools/curl-h3/src/nghttp3-1.18.0/examples'
+make[2]: Entering directory '/home/milosvasic/.local/share/llmctl/tools/curl-h3/src/nghttp3-1.18.0'
+make[2]: Leaving directory '/home/milosvasic/.local/share/llmctl/tools/curl-h3/src/nghttp3-1.18.0'
+make[1]: Leaving directory '/home/milosvasic/.local/share/llmctl/tools/curl-h3/src/nghttp3-1.18.0'

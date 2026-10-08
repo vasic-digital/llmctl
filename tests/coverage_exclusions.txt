@@ -1,0 +1,16 @@
+# tests/coverage_exclusions.txt - CHECKED-IN code-coverage exclusion list (Constitution 11.4.224(E)).
+#
+# A path is dropped from the coverage corpus ONLY if it is listed here, with a class from the CLOSED set
+#   generated-code | vendored-third-party | non-shipping-fixtures-and-golden-assets
+# and a reason. Excluding FIRST-PARTY shipping code needs a tracked item in the 4th column (never '-').
+# scripts/coverage/make_report.py REFUSES a malformed entry (unknown class, empty reason) and prints every
+# exclusion it applied in COVERAGE-REPORT.md, so exclusions are never silent.
+#
+# Format (pipe separated):  class | repo-relative glob (fnmatch) | reason | tracked-item-or-dash
+non-shipping-fixtures-and-golden-assets|internal/client/internal/clienttest/*|test-only TLS gateway helper used by Go/bash tests; never built into a shipped binary|-
+non-shipping-fixtures-and-golden-assets|internal/gateway/internal/fakebackends/*|fake llama-server/encoder backends for tests; never shipped|-
+non-shipping-fixtures-and-golden-assets|internal/server/internal/servetest/*|test-only server harness; never shipped|-
+non-shipping-fixtures-and-golden-assets|internal/server/internal/testpki/*|throw-away test CA/PKI generator; never shipped|-
+non-shipping-fixtures-and-golden-assets|internal/vantage/internal/fixture/*|test fixture for the vantage suite; never shipped|-
+non-shipping-fixtures-and-golden-assets|llmctld/test/integration/*|integration-test package (test files only), not shipped code|-
+vendored-third-party|submodules/*|git submodules (llama.cpp, colibri, containers): third-party/upstream code, measured by their own projects|-

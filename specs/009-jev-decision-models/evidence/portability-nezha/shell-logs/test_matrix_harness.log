@@ -1,0 +1,61 @@
+   "curl": "available",
+   "python-urllib": "available",
+   "python-requests": "available",
+   "node-fetch": "available",
+   "go-nethttp": "available",
+   "chromium": "available"
+  },
+  "pending_adapters": {
+   "llmctl-cli": "llmctl-decide ask adapter is wired later (T-runner follow-up)",
+   "agent:*": "the seven coding-agent adapters are wired later (defined subset: one authenticated success call + one unauthenticated call each)"
+  },
+  "vantages": {
+   "host": "exercised",
+   "second-machine": "pending-vantage (vantage helper not wired yet)"
+  },
+  "cases": 45
+ }
+}
+{
+ "verdict": "PASS",
+ "summary": {
+  "cells": 270,
+  "pass": 227,
+  "not-exercised": 43,
+  "classes_beyond_fr069": 14
+ },
+ "problems": [],
+ "first_failures": [],
+ "run_dir": "/home/milosvasic/llmctl-work/tmp/llmctl-matrix-test-fIKtW7/full"
+}
+PASS: no unexpected failing cell (verdict=PASS, runner rc=0)
+PASS: 45 cases x 6 clients = 270 cells, none missing
+PASS: programmatic clients: 0 failing cells; every not-exercised cell is in a declared class
+PASS: per-client pass counts: {'curl': 43, 'python-urllib': 45, 'python-requests': 42, 'node-fetch': 42, 'go-nethttp': 42, 'chromium': 13}
+PASS: leak scan clean with control needle found
+PASS: run.py --check: chain, manifest, cells<->evidence, completeness all consistent
+PASS: M1 broken client adapter: run FAILS (rc=1, 29 failing cells)
+PASS: M1 control: unbroken curl adapter passes the identical command
+PASS: M2 removed inventory row EP-040 detected
+PASS: M2 inventory row without a test (EP-999) detected
+PASS: M3 tampered matrix.json rejected by --check
+PASS: M3 edited evidence.jsonl rejected (chain/manifest)
+PASS: M3 truncated evidence.jsonl rejected
+PASS: leak scanner finds a planted token (exit non-zero)
+  },
+  "weak-cipher-only-client": {
+   "pass": 2,
+   "fail": 0,
+   "not_exercised": 0
+  }
+ },
+ "problems": [
+  "altered-certificate",
+  "untrusted-authority"
+ ]
+}
+FAIL: negative TLS suite failed (rc=1)
+PASS: negative TLS covers every FR-070 case
+PASS: negative TLS evidence chain intact
+PASS: no __pycache__/.pyc written
+SUMMARY: 1 failure(s)

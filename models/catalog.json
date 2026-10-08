@@ -11,7 +11,19 @@
     "ws-dense-32b": 8086,
     "ws-moe-30b": 8087,
     "colibri-glm": 8090,
-    "colibri-qwen36": 8091
+    "colibri-qwen36": 8091,
+    "decide-tiny": 8092,
+    "decide": 8093,
+    "decide-pro": 8094,
+    "decide-nli": 8096,
+    "decide-2b": 8098,
+    "decide-max": 8097,
+    "decide-julia": 8103,
+    "decide-kev-08b": 8104,
+    "decide-kev-4b": 8105,
+    "decide-kev-9b": 8106,
+    "decide-laya": 8107,
+    "decide-lev": 8108
   },
   "profiles": {
     "fast": {
@@ -1408,6 +1420,942 @@
           "role": "model"
         }
       ]
+    },
+    "decide-tiny": {
+      "capability": [
+        "decide"
+      ],
+      "min_tier": "below-minimum",
+      "port": 8092,
+      "defaults": {
+        "ctx": 4096,
+        "ngl": 99,
+        "parallel": 4,
+        "flash_attn": "auto",
+        "kv_cache_type": "q8_0"
+      },
+      "desc": "Jev-Style 0.8B Decision v3 Q4_K_M - tiny typed-decision model (noul/choice/score), 79.2% typed-decisions accuracy per model card (vendor-measured), 51 languages, Apache-2.0. CPU-friendly; min_tier below-minimum only recommends, never blocks. sha256/size re-verified against huggingface.co on 2026-10-07 (specs/009-jev-decision-models/evidence/pin-reverify.json); hf_revision pinned to commit edf37c26. Override: LLMCTL_PORT_DECIDE_TINY, LLMCTL_CTX_DECIDE_TINY, LLMCTL_KVTYPE_DECIDE_TINY.",
+      "engine": "llama",
+      "hf_repo": "chaoliangUNSW/Jev-Style-0.8B-Decision-v3-GGUF",
+      "hf_revision": "edf37c26a1098f83cf4264b8adbe0dca2d2ebb0c",
+      "license": "Apache-2.0",
+      "provenance": {
+        "benchmark": {
+          "value": "79.2% on 2,000 typed decisions per model card",
+          "class": "vendor-measured"
+        }
+      },
+      "decision": {
+        "protocol": "letter-logit",
+        "max_options": 20,
+        "max_options_status": "evidence-pending",
+        "score_levels": [
+          2,
+          10
+        ],
+        "readout": {
+          "n_probs": 32,
+          "mass_threshold": 0.5,
+          "spellings": [
+            "A",
+            " A"
+          ],
+          "cache_prompt": false
+        }
+      },
+      "files": [
+        {
+          "name": "Jev-Style-0.8B-Decision-v3-Q4_K_M.gguf",
+          "size": 529296864,
+          "sha256": "0a19bc29bacc33e0d871146c8612b24dd14c2ed2e61cedeb7a928b0852628bac",
+          "role": "model"
+        }
+      ],
+      "maturity": {
+        "noul": {
+          "status": "unmeasured",
+          "reason": "not yet measured"
+        },
+        "choice": {
+          "status": "unmeasured",
+          "reason": "not yet measured"
+        },
+        "score": {
+          "status": "unmeasured",
+          "reason": "not yet measured"
+        }
+      },
+      "memory": {
+        "ram": {
+          "status": "unmeasured",
+          "reason": "the model is not downloaded on any host that has measured memory so far (G-137); measure it and re-run scripts/overhead_from_memory.py --write"
+        },
+        "vram": {
+          "status": "unmeasured",
+          "reason": "the model is not downloaded on any host that has measured memory so far (G-137); measure it and re-run scripts/overhead_from_memory.py --write"
+        }
+      }
+    },
+    "decide": {
+      "capability": [
+        "decide"
+      ],
+      "min_tier": "baseline",
+      "port": 8093,
+      "defaults": {
+        "ctx": 8192,
+        "ngl": 99,
+        "parallel": 2,
+        "flash_attn": "auto",
+        "kv_cache_type": "q8_0"
+      },
+      "desc": "Mapika decider-4b v2.1 Q4_K_M - JevBench #1 (64.13) typed-decision model (vendor-measured), Apache-2.0. No 'v2' tag exists upstream; the repo's main branch carries the v2.1 quantization set, pinned to commit b79f09d9. sha256/size re-verified against huggingface.co on 2026-10-07 (specs/009-jev-decision-models/evidence/pin-reverify.json). Override: LLMCTL_PORT_DECIDE, LLMCTL_CTX_DECIDE, LLMCTL_KVTYPE_DECIDE.",
+      "engine": "llama",
+      "hf_repo": "Mapika/decider-4b-GGUF",
+      "hf_revision": "b79f09d9ba7837f1b744295ea267b55d08e958ec",
+      "license": "Apache-2.0",
+      "provenance": {
+        "benchmark": {
+          "value": "JevBench composite 64.13, ranked #1 of 89 on the JevBench leaderboard (per model card / leaderboard)",
+          "class": "vendor-measured"
+        }
+      },
+      "decision": {
+        "protocol": "letter-logit",
+        "max_options": 20,
+        "max_options_status": "evidence-pending",
+        "score_levels": [
+          2,
+          10
+        ],
+        "readout": {
+          "n_probs": 32,
+          "mass_threshold": 0.5,
+          "spellings": [
+            "A",
+            " A"
+          ],
+          "cache_prompt": false
+        }
+      },
+      "files": [
+        {
+          "name": "decider-4b-v2.1-Q4_K_M.gguf",
+          "size": 2708804640,
+          "sha256": "c7083fcfc93f650cd66caeade4a3840ef9eeeeb1e80920907c554f70619d7c56",
+          "role": "model"
+        }
+      ],
+      "maturity": {
+        "noul": {
+          "status": "unmeasured",
+          "reason": "not yet measured"
+        },
+        "choice": {
+          "status": "unmeasured",
+          "reason": "not yet measured"
+        },
+        "score": {
+          "status": "unmeasured",
+          "reason": "not yet measured"
+        }
+      },
+      "memory": {
+        "ram": {
+          "status": "unmeasured",
+          "reason": "the model is not downloaded on any host that has measured memory so far (G-137); measure it and re-run scripts/overhead_from_memory.py --write"
+        },
+        "vram": {
+          "status": "unmeasured",
+          "reason": "the model is not downloaded on any host that has measured memory so far (G-137); measure it and re-run scripts/overhead_from_memory.py --write"
+        }
+      }
+    },
+    "decide-pro": {
+      "capability": [
+        "decide"
+      ],
+      "min_tier": "workstation",
+      "port": 8094,
+      "defaults": {
+        "ctx": 8192,
+        "ngl": 99,
+        "parallel": 2,
+        "flash_attn": "auto",
+        "kv_cache_type": "q8_0"
+      },
+      "desc": "Rizzo Flow 4B (Spark-X2.5 LoRA-merged) Q8_0 - decision model fine-tuned for well-shaped decision probabilities; authors advise recalibration on own data. Apache-2.0. sha256/size re-verified against huggingface.co on 2026-10-07 (specs/009-jev-decision-models/evidence/pin-reverify.json); hf_revision pinned to commit 55633c8c. Override: LLMCTL_PORT_DECIDE_PRO, LLMCTL_CTX_DECIDE_PRO, LLMCTL_KVTYPE_DECIDE_PRO.",
+      "engine": "llama",
+      "hf_repo": "rizzoaiacademy/rizzo-flow",
+      "hf_revision": "55633c8cbd2b826bd3eefdeb05310450996649df",
+      "license": "Apache-2.0",
+      "provenance": {
+        "benchmark": {
+          "value": "typed-decisions accuracy 0.574 (base) -> 0.648 (fine-tuned), Brier 0.205, ECE 0.112, per the Rizzo Flow authors",
+          "class": "vendor-measured"
+        }
+      },
+      "decision": {
+        "protocol": "letter-logit",
+        "max_options": 20,
+        "max_options_status": "evidence-pending",
+        "score_levels": [
+          2,
+          10
+        ],
+        "readout": {
+          "n_probs": 32,
+          "mass_threshold": 0.5,
+          "spellings": [
+            "A",
+            " A"
+          ],
+          "cache_prompt": false
+        }
+      },
+      "files": [
+        {
+          "name": "spark-x2.5-4b-rizzo-flow-lora-q8_0.gguf",
+          "size": 4375021216,
+          "sha256": "dbec3c89d33984772324e65a8ed56b48e958e301b856cb870a7c1b385d01691a",
+          "role": "model"
+        }
+      ],
+      "maturity": {
+        "noul": {
+          "status": "unmeasured",
+          "reason": "not yet measured"
+        },
+        "choice": {
+          "status": "unmeasured",
+          "reason": "not yet measured"
+        },
+        "score": {
+          "status": "unmeasured",
+          "reason": "not yet measured"
+        }
+      },
+      "memory": {
+        "ram": {
+          "status": "unmeasured",
+          "reason": "the model is not downloaded on any host that has measured memory so far (G-137); measure it and re-run scripts/overhead_from_memory.py --write"
+        },
+        "vram": {
+          "status": "unmeasured",
+          "reason": "the model is not downloaded on any host that has measured memory so far (G-137); measure it and re-run scripts/overhead_from_memory.py --write"
+        }
+      }
+    },
+    "decide-nli": {
+      "capability": [
+        "decide"
+      ],
+      "min_tier": "below-minimum",
+      "port": 8096,
+      "defaults": {
+        "ctx": 512,
+        "ngl": 0,
+        "parallel": 1,
+        "flash_attn": "off"
+      },
+      "desc": "DeBERTa-v3-large zeroshot NLI (onnx/model.onnx, fp32, opset 12) - encoder-class typed-decision model served by the onnx engine (lib/onnx_server.py), MIT license. Decisions are computed as NLI entailment: premise = state, one hypothesis per option, ONE ENCODER FORWARD PASS PER OPTION (the cost model - latency grows linearly with option count, hence ctx 512 / parallel 1). CPU-only inference; RAM reservation = model size * 1.5 + 512 MiB. sha256/size re-verified against huggingface.co on 2026-10-07 (specs/009-jev-decision-models/evidence/pin-reverify.json); hf_revision pinned to commit cf44676c. config.json/tokenizer_config.json are small non-LFS git blobs whose sha256 was computed from the downloaded bytes and pinned (config.json determines the label order); the unused 8.6 MB tokenizer.json is no longer downloaded (the runner uses spm.model). Override: LLMCTL_PORT_DECIDE_NLI.",
+      "engine": "onnx",
+      "hf_repo": "MoritzLaurer/deberta-v3-large-zeroshot-v2.0",
+      "hf_revision": "cf44676c28ba7312e5c5f8f8d2c22b3e0c9cdae2",
+      "license": "MIT",
+      "provenance": {
+        "benchmark": {
+          "value": "no accuracy figure recorded; zeroshot-NLI capability claim is the upstream model card's task family only",
+          "class": "unverified"
+        }
+      },
+      "decision": {
+        "protocol": "nli-onnx",
+        "max_options": 20,
+        "max_options_status": "evidence-pending",
+        "score_levels": [
+          2,
+          10
+        ],
+        "experimental": [
+          "choice",
+          "score"
+        ],
+        "tier_note": "experimental choice/score: one encoder forward pass per option (latency grows linearly with option count)"
+      },
+      "files": [
+        {
+          "name": "onnx/model.onnx",
+          "size": 1741985401,
+          "sha256": "beded3d71421ceb718861af381d1a0d29037b3679c7350ebd41edbf79cdced1e",
+          "role": "model"
+        },
+        {
+          "name": "onnx/spm.model",
+          "size": 2464616,
+          "sha256": "c679fbf93643d19aab7ee10c0b99e460bdbc02fedf34b92b05af343b4af586fd",
+          "role": "tokenizer"
+        },
+        {
+          "name": "config.json",
+          "size": 1019,
+          "sha256": "3b0a2a3fb311037ba72670d87cbd16f920581985178547a76936dfdb292e5271",
+          "role": "config"
+        },
+        {
+          "name": "tokenizer_config.json",
+          "size": 1256,
+          "sha256": "f5a1a74a632c0e9225e09a21ddf60c2e70ef5d3bfc1f261a24fd8ddab27254d2",
+          "role": "config"
+        }
+      ],
+      "maturity": {
+        "noul": {
+          "status": "unmeasured",
+          "reason": "not yet measured"
+        },
+        "choice": {
+          "status": "unmeasured",
+          "reason": "not yet measured"
+        },
+        "score": {
+          "status": "unmeasured",
+          "reason": "not yet measured"
+        }
+      },
+      "memory": {
+        "ram": {
+          "status": "unmeasured",
+          "reason": "the model is not downloaded on any host that has measured memory so far (G-137); measure it and re-run scripts/overhead_from_memory.py --write"
+        },
+        "vram": {
+          "status": "unmeasured",
+          "reason": "the model is not downloaded on any host that has measured memory so far (G-137); measure it and re-run scripts/overhead_from_memory.py --write"
+        }
+      }
+    },
+    "decide-2b": {
+      "capability": [
+        "decide"
+      ],
+      "min_tier": "baseline",
+      "port": 8098,
+      "defaults": {
+        "ctx": 8192,
+        "ngl": 99,
+        "parallel": 2,
+        "flash_attn": "auto",
+        "kv_cache_type": "q8_0"
+      },
+      "desc": "JevK5 2B v0.2 Q8_0 - small typed-decision GGUF (noul/choice/score), Apache-2.0. Sits between decide-tiny and decide on the footprint/accuracy ladder. sha256/size re-verified against huggingface.co on 2026-10-07 (specs/009-jev-decision-models/evidence/pin-reverify.json); hf_revision pinned to commit ec67b0bf. Override: LLMCTL_PORT_DECIDE_2B, LLMCTL_CTX_DECIDE_2B, LLMCTL_KVTYPE_DECIDE_2B.",
+      "engine": "llama",
+      "hf_repo": "alibiserikbay/JevK5-GGUF",
+      "hf_revision": "ec67b0bfce5119a8b11a2cdb430bb43e3fa3e82a",
+      "license": "Apache-2.0",
+      "provenance": {
+        "benchmark": {
+          "value": "no accuracy figure recorded; upstream repo card numbers not reproduced",
+          "class": "unverified"
+        }
+      },
+      "decision": {
+        "protocol": "letter-logit",
+        "max_options": 20,
+        "max_options_status": "evidence-pending",
+        "score_levels": [
+          2,
+          10
+        ],
+        "readout": {
+          "n_probs": 32,
+          "mass_threshold": 0.5,
+          "spellings": [
+            "A",
+            " A"
+          ],
+          "cache_prompt": false
+        }
+      },
+      "files": [
+        {
+          "name": "jevk5-2b-v0.2-Q8_0.gguf",
+          "size": 2012012000,
+          "sha256": "17222f27a89273aca7614e34083a530b0d90cd51cffeb225c7acc8e79a7e0eba",
+          "role": "model"
+        }
+      ],
+      "maturity": {
+        "noul": {
+          "status": "unmeasured",
+          "reason": "not yet measured"
+        },
+        "choice": {
+          "status": "unmeasured",
+          "reason": "not yet measured"
+        },
+        "score": {
+          "status": "unmeasured",
+          "reason": "not yet measured"
+        }
+      },
+      "memory": {
+        "ram": {
+          "status": "unmeasured",
+          "reason": "the model is not downloaded on any host that has measured memory so far (G-137); measure it and re-run scripts/overhead_from_memory.py --write"
+        },
+        "vram": {
+          "status": "unmeasured",
+          "reason": "the model is not downloaded on any host that has measured memory so far (G-137); measure it and re-run scripts/overhead_from_memory.py --write"
+        }
+      }
+    },
+    "decide-max": {
+      "capability": [
+        "decide"
+      ],
+      "min_tier": "workstation",
+      "port": 8097,
+      "defaults": {
+        "ctx": 8192,
+        "ngl": 99,
+        "parallel": 2,
+        "flash_attn": "auto",
+        "kv_cache_type": "q8_0"
+      },
+      "desc": "JevK5 9B v0.3.3 Q8_0 - largest shipped typed-decision GGUF (noul/choice/score), Apache-2.0, workstation tier. sha256/size re-verified against huggingface.co on 2026-10-07 (specs/009-jev-decision-models/evidence/pin-reverify.json); hf_revision pinned to commit ec67b0bf. Port 8097 (the former default port is held by another program on this host). Override: LLMCTL_PORT_DECIDE_MAX, LLMCTL_CTX_DECIDE_MAX, LLMCTL_KVTYPE_DECIDE_MAX.",
+      "engine": "llama",
+      "hf_repo": "alibiserikbay/JevK5-GGUF",
+      "hf_revision": "ec67b0bfce5119a8b11a2cdb430bb43e3fa3e82a",
+      "license": "Apache-2.0",
+      "provenance": {
+        "benchmark": {
+          "value": "no accuracy figure recorded; upstream repo card numbers not reproduced",
+          "class": "unverified"
+        }
+      },
+      "decision": {
+        "protocol": "letter-logit",
+        "max_options": 20,
+        "max_options_status": "evidence-pending",
+        "score_levels": [
+          2,
+          10
+        ],
+        "readout": {
+          "n_probs": 32,
+          "mass_threshold": 0.5,
+          "spellings": [
+            "A",
+            " A"
+          ],
+          "cache_prompt": false
+        }
+      },
+      "files": [
+        {
+          "name": "jevk5-9b-v0.3.3-Q8_0.gguf",
+          "size": 9527501280,
+          "sha256": "283de8fd216ad2200506d9236e574ddb5902b16e6a806a6fa38e9dd1b4286edf",
+          "role": "model"
+        }
+      ],
+      "maturity": {
+        "noul": {
+          "status": "unmeasured",
+          "reason": "not yet measured"
+        },
+        "choice": {
+          "status": "unmeasured",
+          "reason": "not yet measured"
+        },
+        "score": {
+          "status": "unmeasured",
+          "reason": "not yet measured"
+        }
+      },
+      "memory": {
+        "ram": {
+          "status": "unmeasured",
+          "reason": "the model is not downloaded on any host that has measured memory so far (G-137); measure it and re-run scripts/overhead_from_memory.py --write"
+        },
+        "vram": {
+          "status": "unmeasured",
+          "reason": "the model is not downloaded on any host that has measured memory so far (G-137); measure it and re-run scripts/overhead_from_memory.py --write"
+        }
+      }
+    },
+    "decide-julia": {
+      "capability": [
+        "decide"
+      ],
+      "min_tier": "below-minimum",
+      "port": 8103,
+      "defaults": {
+        "ctx": 1024,
+        "ngl": 99,
+        "parallel": 1,
+        "flash_attn": "auto",
+        "overhead_mb": 1410,
+        "window_tokens": 1024,
+        "overhead_vram_mb": 194
+      },
+      "desc": "Julia 1 Q8_0 (144M, modern-bert, mmBERT-small base) - tiny non-autoregressive typed-decision encoder served by llama-server's NATIVE /v1/systemone (decision_type laya; needs llama.cpp >= b11379, see docs/decision-models.md). CPU-friendly; min_tier below-minimum only recommends, never blocks. Per-slot context 1024 tokens and defaults.overhead_mb 1160: measured, not estimated - an encoder-class model allocates activation buffers that scale with the state length and the window (peak RSS 1.4 GiB with a state filling the 1024-token window; weights alone are far smaller; specs/009-jev-decision-models/evidence/live/ctx-peak-memory-experiment.txt). A state longer than the window is answered 422. Pins (size, sha256, revision 16fee179) from evidence/admission/ggml-org__Julia-1-GGUF.json, re-verified against huggingface.co in evidence/pin-reverify.json. Override: LLMCTL_PORT_DECIDE_JULIA, LLMCTL_CTX_DECIDE_JULIA.",
+      "engine": "llama",
+      "hf_repo": "ggml-org/Julia-1-GGUF",
+      "hf_revision": "16fee17949206fbf58da9347daea44d792a81211",
+      "license": "Apache-2.0",
+      "provenance": {
+        "benchmark": {
+          "value": "73.15% (1,463/2,000) on typed decisions, H200 BF16, per the upstream model card (vendor-measured, not reproduced; the Q8_0 GGUF was not the measured artifact)",
+          "class": "vendor-measured"
+        }
+      },
+      "decision": {
+        "protocol": "systemone-native",
+        "max_options": 255,
+        "max_options_status": "evidence-pending",
+        "score_levels": [
+          2,
+          10
+        ]
+      },
+      "files": [
+        {
+          "name": "Julia-1-Q8_0.gguf",
+          "size": 168166496,
+          "sha256": "1ea6a7e87156eeeda88cb7a36a61265b37ba7b993897b7289b99aea5b5e47069",
+          "role": "model"
+        }
+      ],
+      "maturity": {
+        "noul": {
+          "status": "experimental",
+          "evidence": "specs/009-jev-decision-models/evidence/live/decide-julia/golden-stats.txt",
+          "lower_bound": 0.425,
+          "baseline": 0.667,
+          "n": 60
+        },
+        "choice": {
+          "status": "experimental",
+          "evidence": "specs/009-jev-decision-models/evidence/live/decide-julia/golden-stats.txt",
+          "lower_bound": 0.216,
+          "baseline": 0.235,
+          "n": 41
+        },
+        "score": {
+          "status": "experimental",
+          "evidence": "specs/009-jev-decision-models/evidence/live/decide-julia/golden-stats.txt",
+          "lower_bound": 0.114,
+          "baseline": 0.29,
+          "n": 31
+        }
+      },
+      "memory": {
+        "ram": {
+          "status": "measured",
+          "format": "ctx-peak-txt",
+          "evidence": "specs/009-jev-decision-models/evidence/live/ctx-peak-memory-experiment.txt",
+          "ctx": 1024,
+          "host": "anton",
+          "peak_hwm_mib": 1442.0,
+          "weights_mib": 160.4
+        },
+        "vram": {
+          "status": "measured",
+          "format": "pid-vram-txt",
+          "evidence": "specs/009-jev-decision-models/evidence/live/decide-julia/memory.txt",
+          "host": "anton",
+          "peak_mib": 176
+        }
+      }
+    },
+    "decide-kev-08b": {
+      "capability": [
+        "decide"
+      ],
+      "min_tier": "below-minimum",
+      "port": 8104,
+      "defaults": {
+        "ctx": 2048,
+        "ngl": 99,
+        "parallel": 1,
+        "flash_attn": "auto",
+        "overhead_mb": 4553,
+        "window_tokens": 2048,
+        "overhead_vram_mb": 2621
+      },
+      "desc": "Kev 0.8B Q8_0 (Qwen3.5-0.8B base + LoRA + pointer head embedded in the GGUF) - small typed-decision model served by llama-server's NATIVE /v1/systemone (decision_type kev; needs llama.cpp >= b11379). min_tier below-minimum only recommends, never blocks. Per-slot context 2048 tokens and defaults.overhead_mb 1540: measured, not estimated (peak RSS 2.5 GiB at a 2048-token window with 775 MiB of weights; specs/009-jev-decision-models/evidence/live/decide-kev-08b-cpu-ctx2048-override/memory.txt). Longer states are answered 422. Pins (size, sha256, revision e551e319) from evidence/admission/ggml-org__Kev-0.8B-GGUF.json, re-verified against huggingface.co in evidence/pin-reverify.json. Override: LLMCTL_PORT_DECIDE_KEV_08B, LLMCTL_CTX_DECIDE_KEV_08B.",
+      "engine": "llama",
+      "hf_repo": "ggml-org/Kev-0.8B-GGUF",
+      "hf_revision": "e551e319d483ff57e1ff208924b349d397cffc1c",
+      "license": "Apache-2.0",
+      "provenance": {
+        "benchmark": {
+          "value": "no accuracy figure recorded; upstream card numbers not reproduced",
+          "class": "unverified"
+        }
+      },
+      "decision": {
+        "protocol": "systemone-native",
+        "max_options": 255,
+        "max_options_status": "evidence-pending",
+        "score_levels": [
+          2,
+          10
+        ]
+      },
+      "files": [
+        {
+          "name": "Kev-0.8B-Q8_0.gguf",
+          "size": 812406304,
+          "sha256": "27278f34eb3273bceea4c053dc50dd61a5161da21a718c4aacdf8fd5830771d0",
+          "role": "model"
+        }
+      ],
+      "maturity": {
+        "noul": {
+          "status": "measured",
+          "evidence": "specs/009-jev-decision-models/evidence/live/decide-kev-08b/golden-stats.txt",
+          "lower_bound": 0.701,
+          "baseline": 0.667,
+          "n": 60
+        },
+        "choice": {
+          "status": "measured",
+          "evidence": "specs/009-jev-decision-models/evidence/live/decide-kev-08b/golden-stats.txt",
+          "lower_bound": 0.745,
+          "baseline": 0.235,
+          "n": 41
+        },
+        "score": {
+          "status": "experimental",
+          "evidence": "specs/009-jev-decision-models/evidence/live/decide-kev-08b/golden-stats.txt",
+          "lower_bound": 0.161,
+          "baseline": 0.29,
+          "n": 31
+        }
+      },
+      "memory": {
+        "ram": {
+          "status": "measured",
+          "format": "memory-summary-json",
+          "evidence": "specs/009-jev-decision-models/evidence/live/nezha/decide-kev-08b/memory-summary.json",
+          "host": "nezha",
+          "peak_hwm_mib": 4913.9,
+          "weights_mib": 774.8
+        },
+        "vram": {
+          "status": "measured",
+          "format": "pid-vram-txt",
+          "evidence": "specs/009-jev-decision-models/evidence/live/decide-kev-08b/memory.txt",
+          "host": "anton",
+          "peak_mib": 2382
+        }
+      }
+    },
+    "decide-kev-4b": {
+      "capability": [
+        "decide"
+      ],
+      "min_tier": "baseline",
+      "port": 8105,
+      "defaults": {
+        "ctx": 8192,
+        "ngl": 99,
+        "parallel": 1,
+        "flash_attn": "auto"
+      },
+      "desc": "Kev 4B Q4_K_M (Qwen3.5-4B-Base + LoRA r16 + pointer head embedded in the GGUF) - typed-decision model served by llama-server's NATIVE /v1/systemone (decision_type kev; needs llama.cpp >= b11379). Upstream card: validated context 8,192 tokens. Pins (size, sha256, revision d924f2e2) from evidence/admission/ggml-org__Kev-4B-GGUF.json, re-verified against huggingface.co in evidence/pin-reverify.json. Override: LLMCTL_PORT_DECIDE_KEV_4B, LLMCTL_CTX_DECIDE_KEV_4B.",
+      "engine": "llama",
+      "hf_repo": "ggml-org/Kev-4B-GGUF",
+      "hf_revision": "d924f2e2c3872da8b8aaf3eb4453b4126deceb79",
+      "license": "Apache-2.0",
+      "provenance": {
+        "benchmark": {
+          "value": "no accuracy figure recorded; upstream card numbers (held-out index 38.0; 0.817/0.838 on listed sets) not reproduced",
+          "class": "unverified"
+        }
+      },
+      "decision": {
+        "protocol": "systemone-native",
+        "max_options": 255,
+        "max_options_status": "evidence-pending",
+        "score_levels": [
+          2,
+          10
+        ]
+      },
+      "files": [
+        {
+          "name": "Kev-4B-Q4_K_M.gguf",
+          "size": 3033489824,
+          "sha256": "33ae6b18926502b2209a1bf7d3b61a350d65938441515c686bb87d226a19eff9",
+          "role": "model"
+        }
+      ],
+      "maturity": {
+        "noul": {
+          "status": "measured",
+          "evidence": "specs/009-jev-decision-models/evidence/live/nezha/decide-kev-4b/golden-stats.txt",
+          "lower_bound": 0.863,
+          "baseline": 0.667,
+          "n": 60
+        },
+        "choice": {
+          "status": "measured",
+          "evidence": "specs/009-jev-decision-models/evidence/live/nezha/decide-kev-4b/golden-stats.txt",
+          "lower_bound": 0.914,
+          "baseline": 0.235,
+          "n": 41
+        },
+        "score": {
+          "status": "measured",
+          "evidence": "specs/009-jev-decision-models/evidence/live/nezha/decide-kev-4b/golden-stats.txt",
+          "lower_bound": 0.438,
+          "baseline": 0.29,
+          "n": 31
+        }
+      },
+      "memory": {
+        "ram": {
+          "status": "unmeasured",
+          "reason": "NEZHA run pending"
+        },
+        "vram": {
+          "status": "unmeasured",
+          "reason": "measured only on a CPU-only host (no CUDA build, so no offload); a CUDA host with enough free RAM to load it was not available (the scheduler refused it, NATIVE-REPORT.md section 3)"
+        }
+      }
+    },
+    "decide-kev-9b": {
+      "capability": [
+        "decide"
+      ],
+      "min_tier": "workstation",
+      "port": 8106,
+      "defaults": {
+        "ctx": 8192,
+        "ngl": 99,
+        "parallel": 1,
+        "flash_attn": "auto"
+      },
+      "desc": "Kev 9B Q4_K_M - largest Kev typed-decision model served by llama-server's NATIVE /v1/systemone (decision_type kev; needs llama.cpp >= b11379). workstation tier: the scheduler refuses it, with numbers, on a host without the memory. Pins (size, sha256, revision ec2bbfe6) from evidence/admission/ggml-org__Kev-9B-GGUF.json, re-verified against huggingface.co in evidence/pin-reverify.json. Override: LLMCTL_PORT_DECIDE_KEV_9B, LLMCTL_CTX_DECIDE_KEV_9B.",
+      "engine": "llama",
+      "hf_repo": "ggml-org/Kev-9B-GGUF",
+      "hf_revision": "ec2bbfe6620218aee2e01cc93bb78dee2a96ed58",
+      "license": "Apache-2.0",
+      "provenance": {
+        "benchmark": {
+          "value": "no accuracy figure recorded; upstream card numbers not reproduced",
+          "class": "unverified"
+        }
+      },
+      "decision": {
+        "protocol": "systemone-native",
+        "max_options": 255,
+        "max_options_status": "evidence-pending",
+        "score_levels": [
+          2,
+          10
+        ]
+      },
+      "files": [
+        {
+          "name": "Kev-9B-Q4_K_M.gguf",
+          "size": 6358923744,
+          "sha256": "86a6084984a6ef6818eb12c07cdc67ed3c47b00208d41a8816c64301bc6bcbda",
+          "role": "model"
+        }
+      ],
+      "maturity": {
+        "noul": {
+          "status": "unmeasured",
+          "reason": "not yet measured"
+        },
+        "choice": {
+          "status": "unmeasured",
+          "reason": "not yet measured"
+        },
+        "score": {
+          "status": "unmeasured",
+          "reason": "not yet measured"
+        }
+      },
+      "memory": {
+        "ram": {
+          "status": "unmeasured",
+          "reason": "NEZHA run pending"
+        },
+        "vram": {
+          "status": "unmeasured",
+          "reason": "measured only on a CPU-only host (no CUDA build, so no offload); a CUDA host with enough free RAM to load it was not available (the scheduler refused it, NATIVE-REPORT.md section 3)"
+        }
+      }
+    },
+    "decide-laya": {
+      "capability": [
+        "decide"
+      ],
+      "min_tier": "below-minimum",
+      "port": 8107,
+      "defaults": {
+        "ctx": 1024,
+        "ngl": 99,
+        "parallel": 1,
+        "flash_attn": "auto",
+        "overhead_mb": 615,
+        "window_tokens": 1024,
+        "overhead_vram_mb": 256
+      },
+      "desc": "Laya Q8_0 (421M, modern-bert, non-autoregressive encoder) - typed-decision model served by llama-server's NATIVE /v1/systemone (decision_type laya; needs llama.cpp >= b11379). Upstream ships a 1,024-token default limit (see docs/decision-models.md). min_tier below-minimum only recommends, never blocks. Per-slot context 1024 tokens and defaults.overhead_mb 440: measured, not estimated - an encoder-class model allocates activation buffers that scale with the state length and the window (peak RSS 0.96 GiB with a state filling the 1024-token window; weights alone are far smaller; specs/009-jev-decision-models/evidence/live/ctx-peak-memory-experiment.txt). A state longer than the window is answered 422. Pins (size, sha256, revision 22265007) from evidence/admission/ggml-org__Laya-GGUF.json, re-verified against huggingface.co in evidence/pin-reverify.json. Override: LLMCTL_PORT_DECIDE_LAYA, LLMCTL_CTX_DECIDE_LAYA.",
+      "engine": "llama",
+      "hf_repo": "ggml-org/Laya-GGUF",
+      "hf_revision": "22265007700297ba9e128297e82540cf28c5d7d4",
+      "license": "Apache-2.0",
+      "provenance": {
+        "benchmark": {
+          "value": "no accuracy figure recorded; upstream card latency/accuracy numbers not reproduced",
+          "class": "unverified"
+        }
+      },
+      "decision": {
+        "protocol": "systemone-native",
+        "max_options": 255,
+        "max_options_status": "evidence-pending",
+        "score_levels": [
+          2,
+          10
+        ]
+      },
+      "files": [
+        {
+          "name": "Laya-Q8_0.gguf",
+          "size": 449397600,
+          "sha256": "c06528c5746d3bb8baa72a27938be95abbfd0b226f8471e8a9e365ed0bb066d2",
+          "role": "model"
+        }
+      ],
+      "maturity": {
+        "noul": {
+          "status": "experimental",
+          "evidence": "specs/009-jev-decision-models/evidence/live/decide-laya/golden-stats.txt",
+          "lower_bound": 0.592,
+          "baseline": 0.667,
+          "n": 60
+        },
+        "choice": {
+          "status": "measured",
+          "evidence": "specs/009-jev-decision-models/evidence/live/decide-laya/golden-stats.txt",
+          "lower_bound": 0.66,
+          "baseline": 0.235,
+          "n": 41
+        },
+        "score": {
+          "status": "experimental",
+          "evidence": "specs/009-jev-decision-models/evidence/live/decide-laya/golden-stats.txt",
+          "lower_bound": 0.186,
+          "baseline": 0.29,
+          "n": 31
+        }
+      },
+      "memory": {
+        "ram": {
+          "status": "measured",
+          "format": "ctx-peak-txt",
+          "evidence": "specs/009-jev-decision-models/evidence/live/ctx-peak-memory-experiment.txt",
+          "ctx": 1024,
+          "host": "anton",
+          "peak_hwm_mib": 987.3,
+          "weights_mib": 428.6
+        },
+        "vram": {
+          "status": "measured",
+          "format": "pid-vram-txt",
+          "evidence": "specs/009-jev-decision-models/evidence/live/decide-laya/memory.txt",
+          "host": "anton",
+          "peak_mib": 232
+        }
+      }
+    },
+    "decide-lev": {
+      "capability": [
+        "decide"
+      ],
+      "min_tier": "baseline",
+      "port": 8108,
+      "defaults": {
+        "ctx": 8192,
+        "ngl": 99,
+        "parallel": 1,
+        "flash_attn": "auto",
+        "overhead_mb": 3098,
+        "window_tokens": 8192
+      },
+      "desc": "lev Q4_K_M (interfaze-ai, Qwen3.5-4B + LoRA, head embedded in the GGUF) - typed-decision model served by llama-server's NATIVE /v1/systemone (decision_type lev; needs llama.cpp >= b11379). Pins (size, sha256, revision 3e9286a7) from evidence/admission/ggml-org__lev-GGUF.json, re-verified against huggingface.co in evidence/pin-reverify.json. Override: LLMCTL_PORT_DECIDE_LEV, LLMCTL_CTX_DECIDE_LEV.",
+      "engine": "llama",
+      "hf_repo": "ggml-org/lev-GGUF",
+      "hf_revision": "3e9286a79ae857b4e1de051c92fab6dc574581ce",
+      "license": "Apache-2.0",
+      "provenance": {
+        "benchmark": {
+          "value": "68.9% across all 13 S1Bench subsets per the upstream card (vendor-measured, not reproduced)",
+          "class": "vendor-measured"
+        }
+      },
+      "decision": {
+        "protocol": "systemone-native",
+        "max_options": 255,
+        "max_options_status": "evidence-pending",
+        "score_levels": [
+          2,
+          10
+        ]
+      },
+      "files": [
+        {
+          "name": "lev-Q4_K_M.gguf",
+          "size": 3011777440,
+          "sha256": "3f61b27c00a098dbc79ed099cca3985cbe0b63d17ac7fedebf2dca1d84f7f3a8",
+          "role": "model"
+        }
+      ],
+      "maturity": {
+        "noul": {
+          "status": "measured",
+          "evidence": "specs/009-jev-decision-models/evidence/live/nezha/decide-lev/golden-stats.txt",
+          "lower_bound": 0.886,
+          "baseline": 0.667,
+          "n": 60
+        },
+        "choice": {
+          "status": "measured",
+          "evidence": "specs/009-jev-decision-models/evidence/live/nezha/decide-lev/golden-stats.txt",
+          "lower_bound": 0.874,
+          "baseline": 0.235,
+          "n": 41
+        },
+        "score": {
+          "status": "measured",
+          "evidence": "specs/009-jev-decision-models/evidence/live/nezha/decide-lev/golden-stats.txt",
+          "lower_bound": 0.348,
+          "baseline": 0.29,
+          "n": 31
+        }
+      },
+      "memory": {
+        "ram": {
+          "status": "measured",
+          "format": "memory-summary-json",
+          "evidence": "specs/009-jev-decision-models/evidence/live/nezha/decide-lev/memory-summary.json",
+          "host": "nezha",
+          "peak_hwm_mib": 5688.1,
+          "weights_mib": 2872.3
+        },
+        "vram": {
+          "status": "unmeasured",
+          "reason": "measured only on a CPU-only host (no CUDA build, so no offload); a CUDA host with enough free RAM to load it was not available (the scheduler refused it, NATIVE-REPORT.md section 3)"
+        }
+      }
     }
   }
 }

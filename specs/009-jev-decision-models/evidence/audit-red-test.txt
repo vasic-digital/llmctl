@@ -1,0 +1,19 @@
+E
+======================================================================
+ERROR: test_spec_closure_audit (unittest.loader._FailedTest.test_spec_closure_audit)
+----------------------------------------------------------------------
+ImportError: Failed to import test module: test_spec_closure_audit
+Traceback (most recent call last):
+  File "/usr/lib/python3.14/unittest/loader.py", line 137, in loadTestsFromName
+    module = __import__(module_name)
+  File "/home/milosvasic/Projects/llmctl/tests/py/test_spec_closure_audit.py", line 18, in <module>
+    import spec_closure_audit as sca  # noqa: E402
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ModuleNotFoundError: No module named 'spec_closure_audit'
+
+
+----------------------------------------------------------------------
+Ran 1 test in 0.000s
+
+FAILED (errors=1)
+exit=1

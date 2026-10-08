@@ -1,0 +1,30 @@
+[llmctl] wrote /home/milosvasic/llmctl-work/tmp/tmp.VdF0nCt1Dk/state/services/small.env
+[llmctl] wrote /home/milosvasic/llmctl-work/tmp/tmp.VdF0nCt1Dk/state/services/vision.env
+  ok: precondition: small + vision are both genuinely running before any switch attempt
+stopped small
+stopped vision
+[llmctl] wrote /home/milosvasic/llmctl-work/tmp/tmp.VdF0nCt1Dk/state/services/fast.env
+[llmctl] wrote /home/milosvasic/llmctl-work/tmp/tmp.VdF0nCt1Dk/state/services/small.env
+started small (mode=gpu, port=8085, reserved 2048 MiB RAM + 3859 MiB VRAM)
+[llmctl] wrote /home/milosvasic/llmctl-work/tmp/tmp.VdF0nCt1Dk/state/services/vision.env
+started vision (mode=gpu, port=8082, reserved 2048 MiB RAM + 4030 MiB VRAM)
+  ok: sched_switch returns the ORIGINAL failure (non-zero) when the target profile's start fails
+  ok: REGRESSION GUARD: a failed switch rolls back to the exact previously-running set (small+vision) instead of leaving the host with nothing running
+  ok: the failure output explains that a rollback was attempted
+  ok: the failure output confirms the rollback actually worked
+  ok: sched_switch succeeds when the target profile's start genuinely succeeds
+  ok: a successful switch leaves ONLY the newly-requested profile running (small+vision correctly stopped)
+  ok: switching to the already-running profile succeeds (no-op)
+  ok: REGRESSION GUARD: switching to the already-solely-running profile does NOT rewrite its reservation (no needless stop+restart / model-reload churn)
+  ok: starting an oversized profile while another is running fails (sanity for message-context test 4a)
+  ok: 4a: WITH another profile running, the message correctly suggests switch
+stopped vision-pro
+  ok: precondition for 4b: nothing is running
+  ok: starting even the smallest profile on a genuinely-too-small host still fails (sanity for message-context test 4b)
+  ok: 4b: with NOTHING running, the message does NOT suggest the circular 'llmctl switch small'
+  ok: 4b: message instead names the real, honest constraint (host RAM/VRAM, not another llmctl profile)
+  ok: precondition for case 5: small + vision running again before the rollback-also-failed scenario
+  ok: LLMCTL-F2: sched_switch returns the distinct exit code 75 (EX_TEMPFAIL) when switch AND rollback both fail, not just the original start_rc
+  ok: the existing stderr text is still present (pre-F2 consumers keep working)
+  ok: CONTROL: an ordinary switch failure with a SUCCESSFUL rollback still returns plain start_rc (1), never the distinct 75
+RESULT: PASS

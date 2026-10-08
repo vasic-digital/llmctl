@@ -1,10 +1,10 @@
 # Cluster Architecture (`llmctld`)
 
-**Revision:** 4
-**Last modified:** 2026-09-16T00:00:00Z
+**Revision:** 5
+**Last modified:** 2026-10-08T00:00:00Z
 
 `llmctld` is an **opt-in** Go daemon (Gin Gonic, HTTP/3/QUIC, Brotli
-compression) that will provide distributed multi-host scheduler
+compression) that provides distributed multi-host scheduler
 coordination, Raft consensus, KV-cache replication, JWT/RBAC auth, and
 tamper-evident audit logging (spec.md FR-039/FR-040/FR-041, Clarification
 9/10/11). **Single-host `bin/llmctl` bash CLI is completely unmodified and
@@ -19,18 +19,20 @@ This document diagrams BOTH what exists today AND what spec.md designs for
 later phases. **Every diagram below is explicitly labeled** with one of two
 states, and neither is presented as the other:
 
-- **✅ IMPLEMENTED** — real Go code exists under `llmctld/internal/`, with
-  passing tests, as of this session (verified via `find llmctld -name
-  '*.go'`, which currently returns only: `cmd/llmctld/main.go` (a version-only
-  stub), `internal/cluster/{state,state_test}.go`, `internal/raft/{fsm,fsm_test,testhelpers_test}.go`,
-  `internal/mtls/{certs,certs_test}.go`, `internal/audit/{log,log_test}.go`).
-- **📋 PLANNED (not yet implemented)** — described by spec.md's functional
-  requirements and data model, but no Go code implements it yet. There is
-  currently **no `internal/api/` package, no HTTP route of any kind, no
-  JWT/RBAC code, no KV-cache/WAL/checkpoint code, and no tenant/quota code**
-  in this repository. These diagrams show the DESIGNED shape so implementers
-  in later phases (9, 10, 11) have a target — they are not a claim that any
-  of this runs today.
+- **✅ IMPLEMENTED** — real Go code exists under `llmctld/internal/` with passing
+  tests (list the sources with `find llmctld -name '*.go' -not -name '*_test.go'`;
+  as of 3.1.0 that includes `internal/api` (HTTP/3 routes), `internal/auth`,
+  `internal/authz`, `internal/tenancy`, `internal/audit`, `internal/replication`,
+  `internal/mtls`, `internal/raft`, `internal/cluster`, `internal/executor`,
+  `internal/isolation`). The sections below say for each mechanism whether the
+  running daemon uses it.
+- **📋 PLANNED / OPEN (not implemented or not wired)** — described by spec.md but
+  absent, or present as a tested library that nothing in the daemon calls yet.
+  Examples: cross-node execution of a sharded model, drain on a minority
+  partition (`PartitionWatcher` has no caller), per-request quota enforcement
+  (`Enforcer.AllowRequest` has no HTTP caller), an OIDC provider. The
+  [FAQ](faq.md) lists the wired / library-only / not-built status per behaviour.
+  Everything was exercised with real processes on one machine, never on several hosts.
 
 ## 1. Raft cluster topology — ✅ IMPLEMENTED (node membership + cluster-wide model-placement scheduling primitives) / 📋 PLANNED (real multi-node leader election + log replication over a production network)
 
@@ -361,6 +363,11 @@ Proven end-to-end by
 /v1/cluster/status` contract test asserting `running_profiles` accurately
 reflects `ClusterState.RunningProfiles`
 (`internal/api/routes_cluster_test.go`).
+
+> **Shell-CLI TLS (G-106).** The daemon's certificates carry SANs and
+> `llmctld cluster bootstrap|join` write a CLI trust bundle (`ca.crt`,
+> `client.crt`, `client.key`) that `lib/cluster.sh` presents with `--cacert/--cert/--key`;
+> see [llmctld-cluster-tls.md](llmctld-cluster-tls.md).
 
 ## 2. Node-to-node mTLS + client JWT auth flow — ✅ IMPLEMENTED (mTLS primitive, wired transport, JWT/RBAC, revocation, zero-downtime renewal, coordinated CA rotation) / 📋 OPEN (per-voter live-handshake trust confirmation for the FR-010 quorum check — see honest scope note below)
 
@@ -737,31 +744,20 @@ sequenceDiagram
 
 ## 4. Control-plane / data-plane split (bash `llmctl` + Go `llmctld`) — ✅ IMPLEMENTED (the split + the hard-fail contract) / 📋 PLANNED (the data-plane operations themselves)
 
-What's real today: the ARCHITECTURAL SPLIT itself is implemented and
-tested. `bin/llmctl` (bash, single-host) is the CONTROL surface an operator
-types commands into; when cluster mode is invoked (`llmctl cluster
-join|leave|status`, `llmctl tenant ...`, `llmctl apikey ...`),
-`cluster::require_daemon` checks for a reachable `llmctld` and hard-fails
-with an explicit, actionable error (naming the daemon and how to restart
-it) if none is reachable — proven live: with no daemon running,
-`cluster::require_daemon` exits 1 with that exact message, and
-`llmctl cluster status` hard-fails identically (both proven by direct
-tests in Phase 2, T005/T006). This is the "never silently fall back to
-single-host scheduling" guarantee from Clarification 12. `llmctl cluster
-status` DOES make a real HTTP request (`cluster::request GET
-/v1/cluster/status`) when a daemon IS reachable — but since `llmctld`
-exposes no HTTP routes yet (no `internal/api/` package exists), that
-request currently has nothing real to reach; `llmctl cluster join`/`leave`
-and every `tenant`/`apikey` subcommand are real CLI stubs that immediately
-`die` with `"llmctld reachable but '<command>' is not yet implemented
-(Phase N, USx)"`.
+What's real today: `bin/llmctl` (bash, single-host) is the CONTROL surface; when cluster mode is invoked (`llmctl cluster join|leave|status`,
+`llmctl tenant create|list|quota`, `llmctl apikey create|rotate`), `cluster::require_daemon` checks for a reachable `llmctld` and hard-fails with an
+explicit, actionable error (naming the daemon and how to restart it) if none is reachable. This is the "never silently fall back to single-host scheduling"
+guarantee from Clarification 12. When the daemon is reachable the subcommands issue real requests over HTTP/3 with mutual TLS
+(`cluster::request` / `request_checked` in `lib/cluster.sh`) to the routes in `llmctld/internal/api/` (`/v1/cluster/{status,join,leave,nodes}`,
+`/v1/tenants[...]`, `/v1/auth/apikeys[...]`). The earlier "stub that dies with 'not yet implemented'" state no longer exists. See
+[llmctld-cluster-tls](llmctld-cluster-tls.md) for the certificate and curl requirements.
 
 ```mermaid
 flowchart TB
     subgraph "Control plane (bash, single-host, ✅ unmodified by any cluster work)"
         CLI["bin/llmctl<br/>setup / hw / plan / models / start / stop /<br/>switch / auto / status / logs / enable / disable"]
     end
-    subgraph "Cluster surface (bash CLI stubs, ✅ implemented hard-fail contract)"
+    subgraph "Cluster surface (bash CLI, ✅ hard-fail contract)"
         CCLUSTER["llmctl cluster join/leave/status"]
         CTENANT["llmctl tenant create/list/quota"]
         CAPIKEY["llmctl apikey create/rotate"]
@@ -772,11 +768,11 @@ flowchart TB
     REQUIRE -->|"daemon unreachable"| HARDFAIL["✅ hard-fail: explicit error<br/>naming the daemon + how to restart it<br/>(NEVER silent single-host fallback)"]
     REQUIRE -->|"daemon reachable"| DATAPLANE
 
-    subgraph "Data plane (Go daemon llmctld, 📋 mostly planned)"
+    subgraph "Control API (Go daemon llmctld, ✅ implemented; no inference traffic passes through it)"
         DATAPLANE{"HTTP/3 request"}
-        DATAPLANE -->|"GET /v1/cluster/status"| NOROUTE["📋 no internal/api/ package yet<br/>- nothing real to reach"]
-        DATAPLANE -->|"join/leave/tenant/apikey ops"| STUB["✅ CLI-side stub:<br/>die 'not yet implemented (Phase N, USx)'"]
-        DATAPLANE -.->|"planned"| RAFTFSM["ClusterFSM<br/>(✅ the FSM itself exists,<br/>📋 not yet wired to an HTTP route)"]
+        DATAPLANE -->|"GET /v1/cluster/status"| STATUS["✅ internal/api cluster routes"]
+        DATAPLANE -->|"join/leave/tenant/apikey ops"| OPS["✅ internal/api routes<br/>(JWT + RBAC for tenant/apikey)"]
+        OPS --> RAFTFSM["ClusterFSM<br/>(✅ Raft-replicated state)"]
     end
 ```
 

@@ -1,0 +1,4 @@
+  ok: binary was produced and is executable
+  ok: built binary exits 2 (usage) with no subcommand
+  ok: unknown build target is still refused
+RESULT: PASS

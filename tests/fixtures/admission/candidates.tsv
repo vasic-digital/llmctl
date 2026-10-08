@@ -1,0 +1,7 @@
+name	hf_repo	pinned	pins	protocol	known_issue	name_collision	kind
+# fixture register for tests/test_admit.sh
+good	fixt/good-letter-gguf	no	good-Q4_K_M.gguf	letter-logit	-	-	weights
+nc	fixt/forbidden-licence	no	auto	letter-logit	-	-	weights
+native	fixt/native-decision	no	auto	systemone-native	note:fixture note about batch size	-	weights
+missing	fixt/does-not-exist	no	auto	letter-logit	-	-	weights
+harness	-	no	-	unsupported	-	PyPI name collision	harness

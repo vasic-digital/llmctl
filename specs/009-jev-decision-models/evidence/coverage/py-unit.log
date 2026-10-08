@@ -1,0 +1,71 @@
+....../home/milosvasic/Projects/llmctl/tests/py/test_evidence_manifest.py:29: ResourceWarning: unclosed file <_io.TextIOWrapper name='/tmp/manifest-ujyodpaz/SHA256SUMS' mode='r' encoding='UTF-8'>
+  sums = open(os.path.join(self.d, "SHA256SUMS")).read().splitlines()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/milosvasic/Projects/llmctl/tests/py/test_evidence_manifest.py:35: ResourceWarning: unclosed file <_io.TextIOWrapper name='/tmp/manifest-ujyodpaz/MANIFEST.json' mode='r' encoding='UTF-8'>
+  m = json.load(open(os.path.join(self.d, "MANIFEST.json")))
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+.../home/milosvasic/Projects/llmctl/tests/py/test_evidence_manifest.py:95: ResourceWarning: unclosed file <_io.TextIOWrapper name='/tmp/manifest-7erk67r8/SHA256SUMS' mode='r' encoding='UTF-8'>
+  a = open(os.path.join(self.d, "SHA256SUMS")).read()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/milosvasic/Projects/llmctl/tests/py/test_evidence_manifest.py:97: ResourceWarning: unclosed file <_io.TextIOWrapper name='/tmp/manifest-7erk67r8/SHA256SUMS' mode='r' encoding='UTF-8'>
+  b = open(os.path.join(self.d, "SHA256SUMS")).read()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+....../home/milosvasic/Projects/llmctl/tests/py/test_evidence_manifest.py:74: ResourceWarning: unclosed file <_io.TextIOWrapper name='/tmp/manifest-ir7xcfyz/SHA256SUMS' mode='r' encoding='UTF-8'>
+  s = open(p).read().replace("evidence.jsonl", "evidence.jsonl", 1)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/milosvasic/Projects/llmctl/tests/py/test_evidence_manifest.py:77: ResourceWarning: unclosed file <_io.TextIOWrapper name='/tmp/manifest-ir7xcfyz/SHA256SUMS' mode='w' encoding='UTF-8'>
+  open(p, "w").write("\n".join(l for l in lines if "raw/x.txt" not in l) + "\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+......./home/milosvasic/Projects/llmctl/tests/py/test_evidence_writer.py:66: ResourceWarning: unclosed file <_io.BufferedReader name='/tmp/evwriter-6di0ojw9/evidence.jsonl'>
+  raw = open(os.path.join(self.d, "evidence.jsonl"), "rb").read().split(b"\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+......../home/milosvasic/Projects/llmctl/tests/py/test_evidence_writer.py:49: ResourceWarning: unclosed file <_io.BufferedReader name='/tmp/evwriter-8feu8c9i/raw/EV-r1-0001-stdout.txt'>
+  self.assertEqual(open(ap, "rb").read(), b"payload")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+../home/milosvasic/Projects/llmctl/tests/py/test_evidence_writer.py:85: ResourceWarning: unclosed file <_io.TextIOWrapper name='/tmp/evwriter-zz802ts7/evidence.jsonl' mode='r' encoding='UTF-8'>
+  ls = open(p).read().splitlines()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/milosvasic/Projects/llmctl/tests/py/test_evidence_writer.py:86: ResourceWarning: unclosed file <_io.TextIOWrapper name='/tmp/evwriter-zz802ts7/evidence.jsonl' mode='w' encoding='UTF-8'>
+  open(p, "w").write("\n".join([ls[0], ls[2]]) + "\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/milosvasic/Projects/llmctl/tests/py/test_evidence_writer.py:88: ResourceWarning: unclosed file <_io.TextIOWrapper name='/tmp/evwriter-zz802ts7/evidence.jsonl' mode='w' encoding='UTF-8'>
+  open(p, "w").write("\n".join([ls[1], ls[0], ls[2]]) + "\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+./home/milosvasic/Projects/llmctl/tests/py/test_evidence_writer.py:77: ResourceWarning: unclosed file <_io.TextIOWrapper name='/tmp/evwriter-28qdwlo8/evidence.jsonl' mode='r' encoding='UTF-8'>
+  s = open(p).read().replace('"exit_code": 0', '"exit_code": 7', 1)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/milosvasic/Projects/llmctl/tests/py/test_evidence_writer.py:78: ResourceWarning: unclosed file <_io.TextIOWrapper name='/tmp/evwriter-28qdwlo8/evidence.jsonl' mode='w' encoding='UTF-8'>
+  open(p, "w").write(s)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+./home/milosvasic/Projects/llmctl/tests/py/test_golden_manifest.py:34: ResourceWarning: unclosed file <_io.TextIOWrapper name='/tmp/golden-man-c__74v4z/questions.jsonl' mode='r' encoding='UTF-8'>
+  lines = open(p).read().splitlines()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/milosvasic/Projects/llmctl/tests/py/test_golden_manifest.py:35: ResourceWarning: unclosed file <_io.TextIOWrapper name='/tmp/golden-man-c__74v4z/questions.jsonl' mode='w' encoding='UTF-8'>
+  open(p, "w").write("\n".join(lines[:-1]) + "\n")           # drop the last item
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/milosvasic/Projects/llmctl/tests/py/test_golden_manifest.py:36: ResourceWarning: unclosed file <_io.TextIOWrapper name='/tmp/golden-man-c__74v4z/MANIFEST.json' mode='r' encoding='UTF-8'>
+  man = json.load(open(os.path.join(self.d, "MANIFEST.json")))
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/milosvasic/Projects/llmctl/tests/py/test_golden_manifest.py:38: ResourceWarning: unclosed file <_io.TextIOWrapper name='/tmp/golden-man-c__74v4z/MANIFEST.json' mode='w' encoding='UTF-8'>
+  json.dump(man, open(os.path.join(self.d, "MANIFEST.json"), "w"))
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+.../home/milosvasic/Projects/llmctl/tests/py/test_golden_manifest.py:28: ResourceWarning: unclosed file <_io.BufferedReader name='/tmp/golden-man-cf1wku8r/questions.jsonl'>
+  data = open(p, "rb").read()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/milosvasic/Projects/llmctl/tests/py/test_golden_manifest.py:29: ResourceWarning: unclosed file <_io.BufferedWriter name='/tmp/golden-man-cf1wku8r/questions.jsonl'>
+  open(p, "wb").write(data.replace(b"rm -rf /", b"rm -rf ./", 1))
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+./home/milosvasic/Projects/llmctl/tests/py/test_golden_manifest.py:22: ResourceWarning: unclosed file <_io.TextIOWrapper name='/tmp/golden-man-9rqy3fjo/MANIFEST.json' mode='r' encoding='UTF-8'>
+  before = open(os.path.join(self.d, "MANIFEST.json")).read()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/milosvasic/Projects/llmctl/tests/py/test_golden_manifest.py:24: ResourceWarning: unclosed file <_io.TextIOWrapper name='/tmp/golden-man-9rqy3fjo/MANIFEST.json' mode='r' encoding='UTF-8'>
+  self.assertEqual(open(os.path.join(self.d, "MANIFEST.json")).read(), before)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+../home/milosvasic/Projects/llmctl/tests/py/test_golden_manifest.py:42: ResourceWarning: unclosed file <_io.TextIOWrapper name='/tmp/golden-man-hxpl3w1x/extra.jsonl' mode='w' encoding='UTF-8'>
+  open(os.path.join(self.d, "extra.jsonl"), "w").write("{}\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+.......................................................................................
+----------------------------------------------------------------------
+Ran 127 tests in 9.459s
+
+OK

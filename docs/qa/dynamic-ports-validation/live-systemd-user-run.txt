@@ -1,0 +1,45 @@
+== systemd --user: systemd 259 (259.5-0ubuntu3.4)
+/home/milosvasic/.config/systemd/user/llmctl-llama@.service:37: Unknown key 'StartLimitIntervalSec' in section [Service], ignoring.
+/usr/lib/systemd/user/spice-vdagent.service:23: Unknown key 'StandardError' in section [Install], ignoring.
+(verify done)
+Created symlink '/home/milosvasic/.config/systemd/user/llmctl-qa1157666-llama@.service' → '<tmp>/llmctl-qa1157666-llama@.service'.
+Created symlink '/home/milosvasic/.config/systemd/user/llmctl-qa1157666-gateway.service' → '<tmp>/llmctl-qa1157666-gateway.service'.
+== start engine instance (ExecStartPre rotates key, ExecStartPost registers)
+start rc=0
+ActiveState=active SubState=running MainPID=1161547 
+key file present: yes mode=600
+-- registry (rows):
+NAME    URL                     HEALTH   PID      LOOPBACK  KEY  LABELS
+qa-eng  http://127.0.0.1:46377  healthy  1161547  yes       ok   instance=qa-eng,key_file=<tmp>/state/keys/llama-qa-eng.key,kind=chat,profile=qa-eng,protocol=http
+engine cmdline: python3 <tmp>/bin/llama-server --model /x --host 127.0.0.1 --port 46377 --api-key-file <tmp>/state/keys/llama-qa-eng.key 
+engine /health: 200
+NoNewPrivs in engine: NoNewPrivs:	1
+== restart: key must rotate
+key rotated across restart: yes
+-- registry after restart:
+NAME    URL                     HEALTH   PID      LOOPBACK  KEY  LABELS
+qa-eng  http://127.0.0.1:46377  healthy  1165915  yes       ok   instance=qa-eng,key_file=<tmp>/state/keys/llama-qa-eng.key,kind=chat,profile=qa-eng,protocol=http
+== stop engine: row must go
+-- registry after stop:
+NAME  URL  HEALTH  PID  LOOPBACK  KEY  LABELS
+== gateway unit (dynamic strategy via gateway.conf)
+start rc=0
+ActiveState=active SubState=running MainPID=1170328 
+gateway cmdline: <tmp>/bin/llmctl-decide serve --foreground 
+-- registry:
+NAME            URL                      HEALTH   PID      LOOPBACK  KEY  LABELS
+decide-gateway  https://127.0.0.1:42500  healthy  1170328  yes       -    kind=gateway,port=42500,profile=decide,protocol=https
+gateway https /healthz: 200 on dynamic port 42500 (range 42500-42559)
+gateway peak RSS (VmHWM): 16376 kB
+gateway NoNewPrivs/Seccomp: NoNewPrivs:	1 Seccomp:	2 
+gateway cgroup MemoryMax: 34359738368 MemoryHigh: 34359738368 StartLimitBurst: 5 StartLimitIntervalUSec: 1min
+== Restart=always: kill -9 the gateway, it must come back
+new MainPID after kill -9: 1176714 (old 1170328) state=active
+removed decide-gateway: health check failed for 0s (grace 0s): cannot read the CA certificate /home/milosvasic/llmctl/cert/ca/ca.crt (LLMCTL_CACERT): open /home/milosvasic/llmctl/cert/ca/ca.crt: no such file or directory
+reconciled: 0 healthy, 0 unhealthy, 1 removed, 0 port holds pruned
+== stop gateway: row must go
+NAME  URL  HEALTH  PID  LOOPBACK  KEY  LABELS
+== cleanup
+Removed '/home/milosvasic/.config/systemd/user/llmctl-qa1157666-llama@.service'.
+Removed '/home/milosvasic/.config/systemd/user/llmctl-qa1157666-gateway.service'.
+no leftover qa units in ~/.config/systemd/user

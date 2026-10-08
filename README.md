@@ -6,13 +6,19 @@ the inference engines from pinned source, and runs multiple models
 concurrently with strict memory budgets — as systemd user services (Linux) or
 launchd agents (macOS).
 
-Engines (vendored as git submodules, pinned to stable tags):
+Engines (llama.cpp and colibri vendored as git submodules, pinned to stable
+tags; the `onnx` runner ships in-tree):
 
-* [llama.cpp](https://github.com/ggml-org/llama.cpp) `v0.4.0` — GGUF models,
+* [llama.cpp](https://github.com/ggml-org/llama.cpp) tag `b11379` (3.1.0 pin; it was `b10969`) — GGUF models,
   OpenAI-compatible `llama-server` (CUDA / ROCm / Metal / CPU backends).
 * [colibri](https://github.com/JustVugg/colibri) `v1.11.0` — pure-C engines
   for very large MoE models memory-mapped from NVMe (no GPU required);
   OpenAI- and Anthropic-compatible API.
+* `onnx` — a pure-python3 runner (`lib/onnx_server.py`, no build step, no
+  submodule) for encoder-class decision models (NLI/sequence-classification
+  ONNX exports such as the `decide-nli` profile); CPU-only inference via
+  guarded optional pip deps (`onnxruntime`, `numpy`, `sentencepiece`,
+  `tokenizers`). See `docs/decision-models.md`.
 
 ## Quickstart
 
@@ -56,7 +62,23 @@ For a service that survives logout/reboot, follow up with
 `./scripts/install.sh` above, which chains all of this for you.
 
 Forgot `--recursive`? `git submodule update --init` or just run
-`llmctl build`, which initializes the submodules itself.
+`llmctl build all` (a target is required), which initializes the submodules itself.
+
+> **Release 3.1.0** adds typed local decisions (`noul` / `choice` / `score`) behind a secured HTTPS gateway.
+> What changed and what you must do when upgrading: [`CHANGELOG.md`](CHANGELOG.md) (migration table).
+> What it does not do, and what was not verified live: [`docs/limitations.md`](docs/limitations.md).
+> Building the decision binary needs Go >= 1.25; everything else still needs only bash, python3 and curl.
+> Manual QA was waived by the operator on 2026-10-08 (the constitution gate is operator-waived, not satisfied); see [`docs/validation.md`](docs/validation.md).
+
+### Supported platforms
+
+| Platform | Status in 3.1.0 |
+|---|---|
+| Linux (systemd `--user`) | **Live-verified**: the development host, plus a second Linux machine (ALT Linux, CPU only) for portability runs |
+| macOS (launchd) | Shipped, **verified statically only** (code read and fixture-tested; never run on a Mac) |
+| Windows | **Unsupported** (no code path) |
+
+What the verification did and did not cover: [`docs/limitations.md`](docs/limitations.md).
 
 ## Command reference
 
@@ -69,11 +91,13 @@ Forgot `--recursive`? `git submodule update --init` or just run
 | `llmctl models list` | catalog overview (port, engine, size, min-tier) |
 | `llmctl models download <p>` | resumable download + sha256 verify + smoke test |
 | `llmctl models verify <p>` | re-verify checksums of a downloaded profile |
-| `llmctl build [llama\|colibri\|all]` | build engines (backend auto-detected) |
+| `llmctl build <llama\|colibri\|onnx\|decide\|all>` | build engines (a target is required: a bare `llmctl build` prints usage; backend auto-detected; `onnx` creates the hash-locked private venv, `decide` builds the Go decision binary, `all` = all four) |
 | `llmctl start <p> [more...]` | start profiles iff the combined footprint fits |
 | `llmctl stop <p\|all>` | stop services |
 | `llmctl switch <p>` | on-demand model switch: stop everything, start exactly one profile — atomic and safe (a failed switch auto-restores whatever was running before, never leaves the host with nothing running) |
-| `llmctl auto <chat\|coder\|vision>...` | best set that fits *now*, LRU-evicting non-enabled services |
+| `llmctl auto <chat\|coder\|vision\|decide>...` | best set that fits *now*, LRU-evicting non-enabled services (`auto decide` picks the smallest fitting decision profile) |
+| `llmctl decide <ask\|batch\|models\|capacity\|status\|interactive\|serve\|key\|cert\|registry\|port\|discover\|schema>` | typed decisions (noul/choice/score) against the local decision profiles + the Jev-shaped **HTTPS** gateway (port 8095, mandatory access key). `smoke`, `mcp` and `vantage` are subcommands of the `llmctl-decide` binary ([limitations](docs/limitations.md)) |
+| `llmctl admit <hf-repo>` | run the candidate-model admission gates G1-G10 |
 | `llmctl status` / `logs <p>` | running services / log tail |
 | `llmctl install` | install service templates (systemd units / launchd dir) |
 | `llmctl enable/disable <p>` | autostart at login (linger enabled on Linux) |
@@ -96,7 +120,11 @@ memory model). Reservations are tracked in `$XDG_STATE_HOME/llmctl/run/`.
 
 Ports are fixed per profile: fast 8080, coder 8081, vision 8082,
 vision-pro 8083, moe-fast 8084, small 8085, ws-dense-32b 8086, ws-moe-30b
-8087, colibri-glm 8090, colibri-qwen36 8091. By default every profile binds
+8087, colibri-glm 8090, colibri-qwen36 8091, decide-tiny 8092, decide 8093,
+decide-pro 8094, decide-nli 8096, decide-2b 8098, decide-max 8097 and further
+decision profiles listed in `docs/decision-models.md` (the
+decide gateway, `llmctl decide serve`, listens on 8095). By default every
+profile binds
 to `0.0.0.0` (LAN-accessible) — see "Safety guarantees" below for the
 security trade-off and how to lock a profile (or the whole host) back to
 `127.0.0.1`.
@@ -110,7 +138,11 @@ See `docs/hardware-tiers.md`. The baseline reference machine (Ryzen 7 2700X,
 `small` — including co-resident combinations. Workstations (64-core
 Threadripper, 32 GB VRAM) unlock the `ws-*` profiles and full co-residency;
 `colibri-glm` (a 744B MoE that streams weights from ~380 GB of NVMe) is gated
-to `datacenter`.
+to `datacenter`. The catalog also carries **decision profiles** (capability `decide`) for typed
+noul/choice/score decisions, from `decide-tiny` (0.8B GGUF, any tier) and `decide-nli`
+(DeBERTa-v3-large zero-shot NLI on the `onnx` engine, any tier) up to workstation-tier
+profiles. The authoritative, current profile table (tiers, sizes, ports, source-labelled
+benchmarks) is `docs/decision-models.md`.
 
 ## Safety guarantees
 
@@ -122,7 +154,14 @@ to `datacenter`.
   `~/.local/state/llmctl/verify/<profile>.log`.
 * **Smoke tests**: GGUF profiles are booted in a real `llama-server`
   (ctx 512, CPU layers only) and must answer the deterministic prompt
-  "Reply with exactly: OK" before the download is accepted.
+  "Reply with exactly: OK" before the download is accepted. Decision GGUF
+  profiles are then asked fixed typed questions through the production Go driver
+  (`llmctl decide smoke`: the answer must be a valid typed choice with finite
+  probabilities, and the invoice-routing probe must pick `billing`). `onnx`-engine
+  decision profiles are booted in the real `lib/onnx_server.py` encoder runtime and
+  must pass entail / contradict / batch probes against its `/v1/score`; when the
+  optional inference deps are missing the smoke test SKIPs with a recorded reason
+  and the download is NOT reported as fully verified.
 * **Budget refusals**: the scheduler never overcommits; it refuses with exact
   numbers and a suggested alternative.
 * **OS-level protection**: systemd units carry `MemoryHigh`/`MemoryMax`
@@ -207,21 +246,42 @@ make archive    # ../llmctl.tar.gz + ../llmctl.zip
 ## Documentation
 
 Every doc in this project is reachable from this table (Constitution
-§11.4.212 — no orphan docs). Start with the Quickstart above for the
+§11.4.212 — no orphan docs; `scripts/check_doc_reachability.sh` and `tests/test_doc_reachability.sh` enforce it). Start with the Quickstart above for the
 fastest path to a running model.
 
 | Doc | What it covers |
 |---|---|
 | [`docs/quickstart.md`](docs/quickstart.md) | Fresh-clone → setup → real model verification; the full release-gating live-challenge procedure for all 7 CLI agents |
 | [`docs/tutorial.md`](docs/tutorial.md) | A narrative first walkthrough: clone → setup → download → start → use with one real CLI agent (aider) |
-| [`docs/user-manual.md`](docs/user-manual.md) | Complete command reference for every `bin/llmctl` subcommand, including the `cluster`/`tenant`/`apikey` stubs |
-| [`docs/faq.md`](docs/faq.md) | Every edge case from the spec, each honestly labeled as current behavior (with source/test citations) or planned-for-a-later-phase |
+| [`docs/user-manual.md`](docs/user-manual.md) | Complete command reference for every `bin/llmctl` subcommand, including the opt-in `cluster`/`tenant`/`apikey` client commands |
+| [`docs/faq.md`](docs/faq.md) | Every edge case from the spec, each labelled with what is wired into the code, what is a tested library only and what is not built (with source/test citations) |
 | [`docs/integrations.md`](docs/integrations.md) | Per-agent config + install-verify scripts + normalization filters for all 7 CLI agents (opencode, pi, crush, Claude Code, aider, continue.dev, Cline) |
 | [`docs/architecture.md`](docs/architecture.md) | Internals: layout, memory model, scheduler state machine, service backends, port map — with Mermaid diagrams |
-| [`docs/cluster-architecture.md`](docs/cluster-architecture.md) | `llmctld`'s Raft/mTLS/JWT/WAL design, with an explicit ✅ implemented / 📋 planned boundary per diagram |
-| [`docs/api-reference.md`](docs/api-reference.md) | The real llama.cpp/colibri HTTP API every profile serves, plus `llmctld`'s planned (not yet built) cluster API |
+| [`docs/cluster-architecture.md`](docs/cluster-architecture.md) | `llmctld`'s Raft/mTLS/JWT/WAL design, with an explicit ✅ implemented / 📋 open boundary per diagram |
+| [`docs/api-reference.md`](docs/api-reference.md) | The real llama.cpp/colibri HTTP API every profile serves, plus `llmctld`'s implemented HTTP/3 control-plane API |
 | [`docs/release-process.md`](docs/release-process.md) | The full GitHub+GitLab release procedure: dry-run, submodule preflight, archive build, idempotent per-forge retry |
-| [`docs/hardware-tiers.md`](docs/hardware-tiers.md) | The `below-minimum`/`baseline`/`workstation`/`datacenter` tier classification rules |
+| [`docs/ports.md`](docs/ports.md) | Every port llmctl uses (generated from the catalog), the `LLMCTL_PORT_<PROFILE>` override named in the port-conflict message, fixed versus dynamic assignment, collisions seen on a real host |
+| [`docs/hardware-tiers.md`](docs/hardware-tiers.md) | The `below-minimum`/`baseline`/`workstation`/`datacenter` tier classification rules, plus decision-profile tiers and multi-instance capacity semantics |
+| [`docs/decision-models.md`](docs/decision-models.md) | Decision models: concept, profile table (source-labeled benchmarks), the prompt/logprob mechanism, calibration, sha256 pinning, honest limitations |
+| [`docs/cloud-exposure.md`](docs/cloud-exposure.md) | Exposing the HTTPS gateway beyond the LAN: VPN, SSH tunnel, port-forward, reverse proxy, tunnel services, with the security consequences stated |
+| [`docs/runbooks.md`](docs/runbooks.md) | Operations: key rotation (and its environment-key caveat), certificate renew/reload, stuck engines, port conflicts, registry reconcile, vantage image, release archive, stale units, LD_LIBRARY_PATH, backup/restore, upgrade/rollback |
+| [`docs/limitations.md`](docs/limitations.md) | Honest limits: not a safety guardrail, no calibration claim, option-order sensitivity, determinism scope, what was and was not verified live |
+| [`docs/glossary.md`](docs/glossary.md) | Terms used across the decision documentation |
+| [`docs/related-tools.md`](docs/related-tools.md) | Third-party tools with similar names, and how they relate (or do not) to llmctl |
+| [`docs/golden-set.md`](docs/golden-set.md) | The golden question set and its statistics tooling (labels agent-authored, human review pending) |
+| [`docs/agents/README.md`](docs/agents/README.md) | Coding-agent kit for decision calls: hooks, router, MCP, per-agent pages (opencode, pi, crush, Claude Code, aider, Continue, Cline) |
+| [`docs/llmctld-cluster-tls.md`](docs/llmctld-cluster-tls.md) | TLS and client-certificate notes for the `llmctld` cluster CLI |
+| [`docs/scripts/README.md`](docs/scripts/README.md) | Index of the per-script and per-test documentation pages |
+| [`docs/qa/README.md`](docs/qa/README.md) | Index of the captured QA evidence directories |
+| [`docs/decide-gateway.md`](docs/decide-gateway.md) | The `llmctl decide serve` Go HTTPS gateway reference: `/v1/systemone`, `/v1/models`, `/healthz`, TypeSafe SDK setup, auth, truncation, concurrency, token-usage honesty |
+| [`docs/tls-and-keys.md`](docs/tls-and-keys.md) | Security notes for the decision gateway: access-key strength, rotation and revocation, certificate and key-file checks, the placement guard, connection admission limits, the loopback-engine port-squatting caveat |
+| [`docs/registry-discovery.md`](docs/registry-discovery.md) | Dynamic ports (per-user ranges, all-address bind test), the service registry, TLS-aware health, and how the decision gateway discovers engines through the registry |
+| [`docs/scripts/decide.md`](docs/scripts/decide.md) | Per-lib internals of `lib/decide.sh` (typed-decision path, engine dispatch, wizard, capacity/status, serve lifecycle) |
+| [`docs/scripts/onnx_server.md`](docs/scripts/onnx_server.md) | Per-lib internals of `lib/onnx_server.py` (the `onnx` engine runner for encoder-class decision models) |
+| [`docs/scripts/test_decide.md`](docs/scripts/test_decide.md), [`docs/scripts/test_decide_download.md`](docs/scripts/test_decide_download.md), [`docs/scripts/test_regression_defects.md`](docs/scripts/test_regression_defects.md) | Per-test docs for the decision-model test suites (71 / 14 / 37 captured passing assertions) |
+| [`docs/scripts/test_onnx_server.md`](docs/scripts/test_onnx_server.md), [`docs/scripts/test_onnx_download.md`](docs/scripts/test_onnx_download.md) | Per-test docs for the two `onnx`-engine test suites (27 / 27 passing assertions, measured with `scripts/doc_counts.sh`) |
+| [`docs/research/README.md`](docs/research/README.md) | Index of the decision-models research briefs (Jev ecosystem survey, verified HF hashes, encoder-model hashes, implementation architecture map) |
+| [`docs/qa/decision-models-validation/README.md`](docs/qa/decision-models-validation/README.md) | Captured evidence for the decision-models feature's validation runs (iteration 1: 34 PASS / 7 pre-existing environment FAIL; iteration 2: 36 PASS / 7 environment FAIL) |
 | [`docs/validation.md`](docs/validation.md) | The project's V&V (validation & verification) contract |
 | [`docs/validation_and_verification.md`](docs/validation_and_verification.md) | Why fully-deterministic V&V matters for CLI-agent-driven development |
 | [`docs/CONTINUATION.md`](docs/CONTINUATION.md) | Live session-resumption state: current phase, next action, per-phase findings (Constitution §12.10) |

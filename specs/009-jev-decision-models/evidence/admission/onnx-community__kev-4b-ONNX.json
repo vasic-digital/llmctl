@@ -1,0 +1,138 @@
+{
+  "schema": "llmctl.admission/1",
+  "candidate": {
+    "name": "kev-onnx",
+    "repo": "onnx-community/kev-4b-ONNX",
+    "pinned": "no",
+    "protocol_hint": "unsupported",
+    "known_issue": "",
+    "name_collision": "npm 'kev-onnx' does not exist (404)",
+    "kind": "weights"
+  },
+  "slug": "onnx-community__kev-4b-ONNX",
+  "mode": "paper-only",
+  "retrieved_at": "2026-10-07T16:16:14Z",
+  "existence": {
+    "verdict": "VERIFIED",
+    "evidence": "HTTP 200 from <LLMCTL_HF_BASE>/api/models/onnx-community/kev-4b-ONNX",
+    "http_status": 200,
+    "name_collision": "npm 'kev-onnx' does not exist (404)"
+  },
+  "api": {
+    "id": "onnx-community/kev-4b-ONNX",
+    "sha": "195bdf73096df2bca7150223c9279af7893163c4",
+    "lastModified": "2026-09-20T19:14:34.000Z",
+    "author": "onnx-community",
+    "gated": false,
+    "private": false,
+    "disabled": false
+  },
+  "pins": [
+    {
+      "name": "onnx/model_q4.onnx",
+      "size": 1600231,
+      "sha256": "37b7a5755e02634bab9d3f0e8833df0a52b29c5a7c19fcdfc606281f6cd3ac49",
+      "role": "model"
+    }
+  ],
+  "protocol": {
+    "class": "unsupported",
+    "source": "curated hint 'unsupported'"
+  },
+  "needs_engine_advance": false,
+  "tier": "below-minimum",
+  "est_memory_bytes": 539271258,
+  "g10_subchecks": [
+    {
+      "check": "loadability",
+      "status": "SKIP",
+      "evidence": "not attempted: earlier gate(s) failed: ['G6']"
+    },
+    {
+      "check": "smoke_answer",
+      "status": "SKIP",
+      "evidence": "not attempted: earlier gate(s) failed: ['G6']"
+    },
+    {
+      "check": "determinism_repeats",
+      "status": "SKIP",
+      "evidence": "not attempted: earlier gate(s) failed: ['G6']"
+    },
+    {
+      "check": "option_order_sensitivity",
+      "status": "SKIP",
+      "evidence": "not attempted: earlier gate(s) failed: ['G6']"
+    },
+    {
+      "check": "memory_fit_measured",
+      "status": "SKIP",
+      "evidence": "not attempted: earlier gate(s) failed: ['G6']"
+    }
+  ],
+  "gates": [
+    {
+      "gate": "G1",
+      "name": "licence allow-list",
+      "status": "PASS",
+      "evidence": "weights licence apache-2.0 (SPDX, from the HF API) is on the allow-list; licence files in repo: none"
+    },
+    {
+      "gate": "G2",
+      "name": "stable revision",
+      "status": "PASS",
+      "evidence": "immutable ref 195bdf73096df2bca7150223c9279af7893163c4, lastModified 2026-09-20T19:14:34.000Z; re-verify at release"
+    },
+    {
+      "gate": "G3",
+      "name": "pinned size+sha256",
+      "status": "PASS",
+      "evidence": "1 file(s) with size+sha256 from the HF API LFS oid (auto-selected): onnx/model_q4.onnx 1600231 B sha256:37b7a5755e02..."
+    },
+    {
+      "gate": "G4",
+      "name": "loadable by pinned engine",
+      "status": "SKIP",
+      "evidence": "no supported runtime exists for an unclassified protocol (the failure is recorded at G6)"
+    },
+    {
+      "gate": "G5",
+      "name": "fits budgets",
+      "status": "PASS",
+      "evidence": "largest model file onnx/model_q4.onnx = 1600231 B (cap 10737418240 B), tier below-minimum, memory ESTIMATE 539271258 B (onnx: size*1.5+512MiB) vs budget 19487261491 B (60% of /proc/meminfo MemTotal (Constitution 12.6))"
+    },
+    {
+      "gate": "G6",
+      "name": "protocol classification",
+      "status": "FAIL",
+      "evidence": "unsupported / unclassified protocol (curated hint 'unsupported'); fail closed"
+    },
+    {
+      "gate": "G7",
+      "name": "supply chain",
+      "status": "PASS",
+      "evidence": "pin has no pickle files"
+    },
+    {
+      "gate": "G8",
+      "name": "provenance",
+      "status": "PASS",
+      "evidence": "API author 'onnx-community' == repo owner; HF-side cross-link to GitHub/PyPI not checked in paper mode; name collision noted: npm 'kev-onnx' does not exist (404)"
+    },
+    {
+      "gate": "G9",
+      "name": "known-issue sweep",
+      "status": "PENDING",
+      "evidence": "live upstream issue-tracker sweep not done by this driver (offline); none recorded in the research register"
+    },
+    {
+      "gate": "G10",
+      "name": "real run",
+      "status": "SKIP",
+      "evidence": "not attempted: earlier gate(s) failed: ['G6']"
+    }
+  ],
+  "disposition": "USER-ONLY",
+  "reasons": [
+    "G6: unsupported / unclassified protocol (curated hint 'unsupported'); fail closed"
+  ]
+}

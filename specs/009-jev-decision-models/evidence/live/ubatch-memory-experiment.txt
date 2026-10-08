@@ -1,0 +1,6 @@
+# direct llama-server (CPU, -ngl 0), ~375-token state x4 requests, VmHWM (kB) idle vs after; own pid killed via kill $pid of the started child
+model=Laya-Q8_0.gguf ctx=2048 ub=4096 idleHWM_kB=712996 afterHWM_kB=934764
+model=Laya-Q8_0.gguf ctx=2048 ub=2048 idleHWM_kB=716936 afterHWM_kB=934460
+model=Laya-Q8_0.gguf ctx=2048 ub=512 idleHWM_kB=690360 afterHWM_kB=911132
+model=Julia-1-Q8_0.gguf ctx=2048 ub=4096 idleHWM_kB=498708 afterHWM_kB=903408
+model=Julia-1-Q8_0.gguf ctx=2048 ub=2048 idleHWM_kB=524312 afterHWM_kB=935968

@@ -1,0 +1,323 @@
+{
+  "retrieved_utc": "2026-10-08T08:35:48Z",
+  "source": "https://huggingface.co",
+  "method": "tree API (size, lfs.oid) + computed sha256 for non-LFS files < 20 MB; no multi-GB downloads",
+  "hf_token_used": false,
+  "licences": {
+    "decide-tiny": {
+      "repo": "chaoliangUNSW/Jev-Style-0.8B-Decision-v3-GGUF",
+      "api_sha": "edf37c26a1098f83cf4264b8adbe0dca2d2ebb0c",
+      "revision_match": true,
+      "license": "apache-2.0",
+      "license_tag": [
+        "license:apache-2.0"
+      ]
+    },
+    "decide": {
+      "repo": "Mapika/decider-4b-GGUF",
+      "api_sha": "b79f09d9ba7837f1b744295ea267b55d08e958ec",
+      "revision_match": true,
+      "license": "apache-2.0",
+      "license_tag": [
+        "license:apache-2.0"
+      ]
+    },
+    "decide-pro": {
+      "repo": "rizzoaiacademy/rizzo-flow",
+      "api_sha": "55633c8cbd2b826bd3eefdeb05310450996649df",
+      "revision_match": true,
+      "license": "apache-2.0",
+      "license_tag": [
+        "license:apache-2.0"
+      ]
+    },
+    "decide-nli": {
+      "repo": "MoritzLaurer/deberta-v3-large-zeroshot-v2.0",
+      "api_sha": "cf44676c28ba7312e5c5f8f8d2c22b3e0c9cdae2",
+      "revision_match": true,
+      "license": "mit",
+      "license_tag": [
+        "license:mit"
+      ]
+    },
+    "decide-2b": {
+      "repo": "alibiserikbay/JevK5-GGUF",
+      "api_sha": "ec67b0bfce5119a8b11a2cdb430bb43e3fa3e82a",
+      "revision_match": true,
+      "license": "apache-2.0",
+      "license_tag": [
+        "license:apache-2.0"
+      ]
+    },
+    "decide-max": {
+      "repo": "alibiserikbay/JevK5-GGUF",
+      "api_sha": "ec67b0bfce5119a8b11a2cdb430bb43e3fa3e82a",
+      "revision_match": true,
+      "license": "apache-2.0",
+      "license_tag": [
+        "license:apache-2.0"
+      ]
+    },
+    "decide-julia": {
+      "repo": "ggml-org/Julia-1-GGUF",
+      "api_sha": "16fee17949206fbf58da9347daea44d792a81211",
+      "revision_match": true,
+      "license": "apache-2.0",
+      "license_tag": [
+        "license:apache-2.0"
+      ]
+    },
+    "decide-kev-08b": {
+      "repo": "ggml-org/Kev-0.8B-GGUF",
+      "api_sha": "e551e319d483ff57e1ff208924b349d397cffc1c",
+      "revision_match": true,
+      "license": "apache-2.0",
+      "license_tag": [
+        "license:apache-2.0"
+      ]
+    },
+    "decide-kev-4b": {
+      "repo": "ggml-org/Kev-4B-GGUF",
+      "api_sha": "d924f2e2c3872da8b8aaf3eb4453b4126deceb79",
+      "revision_match": true,
+      "license": "apache-2.0",
+      "license_tag": [
+        "license:apache-2.0"
+      ]
+    },
+    "decide-kev-9b": {
+      "repo": "ggml-org/Kev-9B-GGUF",
+      "api_sha": "ec2bbfe6620218aee2e01cc93bb78dee2a96ed58",
+      "revision_match": true,
+      "license": "apache-2.0",
+      "license_tag": [
+        "license:apache-2.0"
+      ]
+    },
+    "decide-laya": {
+      "repo": "ggml-org/Laya-GGUF",
+      "api_sha": "22265007700297ba9e128297e82540cf28c5d7d4",
+      "revision_match": true,
+      "license": "apache-2.0",
+      "license_tag": [
+        "license:apache-2.0"
+      ]
+    },
+    "decide-lev": {
+      "repo": "ggml-org/lev-GGUF",
+      "api_sha": "3e9286a79ae857b4e1de051c92fab6dc574581ce",
+      "revision_match": true,
+      "license": "apache-2.0",
+      "license_tag": [
+        "license:apache-2.0"
+      ]
+    }
+  },
+  "files": [
+    {
+      "profile": "decide-tiny",
+      "repo": "chaoliangUNSW/Jev-Style-0.8B-Decision-v3-GGUF",
+      "revision": "edf37c26a1098f83cf4264b8adbe0dca2d2ebb0c",
+      "path": "Jev-Style-0.8B-Decision-v3-Q4_K_M.gguf",
+      "catalog_size": 529296864,
+      "catalog_sha256": "0a19bc29bacc33e0d871146c8612b24dd14c2ed2e61cedeb7a928b0852628bac",
+      "size": 529296864,
+      "sha256": "0a19bc29bacc33e0d871146c8612b24dd14c2ed2e61cedeb7a928b0852628bac",
+      "source": "api",
+      "match": true,
+      "catalog_sha_was_null": false
+    },
+    {
+      "profile": "decide",
+      "repo": "Mapika/decider-4b-GGUF",
+      "revision": "b79f09d9ba7837f1b744295ea267b55d08e958ec",
+      "path": "decider-4b-v2.1-Q4_K_M.gguf",
+      "catalog_size": 2708804640,
+      "catalog_sha256": "c7083fcfc93f650cd66caeade4a3840ef9eeeeb1e80920907c554f70619d7c56",
+      "size": 2708804640,
+      "sha256": "c7083fcfc93f650cd66caeade4a3840ef9eeeeb1e80920907c554f70619d7c56",
+      "source": "api",
+      "match": true,
+      "catalog_sha_was_null": false
+    },
+    {
+      "profile": "decide-pro",
+      "repo": "rizzoaiacademy/rizzo-flow",
+      "revision": "55633c8cbd2b826bd3eefdeb05310450996649df",
+      "path": "spark-x2.5-4b-rizzo-flow-lora-q8_0.gguf",
+      "catalog_size": 4375021216,
+      "catalog_sha256": "dbec3c89d33984772324e65a8ed56b48e958e301b856cb870a7c1b385d01691a",
+      "size": 4375021216,
+      "sha256": "dbec3c89d33984772324e65a8ed56b48e958e301b856cb870a7c1b385d01691a",
+      "source": "api",
+      "match": true,
+      "catalog_sha_was_null": false
+    },
+    {
+      "profile": "decide-nli",
+      "repo": "MoritzLaurer/deberta-v3-large-zeroshot-v2.0",
+      "revision": "cf44676c28ba7312e5c5f8f8d2c22b3e0c9cdae2",
+      "path": "onnx/model.onnx",
+      "catalog_size": 1741985401,
+      "catalog_sha256": "beded3d71421ceb718861af381d1a0d29037b3679c7350ebd41edbf79cdced1e",
+      "size": 1741985401,
+      "sha256": "beded3d71421ceb718861af381d1a0d29037b3679c7350ebd41edbf79cdced1e",
+      "source": "api",
+      "match": true,
+      "catalog_sha_was_null": false
+    },
+    {
+      "profile": "decide-nli",
+      "repo": "MoritzLaurer/deberta-v3-large-zeroshot-v2.0",
+      "revision": "cf44676c28ba7312e5c5f8f8d2c22b3e0c9cdae2",
+      "path": "onnx/spm.model",
+      "catalog_size": 2464616,
+      "catalog_sha256": "c679fbf93643d19aab7ee10c0b99e460bdbc02fedf34b92b05af343b4af586fd",
+      "size": 2464616,
+      "sha256": "c679fbf93643d19aab7ee10c0b99e460bdbc02fedf34b92b05af343b4af586fd",
+      "source": "api",
+      "match": true,
+      "catalog_sha_was_null": false
+    },
+    {
+      "profile": "decide-nli",
+      "repo": "MoritzLaurer/deberta-v3-large-zeroshot-v2.0",
+      "revision": "cf44676c28ba7312e5c5f8f8d2c22b3e0c9cdae2",
+      "path": "config.json",
+      "catalog_size": 1019,
+      "catalog_sha256": "3b0a2a3fb311037ba72670d87cbd16f920581985178547a76936dfdb292e5271",
+      "size": 1019,
+      "sha256": "3b0a2a3fb311037ba72670d87cbd16f920581985178547a76936dfdb292e5271",
+      "source": "computed",
+      "downloaded_bytes": 1019,
+      "size_matches_download": true,
+      "match": true,
+      "catalog_sha_was_null": false
+    },
+    {
+      "profile": "decide-nli",
+      "repo": "MoritzLaurer/deberta-v3-large-zeroshot-v2.0",
+      "revision": "cf44676c28ba7312e5c5f8f8d2c22b3e0c9cdae2",
+      "path": "tokenizer_config.json",
+      "catalog_size": 1256,
+      "catalog_sha256": "f5a1a74a632c0e9225e09a21ddf60c2e70ef5d3bfc1f261a24fd8ddab27254d2",
+      "size": 1256,
+      "sha256": "f5a1a74a632c0e9225e09a21ddf60c2e70ef5d3bfc1f261a24fd8ddab27254d2",
+      "source": "computed",
+      "downloaded_bytes": 1256,
+      "size_matches_download": true,
+      "match": true,
+      "catalog_sha_was_null": false
+    },
+    {
+      "profile": "decide-2b",
+      "repo": "alibiserikbay/JevK5-GGUF",
+      "revision": "ec67b0bfce5119a8b11a2cdb430bb43e3fa3e82a",
+      "path": "jevk5-2b-v0.2-Q8_0.gguf",
+      "catalog_size": 2012012000,
+      "catalog_sha256": "17222f27a89273aca7614e34083a530b0d90cd51cffeb225c7acc8e79a7e0eba",
+      "size": 2012012000,
+      "sha256": "17222f27a89273aca7614e34083a530b0d90cd51cffeb225c7acc8e79a7e0eba",
+      "source": "api",
+      "match": true,
+      "catalog_sha_was_null": false
+    },
+    {
+      "profile": "decide-max",
+      "repo": "alibiserikbay/JevK5-GGUF",
+      "revision": "ec67b0bfce5119a8b11a2cdb430bb43e3fa3e82a",
+      "path": "jevk5-9b-v0.3.3-Q8_0.gguf",
+      "catalog_size": 9527501280,
+      "catalog_sha256": "283de8fd216ad2200506d9236e574ddb5902b16e6a806a6fa38e9dd1b4286edf",
+      "size": 9527501280,
+      "sha256": "283de8fd216ad2200506d9236e574ddb5902b16e6a806a6fa38e9dd1b4286edf",
+      "source": "api",
+      "match": true,
+      "catalog_sha_was_null": false
+    },
+    {
+      "profile": "decide-julia",
+      "repo": "ggml-org/Julia-1-GGUF",
+      "revision": "16fee17949206fbf58da9347daea44d792a81211",
+      "path": "Julia-1-Q8_0.gguf",
+      "catalog_size": 168166496,
+      "catalog_sha256": "1ea6a7e87156eeeda88cb7a36a61265b37ba7b993897b7289b99aea5b5e47069",
+      "size": 168166496,
+      "sha256": "1ea6a7e87156eeeda88cb7a36a61265b37ba7b993897b7289b99aea5b5e47069",
+      "source": "api",
+      "match": true,
+      "catalog_sha_was_null": false
+    },
+    {
+      "profile": "decide-kev-08b",
+      "repo": "ggml-org/Kev-0.8B-GGUF",
+      "revision": "e551e319d483ff57e1ff208924b349d397cffc1c",
+      "path": "Kev-0.8B-Q8_0.gguf",
+      "catalog_size": 812406304,
+      "catalog_sha256": "27278f34eb3273bceea4c053dc50dd61a5161da21a718c4aacdf8fd5830771d0",
+      "size": 812406304,
+      "sha256": "27278f34eb3273bceea4c053dc50dd61a5161da21a718c4aacdf8fd5830771d0",
+      "source": "api",
+      "match": true,
+      "catalog_sha_was_null": false
+    },
+    {
+      "profile": "decide-kev-4b",
+      "repo": "ggml-org/Kev-4B-GGUF",
+      "revision": "d924f2e2c3872da8b8aaf3eb4453b4126deceb79",
+      "path": "Kev-4B-Q4_K_M.gguf",
+      "catalog_size": 3033489824,
+      "catalog_sha256": "33ae6b18926502b2209a1bf7d3b61a350d65938441515c686bb87d226a19eff9",
+      "size": 3033489824,
+      "sha256": "33ae6b18926502b2209a1bf7d3b61a350d65938441515c686bb87d226a19eff9",
+      "source": "api",
+      "match": true,
+      "catalog_sha_was_null": false
+    },
+    {
+      "profile": "decide-kev-9b",
+      "repo": "ggml-org/Kev-9B-GGUF",
+      "revision": "ec2bbfe6620218aee2e01cc93bb78dee2a96ed58",
+      "path": "Kev-9B-Q4_K_M.gguf",
+      "catalog_size": 6358923744,
+      "catalog_sha256": "86a6084984a6ef6818eb12c07cdc67ed3c47b00208d41a8816c64301bc6bcbda",
+      "size": 6358923744,
+      "sha256": "86a6084984a6ef6818eb12c07cdc67ed3c47b00208d41a8816c64301bc6bcbda",
+      "source": "api",
+      "match": true,
+      "catalog_sha_was_null": false
+    },
+    {
+      "profile": "decide-laya",
+      "repo": "ggml-org/Laya-GGUF",
+      "revision": "22265007700297ba9e128297e82540cf28c5d7d4",
+      "path": "Laya-Q8_0.gguf",
+      "catalog_size": 449397600,
+      "catalog_sha256": "c06528c5746d3bb8baa72a27938be95abbfd0b226f8471e8a9e365ed0bb066d2",
+      "size": 449397600,
+      "sha256": "c06528c5746d3bb8baa72a27938be95abbfd0b226f8471e8a9e365ed0bb066d2",
+      "source": "api",
+      "match": true,
+      "catalog_sha_was_null": false
+    },
+    {
+      "profile": "decide-lev",
+      "repo": "ggml-org/lev-GGUF",
+      "revision": "3e9286a79ae857b4e1de051c92fab6dc574581ce",
+      "path": "lev-Q4_K_M.gguf",
+      "catalog_size": 3011777440,
+      "catalog_sha256": "3f61b27c00a098dbc79ed099cca3985cbe0b63d17ac7fedebf2dca1d84f7f3a8",
+      "size": 3011777440,
+      "sha256": "3f61b27c00a098dbc79ed099cca3985cbe0b63d17ac7fedebf2dca1d84f7f3a8",
+      "source": "api",
+      "match": true,
+      "catalog_sha_was_null": false
+    }
+  ],
+  "summary": {
+    "files": 15,
+    "match": 15,
+    "mismatch": [],
+    "filled_null": []
+  }
+}

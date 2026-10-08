@@ -1,0 +1,50 @@
+  ok: normalize_opencode.sh exists
+  ok: normalize_opencode.sh is syntactically valid
+  ok: opencode: run1 fixture exists
+  ok: opencode: run2 fixture exists
+  ok: opencode: expected_normalized fixture exists
+  ok: opencode: two runs differing only in non-deterministic fields normalize to byte-identical output
+  ok: opencode: normalized output matches the checked-in expected fixture
+  ok: normalize_pi.sh exists
+  ok: normalize_pi.sh is syntactically valid
+  ok: pi: run1 fixture exists
+  ok: pi: run2 fixture exists
+  ok: pi: expected_normalized fixture exists
+  ok: pi: two runs differing only in non-deterministic fields normalize to byte-identical output
+  ok: pi: normalized output matches the checked-in expected fixture
+  ok: normalize_crush.sh exists
+  ok: normalize_crush.sh is syntactically valid
+  ok: crush: run1 fixture exists
+  ok: crush: run2 fixture exists
+  ok: crush: expected_normalized fixture exists
+  ok: crush: two runs differing only in non-deterministic fields normalize to byte-identical output
+  ok: crush: normalized output matches the checked-in expected fixture
+  ok: normalize_claude_code.sh exists
+  ok: normalize_claude_code.sh is syntactically valid
+  ok: claude_code: run1 fixture exists
+  ok: claude_code: run2 fixture exists
+  ok: claude_code: expected_normalized fixture exists
+  ok: claude_code: two runs differing only in non-deterministic fields normalize to byte-identical output
+  ok: claude_code: normalized output matches the checked-in expected fixture
+  ok: normalize_aider.sh exists
+  ok: normalize_aider.sh is syntactically valid
+  ok: aider: run1 fixture exists
+  ok: aider: run2 fixture exists
+  ok: aider: expected_normalized fixture exists
+  ok: aider: two runs differing only in non-deterministic fields normalize to byte-identical output
+  ok: aider: normalized output matches the checked-in expected fixture
+  ok: normalize_continue.sh exists
+  ok: normalize_continue.sh is syntactically valid
+  ok: continue: run1 fixture exists
+  ok: continue: run2 fixture exists
+  ok: continue: expected_normalized fixture exists
+  ok: continue: two runs differing only in non-deterministic fields normalize to byte-identical output
+  ok: continue: normalized output matches the checked-in expected fixture
+  ok: normalize_cline.sh exists
+  ok: normalize_cline.sh is syntactically valid
+  ok: cline: run1 fixture exists
+  ok: cline: run2 fixture exists
+  ok: cline: expected_normalized fixture exists
+  ok: cline: two runs differing only in non-deterministic fields normalize to byte-identical output
+  ok: cline: normalized output matches the checked-in expected fixture
+RESULT: PASS

@@ -1,0 +1,3359 @@
+=== make test RUN 1 ===
+bash tests/run_tests.sh
+
+======================================================================
+TEST: test_apikey_lifecycle.sh
+CMD:  bash /mnt/agents/llmctl/tests/test_apikey_lifecycle.sh
+----------------------------------------------------------------------
+OUTPUT:
+ERROR: required command 'go' not found. Install hint: install Go via your package manager
+EXIT: 1
+
+======================================================================
+TEST: test_archive_completeness.sh
+CMD:  bash /mnt/agents/llmctl/tests/test_archive_completeness.sh
+----------------------------------------------------------------------
+OUTPUT:
+  ok: build_archive produces a real .tar.gz
+  ok: build_archive produces a real .zip
+  ok: extracted tree includes the superproject's own .git directory
+  ok: extracted tree includes the submodule's REAL file content (not an empty placeholder dir - the exact git-archive gap this task fixes)
+  ok: extracted tree includes ARBITRARILY-NESTED submodule content
+  ok: build-output directories are excluded from the archive (matches the project's existing */build/* exclusion convention)
+  ok: git status on the relocated submodule succeeds (relative .git gitdir pointer survived relocation)
+  ok: relocated submodule reports a clean status (no unexpected diff introduced by archiving)
+  ok: git log inside the relocated submodule succeeds (it is a genuinely functional git repo, not just copied files)
+  ok: relocated submodule's real commit history is intact
+  ok: a RELATIVE output-basename resolves against the caller's cwd, not build_archive's internal cd target
+  ok: the .zip counterpart also resolves correctly for a relative output-basename
+RESULT: PASS
+EXIT: 0
+
+======================================================================
+TEST: test_bin_llmctl_symlink_invocation.sh
+CMD:  bash /mnt/agents/llmctl/tests/test_bin_llmctl_symlink_invocation.sh
+----------------------------------------------------------------------
+OUTPUT:
+  ok: invoking bin/llmctl via a PATH-style symlink exits 0
+  ok: symlinked invocation did not fail resolving lib/
+  ok: symlinked invocation produced real plan JSON output
+RESULT: PASS
+EXIT: 0
+
+======================================================================
+TEST: test_catalog_json.sh
+CMD:  bash /mnt/agents/llmctl/tests/test_catalog_json.sh
+----------------------------------------------------------------------
+OUTPUT:
+  ok: catalog parses as JSON (python3 json.load)
+profiles: 16
+  ok: catalog cross-check (fields, unique ports, known profiles)
+  ok: all GGUF files carry a real sha256
+
+  ok: decide profiles: present, llama engine, decide capability, real sha256 pins, ports 8092-8094
+
+  ok: iter2 profiles: decide-nli (onnx), decide-2b, decide-max pinned and consistent (ports 8096/8098/8099)
+RESULT: PASS
+EXIT: 0
+
+======================================================================
+TEST: test_cli.sh
+CMD:  bash /mnt/agents/llmctl/tests/test_cli.sh
+----------------------------------------------------------------------
+OUTPUT:
+  ok: help exit code
+  ok: help shows usage
+  ok: version exit code
+  ok: version string
+  ok: unknown command exit code
+  ok: unknown command message
+  ok: switch without profile exits 1
+  ok: switch without profile names the real usage error
+  ok: models download without profile exits 1
+  ok: models download without profile names the real usage error
+  ok: unknown models subcommand exits 1
+  ok: unknown models subcommand names the real bad input
+  ok: models list contains fast
+  ok: models list contains coder
+  ok: models list contains vision
+  ok: models list contains vision-pro
+  ok: models list contains moe-fast
+  ok: models list contains small
+  ok: models list contains ws-dense-32b
+  ok: models list contains ws-moe-30b
+  ok: models list contains colibri-glm
+  ok: models list contains colibri-qwen36
+  ok: hw --json returns fixture
+  ok: hw human output shows GPU
+  ok: plan tier line
+  ok: plan co-residency group 1
+  ok: start unknown profile exits 1
+  ok: unknown profile message
+RESULT: PASS
+EXIT: 0
+
+======================================================================
+TEST: test_cluster_join_leave.sh
+CMD:  bash /mnt/agents/llmctl/tests/test_cluster_join_leave.sh
+----------------------------------------------------------------------
+OUTPUT:
+ERROR: required command 'go' not found. Install hint: install Go via your package manager
+EXIT: 1
+
+======================================================================
+TEST: test_cluster_request_checked.sh
+CMD:  bash /mnt/agents/llmctl/tests/test_cluster_request_checked.sh
+----------------------------------------------------------------------
+OUTPUT:
+  ok: request_checked: 2xx GET returns exit 0
+  ok: request_checked: 2xx GET prints the real response body
+  ok: request_checked: 2xx POST returns exit 0
+  ok: request_checked: 2xx POST prints the real response body
+  ok: request_checked: 403 GET returns exit 1 (never a transport-failure code, never 0)
+  ok: request_checked: 403 GET prints the daemon's real error body
+  ok: request_checked: 404 GET returns exit 1
+  ok: request_checked: 404 GET prints the daemon's real error body
+  ok: request_checked: unreachable daemon returns curl's own transport exit code (got 7), distinct from both HTTP-status outcomes (0/1)
+  ok: cluster::request (untouched): still exits 0 on a non-2xx HTTP response - unchanged pre-existing behavior
+  ok: cluster::request (untouched): still prints the response body regardless of status - unchanged pre-existing behavior
+RESULT: PASS
+EXIT: 0
+
+======================================================================
+TEST: test_constitution_inheritance.sh
+CMD:  bash /mnt/agents/llmctl/tests/test_constitution_inheritance.sh
+----------------------------------------------------------------------
+OUTPUT:
+=== Constitution Inheritance Verification ===
+Project root: /mnt/agents/llmctl
+Constitution dir: /mnt/agents/llmctl/constitution
+
+Invariant 1: constitution/ directory exists
+  ✓ constitution/ directory exists
+
+Invariant 2: constitution/Constitution.md exists with §11.4 anchor
+  ✗ Constitution.md: /mnt/agents/llmctl/constitution/Constitution.md (MISSING)
+  ✗ §11.4 End-user quality guarantee anchor MISSING in /mnt/agents/llmctl/constitution/Constitution.md
+
+Invariant 3: constitution/CLAUDE.md exists with MANDATORY ANTI-BLUFF COVENANT anchor
+  ✗ CLAUDE.md: /mnt/agents/llmctl/constitution/CLAUDE.md (MISSING)
+  ✗ MANDATORY ANTI-BLUFF COVENANT anchor MISSING in /mnt/agents/llmctl/constitution/CLAUDE.md
+
+Invariant 4: constitution/AGENTS.md exists with Anti-bluff covenant anchor
+  ✗ AGENTS.md: /mnt/agents/llmctl/constitution/AGENTS.md (MISSING)
+  ✗ Anti-bluff covenant anchor MISSING in /mnt/agents/llmctl/constitution/AGENTS.md
+
+Invariant 5: Parent CLAUDE.md references constitution submodule
+  ✓ Parent CLAUDE.md: /mnt/agents/llmctl/CLAUDE.md
+  ✓ CLAUDE.md inheritance pointer found in /mnt/agents/llmctl/CLAUDE.md
+
+Invariant 5b: Parent AGENTS.md references constitution submodule
+  ✓ Parent AGENTS.md: /mnt/agents/llmctl/AGENTS.md
+  ✓ AGENTS.md inheritance pointer found in /mnt/agents/llmctl/AGENTS.md
+
+Invariant 5c: Project Constitution references submodule
+  ✓ Project validation doc: /mnt/agents/llmctl/docs/validation_and_verification.md
+
+Invariant 6: Nested third-party submodules are documented, never modified
+  Checking submodules/superspec...
+  - submodules/superspec: No CLAUDE.md or AGENTS.md upstream (nothing to report - not injected either, by design)
+  Checking submodules/llama.cpp...
+  - submodules/llama.cpp: No CLAUDE.md or AGENTS.md upstream (nothing to report - not injected either, by design)
+  Checking submodules/colibri...
+  - submodules/colibri: No CLAUDE.md or AGENTS.md upstream (nothing to report - not injected either, by design)
+
+Invariant 7: Constitution submodule has all required files
+  ✗ constitution/Constitution.md: /mnt/agents/llmctl/constitution/Constitution.md (MISSING)
+  ✗ constitution/CLAUDE.md: /mnt/agents/llmctl/constitution/CLAUDE.md (MISSING)
+  ✗ constitution/AGENTS.md: /mnt/agents/llmctl/constitution/AGENTS.md (MISSING)
+  ✗ constitution/install_upstreams.sh: /mnt/agents/llmctl/constitution/install_upstreams.sh (MISSING)
+  ✗ constitution/find_constitution.sh: /mnt/agents/llmctl/constitution/find_constitution.sh (MISSING)
+
+Invariant 8: Constitution submodule has 4+ upstream remotes configured
+fatal: not a git repository (or any parent up to mount point /mnt)
+Stopping at filesystem boundary (GIT_DISCOVERY_ACROSS_FILESYSTEM not set).
+  Upstream remotes (excluding origin): 0
+  Origin push URLs: 0
+  ✗ Insufficient upstream remotes (need 4+, or constitution/ directory missing)
+
+Invariant 9: Constitution verification harness executes successfully
+  ✗ Verification harness MISSING
+
+Invariant 10: Meta-test mutation proves gate is not a bluff
+  ✗ Meta-test mutation script MISSING
+
+=== INHERITANCE VERIFICATION SUMMARY ===
+FAILURES (14):
+  ✗ Constitution.md missing: /mnt/agents/llmctl/constitution/Constitution.md
+  ✗ §11.4 End-user quality guarantee anchor missing in /mnt/agents/llmctl/constitution/Constitution.md
+  ✗ CLAUDE.md missing: /mnt/agents/llmctl/constitution/CLAUDE.md
+  ✗ MANDATORY ANTI-BLUFF COVENANT anchor missing in /mnt/agents/llmctl/constitution/CLAUDE.md
+  ✗ AGENTS.md missing: /mnt/agents/llmctl/constitution/AGENTS.md
+  ✗ Anti-bluff covenant anchor missing in /mnt/agents/llmctl/constitution/AGENTS.md
+  ✗ constitution/Constitution.md missing: /mnt/agents/llmctl/constitution/Constitution.md
+  ✗ constitution/CLAUDE.md missing: /mnt/agents/llmctl/constitution/CLAUDE.md
+  ✗ constitution/AGENTS.md missing: /mnt/agents/llmctl/constitution/AGENTS.md
+  ✗ constitution/install_upstreams.sh missing: /mnt/agents/llmctl/constitution/install_upstreams.sh
+  ✗ constitution/find_constitution.sh missing: /mnt/agents/llmctl/constitution/find_constitution.sh
+  ✗ Insufficient upstream remotes or constitution/ directory missing
+  ✗ Verification harness missing
+  ✗ Meta-test mutation script missing
+EXIT: 1
+
+======================================================================
+TEST: test_create_release.sh
+CMD:  bash /mnt/agents/llmctl/tests/test_create_release.sh
+----------------------------------------------------------------------
+OUTPUT:
+  ok: v1.0.0 is valid SemVer
+  ok: v1.0.0-rc.1 (pre-release) is valid SemVer
+  ok: 1.2.3 (no leading v) is valid SemVer
+  ok: v1.0 (missing PATCH) is rejected
+  ok: garbage string is rejected
+  ok: changelog includes the real feat commit
+  ok: changelog includes the real fix commit
+  ok: changelog includes the real docs commit
+  ok: changelog groups feat: commits under a Features heading
+  ok: changelog groups fix: commits under a Fixes heading
+  ok: a forge with no recorded state defaults to pending
+  ok: release_state_set persists real state, read back correctly
+  ok: a DIFFERENT forge's state is independent (not accidentally shared)
+  ok: release_publish_forge github invoked the real gh binary with 'release create'
+  ok: successful github publish is recorded as done
+  ok: fresh tag v9.9.10: github genuinely starts pending (sanity - proves the next failure is real)
+PASS gitlab: release v9.9.10 published
+  ok: whole release is treated as failed when github fails (even if gitlab succeeds)
+  ok: failed github publish is recorded as failed, not done
+  ok: gitlab's independent success is still recorded as done despite github's failure
+PASS github: release v9.9.10 published
+SKIP gitlab: already published (idempotent retry-only-the-failed-forge)
+  ok: github IS retried on re-run (1 failed attempt + 1 retry attempt = 2 real invocations total)
+  ok: retry after a github-only failure does NOT re-invoke glab (already succeeded, idempotent retry-only-the-failed-forge)
+  ok: retried github publish now recorded as done
+  ok: dry-run makes ZERO calls to gh
+  ok: dry-run makes ZERO calls to glab
+  ok: dry-run output announces itself as a dry run
+RESULT: PASS
+EXIT: 0
+
+======================================================================
+TEST: test_ctx_kvtype_override.sh
+CMD:  bash /mnt/agents/llmctl/tests/test_ctx_kvtype_override.sh
+----------------------------------------------------------------------
+OUTPUT:
+  ok: ctx override env-var name for a simple profile
+  ok: ctx override env-var name for a hyphenated profile
+  ok: kv-type override env-var name for a simple profile
+  ok: kv-type override env-var name for a hyphenated profile
+  ok: no override: fast's ctx is still the catalog default (regression guard)
+  ok: no override: fast's kv_cache_type defaults to f16 (zero behavior change for every profile that doesn't opt in)
+  ok: LLMCTL_CTX_SMALL=65536 plumbs into catalog_plan_json's small ctx - the actual launch --ctx-size
+  ok: ctx override is scoped to 'small' only, 'fast' keeps its catalog ctx
+  ok: an invalid LLMCTL_CTX_SMALL value fails the plan instead of silently using garbage
+  ok: invalid ctx override reports a clear error naming the bad value
+  ok: LLMCTL_CTX_SMALL=0 fails the plan instead of silently using it (0 means something dangerously different to llama-server, not 'use the catalog default')
+  ok: zero ctx override reports a clear error naming the MIN_CTX floor
+  ok: LLMCTL_CTX_SMALL=-5 (negative) fails the plan instead of silently using it
+  ok: negative ctx override reports a clear error naming the MIN_CTX floor
+  ok: LLMCTL_KVTYPE_SMALL=q4_0 plumbs into catalog_plan_json's small kv_cache_type
+  ok: kv-type override is scoped to 'small' only, 'fast' keeps f16
+  ok: q4_0 KV quantization genuinely reduces the estimated vram_mb vs f16 at the same ctx (got f16=2949 q4_0=2213)
+  ok: an invalid LLMCTL_KVTYPE_SMALL value fails the plan instead of silently passing garbage to llama-server
+  ok: invalid kv-type override's error names the real allowed set (not a vague message)
+  ok: sanity: ctx=12000 at f16 genuinely does NOT fit on GPU in the contended fixture's real headroom - falls through to cpu mode (confirms the test fixture actually exercises the boundary, not a vacuous pass)
+  ok: the SAME ctx=12000, with q4_0 KV quantization accounted for, now correctly fits on GPU (mode=gpu, not the cpu fallback) - proving kv_mb() is genuinely type-aware in the admission-control path, not just cosmetically labeled
+  ok: llmctl plan --json without overrides still shows the catalog default (regression guard, using 'fast' - untouched by this feature's own catalog tuning)
+  ok: llmctl plan --json honors LLMCTL_CTX_SMALL end-to-end through the real CLI entrypoint
+  ok: llmctl plan --json honors LLMCTL_KVTYPE_SMALL end-to-end through the real CLI entrypoint
+  ok: f16 kv_type omits --cache-type-k/-v from the real launch command (byte-for-byte unchanged for every profile that does not opt in)
+  ok: q4_0 kv_type adds --cache-type-k q4_0 to the real launch command sched_build_launch constructs
+  ok: q4_0 kv_type adds --cache-type-v q4_0 to the real launch command sched_build_launch constructs
+RESULT: PASS
+EXIT: 0
+
+======================================================================
+TEST: test_decide.sh
+CMD:  bash /mnt/agents/llmctl/tests/test_decide.sh
+----------------------------------------------------------------------
+OUTPUT:
+  ok: choice prompt: option A is the first criteria key
+  ok: choice prompt: option B is the second criteria key
+  ok: choice prompt: A) line precedes B) line (criteria insertion order)
+  ok: choice prompt: instructions line
+  ok: choice prompt: state block
+  ok: noul prompt: fixed A=yes option
+  ok: noul prompt: fixed B=no option
+  ok: noul prompt: true-description appended when criteria given
+  ok: noul prompt: false-description appended when criteria given
+  ok: score prompt: level 0 is option A
+  ok: score prompt: level 2 is option C
+  ok: choice shape: exact renormalized probabilities + confidence (computed in-test)
+  ok: noul shape: exact yes probability (softmax of -0.03 vs -3.5)
+  ok: noul shape: type field
+  ok: noul shape: NO confidence key (Jev 1P shape)
+  ok: score shape: exact probability-weighted expectation
+  ok: score shape: legend key 0
+  ok: score shape: legend key 2
+  ok: score shape: confidence key present
+  ok: decide_ask choice against fixture: exit code
+  ok: --json output is a single line
+  ok: decide_ask choice: winner is billing
+  ok: decide_ask: additive model field
+  ok: decide_ask: additive evidence.server_port field
+  ok: decide_ask noul: type field
+  ok: decide_ask noul: yes probability > 0.5 on the 2+2=4 fixture distribution
+  ok: decide_ask score: weighted score >= 1.0 on the top-level-heavy fixture distribution
+  ok: decide_ask score: legend survives the full path
+  ok: 27 options -> rc 2
+  ok: 27 options -> cap message
+  ok: choice without --criteria -> rc 2
+  ok: choice without --criteria -> usage message
+  ok: non-downloaded/non-started profile -> rc 1
+  ok: non-started profile -> clear error message
+  ok: decide interactive (non-TTY) -> rc 2
+  ok: interactive non-TTY refusal message
+  ok: decide interactive with LLMCTL_DECIDE_NO_INTERACTIVE=1 -> rc 2
+  ok: interactive disabled message
+  ok: --interactive flag cannot override LLMCTL_DECIDE_NO_INTERACTIVE=1 -> rc 2
+  ok: decide ask --interactive (flag activation) -> rc 0
+  ok: decide ask --interactive: noul answer via wizard
+  ok: wizard happy path (scripted heredoc) -> rc 0
+  ok: wizard stdout is single-line JSON (prompts went to stderr)
+  ok: wizard happy path: choice is billing
+  ok: wizard happy path: model field
+  ok: wizard with all flag equivalents -> rc 0
+  ok: wizard flag equivalents: noul answer
+  ok: wizard abort at Proceed? -> rc 0
+  ok: wizard abort: no JSON emitted on stdout
+  ok: decide capacity --json: tier
+  ok: decide capacity --json: decide-tiny gpu instances (10444//1592=6, 25904//2048=12 -> min=6)
+  ok: decide capacity human: lists decide-tiny
+  ok: decide capacity human: table header
+  ok: decide status --json: decide profile row present
+  ok: decide status --json: decide not running in the isolated env
+  ok: engine dispatch: decide-nli is an onnx-engine profile
+  ok: engine dispatch: decide stays llama-engine
+  ok: engine dispatch: decide-2b is llama-engine
+  ok: decide_ask onnx choice against fixture: exit code
+  ok: decide_ask onnx choice: winner is billing
+  ok: decide_ask onnx: additive model field
+  ok: decide_ask onnx: additive evidence.server_port field
+  ok: decide_ask onnx choice: confidence passes through
+  ok: decide_ask onnx noul: type field
+  ok: decide_ask onnx noul: scripted 0.97 passes through unchanged (no logprob reshaping)
+  ok: decide_ask onnx score: scripted weighted score 1.65
+  ok: decide_ask onnx score: legend passes through
+  ok: wizard with an onnx profile -> rc 0
+  ok: wizard onnx profile: noul answer
+  ok: unsupported engine value -> rc 1
+  ok: unsupported engine -> clear message
+RESULT: PASS
+EXIT: 0
+
+======================================================================
+TEST: test_decide_download.sh
+CMD:  bash /mnt/agents/llmctl/tests/test_decide_download.sh
+----------------------------------------------------------------------
+OUTPUT:
+  ok: download_profile toy-decide exit code
+  [llmctl] downloading model.gguf from toy/decide
+    % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                   Dload  Upload   Total   Spent    Left  Speed
+    0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0100    61  100    61    0     0  15831      0 --:--:-- --:--:-- --:--:-- 20333
+  verified: model.gguf
+  WARN: smoke test disabled (LLMCTL_SMOKE=0)
+  profile 'toy-decide' downloaded and verified. Evidence: /tmp/tmp.l3LZLQyGCO/state/verify/toy-decide.log
+  ok: model.gguf exists after download
+  ok: downloaded file sha256 matches
+  ok: evidence log records the DECISION smoke path (not the gguf smoke path)
+  ok: gguf smoke path NOT taken for a decide-capable profile
+  ok: evidence log records overall success
+  ok: download with smoke enabled but no llama-server: still rc 0 (skip-warn precedent)
+  ok: evidence log records the decision smoke SKIP-with-reason
+  ok: operator-facing skip warning
+RESULT: PASS
+EXIT: 0
+
+======================================================================
+TEST: test_decide_gateway.sh
+CMD:  bash /mnt/agents/llmctl/tests/test_decide_gateway.sh
+----------------------------------------------------------------------
+OUTPUT:
+  ok: gateway on port 41257: /healthz becomes 200
+  ok: gateway on port 43623: /healthz becomes 200
+  ok: gateway on port 52453: /healthz becomes 200
+  ok: systemone: answers.team.choice is billing
+  ok: systemone: probabilities keyed by criteria keys
+  ok: systemone: confidence present
+  ok: systemone: model echoes the requested alias
+  ok: systemone: usage present (estimated input_tokens > 0, 1 output token/question)
+  ok: systemone: noul question typed answer
+  ok: systemone: noul value > 0.5 on the 2+2=4 fixture distribution
+  ok: systemone: score weighted expectation >= 1.0 on the top-level-heavy distribution
+  ok: systemone: score legend present
+  ok: systemone: usage.output_tokens == number of questions
+  ok: /v1/models: jev-latest alias present
+  ok: /v1/models: jev-preview alias present
+  ok: /v1/models: llmctl-<profile> alias present
+  ok: auth gateway: absent Bearer -> 401
+  ok: auth gateway: wrong Bearer -> 401
+  ok: auth gateway: correct Bearer -> 200
+  ok: auth gateway: /v1/models also requires the key
+  ok: auth gateway: /healthz stays open for probes
+  ok: truncating gateway: header set on oversized state
+  ok: uncapped gateway: no truncation header on the same body
+  ok: decide serve (daemonized) -> rc 0
+  ok: decide serve: pidfile written
+  ok: decide serve: gateway process alive
+  ok: decide serve: gateway answers /healthz
+  ok: decide serve: systemone works through the served gateway
+  ok: decide serve --stop -> rc 0
+  ok: decide serve --stop: process gone
+  ok: decide serve --stop: pidfile removed
+  ok: decide serve --stop when not running -> rc 1
+  ok: decide serve --stop when not running -> message
+  ok: decide serve with LLMCTL_DRY_RUN=1 -> rc 0
+  ok: decide serve dry-run: launch line printed
+  ok: decide serve dry-run: no pidfile
+  ok: onnx-mode gateway: /healthz becomes 200 (backend /health up)
+  ok: onnx-mode gateway: answers.team.choice is billing (proxied)
+  ok: onnx-mode gateway: model alias passes through to the backend
+  ok: onnx-mode gateway: upstream usage block returned verbatim
+  ok: onnx-mode gateway: noul + score questions in the same proxied request
+  ok: onnx-mode gateway: missing state -> 400 at the gateway
+  ok: decide serve decide-nli (dry-run) -> rc 0
+  ok: decide serve: onnx profiles pass --backend-engine onnx to the gateway
+  ok: decide serve: llama profiles pass --backend-engine llama
+RESULT: PASS
+EXIT: 0
+
+======================================================================
+TEST: test_determinism.sh
+CMD:  bash /mnt/agents/llmctl/tests/test_determinism.sh
+----------------------------------------------------------------------
+OUTPUT:
+  ok: hw --json run 1 == run 2 (byte-identical)
+  ok: hw --json run 2 == run 3 (byte-identical)
+  ok: hw --json output is not empty/degenerate (sanity - it is real hardware JSON)
+  ok: plan --json run 1 == run 2 (byte-identical)
+  ok: plan --json run 2 == run 3 (byte-identical)
+RESULT: PASS
+EXIT: 0
+
+======================================================================
+TEST: test_download.sh
+CMD:  bash /mnt/agents/llmctl/tests/test_download.sh
+----------------------------------------------------------------------
+OUTPUT:
+  ok: download_profile toy exit code
+  [llmctl] downloading model.bin from toy/repo
+    % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                   Dload  Upload   Total   Spent    Left  Speed
+    0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0100    52  100    52    0     0  13626      0 --:--:-- --:--:-- --:--:-- 17333
+  verified: model.bin
+  WARN: smoke test disabled (LLMCTL_SMOKE=0)
+  profile 'toy' downloaded and verified. Evidence: /tmp/tmp.7fpxrCyDBc/state/verify/toy.log
+  ok: model.bin exists after download
+  ok: downloaded file sha256 matches
+  ok: evidence log records verification
+  ok: evidence log records exit code
+  ok: second download skips verified file
+  ok: no .part file left behind (atomic rename)
+  ok: re-download of corrupted file succeeds
+  ok: corruption detected before re-download
+  ok: re-downloaded file verified
+  ok: sha256 mismatch -> hard failure
+  ok: mismatch reported
+  ok: mismatched content never lands at the final path
+  ok: verify_profile exit code
+  ok: verify_profile success message
+RESULT: PASS
+EXIT: 0
+
+======================================================================
+TEST: test_download_resume.sh
+CMD:  bash /mnt/agents/llmctl/tests/test_download_resume.sh
+----------------------------------------------------------------------
+OUTPUT:
+  ok: resume against Range-capable server succeeds
+  ok: resumed file's sha256 matches the full payload
+  ok: no .part file left behind after successful resume
+  ok: server actually received a Range request starting at the pre-existing byte offset (genuine resume, not a from-scratch refetch)
+  ok: download succeeds even when the server does not support Range (falls back to full re-download)
+  ok: fallback-re-downloaded file's sha256 matches the full payload
+  ok: no .part file left behind after fallback re-download
+RESULT: PASS
+EXIT: 0
+
+======================================================================
+TEST: test_engine.sh
+CMD:  bash /mnt/agents/llmctl/tests/test_engine.sh
+----------------------------------------------------------------------
+OUTPUT:
+  ok: LLMCTL_LLAMA_SRC resolves to the real git submodule, not the un-pinned vendor/ copy
+  ok: LLMCTL_COLIBRI_SRC resolves to the real git submodule, not the un-pinned vendor/ copy
+  ok: engine_ensure_submodules exits 0 when submodules/{llama.cpp,colibri}/.git are present
+  ok: no 'not initialized' warning when the real submodule paths are present
+  ok: missing submodule is reported at its real path (submodules/colibri), not the old vendor/colibri
+EXIT: 1
+
+======================================================================
+TEST: test_engine_cpu_regression.sh
+CMD:  bash /mnt/agents/llmctl/tests/test_engine_cpu_regression.sh
+----------------------------------------------------------------------
+OUTPUT:
+  ok: the shadow no-nvcc bin directory genuinely excludes nvcc
+  ok: engine_detect_backend returns 'cpu' when nvcc is absent from PATH
+EXIT: 128
+
+======================================================================
+TEST: test_gpu_throughput_ratio.sh
+CMD:  bash /mnt/agents/llmctl/tests/test_gpu_throughput_ratio.sh
+----------------------------------------------------------------------
+OUTPUT:
+  SKIP: GPU throughput-ratio measurement
+    reason: nvidia-smi not present on this host
+RESULT: PASS
+EXIT: 0
+
+======================================================================
+TEST: test_gpu_vram_delta.sh
+CMD:  bash /mnt/agents/llmctl/tests/test_gpu_vram_delta.sh
+----------------------------------------------------------------------
+OUTPUT:
+  SKIP: GPU VRAM-delta measurement
+    reason: nvidia-smi not present on this host
+RESULT: PASS
+EXIT: 0
+
+======================================================================
+TEST: test_hardware_probe.sh
+CMD:  bash /mnt/agents/llmctl/tests/test_hardware_probe.sh
+----------------------------------------------------------------------
+OUTPUT:
+  ok: real probe exit code
+  ok: probe JSON top-level keys
+  ok: probe reports a sane core count (3)
+  ok: probe reports total memory (4984 MiB)
+  ok: human output has CPU line
+  ok: human output has RAM line
+  ok: human output has Storage line
+  ok: fake probe returns fixture model
+  ok: fake probe returns fixture VRAM
+  ok: missing fixture file -> probe fails
+  ok: missing fixture file fails for the real stated reason
+  ok: invalid fixture JSON -> probe fails
+  ok: invalid fixture JSON fails for the real stated reason
+RESULT: PASS
+EXIT: 0
+
+======================================================================
+TEST: test_install_script_e2e.sh
+CMD:  bash /mnt/agents/llmctl/tests/test_install_script_e2e.sh
+----------------------------------------------------------------------
+OUTPUT:
+  ok: scripts/install.sh exists (GREEN half of the RED/GREEN pair)
+  ok: bash -n scripts/install.sh (syntax check - tests/test_syntax.sh's own script glob does not currently enumerate top-level scripts/*.sh, only scripts/release/*.sh, so this file asserts it directly)
+  === Step 1: llmctl setup (doctor -> build engines -> hardware plan) ===
+  
+  === Step 2: download profile 'small' (idempotent - skips re-download when already present+verified) ===
+  
+  === Step 3: llmctl install (writes systemd --user unit templates / prepares launchd dir; also attempts 'loginctl enable-linger' on Linux) ===
+  
+  === Step 4: enable + start 'small' ===
+  
+  === Step 5: verify systemd --user lingering (reboot/logout survival) ===
+  PASS: linger is enabled for root - the profile(s) enabled above will survive both logout and reboot.
+  
+  === Step 6: final status ===
+  profile port mode RAM VRAM enabled state
+  
+  install complete: small
+  ok: happy path: exit code 0
+  ok: happy path: linger PASS reported
+  ok: happy path: default profile is 'small' when none given
+  ok: happy path: 'llmctl setup' was invoked
+  ok: happy path: 'llmctl models download small' was invoked (default profile)
+  ok: happy path: 'llmctl install' was invoked (writes the systemd unit TEMPLATE 'enable' depends on - see scripts/install.sh's own header for the real, root-caused reason this step exists)
+  ok: happy path: 'llmctl enable small' was invoked
+  ok: happy path: 'llmctl status' was invoked as the final step
+  ok: happy path: real invocation order is setup -> download -> install -> enable -> status (proves scripts/install.sh's own sequencing, not just that every subcommand happened to run somewhere)
+  === Step 1: llmctl setup (doctor -> build engines -> hardware plan) ===
+  
+  === Step 2: download profile 'vision' (idempotent - skips re-download when already present+verified) ===
+  
+  === Step 3: llmctl install (writes systemd --user unit templates / prepares launchd dir; also attempts 'loginctl enable-linger' on Linux) ===
+  
+  === Step 4: enable + start 'vision' ===
+  
+  === Step 5: verify systemd --user lingering (reboot/logout survival) ===
+  FAIL: linger is NOT confirmed enabled for root.
+    'llmctl install' already attempts 'loginctl enable-linger' automatically
+    (lib/service_linux.sh), but that call only WARNS on failure rather than
+    aborting - it can silently fail to take effect (e.g. missing polkit/D-Bus
+    permission) while every step above still reports success.
+  
+    ACTION REQUIRED (never attempted automatically - privilege escalation is
+    never performed unattended by this script or by llmctl itself):
+  
+        sudo loginctl enable-linger root
+  
+    Without confirmed lingering, the profile(s) enabled above will stop at the
+    next logout and will NOT restart automatically after a reboot.
+  ok: linger-not-confirmed path: exit code 1 (non-zero - never silently proceeds)
+  ok: linger-not-confirmed path: FAIL is reported
+  ok: linger-not-confirmed path: actionable sudo instruction is printed (never attempted automatically)
+  ok: linger-not-confirmed path: --profile vision was honored (not the default 'small')
+  ok: linger-not-confirmed path: enable ran for the requested profile before the linger check failed it
+  ok: linger-not-confirmed path: 'llmctl status' (Step 6) did not run after the Step 5 linger check failed
+  === Step 1: llmctl setup (doctor -> build engines -> hardware plan) ===
+  
+  === Step 2: download profile 'small' (idempotent - skips re-download when already present+verified) ===
+  
+  === Step 3: llmctl install (writes systemd --user unit templates / prepares launchd dir; also attempts 'loginctl enable-linger' on Linux) ===
+  
+  === Step 4: enable + start 'small' ===
+  
+  === Step 5: verify systemd --user lingering (reboot/logout survival) ===
+  [dry-run] would run: loginctl show-user $(id -un) -p Linger
+  
+  === Step 6: final status ===
+  profile port mode RAM VRAM enabled state
+  
+  install complete: small
+  ok: --dry-run: exit code 0
+  ok: --dry-run: linger step is honestly skipped, not silently fabricated
+  ok: --dry-run: LLMCTL_DRY_RUN=1 was genuinely exported into every llmctl invocation's environment
+  ok: --skip-setup: exit code 0
+  ok: --skip-setup: Step 1 is honestly reported as skipped
+  ok: --skip-setup: 'llmctl setup' was NOT invoked
+  ok: unknown flag: exit code 2
+  ok: --profile with no argument: exit code 2
+  SKIP: loginctl-absent SKIP branch
+    reason: loginctl is present even on the narrowed PATH on this host
+RESULT: PASS
+EXIT: 0
+
+======================================================================
+TEST: test_normalize_agents.sh
+CMD:  bash /mnt/agents/llmctl/tests/test_normalize_agents.sh
+----------------------------------------------------------------------
+OUTPUT:
+  ok: normalize_opencode.sh exists
+  ok: normalize_opencode.sh is syntactically valid
+  ok: opencode: run1 fixture exists
+  ok: opencode: run2 fixture exists
+  ok: opencode: expected_normalized fixture exists
+  ok: opencode: two runs differing only in non-deterministic fields normalize to byte-identical output
+  ok: opencode: normalized output matches the checked-in expected fixture
+  ok: normalize_pi.sh exists
+  ok: normalize_pi.sh is syntactically valid
+  ok: pi: run1 fixture exists
+  ok: pi: run2 fixture exists
+  ok: pi: expected_normalized fixture exists
+  ok: pi: two runs differing only in non-deterministic fields normalize to byte-identical output
+  ok: pi: normalized output matches the checked-in expected fixture
+  ok: normalize_crush.sh exists
+  ok: normalize_crush.sh is syntactically valid
+  ok: crush: run1 fixture exists
+  ok: crush: run2 fixture exists
+  ok: crush: expected_normalized fixture exists
+  ok: crush: two runs differing only in non-deterministic fields normalize to byte-identical output
+  ok: crush: normalized output matches the checked-in expected fixture
+  ok: normalize_claude_code.sh exists
+  ok: normalize_claude_code.sh is syntactically valid
+  ok: claude_code: run1 fixture exists
+  ok: claude_code: run2 fixture exists
+  ok: claude_code: expected_normalized fixture exists
+  ok: claude_code: two runs differing only in non-deterministic fields normalize to byte-identical output
+  ok: claude_code: normalized output matches the checked-in expected fixture
+  ok: normalize_aider.sh exists
+  ok: normalize_aider.sh is syntactically valid
+  ok: aider: run1 fixture exists
+  ok: aider: run2 fixture exists
+  ok: aider: expected_normalized fixture exists
+  ok: aider: two runs differing only in non-deterministic fields normalize to byte-identical output
+  ok: aider: normalized output matches the checked-in expected fixture
+  ok: normalize_continue.sh exists
+  ok: normalize_continue.sh is syntactically valid
+  ok: continue: run1 fixture exists
+  ok: continue: run2 fixture exists
+  ok: continue: expected_normalized fixture exists
+  ok: continue: two runs differing only in non-deterministic fields normalize to byte-identical output
+  ok: continue: normalized output matches the checked-in expected fixture
+  ok: normalize_cline.sh exists
+  ok: normalize_cline.sh is syntactically valid
+  ok: cline: run1 fixture exists
+  ok: cline: run2 fixture exists
+  ok: cline: expected_normalized fixture exists
+  ok: cline: two runs differing only in non-deterministic fields normalize to byte-identical output
+  ok: cline: normalized output matches the checked-in expected fixture
+RESULT: PASS
+EXIT: 0
+
+======================================================================
+TEST: test_normalize_common.sh
+CMD:  bash /mnt/agents/llmctl/tests/test_normalize_common.sh
+----------------------------------------------------------------------
+OUTPUT:
+  ok: norm_strip_timestamps replaces ISO8601 + human-readable timestamps
+  ok: two DIFFERENT real timestamps normalize to the SAME placeholder (the actual determinism property under test)
+  ok: norm_strip_temp_paths replaces /tmp/... paths
+  ok: two DIFFERENT temp paths normalize to the SAME placeholder
+  ok: norm_strip_uuids replaces a v4-shaped UUID
+  ok: norm_strip_durations replaces elapsed-time reporting
+  ok: two runs differing ONLY in timestamp/temp-path/uuid/duration normalize to byte-identical output
+  ok: paired mutation: a filter that does not actually strip timestamps is correctly detected as different from the real one's output
+RESULT: PASS
+EXIT: 0
+
+======================================================================
+TEST: test_onnx_download.sh
+CMD:  bash /mnt/agents/llmctl/tests/test_onnx_download.sh
+----------------------------------------------------------------------
+OUTPUT:
+  ok: download_profile toy-onnx (fake seam, smoke enabled): exit code
+  [llmctl] downloading onnx/model.onnx from toy/onnx
+    % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                   Dload  Upload   Total   Spent    Left  Speed
+    0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0100    51  100    51    0     0  14934      0 --:--:-- --:--:-- --:--:-- 17000
+  verified: onnx/model.onnx
+  [llmctl] downloading onnx/spm.model from toy/onnx
+    % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                   Dload  Upload   Total   Spent    Left  Speed
+    0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0100    50  100    50    0     0  39277      0 --:--:-- --:--:-- --:--:-- 50000
+  verified: onnx/spm.model
+  structural validation passed for toy-onnx (onnx model + tokenizer present)
+  [llmctl] onnx smoke test: starting onnx_server.py for toy-onnx on 127.0.0.1:18090
+  onnx smoke test passed for toy-onnx (noul/choice/score probes)
+  profile 'toy-onnx' downloaded and verified. Evidence: /tmp/tmp.drR9n8oZS8/state/verify/toy-onnx.log
+  ok: onnx/model.onnx exists after download (subdirectory preserved)
+  ok: downloaded model sha256 matches
+  ok: structural validation ran (model.onnx found)
+  ok: structural validation ran (tokenizer found)
+  ok: onnx smoke launched the REAL lib/onnx_server.py
+  ok: evidence log records the fake seam
+  ok: smoke: server became healthy
+  ok: probe evidence: noul
+  ok: probe evidence: choice
+  ok: probe evidence: score
+  ok: choice probe returned billing (fake formula: first option wins)
+  ok: smoke passed with the fake seam
+  ok: evidence log records overall success
+  ok: second download: exit code
+  ok: second download: existing verified files are skipped (no re-download)
+  ok: download without deps: still rc 0 (skip-warn precedent)
+  ok: evidence log records the SKIP-with-reason line
+  ok: operator-facing skip warning
+  ok: structural validation still ran before the skip
+  ok: skip still records overall success
+RESULT: PASS
+EXIT: 0
+
+======================================================================
+TEST: test_onnx_server.sh
+CMD:  bash /mnt/agents/llmctl/tests/test_onnx_server.sh
+----------------------------------------------------------------------
+OUTPUT:
+  ok: missing --model-dir -> rc 2
+  ok: missing --model-dir -> message
+  ok: nonexistent --model-dir -> rc 1
+  ok: nonexistent --model-dir -> message
+  ok: onnx server on port 57317: /health becomes 200
+  ok: onnx server on port 46255: /health becomes 200
+  ok: onnx server on port 54087: /health becomes 200
+  ok: onnx server on port 35591: /health becomes 200
+  ok: /health advertises the fake seam
+  ok: noul: exact P(entailment) softmax([2.0, logsumexp(0,-2)]), no confidence key
+  ok: noul: model defaults to llmctl-<profile>
+  ok: choice: exact softmax over entailment logits [2.0, 1.5], billing wins
+  ok: score: exact weighted expectation over ent logits [2.0, 1.5, 1.0] + legend
+  ok: usage: input_tokens is the documented ceil(chars/4) estimate
+  ok: label-order detection: permuted id2label (entailment at index 2) yields the IDENTICAL noul value
+  ok: label-order detection: startup log records entailment index 2 from config.json
+  ok: label-order detection: missing config.json logs the documented assumption
+  ok: auth: absent Bearer -> 401
+  ok: auth: wrong Bearer -> 401
+  ok: auth: correct Bearer -> 200
+  ok: auth: /health stays open for probes
+  ok: oversized body (> 4 MiB) -> 400
+  ok: truncating server: header set on oversized state
+  ok: uncapped server: no truncation header on the same body
+  ok: bad question type -> 400
+  ok: missing state -> 400
+  ok: startup: listening event logged to stdout
+  ok: requests: single-line JSON log records
+RESULT: PASS
+EXIT: 0
+
+======================================================================
+TEST: test_planner.sh
+CMD:  bash /mnt/agents/llmctl/tests/test_planner.sh
+----------------------------------------------------------------------
+OUTPUT:
+  ok: baseline tier
+  ok: baseline RAM budget (30000-4096)
+  ok: baseline VRAM budget (12288*0.85)
+  ok: baseline recommended set (decide-tiny/decide + iter2 decide-nli/decide-2b recommended)
+  ok: baseline fast mode
+  ok: baseline coder mode (17.7GiB > 10444MiB VRAM)
+  ok: baseline fast VRAM footprint (4692 model + 1024 KV)
+  ok: baseline coder RAM footprint (17697 + 4096 KV)
+  ok: baseline gates ws-dense-32b by tier
+  ok: baseline co-residency groups (decide-nli joins group 2 as VRAM-0; decide-2b spills to group 3)
+  ok: decide-nli mode is always cpu (onnx encoder)
+  ok: decide-nli RAM reservation = 1671*3//2 + 512 = 3018 MiB
+  ok: decide-nli VRAM need is 0 (CPU inference)
+  ok: decide-nli ctx default 512 (encoder, not a generation ctx)
+  ok: decide-nli fits baseline (3018 <= 25904)
+  ok: decide-nli recommended on baseline (min_tier below-minimum)
+  ok: decide-2b GPU footprint (1918 weights + 1088 KV)
+  ok: decide-max tier-gated on baseline
+  ok: decide-max GPU footprint (9086 weights + 1088 KV)
+  ok: workstation fixture tier
+  ok: workstation recommended set (all 16 profiles: decide-pro/decide-max's workstation tier gate passes on a datacenter host)
+  ok: ws-dense-32b fully offloaded
+  ok: colibri-glm mode
+  ok: workstation co-residency groups (group 6 = all five remaining decide profiles)
+  ok: apple tier (64GB unified RAM)
+  ok: apple recommended set (colibri-glm gated to datacenter; all six decide profiles fit 64GB unified memory)
+  ok: apple gates colibri-glm
+  ok: apple fast uses unified-memory GPU
+  ok: human plan header
+  ok: human plan groups
+  ok: catalog_classify_tier: baseline fixture
+  ok: catalog_classify_tier: workstation fixture (actually computes datacenter, matching catalog_plan_json above)
+  ok: catalog_classify_tier: apple fixture
+  ok: catalog_classify_tier: constrained fixture (8 cores / 32768 MiB RAM sits exactly at the baseline threshold)
+  ok: vram-contended VRAM budget uses REAL FREE (3000*0.85), not total (12288*0.85=10444)
+  ok: small still fits this host overall (via cpu-mode RAM fallback), just no longer via gpu mode
+  ok: small correctly falls through to cpu mode instead of a gpu mode that would OOM
+  ok: baseline decide-tiny gpu instances (min(10444//1592, 25904//2048)=6)
+  ok: baseline decide-tiny cpu instances (25904//1592=16)
+  ok: baseline decide-tiny slots per instance (parallel=4)
+  ok: baseline decide-tiny total slots (max(6,16)*4=64)
+  ok: baseline decide gpu instances (min(10444//3671, 12)=2)
+  ok: baseline decide cpu instances (25904//3671=7)
+  ok: baseline decide total slots (max(2,7)*2=14)
+  ok: baseline decide-pro tier-gated to 0 gpu instances
+  ok: baseline decide-pro tier-gated to 0 cpu instances
+  ok: baseline decide-pro carries a tier-gate reason
+  ok: baseline decide-nli gpu instances ALWAYS 0 (CPU-only onnx encoder)
+  ok: baseline decide-nli cpu instances (25904//3018=8)
+  ok: baseline decide-nli per-instance VRAM 0
+  ok: baseline decide-nli per-instance RAM 3018 (1671*3//2+512)
+  ok: baseline decide-nli slots per instance (parallel=1: per-option forward passes)
+  ok: baseline decide-nli total slots (max(0,8)*1=8)
+  ok: baseline decide-2b gpu instances (min(10444//3006, 12)=3)
+  ok: baseline decide-2b cpu instances (25904//3006=8)
+  ok: baseline decide-2b total slots (max(3,8)*2=16)
+  ok: baseline decide-max tier-gated to 0
+  ok: baseline decide-max carries a tier-gate reason
+  ok: workstation decide-tiny gpu instances (min(27852//1592, 235904//2048)=17)
+  ok: workstation decide-tiny cpu instances (235904//1592=148)
+  ok: workstation decide gpu instances (min(27852//3671, 115)=7)
+  ok: workstation decide cpu instances (235904//3671=64)
+  ok: workstation decide-pro gpu instances (min(27852//5260, 115)=5)
+  ok: workstation decide-pro cpu instances (235904//5260=44)
+  ok: workstation decide-pro total slots (max(5,44)*2=88)
+  ok: tiny decide-tiny: 0 (0 MiB RAM budget vs 1592 MiB footprint)
+  ok: tiny decide-tiny: footprint reason (tier gate passes)
+  ok: tiny decide: 0 (tier-gated)
+  ok: tiny decide: tier-gate reason
+  ok: tiny decide-pro: 0 (tier-gated)
+  ok: tiny decide-nli: gpu ALWAYS 0 (CPU-only engine)
+  ok: tiny decide-nli: 0 (0 MiB RAM budget vs 3018 MiB reservation)
+  ok: tiny decide-nli: footprint reason (tier gate passes at below-minimum)
+  ok: vram-contended decide-tiny gpu instances (min(2550//1592, 12)=1, down from 6 on baseline)
+  ok: vram-contended decide-tiny cpu instances UNCHANGED (25904//1592=16)
+  ok: vram-contended decide gpu instances (2550 < 3671 -> 0, down from 2 on baseline)
+  ok: vram-contended decide cpu instances UNCHANGED (25904//3671=7)
+  ok: constrained decide-tiny gpu instances (min(6963//1592, 12)=4)
+  ok: constrained decide gpu instances (min(6963//3671, 12)=1)
+  ok: decide capacity --json decision_instances == plan --json decision_instances
+  ok: human plan: Decision capacity section header
+  ok: human plan: Decision capacity lists decide-tiny
+  ok: human plan: Decision capacity lists decide-nli (onnx profile)
+  ok: decide rank: tiny > nli > 2b > base > pro > max
+RESULT: PASS
+EXIT: 0
+
+======================================================================
+TEST: test_port_override.sh
+CMD:  bash /mnt/agents/llmctl/tests/test_port_override.sh
+----------------------------------------------------------------------
+OUTPUT:
+  ok: override env-var name for a simple profile
+  ok: override env-var name for a hyphenated profile (hyphens -> underscores, uppercased)
+  ok: override env-var name for another hyphenated profile
+  ok: catalog_port fast (no override) is the catalog default
+  ok: catalog_port fast honors LLMCTL_PORT_FAST
+  ok: LLMCTL_PORT_FAST does not leak into an unrelated profile (small unchanged)
+  ok: an override for an unknown profile still dies (die() exits 1), never silently returns the override
+  ok: die() message is the same as the no-override unknown-profile path
+  ok: no override: plan's fast port is still the catalog default (regression guard)
+  ok: LLMCTL_PORT_FAST=18080 plumbs into catalog_plan_json's fast port - the actual launch port
+  ok: plan: override is scoped to 'fast' only, 'small' keeps its catalog port
+  ok: plan: override is scoped to 'fast' only, 'coder' keeps its catalog port
+  ok: hyphenated profile name (ws-dense-32b) override plumbs through catalog_plan_json
+  ok: an invalid LLMCTL_PORT_FAST value fails the plan instead of silently using garbage
+  ok: invalid override reports a clear error naming the bad value
+  ok: llmctl models list shows the overridden port for fast
+  ok: llmctl plan --json without the override still shows the catalog default (regression guard)
+  ok: llmctl plan --json with LLMCTL_PORT_FAST=18080 shows the overridden port - this is the exact value 'llmctl start/enable fast' would bind to
+RESULT: PASS
+EXIT: 0
+
+======================================================================
+TEST: test_preflight_submodules.sh
+CMD:  bash /mnt/agents/llmctl/tests/test_preflight_submodules.sh
+----------------------------------------------------------------------
+OUTPUT:
+  ok: a genuinely reachable pinned commit is detected as reachable
+  ok: fixture sanity: the orphaned commit is genuinely gone from upstream_bad after gc --prune
+  ok: a genuinely unreachable pinned commit is detected as unreachable
+  ok: preflight_run exits 1 when a submodule ref is unreachable
+  ok: failure message names the specific unreachable submodule
+  ok: failure message names the specific expected (unreachable) ref
+  ok: preflight_run exits 0 when the submodule ref is genuinely reachable
+  ok: preflight_check_ref returns 2 (could-not-verify) when the fetch itself fails, distinct from 1 (confirmed unreachable)
+  ok: preflight_run exits 2 (could-not-verify) when the fetch itself fails, never silently treated as reachable (rc 0) nor mis-reported as confirmed-unreachable (rc 1)
+  ok: could-not-verify case is reported with an honest UNKNOWN message, not a false FAIL/PASS claim
+  ok: a caller that invokes preflight_run twice in its own loop returns cleanly (no leaked RETURN-trap crash on the CALLER's own return)
+  ok: no 'unbound variable' text appears in the wrapper's output
+  ok: _preflight_walk checks a submodule whose .gitmodules SECTION NAME differs from its own path= value (previously silently skipped entirely)
+  ok: the mismatched-section-name submodule's genuinely-reachable ref is reported PASS, not silently omitted
+  ok: no false FAIL recorded for the mismatched-section-name submodule
+  ok: no false UNKNOWN recorded for the mismatched-section-name submodule
+RESULT: PASS
+EXIT: 0
+
+======================================================================
+TEST: test_run_tests_format.sh
+CMD:  bash /mnt/agents/llmctl/tests/test_run_tests_format.sh
+----------------------------------------------------------------------
+OUTPUT:
+  ok: isolated harness exits 0 on an all-passing fake suite
+  ok: CMD: line names the real invoked command
+  ok: OUTPUT: label present (grep-parseable evidence marker, FR-002)
+  ok: raw subprocess output is captured
+  ok: EXIT: line present with the real captured exit code
+  ok: CMD: / OUTPUT: / EXIT: appear in that order for one test block
+RESULT: PASS
+EXIT: 0
+
+======================================================================
+TEST: test_scheduler.sh
+CMD:  bash /mnt/agents/llmctl/tests/test_scheduler.sh
+----------------------------------------------------------------------
+OUTPUT:
+  ok: start fast small (co-resident) exit code
+  ok: fast started
+  ok: small started
+  ok: fast reservation written
+  ok: small reservation written
+  ok: status lists fast
+  ok: status lists small
+  ok: status --json: valid JSON array, exact field set, fast+small both state=running with no log line
+  ok: status --json's profile set matches the plain-text table's (single source of truth, not a second parse)
+  ok: sanity: the plain-text table itself still lists exactly fast+small (unchanged by the refactor)
+  ok: start vision refused (exit 1)
+  ok: refusal message
+  ok: alternative suggested
+  ok: switch fallback suggested
+  ok: fast kept after refusal
+  ok: small kept after refusal
+  ok: vision not started after refusal
+  ok: auto vision exit code
+  ok: LRU eviction of fast announced
+  ok: fast reservation removed after eviction
+  ok: small kept after eviction
+  ok: vision running after eviction
+  ok: constrained: start fast
+  ok: constrained: auto vision fails (exit 1)
+  ok: protection message
+  ok: protected service untouched
+  ok: vision not started (protected)
+  ok: switch moe-fast exit code
+  ok: switch leaves exactly one service running
+  ok: stop is a dry-run action
+  ok: auto coder vision exit code (US1 Acceptance Scenario 3)
+  ok: co-residency computation: coder capability resolved to a profile
+  ok: co-residency computation: vision capability resolved to a profile
+  ok: at least one service started (budgets allow on this abundant fixture)
+  ok: no eviction needed - both profiles fit the abundant budget directly
+  ok: both resolved profiles (coder + vision capabilities) ended up running
+  ok: LLMCTL_SEED unset: no --seed flag added (default interactive behavior unchanged)
+  ok: LLMCTL_SEED=42: llama launch includes --seed 42
+  ok: LLMCTL_SEED set: llama launch includes --temp 0 (FR-012 fixed-seed + temperature-0 pair)
+  ok: LLMCTL_SLOT_SAVE_PATH unset: no --slot-save-path flag added (default launch unchanged)
+  ok: LLMCTL_SLOT_SAVE_PATH set: llama launch includes a per-profile --slot-save-path subdirectory
+  ok: the per-profile slot-save directory is created before the engine is launched
+  ok: co-resident double-count regression: starting 'small' alone succeeds
+  ok: small reservation written
+  ok: co-resident double-count regression: 'vision' is NOT wrongly refused while 'small' is already running (would be 7159 > 5100 under the old double-count; is 4210 <= 5100 under the fix)
+  ok: vision genuinely started alongside small
+  ok: vision reservation written
+  ok: small's own reservation is untouched by starting vision
+  ok: 10b: same-call multi-profile demand (small+vision=7159) still correctly exceeds the 5100 budget and is refused
+  ok: 10b: the SECOND profile in the call is the one named as refused (small, selected first, already fit on its own)
+  ok: 10b: nothing starts when the batch's validation phase refuses any member (atomic start, pre-existing design)
+  ok: 10b: vision (the one that overflows the combined demand) is correctly refused, never started
+  ok: 10c: 'small' starts alone
+  ok: 10c: small reservation written
+  ok: 10c: auto chat vision succeeds after evicting small (9904 RAM budget + 2949 credited back >= fast(5716)+vision(4210)=9926)
+  ok: 10c: small is the one evicted (LRU, not enabled, not in the wanted set)
+  ok: 10c: fast genuinely started
+  ok: 10c: vision genuinely started
+  ok: 10c: small's reservation removed by the eviction
+  ok: 10c: fast reservation written
+  ok: 10c: vision reservation written
+  ok: 10d: 'small' starts alone
+  ok: 10d: small reservation written
+  ok: 10d: the forced stop failure is reported, not silently swallowed
+  ok: 10d: small's reservation SURVIVES -- it is still running, never credited as freed
+  ok: 10d: auto chat vision does NOT wrongly succeed via a bogus credit for memory that was never actually freed
+  ok: 10d: fails via the LOOP's own exclusion-aware message, not merely _sched_start_impl's independent rescue
+  ok: 10e: 'small' starts alone
+  ok: 10e: with only 1 attempt allowed, the call fails cleanly rather than falling through unverified
+  ok: 10e: the new loop-level exhaustion message fires, naming the real attempt bound
+  ok: 10e: small WAS evicted (the single allowed attempt's eviction genuinely ran)
+  ok: 10e: small's reservation is gone -- the eviction itself succeeded
+  ok: 10e: fast was NEVER started -- _sched_start_impl must not be reached on the non-converged path
+  ok: 10e: vision was NEVER started, for the same reason
+  ok: onnx arm: exec is python3 (pure-python runner, no compiled engine)
+  ok: onnx arm: argv[0] is lib/onnx_server.py
+  ok: onnx arm: --model-dir points at the profile dir
+  ok: onnx arm: --port
+  ok: onnx arm: --profile
+  ok: onnx arm: no --api-key when LLMCTL_DECIDE_API_KEY is unset
+  ok: onnx arm: --api-key passed when LLMCTL_DECIDE_API_KEY is set
+  ok: onnx arm: not-downloaded model dir -> rc 1 (real mode)
+  ok: onnx arm: not-downloaded message names the download command
+RESULT: PASS
+EXIT: 0
+
+======================================================================
+TEST: test_scheduler_bind_host.sh
+CMD:  bash /mnt/agents/llmctl/tests/test_scheduler_bind_host.sh
+----------------------------------------------------------------------
+OUTPUT:
+  ok: override env-var name for a simple profile
+  ok: override env-var name for a hyphenated profile (hyphens -> underscores, uppercased)
+  ok: override env-var name for another hyphenated profile
+  ok: catalog_bind_host fast (no override): LAN-accessible default, per operator mandate
+  ok: global LLMCTL_BIND_HOST=127.0.0.1 applies to fast
+  ok: global LLMCTL_BIND_HOST=127.0.0.1 applies to small too (unscoped)
+  ok: catalog_bind_host fast honors LLMCTL_BIND_HOST_FAST
+  ok: LLMCTL_BIND_HOST_FAST does not leak into an unrelated profile (small keeps the LAN-accessible default)
+  ok: per-profile override wins over the global override for the same profile
+  ok: an override for an unknown profile still dies (die() exits 1), never silently returns the override
+  ok: die() message is the same as the no-override unknown-profile path
+  ok: llama engine, no override: sched_build_launch binds fast to 0.0.0.0 (LAN-accessible default)
+  ok: llama engine: global LLMCTL_BIND_HOST=127.0.0.1 overrides fast back to localhost-only
+  ok: llama engine: LLMCTL_BIND_HOST_FAST plumbs into sched_build_launch's real --host flag
+WARN: profile 'colibri-qwen36' uses the colibri engine and will bind to 0.0.0.0 (non-loopback). colibri's own independent security guard will refuse to start under this combination unless COLI_ALLOW_INSECURE_BIND=1 is set for this launch, or LLMCTL_BIND_HOST_COLIBRI_QWEN36=127.0.0.1 reverts just this profile to loopback-only.
+  ok: colibri engine, no override: sched_build_launch binds colibri-qwen36 to 0.0.0.0 (LAN-accessible default)
+  ok: colibri engine: global LLMCTL_BIND_HOST=127.0.0.1 overrides colibri-qwen36 back to localhost-only
+  ok: colibri + non-loopback + no override: warning names the profile
+  ok: colibri + non-loopback + no override: warning names the first resolution path
+  ok: colibri + non-loopback + no override: warning names the second resolution path (per-profile override)
+  ok: COLI_ALLOW_INSECURE_BIND=1 suppresses the warning (operator already made the call)
+  ok: a loopback per-profile override suppresses the warning (nothing to warn about)
+  ok: non-colibri engine (fast, llama) under the same LAN-exposed default never fires the colibri-specific warning
+  ok: lib/download.sh's smoke-test launch is still hardcoded to 127.0.0.1 (untouched by design)
+RESULT: PASS
+EXIT: 0
+
+======================================================================
+TEST: test_scheduler_lock.sh
+CMD:  bash /mnt/agents/llmctl/tests/test_scheduler_lock.sh
+----------------------------------------------------------------------
+OUTPUT:
+  ok: no lost updates across 200 concurrent flock-serialized increments
+  ok: second acquirer waits for the first to release before proceeding
+RESULT: PASS
+EXIT: 0
+
+======================================================================
+TEST: test_scheduler_reboot_reconciliation.sh
+CMD:  bash /mnt/agents/llmctl/tests/test_scheduler_reboot_reconciliation.sh
+----------------------------------------------------------------------
+OUTPUT:
+[llmctl] wrote /tmp/tmp.MR6DSwaJld/state/services/small.env
+[llmctl] wrote /tmp/tmp.MR6DSwaJld/state/services/vision-pro.env
+  ok: sanity: fake systemctl reports small active
+  ok: sanity: fake systemctl reports vision-pro NOT active
+  ok: precondition: small has no reservation marker before reconciliation
+  ok: precondition: vision-pro has no reservation marker before reconciliation
+[llmctl] reconciled missing reservation for 'small' (enabled + genuinely active, no .run marker - likely a post-reboot state desync)
+  ok: sched_running() lists exactly 'small' after reboot-reconciliation (previously empty - the reported defect; also proves no log noise leaks onto its stdout data contract)
+  ok: sched_running() self-healed small's missing .run reservation record
+  ok: sched_running() did NOT fabricate a reservation for the non-active vision-pro
+  ok: reconstructed reservation: profile field
+  ok: reconstructed reservation: real port from a fresh plan lookup
+  ok: reconstructed reservation: ram_mb is a real numeric footprint from the plan
+  ok: reconstructed reservation: vram_mb is a real numeric footprint from the plan
+  ok: sched_running() is idempotent - an already-reconciled reservation is left untouched on a second call
+  ok: sched_reserved_field(ram_mb) accounts for the reconciled small reservation (>0, not the pre-fix 0)
+  ok: sched_reserved_field(ram_mb) == the reconciled reservation's own ram_mb (only 'small' is reserved)
+  ok: sched_reserved_field(vram_mb) == the reconciled reservation's own vram_mb (only 'small' is reserved)
+RESULT: PASS
+EXIT: 0
+
+======================================================================
+TEST: test_scheduler_switch_safety.sh
+CMD:  bash /mnt/agents/llmctl/tests/test_scheduler_switch_safety.sh
+----------------------------------------------------------------------
+OUTPUT:
+[llmctl] wrote /tmp/tmp.mYE3EEe2xA/state/services/small.env
+[llmctl] wrote /tmp/tmp.mYE3EEe2xA/state/services/vision.env
+  ok: precondition: small + vision are both genuinely running before any switch attempt
+stopped small
+stopped vision
+[llmctl] wrote /tmp/tmp.mYE3EEe2xA/state/services/fast.env
+[llmctl] wrote /tmp/tmp.mYE3EEe2xA/state/services/small.env
+started small (mode=gpu, port=8085, reserved 2048 MiB RAM + 3859 MiB VRAM)
+[llmctl] wrote /tmp/tmp.mYE3EEe2xA/state/services/vision.env
+started vision (mode=gpu, port=8082, reserved 2048 MiB RAM + 4030 MiB VRAM)
+  ok: sched_switch returns the ORIGINAL failure (non-zero) when the target profile's start fails
+  ok: REGRESSION GUARD: a failed switch rolls back to the exact previously-running set (small+vision) instead of leaving the host with nothing running
+  ok: the failure output explains that a rollback was attempted
+  ok: the failure output confirms the rollback actually worked
+  ok: sched_switch succeeds when the target profile's start genuinely succeeds
+  ok: a successful switch leaves ONLY the newly-requested profile running (small+vision correctly stopped)
+  ok: switching to the already-running profile succeeds (no-op)
+  ok: REGRESSION GUARD: switching to the already-solely-running profile does NOT rewrite its reservation (no needless stop+restart / model-reload churn)
+  ok: starting an oversized profile while another is running fails (sanity for message-context test 4a)
+  ok: 4a: WITH another profile running, the message correctly suggests switch
+stopped vision-pro
+  ok: precondition for 4b: nothing is running
+  ok: starting even the smallest profile on a genuinely-too-small host still fails (sanity for message-context test 4b)
+  ok: 4b: with NOTHING running, the message does NOT suggest the circular 'llmctl switch small'
+  ok: 4b: message instead names the real, honest constraint (host RAM/VRAM, not another llmctl profile)
+  ok: precondition for case 5: small + vision running again before the rollback-also-failed scenario
+  ok: LLMCTL-F2: sched_switch returns the distinct exit code 75 (EX_TEMPFAIL) when switch AND rollback both fail, not just the original start_rc
+  ok: the existing stderr text is still present (pre-F2 consumers keep working)
+  ok: CONTROL: an ordinary switch failure with a SUCCESSFUL rollback still returns plain start_rc (1), never the distinct 75
+RESULT: PASS
+EXIT: 0
+
+======================================================================
+TEST: test_scheduler_wait_ready.sh
+CMD:  bash /mnt/agents/llmctl/tests/test_scheduler_wait_ready.sh
+----------------------------------------------------------------------
+OUTPUT:
+  ok: _sched_wait_ready succeeds once the delayed server actually binds
+  ok: wait genuinely blocked until readiness (elapsed=3s, expected roughly the 2s delay, well under the 10s timeout)
+  ok: _sched_wait_ready fails when nothing ever becomes ready
+  ok: wait is bounded by its own timeout, not open-ended (elapsed=2s for a 2s timeout)
+  ok: LLMCTL_READY_TIMEOUT=0 disables the wait entirely (opt-out for hermetic tests with no real listener)
+  ok: _sched_wait_ready under LLMCTL_DRY_RUN=1 reports success (never blocks waiting for a listener dry-run mode will never start)
+  ok: REGRESSION GUARD: dry-run readiness check completed in 0s, not the ~60s production default timeout
+  ok: _sched_diagnose_bind_failure returns 1 (no diagnosis) when there is no log file at all
+  ok: no diagnosis text is emitted when there is nothing to diagnose
+  ok: _sched_diagnose_bind_failure does NOT fire on an unrelated failure (e.g. OOM) - never a false positive
+  ok: _sched_diagnose_bind_failure detects the real bind-conflict signature and returns 0
+  ok: the diagnosis names the real port and says it's already in use (got: port 19997 is already in use by another process (not an llmctl profile) - stop it, or set LLMCTL_PORT_BINDCONFLICT to a free port)
+  ok: the diagnosis names the exact override env var the operator can set (got: port 19997 is already in use by another process (not an llmctl profile) - stop it, or set LLMCTL_PORT_BINDCONFLICT to a free port)
+RESULT: PASS
+EXIT: 0
+
+======================================================================
+TEST: test_services.sh
+CMD:  bash /mnt/agents/llmctl/tests/test_services.sh
+----------------------------------------------------------------------
+OUTPUT:
+installed systemd user units into /tmp/tmp.IPeiTdGXWf/systemd-user (MemoryHigh=32768M MemoryMax=32768M)
+[dry-run] systemctl --user daemon-reload
+[dry-run] loginctl enable-linger root
+  ok: llama unit: Restart=always
+  ok: llama unit: RestartSec=5
+  ok: llama unit: StartLimitBurst=5 (bounded restarts, FR-044)
+  ok: llama unit: StartLimitIntervalSec=60 (bounded restarts, FR-044)
+  ok: llama unit: MemoryMax = full probed RAM, no artificial ceiling
+  ok: llama unit: MemoryHigh = MemoryMax (no soft-throttle zone below the max, for maximal performance)
+  ok: llama unit: per-profile EnvironmentFile
+  ok: llama unit: ExecStart from env file
+  ok: llama unit: log location
+  ok: colibri unit installed
+  ok: colibri unit: description
+[llmctl] wrote /tmp/tmp.IPeiTdGXWf/state/services/fast.env
+  ok: env file: engine
+  ok: env file: port in args
+  ok: env file: ngl in args
+  ok: dry-run enable
+  ok: dry-run start
+  ok: plist: label
+  ok: plist: KeepAlive
+  ok: plist: ThrottleInterval
+  ok: plist: throttle 60s (bounded restart rate, FR-044)
+  ok: plist: arg present
+  ok: plist: port present
+  ok: plist: log path
+  ok: plist parses (plistlib)
+  ok: dry-run launchctl bootstrap
+RESULT: PASS
+EXIT: 0
+
+======================================================================
+TEST: test_services_crashloop.sh
+CMD:  bash /mnt/agents/llmctl/tests/test_services_crashloop.sh
+----------------------------------------------------------------------
+OUTPUT:
+installed systemd user units into /tmp/tmp.iOtCq0mGKF/systemd-user (MemoryHigh=32768M MemoryMax=32768M)
+[dry-run] systemctl --user daemon-reload
+[dry-run] loginctl enable-linger root
+  ok: llama unit: bounded restart burst (5 attempts)
+  ok: llama unit: bounded restart interval (60s window)
+  ok: colibri unit: bounded restart burst (5 attempts)
+  ok: colibri unit: bounded restart interval (60s window)
+[llmctl] wrote /tmp/tmp.iOtCq0mGKF/LaunchAgents/com.llmctl.fast.plist
+  ok: plist: throttle widened to 60s (launchd has no native give-up-after-N; this bounds the RATE, not the total attempts)
+  ok: status lists the healthy profile
+  ok: healthy profile reported as running
+  ok: crash-looped profile reported as failed (crash-loop)
+  ok: crash-looped profile's last log line surfaced
+RESULT: PASS
+EXIT: 0
+
+======================================================================
+TEST: test_setup_e2e.sh
+CMD:  bash /mnt/agents/llmctl/tests/test_setup_e2e.sh
+----------------------------------------------------------------------
+OUTPUT:
+  [llmctl] llmctl setup: doctor -> build -> plan
+  llmctl doctor - environment self-diagnosis
+  PASS OS: linux (x86_64)
+  PASS command 'bash' -> /usr/bin/bash
+  PASS command 'curl' -> /usr/bin/curl
+  PASS command 'git' -> /usr/bin/git
+  PASS command 'python3' -> /usr/local/bin/python3
+  WARN missing optional command 'cmake'. needed to build llama.cpp (llmctl build llama)
+  PASS command 'make' -> /usr/bin/make
+  PASS C compiler available
+  PASS sha256 tool available
+  WARN submodule submodules/llama.cpp not initialized (run: llmctl build)
+  WARN submodule submodules/colibri not initialized (run: llmctl build)
+  PASS catalog valid JSON (16 profiles)
+  PASS state dir writable: /tmp/tmp.ShqxZWNVOL/state
+  WARN no GPU tooling detected - CPU-only inference
+  WARN systemd --user not available in this session (services need a user systemd session; headless servers: sudo loginctl enable-linger <user>)
+  WARN llama-server not built yet (llmctl build llama)
+  PASS onnx: onnxruntime importable
+  WARN onnx: sentencepiece NOT importable - DeBERTa-class spm.model tokenizers need it (pip install sentencepiece; llama decision profiles are unaffected)
+  WARN curl lacks HTTP/3 (Features: alt-svc AsynchDNS brotli GSS-API HSTS HTTP2 HTTPS-proxy IDN IPv6 Kerberos Largefile libz NTLM NTLM_WB PSL SPNEGO SSL threadsafe TLS-SRP UnixSockets zstd) - llmctl cluster commands will use HTTP/2 against llmctld (llmctld itself always serves both)
+  WARN go not installed - only needed to build the opt-in llmctld cluster daemon; single-host llmctl is unaffected
+  
+  doctor: 0 failure(s), 9 warning(s)
+  WARN: submodule submodules/llama.cpp not initialized
+  WARN: submodule submodules/colibri not initialized
+  [llmctl] initializing submodules (git submodule update --init)
+  fatal: not a git repository (or any parent up to mount point /mnt)
+  Stopping at filesystem boundary (GIT_DISCOVERY_ACROSS_FILESYSTEM not set).
+  FAIL: llmctl setup exit code (fresh-clone simulation)
+    expected: 0
+    actual:   128
+  ok: setup announces its own orchestration sequence
+  ok: doctor phase: hardware/OS probe ran
+  FAIL: doctor phase: real submodule path checked (not the removed vendor/ path)
+    needle not found: submodule submodules/llama.cpp initialized
+    haystack: [llmctl] llmctl setup: doctor -> build -> plan
+llmctl doctor - environment self-diagnosis
+PASS OS: linux (x86_64)
+PASS command 'bash' -> /usr/bin/bash
+PASS command 'curl' -> /usr/bin/curl
+PASS command 'git' -> /usr/bin/git
+PASS command 'python3' -> /usr/local/bin/python3
+WARN missing optional command 'cmake'. needed to build llama.cpp (llmctl build llama)
+PASS command 'make' -> /usr/bin/make
+PASS C compiler available
+PASS sha256 tool available
+WARN submodule submodules/llama.cpp not initialized 
+  FAIL: doctor phase: real submodule path checked (not the removed vendor/ path)
+    needle not found: submodule submodules/colibri initialized
+    haystack: [llmctl] llmctl setup: doctor -> build -> plan
+llmctl doctor - environment self-diagnosis
+PASS OS: linux (x86_64)
+PASS command 'bash' -> /usr/bin/bash
+PASS command 'curl' -> /usr/bin/curl
+PASS command 'git' -> /usr/bin/git
+PASS command 'python3' -> /usr/local/bin/python3
+WARN missing optional command 'cmake'. needed to build llama.cpp (llmctl build llama)
+PASS command 'make' -> /usr/bin/make
+PASS C compiler available
+PASS sha256 tool available
+WARN submodule submodules/llama.cpp not initialized 
+  ok: doctor phase: model catalog validated
+  FAIL: build phase: llama.cpp engine build was invoked (dry-run)
+    needle not found: [dry-run] cmake -S
+    haystack: [llmctl] llmctl setup: doctor -> build -> plan
+llmctl doctor - environment self-diagnosis
+PASS OS: linux (x86_64)
+PASS command 'bash' -> /usr/bin/bash
+PASS command 'curl' -> /usr/bin/curl
+PASS command 'git' -> /usr/bin/git
+PASS command 'python3' -> /usr/local/bin/python3
+WARN missing optional command 'cmake'. needed to build llama.cpp (llmctl build llama)
+PASS command 'make' -> /usr/bin/make
+PASS C compiler available
+PASS sha256 tool available
+WARN submodule submodules/llama.cpp not initialized 
+  FAIL: build phase: colibri engine build was invoked (dry-run)
+    needle not found: [dry-run] make -C
+    haystack: [llmctl] llmctl setup: doctor -> build -> plan
+llmctl doctor - environment self-diagnosis
+PASS OS: linux (x86_64)
+PASS command 'bash' -> /usr/bin/bash
+PASS command 'curl' -> /usr/bin/curl
+PASS command 'git' -> /usr/bin/git
+PASS command 'python3' -> /usr/local/bin/python3
+WARN missing optional command 'cmake'. needed to build llama.cpp (llmctl build llama)
+PASS command 'make' -> /usr/bin/make
+PASS C compiler available
+PASS sha256 tool available
+WARN submodule submodules/llama.cpp not initialized 
+  FAIL: plan phase: catalog profiles considered
+    needle not found: fast
+    haystack: [llmctl] llmctl setup: doctor -> build -> plan
+llmctl doctor - environment self-diagnosis
+PASS OS: linux (x86_64)
+PASS command 'bash' -> /usr/bin/bash
+PASS command 'curl' -> /usr/bin/curl
+PASS command 'git' -> /usr/bin/git
+PASS command 'python3' -> /usr/local/bin/python3
+WARN missing optional command 'cmake'. needed to build llama.cpp (llmctl build llama)
+PASS command 'make' -> /usr/bin/make
+PASS C compiler available
+PASS sha256 tool available
+WARN submodule submodules/llama.cpp not initialized 
+  FAIL: setup reports completion
+    needle not found: setup complete
+    haystack: [llmctl] llmctl setup: doctor -> build -> plan
+llmctl doctor - environment self-diagnosis
+PASS OS: linux (x86_64)
+PASS command 'bash' -> /usr/bin/bash
+PASS command 'curl' -> /usr/bin/curl
+PASS command 'git' -> /usr/bin/git
+PASS command 'python3' -> /usr/local/bin/python3
+WARN missing optional command 'cmake'. needed to build llama.cpp (llmctl build llama)
+PASS command 'make' -> /usr/bin/make
+PASS C compiler available
+PASS sha256 tool available
+WARN submodule submodules/llama.cpp not initialized 
+RESULT: FAIL (7 assertion failure(s))
+EXIT: 1
+
+======================================================================
+TEST: test_small_profile_full_context.sh
+CMD:  bash /mnt/agents/llmctl/tests/test_small_profile_full_context.sh
+----------------------------------------------------------------------
+OUTPUT:
+  ok: small profile's catalog-declared parallel is 1 (full ctx-size usable per session)
+RESULT: PASS
+EXIT: 0
+
+======================================================================
+TEST: test_syntax.sh
+CMD:  bash /mnt/agents/llmctl/tests/test_syntax.sh
+----------------------------------------------------------------------
+OUTPUT:
+checking 76 scripts with bash -n
+  ok: bash -n bin/llmctl
+  ok: bash -n lib/catalog.sh
+  ok: bash -n lib/cluster.sh
+  ok: bash -n lib/common.sh
+  ok: bash -n lib/decide.sh
+  ok: bash -n lib/doctor.sh
+  ok: bash -n lib/download.sh
+  ok: bash -n lib/engine.sh
+  ok: bash -n lib/hardware.sh
+  ok: bash -n lib/os_detect.sh
+  ok: bash -n lib/scheduler.sh
+  ok: bash -n lib/service_linux.sh
+  ok: bash -n lib/service_macos.sh
+  ok: bash -n tests/helpers.sh
+  ok: bash -n tests/run_tests.sh
+  ok: bash -n tests/test_apikey_lifecycle.sh
+  ok: bash -n tests/test_archive_completeness.sh
+  ok: bash -n tests/test_bin_llmctl_symlink_invocation.sh
+  ok: bash -n tests/test_catalog_json.sh
+  ok: bash -n tests/test_cli.sh
+  ok: bash -n tests/test_cluster_join_leave.sh
+  ok: bash -n tests/test_cluster_request_checked.sh
+  ok: bash -n tests/test_constitution_inheritance.sh
+  ok: bash -n tests/test_create_release.sh
+  ok: bash -n tests/test_ctx_kvtype_override.sh
+  ok: bash -n tests/test_decide.sh
+  ok: bash -n tests/test_decide_download.sh
+  ok: bash -n tests/test_decide_gateway.sh
+  ok: bash -n tests/test_determinism.sh
+  ok: bash -n tests/test_download.sh
+  ok: bash -n tests/test_download_resume.sh
+  ok: bash -n tests/test_engine.sh
+  ok: bash -n tests/test_engine_cpu_regression.sh
+  ok: bash -n tests/test_gpu_throughput_ratio.sh
+  ok: bash -n tests/test_gpu_vram_delta.sh
+  ok: bash -n tests/test_hardware_probe.sh
+  ok: bash -n tests/test_install_script_e2e.sh
+  ok: bash -n tests/test_normalize_agents.sh
+  ok: bash -n tests/test_normalize_common.sh
+  ok: bash -n tests/test_onnx_download.sh
+  ok: bash -n tests/test_onnx_server.sh
+  ok: bash -n tests/test_planner.sh
+  ok: bash -n tests/test_port_override.sh
+  ok: bash -n tests/test_preflight_submodules.sh
+  ok: bash -n tests/test_run_tests_format.sh
+  ok: bash -n tests/test_scheduler.sh
+  ok: bash -n tests/test_scheduler_bind_host.sh
+  ok: bash -n tests/test_scheduler_lock.sh
+  ok: bash -n tests/test_scheduler_reboot_reconciliation.sh
+  ok: bash -n tests/test_scheduler_switch_safety.sh
+  ok: bash -n tests/test_scheduler_wait_ready.sh
+  ok: bash -n tests/test_services.sh
+  ok: bash -n tests/test_services_crashloop.sh
+  ok: bash -n tests/test_setup_e2e.sh
+  ok: bash -n tests/test_small_profile_full_context.sh
+  ok: bash -n tests/test_syntax.sh
+  ok: bash -n tests/test_tenant_list_quota.sh
+  ok: bash -n tests/test_tenant_service_isolation.sh
+  ok: bash -n docs/integrations/install_aider.sh
+  ok: bash -n docs/integrations/install_claude_code.sh
+  ok: bash -n docs/integrations/install_cline.sh
+  ok: bash -n docs/integrations/install_continue.sh
+  ok: bash -n docs/integrations/install_crush.sh
+  ok: bash -n docs/integrations/install_opencode.sh
+  ok: bash -n docs/integrations/install_pi.sh
+  ok: bash -n docs/integrations/lib_normalize_common.sh
+  ok: bash -n docs/integrations/normalize_aider.sh
+  ok: bash -n docs/integrations/normalize_claude_code.sh
+  ok: bash -n docs/integrations/normalize_cline.sh
+  ok: bash -n docs/integrations/normalize_continue.sh
+  ok: bash -n docs/integrations/normalize_crush.sh
+  ok: bash -n docs/integrations/normalize_opencode.sh
+  ok: bash -n docs/integrations/normalize_pi.sh
+  ok: bash -n scripts/release/build_archive.sh
+  ok: bash -n scripts/release/create_release.sh
+  ok: bash -n scripts/release/preflight_submodules.sh
+  ok: shebang: bin/llmctl
+  ok: strict mode: bin/llmctl
+  ok: shebang: lib/catalog.sh
+  ok: strict mode: lib/catalog.sh
+  ok: shebang: lib/cluster.sh
+  ok: strict mode: lib/cluster.sh
+  ok: shebang: lib/common.sh
+  ok: strict mode: lib/common.sh
+  ok: shebang: lib/decide.sh
+  ok: strict mode: lib/decide.sh
+  ok: shebang: lib/doctor.sh
+  ok: strict mode: lib/doctor.sh
+  ok: shebang: lib/download.sh
+  ok: strict mode: lib/download.sh
+  ok: shebang: lib/engine.sh
+  ok: strict mode: lib/engine.sh
+  ok: shebang: lib/hardware.sh
+  ok: strict mode: lib/hardware.sh
+  ok: shebang: lib/os_detect.sh
+  ok: strict mode: lib/os_detect.sh
+  ok: shebang: lib/scheduler.sh
+  ok: strict mode: lib/scheduler.sh
+  ok: shebang: lib/service_linux.sh
+  ok: strict mode: lib/service_linux.sh
+  ok: shebang: lib/service_macos.sh
+  ok: strict mode: lib/service_macos.sh
+  ok: shebang: tests/helpers.sh
+  ok: strict mode: tests/helpers.sh
+  ok: shebang: tests/run_tests.sh
+  ok: strict mode: tests/run_tests.sh
+  ok: shebang: tests/test_apikey_lifecycle.sh
+  ok: strict mode: tests/test_apikey_lifecycle.sh
+  ok: shebang: tests/test_archive_completeness.sh
+  ok: strict mode: tests/test_archive_completeness.sh
+  ok: shebang: tests/test_bin_llmctl_symlink_invocation.sh
+  ok: strict mode: tests/test_bin_llmctl_symlink_invocation.sh
+  ok: shebang: tests/test_catalog_json.sh
+  ok: strict mode: tests/test_catalog_json.sh
+  ok: shebang: tests/test_cli.sh
+  ok: strict mode: tests/test_cli.sh
+  ok: shebang: tests/test_cluster_join_leave.sh
+  ok: strict mode: tests/test_cluster_join_leave.sh
+  ok: shebang: tests/test_cluster_request_checked.sh
+  ok: strict mode: tests/test_cluster_request_checked.sh
+  ok: shebang: tests/test_constitution_inheritance.sh
+  ok: strict mode: tests/test_constitution_inheritance.sh
+  ok: shebang: tests/test_create_release.sh
+  ok: strict mode: tests/test_create_release.sh
+  ok: shebang: tests/test_ctx_kvtype_override.sh
+  ok: strict mode: tests/test_ctx_kvtype_override.sh
+  ok: shebang: tests/test_decide.sh
+  ok: strict mode: tests/test_decide.sh
+  ok: shebang: tests/test_decide_download.sh
+  ok: strict mode: tests/test_decide_download.sh
+  ok: shebang: tests/test_decide_gateway.sh
+  ok: strict mode: tests/test_decide_gateway.sh
+  ok: shebang: tests/test_determinism.sh
+  ok: strict mode: tests/test_determinism.sh
+  ok: shebang: tests/test_download.sh
+  ok: strict mode: tests/test_download.sh
+  ok: shebang: tests/test_download_resume.sh
+  ok: strict mode: tests/test_download_resume.sh
+  ok: shebang: tests/test_engine.sh
+  ok: strict mode: tests/test_engine.sh
+  ok: shebang: tests/test_engine_cpu_regression.sh
+  ok: strict mode: tests/test_engine_cpu_regression.sh
+  ok: shebang: tests/test_gpu_throughput_ratio.sh
+  ok: strict mode: tests/test_gpu_throughput_ratio.sh
+  ok: shebang: tests/test_gpu_vram_delta.sh
+  ok: strict mode: tests/test_gpu_vram_delta.sh
+  ok: shebang: tests/test_hardware_probe.sh
+  ok: strict mode: tests/test_hardware_probe.sh
+  ok: shebang: tests/test_install_script_e2e.sh
+  ok: strict mode: tests/test_install_script_e2e.sh
+  ok: shebang: tests/test_normalize_agents.sh
+  ok: strict mode: tests/test_normalize_agents.sh
+  ok: shebang: tests/test_normalize_common.sh
+  ok: strict mode: tests/test_normalize_common.sh
+  ok: shebang: tests/test_onnx_download.sh
+  ok: strict mode: tests/test_onnx_download.sh
+  ok: shebang: tests/test_onnx_server.sh
+  ok: strict mode: tests/test_onnx_server.sh
+  ok: shebang: tests/test_planner.sh
+  ok: strict mode: tests/test_planner.sh
+  ok: shebang: tests/test_port_override.sh
+  ok: strict mode: tests/test_port_override.sh
+  ok: shebang: tests/test_preflight_submodules.sh
+  ok: strict mode: tests/test_preflight_submodules.sh
+  ok: shebang: tests/test_run_tests_format.sh
+  ok: strict mode: tests/test_run_tests_format.sh
+  ok: shebang: tests/test_scheduler.sh
+  ok: strict mode: tests/test_scheduler.sh
+  ok: shebang: tests/test_scheduler_bind_host.sh
+  ok: strict mode: tests/test_scheduler_bind_host.sh
+  ok: shebang: tests/test_scheduler_lock.sh
+  ok: strict mode: tests/test_scheduler_lock.sh
+  ok: shebang: tests/test_scheduler_reboot_reconciliation.sh
+  ok: strict mode: tests/test_scheduler_reboot_reconciliation.sh
+  ok: shebang: tests/test_scheduler_switch_safety.sh
+  ok: strict mode: tests/test_scheduler_switch_safety.sh
+  ok: shebang: tests/test_scheduler_wait_ready.sh
+  ok: strict mode: tests/test_scheduler_wait_ready.sh
+  ok: shebang: tests/test_services.sh
+  ok: strict mode: tests/test_services.sh
+  ok: shebang: tests/test_services_crashloop.sh
+  ok: strict mode: tests/test_services_crashloop.sh
+  ok: shebang: tests/test_setup_e2e.sh
+  ok: strict mode: tests/test_setup_e2e.sh
+  ok: shebang: tests/test_small_profile_full_context.sh
+  ok: strict mode: tests/test_small_profile_full_context.sh
+  ok: shebang: tests/test_syntax.sh
+  ok: strict mode: tests/test_syntax.sh
+  ok: shebang: tests/test_tenant_list_quota.sh
+  ok: strict mode: tests/test_tenant_list_quota.sh
+  ok: shebang: tests/test_tenant_service_isolation.sh
+  ok: strict mode: tests/test_tenant_service_isolation.sh
+  ok: shebang: docs/integrations/install_aider.sh
+  ok: strict mode: docs/integrations/install_aider.sh
+  ok: shebang: docs/integrations/install_claude_code.sh
+  ok: strict mode: docs/integrations/install_claude_code.sh
+  ok: shebang: docs/integrations/install_cline.sh
+  ok: strict mode: docs/integrations/install_cline.sh
+  ok: shebang: docs/integrations/install_continue.sh
+  ok: strict mode: docs/integrations/install_continue.sh
+  ok: shebang: docs/integrations/install_crush.sh
+  ok: strict mode: docs/integrations/install_crush.sh
+  ok: shebang: docs/integrations/install_opencode.sh
+  ok: strict mode: docs/integrations/install_opencode.sh
+  ok: shebang: docs/integrations/install_pi.sh
+  ok: strict mode: docs/integrations/install_pi.sh
+  ok: shebang: docs/integrations/lib_normalize_common.sh
+  ok: strict mode: docs/integrations/lib_normalize_common.sh
+  ok: shebang: docs/integrations/normalize_aider.sh
+  ok: strict mode: docs/integrations/normalize_aider.sh
+  ok: shebang: docs/integrations/normalize_claude_code.sh
+  ok: strict mode: docs/integrations/normalize_claude_code.sh
+  ok: shebang: docs/integrations/normalize_cline.sh
+  ok: strict mode: docs/integrations/normalize_cline.sh
+  ok: shebang: docs/integrations/normalize_continue.sh
+  ok: strict mode: docs/integrations/normalize_continue.sh
+  ok: shebang: docs/integrations/normalize_crush.sh
+  ok: strict mode: docs/integrations/normalize_crush.sh
+  ok: shebang: docs/integrations/normalize_opencode.sh
+  ok: strict mode: docs/integrations/normalize_opencode.sh
+  ok: shebang: docs/integrations/normalize_pi.sh
+  ok: strict mode: docs/integrations/normalize_pi.sh
+  ok: shebang: scripts/release/build_archive.sh
+  ok: strict mode: scripts/release/build_archive.sh
+  ok: shebang: scripts/release/create_release.sh
+  ok: strict mode: scripts/release/create_release.sh
+  ok: shebang: scripts/release/preflight_submodules.sh
+  ok: strict mode: scripts/release/preflight_submodules.sh
+RESULT: PASS
+EXIT: 0
+
+======================================================================
+TEST: test_tenant_list_quota.sh
+CMD:  bash /mnt/agents/llmctl/tests/test_tenant_list_quota.sh
+----------------------------------------------------------------------
+OUTPUT:
+ERROR: required command 'go' not found. Install hint: install Go via your package manager
+EXIT: 1
+
+======================================================================
+TEST: test_tenant_service_isolation.sh
+CMD:  bash /mnt/agents/llmctl/tests/test_tenant_service_isolation.sh
+----------------------------------------------------------------------
+OUTPUT:
+[llmctl] wrote /tmp/tmp.9Pc1FrXhH6/state/services/fast.env
+  ok: untenanted: env file uses the bare profile name
+  ok: untenanted: unit name unchanged (no LLMCTL_TENANT_ID)
+[llmctl] wrote /tmp/tmp.9Pc1FrXhH6/state/services/tenant-a--fast.env
+  ok: tenant-a: env file is tenant-qualified, not a bare profile name
+  ok: tenant-a: env file carries its own real launch args
+[llmctl] wrote /tmp/tmp.9Pc1FrXhH6/state/services/tenant-b--fast.env
+  ok: tenant-b: SAME profile name resolves to a DIFFERENT env file than tenant-a
+  ok: tenant-b: its own env file carries its own real launch args (not tenant-a's)
+  ok: tenant-a: env file still carries ITS OWN args after tenant-b registered the same profile name
+  ok: tenant-a: unit instance is tenant-qualified
+  ok: tenant-b: unit instance is tenant-qualified, distinct from tenant-a's
+  ok: tenant-a: dry-run enable targets the tenant-qualified unit
+  ok: tenant-a: dry-run start targets the tenant-qualified unit
+  ok: tenant-a: real systemd drop-in file was written for the tenant-qualified unit
+  ok: tenant-a: drop-in sets the real per-tenant Slice= property
+  ok: tenant-b: svc_start alone (not just svc_enable) also ensures the drop-in exists
+  ok: tenant-b: its own drop-in names its own slice, never tenant-a's
+  ok: malicious tenant ID (embedded ';') is rejected, not silently passed through (rc)
+  ok: malicious tenant ID (path traversal) is rejected (rc)
+  ok: malicious tenant ID (embedded '..' mid-string, not just a leading path-traversal) is rejected - same defense-in-depth internal/isolation/cgroup.go's Go-side validateTenantID applies beyond its charset check (rc)
+  ok: tenant ID containing '.' (accepted by Go's allow-list) is now ALSO accepted by bash's - the two languages' allow-lists genuinely match, not merely claimed to
+RESULT: PASS
+EXIT: 0
+
+======================================================================
+SUMMARY
+----------------------------------------------------------------------
+FAIL  test_apikey_lifecycle.sh (exit 1)
+PASS  test_archive_completeness.sh
+PASS  test_bin_llmctl_symlink_invocation.sh
+PASS  test_catalog_json.sh
+PASS  test_cli.sh
+FAIL  test_cluster_join_leave.sh (exit 1)
+PASS  test_cluster_request_checked.sh
+FAIL  test_constitution_inheritance.sh (exit 1)
+PASS  test_create_release.sh
+PASS  test_ctx_kvtype_override.sh
+PASS  test_decide.sh
+PASS  test_decide_download.sh
+PASS  test_decide_gateway.sh
+PASS  test_determinism.sh
+PASS  test_download.sh
+PASS  test_download_resume.sh
+FAIL  test_engine.sh (exit 1)
+FAIL  test_engine_cpu_regression.sh (exit 128)
+PASS  test_gpu_throughput_ratio.sh
+PASS  test_gpu_vram_delta.sh
+PASS  test_hardware_probe.sh
+PASS  test_install_script_e2e.sh
+PASS  test_normalize_agents.sh
+PASS  test_normalize_common.sh
+PASS  test_onnx_download.sh
+PASS  test_onnx_server.sh
+PASS  test_planner.sh
+PASS  test_port_override.sh
+PASS  test_preflight_submodules.sh
+PASS  test_run_tests_format.sh
+PASS  test_scheduler.sh
+PASS  test_scheduler_bind_host.sh
+PASS  test_scheduler_lock.sh
+PASS  test_scheduler_reboot_reconciliation.sh
+PASS  test_scheduler_switch_safety.sh
+PASS  test_scheduler_wait_ready.sh
+PASS  test_services.sh
+PASS  test_services_crashloop.sh
+FAIL  test_setup_e2e.sh (exit 1)
+PASS  test_small_profile_full_context.sh
+PASS  test_syntax.sh
+FAIL  test_tenant_list_quota.sh (exit 1)
+PASS  test_tenant_service_isolation.sh
+----------------------------------------------------------------------
+PASS: 36  FAIL: 7
+make: *** [Makefile:11: test] Error 1
+
+=== make test RUN 2 ===
+bash tests/run_tests.sh
+
+======================================================================
+TEST: test_apikey_lifecycle.sh
+CMD:  bash /mnt/agents/llmctl/tests/test_apikey_lifecycle.sh
+----------------------------------------------------------------------
+OUTPUT:
+ERROR: required command 'go' not found. Install hint: install Go via your package manager
+EXIT: 1
+
+======================================================================
+TEST: test_archive_completeness.sh
+CMD:  bash /mnt/agents/llmctl/tests/test_archive_completeness.sh
+----------------------------------------------------------------------
+OUTPUT:
+  ok: build_archive produces a real .tar.gz
+  ok: build_archive produces a real .zip
+  ok: extracted tree includes the superproject's own .git directory
+  ok: extracted tree includes the submodule's REAL file content (not an empty placeholder dir - the exact git-archive gap this task fixes)
+  ok: extracted tree includes ARBITRARILY-NESTED submodule content
+  ok: build-output directories are excluded from the archive (matches the project's existing */build/* exclusion convention)
+  ok: git status on the relocated submodule succeeds (relative .git gitdir pointer survived relocation)
+  ok: relocated submodule reports a clean status (no unexpected diff introduced by archiving)
+  ok: git log inside the relocated submodule succeeds (it is a genuinely functional git repo, not just copied files)
+  ok: relocated submodule's real commit history is intact
+  ok: a RELATIVE output-basename resolves against the caller's cwd, not build_archive's internal cd target
+  ok: the .zip counterpart also resolves correctly for a relative output-basename
+RESULT: PASS
+EXIT: 0
+
+======================================================================
+TEST: test_bin_llmctl_symlink_invocation.sh
+CMD:  bash /mnt/agents/llmctl/tests/test_bin_llmctl_symlink_invocation.sh
+----------------------------------------------------------------------
+OUTPUT:
+  ok: invoking bin/llmctl via a PATH-style symlink exits 0
+  ok: symlinked invocation did not fail resolving lib/
+  ok: symlinked invocation produced real plan JSON output
+RESULT: PASS
+EXIT: 0
+
+======================================================================
+TEST: test_catalog_json.sh
+CMD:  bash /mnt/agents/llmctl/tests/test_catalog_json.sh
+----------------------------------------------------------------------
+OUTPUT:
+  ok: catalog parses as JSON (python3 json.load)
+profiles: 16
+  ok: catalog cross-check (fields, unique ports, known profiles)
+  ok: all GGUF files carry a real sha256
+
+  ok: decide profiles: present, llama engine, decide capability, real sha256 pins, ports 8092-8094
+
+  ok: iter2 profiles: decide-nli (onnx), decide-2b, decide-max pinned and consistent (ports 8096/8098/8099)
+RESULT: PASS
+EXIT: 0
+
+======================================================================
+TEST: test_cli.sh
+CMD:  bash /mnt/agents/llmctl/tests/test_cli.sh
+----------------------------------------------------------------------
+OUTPUT:
+  ok: help exit code
+  ok: help shows usage
+  ok: version exit code
+  ok: version string
+  ok: unknown command exit code
+  ok: unknown command message
+  ok: switch without profile exits 1
+  ok: switch without profile names the real usage error
+  ok: models download without profile exits 1
+  ok: models download without profile names the real usage error
+  ok: unknown models subcommand exits 1
+  ok: unknown models subcommand names the real bad input
+  ok: models list contains fast
+  ok: models list contains coder
+  ok: models list contains vision
+  ok: models list contains vision-pro
+  ok: models list contains moe-fast
+  ok: models list contains small
+  ok: models list contains ws-dense-32b
+  ok: models list contains ws-moe-30b
+  ok: models list contains colibri-glm
+  ok: models list contains colibri-qwen36
+  ok: hw --json returns fixture
+  ok: hw human output shows GPU
+  ok: plan tier line
+  ok: plan co-residency group 1
+  ok: start unknown profile exits 1
+  ok: unknown profile message
+RESULT: PASS
+EXIT: 0
+
+======================================================================
+TEST: test_cluster_join_leave.sh
+CMD:  bash /mnt/agents/llmctl/tests/test_cluster_join_leave.sh
+----------------------------------------------------------------------
+OUTPUT:
+ERROR: required command 'go' not found. Install hint: install Go via your package manager
+EXIT: 1
+
+======================================================================
+TEST: test_cluster_request_checked.sh
+CMD:  bash /mnt/agents/llmctl/tests/test_cluster_request_checked.sh
+----------------------------------------------------------------------
+OUTPUT:
+  ok: request_checked: 2xx GET returns exit 0
+  ok: request_checked: 2xx GET prints the real response body
+  ok: request_checked: 2xx POST returns exit 0
+  ok: request_checked: 2xx POST prints the real response body
+  ok: request_checked: 403 GET returns exit 1 (never a transport-failure code, never 0)
+  ok: request_checked: 403 GET prints the daemon's real error body
+  ok: request_checked: 404 GET returns exit 1
+  ok: request_checked: 404 GET prints the daemon's real error body
+  ok: request_checked: unreachable daemon returns curl's own transport exit code (got 7), distinct from both HTTP-status outcomes (0/1)
+  ok: cluster::request (untouched): still exits 0 on a non-2xx HTTP response - unchanged pre-existing behavior
+  ok: cluster::request (untouched): still prints the response body regardless of status - unchanged pre-existing behavior
+RESULT: PASS
+EXIT: 0
+
+======================================================================
+TEST: test_constitution_inheritance.sh
+CMD:  bash /mnt/agents/llmctl/tests/test_constitution_inheritance.sh
+----------------------------------------------------------------------
+OUTPUT:
+=== Constitution Inheritance Verification ===
+Project root: /mnt/agents/llmctl
+Constitution dir: /mnt/agents/llmctl/constitution
+
+Invariant 1: constitution/ directory exists
+  ✓ constitution/ directory exists
+
+Invariant 2: constitution/Constitution.md exists with §11.4 anchor
+  ✗ Constitution.md: /mnt/agents/llmctl/constitution/Constitution.md (MISSING)
+  ✗ §11.4 End-user quality guarantee anchor MISSING in /mnt/agents/llmctl/constitution/Constitution.md
+
+Invariant 3: constitution/CLAUDE.md exists with MANDATORY ANTI-BLUFF COVENANT anchor
+  ✗ CLAUDE.md: /mnt/agents/llmctl/constitution/CLAUDE.md (MISSING)
+  ✗ MANDATORY ANTI-BLUFF COVENANT anchor MISSING in /mnt/agents/llmctl/constitution/CLAUDE.md
+
+Invariant 4: constitution/AGENTS.md exists with Anti-bluff covenant anchor
+  ✗ AGENTS.md: /mnt/agents/llmctl/constitution/AGENTS.md (MISSING)
+  ✗ Anti-bluff covenant anchor MISSING in /mnt/agents/llmctl/constitution/AGENTS.md
+
+Invariant 5: Parent CLAUDE.md references constitution submodule
+  ✓ Parent CLAUDE.md: /mnt/agents/llmctl/CLAUDE.md
+  ✓ CLAUDE.md inheritance pointer found in /mnt/agents/llmctl/CLAUDE.md
+
+Invariant 5b: Parent AGENTS.md references constitution submodule
+  ✓ Parent AGENTS.md: /mnt/agents/llmctl/AGENTS.md
+  ✓ AGENTS.md inheritance pointer found in /mnt/agents/llmctl/AGENTS.md
+
+Invariant 5c: Project Constitution references submodule
+  ✓ Project validation doc: /mnt/agents/llmctl/docs/validation_and_verification.md
+
+Invariant 6: Nested third-party submodules are documented, never modified
+  Checking submodules/superspec...
+  - submodules/superspec: No CLAUDE.md or AGENTS.md upstream (nothing to report - not injected either, by design)
+  Checking submodules/llama.cpp...
+  - submodules/llama.cpp: No CLAUDE.md or AGENTS.md upstream (nothing to report - not injected either, by design)
+  Checking submodules/colibri...
+  - submodules/colibri: No CLAUDE.md or AGENTS.md upstream (nothing to report - not injected either, by design)
+
+Invariant 7: Constitution submodule has all required files
+  ✗ constitution/Constitution.md: /mnt/agents/llmctl/constitution/Constitution.md (MISSING)
+  ✗ constitution/CLAUDE.md: /mnt/agents/llmctl/constitution/CLAUDE.md (MISSING)
+  ✗ constitution/AGENTS.md: /mnt/agents/llmctl/constitution/AGENTS.md (MISSING)
+  ✗ constitution/install_upstreams.sh: /mnt/agents/llmctl/constitution/install_upstreams.sh (MISSING)
+  ✗ constitution/find_constitution.sh: /mnt/agents/llmctl/constitution/find_constitution.sh (MISSING)
+
+Invariant 8: Constitution submodule has 4+ upstream remotes configured
+fatal: not a git repository (or any parent up to mount point /mnt)
+Stopping at filesystem boundary (GIT_DISCOVERY_ACROSS_FILESYSTEM not set).
+  Upstream remotes (excluding origin): 0
+  Origin push URLs: 0
+  ✗ Insufficient upstream remotes (need 4+, or constitution/ directory missing)
+
+Invariant 9: Constitution verification harness executes successfully
+  ✗ Verification harness MISSING
+
+Invariant 10: Meta-test mutation proves gate is not a bluff
+  ✗ Meta-test mutation script MISSING
+
+=== INHERITANCE VERIFICATION SUMMARY ===
+FAILURES (14):
+  ✗ Constitution.md missing: /mnt/agents/llmctl/constitution/Constitution.md
+  ✗ §11.4 End-user quality guarantee anchor missing in /mnt/agents/llmctl/constitution/Constitution.md
+  ✗ CLAUDE.md missing: /mnt/agents/llmctl/constitution/CLAUDE.md
+  ✗ MANDATORY ANTI-BLUFF COVENANT anchor missing in /mnt/agents/llmctl/constitution/CLAUDE.md
+  ✗ AGENTS.md missing: /mnt/agents/llmctl/constitution/AGENTS.md
+  ✗ Anti-bluff covenant anchor missing in /mnt/agents/llmctl/constitution/AGENTS.md
+  ✗ constitution/Constitution.md missing: /mnt/agents/llmctl/constitution/Constitution.md
+  ✗ constitution/CLAUDE.md missing: /mnt/agents/llmctl/constitution/CLAUDE.md
+  ✗ constitution/AGENTS.md missing: /mnt/agents/llmctl/constitution/AGENTS.md
+  ✗ constitution/install_upstreams.sh missing: /mnt/agents/llmctl/constitution/install_upstreams.sh
+  ✗ constitution/find_constitution.sh missing: /mnt/agents/llmctl/constitution/find_constitution.sh
+  ✗ Insufficient upstream remotes or constitution/ directory missing
+  ✗ Verification harness missing
+  ✗ Meta-test mutation script missing
+EXIT: 1
+
+======================================================================
+TEST: test_create_release.sh
+CMD:  bash /mnt/agents/llmctl/tests/test_create_release.sh
+----------------------------------------------------------------------
+OUTPUT:
+  ok: v1.0.0 is valid SemVer
+  ok: v1.0.0-rc.1 (pre-release) is valid SemVer
+  ok: 1.2.3 (no leading v) is valid SemVer
+  ok: v1.0 (missing PATCH) is rejected
+  ok: garbage string is rejected
+  ok: changelog includes the real feat commit
+  ok: changelog includes the real fix commit
+  ok: changelog includes the real docs commit
+  ok: changelog groups feat: commits under a Features heading
+  ok: changelog groups fix: commits under a Fixes heading
+  ok: a forge with no recorded state defaults to pending
+  ok: release_state_set persists real state, read back correctly
+  ok: a DIFFERENT forge's state is independent (not accidentally shared)
+  ok: release_publish_forge github invoked the real gh binary with 'release create'
+  ok: successful github publish is recorded as done
+  ok: fresh tag v9.9.10: github genuinely starts pending (sanity - proves the next failure is real)
+PASS gitlab: release v9.9.10 published
+  ok: whole release is treated as failed when github fails (even if gitlab succeeds)
+  ok: failed github publish is recorded as failed, not done
+  ok: gitlab's independent success is still recorded as done despite github's failure
+PASS github: release v9.9.10 published
+SKIP gitlab: already published (idempotent retry-only-the-failed-forge)
+  ok: github IS retried on re-run (1 failed attempt + 1 retry attempt = 2 real invocations total)
+  ok: retry after a github-only failure does NOT re-invoke glab (already succeeded, idempotent retry-only-the-failed-forge)
+  ok: retried github publish now recorded as done
+  ok: dry-run makes ZERO calls to gh
+  ok: dry-run makes ZERO calls to glab
+  ok: dry-run output announces itself as a dry run
+RESULT: PASS
+EXIT: 0
+
+======================================================================
+TEST: test_ctx_kvtype_override.sh
+CMD:  bash /mnt/agents/llmctl/tests/test_ctx_kvtype_override.sh
+----------------------------------------------------------------------
+OUTPUT:
+  ok: ctx override env-var name for a simple profile
+  ok: ctx override env-var name for a hyphenated profile
+  ok: kv-type override env-var name for a simple profile
+  ok: kv-type override env-var name for a hyphenated profile
+  ok: no override: fast's ctx is still the catalog default (regression guard)
+  ok: no override: fast's kv_cache_type defaults to f16 (zero behavior change for every profile that doesn't opt in)
+  ok: LLMCTL_CTX_SMALL=65536 plumbs into catalog_plan_json's small ctx - the actual launch --ctx-size
+  ok: ctx override is scoped to 'small' only, 'fast' keeps its catalog ctx
+  ok: an invalid LLMCTL_CTX_SMALL value fails the plan instead of silently using garbage
+  ok: invalid ctx override reports a clear error naming the bad value
+  ok: LLMCTL_CTX_SMALL=0 fails the plan instead of silently using it (0 means something dangerously different to llama-server, not 'use the catalog default')
+  ok: zero ctx override reports a clear error naming the MIN_CTX floor
+  ok: LLMCTL_CTX_SMALL=-5 (negative) fails the plan instead of silently using it
+  ok: negative ctx override reports a clear error naming the MIN_CTX floor
+  ok: LLMCTL_KVTYPE_SMALL=q4_0 plumbs into catalog_plan_json's small kv_cache_type
+  ok: kv-type override is scoped to 'small' only, 'fast' keeps f16
+  ok: q4_0 KV quantization genuinely reduces the estimated vram_mb vs f16 at the same ctx (got f16=2949 q4_0=2213)
+  ok: an invalid LLMCTL_KVTYPE_SMALL value fails the plan instead of silently passing garbage to llama-server
+  ok: invalid kv-type override's error names the real allowed set (not a vague message)
+  ok: sanity: ctx=12000 at f16 genuinely does NOT fit on GPU in the contended fixture's real headroom - falls through to cpu mode (confirms the test fixture actually exercises the boundary, not a vacuous pass)
+  ok: the SAME ctx=12000, with q4_0 KV quantization accounted for, now correctly fits on GPU (mode=gpu, not the cpu fallback) - proving kv_mb() is genuinely type-aware in the admission-control path, not just cosmetically labeled
+  ok: llmctl plan --json without overrides still shows the catalog default (regression guard, using 'fast' - untouched by this feature's own catalog tuning)
+  ok: llmctl plan --json honors LLMCTL_CTX_SMALL end-to-end through the real CLI entrypoint
+  ok: llmctl plan --json honors LLMCTL_KVTYPE_SMALL end-to-end through the real CLI entrypoint
+  ok: f16 kv_type omits --cache-type-k/-v from the real launch command (byte-for-byte unchanged for every profile that does not opt in)
+  ok: q4_0 kv_type adds --cache-type-k q4_0 to the real launch command sched_build_launch constructs
+  ok: q4_0 kv_type adds --cache-type-v q4_0 to the real launch command sched_build_launch constructs
+RESULT: PASS
+EXIT: 0
+
+======================================================================
+TEST: test_decide.sh
+CMD:  bash /mnt/agents/llmctl/tests/test_decide.sh
+----------------------------------------------------------------------
+OUTPUT:
+  ok: choice prompt: option A is the first criteria key
+  ok: choice prompt: option B is the second criteria key
+  ok: choice prompt: A) line precedes B) line (criteria insertion order)
+  ok: choice prompt: instructions line
+  ok: choice prompt: state block
+  ok: noul prompt: fixed A=yes option
+  ok: noul prompt: fixed B=no option
+  ok: noul prompt: true-description appended when criteria given
+  ok: noul prompt: false-description appended when criteria given
+  ok: score prompt: level 0 is option A
+  ok: score prompt: level 2 is option C
+  ok: choice shape: exact renormalized probabilities + confidence (computed in-test)
+  ok: noul shape: exact yes probability (softmax of -0.03 vs -3.5)
+  ok: noul shape: type field
+  ok: noul shape: NO confidence key (Jev 1P shape)
+  ok: score shape: exact probability-weighted expectation
+  ok: score shape: legend key 0
+  ok: score shape: legend key 2
+  ok: score shape: confidence key present
+  ok: decide_ask choice against fixture: exit code
+  ok: --json output is a single line
+  ok: decide_ask choice: winner is billing
+  ok: decide_ask: additive model field
+  ok: decide_ask: additive evidence.server_port field
+  ok: decide_ask noul: type field
+  ok: decide_ask noul: yes probability > 0.5 on the 2+2=4 fixture distribution
+  ok: decide_ask score: weighted score >= 1.0 on the top-level-heavy fixture distribution
+  ok: decide_ask score: legend survives the full path
+  ok: 27 options -> rc 2
+  ok: 27 options -> cap message
+  ok: choice without --criteria -> rc 2
+  ok: choice without --criteria -> usage message
+  ok: non-downloaded/non-started profile -> rc 1
+  ok: non-started profile -> clear error message
+  ok: decide interactive (non-TTY) -> rc 2
+  ok: interactive non-TTY refusal message
+  ok: decide interactive with LLMCTL_DECIDE_NO_INTERACTIVE=1 -> rc 2
+  ok: interactive disabled message
+  ok: --interactive flag cannot override LLMCTL_DECIDE_NO_INTERACTIVE=1 -> rc 2
+  ok: decide ask --interactive (flag activation) -> rc 0
+  ok: decide ask --interactive: noul answer via wizard
+  ok: wizard happy path (scripted heredoc) -> rc 0
+  ok: wizard stdout is single-line JSON (prompts went to stderr)
+  ok: wizard happy path: choice is billing
+  ok: wizard happy path: model field
+  ok: wizard with all flag equivalents -> rc 0
+  ok: wizard flag equivalents: noul answer
+  ok: wizard abort at Proceed? -> rc 0
+  ok: wizard abort: no JSON emitted on stdout
+  ok: decide capacity --json: tier
+  ok: decide capacity --json: decide-tiny gpu instances (10444//1592=6, 25904//2048=12 -> min=6)
+  ok: decide capacity human: lists decide-tiny
+  ok: decide capacity human: table header
+  ok: decide status --json: decide profile row present
+  ok: decide status --json: decide not running in the isolated env
+  ok: engine dispatch: decide-nli is an onnx-engine profile
+  ok: engine dispatch: decide stays llama-engine
+  ok: engine dispatch: decide-2b is llama-engine
+  ok: decide_ask onnx choice against fixture: exit code
+  ok: decide_ask onnx choice: winner is billing
+  ok: decide_ask onnx: additive model field
+  ok: decide_ask onnx: additive evidence.server_port field
+  ok: decide_ask onnx choice: confidence passes through
+  ok: decide_ask onnx noul: type field
+  ok: decide_ask onnx noul: scripted 0.97 passes through unchanged (no logprob reshaping)
+  ok: decide_ask onnx score: scripted weighted score 1.65
+  ok: decide_ask onnx score: legend passes through
+  ok: wizard with an onnx profile -> rc 0
+  ok: wizard onnx profile: noul answer
+  ok: unsupported engine value -> rc 1
+  ok: unsupported engine -> clear message
+RESULT: PASS
+EXIT: 0
+
+======================================================================
+TEST: test_decide_download.sh
+CMD:  bash /mnt/agents/llmctl/tests/test_decide_download.sh
+----------------------------------------------------------------------
+OUTPUT:
+  ok: download_profile toy-decide exit code
+  [llmctl] downloading model.gguf from toy/decide
+    % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                   Dload  Upload   Total   Spent    Left  Speed
+    0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0100    61  100    61    0     0  16850      0 --:--:-- --:--:-- --:--:-- 20333
+  verified: model.gguf
+  WARN: smoke test disabled (LLMCTL_SMOKE=0)
+  profile 'toy-decide' downloaded and verified. Evidence: /tmp/tmp.bL2WHWdUFM/state/verify/toy-decide.log
+  ok: model.gguf exists after download
+  ok: downloaded file sha256 matches
+  ok: evidence log records the DECISION smoke path (not the gguf smoke path)
+  ok: gguf smoke path NOT taken for a decide-capable profile
+  ok: evidence log records overall success
+  ok: download with smoke enabled but no llama-server: still rc 0 (skip-warn precedent)
+  ok: evidence log records the decision smoke SKIP-with-reason
+  ok: operator-facing skip warning
+RESULT: PASS
+EXIT: 0
+
+======================================================================
+TEST: test_decide_gateway.sh
+CMD:  bash /mnt/agents/llmctl/tests/test_decide_gateway.sh
+----------------------------------------------------------------------
+OUTPUT:
+  ok: gateway on port 54537: /healthz becomes 200
+  ok: gateway on port 37623: /healthz becomes 200
+  ok: gateway on port 37319: /healthz becomes 200
+  ok: systemone: answers.team.choice is billing
+  ok: systemone: probabilities keyed by criteria keys
+  ok: systemone: confidence present
+  ok: systemone: model echoes the requested alias
+  ok: systemone: usage present (estimated input_tokens > 0, 1 output token/question)
+  ok: systemone: noul question typed answer
+  ok: systemone: noul value > 0.5 on the 2+2=4 fixture distribution
+  ok: systemone: score weighted expectation >= 1.0 on the top-level-heavy distribution
+  ok: systemone: score legend present
+  ok: systemone: usage.output_tokens == number of questions
+  ok: /v1/models: jev-latest alias present
+  ok: /v1/models: jev-preview alias present
+  ok: /v1/models: llmctl-<profile> alias present
+  ok: auth gateway: absent Bearer -> 401
+  ok: auth gateway: wrong Bearer -> 401
+  ok: auth gateway: correct Bearer -> 200
+  ok: auth gateway: /v1/models also requires the key
+  ok: auth gateway: /healthz stays open for probes
+  ok: truncating gateway: header set on oversized state
+  ok: uncapped gateway: no truncation header on the same body
+  ok: decide serve (daemonized) -> rc 0
+  ok: decide serve: pidfile written
+  ok: decide serve: gateway process alive
+  ok: decide serve: gateway answers /healthz
+  ok: decide serve: systemone works through the served gateway
+  ok: decide serve --stop -> rc 0
+  ok: decide serve --stop: process gone
+  ok: decide serve --stop: pidfile removed
+  ok: decide serve --stop when not running -> rc 1
+  ok: decide serve --stop when not running -> message
+  ok: decide serve with LLMCTL_DRY_RUN=1 -> rc 0
+  ok: decide serve dry-run: launch line printed
+  ok: decide serve dry-run: no pidfile
+  ok: onnx-mode gateway: /healthz becomes 200 (backend /health up)
+  ok: onnx-mode gateway: answers.team.choice is billing (proxied)
+  ok: onnx-mode gateway: model alias passes through to the backend
+  ok: onnx-mode gateway: upstream usage block returned verbatim
+  ok: onnx-mode gateway: noul + score questions in the same proxied request
+  ok: onnx-mode gateway: missing state -> 400 at the gateway
+  ok: decide serve decide-nli (dry-run) -> rc 0
+  ok: decide serve: onnx profiles pass --backend-engine onnx to the gateway
+  ok: decide serve: llama profiles pass --backend-engine llama
+RESULT: PASS
+EXIT: 0
+
+======================================================================
+TEST: test_determinism.sh
+CMD:  bash /mnt/agents/llmctl/tests/test_determinism.sh
+----------------------------------------------------------------------
+OUTPUT:
+  ok: hw --json run 1 == run 2 (byte-identical)
+  ok: hw --json run 2 == run 3 (byte-identical)
+  ok: hw --json output is not empty/degenerate (sanity - it is real hardware JSON)
+  ok: plan --json run 1 == run 2 (byte-identical)
+  ok: plan --json run 2 == run 3 (byte-identical)
+RESULT: PASS
+EXIT: 0
+
+======================================================================
+TEST: test_download.sh
+CMD:  bash /mnt/agents/llmctl/tests/test_download.sh
+----------------------------------------------------------------------
+OUTPUT:
+  ok: download_profile toy exit code
+  [llmctl] downloading model.bin from toy/repo
+    % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                   Dload  Upload   Total   Spent    Left  Speed
+    0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0100    52  100    52    0     0  13789      0 --:--:-- --:--:-- --:--:-- 17333
+  verified: model.bin
+  WARN: smoke test disabled (LLMCTL_SMOKE=0)
+  profile 'toy' downloaded and verified. Evidence: /tmp/tmp.irn2toMzfA/state/verify/toy.log
+  ok: model.bin exists after download
+  ok: downloaded file sha256 matches
+  ok: evidence log records verification
+  ok: evidence log records exit code
+  ok: second download skips verified file
+  ok: no .part file left behind (atomic rename)
+  ok: re-download of corrupted file succeeds
+  ok: corruption detected before re-download
+  ok: re-downloaded file verified
+  ok: sha256 mismatch -> hard failure
+  ok: mismatch reported
+  ok: mismatched content never lands at the final path
+  ok: verify_profile exit code
+  ok: verify_profile success message
+RESULT: PASS
+EXIT: 0
+
+======================================================================
+TEST: test_download_resume.sh
+CMD:  bash /mnt/agents/llmctl/tests/test_download_resume.sh
+----------------------------------------------------------------------
+OUTPUT:
+  ok: resume against Range-capable server succeeds
+  ok: resumed file's sha256 matches the full payload
+  ok: no .part file left behind after successful resume
+  ok: server actually received a Range request starting at the pre-existing byte offset (genuine resume, not a from-scratch refetch)
+  ok: download succeeds even when the server does not support Range (falls back to full re-download)
+  ok: fallback-re-downloaded file's sha256 matches the full payload
+  ok: no .part file left behind after fallback re-download
+RESULT: PASS
+EXIT: 0
+
+======================================================================
+TEST: test_engine.sh
+CMD:  bash /mnt/agents/llmctl/tests/test_engine.sh
+----------------------------------------------------------------------
+OUTPUT:
+  ok: LLMCTL_LLAMA_SRC resolves to the real git submodule, not the un-pinned vendor/ copy
+  ok: LLMCTL_COLIBRI_SRC resolves to the real git submodule, not the un-pinned vendor/ copy
+  ok: engine_ensure_submodules exits 0 when submodules/{llama.cpp,colibri}/.git are present
+  ok: no 'not initialized' warning when the real submodule paths are present
+  ok: missing submodule is reported at its real path (submodules/colibri), not the old vendor/colibri
+EXIT: 1
+
+======================================================================
+TEST: test_engine_cpu_regression.sh
+CMD:  bash /mnt/agents/llmctl/tests/test_engine_cpu_regression.sh
+----------------------------------------------------------------------
+OUTPUT:
+  ok: the shadow no-nvcc bin directory genuinely excludes nvcc
+  ok: engine_detect_backend returns 'cpu' when nvcc is absent from PATH
+EXIT: 128
+
+======================================================================
+TEST: test_gpu_throughput_ratio.sh
+CMD:  bash /mnt/agents/llmctl/tests/test_gpu_throughput_ratio.sh
+----------------------------------------------------------------------
+OUTPUT:
+  SKIP: GPU throughput-ratio measurement
+    reason: nvidia-smi not present on this host
+RESULT: PASS
+EXIT: 0
+
+======================================================================
+TEST: test_gpu_vram_delta.sh
+CMD:  bash /mnt/agents/llmctl/tests/test_gpu_vram_delta.sh
+----------------------------------------------------------------------
+OUTPUT:
+  SKIP: GPU VRAM-delta measurement
+    reason: nvidia-smi not present on this host
+RESULT: PASS
+EXIT: 0
+
+======================================================================
+TEST: test_hardware_probe.sh
+CMD:  bash /mnt/agents/llmctl/tests/test_hardware_probe.sh
+----------------------------------------------------------------------
+OUTPUT:
+  ok: real probe exit code
+  ok: probe JSON top-level keys
+  ok: probe reports a sane core count (3)
+  ok: probe reports total memory (4984 MiB)
+  ok: human output has CPU line
+  ok: human output has RAM line
+  ok: human output has Storage line
+  ok: fake probe returns fixture model
+  ok: fake probe returns fixture VRAM
+  ok: missing fixture file -> probe fails
+  ok: missing fixture file fails for the real stated reason
+  ok: invalid fixture JSON -> probe fails
+  ok: invalid fixture JSON fails for the real stated reason
+RESULT: PASS
+EXIT: 0
+
+======================================================================
+TEST: test_install_script_e2e.sh
+CMD:  bash /mnt/agents/llmctl/tests/test_install_script_e2e.sh
+----------------------------------------------------------------------
+OUTPUT:
+  ok: scripts/install.sh exists (GREEN half of the RED/GREEN pair)
+  ok: bash -n scripts/install.sh (syntax check - tests/test_syntax.sh's own script glob does not currently enumerate top-level scripts/*.sh, only scripts/release/*.sh, so this file asserts it directly)
+  === Step 1: llmctl setup (doctor -> build engines -> hardware plan) ===
+  
+  === Step 2: download profile 'small' (idempotent - skips re-download when already present+verified) ===
+  
+  === Step 3: llmctl install (writes systemd --user unit templates / prepares launchd dir; also attempts 'loginctl enable-linger' on Linux) ===
+  
+  === Step 4: enable + start 'small' ===
+  
+  === Step 5: verify systemd --user lingering (reboot/logout survival) ===
+  PASS: linger is enabled for root - the profile(s) enabled above will survive both logout and reboot.
+  
+  === Step 6: final status ===
+  profile port mode RAM VRAM enabled state
+  
+  install complete: small
+  ok: happy path: exit code 0
+  ok: happy path: linger PASS reported
+  ok: happy path: default profile is 'small' when none given
+  ok: happy path: 'llmctl setup' was invoked
+  ok: happy path: 'llmctl models download small' was invoked (default profile)
+  ok: happy path: 'llmctl install' was invoked (writes the systemd unit TEMPLATE 'enable' depends on - see scripts/install.sh's own header for the real, root-caused reason this step exists)
+  ok: happy path: 'llmctl enable small' was invoked
+  ok: happy path: 'llmctl status' was invoked as the final step
+  ok: happy path: real invocation order is setup -> download -> install -> enable -> status (proves scripts/install.sh's own sequencing, not just that every subcommand happened to run somewhere)
+  === Step 1: llmctl setup (doctor -> build engines -> hardware plan) ===
+  
+  === Step 2: download profile 'vision' (idempotent - skips re-download when already present+verified) ===
+  
+  === Step 3: llmctl install (writes systemd --user unit templates / prepares launchd dir; also attempts 'loginctl enable-linger' on Linux) ===
+  
+  === Step 4: enable + start 'vision' ===
+  
+  === Step 5: verify systemd --user lingering (reboot/logout survival) ===
+  FAIL: linger is NOT confirmed enabled for root.
+    'llmctl install' already attempts 'loginctl enable-linger' automatically
+    (lib/service_linux.sh), but that call only WARNS on failure rather than
+    aborting - it can silently fail to take effect (e.g. missing polkit/D-Bus
+    permission) while every step above still reports success.
+  
+    ACTION REQUIRED (never attempted automatically - privilege escalation is
+    never performed unattended by this script or by llmctl itself):
+  
+        sudo loginctl enable-linger root
+  
+    Without confirmed lingering, the profile(s) enabled above will stop at the
+    next logout and will NOT restart automatically after a reboot.
+  ok: linger-not-confirmed path: exit code 1 (non-zero - never silently proceeds)
+  ok: linger-not-confirmed path: FAIL is reported
+  ok: linger-not-confirmed path: actionable sudo instruction is printed (never attempted automatically)
+  ok: linger-not-confirmed path: --profile vision was honored (not the default 'small')
+  ok: linger-not-confirmed path: enable ran for the requested profile before the linger check failed it
+  ok: linger-not-confirmed path: 'llmctl status' (Step 6) did not run after the Step 5 linger check failed
+  === Step 1: llmctl setup (doctor -> build engines -> hardware plan) ===
+  
+  === Step 2: download profile 'small' (idempotent - skips re-download when already present+verified) ===
+  
+  === Step 3: llmctl install (writes systemd --user unit templates / prepares launchd dir; also attempts 'loginctl enable-linger' on Linux) ===
+  
+  === Step 4: enable + start 'small' ===
+  
+  === Step 5: verify systemd --user lingering (reboot/logout survival) ===
+  [dry-run] would run: loginctl show-user $(id -un) -p Linger
+  
+  === Step 6: final status ===
+  profile port mode RAM VRAM enabled state
+  
+  install complete: small
+  ok: --dry-run: exit code 0
+  ok: --dry-run: linger step is honestly skipped, not silently fabricated
+  ok: --dry-run: LLMCTL_DRY_RUN=1 was genuinely exported into every llmctl invocation's environment
+  ok: --skip-setup: exit code 0
+  ok: --skip-setup: Step 1 is honestly reported as skipped
+  ok: --skip-setup: 'llmctl setup' was NOT invoked
+  ok: unknown flag: exit code 2
+  ok: --profile with no argument: exit code 2
+  SKIP: loginctl-absent SKIP branch
+    reason: loginctl is present even on the narrowed PATH on this host
+RESULT: PASS
+EXIT: 0
+
+======================================================================
+TEST: test_normalize_agents.sh
+CMD:  bash /mnt/agents/llmctl/tests/test_normalize_agents.sh
+----------------------------------------------------------------------
+OUTPUT:
+  ok: normalize_opencode.sh exists
+  ok: normalize_opencode.sh is syntactically valid
+  ok: opencode: run1 fixture exists
+  ok: opencode: run2 fixture exists
+  ok: opencode: expected_normalized fixture exists
+  ok: opencode: two runs differing only in non-deterministic fields normalize to byte-identical output
+  ok: opencode: normalized output matches the checked-in expected fixture
+  ok: normalize_pi.sh exists
+  ok: normalize_pi.sh is syntactically valid
+  ok: pi: run1 fixture exists
+  ok: pi: run2 fixture exists
+  ok: pi: expected_normalized fixture exists
+  ok: pi: two runs differing only in non-deterministic fields normalize to byte-identical output
+  ok: pi: normalized output matches the checked-in expected fixture
+  ok: normalize_crush.sh exists
+  ok: normalize_crush.sh is syntactically valid
+  ok: crush: run1 fixture exists
+  ok: crush: run2 fixture exists
+  ok: crush: expected_normalized fixture exists
+  ok: crush: two runs differing only in non-deterministic fields normalize to byte-identical output
+  ok: crush: normalized output matches the checked-in expected fixture
+  ok: normalize_claude_code.sh exists
+  ok: normalize_claude_code.sh is syntactically valid
+  ok: claude_code: run1 fixture exists
+  ok: claude_code: run2 fixture exists
+  ok: claude_code: expected_normalized fixture exists
+  ok: claude_code: two runs differing only in non-deterministic fields normalize to byte-identical output
+  ok: claude_code: normalized output matches the checked-in expected fixture
+  ok: normalize_aider.sh exists
+  ok: normalize_aider.sh is syntactically valid
+  ok: aider: run1 fixture exists
+  ok: aider: run2 fixture exists
+  ok: aider: expected_normalized fixture exists
+  ok: aider: two runs differing only in non-deterministic fields normalize to byte-identical output
+  ok: aider: normalized output matches the checked-in expected fixture
+  ok: normalize_continue.sh exists
+  ok: normalize_continue.sh is syntactically valid
+  ok: continue: run1 fixture exists
+  ok: continue: run2 fixture exists
+  ok: continue: expected_normalized fixture exists
+  ok: continue: two runs differing only in non-deterministic fields normalize to byte-identical output
+  ok: continue: normalized output matches the checked-in expected fixture
+  ok: normalize_cline.sh exists
+  ok: normalize_cline.sh is syntactically valid
+  ok: cline: run1 fixture exists
+  ok: cline: run2 fixture exists
+  ok: cline: expected_normalized fixture exists
+  ok: cline: two runs differing only in non-deterministic fields normalize to byte-identical output
+  ok: cline: normalized output matches the checked-in expected fixture
+RESULT: PASS
+EXIT: 0
+
+======================================================================
+TEST: test_normalize_common.sh
+CMD:  bash /mnt/agents/llmctl/tests/test_normalize_common.sh
+----------------------------------------------------------------------
+OUTPUT:
+  ok: norm_strip_timestamps replaces ISO8601 + human-readable timestamps
+  ok: two DIFFERENT real timestamps normalize to the SAME placeholder (the actual determinism property under test)
+  ok: norm_strip_temp_paths replaces /tmp/... paths
+  ok: two DIFFERENT temp paths normalize to the SAME placeholder
+  ok: norm_strip_uuids replaces a v4-shaped UUID
+  ok: norm_strip_durations replaces elapsed-time reporting
+  ok: two runs differing ONLY in timestamp/temp-path/uuid/duration normalize to byte-identical output
+  ok: paired mutation: a filter that does not actually strip timestamps is correctly detected as different from the real one's output
+RESULT: PASS
+EXIT: 0
+
+======================================================================
+TEST: test_onnx_download.sh
+CMD:  bash /mnt/agents/llmctl/tests/test_onnx_download.sh
+----------------------------------------------------------------------
+OUTPUT:
+  ok: download_profile toy-onnx (fake seam, smoke enabled): exit code
+  [llmctl] downloading onnx/model.onnx from toy/onnx
+    % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                   Dload  Upload   Total   Spent    Left  Speed
+    0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0100    51  100    51    0     0  15809      0 --:--:-- --:--:-- --:--:-- 17000
+  verified: onnx/model.onnx
+  [llmctl] downloading onnx/spm.model from toy/onnx
+    % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                   Dload  Upload   Total   Spent    Left  Speed
+    0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0100    50  100    50    0     0  42992      0 --:--:-- --:--:-- --:--:-- 50000
+  verified: onnx/spm.model
+  structural validation passed for toy-onnx (onnx model + tokenizer present)
+  [llmctl] onnx smoke test: starting onnx_server.py for toy-onnx on 127.0.0.1:18090
+  onnx smoke test passed for toy-onnx (noul/choice/score probes)
+  profile 'toy-onnx' downloaded and verified. Evidence: /tmp/tmp.jgP5lyWH1b/state/verify/toy-onnx.log
+  ok: onnx/model.onnx exists after download (subdirectory preserved)
+  ok: downloaded model sha256 matches
+  ok: structural validation ran (model.onnx found)
+  ok: structural validation ran (tokenizer found)
+  ok: onnx smoke launched the REAL lib/onnx_server.py
+  ok: evidence log records the fake seam
+  ok: smoke: server became healthy
+  ok: probe evidence: noul
+  ok: probe evidence: choice
+  ok: probe evidence: score
+  ok: choice probe returned billing (fake formula: first option wins)
+  ok: smoke passed with the fake seam
+  ok: evidence log records overall success
+  ok: second download: exit code
+  ok: second download: existing verified files are skipped (no re-download)
+  ok: download without deps: still rc 0 (skip-warn precedent)
+  ok: evidence log records the SKIP-with-reason line
+  ok: operator-facing skip warning
+  ok: structural validation still ran before the skip
+  ok: skip still records overall success
+RESULT: PASS
+EXIT: 0
+
+======================================================================
+TEST: test_onnx_server.sh
+CMD:  bash /mnt/agents/llmctl/tests/test_onnx_server.sh
+----------------------------------------------------------------------
+OUTPUT:
+  ok: missing --model-dir -> rc 2
+  ok: missing --model-dir -> message
+  ok: nonexistent --model-dir -> rc 1
+  ok: nonexistent --model-dir -> message
+  ok: onnx server on port 38457: /health becomes 200
+  ok: onnx server on port 46759: /health becomes 200
+  ok: onnx server on port 48781: /health becomes 200
+  ok: onnx server on port 42897: /health becomes 200
+  ok: /health advertises the fake seam
+  ok: noul: exact P(entailment) softmax([2.0, logsumexp(0,-2)]), no confidence key
+  ok: noul: model defaults to llmctl-<profile>
+  ok: choice: exact softmax over entailment logits [2.0, 1.5], billing wins
+  ok: score: exact weighted expectation over ent logits [2.0, 1.5, 1.0] + legend
+  ok: usage: input_tokens is the documented ceil(chars/4) estimate
+  ok: label-order detection: permuted id2label (entailment at index 2) yields the IDENTICAL noul value
+  ok: label-order detection: startup log records entailment index 2 from config.json
+  ok: label-order detection: missing config.json logs the documented assumption
+  ok: auth: absent Bearer -> 401
+  ok: auth: wrong Bearer -> 401
+  ok: auth: correct Bearer -> 200
+  ok: auth: /health stays open for probes
+  ok: oversized body (> 4 MiB) -> 400
+  ok: truncating server: header set on oversized state
+  ok: uncapped server: no truncation header on the same body
+  ok: bad question type -> 400
+  ok: missing state -> 400
+  ok: startup: listening event logged to stdout
+  ok: requests: single-line JSON log records
+RESULT: PASS
+EXIT: 0
+
+======================================================================
+TEST: test_planner.sh
+CMD:  bash /mnt/agents/llmctl/tests/test_planner.sh
+----------------------------------------------------------------------
+OUTPUT:
+  ok: baseline tier
+  ok: baseline RAM budget (30000-4096)
+  ok: baseline VRAM budget (12288*0.85)
+  ok: baseline recommended set (decide-tiny/decide + iter2 decide-nli/decide-2b recommended)
+  ok: baseline fast mode
+  ok: baseline coder mode (17.7GiB > 10444MiB VRAM)
+  ok: baseline fast VRAM footprint (4692 model + 1024 KV)
+  ok: baseline coder RAM footprint (17697 + 4096 KV)
+  ok: baseline gates ws-dense-32b by tier
+  ok: baseline co-residency groups (decide-nli joins group 2 as VRAM-0; decide-2b spills to group 3)
+  ok: decide-nli mode is always cpu (onnx encoder)
+  ok: decide-nli RAM reservation = 1671*3//2 + 512 = 3018 MiB
+  ok: decide-nli VRAM need is 0 (CPU inference)
+  ok: decide-nli ctx default 512 (encoder, not a generation ctx)
+  ok: decide-nli fits baseline (3018 <= 25904)
+  ok: decide-nli recommended on baseline (min_tier below-minimum)
+  ok: decide-2b GPU footprint (1918 weights + 1088 KV)
+  ok: decide-max tier-gated on baseline
+  ok: decide-max GPU footprint (9086 weights + 1088 KV)
+  ok: workstation fixture tier
+  ok: workstation recommended set (all 16 profiles: decide-pro/decide-max's workstation tier gate passes on a datacenter host)
+  ok: ws-dense-32b fully offloaded
+  ok: colibri-glm mode
+  ok: workstation co-residency groups (group 6 = all five remaining decide profiles)
+  ok: apple tier (64GB unified RAM)
+  ok: apple recommended set (colibri-glm gated to datacenter; all six decide profiles fit 64GB unified memory)
+  ok: apple gates colibri-glm
+  ok: apple fast uses unified-memory GPU
+  ok: human plan header
+  ok: human plan groups
+  ok: catalog_classify_tier: baseline fixture
+  ok: catalog_classify_tier: workstation fixture (actually computes datacenter, matching catalog_plan_json above)
+  ok: catalog_classify_tier: apple fixture
+  ok: catalog_classify_tier: constrained fixture (8 cores / 32768 MiB RAM sits exactly at the baseline threshold)
+  ok: vram-contended VRAM budget uses REAL FREE (3000*0.85), not total (12288*0.85=10444)
+  ok: small still fits this host overall (via cpu-mode RAM fallback), just no longer via gpu mode
+  ok: small correctly falls through to cpu mode instead of a gpu mode that would OOM
+  ok: baseline decide-tiny gpu instances (min(10444//1592, 25904//2048)=6)
+  ok: baseline decide-tiny cpu instances (25904//1592=16)
+  ok: baseline decide-tiny slots per instance (parallel=4)
+  ok: baseline decide-tiny total slots (max(6,16)*4=64)
+  ok: baseline decide gpu instances (min(10444//3671, 12)=2)
+  ok: baseline decide cpu instances (25904//3671=7)
+  ok: baseline decide total slots (max(2,7)*2=14)
+  ok: baseline decide-pro tier-gated to 0 gpu instances
+  ok: baseline decide-pro tier-gated to 0 cpu instances
+  ok: baseline decide-pro carries a tier-gate reason
+  ok: baseline decide-nli gpu instances ALWAYS 0 (CPU-only onnx encoder)
+  ok: baseline decide-nli cpu instances (25904//3018=8)
+  ok: baseline decide-nli per-instance VRAM 0
+  ok: baseline decide-nli per-instance RAM 3018 (1671*3//2+512)
+  ok: baseline decide-nli slots per instance (parallel=1: per-option forward passes)
+  ok: baseline decide-nli total slots (max(0,8)*1=8)
+  ok: baseline decide-2b gpu instances (min(10444//3006, 12)=3)
+  ok: baseline decide-2b cpu instances (25904//3006=8)
+  ok: baseline decide-2b total slots (max(3,8)*2=16)
+  ok: baseline decide-max tier-gated to 0
+  ok: baseline decide-max carries a tier-gate reason
+  ok: workstation decide-tiny gpu instances (min(27852//1592, 235904//2048)=17)
+  ok: workstation decide-tiny cpu instances (235904//1592=148)
+  ok: workstation decide gpu instances (min(27852//3671, 115)=7)
+  ok: workstation decide cpu instances (235904//3671=64)
+  ok: workstation decide-pro gpu instances (min(27852//5260, 115)=5)
+  ok: workstation decide-pro cpu instances (235904//5260=44)
+  ok: workstation decide-pro total slots (max(5,44)*2=88)
+  ok: tiny decide-tiny: 0 (0 MiB RAM budget vs 1592 MiB footprint)
+  ok: tiny decide-tiny: footprint reason (tier gate passes)
+  ok: tiny decide: 0 (tier-gated)
+  ok: tiny decide: tier-gate reason
+  ok: tiny decide-pro: 0 (tier-gated)
+  ok: tiny decide-nli: gpu ALWAYS 0 (CPU-only engine)
+  ok: tiny decide-nli: 0 (0 MiB RAM budget vs 3018 MiB reservation)
+  ok: tiny decide-nli: footprint reason (tier gate passes at below-minimum)
+  ok: vram-contended decide-tiny gpu instances (min(2550//1592, 12)=1, down from 6 on baseline)
+  ok: vram-contended decide-tiny cpu instances UNCHANGED (25904//1592=16)
+  ok: vram-contended decide gpu instances (2550 < 3671 -> 0, down from 2 on baseline)
+  ok: vram-contended decide cpu instances UNCHANGED (25904//3671=7)
+  ok: constrained decide-tiny gpu instances (min(6963//1592, 12)=4)
+  ok: constrained decide gpu instances (min(6963//3671, 12)=1)
+  ok: decide capacity --json decision_instances == plan --json decision_instances
+  ok: human plan: Decision capacity section header
+  ok: human plan: Decision capacity lists decide-tiny
+  ok: human plan: Decision capacity lists decide-nli (onnx profile)
+  ok: decide rank: tiny > nli > 2b > base > pro > max
+RESULT: PASS
+EXIT: 0
+
+======================================================================
+TEST: test_port_override.sh
+CMD:  bash /mnt/agents/llmctl/tests/test_port_override.sh
+----------------------------------------------------------------------
+OUTPUT:
+  ok: override env-var name for a simple profile
+  ok: override env-var name for a hyphenated profile (hyphens -> underscores, uppercased)
+  ok: override env-var name for another hyphenated profile
+  ok: catalog_port fast (no override) is the catalog default
+  ok: catalog_port fast honors LLMCTL_PORT_FAST
+  ok: LLMCTL_PORT_FAST does not leak into an unrelated profile (small unchanged)
+  ok: an override for an unknown profile still dies (die() exits 1), never silently returns the override
+  ok: die() message is the same as the no-override unknown-profile path
+  ok: no override: plan's fast port is still the catalog default (regression guard)
+  ok: LLMCTL_PORT_FAST=18080 plumbs into catalog_plan_json's fast port - the actual launch port
+  ok: plan: override is scoped to 'fast' only, 'small' keeps its catalog port
+  ok: plan: override is scoped to 'fast' only, 'coder' keeps its catalog port
+  ok: hyphenated profile name (ws-dense-32b) override plumbs through catalog_plan_json
+  ok: an invalid LLMCTL_PORT_FAST value fails the plan instead of silently using garbage
+  ok: invalid override reports a clear error naming the bad value
+  ok: llmctl models list shows the overridden port for fast
+  ok: llmctl plan --json without the override still shows the catalog default (regression guard)
+  ok: llmctl plan --json with LLMCTL_PORT_FAST=18080 shows the overridden port - this is the exact value 'llmctl start/enable fast' would bind to
+RESULT: PASS
+EXIT: 0
+
+======================================================================
+TEST: test_preflight_submodules.sh
+CMD:  bash /mnt/agents/llmctl/tests/test_preflight_submodules.sh
+----------------------------------------------------------------------
+OUTPUT:
+  ok: a genuinely reachable pinned commit is detected as reachable
+  ok: fixture sanity: the orphaned commit is genuinely gone from upstream_bad after gc --prune
+  ok: a genuinely unreachable pinned commit is detected as unreachable
+  ok: preflight_run exits 1 when a submodule ref is unreachable
+  ok: failure message names the specific unreachable submodule
+  ok: failure message names the specific expected (unreachable) ref
+  ok: preflight_run exits 0 when the submodule ref is genuinely reachable
+  ok: preflight_check_ref returns 2 (could-not-verify) when the fetch itself fails, distinct from 1 (confirmed unreachable)
+  ok: preflight_run exits 2 (could-not-verify) when the fetch itself fails, never silently treated as reachable (rc 0) nor mis-reported as confirmed-unreachable (rc 1)
+  ok: could-not-verify case is reported with an honest UNKNOWN message, not a false FAIL/PASS claim
+  ok: a caller that invokes preflight_run twice in its own loop returns cleanly (no leaked RETURN-trap crash on the CALLER's own return)
+  ok: no 'unbound variable' text appears in the wrapper's output
+  ok: _preflight_walk checks a submodule whose .gitmodules SECTION NAME differs from its own path= value (previously silently skipped entirely)
+  ok: the mismatched-section-name submodule's genuinely-reachable ref is reported PASS, not silently omitted
+  ok: no false FAIL recorded for the mismatched-section-name submodule
+  ok: no false UNKNOWN recorded for the mismatched-section-name submodule
+RESULT: PASS
+EXIT: 0
+
+======================================================================
+TEST: test_run_tests_format.sh
+CMD:  bash /mnt/agents/llmctl/tests/test_run_tests_format.sh
+----------------------------------------------------------------------
+OUTPUT:
+  ok: isolated harness exits 0 on an all-passing fake suite
+  ok: CMD: line names the real invoked command
+  ok: OUTPUT: label present (grep-parseable evidence marker, FR-002)
+  ok: raw subprocess output is captured
+  ok: EXIT: line present with the real captured exit code
+  ok: CMD: / OUTPUT: / EXIT: appear in that order for one test block
+RESULT: PASS
+EXIT: 0
+
+======================================================================
+TEST: test_scheduler.sh
+CMD:  bash /mnt/agents/llmctl/tests/test_scheduler.sh
+----------------------------------------------------------------------
+OUTPUT:
+  ok: start fast small (co-resident) exit code
+  ok: fast started
+  ok: small started
+  ok: fast reservation written
+  ok: small reservation written
+  ok: status lists fast
+  ok: status lists small
+  ok: status --json: valid JSON array, exact field set, fast+small both state=running with no log line
+  ok: status --json's profile set matches the plain-text table's (single source of truth, not a second parse)
+  ok: sanity: the plain-text table itself still lists exactly fast+small (unchanged by the refactor)
+  ok: start vision refused (exit 1)
+  ok: refusal message
+  ok: alternative suggested
+  ok: switch fallback suggested
+  ok: fast kept after refusal
+  ok: small kept after refusal
+  ok: vision not started after refusal
+  ok: auto vision exit code
+  ok: LRU eviction of fast announced
+  ok: fast reservation removed after eviction
+  ok: small kept after eviction
+  ok: vision running after eviction
+  ok: constrained: start fast
+  ok: constrained: auto vision fails (exit 1)
+  ok: protection message
+  ok: protected service untouched
+  ok: vision not started (protected)
+  ok: switch moe-fast exit code
+  ok: switch leaves exactly one service running
+  ok: stop is a dry-run action
+  ok: auto coder vision exit code (US1 Acceptance Scenario 3)
+  ok: co-residency computation: coder capability resolved to a profile
+  ok: co-residency computation: vision capability resolved to a profile
+  ok: at least one service started (budgets allow on this abundant fixture)
+  ok: no eviction needed - both profiles fit the abundant budget directly
+  ok: both resolved profiles (coder + vision capabilities) ended up running
+  ok: LLMCTL_SEED unset: no --seed flag added (default interactive behavior unchanged)
+  ok: LLMCTL_SEED=42: llama launch includes --seed 42
+  ok: LLMCTL_SEED set: llama launch includes --temp 0 (FR-012 fixed-seed + temperature-0 pair)
+  ok: LLMCTL_SLOT_SAVE_PATH unset: no --slot-save-path flag added (default launch unchanged)
+  ok: LLMCTL_SLOT_SAVE_PATH set: llama launch includes a per-profile --slot-save-path subdirectory
+  ok: the per-profile slot-save directory is created before the engine is launched
+  ok: co-resident double-count regression: starting 'small' alone succeeds
+  ok: small reservation written
+  ok: co-resident double-count regression: 'vision' is NOT wrongly refused while 'small' is already running (would be 7159 > 5100 under the old double-count; is 4210 <= 5100 under the fix)
+  ok: vision genuinely started alongside small
+  ok: vision reservation written
+  ok: small's own reservation is untouched by starting vision
+  ok: 10b: same-call multi-profile demand (small+vision=7159) still correctly exceeds the 5100 budget and is refused
+  ok: 10b: the SECOND profile in the call is the one named as refused (small, selected first, already fit on its own)
+  ok: 10b: nothing starts when the batch's validation phase refuses any member (atomic start, pre-existing design)
+  ok: 10b: vision (the one that overflows the combined demand) is correctly refused, never started
+  ok: 10c: 'small' starts alone
+  ok: 10c: small reservation written
+  ok: 10c: auto chat vision succeeds after evicting small (9904 RAM budget + 2949 credited back >= fast(5716)+vision(4210)=9926)
+  ok: 10c: small is the one evicted (LRU, not enabled, not in the wanted set)
+  ok: 10c: fast genuinely started
+  ok: 10c: vision genuinely started
+  ok: 10c: small's reservation removed by the eviction
+  ok: 10c: fast reservation written
+  ok: 10c: vision reservation written
+  ok: 10d: 'small' starts alone
+  ok: 10d: small reservation written
+  ok: 10d: the forced stop failure is reported, not silently swallowed
+  ok: 10d: small's reservation SURVIVES -- it is still running, never credited as freed
+  ok: 10d: auto chat vision does NOT wrongly succeed via a bogus credit for memory that was never actually freed
+  ok: 10d: fails via the LOOP's own exclusion-aware message, not merely _sched_start_impl's independent rescue
+  ok: 10e: 'small' starts alone
+  ok: 10e: with only 1 attempt allowed, the call fails cleanly rather than falling through unverified
+  ok: 10e: the new loop-level exhaustion message fires, naming the real attempt bound
+  ok: 10e: small WAS evicted (the single allowed attempt's eviction genuinely ran)
+  ok: 10e: small's reservation is gone -- the eviction itself succeeded
+  ok: 10e: fast was NEVER started -- _sched_start_impl must not be reached on the non-converged path
+  ok: 10e: vision was NEVER started, for the same reason
+  ok: onnx arm: exec is python3 (pure-python runner, no compiled engine)
+  ok: onnx arm: argv[0] is lib/onnx_server.py
+  ok: onnx arm: --model-dir points at the profile dir
+  ok: onnx arm: --port
+  ok: onnx arm: --profile
+  ok: onnx arm: no --api-key when LLMCTL_DECIDE_API_KEY is unset
+  ok: onnx arm: --api-key passed when LLMCTL_DECIDE_API_KEY is set
+  ok: onnx arm: not-downloaded model dir -> rc 1 (real mode)
+  ok: onnx arm: not-downloaded message names the download command
+RESULT: PASS
+EXIT: 0
+
+======================================================================
+TEST: test_scheduler_bind_host.sh
+CMD:  bash /mnt/agents/llmctl/tests/test_scheduler_bind_host.sh
+----------------------------------------------------------------------
+OUTPUT:
+  ok: override env-var name for a simple profile
+  ok: override env-var name for a hyphenated profile (hyphens -> underscores, uppercased)
+  ok: override env-var name for another hyphenated profile
+  ok: catalog_bind_host fast (no override): LAN-accessible default, per operator mandate
+  ok: global LLMCTL_BIND_HOST=127.0.0.1 applies to fast
+  ok: global LLMCTL_BIND_HOST=127.0.0.1 applies to small too (unscoped)
+  ok: catalog_bind_host fast honors LLMCTL_BIND_HOST_FAST
+  ok: LLMCTL_BIND_HOST_FAST does not leak into an unrelated profile (small keeps the LAN-accessible default)
+  ok: per-profile override wins over the global override for the same profile
+  ok: an override for an unknown profile still dies (die() exits 1), never silently returns the override
+  ok: die() message is the same as the no-override unknown-profile path
+  ok: llama engine, no override: sched_build_launch binds fast to 0.0.0.0 (LAN-accessible default)
+  ok: llama engine: global LLMCTL_BIND_HOST=127.0.0.1 overrides fast back to localhost-only
+  ok: llama engine: LLMCTL_BIND_HOST_FAST plumbs into sched_build_launch's real --host flag
+WARN: profile 'colibri-qwen36' uses the colibri engine and will bind to 0.0.0.0 (non-loopback). colibri's own independent security guard will refuse to start under this combination unless COLI_ALLOW_INSECURE_BIND=1 is set for this launch, or LLMCTL_BIND_HOST_COLIBRI_QWEN36=127.0.0.1 reverts just this profile to loopback-only.
+  ok: colibri engine, no override: sched_build_launch binds colibri-qwen36 to 0.0.0.0 (LAN-accessible default)
+  ok: colibri engine: global LLMCTL_BIND_HOST=127.0.0.1 overrides colibri-qwen36 back to localhost-only
+  ok: colibri + non-loopback + no override: warning names the profile
+  ok: colibri + non-loopback + no override: warning names the first resolution path
+  ok: colibri + non-loopback + no override: warning names the second resolution path (per-profile override)
+  ok: COLI_ALLOW_INSECURE_BIND=1 suppresses the warning (operator already made the call)
+  ok: a loopback per-profile override suppresses the warning (nothing to warn about)
+  ok: non-colibri engine (fast, llama) under the same LAN-exposed default never fires the colibri-specific warning
+  ok: lib/download.sh's smoke-test launch is still hardcoded to 127.0.0.1 (untouched by design)
+RESULT: PASS
+EXIT: 0
+
+======================================================================
+TEST: test_scheduler_lock.sh
+CMD:  bash /mnt/agents/llmctl/tests/test_scheduler_lock.sh
+----------------------------------------------------------------------
+OUTPUT:
+  ok: no lost updates across 200 concurrent flock-serialized increments
+  ok: second acquirer waits for the first to release before proceeding
+RESULT: PASS
+EXIT: 0
+
+======================================================================
+TEST: test_scheduler_reboot_reconciliation.sh
+CMD:  bash /mnt/agents/llmctl/tests/test_scheduler_reboot_reconciliation.sh
+----------------------------------------------------------------------
+OUTPUT:
+[llmctl] wrote /tmp/tmp.MsJWRsgYBN/state/services/small.env
+[llmctl] wrote /tmp/tmp.MsJWRsgYBN/state/services/vision-pro.env
+  ok: sanity: fake systemctl reports small active
+  ok: sanity: fake systemctl reports vision-pro NOT active
+  ok: precondition: small has no reservation marker before reconciliation
+  ok: precondition: vision-pro has no reservation marker before reconciliation
+[llmctl] reconciled missing reservation for 'small' (enabled + genuinely active, no .run marker - likely a post-reboot state desync)
+  ok: sched_running() lists exactly 'small' after reboot-reconciliation (previously empty - the reported defect; also proves no log noise leaks onto its stdout data contract)
+  ok: sched_running() self-healed small's missing .run reservation record
+  ok: sched_running() did NOT fabricate a reservation for the non-active vision-pro
+  ok: reconstructed reservation: profile field
+  ok: reconstructed reservation: real port from a fresh plan lookup
+  ok: reconstructed reservation: ram_mb is a real numeric footprint from the plan
+  ok: reconstructed reservation: vram_mb is a real numeric footprint from the plan
+  ok: sched_running() is idempotent - an already-reconciled reservation is left untouched on a second call
+  ok: sched_reserved_field(ram_mb) accounts for the reconciled small reservation (>0, not the pre-fix 0)
+  ok: sched_reserved_field(ram_mb) == the reconciled reservation's own ram_mb (only 'small' is reserved)
+  ok: sched_reserved_field(vram_mb) == the reconciled reservation's own vram_mb (only 'small' is reserved)
+RESULT: PASS
+EXIT: 0
+
+======================================================================
+TEST: test_scheduler_switch_safety.sh
+CMD:  bash /mnt/agents/llmctl/tests/test_scheduler_switch_safety.sh
+----------------------------------------------------------------------
+OUTPUT:
+[llmctl] wrote /tmp/tmp.sJzTmquQJv/state/services/small.env
+[llmctl] wrote /tmp/tmp.sJzTmquQJv/state/services/vision.env
+  ok: precondition: small + vision are both genuinely running before any switch attempt
+stopped small
+stopped vision
+[llmctl] wrote /tmp/tmp.sJzTmquQJv/state/services/fast.env
+[llmctl] wrote /tmp/tmp.sJzTmquQJv/state/services/small.env
+started small (mode=gpu, port=8085, reserved 2048 MiB RAM + 3859 MiB VRAM)
+[llmctl] wrote /tmp/tmp.sJzTmquQJv/state/services/vision.env
+started vision (mode=gpu, port=8082, reserved 2048 MiB RAM + 4030 MiB VRAM)
+  ok: sched_switch returns the ORIGINAL failure (non-zero) when the target profile's start fails
+  ok: REGRESSION GUARD: a failed switch rolls back to the exact previously-running set (small+vision) instead of leaving the host with nothing running
+  ok: the failure output explains that a rollback was attempted
+  ok: the failure output confirms the rollback actually worked
+  ok: sched_switch succeeds when the target profile's start genuinely succeeds
+  ok: a successful switch leaves ONLY the newly-requested profile running (small+vision correctly stopped)
+  ok: switching to the already-running profile succeeds (no-op)
+  ok: REGRESSION GUARD: switching to the already-solely-running profile does NOT rewrite its reservation (no needless stop+restart / model-reload churn)
+  ok: starting an oversized profile while another is running fails (sanity for message-context test 4a)
+  ok: 4a: WITH another profile running, the message correctly suggests switch
+stopped vision-pro
+  ok: precondition for 4b: nothing is running
+  ok: starting even the smallest profile on a genuinely-too-small host still fails (sanity for message-context test 4b)
+  ok: 4b: with NOTHING running, the message does NOT suggest the circular 'llmctl switch small'
+  ok: 4b: message instead names the real, honest constraint (host RAM/VRAM, not another llmctl profile)
+  ok: precondition for case 5: small + vision running again before the rollback-also-failed scenario
+  ok: LLMCTL-F2: sched_switch returns the distinct exit code 75 (EX_TEMPFAIL) when switch AND rollback both fail, not just the original start_rc
+  ok: the existing stderr text is still present (pre-F2 consumers keep working)
+  ok: CONTROL: an ordinary switch failure with a SUCCESSFUL rollback still returns plain start_rc (1), never the distinct 75
+RESULT: PASS
+EXIT: 0
+
+======================================================================
+TEST: test_scheduler_wait_ready.sh
+CMD:  bash /mnt/agents/llmctl/tests/test_scheduler_wait_ready.sh
+----------------------------------------------------------------------
+OUTPUT:
+  ok: _sched_wait_ready succeeds once the delayed server actually binds
+  ok: wait genuinely blocked until readiness (elapsed=3s, expected roughly the 2s delay, well under the 10s timeout)
+  ok: _sched_wait_ready fails when nothing ever becomes ready
+  ok: wait is bounded by its own timeout, not open-ended (elapsed=2s for a 2s timeout)
+  ok: LLMCTL_READY_TIMEOUT=0 disables the wait entirely (opt-out for hermetic tests with no real listener)
+  ok: _sched_wait_ready under LLMCTL_DRY_RUN=1 reports success (never blocks waiting for a listener dry-run mode will never start)
+  ok: REGRESSION GUARD: dry-run readiness check completed in 0s, not the ~60s production default timeout
+  ok: _sched_diagnose_bind_failure returns 1 (no diagnosis) when there is no log file at all
+  ok: no diagnosis text is emitted when there is nothing to diagnose
+  ok: _sched_diagnose_bind_failure does NOT fire on an unrelated failure (e.g. OOM) - never a false positive
+  ok: _sched_diagnose_bind_failure detects the real bind-conflict signature and returns 0
+  ok: the diagnosis names the real port and says it's already in use (got: port 19997 is already in use by another process (not an llmctl profile) - stop it, or set LLMCTL_PORT_BINDCONFLICT to a free port)
+  ok: the diagnosis names the exact override env var the operator can set (got: port 19997 is already in use by another process (not an llmctl profile) - stop it, or set LLMCTL_PORT_BINDCONFLICT to a free port)
+RESULT: PASS
+EXIT: 0
+
+======================================================================
+TEST: test_services.sh
+CMD:  bash /mnt/agents/llmctl/tests/test_services.sh
+----------------------------------------------------------------------
+OUTPUT:
+installed systemd user units into /tmp/tmp.o4O6YIRfak/systemd-user (MemoryHigh=32768M MemoryMax=32768M)
+[dry-run] systemctl --user daemon-reload
+[dry-run] loginctl enable-linger root
+  ok: llama unit: Restart=always
+  ok: llama unit: RestartSec=5
+  ok: llama unit: StartLimitBurst=5 (bounded restarts, FR-044)
+  ok: llama unit: StartLimitIntervalSec=60 (bounded restarts, FR-044)
+  ok: llama unit: MemoryMax = full probed RAM, no artificial ceiling
+  ok: llama unit: MemoryHigh = MemoryMax (no soft-throttle zone below the max, for maximal performance)
+  ok: llama unit: per-profile EnvironmentFile
+  ok: llama unit: ExecStart from env file
+  ok: llama unit: log location
+  ok: colibri unit installed
+  ok: colibri unit: description
+[llmctl] wrote /tmp/tmp.o4O6YIRfak/state/services/fast.env
+  ok: env file: engine
+  ok: env file: port in args
+  ok: env file: ngl in args
+  ok: dry-run enable
+  ok: dry-run start
+  ok: plist: label
+  ok: plist: KeepAlive
+  ok: plist: ThrottleInterval
+  ok: plist: throttle 60s (bounded restart rate, FR-044)
+  ok: plist: arg present
+  ok: plist: port present
+  ok: plist: log path
+  ok: plist parses (plistlib)
+  ok: dry-run launchctl bootstrap
+RESULT: PASS
+EXIT: 0
+
+======================================================================
+TEST: test_services_crashloop.sh
+CMD:  bash /mnt/agents/llmctl/tests/test_services_crashloop.sh
+----------------------------------------------------------------------
+OUTPUT:
+installed systemd user units into /tmp/tmp.Ho73cEI9B1/systemd-user (MemoryHigh=32768M MemoryMax=32768M)
+[dry-run] systemctl --user daemon-reload
+[dry-run] loginctl enable-linger root
+  ok: llama unit: bounded restart burst (5 attempts)
+  ok: llama unit: bounded restart interval (60s window)
+  ok: colibri unit: bounded restart burst (5 attempts)
+  ok: colibri unit: bounded restart interval (60s window)
+[llmctl] wrote /tmp/tmp.Ho73cEI9B1/LaunchAgents/com.llmctl.fast.plist
+  ok: plist: throttle widened to 60s (launchd has no native give-up-after-N; this bounds the RATE, not the total attempts)
+  ok: status lists the healthy profile
+  ok: healthy profile reported as running
+  ok: crash-looped profile reported as failed (crash-loop)
+  ok: crash-looped profile's last log line surfaced
+RESULT: PASS
+EXIT: 0
+
+======================================================================
+TEST: test_setup_e2e.sh
+CMD:  bash /mnt/agents/llmctl/tests/test_setup_e2e.sh
+----------------------------------------------------------------------
+OUTPUT:
+  [llmctl] llmctl setup: doctor -> build -> plan
+  llmctl doctor - environment self-diagnosis
+  PASS OS: linux (x86_64)
+  PASS command 'bash' -> /usr/bin/bash
+  PASS command 'curl' -> /usr/bin/curl
+  PASS command 'git' -> /usr/bin/git
+  PASS command 'python3' -> /usr/local/bin/python3
+  WARN missing optional command 'cmake'. needed to build llama.cpp (llmctl build llama)
+  PASS command 'make' -> /usr/bin/make
+  PASS C compiler available
+  PASS sha256 tool available
+  WARN submodule submodules/llama.cpp not initialized (run: llmctl build)
+  WARN submodule submodules/colibri not initialized (run: llmctl build)
+  PASS catalog valid JSON (16 profiles)
+  PASS state dir writable: /tmp/tmp.Ky0FLOqqDP/state
+  WARN no GPU tooling detected - CPU-only inference
+  WARN systemd --user not available in this session (services need a user systemd session; headless servers: sudo loginctl enable-linger <user>)
+  WARN llama-server not built yet (llmctl build llama)
+  PASS onnx: onnxruntime importable
+  WARN onnx: sentencepiece NOT importable - DeBERTa-class spm.model tokenizers need it (pip install sentencepiece; llama decision profiles are unaffected)
+  WARN curl lacks HTTP/3 (Features: alt-svc AsynchDNS brotli GSS-API HSTS HTTP2 HTTPS-proxy IDN IPv6 Kerberos Largefile libz NTLM NTLM_WB PSL SPNEGO SSL threadsafe TLS-SRP UnixSockets zstd) - llmctl cluster commands will use HTTP/2 against llmctld (llmctld itself always serves both)
+  WARN go not installed - only needed to build the opt-in llmctld cluster daemon; single-host llmctl is unaffected
+  
+  doctor: 0 failure(s), 9 warning(s)
+  WARN: submodule submodules/llama.cpp not initialized
+  WARN: submodule submodules/colibri not initialized
+  [llmctl] initializing submodules (git submodule update --init)
+  fatal: not a git repository (or any parent up to mount point /mnt)
+  Stopping at filesystem boundary (GIT_DISCOVERY_ACROSS_FILESYSTEM not set).
+  FAIL: llmctl setup exit code (fresh-clone simulation)
+    expected: 0
+    actual:   128
+  ok: setup announces its own orchestration sequence
+  ok: doctor phase: hardware/OS probe ran
+  FAIL: doctor phase: real submodule path checked (not the removed vendor/ path)
+    needle not found: submodule submodules/llama.cpp initialized
+    haystack: [llmctl] llmctl setup: doctor -> build -> plan
+llmctl doctor - environment self-diagnosis
+PASS OS: linux (x86_64)
+PASS command 'bash' -> /usr/bin/bash
+PASS command 'curl' -> /usr/bin/curl
+PASS command 'git' -> /usr/bin/git
+PASS command 'python3' -> /usr/local/bin/python3
+WARN missing optional command 'cmake'. needed to build llama.cpp (llmctl build llama)
+PASS command 'make' -> /usr/bin/make
+PASS C compiler available
+PASS sha256 tool available
+WARN submodule submodules/llama.cpp not initialized 
+  FAIL: doctor phase: real submodule path checked (not the removed vendor/ path)
+    needle not found: submodule submodules/colibri initialized
+    haystack: [llmctl] llmctl setup: doctor -> build -> plan
+llmctl doctor - environment self-diagnosis
+PASS OS: linux (x86_64)
+PASS command 'bash' -> /usr/bin/bash
+PASS command 'curl' -> /usr/bin/curl
+PASS command 'git' -> /usr/bin/git
+PASS command 'python3' -> /usr/local/bin/python3
+WARN missing optional command 'cmake'. needed to build llama.cpp (llmctl build llama)
+PASS command 'make' -> /usr/bin/make
+PASS C compiler available
+PASS sha256 tool available
+WARN submodule submodules/llama.cpp not initialized 
+  ok: doctor phase: model catalog validated
+  FAIL: build phase: llama.cpp engine build was invoked (dry-run)
+    needle not found: [dry-run] cmake -S
+    haystack: [llmctl] llmctl setup: doctor -> build -> plan
+llmctl doctor - environment self-diagnosis
+PASS OS: linux (x86_64)
+PASS command 'bash' -> /usr/bin/bash
+PASS command 'curl' -> /usr/bin/curl
+PASS command 'git' -> /usr/bin/git
+PASS command 'python3' -> /usr/local/bin/python3
+WARN missing optional command 'cmake'. needed to build llama.cpp (llmctl build llama)
+PASS command 'make' -> /usr/bin/make
+PASS C compiler available
+PASS sha256 tool available
+WARN submodule submodules/llama.cpp not initialized 
+  FAIL: build phase: colibri engine build was invoked (dry-run)
+    needle not found: [dry-run] make -C
+    haystack: [llmctl] llmctl setup: doctor -> build -> plan
+llmctl doctor - environment self-diagnosis
+PASS OS: linux (x86_64)
+PASS command 'bash' -> /usr/bin/bash
+PASS command 'curl' -> /usr/bin/curl
+PASS command 'git' -> /usr/bin/git
+PASS command 'python3' -> /usr/local/bin/python3
+WARN missing optional command 'cmake'. needed to build llama.cpp (llmctl build llama)
+PASS command 'make' -> /usr/bin/make
+PASS C compiler available
+PASS sha256 tool available
+WARN submodule submodules/llama.cpp not initialized 
+  FAIL: plan phase: catalog profiles considered
+    needle not found: fast
+    haystack: [llmctl] llmctl setup: doctor -> build -> plan
+llmctl doctor - environment self-diagnosis
+PASS OS: linux (x86_64)
+PASS command 'bash' -> /usr/bin/bash
+PASS command 'curl' -> /usr/bin/curl
+PASS command 'git' -> /usr/bin/git
+PASS command 'python3' -> /usr/local/bin/python3
+WARN missing optional command 'cmake'. needed to build llama.cpp (llmctl build llama)
+PASS command 'make' -> /usr/bin/make
+PASS C compiler available
+PASS sha256 tool available
+WARN submodule submodules/llama.cpp not initialized 
+  FAIL: setup reports completion
+    needle not found: setup complete
+    haystack: [llmctl] llmctl setup: doctor -> build -> plan
+llmctl doctor - environment self-diagnosis
+PASS OS: linux (x86_64)
+PASS command 'bash' -> /usr/bin/bash
+PASS command 'curl' -> /usr/bin/curl
+PASS command 'git' -> /usr/bin/git
+PASS command 'python3' -> /usr/local/bin/python3
+WARN missing optional command 'cmake'. needed to build llama.cpp (llmctl build llama)
+PASS command 'make' -> /usr/bin/make
+PASS C compiler available
+PASS sha256 tool available
+WARN submodule submodules/llama.cpp not initialized 
+RESULT: FAIL (7 assertion failure(s))
+EXIT: 1
+
+======================================================================
+TEST: test_small_profile_full_context.sh
+CMD:  bash /mnt/agents/llmctl/tests/test_small_profile_full_context.sh
+----------------------------------------------------------------------
+OUTPUT:
+  ok: small profile's catalog-declared parallel is 1 (full ctx-size usable per session)
+RESULT: PASS
+EXIT: 0
+
+======================================================================
+TEST: test_syntax.sh
+CMD:  bash /mnt/agents/llmctl/tests/test_syntax.sh
+----------------------------------------------------------------------
+OUTPUT:
+checking 76 scripts with bash -n
+  ok: bash -n bin/llmctl
+  ok: bash -n lib/catalog.sh
+  ok: bash -n lib/cluster.sh
+  ok: bash -n lib/common.sh
+  ok: bash -n lib/decide.sh
+  ok: bash -n lib/doctor.sh
+  ok: bash -n lib/download.sh
+  ok: bash -n lib/engine.sh
+  ok: bash -n lib/hardware.sh
+  ok: bash -n lib/os_detect.sh
+  ok: bash -n lib/scheduler.sh
+  ok: bash -n lib/service_linux.sh
+  ok: bash -n lib/service_macos.sh
+  ok: bash -n tests/helpers.sh
+  ok: bash -n tests/run_tests.sh
+  ok: bash -n tests/test_apikey_lifecycle.sh
+  ok: bash -n tests/test_archive_completeness.sh
+  ok: bash -n tests/test_bin_llmctl_symlink_invocation.sh
+  ok: bash -n tests/test_catalog_json.sh
+  ok: bash -n tests/test_cli.sh
+  ok: bash -n tests/test_cluster_join_leave.sh
+  ok: bash -n tests/test_cluster_request_checked.sh
+  ok: bash -n tests/test_constitution_inheritance.sh
+  ok: bash -n tests/test_create_release.sh
+  ok: bash -n tests/test_ctx_kvtype_override.sh
+  ok: bash -n tests/test_decide.sh
+  ok: bash -n tests/test_decide_download.sh
+  ok: bash -n tests/test_decide_gateway.sh
+  ok: bash -n tests/test_determinism.sh
+  ok: bash -n tests/test_download.sh
+  ok: bash -n tests/test_download_resume.sh
+  ok: bash -n tests/test_engine.sh
+  ok: bash -n tests/test_engine_cpu_regression.sh
+  ok: bash -n tests/test_gpu_throughput_ratio.sh
+  ok: bash -n tests/test_gpu_vram_delta.sh
+  ok: bash -n tests/test_hardware_probe.sh
+  ok: bash -n tests/test_install_script_e2e.sh
+  ok: bash -n tests/test_normalize_agents.sh
+  ok: bash -n tests/test_normalize_common.sh
+  ok: bash -n tests/test_onnx_download.sh
+  ok: bash -n tests/test_onnx_server.sh
+  ok: bash -n tests/test_planner.sh
+  ok: bash -n tests/test_port_override.sh
+  ok: bash -n tests/test_preflight_submodules.sh
+  ok: bash -n tests/test_run_tests_format.sh
+  ok: bash -n tests/test_scheduler.sh
+  ok: bash -n tests/test_scheduler_bind_host.sh
+  ok: bash -n tests/test_scheduler_lock.sh
+  ok: bash -n tests/test_scheduler_reboot_reconciliation.sh
+  ok: bash -n tests/test_scheduler_switch_safety.sh
+  ok: bash -n tests/test_scheduler_wait_ready.sh
+  ok: bash -n tests/test_services.sh
+  ok: bash -n tests/test_services_crashloop.sh
+  ok: bash -n tests/test_setup_e2e.sh
+  ok: bash -n tests/test_small_profile_full_context.sh
+  ok: bash -n tests/test_syntax.sh
+  ok: bash -n tests/test_tenant_list_quota.sh
+  ok: bash -n tests/test_tenant_service_isolation.sh
+  ok: bash -n docs/integrations/install_aider.sh
+  ok: bash -n docs/integrations/install_claude_code.sh
+  ok: bash -n docs/integrations/install_cline.sh
+  ok: bash -n docs/integrations/install_continue.sh
+  ok: bash -n docs/integrations/install_crush.sh
+  ok: bash -n docs/integrations/install_opencode.sh
+  ok: bash -n docs/integrations/install_pi.sh
+  ok: bash -n docs/integrations/lib_normalize_common.sh
+  ok: bash -n docs/integrations/normalize_aider.sh
+  ok: bash -n docs/integrations/normalize_claude_code.sh
+  ok: bash -n docs/integrations/normalize_cline.sh
+  ok: bash -n docs/integrations/normalize_continue.sh
+  ok: bash -n docs/integrations/normalize_crush.sh
+  ok: bash -n docs/integrations/normalize_opencode.sh
+  ok: bash -n docs/integrations/normalize_pi.sh
+  ok: bash -n scripts/release/build_archive.sh
+  ok: bash -n scripts/release/create_release.sh
+  ok: bash -n scripts/release/preflight_submodules.sh
+  ok: shebang: bin/llmctl
+  ok: strict mode: bin/llmctl
+  ok: shebang: lib/catalog.sh
+  ok: strict mode: lib/catalog.sh
+  ok: shebang: lib/cluster.sh
+  ok: strict mode: lib/cluster.sh
+  ok: shebang: lib/common.sh
+  ok: strict mode: lib/common.sh
+  ok: shebang: lib/decide.sh
+  ok: strict mode: lib/decide.sh
+  ok: shebang: lib/doctor.sh
+  ok: strict mode: lib/doctor.sh
+  ok: shebang: lib/download.sh
+  ok: strict mode: lib/download.sh
+  ok: shebang: lib/engine.sh
+  ok: strict mode: lib/engine.sh
+  ok: shebang: lib/hardware.sh
+  ok: strict mode: lib/hardware.sh
+  ok: shebang: lib/os_detect.sh
+  ok: strict mode: lib/os_detect.sh
+  ok: shebang: lib/scheduler.sh
+  ok: strict mode: lib/scheduler.sh
+  ok: shebang: lib/service_linux.sh
+  ok: strict mode: lib/service_linux.sh
+  ok: shebang: lib/service_macos.sh
+  ok: strict mode: lib/service_macos.sh
+  ok: shebang: tests/helpers.sh
+  ok: strict mode: tests/helpers.sh
+  ok: shebang: tests/run_tests.sh
+  ok: strict mode: tests/run_tests.sh
+  ok: shebang: tests/test_apikey_lifecycle.sh
+  ok: strict mode: tests/test_apikey_lifecycle.sh
+  ok: shebang: tests/test_archive_completeness.sh
+  ok: strict mode: tests/test_archive_completeness.sh
+  ok: shebang: tests/test_bin_llmctl_symlink_invocation.sh
+  ok: strict mode: tests/test_bin_llmctl_symlink_invocation.sh
+  ok: shebang: tests/test_catalog_json.sh
+  ok: strict mode: tests/test_catalog_json.sh
+  ok: shebang: tests/test_cli.sh
+  ok: strict mode: tests/test_cli.sh
+  ok: shebang: tests/test_cluster_join_leave.sh
+  ok: strict mode: tests/test_cluster_join_leave.sh
+  ok: shebang: tests/test_cluster_request_checked.sh
+  ok: strict mode: tests/test_cluster_request_checked.sh
+  ok: shebang: tests/test_constitution_inheritance.sh
+  ok: strict mode: tests/test_constitution_inheritance.sh
+  ok: shebang: tests/test_create_release.sh
+  ok: strict mode: tests/test_create_release.sh
+  ok: shebang: tests/test_ctx_kvtype_override.sh
+  ok: strict mode: tests/test_ctx_kvtype_override.sh
+  ok: shebang: tests/test_decide.sh
+  ok: strict mode: tests/test_decide.sh
+  ok: shebang: tests/test_decide_download.sh
+  ok: strict mode: tests/test_decide_download.sh
+  ok: shebang: tests/test_decide_gateway.sh
+  ok: strict mode: tests/test_decide_gateway.sh
+  ok: shebang: tests/test_determinism.sh
+  ok: strict mode: tests/test_determinism.sh
+  ok: shebang: tests/test_download.sh
+  ok: strict mode: tests/test_download.sh
+  ok: shebang: tests/test_download_resume.sh
+  ok: strict mode: tests/test_download_resume.sh
+  ok: shebang: tests/test_engine.sh
+  ok: strict mode: tests/test_engine.sh
+  ok: shebang: tests/test_engine_cpu_regression.sh
+  ok: strict mode: tests/test_engine_cpu_regression.sh
+  ok: shebang: tests/test_gpu_throughput_ratio.sh
+  ok: strict mode: tests/test_gpu_throughput_ratio.sh
+  ok: shebang: tests/test_gpu_vram_delta.sh
+  ok: strict mode: tests/test_gpu_vram_delta.sh
+  ok: shebang: tests/test_hardware_probe.sh
+  ok: strict mode: tests/test_hardware_probe.sh
+  ok: shebang: tests/test_install_script_e2e.sh
+  ok: strict mode: tests/test_install_script_e2e.sh
+  ok: shebang: tests/test_normalize_agents.sh
+  ok: strict mode: tests/test_normalize_agents.sh
+  ok: shebang: tests/test_normalize_common.sh
+  ok: strict mode: tests/test_normalize_common.sh
+  ok: shebang: tests/test_onnx_download.sh
+  ok: strict mode: tests/test_onnx_download.sh
+  ok: shebang: tests/test_onnx_server.sh
+  ok: strict mode: tests/test_onnx_server.sh
+  ok: shebang: tests/test_planner.sh
+  ok: strict mode: tests/test_planner.sh
+  ok: shebang: tests/test_port_override.sh
+  ok: strict mode: tests/test_port_override.sh
+  ok: shebang: tests/test_preflight_submodules.sh
+  ok: strict mode: tests/test_preflight_submodules.sh
+  ok: shebang: tests/test_run_tests_format.sh
+  ok: strict mode: tests/test_run_tests_format.sh
+  ok: shebang: tests/test_scheduler.sh
+  ok: strict mode: tests/test_scheduler.sh
+  ok: shebang: tests/test_scheduler_bind_host.sh
+  ok: strict mode: tests/test_scheduler_bind_host.sh
+  ok: shebang: tests/test_scheduler_lock.sh
+  ok: strict mode: tests/test_scheduler_lock.sh
+  ok: shebang: tests/test_scheduler_reboot_reconciliation.sh
+  ok: strict mode: tests/test_scheduler_reboot_reconciliation.sh
+  ok: shebang: tests/test_scheduler_switch_safety.sh
+  ok: strict mode: tests/test_scheduler_switch_safety.sh
+  ok: shebang: tests/test_scheduler_wait_ready.sh
+  ok: strict mode: tests/test_scheduler_wait_ready.sh
+  ok: shebang: tests/test_services.sh
+  ok: strict mode: tests/test_services.sh
+  ok: shebang: tests/test_services_crashloop.sh
+  ok: strict mode: tests/test_services_crashloop.sh
+  ok: shebang: tests/test_setup_e2e.sh
+  ok: strict mode: tests/test_setup_e2e.sh
+  ok: shebang: tests/test_small_profile_full_context.sh
+  ok: strict mode: tests/test_small_profile_full_context.sh
+  ok: shebang: tests/test_syntax.sh
+  ok: strict mode: tests/test_syntax.sh
+  ok: shebang: tests/test_tenant_list_quota.sh
+  ok: strict mode: tests/test_tenant_list_quota.sh
+  ok: shebang: tests/test_tenant_service_isolation.sh
+  ok: strict mode: tests/test_tenant_service_isolation.sh
+  ok: shebang: docs/integrations/install_aider.sh
+  ok: strict mode: docs/integrations/install_aider.sh
+  ok: shebang: docs/integrations/install_claude_code.sh
+  ok: strict mode: docs/integrations/install_claude_code.sh
+  ok: shebang: docs/integrations/install_cline.sh
+  ok: strict mode: docs/integrations/install_cline.sh
+  ok: shebang: docs/integrations/install_continue.sh
+  ok: strict mode: docs/integrations/install_continue.sh
+  ok: shebang: docs/integrations/install_crush.sh
+  ok: strict mode: docs/integrations/install_crush.sh
+  ok: shebang: docs/integrations/install_opencode.sh
+  ok: strict mode: docs/integrations/install_opencode.sh
+  ok: shebang: docs/integrations/install_pi.sh
+  ok: strict mode: docs/integrations/install_pi.sh
+  ok: shebang: docs/integrations/lib_normalize_common.sh
+  ok: strict mode: docs/integrations/lib_normalize_common.sh
+  ok: shebang: docs/integrations/normalize_aider.sh
+  ok: strict mode: docs/integrations/normalize_aider.sh
+  ok: shebang: docs/integrations/normalize_claude_code.sh
+  ok: strict mode: docs/integrations/normalize_claude_code.sh
+  ok: shebang: docs/integrations/normalize_cline.sh
+  ok: strict mode: docs/integrations/normalize_cline.sh
+  ok: shebang: docs/integrations/normalize_continue.sh
+  ok: strict mode: docs/integrations/normalize_continue.sh
+  ok: shebang: docs/integrations/normalize_crush.sh
+  ok: strict mode: docs/integrations/normalize_crush.sh
+  ok: shebang: docs/integrations/normalize_opencode.sh
+  ok: strict mode: docs/integrations/normalize_opencode.sh
+  ok: shebang: docs/integrations/normalize_pi.sh
+  ok: strict mode: docs/integrations/normalize_pi.sh
+  ok: shebang: scripts/release/build_archive.sh
+  ok: strict mode: scripts/release/build_archive.sh
+  ok: shebang: scripts/release/create_release.sh
+  ok: strict mode: scripts/release/create_release.sh
+  ok: shebang: scripts/release/preflight_submodules.sh
+  ok: strict mode: scripts/release/preflight_submodules.sh
+RESULT: PASS
+EXIT: 0
+
+======================================================================
+TEST: test_tenant_list_quota.sh
+CMD:  bash /mnt/agents/llmctl/tests/test_tenant_list_quota.sh
+----------------------------------------------------------------------
+OUTPUT:
+ERROR: required command 'go' not found. Install hint: install Go via your package manager
+EXIT: 1
+
+======================================================================
+TEST: test_tenant_service_isolation.sh
+CMD:  bash /mnt/agents/llmctl/tests/test_tenant_service_isolation.sh
+----------------------------------------------------------------------
+OUTPUT:
+[llmctl] wrote /tmp/tmp.UOlBxQHKa7/state/services/fast.env
+  ok: untenanted: env file uses the bare profile name
+  ok: untenanted: unit name unchanged (no LLMCTL_TENANT_ID)
+[llmctl] wrote /tmp/tmp.UOlBxQHKa7/state/services/tenant-a--fast.env
+  ok: tenant-a: env file is tenant-qualified, not a bare profile name
+  ok: tenant-a: env file carries its own real launch args
+[llmctl] wrote /tmp/tmp.UOlBxQHKa7/state/services/tenant-b--fast.env
+  ok: tenant-b: SAME profile name resolves to a DIFFERENT env file than tenant-a
+  ok: tenant-b: its own env file carries its own real launch args (not tenant-a's)
+  ok: tenant-a: env file still carries ITS OWN args after tenant-b registered the same profile name
+  ok: tenant-a: unit instance is tenant-qualified
+  ok: tenant-b: unit instance is tenant-qualified, distinct from tenant-a's
+  ok: tenant-a: dry-run enable targets the tenant-qualified unit
+  ok: tenant-a: dry-run start targets the tenant-qualified unit
+  ok: tenant-a: real systemd drop-in file was written for the tenant-qualified unit
+  ok: tenant-a: drop-in sets the real per-tenant Slice= property
+  ok: tenant-b: svc_start alone (not just svc_enable) also ensures the drop-in exists
+  ok: tenant-b: its own drop-in names its own slice, never tenant-a's
+  ok: malicious tenant ID (embedded ';') is rejected, not silently passed through (rc)
+  ok: malicious tenant ID (path traversal) is rejected (rc)
+  ok: malicious tenant ID (embedded '..' mid-string, not just a leading path-traversal) is rejected - same defense-in-depth internal/isolation/cgroup.go's Go-side validateTenantID applies beyond its charset check (rc)
+  ok: tenant ID containing '.' (accepted by Go's allow-list) is now ALSO accepted by bash's - the two languages' allow-lists genuinely match, not merely claimed to
+RESULT: PASS
+EXIT: 0
+
+======================================================================
+SUMMARY
+----------------------------------------------------------------------
+FAIL  test_apikey_lifecycle.sh (exit 1)
+PASS  test_archive_completeness.sh
+PASS  test_bin_llmctl_symlink_invocation.sh
+PASS  test_catalog_json.sh
+PASS  test_cli.sh
+FAIL  test_cluster_join_leave.sh (exit 1)
+PASS  test_cluster_request_checked.sh
+FAIL  test_constitution_inheritance.sh (exit 1)
+PASS  test_create_release.sh
+PASS  test_ctx_kvtype_override.sh
+PASS  test_decide.sh
+PASS  test_decide_download.sh
+PASS  test_decide_gateway.sh
+PASS  test_determinism.sh
+PASS  test_download.sh
+PASS  test_download_resume.sh
+FAIL  test_engine.sh (exit 1)
+FAIL  test_engine_cpu_regression.sh (exit 128)
+PASS  test_gpu_throughput_ratio.sh
+PASS  test_gpu_vram_delta.sh
+PASS  test_hardware_probe.sh
+PASS  test_install_script_e2e.sh
+PASS  test_normalize_agents.sh
+PASS  test_normalize_common.sh
+PASS  test_onnx_download.sh
+PASS  test_onnx_server.sh
+PASS  test_planner.sh
+PASS  test_port_override.sh
+PASS  test_preflight_submodules.sh
+PASS  test_run_tests_format.sh
+PASS  test_scheduler.sh
+PASS  test_scheduler_bind_host.sh
+PASS  test_scheduler_lock.sh
+PASS  test_scheduler_reboot_reconciliation.sh
+PASS  test_scheduler_switch_safety.sh
+PASS  test_scheduler_wait_ready.sh
+PASS  test_services.sh
+PASS  test_services_crashloop.sh
+FAIL  test_setup_e2e.sh (exit 1)
+PASS  test_small_profile_full_context.sh
+PASS  test_syntax.sh
+FAIL  test_tenant_list_quota.sh (exit 1)
+PASS  test_tenant_service_isolation.sh
+----------------------------------------------------------------------
+PASS: 36  FAIL: 7
+make: *** [Makefile:11: test] Error 1

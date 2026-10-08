@@ -1,0 +1,26 @@
+# scripts/coverage/bash_suites_excluded.txt - bash suites that scripts/coverage/report.sh does NOT run.
+# Format: <suite file name> | <reason>.  Every exclusion is repeated in COVERAGE-REPORT.md so the
+# files only those suites exercise are reported 'not measured' instead of silently dropped.
+# Operator constraints (agent COVERAGE brief): no podman / systemd service / GPU suites; whole run < ~40 min;
+# host is memory/CPU constrained; never the whole `make test`.
+test_gpu_throughput_ratio.sh | GPU suite (needs an NVIDIA GPU + llama-server)
+test_gpu_vram_delta.sh | GPU suite (needs an NVIDIA GPU + llama-server)
+test_vantage.sh | podman suite (rootless containers)
+test_services.sh | systemd service suite
+test_services_crashloop.sh | systemd service suite
+test_service_ops_hardening.sh | systemd service suite (real units)
+test_systemd_cleanliness.sh | systemd service suite
+test_unit_hardening.sh | systemd service suite (real systemctl stop/reset-failed)
+test_scheduler_reboot_reconciliation.sh | systemd service suite (service reconciliation)
+test_scheduler_switch_safety.sh | systemd service suite (service switch)
+test_install_script_e2e.sh | installs/enables real services + linger (systemd)
+test_setup_e2e.sh | builds engines from source (multi-minute compile)
+test_engine_build_decide.sh | builds engines / Go binaries (heavy)
+test_engine_build_onnx.sh | builds/installs the ONNX engine (heavy)
+test_engine_build_safety.sh | engine build safety (heavy build tooling)
+test_go_unit.sh | Go suite, measured separately by the Go stage
+test_py_unit.sh | Python suite, measured separately by the Python stage
+test_gateway_mutation.sh | Go mutation suite (copies the tree, runs many go test builds)
+test_decide_security_mutation.sh | Go mutation suite (copies the tree, runs many go test builds)
+test_certs_go_mutation.sh | Go mutation suite (copies the tree, runs go test)
+test_run_tests_format.sh | drives the whole run_tests.sh harness (recursion; would run the full suite)

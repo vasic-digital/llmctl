@@ -42,8 +42,20 @@ _kv_var="LLMCTL_KVTYPE_$(printf '%s' "${PROFILE}" | tr '[:lower:]-' '[:upper:]_'
 export "${_ctx_var}=${!_ctx_var:-8192}"
 export "${_kv_var}=${!_kv_var:-f16}"
 QA_DIR="${LLMCTL_ROOT}/docs/qa/005-cuda-gpu-inference"
-mkdir -p "${QA_DIR}"
-EVIDENCE="${QA_DIR}/throughput_ratio.txt"
+# Tracked QA evidence is only (re)written when the operator asks for it: a plain
+# `make test` must never clobber docs/qa/** (gap G-015). Host facts are probed live.
+if [[ "${LLMCTL_QA_EVIDENCE:-0}" == "1" ]]; then
+  mkdir -p "${QA_DIR}"
+  EVIDENCE="${QA_DIR}/throughput_ratio.txt"
+else
+  EVIDENCE="${TEST_TMP}/throughput_ratio.txt"
+fi
+# Free VRAM at decision time (live probe; never hard-coded).
+_free_vram_mib() { nvidia-smi --query-gpu=memory.total,memory.used --format=csv,noheader,nounits 2>/dev/null | head -1 | awk -F', *' '{print $1-$2}'; }
+_qa_host_line() {
+  printf 'host: %s | gpu: %s | date: %s\n' "$(hostname 2>/dev/null || echo unknown)" \
+    "$(nvidia-smi --query-gpu=name,memory.total --format=csv,noheader 2>/dev/null | head -1 || echo none)" "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+}
 
 if ! have_cmd nvidia-smi; then
   assert_skip "nvidia-smi not present on this host" "GPU throughput-ratio measurement"
@@ -191,7 +203,20 @@ CPU_TOKS="${RUN_TOKS}"; CPU_ELAPSED="${RUN_ELAPSED}"; CPU_TOKPS="${RUN_TOKPS}"
 CPU_CONTENT="${RUN_CONTENT}"; CPU_FINISH="${RUN_FINISH}"
 
 # --- run 2: real catalog-planned ngl (GPU offload), same model, same prompt -
+# The GPU half only means something with real GPU offload. If the planner chose CPU-only because the
+# GPU is occupied right now (shared host), or the engine cannot allocate device memory, this is an
+# honest SKIP carrying the live numbers - never a FAIL of a property the host cannot currently test.
+if [[ "${PLANNED_NGL}" == "0" ]]; then
+  assert_skip "planner chose CPU-only (ngl=0) for '${PROFILE}': free VRAM is $(_free_vram_mib) MiB right now" "GPU throughput-ratio measurement"
+  echo "SKIPPED: planner chose ngl=0 for ${PROFILE} on $(hostname); free VRAM $(_free_vram_mib) MiB at $(date -u +%Y-%m-%dT%H:%M:%SZ)" > "${EVIDENCE}"
+  test_finish
+fi
 if ! run_completion "${PLANNED_NGL}" 18097 gpu; then
+  if grep -qiE 'unable to allocate|out of memory|cudaMalloc failed' "${TEST_TMP}/throughput-gpu-server.log" 2>/dev/null; then
+    assert_skip "GPU device memory could not be allocated for ngl=${PLANNED_NGL} (free VRAM ${_free_vram_mib:-unknown} MiB, GPU shared with other processes)" "GPU throughput-ratio measurement"
+    echo "SKIPPED: CUDA allocation failed at ngl=${PLANNED_NGL}; free VRAM $(_free_vram_mib) MiB on $(hostname) at $(date -u +%Y-%m-%dT%H:%M:%SZ)" > "${EVIDENCE}"
+    test_finish
+  fi
   printf 'FAIL: %s\n' "GPU-planned (ngl=${PLANNED_NGL}) completion run failed to complete"
   TEST_FAILS=$((TEST_FAILS+1))
   test_finish
@@ -202,6 +227,7 @@ GPU_CONTENT="${RUN_CONTENT}"; GPU_FINISH="${RUN_FINISH}"
 RATIO="$(python3 -c "print(f'{${GPU_TOKPS} / ${CPU_TOKPS}:.4f}')" 2>/dev/null || echo 0)"
 
 {
+  _qa_host_line
   echo "profile: ${PROFILE}"
   echo "model: ${MODEL_PATH}"
   echo "prompt: ${PROMPT_PAYLOAD}"

@@ -1,0 +1,13 @@
+.git
+build/
+__pycache__/
+submodules/llama.cpp/
+submodules/colibri/build/
+submodules/superspec/
+specs/009-jev-decision-models/evidence/portability-nezha/
+*.gguf
+.codegraph/
+.opencode/
+archive/
+node_modules/
+constitution/.git

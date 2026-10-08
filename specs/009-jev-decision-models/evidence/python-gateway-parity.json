@@ -1,0 +1,290 @@
+{
+ "task": "G-047: parity of the Go gateway with the retired Python gateway (lib/decide_gateway.py) and its tests",
+ "python_gateway_history": {
+  "released": false,
+  "git_log_all": "git log --all -- lib/decide_gateway.py: no commits",
+  "tags_containing": "none",
+  "status": "untracked candidate file from the second team; never part of a tag or commit"
+ },
+ "groups": [
+  {
+   "source": "tests/test_decide_gateway.sh",
+   "assertion_group": "s1 POST /v1/systemone TypeSafe-shaped body: answers.team.choice == billing",
+   "covered_by": [
+    "tests/test_gateway_endpoints.sh::row EP-002 200",
+    "internal/gateway/letter_test.go::TestLetterChoiceAndScore",
+    "internal/gateway/letter_parity_test.go::TestParityChoiceExactRenormalisedProbabilities"
+   ]
+  },
+  {
+   "source": "tests/test_decide_gateway.sh",
+   "assertion_group": "s1 probabilities keyed by the criteria keys, in option order",
+   "covered_by": [
+    "internal/gateway/letter_parity_test.go::TestParityChoiceExactRenormalisedProbabilities",
+    "internal/contract/response_test.go::TestChoiceAnswer"
+   ]
+  },
+  {
+   "source": "tests/test_decide_gateway.sh",
+   "assertion_group": "s1 confidence present for choice",
+   "covered_by": [
+    "internal/contract/response_test.go::TestChoiceConfidenceExtremesAndTies",
+    "internal/gateway/letter_parity_test.go::TestParityChoiceExactRenormalisedProbabilities"
+   ]
+  },
+  {
+   "source": "tests/test_decide_gateway.sh",
+   "assertion_group": "s1 response 'model' echoes the requested alias (jev-latest)",
+   "covered_by": [
+    "tests/test_gateway_endpoints.sh::EP-007: hosted alias answered by the served profile id",
+    "internal/contract/request_test.go::TestModelMapping",
+    "internal/contract/request_test.go::TestUnknownModelNotEchoed"
+   ],
+   "note": "CHANGED BY DESIGN (FR-075): the Go gateway answers with the SERVED profile id, never the request's string; the alias still resolves."
+  },
+  {
+   "source": "tests/test_decide_gateway.sh",
+   "assertion_group": "s1 usage present (input_tokens > 0, output_tokens == 1 per question)",
+   "covered_by": [
+    "internal/gateway/letter_test.go::TestLetterNoulProbabilityAndRequestShape",
+    "internal/gateway/letter_test.go::TestLetterMultipleQuestionsInOrder",
+    "internal/contract/response_test.go::TestEstimateTokens",
+    "internal/contract/response_test.go::TestResponseEnvelope"
+   ]
+  },
+  {
+   "source": "tests/test_decide_gateway.sh",
+   "assertion_group": "s2 noul question typed answer, noul > 0.5 on the entailed fixture",
+   "covered_by": [
+    "tests/test_gateway_endpoints.sh::EP-001: noul probability from the letter readout",
+    "internal/gateway/letter_parity_test.go::TestParityNoulExactYesProbabilityNoConfidence"
+   ]
+  },
+  {
+   "source": "tests/test_decide_gateway.sh",
+   "assertion_group": "s2 score question: weighted expectation >= 1.0, legend present",
+   "covered_by": [
+    "tests/test_gateway_endpoints.sh::EP-004: score answer carries the legend",
+    "internal/gateway/letter_parity_test.go::TestParityScoreWeightedExpectationAndLegend",
+    "internal/contract/response_test.go::TestScoreAnswer"
+   ]
+  },
+  {
+   "source": "tests/test_decide_gateway.sh",
+   "assertion_group": "s2 mixed questions in one request; usage.output_tokens == number of questions",
+   "covered_by": [
+    "tests/test_gateway_endpoints.sh::EP-005: mixed questions all answered",
+    "internal/gateway/letter_test.go::TestLetterMultipleQuestionsInOrder"
+   ]
+  },
+  {
+   "source": "tests/test_decide_gateway.sh",
+   "assertion_group": "s3 GET /v1/models lists jev-latest / jev-preview / llmctl-<profile> aliases",
+   "covered_by": [
+    "tests/test_gateway_endpoints.sh::EP-030: lists the hosted alias",
+    "tests/test_gateway_endpoints.sh::EP-030: lists the served profile",
+    "internal/server/extra_test.go::TestModelsBodyCarriesTheSDKShapeAndTheLocalShape",
+    "internal/gateway/router_test.go::TestRouterModelsAndReady",
+    "internal/contract/contract.go (SystemModelAliases: jev-latest, jev-1.13.0, jev-preview)"
+   ],
+   "note": "llmctl-<profile> alias asserted by TestRouterModelsAndReady / EP-030 listing."
+  },
+  {
+   "source": "tests/test_decide_gateway.sh",
+   "assertion_group": "s4 absent / wrong Bearer -> 401 on /v1/systemone",
+   "covered_by": [
+    "tests/test_gateway_endpoints.sh::row EP-009",
+    "tests/test_gateway_endpoints.sh::row EP-010",
+    "internal/server/server_test.go::TestAuthSchemeParsing"
+   ]
+  },
+  {
+   "source": "tests/test_decide_gateway.sh",
+   "assertion_group": "s4 correct Bearer -> 200",
+   "covered_by": [
+    "tests/test_gateway_endpoints.sh::row EP-002 200",
+    "internal/server/server_test.go::TestServerEndToEnd"
+   ]
+  },
+  {
+   "source": "tests/test_decide_gateway.sh",
+   "assertion_group": "s4 /v1/models also requires the key",
+   "covered_by": [
+    "internal/server/server_test.go::TestServerEndToEnd",
+    "tests/test_gateway_endpoints.sh::EP-031/EP-032 rows driven by internal/server/server_test.go::TestStatusInventory"
+   ]
+  },
+  {
+   "source": "tests/test_decide_gateway.sh",
+   "assertion_group": "s4 /healthz stays open for probes",
+   "covered_by": [
+    "internal/server/server_test.go::TestServerEndToEnd",
+    "internal/server/server_test.go::TestProbesAreMinimalEvenWithSecretProfiles"
+   ]
+  },
+  {
+   "source": "tests/test_decide_gateway.sh",
+   "assertion_group": "s5 oversized state -> x-llmctl-decide-truncated header (opt-in cap), absent otherwise",
+   "covered_by": [
+    "tests/test_gateway_endpoints.sh::EP-008b: truncation header set",
+    "internal/server/server_test.go::TestTruncationHeaderOnlyWhenApplied",
+    "internal/contract/request_test.go::TestTruncateOptIn",
+    "internal/contract/request_test.go::TestTruncateNotFlaggedWhenFits"
+   ],
+   "note": "CHANGED BY DESIGN (FR-012): default is REJECT (422 validation_failed, EP-008); shortening is opt-in (LLMCTL_DECIDE_TRUNCATE)."
+  },
+  {
+   "source": "tests/test_decide_gateway.sh",
+   "assertion_group": "s6 decide serve daemonises: pidfile written, process alive, /healthz answers, systemone works",
+   "covered_by": [
+    "tests/test_gateway_endpoints.sh::serve --status is 0 while running",
+    "tests/test_gateway_endpoints.sh::pidfile is mode 0600",
+    "cmd/llmctl-decide/cmd_serve_test.go::TestServeEndToEndInProcess"
+   ]
+  },
+  {
+   "source": "tests/test_decide_gateway.sh",
+   "assertion_group": "s6 decide serve --stop: rc 0, process gone, pidfile removed",
+   "covered_by": [
+    "tests/test_gateway_endpoints.sh::pidfile removed after stop",
+    "tests/test_gateway_endpoints.sh::gateway ${s}: --stop verified and stopped it",
+    "cmd/llmctl-decide/cmd_serve_test.go::TestServeStatusAndStopWithoutPidfile"
+   ]
+  },
+  {
+   "source": "tests/test_decide_gateway.sh",
+   "assertion_group": "s6 second --stop with no pidfile -> rc 1 'no gateway pidfile'",
+   "covered_by": [
+    "tests/test_gateway_endpoints.sh::stop with no pidfile is a clean no-op",
+    "cmd/llmctl-decide/cmd_serve_test.go::TestServeStatusAndStopWithoutPidfile"
+   ],
+   "note": "CHANGED BY DESIGN: a missing pidfile is a clean no-op rc 0 (idempotent stop); stop never signals an unverified process (Helix 11.4.263: TestServeStopNeverSignalsUnrelatedProcess, EP 'stop refuses a pidfile that names an unrelated process')."
+  },
+  {
+   "source": "tests/test_decide_gateway.sh",
+   "assertion_group": "s6 LLMCTL_DRY_RUN=1 decide serve prints the launch line, no pidfile",
+   "covered_by": [
+    "tests/test_decide.sh::decide_serve honours LLMCTL_DRY_RUN",
+    "tests/test_decide.sh::dry-run shows the generic delegation"
+   ],
+   "note": "Launch line is now the generic delegation to llmctl-decide serve."
+  },
+  {
+   "source": "tests/test_decide_gateway.sh",
+   "assertion_group": "s7 --backend-engine onnx single-hop proxy of /v1/systemone to the onnx server",
+   "covered_by": [
+    "intentionally dropped: the encoder runtime speaks only POST /v1/score (internal contract); typed-question logic lives in the Go NLIBackend - there is no native /v1/systemone hop on the onnx server any more. Replaced by internal/gateway/nli_test.go::TestNLINoulSendsOneYesAndOneNoPairWithTheKeyAndPath, internal/gateway/nli_test.go::TestNLIChoiceAndScoreNormaliseTheEntailmentProbabilityPerOption and tests/test_gateway_endpoints.sh::NLI profile: entailment of the yes-hypothesis vs the no-hypothesis"
+   ]
+  },
+  {
+   "source": "tests/test_decide_gateway.sh",
+   "assertion_group": "s7 bad body (missing state) rejected 400 at the gateway before any engine hop",
+   "covered_by": [
+    "internal/contract/request_test.go::TestRejections400",
+    "tests/test_gateway_endpoints.sh::row EP-011"
+   ]
+  },
+  {
+   "source": "tests/test_decide_gateway.sh",
+   "assertion_group": "s7 decide serve passes --backend-engine <catalog engine> to the gateway",
+   "covered_by": [
+    "intentionally dropped: engine selection is per catalog profile/protocol inside the Go router (internal/gateway/router_test.go::TestRouterDeterministicUsesPrimary, internal/gateway/catalog_test.go::TestParseCatalogDecisionProfilesOnly); no per-launch flag exists"
+   ]
+  },
+  {
+   "source": "tests/test_decide_download.sh",
+   "assertion_group": "decision smoke dispatch: decide-capable profile routes through _dl_smoke_test_decision (never the gguf smoke)",
+   "covered_by": [
+    "tests/test_decide_download.sh::evidence log records the DECISION smoke path (not the gguf smoke path)",
+    "tests/test_decide_download.sh::gguf smoke path NOT taken for a decide-capable profile"
+   ],
+   "note": "unchanged assertions (shell dispatch)."
+  },
+  {
+   "source": "tests/test_decide_download.sh",
+   "assertion_group": "decision smoke SKIP-with-reason when llama-server is not built",
+   "covered_by": [
+    "tests/test_decide_download.sh::evidence log records the decision smoke SKIP-with-reason"
+   ],
+   "note": "unchanged (conditional on host)."
+  },
+  {
+   "source": "tests/test_decide_download.sh",
+   "assertion_group": "decision probes noul/choice/score through the production decide_* shell path against decide_server.py",
+   "covered_by": [
+    "tests/test_decide_download.sh::download with a fake engine: decision smoke passes through llmctl-decide smoke",
+    "tests/test_decide_download.sh::evidence log records the typed billing answer",
+    "internal/gateway/smoke_test.go::TestSmokeLetterLogitOK",
+    "cmd/llmctl-decide/cmd_smoke_test.go::TestSmokeCmdOK"
+   ],
+   "note": "Probes are now `llmctl-decide smoke` (choice 2 options expect billing + 4 options). noul/score threshold probes (noul>0.5, score>=1.0) were not carried: their exact math is asserted in Go (internal/gateway/letter_parity_test.go) and the live model-sanity check is the billing choice."
+  },
+  {
+   "source": "tests/test_decide_download.sh",
+   "assertion_group": "failing engine / unusable binary must fail the download (no false PASS)",
+   "covered_by": [
+    "tests/test_decide_download.sh::download with a failing engine: decision smoke FAILS the download",
+    "tests/test_decide_download.sh::download with an unusable LLMCTL_DECIDE_BIN fails (no silent skip)"
+   ],
+   "note": "NEW coverage."
+  },
+  {
+   "source": "tests/test_decide.sh",
+   "assertion_group": "s1 prompt building: lettered options in criteria insertion order, noul yes/no (+descriptions), score levels, Question/State blocks",
+   "covered_by": [
+    "internal/contract/prompt_test.go::TestPromptTemplateExact",
+    "internal/contract/prompt_test.go::TestOptionsOnceOutsideStateBlock",
+    "internal/contract/request_test.go::TestParseChoiceLettersAndLabels",
+    "internal/contract/request_test.go::TestNoulCriteria",
+    "internal/contract/request_test.go::TestParseScoreLevels",
+    "internal/contract/request_test.go::TestQuestionOrderKept"
+   ]
+  },
+  {
+   "source": "tests/test_decide.sh",
+   "assertion_group": "s2 shape response: exact renormalised probabilities + confidence (non-letter token filtered)",
+   "covered_by": [
+    "internal/gateway/letter_parity_test.go::TestParityChoiceExactRenormalisedProbabilities",
+    "internal/readout/readout_test.go::TestLowercaseAndOtherTokensDoNotCount",
+    "internal/readout/readout_test.go::TestSumOverSpellings"
+   ]
+  },
+  {
+   "source": "tests/test_decide.sh",
+   "assertion_group": "s3 noul: renormalised yes probability, NO confidence key",
+   "covered_by": [
+    "internal/gateway/letter_parity_test.go::TestParityNoulExactYesProbabilityNoConfidence",
+    "internal/contract/response_test.go::TestNoulHasNoConfidence"
+   ]
+  },
+  {
+   "source": "tests/test_decide.sh",
+   "assertion_group": "s4 score: probability-weighted expectation + legend",
+   "covered_by": [
+    "internal/gateway/letter_parity_test.go::TestParityScoreWeightedExpectationAndLegend"
+   ]
+  },
+  {
+   "source": "tests/test_decide.sh",
+   "assertion_group": "LLMCTL_DECIDE_TEMPERATURE divides logprobs before softmax",
+   "covered_by": [
+    "internal/gateway/letter_parity_test.go::TestParityTemperatureDividesLogprobs",
+    "internal/readout/readout_test.go::TestTemperature"
+   ]
+  },
+  {
+   "source": "tests/test_decide.sh",
+   "assertion_group": "smoke path end to end (new)",
+   "covered_by": [
+    "tests/test_decide.sh::smoke (2 options, expect billing) -> rc 0",
+    "internal/gateway/smoke_test.go::TestSmokeLetterLogitOK",
+    "internal/gateway/smoke_test.go::TestSmokeNLI",
+    "internal/gateway/smoke_test.go::TestSmokeNative",
+    "internal/gateway/smoke_test.go::TestSmokeUnreachable",
+    "cmd/llmctl-decide/cmd_smoke_test.go::TestSmokeCmdExitCodes"
+   ],
+   "note": "NEW coverage for the replacement."
+  }
+ ],
+ "unresolved_refs": []
+}

@@ -1,0 +1,38 @@
+profile=decide-lev port=8108 date=2026-10-08T09:16:55Z host=anton
+engine: version: 0.5.0-dev (build 11379, commit 1537a0a8b)
+llama.cpp submodule: 1537a0a8b2f8711d840878b0a0677ab2213c882c b11379
+model: ggml-org/lev-GGUF 3e9286a79ae857b4e1de051c92fab6dc574581ce [('lev-Q4_K_M.gguf', 3011777440, '3f61b27c00a098dbc79ed099cca3985cbe0b63d17ac7fedebf2dca1d84f7f3a8')]
+--- memory before
+               total        used        free      shared  buff/cache   available
+Mem:           30974       25007        1001       15063       20422        5966
+Swap:           8191        8191           0
+6954 MiB, 12288 MiB
+--- plan row
+{
+ "budgets": {
+  "ram_mb": 1794,
+  "vram_mb": 4213,
+  "vram_live": true,
+  "storage_free_mb": 33186
+ },
+ "profile": {
+  "mode": "none",
+  "ram_mb": 3896,
+  "vram_mb": 0,
+  "storage_mb": 2872,
+  "ctx": 8192,
+  "ngl": 0,
+  "parallel": 1,
+  "flash_attn": "auto",
+  "kv_cache_type": "f16",
+  "fits": false,
+  "port": 8108,
+  "engine": "llama",
+  "capability": [
+   "decide"
+  ],
+  "min_tier": "baseline",
+  "tier_ok": false,
+  "recommended": false
+ }
+}

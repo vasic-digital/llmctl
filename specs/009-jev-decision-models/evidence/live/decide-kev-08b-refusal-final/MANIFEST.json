@@ -1,0 +1,30 @@
+{
+  "files": [
+    {
+      "path": "RESULT.txt",
+      "sha256": "cf4dd4f62a1fdbe44c75b3ee3341204276a42cf7ee3487d61eb88b3a2f29cc08",
+      "size": 77
+    },
+    {
+      "path": "context.txt",
+      "sha256": "99b31229dda02a56797fc47dd48ad2f7f1c85cbff14fd692ce999f1cd61152dd",
+      "size": 1084
+    },
+    {
+      "path": "download.txt",
+      "sha256": "494323addba0e2aef1c4aaa4cfbf2a9943d49d8fb1f11a631e024629d4d5c2df",
+      "size": 1866
+    },
+    {
+      "path": "start.txt",
+      "sha256": "8ac60836b10e6fd54ad761d11edf82162c8c36c1c248225c8ccb447e0f22d300",
+      "size": 276
+    },
+    {
+      "path": "verify.txt",
+      "sha256": "663b3fd7881db12fbcc978bbfc76cfaa740140e887bcf58939a17f2aa872d961",
+      "size": 59
+    }
+  ],
+  "schema": 1
+}

@@ -1,0 +1,30 @@
+[2026-10-08T08:52:26Z] llmctl models download decide-laya
+[2026-10-08T08:52:26Z] engine: llama  repo: ggml-org/Laya-GGUF
+[2026-10-08T08:52:26Z] download: https://huggingface.co/ggml-org/Laya-GGUF/resolve/22265007700297ba9e128297e82540cf28c5d7d4/Laya-Q8_0.gguf -> /home/milosvasic/.local/share/llmctl/models/decide-laya/Laya-Q8_0.gguf.part
+[2026-10-08T08:53:42Z] curl exit: 0
+[2026-10-08T08:53:42Z] RUN: _dl_verify_file /home/milosvasic/.local/share/llmctl/models/decide-laya/Laya-Q8_0.gguf.part 449397600 c06528c5746d3bb8baa72a27938be95abbfd0b226f8471e8a9e365ed0bb066d2
+[2026-10-08T08:53:44Z] EXIT: 0
+[2026-10-08T08:53:44Z] renamed /home/milosvasic/.local/share/llmctl/models/decide-laya/Laya-Q8_0.gguf.part -> /home/milosvasic/.local/share/llmctl/models/decide-laya/Laya-Q8_0.gguf (atomic, verified)
+[2026-10-08T08:53:44Z] smoke protocol: systemone-native
+[2026-10-08T08:53:44Z] smoke: /home/milosvasic/Projects/llmctl/submodules/llama.cpp/build/bin/llama-server --model /home/milosvasic/.local/share/llmctl/models/decide-laya/Laya-Q8_0.gguf --ctx-size 4096 --n-gpu-layers 0 --host 127.0.0.1 --port 59921
+[2026-10-08T08:53:47Z] smoke: /health OK after 2s
+[2026-10-08T08:53:47Z] RUN: _dl_decision_probe_choice 59921
+[2026-10-08T08:53:47Z] EXIT: 0
+OUT: smoke ok: protocol=systemone-native choice=billing confidence=0.3990
+OUT:   billing=0.699518
+OUT:   legal=0.300482
+[2026-10-08T08:53:47Z] RUN: _dl_decision_probe_options 59921
+[2026-10-08T08:53:48Z] EXIT: 0
+OUT: smoke ok: protocol=systemone-native choice=team3 confidence=0.2969
+OUT:   billing=0.234097
+OUT:   legal=0.154138
+OUT:   team3=0.472652
+OUT:   team4=0.139113
+[2026-10-08T08:53:48Z] decision smoke PASSED: valid typed answers over /v1/systemone (2 and 4 options; shape evidence only)
+[2026-10-08T08:53:48Z] download decide-laya: SUCCESS
+[2026-10-08T09:00:36Z] llmctl models verify decide-laya
+[2026-10-08T09:00:36Z] RUN: _dl_verify_file /home/milosvasic/.local/share/llmctl/models/decide-laya/Laya-Q8_0.gguf 449397600 c06528c5746d3bb8baa72a27938be95abbfd0b226f8471e8a9e365ed0bb066d2
+[2026-10-08T09:00:38Z] EXIT: 0
+[2026-10-08T09:15:14Z] llmctl models verify decide-laya
+[2026-10-08T09:15:14Z] RUN: _dl_verify_file /home/milosvasic/.local/share/llmctl/models/decide-laya/Laya-Q8_0.gguf 449397600 c06528c5746d3bb8baa72a27938be95abbfd0b226f8471e8a9e365ed0bb066d2
+[2026-10-08T09:15:15Z] EXIT: 0

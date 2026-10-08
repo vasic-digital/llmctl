@@ -1,8 +1,16 @@
 ## Overview
 
-`lib/engine.sh` builds llmctl's two inference engines — `llama.cpp` (via
-`cmake`) and `colibri` (via `make`, plus an optional Python launcher
-`pip install`) — from their pinned git submodules under `submodules/`. It
+`lib/engine.sh` builds llmctl's two compiled inference engines — `llama.cpp`
+(via `cmake`) and `colibri` (via `make`, plus an optional Python launcher
+`pip install`) — from their pinned git submodules under `submodules/`. A
+third engine, `onnx`, needs no compile: `engine_build_onnx` provisions the
+python environment of the internal encoder runtime (`lib/onnx_server.py`) —
+a private venv at `$LLMCTL_DATA_DIR/venv-onnx` installed from the committed
+`lib/lock/requirements-onnx.lock` with `--require-hashes --no-deps
+--only-binary=:all:` (via `python3 -m venv` + pip, or `uv` when
+python3-venv is absent). A lock marked `UNPINNED` or without sha256 hashes
+is refused; a hash mismatch aborts and removes the half-built venv.
+`engine_build all` builds the two compiled engines and then this venv. It
 auto-detects the best available GPU backend on the current host (CUDA on
 Linux with `nvcc`, Metal on macOS by default, ROCm on Linux with `rocm-smi`/
 `/opt/rocm`, or a CPU-native fallback) and passes the corresponding cmake
@@ -49,7 +57,9 @@ engine_build_colibri qwen36       # build only the qwen36 colibri target
 
 engine_build llama               # same as engine_build_llama
 engine_build colibri qwen36       # same as engine_build_colibri qwen36 (target args forwarded)
-engine_build all                  # llama.cpp then colibri (default)
+engine_build onnx                 # hash-locked private venv for the encoder runtime
+engine_build decide                # Go decision binary (gateway + client + key/cert) -> build/llmctl-decide (or $LLMCTL_DECIDE_BUILD_OUT)
+engine_build all                  # llama.cpp then colibri, then the onnx venv (default)
 engine_build                      # same as "all" (default argument)
 
 # via the CLI:
@@ -64,6 +74,22 @@ LLMCTL_DRY_RUN=1 bin/llmctl build all
 LLMCTL_LLAMA_SERVER=/custom/path/llama-server bin/llmctl models download fast
 ```
 
+## Safety and CLI contract (C-04, C-25, G-078)
+
+* **`llmctl build` requires a target.** A bare `llmctl build` prints `usage: llmctl build
+  <llama|colibri|onnx|decide|all>` on stderr and exits 2 - it used to start compiling everything
+  (breaking change, see CHANGELOG). `llmctl build all` is the explicit spelling.
+* **`build all` = llama + colibri + onnx + decide.** The registry, dynamic ports and the gateway unit
+  need `build/llmctl-decide`, so `all` includes it.
+* **The onnx venv is only ever deleted when llmctl made it (C-04).** `LLMCTL_ONNX_VENV` (default
+  `$LLMCTL_DATA_DIR/venv-onnx`) is overridable, and a rebuild used to `rm -rf` it unconditionally.
+  `engine_venv_prepare` now refuses (nothing is deleted, the build dies with the reason) a path that is
+  relative, `/`, a symlink, `$HOME`, the data dir, the install root or any ancestor of them, or an existing
+  directory that does not carry `.llmctl-onnx-venv` naming exactly that path (a copied marker is
+  rejected). A path that does not exist yet is fine; a marker-less venv at the DEFAULT location (built by an
+  older llmctl) is still replaceable. Every venv the build creates gets the marker. Tests:
+  `tests/test_engine_build_onnx.sh`, `tests/test_engine_build_decide.sh`.
+
 ## Edge cases
 
 * **Submodule initialization is conditional, not unconditional**:
@@ -75,7 +101,7 @@ LLMCTL_LLAMA_SERVER=/custom/path/llama-server bin/llmctl models download fast
   `case`-like `if`/`elif` chain in `engine_detect_backend` checks `macos`
   before CUDA/ROCm, so even a Linux-only backend probe (`nvcc`/`rocm-smi`)
   is never reached on macOS — Metal is always selected there regardless of
-  what else might theoretically be present.
+  what else is present.
 * **CUDA detection accepts either a `PATH`-resolved `nvcc` OR a hardcoded
   fallback path** (`/usr/local/cuda/bin/nvcc`) — a CUDA toolkit installed
   but not added to `PATH` at that exact conventional location is still
@@ -120,7 +146,7 @@ LLMCTL_LLAMA_SERVER=/custom/path/llama-server bin/llmctl models download fast
   `engine_build_colibri`'s own default-target logic.
 * **An unrecognized top-level build target is a hard error naming the valid
   choices**: `engine_build`'s `*)` branch dies with
-  `"unknown build target: ${what} (expected llama|colibri|all)"`.
+  `"unknown build target: ${what} (expected llama|colibri|onnx|all)"`.
 
 ## Internal behaviour
 

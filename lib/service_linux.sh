@@ -17,6 +17,8 @@ _svl_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${_svl_dir}/common.sh"
 # shellcheck source=hardware.sh
 source "${_svl_dir}/hardware.sh"
+# shellcheck source=portreg.sh
+source "${_svl_dir}/portreg.sh"
 
 svc_backend_name() { echo "systemd-user"; }
 
@@ -76,12 +78,21 @@ _svc_validate_tenant_id() {
   # id containing ".." ANYWHERE is exactly the path-traversal component
   # a filesystem join would otherwise resolve upward through.
   [[ "${id}" != *..* ]] || die "invalid LLMCTL_TENANT_ID: '${id}' (must not contain \"..\")"
+  # C3-08: registry/service row names are "<tenant>--<profile>"; the FIRST "--" is the separator. A tenant id holding
+  # "--" or ending in "-" would make "acme---small" / "acme--eu--small" belong to two tenants at once (and a tenant-
+  # scoped doctor diff would leak across them). Stricter than the Go-side pattern for this one reason; llmctld's
+  # internal/isolation applies the same two rules.
+  [[ "${id}" != *--* && "${id}" != *- ]] || die "invalid LLMCTL_TENANT_ID: '${id}' (must not contain \"--\" or end with \"-\": row names are <tenant>--<profile>)"
 }
 
 _svc_instance_key() {
   local profile="$1"
+  # C3-08: "--" is the tenant separator, so no profile name may hold it (a non-tenant profile "qwen--7b" would be
+  # indistinguishable from tenant "qwen" / profile "7b" and a non-tenant doctor diff would drop its row).
+  [[ "${profile}" != *--* ]] || die "invalid profile name '${profile}' (must not contain \"--\": it is the <tenant>--<profile> separator)"
   if [[ -n "${LLMCTL_TENANT_ID:-}" ]]; then
     _svc_validate_tenant_id "${LLMCTL_TENANT_ID}"
+    [[ "${profile}" != -* ]] || die "invalid profile name '${profile}' for tenant row names (must not start with \"-\": row names are <tenant>--<profile>)"
     echo "${LLMCTL_TENANT_ID}--${profile}"
   else
     echo "${profile}"
@@ -98,7 +109,8 @@ _svc_ensure_tenant_slice_dropin() {
   local unit="$1"
   [[ -n "${LLMCTL_TENANT_ID:-}" ]] || return 0
   _svc_validate_tenant_id "${LLMCTL_TENANT_ID}"
-  local dropin_dir="$(svc_unit_dir)/${unit}.d"
+  local dropin_dir
+  dropin_dir="$(svc_unit_dir)/${unit}.d"
   local dropin_file="${dropin_dir}/tenant-slice.conf"
   local want
   want="$(printf '[Service]\nSlice=llmctl-tenant-%s.slice\n' "${LLMCTL_TENANT_ID}")"
@@ -108,6 +120,175 @@ _svc_ensure_tenant_slice_dropin() {
   ensure_dir "${dropin_dir}"
   printf '%s' "${want}" > "${dropin_file}"
   _svc_sys daemon-reload
+}
+
+# --- unit bodies -------------------------------------------------------------
+# Hardening directives (FR-083). ONLY directives verified to take effect in the
+# systemd --user manager on the reference host are emitted; tests/
+# test_unit_hardening.sh re-proves each one against a live transient unit
+# (a probe that observes the effect, not a parse of the file) and SKIPs
+# honestly where no user manager is reachable. Measured on systemd 259:
+#   effective   NoNewPrivileges, ProtectSystem=full, UMask, and the seccomp
+#               group (RestrictAddressFamilies, RestrictSUIDSGID,
+#               LockPersonality, RestrictRealtime, SystemCallArchitectures)
+#   NOT honoured by the user manager here (so deliberately NOT written, a
+#   claim that is not true would be worse than no claim): PrivateTmp,
+#   ProtectHome, ProtectControlGroups, ProtectProc, PrivateDevices,
+#   ProtectClock, CapabilityBoundingSet.
+# "basic" is applied to chat engines (their GPU/CUDA stacks are unrestricted
+# beyond the two always-safe directives); "strict" to decision components,
+# which only need TCP/unix sockets and the file system.
+_svc_hardening() {
+  printf 'NoNewPrivileges=yes\nProtectSystem=full\n'
+  if [[ "${1:-basic}" == "strict" ]]; then
+    printf 'UMask=0077\nRestrictAddressFamilies=AF_UNIX AF_INET AF_INET6\n'
+    printf 'RestrictSUIDSGID=yes\nLockPersonality=yes\nRestrictRealtime=yes\n'
+    printf 'SystemCallArchitectures=native\n'
+  fi
+}
+
+# _svc_decide_bin_env_line -> "Environment=LLMCTL_DECIDE_BIN=<path>" when the
+# registry binary resolves now (explicit override or build/llmctl-decide), else
+# a comment (the hooks then fall back to the same search at run time).
+_svc_decide_bin_env_line() {
+  local b
+  if b="$(portreg_bin 2>/dev/null)"; then _svc_env LLMCTL_DECIDE_BIN "${b}"
+  else printf '# LLMCTL_DECIDE_BIN: registry binary not built at install time (llmctl build decide)'; fi
+}
+
+# _svc_q <string> -> the string as ONE systemd word: double-quoted, with systemd's C-style escapes
+# (\\ and \") and every `%` doubled (systemd expands %-specifiers in unit values, and splits an
+# unquoted value on whitespace). bash's printf %q is NOT systemd quoting. (C-18)
+_svc_q() {
+  local s="$1"
+  s="${s//\\/\\\\}"; s="${s//\"/\\\"}"; s="${s//%/%%}"
+  printf '"%s"' "${s}"
+}
+
+# _svc_qx <string> -> _svc_q for a word of an ExecStart*= LINE: systemd also expands $VAR / ${VAR} there, even
+# inside double quotes, so a literal `$` must be written `$$` (systemd.service(5), "Command lines"). NOT for
+# Environment= (see _svc_env), where the value is taken literally. (C2-12)
+_svc_qx() { local q; q="$(_svc_q "$1")"; printf '%s' "${q//\$/\$\$}"; }
+
+# _svc_env <KEY> <value> -> an `Environment="KEY=value"` line safe for paths with spaces or `%`.
+_svc_env() { printf 'Environment=%s' "$(_svc_q "$1=$2")"; }
+
+# _svc_pct <string> -> the string with every `%` doubled (for values that are one whole word
+# already, e.g. EnvironmentFile= / StandardOutput=append: paths).
+_svc_pct() { printf '%s' "${1//%/%%}"; }
+
+# _svc_hook_cmd <args...> -> the ExecStart*-ready command line of svc_hook.sh (the script path is
+# one quoted systemd word; the args are systemd specifiers such as %i and stay as given).
+_svc_hook_cmd() { printf '/bin/bash %s %s' "$(_svc_qx "${_svl_dir}/svc_hook.sh")" "$*"; }
+
+# _svc_engine_unit_body <description> <basic|strict> <memhigh-MiB> <memmax-MiB>
+_svc_engine_unit_body() {
+  local desc="$1" level="$2" memhigh="$3" memmax="$4"
+  cat <<EOF
+[Unit]
+Description=${desc}
+After=network-online.target
+Wants=network-online.target
+# Restart bounds belong in [Unit]: systemd ignores StartLimitIntervalSec= in
+# [Service] ("Unknown key ... ignoring", reproduced with systemd-analyze
+# --user verify on systemd 259), which silently left the interval at its
+# default. Restart=always never fires again once the burst is exhausted
+# (until reset-failed) - the crash-loop signal FR-044 surfaces in status.
+StartLimitBurst=5
+StartLimitIntervalSec=60
+
+[Service]
+Type=simple
+# The hooks below find the state/registry/log locations through these (the
+# manager's own environment would silently differ from the installing shell's
+# when LLMCTL_STATE_DIR & co. are overridden - registry and units must agree).
+$(_svc_env LLMCTL_ROOT "${LLMCTL_ROOT}")
+$(_svc_env LLMCTL_STATE_DIR "${LLMCTL_STATE_DIR}")
+$(_svc_env LLMCTL_LOG_DIR "${LLMCTL_LOG_DIR}")
+$(_svc_env LLMCTL_SERVICES_DIR "${LLMCTL_SERVICES_DIR}")
+$(_svc_decide_bin_env_line)
+EnvironmentFile=$(_svc_pct "${LLMCTL_SERVICES_DIR}")/%i.env
+# Root-caused 2026-09-17 (real repro on this host's systemd 259, not
+# guessed): systemd's \$VAR/\${VAR} expansion in ExecStart= applies ONLY to
+# the argument list, NEVER to the executable path itself (word 0) - a bare
+# "ExecStart=\${LLMCTL_EXEC} \${LLMCTL_ARGS}" therefore made systemd try to
+# literally exec a program named "\${LLMCTL_EXEC}", which always fails with
+# status=203/EXEC. The fix: exec through a shell, whose OWN path is a fixed,
+# parse-time-resolvable literal, and let that shell resolve the dynamic
+# executable from its inherited environment at RUN time.
+#
+# \`set -f\` (independent review, 2026-09-17): systemd's own expansion
+# word-splits but never globs; bash's \$LLMCTL_ARGS expansion DOES glob, so a
+# literal "a*b" argument was silently expanded into pathname matches. \`set -f\`
+# restores systemd's no-globbing behaviour exactly.
+#
+# Hooks (lib/svc_hook.sh): ExecStartPre rotates the engine's internal key
+# file on EVERY start (G-028: a true per-start key, not create-if-absent; a
+# no-op for services without a key file); ExecStartPost detaches a waiter that
+# publishes the service in the registry once it answers its health endpoint;
+# ExecStopPost removes the row (the port hold stays so a restart reuses the
+# port, FR-088). Registration failures never fail the unit (the "-" prefix).
+ExecStartPre=$(_svc_hook_cmd prestart %i)
+ExecStart=/bin/bash -c 'set -f; exec "\$LLMCTL_EXEC" \$LLMCTL_ARGS'
+ExecStartPost=-$(_svc_hook_cmd register %i)
+ExecStopPost=-$(_svc_hook_cmd unregister %i)
+Restart=always
+RestartSec=5
+MemoryHigh=${memhigh}M
+MemoryMax=${memmax}M
+$(_svc_hardening "${level}")
+StandardOutput=append:$(_svc_pct "${LLMCTL_LOG_DIR}")/%i.log
+StandardError=append:$(_svc_pct "${LLMCTL_LOG_DIR}")/%i.log
+
+[Install]
+WantedBy=default.target
+EOF
+}
+
+# _svc_unit_directives - reads a unit body on stdin and prints one "<[Section]>/<Key>" line per directive (an
+# Environment= line is keyed by its variable: "Environment:LLMCTL_ROOT"), sorted, unique; comments ignored. Only
+# directive NAMES are compared - values (memory limits, paths, descriptions) legitimately differ per install.
+_svc_unit_directives() {
+  awk '/^[[:space:]]*#/ {next}
+       /^\[/ {sec=$0; next}
+       /^[A-Za-z]+=/ {
+         k=$0; sub(/=.*/, "", k)
+         if (k == "Environment") { v=$0; sub(/^Environment="?/, "", v); sub(/=.*/, "", v); k="Environment:" v }
+         print sec "/" k
+       }' | LC_ALL=C sort -u
+}
+
+# svc_stale_units - prints one line per INSTALLED llmctl unit whose body predates a fix the current generator has.
+# Two checks, both measured against the CURRENT generator (C2-11), not against one remembered defect:
+#   1. G-067: StartLimitIntervalSec=/StartLimitBurst= inside [Service] (systemd ignores them there);
+#   2. every directive NAME the current generator writes for that unit class (rendered fresh from the same
+#      functions svc_install uses) must be present in the installed file: a unit from before the registry hooks,
+#      the state-dir environment, a hardening directive, ... is stale. Extra directives and different values are
+#      not stale. Environment:LLMCTL_DECIDE_BIN is exempt from the engine units' set (the generator writes a
+#      comment instead when the binary was not built at install time).
+# Nothing is printed for a clean install.
+svc_stale_units() {
+  local f base expected got missing
+  for f in "$(svc_unit_dir)"/llmctl-*.service; do
+    [[ -f "${f}" ]] || continue
+    base="$(basename "${f}")"
+    if awk '/^\[/{sec=$0} sec=="[Service]" && /^[[:space:]]*StartLimit(Interval(Sec)?|Burst)=/{found=1} END{exit !found}' "${f}"; then
+      printf '%s: StartLimit*= inside [Service] is ignored by systemd (restart bound not applied); regenerate with: llmctl install\n' "${base}"
+    fi
+    case "${base}" in
+      llmctl-llama@.service|llmctl-colibri@.service) expected="$(_svc_engine_unit_body x basic 1 1 | _svc_unit_directives)" ;;
+      llmctl-onnx@.service)                          expected="$(_svc_engine_unit_body x strict 1 1 | _svc_unit_directives)" ;;
+      "${DECIDE_GATEWAY_UNIT}")                      expected="$(_decide_gateway_unit_body /x 1 1 | _svc_unit_directives)" ;;
+      *) continue ;;
+    esac
+    expected="$(printf '%s\n' "${expected}" | grep -v -x '\[Service\]/Environment:LLMCTL_DECIDE_BIN' || true)"
+    got="$(_svc_unit_directives < "${f}")"
+    missing="$(comm -23 <(printf '%s\n' "${expected}") <(printf '%s\n' "${got}") | sed 's#^\[[A-Za-z]*\]/##' | paste -sd, - | sed 's/,/, /g')"
+    if [[ -n "${missing}" ]]; then
+      printf '%s: lacks directive(s) the current generator writes (%s); regenerate with: llmctl install\n' "${base}" "${missing}"
+    fi
+  done
+  return 0
 }
 
 # --- unit installation -------------------------------------------------------
@@ -134,79 +315,25 @@ svc_install() {
   memmax="${total}"
   memhigh="${total}"
 
-  cat > "${unit_dir}/llmctl-llama@.service" <<EOF
-[Unit]
-Description=llmctl llama.cpp inference server (profile %i)
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-Type=simple
-EnvironmentFile=${LLMCTL_SERVICES_DIR}/%i.env
-# Root-caused 2026-09-17 (real repro on this host's systemd 259, not
-# guessed): systemd's \$VAR/\${VAR} expansion in ExecStart= applies ONLY to
-# the argument list, NEVER to the executable path itself (word 0) - it
-# needs that path resolvable at unit-parse time. A bare
-# "ExecStart=\${LLMCTL_EXEC} \${LLMCTL_ARGS}" therefore made systemd try to
-# literally exec a program named "\${LLMCTL_EXEC}", which always fails
-# with status=203/EXEC ("Unable to locate executable '\${LLMCTL_EXEC}'")
-# regardless of profile, host, or how correct the .env file's real values
-# are - reproduced directly with a minimal two-line test unit before this
-# fix, and confirmed the argument-position case (\${VAR} after a literal
-# executable path) DOES expand correctly. The fix: exec through a shell,
-# whose OWN path is a fixed, parse-time-resolvable literal, and let that
-# shell resolve the dynamic executable from its inherited environment at
-# RUN time - proven with the exact real form below before landing it here.
-#
-# `set -f` (independent review, 2026-09-17): systemd's own \$VAR expansion
-# performs word-splitting but NEVER globbing - the fix above swaps that for
-# bash's \$LLMCTL_ARGS expansion, which DOES glob by default, verified live
-# with a real systemd unit + arg-printing target: a literal "a*b" argument
-# from a %q-escaped LLMCTL_ARGS was silently expanded into two separate
-# argv entries by pathname matches in the cwd. Reachable if any launch
-# argument (a model path, profile name, LLMCTL_MODELS_DIR, a save-path)
-# ever contains *, ?, or [...]. `set -f` disables that expansion for this
-# shell only, restoring systemd's own no-globbing behavior exactly.
-ExecStart=/bin/bash -c 'set -f; exec "\$LLMCTL_EXEC" \$LLMCTL_ARGS'
-Restart=always
-RestartSec=5
-StartLimitBurst=5
-StartLimitIntervalSec=60
-MemoryHigh=${memhigh}M
-MemoryMax=${memmax}M
-StandardOutput=append:${LLMCTL_LOG_DIR}/%i.log
-StandardError=append:${LLMCTL_LOG_DIR}/%i.log
-
-[Install]
-WantedBy=default.target
-EOF
-
-  cat > "${unit_dir}/llmctl-colibri@.service" <<EOF
-[Unit]
-Description=llmctl colibri inference server (profile %i)
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-Type=simple
-EnvironmentFile=${LLMCTL_SERVICES_DIR}/%i.env
-# See the matching note in the llmctl-llama@.service template above -
-# same systemd ExecStart= executable-path-expansion limitation, same fix
-# (including the set -f no-globbing restoration).
-ExecStart=/bin/bash -c 'set -f; exec "\$LLMCTL_EXEC" \$LLMCTL_ARGS'
-Restart=always
-RestartSec=5
-StartLimitBurst=5
-StartLimitIntervalSec=60
-MemoryHigh=${memhigh}M
-MemoryMax=${memmax}M
-StandardOutput=append:${LLMCTL_LOG_DIR}/%i.log
-StandardError=append:${LLMCTL_LOG_DIR}/%i.log
-
-[Install]
-WantedBy=default.target
-EOF
+  # The three engine templates share one body (_svc_engine_unit_body); they
+  # differ only in description and hardening level.
+  _svc_engine_unit_body "llmctl llama.cpp inference server (profile %i)" basic \
+    "${memhigh}" "${memmax}" > "${unit_dir}/llmctl-llama@.service"
+  _svc_engine_unit_body "llmctl onnx encoder decision server (profile %i)" strict \
+    "${memhigh}" "${memmax}" > "${unit_dir}/llmctl-onnx@.service"
+  _svc_engine_unit_body "llmctl colibri inference server (profile %i)" basic \
+    "${memhigh}" "${memmax}" > "${unit_dir}/llmctl-colibri@.service"
   info "installed systemd user units into ${unit_dir} (MemoryHigh=${memhigh}M MemoryMax=${memmax}M)"
+  # The decision gateway's boot service is regenerated too when it is installed: units written by an
+  # earlier llmctl keep their old body (G-067: StartLimitIntervalSec in [Service]) until this runs.
+  if [[ -f "${unit_dir}/${DECIDE_GATEWAY_UNIT}" ]]; then
+    if portreg_bin >/dev/null 2>&1; then
+      _decide_gateway_write_unit >/dev/null
+      info "regenerated ${DECIDE_GATEWAY_UNIT}"
+    else
+      warn "${DECIDE_GATEWAY_UNIT} is installed but the llmctl-decide binary is missing: it was NOT regenerated (llmctl build decide, then llmctl install)"
+    fi
+  fi
 
   _svc_sys daemon-reload
 
@@ -249,6 +376,7 @@ svc_write_env() {
   ensure_dir "${LLMCTL_SERVICES_DIR}"
   local instance; instance="$(_svc_instance_key "${profile}")"
   local env_file="${LLMCTL_SERVICES_DIR}/${instance}.env"
+  ( umask 077; : > "${env_file}" )   # created 0600 before any content is written
   {
     printf 'LLMCTL_PROFILE=%q\n' "${profile}"
     printf 'LLMCTL_ENGINE=%q\n' "${engine}"
@@ -287,7 +415,13 @@ svc_write_env() {
     printf 'LLMCTL_ARGS='
     printf '%q ' "$@"
     printf '\n'
+    # Registration metadata for lib/svc_hook.sh (port, process token, kind,
+    # health path, key-file PATH) - see portreg_env_lines.
+    portreg_env_lines "${profile}" "${engine}" "${exec_bin}" "$@"
   } > "${env_file}"
+  # Owner-only (D-03): the record names key-file paths and is read by the
+  # service manager as the same user; nothing else has a business reading it.
+  chmod 600 "${env_file}"
   log "wrote ${env_file}"
 }
 
@@ -381,11 +515,159 @@ svc_is_failed() {
   systemctl --user is-failed --quiet "$(_svc_unit_for "${profile}")"
 }
 
-# Profiles with an env file (i.e. known to llmctl).
+# Profiles with an env file (i.e. known to llmctl). The env files are named by the INSTANCE key
+# (<tenant>--<profile> under LLMCTL_TENANT_ID); this returns PROFILE names - every other function
+# (svc_is_active, svc_main_pid, _svc_unit_for ...) re-applies the tenant prefix itself, so
+# returning instance keys doubled it (`acme--acme--small`) and made the doctor's live set empty.
+# Under a tenant only that tenant's files are listed (another tenant's services are not ours).
 svc_known_profiles() {
-  local f
+  local f b tid="${LLMCTL_TENANT_ID:-}"
   for f in "${LLMCTL_SERVICES_DIR}"/*.env; do
     [[ -e "${f}" ]] || continue
-    basename "${f}" .env
+    b="$(basename "${f}" .env)"
+    if [[ -n "${tid}" ]]; then
+      [[ "${b}" == "${tid}--"* ]] || continue
+      b="${b#"${tid}--"}"
+    fi
+    printf '%s\n' "${b}"
   done
+}
+
+# svc_main_pid <profile> -> the main process id of the running unit (empty
+# when not running / unknown). Used to register the service with its REAL
+# process identity (the registry re-checks argv, never trusts the row).
+svc_main_pid() {
+  local pid=""
+  if [[ "${LLMCTL_DRY_RUN:-0}" == "1" ]]; then return 0; fi
+  pid="$(systemctl --user show -p MainPID --value "$(_svc_unit_for "$1")" 2>/dev/null || true)"
+  [[ "${pid}" =~ ^[0-9]+$ && "${pid}" -gt 1 ]] && printf '%s\n' "${pid}"
+  return 0
+}
+
+# svc_peak_rss_kb <pid> -> high-water resident set (VmHWM) in KiB, for the
+# FR-083 "record the measured peak memory of every decision component"
+# evidence. Reads the real /proc record; prints nothing when unreadable.
+svc_peak_rss_kb() {
+  sed -n 's/^VmHWM:[[:space:]]*\([0-9]*\) kB.*/\1/p' "/proc/${1}/status" 2>/dev/null | head -1
+}
+
+# --- decision gateway as a boot-time user service (spec 009 FR-031, G-041) ---
+DECIDE_GATEWAY_UNIT="llmctl-decide-gateway.service"
+
+# _decide_gateway_unit_body <bin> <memhigh-MiB> <memmax-MiB>
+# Memory policy (OD-14, the 2026-09-15 operator decision, same as every other
+# llmctl unit): NO artificial ceiling below physical RAM. MemoryHigh=MemoryMax=
+# the probed total keeps the cgroup-level containment of a runaway process
+# without throttling the gateway. The measured peak is recorded in the QA
+# evidence regardless of policy (FR-083).
+_decide_gateway_unit_body() {
+  local bin="$1" memhigh="$2" memmax="$3"
+  cat <<EOF
+[Unit]
+Description=llmctl decision gateway (HTTPS, key-protected; engines stay loopback-only)
+After=network-online.target
+Wants=network-online.target
+# Restart bounds in [Unit] - the only section systemd honours them in.
+StartLimitBurst=5
+StartLimitIntervalSec=60
+
+[Service]
+Type=simple
+$(_svc_env LLMCTL_ROOT "${LLMCTL_ROOT}")
+$(_svc_env LLMCTL_STATE_DIR "${LLMCTL_STATE_DIR}")
+$(_svc_env LLMCTL_LOG_DIR "${LLMCTL_LOG_DIR}")
+$(_svc_env LLMCTL_SERVICES_DIR "${LLMCTL_SERVICES_DIR}")
+$(_svc_env LLMCTL_CONFIG_DIR "${LLMCTL_CONFIG_DIR}")
+$(_svc_env LLMCTL_DATA_DIR "${LLMCTL_DATA_DIR}")
+$(_svc_env LLMCTL_RUNTIME_DIR "${LLMCTL_RUNTIME_DIR}")
+$(_svc_env LLMCTL_DECIDE_BIN "${bin}")
+# Operator overrides (LLMCTL_DECIDE_PORT, LLMCTL_DECIDE_BIND,
+# LLMCTL_PORT_STRATEGY=dynamic, LLMCTL_PORT_GATEWAY=auto, LLMCTL_DECIDE_MODE,
+# ...) go in this optional file; no secret belongs in it (the access key lives
+# in the installation .env, which the gateway reads itself, mode 0600).
+EnvironmentFile=-$(_svc_pct "${LLMCTL_STATE_DIR}")/decide/gateway.conf
+# The wrapper allocates the port (fixed 8095 by default, dynamic on request),
+# resolves decision backends from the registry, publishes the gateway
+# (kind=gateway) and finally EXECs: llmctl-decide serve --foreground
+ExecStart=$(_svc_hook_cmd run-gateway)
+ExecStopPost=-$(_svc_hook_cmd unregister gateway)
+Restart=always
+RestartSec=5
+MemoryHigh=${memhigh}M
+MemoryMax=${memmax}M
+$(_svc_hardening strict)
+StandardOutput=append:$(_svc_pct "${LLMCTL_LOG_DIR}")/decide-gateway.log
+StandardError=append:$(_svc_pct "${LLMCTL_LOG_DIR}")/decide-gateway.log
+
+[Install]
+WantedBy=default.target
+EOF
+}
+
+# _decide_gateway_write_unit - writes the unit file (plain file I/O: also in
+# dry-run, like svc_install) and prints its path.
+_decide_gateway_write_unit() {
+  local bin total unit_dir
+  bin="$(portreg_bin)" || die "llmctl-decide binary not found - build it first: llmctl build decide"
+  total="$(hw_probe_json | json_stdin 'd["memory"]["total_mb"]')" \
+    || die "cannot probe memory for service limits"
+  unit_dir="$(svc_unit_dir)"
+  ensure_dir "${unit_dir}"
+  ensure_state_dirs
+  ensure_dir "${LLMCTL_STATE_DIR}/decide"
+  _decide_gateway_unit_body "${bin}" "${total}" "${total}" > "${unit_dir}/${DECIDE_GATEWAY_UNIT}"
+  printf '%s\n' "${unit_dir}/${DECIDE_GATEWAY_UNIT}"
+}
+
+# decide_service_enable - install + enable + start the gateway user service
+# (called by `llmctl decide serve --enable`).
+decide_service_enable() {
+  _decide_gateway_write_unit >/dev/null
+  info "installed ${DECIDE_GATEWAY_UNIT} into $(svc_unit_dir)"
+  _svc_sys daemon-reload
+  if [[ "${LLMCTL_DRY_RUN}" == "1" ]]; then
+    printf '[dry-run] loginctl enable-linger %s\n' "${USER:-$(id -un)}"
+  elif have_cmd loginctl; then
+    loginctl enable-linger "${USER:-$(id -un)}" 2>/dev/null \
+      || warn "loginctl enable-linger failed; retry with: sudo loginctl enable-linger ${USER:-$(id -un)}"
+  fi
+  _svc_sys enable "${DECIDE_GATEWAY_UNIT}"
+  _svc_sys start "${DECIDE_GATEWAY_UNIT}"
+}
+
+# decide_service_disable - stop + disable + remove the unit and the gateway's
+# registry row / port hold (called by `llmctl decide serve --disable`).
+decide_service_disable() {
+  _svc_sys stop "${DECIDE_GATEWAY_UNIT}" || true
+  _svc_sys disable "${DECIDE_GATEWAY_UNIT}" || true
+  # a dry run must leave the real unit alone (C-12): the service keeps running, so deleting its
+  # unit file would orphan it from systemd's management
+  if [[ "${LLMCTL_DRY_RUN}" == "1" ]]; then
+    printf '[dry-run] rm -f %s\n' "$(svc_unit_dir)/${DECIDE_GATEWAY_UNIT}"
+  else
+    rm -f "$(svc_unit_dir)/${DECIDE_GATEWAY_UNIT}"
+  fi
+  _svc_sys daemon-reload
+  portreg_unregister decide-gateway
+  portreg_release gateway
+  info "removed ${DECIDE_GATEWAY_UNIT}"
+}
+
+# decide_service_main_pid -> main pid of the running gateway unit (empty if none).
+decide_service_main_pid() {
+  local pid=""
+  [[ "${LLMCTL_DRY_RUN:-0}" == "1" ]] && return 0
+  pid="$(systemctl --user show -p MainPID --value "${DECIDE_GATEWAY_UNIT}" 2>/dev/null || true)"
+  [[ "${pid}" =~ ^[0-9]+$ && "${pid}" -gt 1 ]] && printf '%s\n' "${pid}"
+  return 0
+}
+
+# decide_service_status - the unit's own state (the gateway process/cert/key
+# state is `llmctl decide serve --status`, which verifies the real process).
+decide_service_status() {
+  if [[ "${LLMCTL_DRY_RUN}" == "1" ]]; then
+    printf '[dry-run] systemctl --user status %s\n' "${DECIDE_GATEWAY_UNIT}"
+    return 0
+  fi
+  systemctl --user --no-pager status "${DECIDE_GATEWAY_UNIT}" || true
 }

@@ -1,0 +1,28 @@
+{
+ "id": "fixt/pickle-pin",
+ "modelId": "fixt/pickle-pin",
+ "author": "fixt",
+ "private": false,
+ "gated": false,
+ "disabled": false,
+ "sha": "0123456789abcdef0123456789abcdef01234567",
+ "lastModified": "2026-10-01T00:00:00.000Z",
+ "tags": [
+  "license:apache-2.0"
+ ],
+ "siblings": [
+  {
+   "rfilename": "weights.bin",
+   "blobId": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+   "size": 529296864,
+   "lfs": {
+    "sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+    "size": 529296864,
+    "pointerSize": 134
+   }
+  }
+ ],
+ "cardData": {
+  "license": "apache-2.0"
+ }
+}

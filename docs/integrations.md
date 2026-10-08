@@ -39,6 +39,14 @@ serves the loaded model, so `"model": "local"` works in practice.
 > configuration schema at the time of writing. When in doubt, check the tool's
 > own docs.
 
+## Decision gateway for agents
+
+Separate from pointing an agent at a chat profile: coding agents can also make **typed decision calls** (gating, routing) through the HTTPS
+decision gateway. The per-agent hook, shell and MCP forms, the install script (`scripts/install_agents.sh`, pins in `scripts/agents.lock`) and
+how to prove from the gateway's request log that a call happened are in [`docs/agents/README.md`](agents/README.md). Keys are always environment
+references, never literals; an unpinned offline `aider` install is refused unless `LLMCTL_AGENTS_ALLOW_UNVERIFIED=1`. No agent has been exercised live with
+a real prompt through the gateway yet ([limitations](limitations.md)).
+
 ## Installing the CLI agents
 
 Every one of the 7 supported CLI agents can be installed and verified with

@@ -1,0 +1,38 @@
+{
+ "id": "fixt/nli-good",
+ "modelId": "fixt/nli-good",
+ "author": "fixt",
+ "private": false,
+ "gated": false,
+ "disabled": false,
+ "sha": "0123456789abcdef0123456789abcdef01234567",
+ "lastModified": "2026-10-01T00:00:00.000Z",
+ "tags": [
+  "license:mit"
+ ],
+ "siblings": [
+  {
+   "rfilename": "onnx/model.onnx",
+   "blobId": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+   "size": 1741985401,
+   "lfs": {
+    "sha256": "5555555555555555555555555555555555555555555555555555555555555555",
+    "size": 1741985401,
+    "pointerSize": 134
+   }
+  },
+  {
+   "rfilename": "onnx/spm.model",
+   "blobId": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+   "size": 2464616,
+   "lfs": {
+    "sha256": "6666666666666666666666666666666666666666666666666666666666666666",
+    "size": 2464616,
+    "pointerSize": 134
+   }
+  }
+ ],
+ "cardData": {
+  "license": "mit"
+ }
+}

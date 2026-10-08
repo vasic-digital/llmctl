@@ -1,0 +1,8 @@
+  ok: resume against Range-capable server succeeds
+  ok: resumed file's sha256 matches the full payload
+  ok: no .part file left behind after successful resume
+  ok: server actually received a Range request starting at the pre-existing byte offset (genuine resume, not a from-scratch refetch)
+  ok: download succeeds even when the server does not support Range (falls back to full re-download)
+  ok: fallback-re-downloaded file's sha256 matches the full payload
+  ok: no .part file left behind after fallback re-download
+RESULT: PASS

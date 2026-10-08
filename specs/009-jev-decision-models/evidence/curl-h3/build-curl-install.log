@@ -1,0 +1,138 @@
+Making install in lib
+make[1]: Entering directory '/home/milosvasic/.local/share/llmctl/tools/curl-h3/src/curl-8.22.0/lib'
+make[2]: Entering directory '/home/milosvasic/.local/share/llmctl/tools/curl-h3/src/curl-8.22.0/lib'
+ /usr/bin/mkdir -p '/home/milosvasic/.local/share/llmctl/tools/curl-h3/prefix/lib'
+ /bin/bash ../libtool   --mode=install /usr/bin/install -c   libcurl.la '/home/milosvasic/.local/share/llmctl/tools/curl-h3/prefix/lib'
+libtool: install: /usr/bin/install -c .libs/libcurl.lai /home/milosvasic/.local/share/llmctl/tools/curl-h3/prefix/lib/libcurl.la
+libtool: install: /usr/bin/install -c .libs/libcurl.a /home/milosvasic/.local/share/llmctl/tools/curl-h3/prefix/lib/libcurl.a
+libtool: install: chmod 644 /home/milosvasic/.local/share/llmctl/tools/curl-h3/prefix/lib/libcurl.a
+libtool: install: ranlib /home/milosvasic/.local/share/llmctl/tools/curl-h3/prefix/lib/libcurl.a
+libtool: finish: PATH="/home/milosvasic/Projects/tmux/scripts:/home/milosvasic/Projects/tmux/scripts:/home/milosvasic/.kilo/bin:/home/milosvasic/.mimocode/bin:/home/milosvasic/.local/bin:/home/milosvasic/Android/Sdk/cmdline-tools/latest/bin:/home/milosvasic/Android/Sdk/platform-tools:/home/milosvasic/scripts:/home/milosvasic/.local/bin:/home/milosvasic/.kimi-code/bin:/home/milosvasic/.opencode/bin:/home/milosvasic/Projects/tmux/scripts:/home/milosvasic/.kilo/bin:/home/milosvasic/.mimocode/bin:/home/milosvasic/.local/bin:/home/milosvasic/Android/Sdk/cmdline-tools/latest/bin:/home/milosvasic/Android/Sdk/platform-tools:/home/milosvasic/scripts:/home/milosvasic/.local/bin:/home/milosvasic/.kimi-code/bin:/home/milosvasic/.opencode/bin:/home/milosvasic/.nvm/versions/node/v26.8.1/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/home/milosvasic/Projects/project_toolkit:/home/milosvasic/Projects/project_toolkit/Upstreamable:/home/milosvasic/Projects/project_toolkit/Installable:/home/milosvasic/Projects/project_toolkit:/home/milosvasic/Projects/project_toolkit/Upstreamable:/home/milosvasic/Projects/project_toolkit/Installable:/home/milosvasic/.claude-claude1/plugins/cache/claude-plugins-official/lumen/0.0.42/bin:/sbin" ldconfig -n /home/milosvasic/.local/share/llmctl/tools/curl-h3/prefix/lib
+----------------------------------------------------------------------
+Libraries have been installed in:
+   /home/milosvasic/.local/share/llmctl/tools/curl-h3/prefix/lib
+
+If you ever happen to want to link against installed libraries
+in a given directory, LIBDIR, you must either use libtool, and
+specify the full pathname of the library, or use the '-LLIBDIR'
+flag during linking and do at least one of the following:
+   - add LIBDIR to the 'LD_LIBRARY_PATH' environment variable
+     during execution
+   - add LIBDIR to the 'LD_RUN_PATH' environment variable
+     during linking
+   - use the '-Wl,-rpath -Wl,LIBDIR' linker flag
+   - have your system administrator add LIBDIR to '/etc/ld.so.conf'
+
+See any operating system documentation about shared libraries for
+more information, such as the ld(1) and ld.so(8) manual pages.
+----------------------------------------------------------------------
+make[2]: Nothing to be done for 'install-data-am'.
+make[2]: Leaving directory '/home/milosvasic/.local/share/llmctl/tools/curl-h3/src/curl-8.22.0/lib'
+make[1]: Leaving directory '/home/milosvasic/.local/share/llmctl/tools/curl-h3/src/curl-8.22.0/lib'
+Making install in docs
+make[1]: Entering directory '/home/milosvasic/.local/share/llmctl/tools/curl-h3/src/curl-8.22.0/docs'
+Making install in .
+make[2]: Entering directory '/home/milosvasic/.local/share/llmctl/tools/curl-h3/src/curl-8.22.0/docs'
+make[3]: Entering directory '/home/milosvasic/.local/share/llmctl/tools/curl-h3/src/curl-8.22.0/docs'
+make[3]: Nothing to be done for 'install-exec-am'.
+make[3]: Leaving directory '/home/milosvasic/.local/share/llmctl/tools/curl-h3/src/curl-8.22.0/docs'
+make[2]: Leaving directory '/home/milosvasic/.local/share/llmctl/tools/curl-h3/src/curl-8.22.0/docs'
+Making install in cmdline-opts
+make[2]: Entering directory '/home/milosvasic/.local/share/llmctl/tools/curl-h3/src/curl-8.22.0/docs/cmdline-opts'
+make[3]: Entering directory '/home/milosvasic/.local/share/llmctl/tools/curl-h3/src/curl-8.22.0/docs/cmdline-opts'
+make[3]: Nothing to be done for 'install-exec-am'.
+make[3]: Leaving directory '/home/milosvasic/.local/share/llmctl/tools/curl-h3/src/curl-8.22.0/docs/cmdline-opts'
+make[2]: Leaving directory '/home/milosvasic/.local/share/llmctl/tools/curl-h3/src/curl-8.22.0/docs/cmdline-opts'
+Making install in libcurl
+make[2]: Entering directory '/home/milosvasic/.local/share/llmctl/tools/curl-h3/src/curl-8.22.0/docs/libcurl'
+Making install in opts
+make[3]: Entering directory '/home/milosvasic/.local/share/llmctl/tools/curl-h3/src/curl-8.22.0/docs/libcurl/opts'
+make[4]: Entering directory '/home/milosvasic/.local/share/llmctl/tools/curl-h3/src/curl-8.22.0/docs/libcurl/opts'
+make[4]: Nothing to be done for 'install-exec-am'.
+make[4]: Leaving directory '/home/milosvasic/.local/share/llmctl/tools/curl-h3/src/curl-8.22.0/docs/libcurl/opts'
+make[3]: Leaving directory '/home/milosvasic/.local/share/llmctl/tools/curl-h3/src/curl-8.22.0/docs/libcurl/opts'
+make[3]: Entering directory '/home/milosvasic/.local/share/llmctl/tools/curl-h3/src/curl-8.22.0/docs/libcurl'
+make[4]: Entering directory '/home/milosvasic/.local/share/llmctl/tools/curl-h3/src/curl-8.22.0/docs/libcurl'
+make[4]: Nothing to be done for 'install-exec-am'.
+ /usr/bin/mkdir -p '/home/milosvasic/.local/share/llmctl/tools/curl-h3/prefix/share/aclocal'
+ /usr/bin/install -c -m 644 libcurl.m4 '/home/milosvasic/.local/share/llmctl/tools/curl-h3/prefix/share/aclocal'
+make[4]: Leaving directory '/home/milosvasic/.local/share/llmctl/tools/curl-h3/src/curl-8.22.0/docs/libcurl'
+make[3]: Leaving directory '/home/milosvasic/.local/share/llmctl/tools/curl-h3/src/curl-8.22.0/docs/libcurl'
+make[2]: Leaving directory '/home/milosvasic/.local/share/llmctl/tools/curl-h3/src/curl-8.22.0/docs/libcurl'
+make[1]: Leaving directory '/home/milosvasic/.local/share/llmctl/tools/curl-h3/src/curl-8.22.0/docs'
+Making install in src
+make[1]: Entering directory '/home/milosvasic/.local/share/llmctl/tools/curl-h3/src/curl-8.22.0/src'
+make[2]: Entering directory '/home/milosvasic/.local/share/llmctl/tools/curl-h3/src/curl-8.22.0/src'
+ /usr/bin/mkdir -p '/home/milosvasic/.local/share/llmctl/tools/curl-h3/prefix/bin'
+  /bin/bash ../libtool   --mode=install /usr/bin/install -c curl '/home/milosvasic/.local/share/llmctl/tools/curl-h3/prefix/bin'
+libtool: install: /usr/bin/install -c curl /home/milosvasic/.local/share/llmctl/tools/curl-h3/prefix/bin/curl
+make[2]: Nothing to be done for 'install-data-am'.
+make[2]: Leaving directory '/home/milosvasic/.local/share/llmctl/tools/curl-h3/src/curl-8.22.0/src'
+make[1]: Leaving directory '/home/milosvasic/.local/share/llmctl/tools/curl-h3/src/curl-8.22.0/src'
+Making install in scripts
+make[1]: Entering directory '/home/milosvasic/.local/share/llmctl/tools/curl-h3/src/curl-8.22.0/scripts'
+make[2]: Entering directory '/home/milosvasic/.local/share/llmctl/tools/curl-h3/src/curl-8.22.0/scripts'
+ /usr/bin/mkdir -p '/home/milosvasic/.local/share/llmctl/tools/curl-h3/prefix/bin'
+ /usr/bin/install -c wcurl '/home/milosvasic/.local/share/llmctl/tools/curl-h3/prefix/bin'
+make[2]: Nothing to be done for 'install-data-am'.
+make[2]: Leaving directory '/home/milosvasic/.local/share/llmctl/tools/curl-h3/src/curl-8.22.0/scripts'
+make[1]: Leaving directory '/home/milosvasic/.local/share/llmctl/tools/curl-h3/src/curl-8.22.0/scripts'
+make[1]: Entering directory '/home/milosvasic/.local/share/llmctl/tools/curl-h3/src/curl-8.22.0'
+make[2]: Entering directory '/home/milosvasic/.local/share/llmctl/tools/curl-h3/src/curl-8.22.0'
+ /usr/bin/mkdir -p '/home/milosvasic/.local/share/llmctl/tools/curl-h3/prefix/bin'
+ /usr/bin/install -c curl-config '/home/milosvasic/.local/share/llmctl/tools/curl-h3/prefix/bin'
+ /usr/bin/mkdir -p '/home/milosvasic/.local/share/llmctl/tools/curl-h3/prefix/lib/pkgconfig'
+ /usr/bin/install -c -m 644 libcurl.pc '/home/milosvasic/.local/share/llmctl/tools/curl-h3/prefix/lib/pkgconfig'
+make  install-data-hook
+make[3]: Entering directory '/home/milosvasic/.local/share/llmctl/tools/curl-h3/src/curl-8.22.0'
+(cd include && make install)
+make[4]: Entering directory '/home/milosvasic/.local/share/llmctl/tools/curl-h3/src/curl-8.22.0/include'
+Making install in curl
+make[5]: Entering directory '/home/milosvasic/.local/share/llmctl/tools/curl-h3/src/curl-8.22.0/include/curl'
+make[6]: Entering directory '/home/milosvasic/.local/share/llmctl/tools/curl-h3/src/curl-8.22.0/include/curl'
+make[6]: Nothing to be done for 'install-exec-am'.
+ /usr/bin/mkdir -p '/home/milosvasic/.local/share/llmctl/tools/curl-h3/prefix/include/curl'
+ /usr/bin/install -c -m 644 curl.h curlver.h easy.h mprintf.h stdcheaders.h multi.h typecheck-gcc.h system.h urlapi.h options.h header.h websockets.h '/home/milosvasic/.local/share/llmctl/tools/curl-h3/prefix/include/curl'
+make[6]: Leaving directory '/home/milosvasic/.local/share/llmctl/tools/curl-h3/src/curl-8.22.0/include/curl'
+make[5]: Leaving directory '/home/milosvasic/.local/share/llmctl/tools/curl-h3/src/curl-8.22.0/include/curl'
+make[5]: Entering directory '/home/milosvasic/.local/share/llmctl/tools/curl-h3/src/curl-8.22.0/include'
+make[6]: Entering directory '/home/milosvasic/.local/share/llmctl/tools/curl-h3/src/curl-8.22.0/include'
+make[6]: Nothing to be done for 'install-exec-am'.
+make[6]: Nothing to be done for 'install-data-am'.
+make[6]: Leaving directory '/home/milosvasic/.local/share/llmctl/tools/curl-h3/src/curl-8.22.0/include'
+make[5]: Leaving directory '/home/milosvasic/.local/share/llmctl/tools/curl-h3/src/curl-8.22.0/include'
+make[4]: Leaving directory '/home/milosvasic/.local/share/llmctl/tools/curl-h3/src/curl-8.22.0/include'
+(cd docs && make install)
+make[4]: Entering directory '/home/milosvasic/.local/share/llmctl/tools/curl-h3/src/curl-8.22.0/docs'
+Making install in .
+make[5]: Entering directory '/home/milosvasic/.local/share/llmctl/tools/curl-h3/src/curl-8.22.0/docs'
+make[6]: Entering directory '/home/milosvasic/.local/share/llmctl/tools/curl-h3/src/curl-8.22.0/docs'
+make[6]: Nothing to be done for 'install-exec-am'.
+make[6]: Leaving directory '/home/milosvasic/.local/share/llmctl/tools/curl-h3/src/curl-8.22.0/docs'
+make[5]: Leaving directory '/home/milosvasic/.local/share/llmctl/tools/curl-h3/src/curl-8.22.0/docs'
+Making install in cmdline-opts
+make[5]: Entering directory '/home/milosvasic/.local/share/llmctl/tools/curl-h3/src/curl-8.22.0/docs/cmdline-opts'
+make[6]: Entering directory '/home/milosvasic/.local/share/llmctl/tools/curl-h3/src/curl-8.22.0/docs/cmdline-opts'
+make[6]: Nothing to be done for 'install-exec-am'.
+make[6]: Leaving directory '/home/milosvasic/.local/share/llmctl/tools/curl-h3/src/curl-8.22.0/docs/cmdline-opts'
+make[5]: Leaving directory '/home/milosvasic/.local/share/llmctl/tools/curl-h3/src/curl-8.22.0/docs/cmdline-opts'
+Making install in libcurl
+make[5]: Entering directory '/home/milosvasic/.local/share/llmctl/tools/curl-h3/src/curl-8.22.0/docs/libcurl'
+Making install in opts
+make[6]: Entering directory '/home/milosvasic/.local/share/llmctl/tools/curl-h3/src/curl-8.22.0/docs/libcurl/opts'
+make[7]: Entering directory '/home/milosvasic/.local/share/llmctl/tools/curl-h3/src/curl-8.22.0/docs/libcurl/opts'
+make[7]: Nothing to be done for 'install-exec-am'.
+make[7]: Leaving directory '/home/milosvasic/.local/share/llmctl/tools/curl-h3/src/curl-8.22.0/docs/libcurl/opts'
+make[6]: Leaving directory '/home/milosvasic/.local/share/llmctl/tools/curl-h3/src/curl-8.22.0/docs/libcurl/opts'
+make[6]: Entering directory '/home/milosvasic/.local/share/llmctl/tools/curl-h3/src/curl-8.22.0/docs/libcurl'
+make[7]: Entering directory '/home/milosvasic/.local/share/llmctl/tools/curl-h3/src/curl-8.22.0/docs/libcurl'
+make[7]: Nothing to be done for 'install-exec-am'.
+ /usr/bin/mkdir -p '/home/milosvasic/.local/share/llmctl/tools/curl-h3/prefix/share/aclocal'
+ /usr/bin/install -c -m 644 libcurl.m4 '/home/milosvasic/.local/share/llmctl/tools/curl-h3/prefix/share/aclocal'
+make[7]: Leaving directory '/home/milosvasic/.local/share/llmctl/tools/curl-h3/src/curl-8.22.0/docs/libcurl'
+make[6]: Leaving directory '/home/milosvasic/.local/share/llmctl/tools/curl-h3/src/curl-8.22.0/docs/libcurl'
+make[5]: Leaving directory '/home/milosvasic/.local/share/llmctl/tools/curl-h3/src/curl-8.22.0/docs/libcurl'
+make[4]: Leaving directory '/home/milosvasic/.local/share/llmctl/tools/curl-h3/src/curl-8.22.0/docs'
+make[3]: Leaving directory '/home/milosvasic/.local/share/llmctl/tools/curl-h3/src/curl-8.22.0'
+make[2]: Leaving directory '/home/milosvasic/.local/share/llmctl/tools/curl-h3/src/curl-8.22.0'
+make[1]: Leaving directory '/home/milosvasic/.local/share/llmctl/tools/curl-h3/src/curl-8.22.0'

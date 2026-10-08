@@ -1,0 +1,5 @@
+          
+   ERROR  
+          
+  Message content is shorter than read bytes: 12 < 86.                                                                
+

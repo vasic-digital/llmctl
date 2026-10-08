@@ -216,14 +216,9 @@ func TestStress_SustainedLoad_CapacityObservation(t *testing.T) {
 // REAL run against this host, not invented.
 func writeStressObservation(t *testing.T, results []windowResult, stoppedReason string) {
 	t.Helper()
-	root, err := repoRootForEvidence()
+	dir, err := evidenceOutputDir(t)
 	if err != nil {
-		t.Logf("writeStressObservation: could not locate repo root, evidence file not written: %v", err)
-		return
-	}
-	dir := filepath.Join(root, "docs", "qa", "008-full-test-coverage")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		t.Logf("writeStressObservation: mkdir %s: %v", dir, err)
+		t.Logf("writeStressObservation: evidence dir unavailable, observation not written: %v", err)
 		return
 	}
 	path := filepath.Join(dir, "stress_capacity_observation.txt")

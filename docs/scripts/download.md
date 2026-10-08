@@ -62,7 +62,7 @@ LLMCTL_DRY_RUN=1 bin/llmctl models download fast
 
 # tune or disable the smoke test
 LLMCTL_SMOKE=0 bin/llmctl models download fast              # skip smoke test (evidence still logged)
-LLMCTL_SMOKE_PORT=18099 LLMCTL_SMOKE_TIMEOUT=180 bin/llmctl models download fast
+LLMCTL_SMOKE_PORT=18099 LLMCTL_SMOKE_TIMEOUT=180   # (the port is optional: the default "auto" picks a free one) bin/llmctl models download fast
 
 # point downloads/verification at a fixture HTTP server (test pattern)
 LLMCTL_HF_BASE=http://127.0.0.1:8000 bin/llmctl models download fast
@@ -71,6 +71,16 @@ LLMCTL_HF_BASE=http://127.0.0.1:8000 bin/llmctl models download fast
 LLMCTL_LLAMA_SERVER=/custom/path/llama-server bin/llmctl models download fast
 LLMCTL_COLI_BIN=/custom/path/coli bin/llmctl models download colibri-glm
 ```
+
+## Smoke-test port and readiness (C-06)
+
+`LLMCTL_SMOKE_PORT` defaults to `auto`: every smoke test (gguf, decision, onnx) picks a FREE ephemeral
+port; a number pins it but is refused when something already listens there. Readiness is proven
+against the process THIS test launched (`_dl_smoke_wait`): it must be alive, must hold the
+LISTENING socket of the port (`/proc/net/tcp` inode vs `/proc/<pid>/fd`, `lsof` / `ss` elsewhere;
+no way to tell = fail closed) and the health path must answer. A foreign server on the port can no
+longer make the probes run against the wrong model and record its verdict. Tests:
+`tests/test_decide_download.sh` (section 4).
 
 ## Edge cases
 
@@ -200,10 +210,29 @@ LLMCTL_COLI_BIN=/custom/path/coli bin/llmctl models download colibri-glm
 7. **Colibri validation**: `_dl_validate_colibri` (resolves the `coli`
    launcher, runs `coli doctor` if available, falls back to a structural
    shard+config check).
-8. **Public entry points**: `download_profile` (validates the profile
+8. **onnx validation + smoke**: `_dl_validate_onnx` (structural check —
+   non-empty `model.onnx`/`onnx/model.onnx` plus a `spm.model` or
+   `tokenizer.json` tokenizer file — then `_dl_smoke_test_onnx`, which
+   launches the REAL `lib/onnx_server.py` (hash-locked venv python when
+   present) on `127.0.0.1:$LLMCTL_SMOKE_PORT` with a throwaway 0600 key file,
+   waits for `/readyz`, and runs three probes against `POST /v1/score` —
+   an entailed pair must score `entailment`, a contradicted pair must not,
+   and a 2-pair batch must satisfy the contract shape — with RUN/EXIT/OUT
+   evidence; the child and key file are reaped on SIGTERM/SIGINT too). The
+   smoke SKIPs with a recorded reason when `onnxruntime`/`numpy`/
+   `sentencepiece` are not importable, and then `download_profile` does
+   **not** print "downloaded and verified": it warns that file checksums are
+   verified but the smoke did not run and logs `FILES-VERIFIED, smoke not
+   run`. There is no env test seam; tests put stub backends on `PYTHONPATH`.
+9. **Public entry points**: `download_profile` (validates the profile
    exists, sets up the evidence log, downloads every file from
-   `catalog_files`, then dispatches to the GGUF smoke test or colibri
-   validation based on `catalog_engine`, skipping validation entirely under
+   `catalog_files`, then dispatches to the GGUF/decision smoke test,
+   onnx validation, or colibri validation based on `catalog_engine` (and,
+   for llama-engine profiles, the `decide` capability; the decision smoke
+   boots `llama-server` and runs `llmctl-decide smoke` - the production Go driver
+   - through `decide_bin`: a 2-option invoice probe that must pick `billing` and
+   a 4-option probe that must return a valid typed answer), skipping
+   validation entirely under
    `LLMCTL_DRY_RUN`) and `verify_profile` (validates the profile is already
    downloaded, re-resolves and re-checks every file's checksum via the same
    `_dl_resolve_sha`/`_dl_verify_file` path, with no download or smoke test
@@ -222,9 +251,17 @@ LLMCTL_COLI_BIN=/custom/path/coli bin/llmctl models download colibri-glm
   `lib/engine.sh`'s `engine_build_colibri`.
 * Exercised by `tests/test_download.sh` (checksum verification, smoke test
   logic), `tests/test_download_resume.sh` (the curl-33 resume/fallback
-  path), and `tests/fixtures/range_server.py` (a local HTTP fixture server
+  path), `tests/test_onnx_download.sh` (the onnx validation + smoke path),
+  and `tests/fixtures/range_server.py` (a local HTTP fixture server
   used to serve deterministic download responses without hitting the real
   Hugging Face API).
+
+## Decision smoke follows the profile's protocol
+
+`_dl_smoke_test_decision` reads `decision.protocol` (`catalog_decision_protocol`). `letter-logit` (default) keeps its probes
+(`--expect-choice billing`, 512 context). `systemone-native` smokes `/v1/systemone` instead, with a 4096 context, and asserts a
+valid typed answer only (finite probabilities summing to 1 - shape evidence, never quality evidence). The chosen protocol is
+logged as `smoke protocol: <name>` in the evidence log. Test: `tests/test_decide_download.sh` section 3b.
 
 ## Last verified date
 

@@ -1,0 +1,322 @@
+checking 106 scripts with bash -n
+  ok: bash -n bin/llmctl
+  ok: bash -n lib/admit.sh
+  ok: bash -n lib/catalog.sh
+  ok: bash -n lib/cluster.sh
+  ok: bash -n lib/common.sh
+  ok: bash -n lib/decide.sh
+  ok: bash -n lib/doctor.sh
+  ok: bash -n lib/download.sh
+  ok: bash -n lib/engine.sh
+  ok: bash -n lib/hardware.sh
+  ok: bash -n lib/os_detect.sh
+  ok: bash -n lib/portreg.sh
+  ok: bash -n lib/scheduler.sh
+  ok: bash -n lib/service_linux.sh
+  ok: bash -n lib/service_macos.sh
+  ok: bash -n lib/svc_hook.sh
+  ok: bash -n tests/helpers.sh
+  ok: bash -n tests/run_tests.sh
+  ok: bash -n tests/test_admit.sh
+  ok: bash -n tests/test_agent_kit.sh
+  ok: bash -n tests/test_apikey_lifecycle.sh
+  ok: bash -n tests/test_archive_completeness.sh
+  ok: bash -n tests/test_bin_llmctl_symlink_invocation.sh
+  ok: bash -n tests/test_catalog_json.sh
+  ok: bash -n tests/test_certs_go_cli.sh
+  ok: bash -n tests/test_certs_go_mutation.sh
+  ok: bash -n tests/test_cli.sh
+  ok: bash -n tests/test_cluster_join_leave.sh
+  ok: bash -n tests/test_cluster_request_checked.sh
+  ok: bash -n tests/test_constitution_inheritance.sh
+  ok: bash -n tests/test_containers_submodule.sh
+  ok: bash -n tests/test_create_release.sh
+  ok: bash -n tests/test_ctx_kvtype_override.sh
+  ok: bash -n tests/test_decide.sh
+  ok: bash -n tests/test_decide_cli.sh
+  ok: bash -n tests/test_decide_download.sh
+  ok: bash -n tests/test_decide_service.sh
+  ok: bash -n tests/test_decision_capacity.sh
+  ok: bash -n tests/test_determinism.sh
+  ok: bash -n tests/test_docs_no_literal_keys.sh
+  ok: bash -n tests/test_download.sh
+  ok: bash -n tests/test_download_resume.sh
+  ok: bash -n tests/test_dynamic_ports.sh
+  ok: bash -n tests/test_engine.sh
+  ok: bash -n tests/test_engine_build_decide.sh
+  ok: bash -n tests/test_engine_build_onnx.sh
+  ok: bash -n tests/test_engine_cpu_regression.sh
+  ok: bash -n tests/test_gateway_endpoints.sh
+  ok: bash -n tests/test_gateway_mutation.sh
+  ok: bash -n tests/test_go_unit.sh
+  ok: bash -n tests/test_gpu_throughput_ratio.sh
+  ok: bash -n tests/test_gpu_vram_delta.sh
+  ok: bash -n tests/test_hardware_probe.sh
+  ok: bash -n tests/test_install_agents.sh
+  ok: bash -n tests/test_install_script_e2e.sh
+  ok: bash -n tests/test_keyring_go_cli.sh
+  ok: bash -n tests/test_matrix_harness.sh
+  ok: bash -n tests/test_mcp_stdio.sh
+  ok: bash -n tests/test_normalize_agents.sh
+  ok: bash -n tests/test_normalize_common.sh
+  ok: bash -n tests/test_onnx_download.sh
+  ok: bash -n tests/test_onnx_runtime.sh
+  ok: bash -n tests/test_onnx_server.sh
+  ok: bash -n tests/test_planner.sh
+  ok: bash -n tests/test_port_override.sh
+  ok: bash -n tests/test_preflight_submodules.sh
+  ok: bash -n tests/test_py_unit.sh
+  ok: bash -n tests/test_registry_cli.sh
+  ok: bash -n tests/test_registry_discovery.sh
+  ok: bash -n tests/test_regression_defects.sh
+  ok: bash -n tests/test_release_no_secrets.sh
+  ok: bash -n tests/test_run_tests_format.sh
+  ok: bash -n tests/test_scheduler.sh
+  ok: bash -n tests/test_scheduler_bind_host.sh
+  ok: bash -n tests/test_scheduler_lock.sh
+  ok: bash -n tests/test_scheduler_reboot_reconciliation.sh
+  ok: bash -n tests/test_scheduler_switch_safety.sh
+  ok: bash -n tests/test_scheduler_wait_ready.sh
+  ok: bash -n tests/test_services.sh
+  ok: bash -n tests/test_services_crashloop.sh
+  ok: bash -n tests/test_setup_e2e.sh
+  ok: bash -n tests/test_small_profile_full_context.sh
+  ok: bash -n tests/test_syntax.sh
+  ok: bash -n tests/test_tenant_list_quota.sh
+  ok: bash -n tests/test_tenant_service_isolation.sh
+  ok: bash -n tests/test_tls_server.sh
+  ok: bash -n tests/test_unit_hardening.sh
+  ok: bash -n tests/test_vantage.sh
+  ok: bash -n docs/integrations/install_aider.sh
+  ok: bash -n docs/integrations/install_claude_code.sh
+  ok: bash -n docs/integrations/install_cline.sh
+  ok: bash -n docs/integrations/install_continue.sh
+  ok: bash -n docs/integrations/install_crush.sh
+  ok: bash -n docs/integrations/install_opencode.sh
+  ok: bash -n docs/integrations/install_pi.sh
+  ok: bash -n docs/integrations/lib_normalize_common.sh
+  ok: bash -n docs/integrations/normalize_aider.sh
+  ok: bash -n docs/integrations/normalize_claude_code.sh
+  ok: bash -n docs/integrations/normalize_cline.sh
+  ok: bash -n docs/integrations/normalize_continue.sh
+  ok: bash -n docs/integrations/normalize_crush.sh
+  ok: bash -n docs/integrations/normalize_opencode.sh
+  ok: bash -n docs/integrations/normalize_pi.sh
+  ok: bash -n scripts/release/build_archive.sh
+  ok: bash -n scripts/release/create_release.sh
+  ok: bash -n scripts/release/preflight_submodules.sh
+  ok: shebang: bin/llmctl
+  ok: strict mode: bin/llmctl
+  ok: shebang: lib/admit.sh
+  ok: strict mode: lib/admit.sh
+  ok: shebang: lib/catalog.sh
+  ok: strict mode: lib/catalog.sh
+  ok: shebang: lib/cluster.sh
+  ok: strict mode: lib/cluster.sh
+  ok: shebang: lib/common.sh
+  ok: strict mode: lib/common.sh
+  ok: shebang: lib/decide.sh
+  ok: strict mode: lib/decide.sh
+  ok: shebang: lib/doctor.sh
+  ok: strict mode: lib/doctor.sh
+  ok: shebang: lib/download.sh
+  ok: strict mode: lib/download.sh
+  ok: shebang: lib/engine.sh
+  ok: strict mode: lib/engine.sh
+  ok: shebang: lib/hardware.sh
+  ok: strict mode: lib/hardware.sh
+  ok: shebang: lib/os_detect.sh
+  ok: strict mode: lib/os_detect.sh
+  ok: shebang: lib/portreg.sh
+  ok: strict mode: lib/portreg.sh
+  ok: shebang: lib/scheduler.sh
+  ok: strict mode: lib/scheduler.sh
+  ok: shebang: lib/service_linux.sh
+  ok: strict mode: lib/service_linux.sh
+  ok: shebang: lib/service_macos.sh
+  ok: strict mode: lib/service_macos.sh
+  ok: shebang: lib/svc_hook.sh
+  ok: strict mode: lib/svc_hook.sh
+  ok: shebang: tests/helpers.sh
+  ok: strict mode: tests/helpers.sh
+  ok: shebang: tests/run_tests.sh
+  ok: strict mode: tests/run_tests.sh
+  ok: shebang: tests/test_admit.sh
+  ok: strict mode: tests/test_admit.sh
+  ok: shebang: tests/test_agent_kit.sh
+  ok: strict mode: tests/test_agent_kit.sh
+  ok: shebang: tests/test_apikey_lifecycle.sh
+  ok: strict mode: tests/test_apikey_lifecycle.sh
+  ok: shebang: tests/test_archive_completeness.sh
+  ok: strict mode: tests/test_archive_completeness.sh
+  ok: shebang: tests/test_bin_llmctl_symlink_invocation.sh
+  ok: strict mode: tests/test_bin_llmctl_symlink_invocation.sh
+  ok: shebang: tests/test_catalog_json.sh
+  ok: strict mode: tests/test_catalog_json.sh
+  ok: shebang: tests/test_certs_go_cli.sh
+  ok: strict mode: tests/test_certs_go_cli.sh
+  ok: shebang: tests/test_certs_go_mutation.sh
+  ok: strict mode: tests/test_certs_go_mutation.sh
+  ok: shebang: tests/test_cli.sh
+  ok: strict mode: tests/test_cli.sh
+  ok: shebang: tests/test_cluster_join_leave.sh
+  ok: strict mode: tests/test_cluster_join_leave.sh
+  ok: shebang: tests/test_cluster_request_checked.sh
+  ok: strict mode: tests/test_cluster_request_checked.sh
+  ok: shebang: tests/test_constitution_inheritance.sh
+  ok: strict mode: tests/test_constitution_inheritance.sh
+  ok: shebang: tests/test_containers_submodule.sh
+  ok: strict mode: tests/test_containers_submodule.sh
+  ok: shebang: tests/test_create_release.sh
+  ok: strict mode: tests/test_create_release.sh
+  ok: shebang: tests/test_ctx_kvtype_override.sh
+  ok: strict mode: tests/test_ctx_kvtype_override.sh
+  ok: shebang: tests/test_decide.sh
+  ok: strict mode: tests/test_decide.sh
+  ok: shebang: tests/test_decide_cli.sh
+  ok: strict mode: tests/test_decide_cli.sh
+  ok: shebang: tests/test_decide_download.sh
+  ok: strict mode: tests/test_decide_download.sh
+  ok: shebang: tests/test_decide_service.sh
+  ok: strict mode: tests/test_decide_service.sh
+  ok: shebang: tests/test_decision_capacity.sh
+  ok: strict mode: tests/test_decision_capacity.sh
+  ok: shebang: tests/test_determinism.sh
+  ok: strict mode: tests/test_determinism.sh
+  ok: shebang: tests/test_docs_no_literal_keys.sh
+  ok: strict mode: tests/test_docs_no_literal_keys.sh
+  ok: shebang: tests/test_download.sh
+  ok: strict mode: tests/test_download.sh
+  ok: shebang: tests/test_download_resume.sh
+  ok: strict mode: tests/test_download_resume.sh
+  ok: shebang: tests/test_dynamic_ports.sh
+  ok: strict mode: tests/test_dynamic_ports.sh
+  ok: shebang: tests/test_engine.sh
+  ok: strict mode: tests/test_engine.sh
+  ok: shebang: tests/test_engine_build_decide.sh
+  ok: strict mode: tests/test_engine_build_decide.sh
+  ok: shebang: tests/test_engine_build_onnx.sh
+  ok: strict mode: tests/test_engine_build_onnx.sh
+  ok: shebang: tests/test_engine_cpu_regression.sh
+  ok: strict mode: tests/test_engine_cpu_regression.sh
+  ok: shebang: tests/test_gateway_endpoints.sh
+  ok: strict mode: tests/test_gateway_endpoints.sh
+  ok: shebang: tests/test_gateway_mutation.sh
+  ok: strict mode: tests/test_gateway_mutation.sh
+  ok: shebang: tests/test_go_unit.sh
+  ok: strict mode: tests/test_go_unit.sh
+  ok: shebang: tests/test_gpu_throughput_ratio.sh
+  ok: strict mode: tests/test_gpu_throughput_ratio.sh
+  ok: shebang: tests/test_gpu_vram_delta.sh
+  ok: strict mode: tests/test_gpu_vram_delta.sh
+  ok: shebang: tests/test_hardware_probe.sh
+  ok: strict mode: tests/test_hardware_probe.sh
+  ok: shebang: tests/test_install_agents.sh
+  ok: strict mode: tests/test_install_agents.sh
+  ok: shebang: tests/test_install_script_e2e.sh
+  ok: strict mode: tests/test_install_script_e2e.sh
+  ok: shebang: tests/test_keyring_go_cli.sh
+  ok: strict mode: tests/test_keyring_go_cli.sh
+  ok: shebang: tests/test_matrix_harness.sh
+  FAIL: strict mode: tests/test_matrix_harness.sh
+    expected: 0
+    actual:   1
+  ok: shebang: tests/test_mcp_stdio.sh
+  ok: strict mode: tests/test_mcp_stdio.sh
+  ok: shebang: tests/test_normalize_agents.sh
+  ok: strict mode: tests/test_normalize_agents.sh
+  ok: shebang: tests/test_normalize_common.sh
+  ok: strict mode: tests/test_normalize_common.sh
+  ok: shebang: tests/test_onnx_download.sh
+  ok: strict mode: tests/test_onnx_download.sh
+  ok: shebang: tests/test_onnx_runtime.sh
+  ok: strict mode: tests/test_onnx_runtime.sh
+  ok: shebang: tests/test_onnx_server.sh
+  ok: strict mode: tests/test_onnx_server.sh
+  ok: shebang: tests/test_planner.sh
+  ok: strict mode: tests/test_planner.sh
+  ok: shebang: tests/test_port_override.sh
+  ok: strict mode: tests/test_port_override.sh
+  ok: shebang: tests/test_preflight_submodules.sh
+  ok: strict mode: tests/test_preflight_submodules.sh
+  ok: shebang: tests/test_py_unit.sh
+  ok: strict mode: tests/test_py_unit.sh
+  ok: shebang: tests/test_registry_cli.sh
+  ok: strict mode: tests/test_registry_cli.sh
+  ok: shebang: tests/test_registry_discovery.sh
+  ok: strict mode: tests/test_registry_discovery.sh
+  ok: shebang: tests/test_regression_defects.sh
+  ok: strict mode: tests/test_regression_defects.sh
+  ok: shebang: tests/test_release_no_secrets.sh
+  ok: strict mode: tests/test_release_no_secrets.sh
+  ok: shebang: tests/test_run_tests_format.sh
+  ok: strict mode: tests/test_run_tests_format.sh
+  ok: shebang: tests/test_scheduler.sh
+  ok: strict mode: tests/test_scheduler.sh
+  ok: shebang: tests/test_scheduler_bind_host.sh
+  ok: strict mode: tests/test_scheduler_bind_host.sh
+  ok: shebang: tests/test_scheduler_lock.sh
+  ok: strict mode: tests/test_scheduler_lock.sh
+  ok: shebang: tests/test_scheduler_reboot_reconciliation.sh
+  ok: strict mode: tests/test_scheduler_reboot_reconciliation.sh
+  ok: shebang: tests/test_scheduler_switch_safety.sh
+  ok: strict mode: tests/test_scheduler_switch_safety.sh
+  ok: shebang: tests/test_scheduler_wait_ready.sh
+  ok: strict mode: tests/test_scheduler_wait_ready.sh
+  ok: shebang: tests/test_services.sh
+  ok: strict mode: tests/test_services.sh
+  ok: shebang: tests/test_services_crashloop.sh
+  ok: strict mode: tests/test_services_crashloop.sh
+  ok: shebang: tests/test_setup_e2e.sh
+  ok: strict mode: tests/test_setup_e2e.sh
+  ok: shebang: tests/test_small_profile_full_context.sh
+  ok: strict mode: tests/test_small_profile_full_context.sh
+  ok: shebang: tests/test_syntax.sh
+  ok: strict mode: tests/test_syntax.sh
+  ok: shebang: tests/test_tenant_list_quota.sh
+  ok: strict mode: tests/test_tenant_list_quota.sh
+  ok: shebang: tests/test_tenant_service_isolation.sh
+  ok: strict mode: tests/test_tenant_service_isolation.sh
+  ok: shebang: tests/test_tls_server.sh
+  ok: strict mode: tests/test_tls_server.sh
+  ok: shebang: tests/test_unit_hardening.sh
+  ok: strict mode: tests/test_unit_hardening.sh
+  ok: shebang: tests/test_vantage.sh
+  ok: strict mode: tests/test_vantage.sh
+  ok: shebang: docs/integrations/install_aider.sh
+  ok: strict mode: docs/integrations/install_aider.sh
+  ok: shebang: docs/integrations/install_claude_code.sh
+  ok: strict mode: docs/integrations/install_claude_code.sh
+  ok: shebang: docs/integrations/install_cline.sh
+  ok: strict mode: docs/integrations/install_cline.sh
+  ok: shebang: docs/integrations/install_continue.sh
+  ok: strict mode: docs/integrations/install_continue.sh
+  ok: shebang: docs/integrations/install_crush.sh
+  ok: strict mode: docs/integrations/install_crush.sh
+  ok: shebang: docs/integrations/install_opencode.sh
+  ok: strict mode: docs/integrations/install_opencode.sh
+  ok: shebang: docs/integrations/install_pi.sh
+  ok: strict mode: docs/integrations/install_pi.sh
+  ok: shebang: docs/integrations/lib_normalize_common.sh
+  ok: strict mode: docs/integrations/lib_normalize_common.sh
+  ok: shebang: docs/integrations/normalize_aider.sh
+  ok: strict mode: docs/integrations/normalize_aider.sh
+  ok: shebang: docs/integrations/normalize_claude_code.sh
+  ok: strict mode: docs/integrations/normalize_claude_code.sh
+  ok: shebang: docs/integrations/normalize_cline.sh
+  ok: strict mode: docs/integrations/normalize_cline.sh
+  ok: shebang: docs/integrations/normalize_continue.sh
+  ok: strict mode: docs/integrations/normalize_continue.sh
+  ok: shebang: docs/integrations/normalize_crush.sh
+  ok: strict mode: docs/integrations/normalize_crush.sh
+  ok: shebang: docs/integrations/normalize_opencode.sh
+  ok: strict mode: docs/integrations/normalize_opencode.sh
+  ok: shebang: docs/integrations/normalize_pi.sh
+  ok: strict mode: docs/integrations/normalize_pi.sh
+  ok: shebang: scripts/release/build_archive.sh
+  ok: strict mode: scripts/release/build_archive.sh
+  ok: shebang: scripts/release/create_release.sh
+  ok: strict mode: scripts/release/create_release.sh
+  ok: shebang: scripts/release/preflight_submodules.sh
+  ok: strict mode: scripts/release/preflight_submodules.sh
+RESULT: FAIL (1 assertion failure(s))

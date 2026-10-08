@@ -1,0 +1,88 @@
+== 1. fixed strategy (default, OD-18): the documented port, recorded everywhere ==
+  ok: start small (fixed) succeeds
+  ok: start output records the assigned port
+  ok: reservation record holds the documented port
+  ok: env record / launch arguments carry the port
+  ok: env record names the port for the registration hook
+  ok: env record is mode 0600
+  ok: the live process was started on that port (/proc cmdline)
+  ok: registry row published at ready with the same port
+  ok: registry kind label = chat
+  ok: status shows the assigned port
+  ok: plan --json records the assigned port of a running service
+  ok: discover resolves the service by kind label
+== 2. fixed + the default port occupied by another program: fails naming port and variable ==
+  ok: taken documented port: start exits non-zero
+  ok: message names the port
+  ok: message names the override variable
+  ok: no reservation was written for the refused start
+  ok: no registry row for the refused start
+  ok: no port hold left behind by the refused start
+== 3. dynamic per profile (=auto) with that same port occupied: starts on a free range port ==
+  ok: start fast with LLMCTL_PORT_FAST=auto succeeds although 44581 is occupied
+  ok: dynamic port 46500 is inside LLMCTL_PORT_RANGE and differs from the occupied 44581
+  ok: registry row carries the dynamic port
+  ok: process listens where the registry says
+  ok: plan --json shows the dynamic assignment
+  ok: the service answers on the assigned port
+== 4. restart reuses the port when still free; stop releases hold and registry row ==
+  ok: stop removed the registry row
+  ok: stop released the port hold
+  ok: stop removed the reservation
+  ok: restart of the same service reuses its previous dynamic port (sticky)
+== 5. global dynamic strategy: three services, distinct free ports, all registered ==
+  ok: three services start under LLMCTL_PORT_STRATEGY=dynamic
+  ok: three distinct ports: 46501 46500 46502
+  ok: small port 46501 inside the range
+  ok: small: registry port equals the live assignment
+  ok: small: answers on its assigned port
+  ok: fast port 46500 inside the range
+  ok: fast: registry port equals the live assignment
+  ok: fast: answers on its assigned port
+  ok: decide-tiny port 46502 inside the range
+  ok: decide-tiny: registry port equals the live assignment
+  ok: decide-tiny: answers on its assigned port
+  ok: decision profile is published with kind=decide
+  ok: decision engine entry says loopback-only (FR-090)
+== 6. decision engine launch (FR-073/FR-074, G-030): loopback, key FILE, one slot ==
+  ok: decision engine binds loopback only
+  ok: deterministic mode (default) launches exactly one slot (-np 1)
+  ok: context per slot preserved (catalog ctx, one slot)
+  ok: web UI disabled
+  ok: key passed as a FILE path
+  ok: key file mode 0600
+  ok: key directory mode 0700
+  ok: the key value is in neither /proc/<pid>/cmdline nor /proc/<pid>/environ
+  ok: chat engine still launches with its catalog parallel
+  ok: chat engine launch is unchanged (no key file, UI untouched)
+  ok: throughput mode (opt-in) uses the catalog parallel
+  ok: throughput mode scales --ctx-size so each slot keeps 4096
+  ok: an invalid LLMCTL_DECIDE_MODE is refused
+  ok: capacity report: mode=deterministic, catalog-parallel figures labelled as throughput-mode, effective slots = 1
+  ok: capacity report under throughput mode: effective slots = catalog parallel
+== 7. explicit numeric port always wins, even under the dynamic strategy ==
+  ok: LLMCTL_PORT_SMALL=<n> beats LLMCTL_PORT_STRATEGY=dynamic
+  ok: registry carries the explicit port
+== 8. per-user isolation: a second user gets a disjoint port set ==
+  ok: user 1 ports {40275 46500 46502 } and user 2 ports {46501 46503 } are disjoint (same range, bind test)
+  ok: a per-user LLMCTL_PORT_RANGE confines user 2 to 46560-46589 (got 46560)
+== 9. switch and enable/disable keep ports + registry consistent ==
+  ok: switch unregistered the stopped profile
+  ok: switch registered the new profile at its assigned port
+  ok: enable publishes the service in the registry
+  ok: enable holds the port
+  ok: re-enabling a running service keeps the port it holds
+  ok: disable removed the registry row
+  ok: disable released the port hold
+== 10. stop all: registry and port holds are empty ==
+  ok: registry is empty after stop all
+  ok: no port holds remain after stop all
+== 10b. after a reboot the reservation is rebuilt with the REAL (dynamic) port ==
+  ok: reconciled reservation carries the dynamic port from the env record, not the documented one
+== 11. dynamic requested without the registry binary is refused, never silently ignored ==
+  ok: dynamic request with no usable binary exits non-zero
+  ok: message explains why
+  ok: registry off + fixed strategy: the previous behaviour (documented port, no registry) is unchanged
+  ok: inactive adapter uses the catalog port as before
+  ok: inactive adapter publishes nothing
+RESULT: PASS

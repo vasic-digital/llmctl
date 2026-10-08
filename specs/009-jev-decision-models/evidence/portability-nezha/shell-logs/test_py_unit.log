@@ -1,0 +1,101 @@
+test_build_writes_manifest_and_sha256sums (tests.py.test_evidence_manifest.ManifestTests.test_build_writes_manifest_and_sha256sums) ... /home/milosvasic/llmctl-work/llmctl/tests/py/test_evidence_manifest.py:29: ResourceWarning: unclosed file <_io.TextIOWrapper name='/home/milosvasic/llmctl-work/tmp/manifest-36v927yh/SHA256SUMS' mode='r' encoding='utf-8'>
+  sums = open(os.path.join(self.d, "SHA256SUMS")).read().splitlines()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/milosvasic/llmctl-work/llmctl/tests/py/test_evidence_manifest.py:35: ResourceWarning: unclosed file <_io.TextIOWrapper name='/home/milosvasic/llmctl-work/tmp/manifest-36v927yh/MANIFEST.json' mode='r' encoding='utf-8'>
+  m = json.load(open(os.path.join(self.d, "MANIFEST.json")))
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_cli_verify_exit_codes (tests.py.test_evidence_manifest.ManifestTests.test_cli_verify_exit_codes) ... ok
+test_empty_dir_does_not_vacuously_pass (tests.py.test_evidence_manifest.ManifestTests.test_empty_dir_does_not_vacuously_pass) ... ok
+test_rebuild_is_idempotent (tests.py.test_evidence_manifest.ManifestTests.test_rebuild_is_idempotent) ... /home/milosvasic/llmctl-work/llmctl/tests/py/test_evidence_manifest.py:95: ResourceWarning: unclosed file <_io.TextIOWrapper name='/home/milosvasic/llmctl-work/tmp/manifest-jslqvkxh/SHA256SUMS' mode='r' encoding='utf-8'>
+  a = open(os.path.join(self.d, "SHA256SUMS")).read()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/milosvasic/llmctl-work/llmctl/tests/py/test_evidence_manifest.py:97: ResourceWarning: unclosed file <_io.TextIOWrapper name='/home/milosvasic/llmctl-work/tmp/manifest-jslqvkxh/SHA256SUMS' mode='r' encoding='utf-8'>
+  b = open(os.path.join(self.d, "SHA256SUMS")).read()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_sha256sums_format_compatible_with_sha256sum (tests.py.test_evidence_manifest.ManifestTests.test_sha256sums_format_compatible_with_sha256sum) ... ok
+test_verify_clean (tests.py.test_evidence_manifest.ManifestTests.test_verify_clean) ... ok
+test_verify_detects_extra (tests.py.test_evidence_manifest.ManifestTests.test_verify_detects_extra) ... ok
+test_verify_detects_missing (tests.py.test_evidence_manifest.ManifestTests.test_verify_detects_missing) ... ok
+test_verify_detects_tamper (tests.py.test_evidence_manifest.ManifestTests.test_verify_detects_tamper) ... ok
+test_verify_detects_tampered_sha256sums_itself (tests.py.test_evidence_manifest.ManifestTests.test_verify_detects_tampered_sha256sums_itself) ... /home/milosvasic/llmctl-work/llmctl/tests/py/test_evidence_manifest.py:74: ResourceWarning: unclosed file <_io.TextIOWrapper name='/home/milosvasic/llmctl-work/tmp/manifest-8pagcr34/SHA256SUMS' mode='r' encoding='utf-8'>
+  s = open(p).read().replace("evidence.jsonl", "evidence.jsonl", 1)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/milosvasic/llmctl-work/llmctl/tests/py/test_evidence_manifest.py:77: ResourceWarning: unclosed file <_io.TextIOWrapper name='/home/milosvasic/llmctl-work/tmp/manifest-8pagcr34/SHA256SUMS' mode='w' encoding='utf-8'>
+  open(p, "w").write("\n".join(l for l in lines if "raw/x.txt" not in l) + "\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_verify_without_sums_fails_not_passes (tests.py.test_evidence_manifest.ManifestTests.test_verify_without_sums_fails_not_passes) ... ok
+test_agent_client_allowed (tests.py.test_evidence_writer.WriterTests.test_agent_client_allowed) ... ok
+test_enum_validation (tests.py.test_evidence_writer.WriterTests.test_enum_validation) ... ok
+test_env_digest_hashes_sorted_names_only (tests.py.test_evidence_writer.WriterTests.test_env_digest_hashes_sorted_names_only) ... ok
+test_error_message_never_contains_secret (tests.py.test_evidence_writer.WriterTests.test_error_message_never_contains_secret) ... ok
+test_fail_and_not_exercised_require_reason (tests.py.test_evidence_writer.WriterTests.test_fail_and_not_exercised_require_reason) ... ok
+test_hash_chain_links_previous_line (tests.py.test_evidence_writer.WriterTests.test_hash_chain_links_previous_line) ... /home/milosvasic/llmctl-work/llmctl/tests/py/test_evidence_writer.py:66: ResourceWarning: unclosed file <_io.BufferedReader name='/home/milosvasic/llmctl-work/tmp/evwriter-i49kqm_2/evidence.jsonl'>
+  raw = open(os.path.join(self.d, "evidence.jsonl"), "rb").read().split(b"\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_pass_requires_captured_output (tests.py.test_evidence_writer.WriterTests.test_pass_requires_captured_output) ... ok
+test_record_has_all_schema_fields (tests.py.test_evidence_writer.WriterTests.test_record_has_all_schema_fields) ... ok
+test_refusal_does_not_consume_sequence_number (tests.py.test_evidence_writer.WriterTests.test_refusal_does_not_consume_sequence_number) ... ok
+test_refuses_pem_and_key_like_values (tests.py.test_evidence_writer.WriterTests.test_refuses_pem_and_key_like_values) ... ok
+test_refuses_registered_secret_in_command (tests.py.test_evidence_writer.WriterTests.test_refuses_registered_secret_in_command) ... ok
+test_refuses_secret_in_output_without_writing_artifact (tests.py.test_evidence_writer.WriterTests.test_refuses_secret_in_output_without_writing_artifact) ... ok
+test_seq_monotonic_and_survives_reopen (tests.py.test_evidence_writer.WriterTests.test_seq_monotonic_and_survives_reopen) ... ok
+test_sha256_of_output_and_artifact_written (tests.py.test_evidence_writer.WriterTests.test_sha256_of_output_and_artifact_written) ... /home/milosvasic/llmctl-work/llmctl/tests/py/test_evidence_writer.py:49: ResourceWarning: unclosed file <_io.BufferedReader name='/home/milosvasic/llmctl-work/tmp/evwriter-z9wlgekv/raw/EV-r1-0001-stdout.txt'>
+  self.assertEqual(open(ap, "rb").read(), b"payload")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_stand_in_cannot_claim_pass_in_real_summary (tests.py.test_evidence_writer.WriterTests.test_stand_in_cannot_claim_pass_in_real_summary) ... ok
+test_verify_chain_detects_deleted_and_reordered (tests.py.test_evidence_writer.WriterTests.test_verify_chain_detects_deleted_and_reordered) ... /home/milosvasic/llmctl-work/llmctl/tests/py/test_evidence_writer.py:85: ResourceWarning: unclosed file <_io.TextIOWrapper name='/home/milosvasic/llmctl-work/tmp/evwriter-jsqvon9i/evidence.jsonl' mode='r' encoding='utf-8'>
+  ls = open(p).read().splitlines()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/milosvasic/llmctl-work/llmctl/tests/py/test_evidence_writer.py:86: ResourceWarning: unclosed file <_io.TextIOWrapper name='/home/milosvasic/llmctl-work/tmp/evwriter-jsqvon9i/evidence.jsonl' mode='w' encoding='utf-8'>
+  open(p, "w").write("\n".join([ls[0], ls[2]]) + "\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/milosvasic/llmctl-work/llmctl/tests/py/test_evidence_writer.py:88: ResourceWarning: unclosed file <_io.TextIOWrapper name='/home/milosvasic/llmctl-work/tmp/evwriter-jsqvon9i/evidence.jsonl' mode='w' encoding='utf-8'>
+  open(p, "w").write("\n".join([ls[1], ls[0], ls[2]]) + "\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_verify_chain_ok_then_tamper_detected (tests.py.test_evidence_writer.WriterTests.test_verify_chain_ok_then_tamper_detected) ... /home/milosvasic/llmctl-work/llmctl/tests/py/test_evidence_writer.py:77: ResourceWarning: unclosed file <_io.TextIOWrapper name='/home/milosvasic/llmctl-work/tmp/evwriter-2unerfgx/evidence.jsonl' mode='r' encoding='utf-8'>
+  s = open(p).read().replace('"exit_code": 0', '"exit_code": 7', 1)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/milosvasic/llmctl-work/llmctl/tests/py/test_evidence_writer.py:78: ResourceWarning: unclosed file <_io.TextIOWrapper name='/home/milosvasic/llmctl-work/tmp/evwriter-2unerfgx/evidence.jsonl' mode='w' encoding='utf-8'>
+  open(p, "w").write(s)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_archives_are_scanned (tests.py.test_leak_scan.LeakScanTests.test_archives_are_scanned) ... ok
+test_blind_scanner_detected_exit_three (tests.py.test_leak_scan.LeakScanTests.test_blind_scanner_detected_exit_three)
+Mutation: remove the detection logic -> self-test must flag BLIND. ... ok
+test_clean_tree_reports_no_findings (tests.py.test_leak_scan.LeakScanTests.test_clean_tree_reports_no_findings) ... ok
+test_cli_secrets_from_env_file (tests.py.test_leak_scan.LeakScanTests.test_cli_secrets_from_env_file) ... ok
+test_literal_secret_found_without_echoing_value (tests.py.test_leak_scan.LeakScanTests.test_literal_secret_found_without_echoing_value) ... ok
+test_needle_never_left_on_disk (tests.py.test_leak_scan.LeakScanTests.test_needle_never_left_on_disk) ... ok
+test_pem_and_key_like_tokens (tests.py.test_leak_scan.LeakScanTests.test_pem_and_key_like_tokens) ... ok
+test_regex_blind_scanner_detected (tests.py.test_leak_scan.LeakScanTests.test_regex_blind_scanner_detected)
+A scanner finding literals but no regex classes is also blind. ... ok
+test_run_clean_exit_zero_and_needle_checked (tests.py.test_leak_scan.LeakScanTests.test_run_clean_exit_zero_and_needle_checked) ... ok
+test_run_leak_exit_one (tests.py.test_leak_scan.LeakScanTests.test_run_leak_exit_one) ... ok
+test_short_secret_ignored_to_avoid_false_positives (tests.py.test_leak_scan.LeakScanTests.test_short_secret_ignored_to_avoid_false_positives) ... ok
+test_single_file_path_supported (tests.py.test_leak_scan.LeakScanTests.test_single_file_path_supported) ... ok
+test_complete_matrix_has_no_problems (tests.py.test_matrix_harness_units.CompletenessTests.test_complete_matrix_has_no_problems) ... ok
+test_duplicate_and_unexpected_cells (tests.py.test_matrix_harness_units.CompletenessTests.test_duplicate_and_unexpected_cells) ... ok
+test_env_gap_is_a_failure_unless_allowed (tests.py.test_matrix_harness_units.CompletenessTests.test_env_gap_is_a_failure_unless_allowed) ... ok
+test_handler_without_inventory_row_detects_removed_row (tests.py.test_matrix_harness_units.CompletenessTests.test_handler_without_inventory_row_detects_removed_row) ... ok
+test_inventory_row_without_handler (tests.py.test_matrix_harness_units.CompletenessTests.test_inventory_row_without_handler) ... ok
+test_missing_cell_is_a_problem_not_a_skip (tests.py.test_matrix_harness_units.CompletenessTests.test_missing_cell_is_a_problem_not_a_skip) ... ok
+test_not_exercised_needs_a_declared_class (tests.py.test_matrix_harness_units.CompletenessTests.test_not_exercised_needs_a_declared_class) ... ok
+test_error_only (tests.py.test_matrix_harness_units.ParseTests.test_error_only) ... ok
+test_line_protocol (tests.py.test_matrix_harness_units.ParseTests.test_line_protocol) ... ok
+test_check_step_rejects_wrong_status_and_error_type (tests.py.test_matrix_harness_units.ValidatorTests.test_check_step_rejects_wrong_status_and_error_type) ... ok
+test_every_case_in_the_default_inventory_has_a_handler (tests.py.test_matrix_harness_units.ValidatorTests.test_every_case_in_the_default_inventory_has_a_handler) ... ok
+test_good_body (tests.py.test_matrix_harness_units.ValidatorTests.test_good_body) ... ok
+test_missing_answer_and_extra_key (tests.py.test_matrix_harness_units.ValidatorTests.test_missing_answer_and_extra_key) ... ok
+test_probabilities_must_sum_to_one (tests.py.test_matrix_harness_units.ValidatorTests.test_probabilities_must_sum_to_one) ... ok
+
+----------------------------------------------------------------------
+Ran 54 tests in 0.079s
+
+OK
+python unit tier OK

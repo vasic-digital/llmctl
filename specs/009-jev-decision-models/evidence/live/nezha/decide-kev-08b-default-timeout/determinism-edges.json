@@ -1,0 +1,91 @@
+{
+ "profile": "decide-kev-08b",
+ "gateway_status": [
+  200,
+  200,
+  200,
+  200,
+  200,
+  200,
+  200,
+  200
+ ],
+ "gateway_bodies_sha256": [
+  "04525ed052fd6a722473112e42e13d64e1afe1284a5c9a5ab43bdd75d2bc5039"
+ ],
+ "gateway_byte_identical_8of8": true,
+ "gateway_latency_ms": [
+  1720.7,
+  1574.4,
+  1357.2,
+  1435.0,
+  1332.9,
+  1256.7,
+  1254.8,
+  1562.9
+ ],
+ "gateway_sample_body": "{\"model\":\"decide-kev-08b\",\"answers\":{\"route\":{\"type\":\"choice\",\"choice\":\"billing\",\"probabilities\":{\"billing\":0.907022913,\"shipping\":0.041413245,\"technical\":0.051563842},\"confidence\":0.86053437},\"angry\":{\"type\":\"noul\",\"noul\":0.661709922},\"urgency\":{\"type\":\"score\",\"score\":1.171739125,\"legend\":{\"0\":\"can wait\",\"1\":\"this week\",\"2\":\"today\",\"3\":\"right now\"},\"probabilities\":{\"0\":0.373783898,\"1\":0.279854324,\"2\":0.147200532,\"3\":0.199161246},\"confidence\":0.165045198}},\"usage\":{\"input_tokens\":118,\"output_tokens\":0}}",
+ "engine_status": [
+  200,
+  200,
+  200,
+  200,
+  200,
+  200,
+  200,
+  200
+ ],
+ "engine_bodies_sha256": [
+  "c8fa7c47af86ef4deb8a002aaaf46da887b6af8adc8f8fa46f0256ef3890a436"
+ ],
+ "engine_byte_identical_8of8": true,
+ "engine_model_field_is_a_local_path": "/home/milosvasic/llmctl-work-live/models/decide-kev-08b/Kev-0.8B-Q8_0.gguf",
+ "gateway_model_field": "decide-kev-08b",
+ "edges": {
+  "single_option_choice": {
+   "status": 422,
+   "ms": 4.4,
+   "body": "{\"message\":\"Request failed validation.\",\"error_type\":\"validation_failed\"}"
+  },
+  "no_key": {
+   "status": 401,
+   "ms": 3.0,
+   "body": "{\"message\":\"Authentication required.\",\"error_type\":\"unauthorized\"}"
+  },
+  "wrong_key": {
+   "status": 401,
+   "ms": 27.8,
+   "body": "{\"message\":\"Authentication required.\",\"error_type\":\"unauthorized\"}"
+  },
+  "unknown_model": {
+   "status": 422,
+   "ms": 2.1,
+   "body": "{\"message\":\"Unknown model.\",\"error_type\":\"unknown_model\"}"
+  },
+  "state_6500_chars": {
+   "status": 502,
+   "ms": 8006.4,
+   "body": "{\"message\":\"The decision backend failed.\",\"error_type\":\"backend_failed\"}"
+  },
+  "state_8000_chars": {
+   "status": 502,
+   "ms": 8008.6,
+   "body": "{\"message\":\"The decision backend failed.\",\"error_type\":\"backend_failed\"}"
+  },
+  "state_9000_chars_over_gateway_cap": {
+   "status": 422,
+   "ms": 3.6,
+   "body": "{\"message\":\"State plus question exceeds the budget.\",\"error_type\":\"validation_failed\"}"
+  },
+  "state_dense_7500_hex_chars_token_overflow": {
+   "status": 502,
+   "ms": 8004.4,
+   "body": "{\"message\":\"The decision backend failed.\",\"error_type\":\"backend_failed\"}"
+  },
+  "twenty_options": {
+   "status": 502,
+   "ms": 8006.7,
+   "body": "{\"message\":\"The decision backend failed.\",\"error_type\":\"backend_failed\"}"
+  }
+ }
+}

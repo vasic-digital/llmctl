@@ -195,8 +195,9 @@ const version = "0.1.0"
 // unrelated to this binary, the bash `bin/llmctl` CLI's own
 // `cluster`/`tenant`/`apikey` subcommands are honestly-labeled stubs
 // (bin/llmctl:186-211) - this message does not speak for that surface.
-const llmctldUsage = "usage: llmctld cluster <bootstrap|join> [flags]\n" +
-	"  bootstrap and join are the only two CLI subcommands this daemon\n" +
+const llmctldUsage = "usage: llmctld cluster <bootstrap|join|issue-cli-cert> [flags]\n" +
+	"  bootstrap and join start a node; issue-cli-cert re-issues the shell CLI's\n" +
+	"  client certificate (docs/llmctld-cluster-tls.md). These are the only CLI subcommands this daemon\n" +
 	"  supports; once a node is running, its real HTTP API (Raft/mTLS/\n" +
 	"  auth/RBAC/tenancy/placement/replication) is reachable directly -\n" +
 	"  see docs/cluster-architecture.md and docs/api-reference.md."
@@ -216,6 +217,8 @@ func main() {
 			case "join":
 				runClusterJoin(os.Args[3:])
 				return
+			case "issue-cli-cert":
+				os.Exit(runClusterIssueCLICert(os.Args[3:]))
 			}
 			// A genuinely unrecognized `cluster` subcommand (e.g. "leave",
 			// "status") - distinct from "no args at all": the operator DID
@@ -223,7 +226,7 @@ func main() {
 			// it (the daemon's real HTTP API may still cover the same
 			// capability once the node is running - see llmctldUsage).
 			fmt.Fprintf(os.Stderr, "llmctld: cluster subcommand %q is not implemented at the CLI level "+
-				"(this binary's own arg parser only recognizes bootstrap/join)\n%s\n", os.Args[2], llmctldUsage)
+				"(this binary's own arg parser only recognizes bootstrap/join/issue-cli-cert)\n%s\n", os.Args[2], llmctldUsage)
 			os.Exit(1)
 		}
 		// `llmctld cluster` with no subcommand named at all.
@@ -251,6 +254,8 @@ type clusterFlags struct {
 	stateDir       string
 	bootstrapAdmin bool
 	llmctlPath     string
+	advertise      string
+	cliCertDir     string
 }
 
 func parseClusterFlags(fs *flag.FlagSet, args []string) *clusterFlags {
@@ -263,6 +268,8 @@ func parseClusterFlags(fs *flag.FlagSet, args []string) *clusterFlags {
 	fs.StringVar(&f.stateDir, "state-dir", "", "directory for this node's replication.Store (WAL + checkpoints); default: a per-node subdirectory next to -ca-cert")
 	fs.BoolVar(&f.bootstrapAdmin, "bootstrap-admin", false, "seed one admin-role API key into this node's own auth.Store at startup and print its id+secret to stdout once, as \"BOOTSTRAP_ADMIN_KEY_ID=... BOOTSTRAP_ADMIN_KEY_SECRET=...\" (before the READY line) - the out-of-the-box way to stand up a cluster with no existing credential (a first-time operator, or a test harness with no other bootstrap path); only meaningful on \"cluster bootstrap\" since that is where a node's auth.Store is genuinely empty")
 	fs.StringVar(&f.llmctlPath, "llmctl-path", "", "path to the real bin/llmctl script this node's model-lifecycle routes (T072-FU4) shell out to; default: the bare \"llmctl\" name, PATH-resolved at call time (executor.Config.LLMCtlPath's own documented default)")
+	fs.StringVar(&f.advertise, "advertise", "", "comma-separated extra DNS names / IP addresses clients will use to reach this node's API; added as Subject Alternative Names to every certificate (loopback, hostname and the -api-bind host are always included)")
+	fs.StringVar(&f.cliCertDir, "cli-cert-dir", "", "directory (mode 0700) receiving ca.crt, client.crt and client.key for the llmctl shell CLI; default: a \"cli\" directory next to -ca-cert")
 	if err := fs.Parse(args); err != nil {
 		fmt.Fprintln(os.Stderr, "llmctld:", err)
 		os.Exit(2)
@@ -756,6 +763,17 @@ func runClusterBootstrap(args []string) {
 		os.Exit(1)
 	}
 
+	if err := configureCertSANs(f.apiBind, splitList(f.advertise)); err != nil {
+		fmt.Fprintln(os.Stderr, "llmctld: cluster bootstrap:", err)
+		os.Exit(1)
+	}
+	cliDir := resolveCLICertDir(f.cliCertDir, f.caCert)
+	if err := writeCLIMaterial(cliDir, ca); err != nil {
+		fmt.Fprintln(os.Stderr, "llmctld: cluster bootstrap: write CLI certificate material:", err)
+		os.Exit(1)
+	}
+	fmt.Printf("CLI_CERT_DIR=%s\n", cliDir)
+
 	raftTLS, raftTrustStore, err := buildNodeTLSConfig(ca, f.nodeID)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "llmctld: cluster bootstrap:", err)
@@ -971,6 +989,8 @@ func runClusterJoinReal(args []string) int {
 		leaderAPI  string
 		stateDir   string
 		llmctlPath string
+		advertise  string
+		cliCertDir string
 	)
 	fs.StringVar(&nodeID, "node-id", "", "this node's stable Raft/mTLS identity (required)")
 	fs.StringVar(&raftBind, "raft-bind", "127.0.0.1:0", "address for this node's Raft QUIC+mTLS transport to listen on")
@@ -980,6 +1000,8 @@ func runClusterJoinReal(args []string) int {
 	fs.StringVar(&leaderAPI, "leader-api", "", "the existing cluster leader's api-bind address to join through (required)")
 	fs.StringVar(&stateDir, "state-dir", "", "directory for this node's replication.Store (WAL + checkpoints); default: a per-node subdirectory next to -ca-cert")
 	fs.StringVar(&llmctlPath, "llmctl-path", "", "path to the real bin/llmctl script this node's model-lifecycle routes (T072-FU4) shell out to; default: the bare \"llmctl\" name, PATH-resolved at call time (executor.Config.LLMCtlPath's own documented default)")
+	fs.StringVar(&advertise, "advertise", "", "comma-separated extra DNS names / IP addresses clients will use to reach this node's API; added as Subject Alternative Names to every certificate (loopback, hostname and the -api-bind host are always included)")
+	fs.StringVar(&cliCertDir, "cli-cert-dir", "", "directory (mode 0700) receiving ca.crt, client.crt and client.key for the llmctl shell CLI; default: a \"cli\" directory next to -ca-cert")
 	if err := fs.Parse(args); err != nil {
 		fmt.Fprintln(os.Stderr, "llmctld:", err)
 		return 2
@@ -1004,6 +1026,17 @@ func runClusterJoinReal(args []string) int {
 		fmt.Fprintln(os.Stderr, "llmctld: cluster join: load CA:", err)
 		return 1
 	}
+
+	if err := configureCertSANs(apiBind, splitList(advertise)); err != nil {
+		fmt.Fprintln(os.Stderr, "llmctld: cluster join:", err)
+		return 1
+	}
+	cliDir := resolveCLICertDir(cliCertDir, caCert)
+	if err := writeCLIMaterial(cliDir, ca); err != nil {
+		fmt.Fprintln(os.Stderr, "llmctld: cluster join: write CLI certificate material:", err)
+		return 1
+	}
+	fmt.Printf("CLI_CERT_DIR=%s\n", cliDir)
 
 	raftTLS, raftTrustStore, err := buildNodeTLSConfig(ca, nodeID)
 	if err != nil {

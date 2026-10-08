@@ -1,0 +1,132 @@
+== claude-code PreToolUse: decisions ==
+  ok: safe answer: exit 0
+  ok: safe answer: no decision printed (normal permission flow)
+  ok: ON_SAFE=allow: explicit allow
+  ok: allow names the event
+  ok: block answer: exit 2 (blocks the tool call)
+  ok: block answer: reason on stderr
+  ok: low confidence: exit 0 with an ask decision
+  ok: low confidence escalates to the human (ask)
+  ok: the escalation reason names the confidence
+== claude-code: fail closed on every failure ==
+  ok: gateway down: escalates (ask), never allows
+  ok: wrong key (401): escalates (ask), never allows
+  ok: overloaded (529): escalates (ask), never allows
+  ok: not ready (503): escalates (ask), never allows
+  ok: readout failure (422): escalates (ask), never allows
+  ok: unreadable CA: escalates (ask), never allows
+  ok: decision binary missing: escalates (ask), never allows
+  ok: bad decision binary (garbage): escalates (ask), never allows
+  ok: bad decision binary (noconf): escalates (ask), never allows
+  ok: bad decision binary (nochoice): escalates (ask), never allows
+  ok: bad decision binary (crash): escalates (ask), never allows
+  ok: bad decision binary (abstain): escalates (ask), never allows
+  ok: bad decision binary (surprise): escalates (ask), never allows
+  ok: bad decision binary (lowconf): escalates (ask), never allows
+  ok: hung decision binary (timeout): escalates (ask), never allows
+  ok: garbage on stdin: escalates
+  ok: empty stdin: escalates
+  ok: ON_ERROR=deny: exit 2
+  ok: ON_ERROR=allow (explicit fail-open): exit 0
+  ok: ON_ERROR=allow: no deny/ask printed
+  ok: unknown ON_ERROR value fails closed (exit 2)
+  ok: python3 missing: wrapper blocks with exit 2
+  ok: unknown --agent: blocks with exit 2
+== entry points and config templates ==
+  ok: claude-code-pretool.sh: a block answer exits 2 through the entry point
+  ok: claude-code-prompt.sh: a block answer exits 2 through the entry point
+  ok: crush-pretool.sh: a block answer exits 2 through the entry point
+  ok: claude-code.settings.json is valid JSON
+  ok: crush.hooks.json is valid JSON
+  ok: routes.example.json is valid JSON
+  ok: question.json is valid JSON
+  ok: claude-code.settings.json points at an entry script the kit ships (claude-code-pretool.sh)
+  ok: claude-code-pretool.sh is executable
+  ok: crush.hooks.json points at an entry script the kit ships (crush-pretool.sh)
+  ok: crush-pretool.sh is executable
+  ok: question.json is a choice question over allow/review/block
+== no secret leaves the hook ==
+  ok: the access key is not on stdout/stderr
+  ok: the access key is not in a normal run either
+== claude-code UserPromptSubmit ==
+  ok: prompt: safe answer passes
+  ok: prompt: block answer exits 2
+  ok: prompt: gateway down blocks (fail closed)
+== crush PreToolUse ==
+  ok: crush: safe answer exits 0
+  ok: crush: safe answer prints nothing (falls through to the normal permission flow)
+  ok: crush: ON_SAFE=allow prints the allow envelope
+  ok: crush: block answer exits 2
+  ok: crush: reason on stderr
+  ok: crush: low confidence is a deny (crush has no ask; fall-through would auto-approve under --yolo)
+  ok: crush: gateway down denies
+  ok: crush: 529 denies
+  ok: crush: explicit fail-open exits 0
+== generic caller (used by the opencode plugin and the pi extension) ==
+  ok: generic: ALLOW
+  ok: generic: DENY
+  ok: generic: ESCALATE on low confidence
+  ok: generic: gateway down escalates
+  ok: generic: explicit fail-open ALLOW
+== opencode plugin and pi extension under a stub agent harness ==
+  ok: node harness exits 0
+    harness ok: opencode: the module exports only the plugin function
+    harness ok: pi: registered a tool_call handler
+    harness ok: opencode: safe answer lets the tool run
+    harness ok: opencode: block answer throws
+    harness ok: opencode: low confidence blocks (no ask in opencode)
+    harness ok: opencode: gateway down blocks
+    harness ok: opencode: explicit fail-open lets it run
+    harness ok: opencode: missing hook file blocks
+    harness ok: opencode: missing hook file + fail-open allows
+    harness ok: pi: safe answer returns nothing (proceed)
+    harness ok: pi: block answer returns { block: true }
+    harness ok: pi: low confidence without a UI blocks
+    harness ok: pi: low confidence with a UI asks the human and proceeds on yes
+    harness ok: pi: the human declining blocks
+    harness ok: pi: a DENY verdict is never overridden by a prompt
+    harness ok: pi: gateway down blocks
+    harness ok: pi: explicit fail-open proceeds
+    HARNESS-DONE fails=0
+  ok: harness ran to completion
+  ok: no harness expectation failed
+== consumer-side router (fixes the Jev.md J3-038 / J3-058 snippets) ==
+  ok: router driver exits 0
+    router ok: success on a real gateway
+    router ok: the success result carries the real answer
+    router ok: selector picks the small route for few labels
+    router ok: a selector with label_count_over routes to the large one
+    router ok: max_labels is enforced (falls back)
+    router ok: below min_confidence follows the fallback to deny
+    router ok: a noul question is scaled abs(p-0.5)*2 (0.5/0.5 uniform -> 0) and fails the gate
+    router ok: a fallback cycle ends in escalate, no recursion error
+    router ok: a fallback that is no route escalates (J3-038 KeyError class)
+    router ok: an unknown route name escalates instead of raising
+    router ok: a route without a model escalates
+    router ok: the reserved route name escalate is terminal
+    router ok: gateway down never yields an allow: escalate
+    router ok: 529 overloaded never yields an allow: escalate
+    router ok: wrong key (401) never yields an allow: escalate
+    router ok: 529 is reported as retryable in the reason
+    router ok: a missing CA is a configuration error
+    router ok: a garbage CA file is a configuration error
+    router ok: plain http is refused
+    router ok: min_agreement is rejected, not ignored
+    router ok: cost_budget is rejected, not ignored
+    router ok: min_probability is rejected, not ignored
+    router ok: routes.example.json loads
+    router ok: the example risk_gate fails closed to deny on a low-confidence answer
+    router ok: the example tool_selection routes small -> large -> escalate or succeeds, never raises
+    router ok: the key can come from a key file
+    router ok: no key at all is a configuration error
+    router ok: a Secret never prints its value
+    router ok: the router object does not leak the key through its repr
+    router ok: CLI: success exit 0 with one JSON line
+    router ok: CLI: a deny outcome exits 1
+    router ok: CLI: bad question JSON is a configuration failure that escalates
+    router ok: CLI: usage exits 2
+    ROUTER-DONE fails=0
+  ok: router driver ran to completion
+  ok: no router expectation failed
+  ok: the router never prints the key
+RESULT: PASS

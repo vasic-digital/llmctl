@@ -1,0 +1,14 @@
+  ok: _sched_wait_ready succeeds once the delayed server actually binds
+  ok: wait genuinely blocked until readiness (elapsed=3s, expected roughly the 2s delay, well under the 10s timeout)
+  ok: _sched_wait_ready fails when nothing ever becomes ready
+  ok: wait is bounded by its own timeout, not open-ended (elapsed=2s for a 2s timeout)
+  ok: LLMCTL_READY_TIMEOUT=0 disables the wait entirely (opt-out for hermetic tests with no real listener)
+  ok: _sched_wait_ready under LLMCTL_DRY_RUN=1 reports success (never blocks waiting for a listener dry-run mode will never start)
+  ok: REGRESSION GUARD: dry-run readiness check completed in 0s, not the ~60s production default timeout
+  ok: _sched_diagnose_bind_failure returns 1 (no diagnosis) when there is no log file at all
+  ok: no diagnosis text is emitted when there is nothing to diagnose
+  ok: _sched_diagnose_bind_failure does NOT fire on an unrelated failure (e.g. OOM) - never a false positive
+  ok: _sched_diagnose_bind_failure detects the real bind-conflict signature and returns 0
+  ok: the diagnosis names the real port and says it's already in use (got: port 19997 is already in use by another process (not an llmctl profile) - stop it, or set LLMCTL_PORT_BINDCONFLICT to a free port)
+  ok: the diagnosis names the exact override env var the operator can set (got: port 19997 is already in use by another process (not an llmctl profile) - stop it, or set LLMCTL_PORT_BINDCONFLICT to a free port)
+RESULT: PASS

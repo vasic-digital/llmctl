@@ -1,0 +1,57 @@
+{
+ "task": "T001",
+ "base": "a9ebefe16943a6df32a47cbd3a8e234342838c15",
+ "branch": "main",
+ "expected_base": "a9ebefe",
+ "base_matches": true,
+ "ts": "2026-10-07T14:10:21.963404Z",
+ "t002": {
+  "suite": "make test",
+  "pass": 37,
+  "fail": 1,
+  "failing": [
+   "test_gpu_throughput_ratio.sh (GPU/CPU ratio 1.1969x < 2.0x on this RTX 3060 host; hardware-dependent, pre-existing)"
+  ],
+  "log": "evidence/p0-baseline-make-test.log",
+  "wall_s": 194
+ },
+ "t003_t004": {
+  "modified_applied": 24,
+  "new_added": 29,
+  "qa_files_head_wins": 2,
+  "byte_mismatches": 0,
+  "excluded": "4 .pyc, 5 symlinks"
+ },
+ "t005": {
+  "suite": "make test",
+  "pass": 43,
+  "fail": 0,
+  "log": "evidence/p0-port-make-test.log",
+  "new_suites_passing": [
+   "test_decide_download.sh",
+   "test_decide_gateway.sh",
+   "test_decide.sh",
+   "test_onnx_download.sh",
+   "test_onnx_server.sh"
+  ],
+  "note": "baseline had 1 failing (test_gpu_throughput_ratio, ratio 1.1969x) which PASSED on the ported tree; the test is hardware/load dependent on this shared host - cause not yet established (UNCONFIRMED); the plan expected 2 environment failures, measured 1 then 0"
+ },
+ "t006": {
+  "reviewer": "independent opus subagent",
+  "verdict": "GO",
+  "counts_reproduced": {
+   "IDENTICAL": 455,
+   "MODIFIED": "24 applied + 2 HEAD-wins",
+   "NEW": "29 + 4 pyc skipped",
+   "SYMLINK": 5
+  },
+  "findings": {
+   "F1": "review's own 4 .pyc written into tree - removed by name",
+   "F2": "tests/test_gpu_throughput_ratio.sh overwrites tracked docs/qa files on every run (pre-existing)",
+   "F3": "HEAD's two qa files are SKIPPED placeholders; b09a79a had the real RTX numbers",
+   "F4": "baseline GPU test planned ngl=0, port run ngl=99 - shared-GPU free VRAM likely cause, UNCONFIRMED",
+   "F5": "--api-key argv exposure already tracked (D-03)",
+   "F6": "7 files mode 600 from candidate; git stores 644; archive effect UNCONFIRMED"
+  }
+ }
+}

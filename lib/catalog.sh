@@ -126,7 +126,7 @@ catalog_port() {
   local p="$1" override_var override
   override_var="$(catalog_port_override_env_name "${p}")"
   override="${!override_var:-}"
-  if [[ -n "${override}" ]]; then
+  if [[ -n "${override}" && "${override}" != "auto" ]]; then
     catalog_check
     catalog_exists "${p}" || die "unknown profile: ${p} (see: llmctl models list)"
     printf '%s\n' "${override}"
@@ -167,6 +167,12 @@ catalog_bind_host() {
 catalog_min_tier()   { catalog_field "$1" min_tier baseline; }
 catalog_desc()       { catalog_field "$1" desc ""; }
 catalog_hf_repo()    { catalog_field "$1" hf_repo; }
+# catalog_decision_protocol <profile> -> letter-logit | systemone-native | nli-onnx ("" for a non-decision profile).
+catalog_decision_protocol() {
+  catalog_check
+  json_query "${LLMCTL_CATALOG}" "d[\"profiles\"][\"$1\"].get(\"decision\",{}).get(\"protocol\") or \"\"" 2>/dev/null || true
+}
+
 catalog_capability() { catalog_check; json_query "${LLMCTL_CATALOG}" "' '.join(d[\"profiles\"][\"$1\"][\"capability\"])"; }
 
 catalog_default() {
@@ -453,6 +459,13 @@ def resolve_port(name, default_port):
     override = os.environ.get(env_name)
     if not override:
         return default_port
+    # "auto" selects the DYNAMIC strategy for this profile (FR-088): the port
+    # is then assigned at start time by the registry allocator
+    # (lib/portreg.sh), so the plan keeps the documented port as the
+    # fallback/ordering key and the real port is recorded in "assigned_port"
+    # once the service runs.
+    if override.strip().lower() == "auto":
+        return default_port
     try:
         return int(override)
     except ValueError:
@@ -461,12 +474,35 @@ def resolve_port(name, default_port):
         )
         sys.exit(1)
 
+def overhead_field(name, dfl, key):
+    """Validated defaults.<key> (overhead_mb | overhead_vram_mb): an integer in 0..65536, default 0.  Malformed is
+    a loud error, never ignored."""
+    v = dfl.get(key, 0)
+    if isinstance(v, bool) or not isinstance(v, int) or not 0 <= v <= 65536:
+        sys.stderr.write("catalog_plan_json: profile %s: defaults.%s must be an integer in 0..65536, got %r\n" % (name, key, v))
+        sys.exit(1)
+    return v
+
 def footprint(name, p):
     """-> dict(mode, ram_mb, vram_mb, storage_mb, fits) or None when unfit."""
     size_mb = sum((f.get("size") or 0) for f in p["files"]) // 1048576
     dfl = p.get("defaults", {})
     ctx = resolve_ctx(name, int(dfl.get("ctx", 8192)))
     par = int(dfl.get("parallel", 1))
+    if p["engine"] == "onnx":
+        # Encoder-class decision runner (lib/onnx_server.py): CPU-only
+        # inference (onnxruntime CPUExecutionProvider), so VRAM need is 0.
+        # RAM reservation = model_size_mb * 1.5 + 512 MiB: the fp32 weights
+        # are memory-mapped/loaded once (~1.0x), plus onnxruntime's session
+        # working set and per-request activation buffers (~0.5x), plus a
+        # fixed 512 MiB for the python3 interpreter + SentencePiece
+        # tokenizer + HTTP stack. Storage need is the repo size + 10%
+        # (same rule of thumb the colibri branch applies).
+        ram_need = (size_mb * 3 // 2) + 512
+        ok = ram_need <= ram_budget and size_mb * 11 // 10 <= storage_free
+        return {"mode": "cpu", "ram_mb": ram_need, "vram_mb": 0,
+                "storage_mb": size_mb, "ctx": ctx, "ngl": 0, "parallel": par,
+                "flash_attn": "off", "fits": ok}
     if p["engine"] == "colibri":
         # Weights are memory-mapped from NVMe; RAM is page cache + working set.
         # No GPU KV cache (colibri's own int4-gs64 scheme is unrelated to
@@ -478,18 +514,32 @@ def footprint(name, p):
                 "flash_attn": "off", "fits": ok}
     kv_type = resolve_kv_type(name, dfl.get("kv_cache_type", "f16"))
     kv = kv_mb(ctx, par, kv_type)
+    # defaults.overhead_mb / overhead_vram_mb: the MEASURED working set above weights + KV (activation / compute
+    # buffers).  The flat ctx/8 KV rule cannot see it; for an encoder-class or native decision model it dominates
+    # (Julia-1: 160 MiB of weights, 1.4 GiB peak with a 1024-token window).  Both come from
+    # scripts/overhead_from_memory.py (rule: ceil(1.10 x (peak VmHWM - model file)); VRAM: ceil(1.10 x the peak VRAM
+    # the engine pid held)) and carry their evidence in the profile's `memory` object.  Absent = 0, so every
+    # profile that does not declare them keeps its footprint unchanged.
+    ovh = overhead_field(name, dfl, "overhead_mb")
+    ovh_v = overhead_field(name, dfl, "overhead_vram_mb")
+    kv += ovh
     if vram_budget > 0 and size_mb + kv <= vram_budget and 2048 <= ram_budget:
         return {"mode": "gpu", "ram_mb": 2048, "vram_mb": size_mb + kv,
                 "storage_mb": size_mb, "ctx": ctx,
                 "ngl": int(dfl.get("ngl", 99)), "parallel": par,
                 "flash_attn": dfl.get("flash_attn", "auto"), "kv_cache_type": kv_type,
                 "fits": True}
-    if size_mb + kv <= ram_budget:
-        return {"mode": "cpu", "ram_mb": size_mb + kv, "vram_mb": 0,
+    # cpu mode (-ngl 0): a CUDA build still offloads large-batch host ops to the GPU (measured: kev-08b 2.3 GiB of
+    # VRAM, encoders 0.1-0.2 GiB), so on a host that HAS a GPU the measured offload VRAM is booked; on a CPU-only
+    # host there is no offload and nothing is booked.  A host whose VRAM budget cannot hold it refuses the profile
+    # (mode none) rather than silently booking 0.
+    cpu_vram = ovh_v if vram_budget > 0 else 0
+    if size_mb + kv <= ram_budget and cpu_vram <= vram_budget:
+        return {"mode": "cpu", "ram_mb": size_mb + kv, "vram_mb": cpu_vram,
                 "storage_mb": size_mb, "ctx": ctx, "ngl": 0, "parallel": par,
                 "flash_attn": dfl.get("flash_attn", "auto"), "kv_cache_type": kv_type,
                 "fits": True}
-    return {"mode": "none", "ram_mb": size_mb + kv, "vram_mb": 0,
+    return {"mode": "none", "ram_mb": size_mb + kv, "vram_mb": cpu_vram,
             "storage_mb": size_mb, "ctx": ctx, "ngl": 0, "parallel": par,
             "flash_attn": dfl.get("flash_attn", "auto"), "kv_cache_type": kv_type,
             "fits": False}
@@ -500,9 +550,27 @@ for name in sorted(catalog["profiles"].keys()):
     fp = footprint(name, p)
     min_tier = p.get("min_tier", "baseline")
     tier_ok = tier_rank[tier] >= tier_rank.get(min_tier, 1)
+    # The port a RUNNING service was actually given (dynamic strategy, FR-088)
+    # is read back from its reservation record, so `plan` shows reality.
+    assigned = None
+    run_rec = os.path.join(os.environ.get("LLMCTL_RUNTIME_DIR", ""), name + ".run")
+    if os.environ.get("LLMCTL_RUNTIME_DIR") and os.path.isfile(run_rec):
+        with open(run_rec) as rf:
+            for ln in rf:
+                if ln.startswith("port=") and ln[5:].strip().isdigit():
+                    assigned = int(ln[5:].strip())
+    if assigned is not None:
+        fp["assigned_port"] = assigned
     fp.update({"port": resolve_port(name, p["port"]), "engine": p["engine"],
                "capability": p["capability"], "min_tier": min_tier,
                "tier_ok": tier_ok, "recommended": bool(fp["fits"] and tier_ok)})
+    if "decide" in p.get("capability", []):
+        # T139: what the planner booked above weights + KV, and the window it was measured at (None = unmeasured)
+        pdfl = p.get("defaults", {})
+        pmem = (p.get("memory") or {}).get("ram") or {}
+        fp.update({"overhead_mb": int(pdfl.get("overhead_mb", 0)), "overhead_vram_mb": int(pdfl.get("overhead_vram_mb", 0)),
+                   "window_tokens": pdfl.get("window_tokens"),
+                   "memory_status": "measured" if pmem.get("status") == "measured" else "unmeasured"})
     profiles[name] = fp
 
 # Co-residency groups: greedy bin-packing over the recommended profiles in
@@ -529,11 +597,128 @@ for name in sorted(profiles, key=lambda n: profiles[n]["port"]):
 if current["members"]:
     groups.append(current)
 
+# Decision capacity (decide capability): per decide-capable profile, the
+# maximum number of parallel server instances this host could run in GPU
+# mode and in CPU mode (ALTERNATIVE placements, never additive), under the
+# SAME ram_budget/vram_budget (4 GiB RAM headroom, 15% VRAM headroom)
+# already computed above - no budget/headroom logic is changed, this only
+# re-divides it. llama-engine profiles: GPU placement uses the same fixed
+# 2048 MiB RAM reservation footprint() already uses for gpu mode; CPU
+# placement is the weights+KV footprint with ngl=0. onnx-engine profiles
+# are CPU-only encoder inference: instances_gpu is always 0 and the CPU
+# per-instance footprint is the SAME size*1.5 + 512 MiB reservation the
+# footprint() onnx branch computes. This is a READ-ONLY
+# capacity report: it reserves nothing; runtime admission still goes
+# through scheduler.sh's own budget check when a profile is actually
+# started. Profiles that do not fit (or are tier-gated) report 0 with a
+# "reason" field.
+# G-030 / FR-074: the decision mode the launched servers run in. In the
+# default deterministic mode a decision llama-server runs ONE slot (-np 1,
+# context per slot preserved - lib/scheduler.sh sched_build_launch), so the
+# parallel figure the planner reads from the catalog ("slots",
+# "total_decision_slots") is the THROUGHPUT-mode figure. Both are reported:
+# the catalog-parallel figures stay as they were, "slots_assume_mode" says
+# which mode they assume, and the "effective_*" fields are the figures for the
+# mode that is actually active.
+decide_mode = (os.environ.get("LLMCTL_DECIDE_MODE") or "deterministic").strip().lower()
+if decide_mode not in ("deterministic", "throughput"):
+    sys.stderr.write("catalog_plan_json: LLMCTL_DECIDE_MODE=%r must be deterministic or throughput\n" % decide_mode)
+    sys.exit(1)
+decision_instances = {}
+for name in sorted(catalog["profiles"].keys()):
+    p = catalog["profiles"][name]
+    if p["engine"] not in ("llama", "onnx") or "decide" not in p.get("capability", []):
+        continue
+    size_mb = sum((f.get("size") or 0) for f in p["files"]) // 1048576
+    dfl = p.get("defaults", {})
+    dpar = int(dfl.get("parallel", 1))
+    dtier_ok = tier_rank[tier] >= tier_rank.get(p.get("min_tier", "baseline"), 1)
+    if p["engine"] == "onnx":
+        # CPU-only encoder: no GPU placement at all; per-instance RAM is
+        # the footprint() onnx branch's size*1.5 + 512 MiB reservation.
+        gpu_ram_mb, gpu_vram_mb = 0, 0
+        cpu_ram_mb = (size_mb * 3 // 2) + 512
+        cpu_vram_mb = 0
+    else:
+        dctx = resolve_ctx(name, int(dfl.get("ctx", 8192)))
+        dkv_type = resolve_kv_type(name, dfl.get("kv_cache_type", "f16"))
+        dkv = kv_mb(dctx, dpar, dkv_type) + int(dfl.get("overhead_mb", 0))   # validated by footprint() above
+        gpu_ram_mb, gpu_vram_mb = 2048, size_mb + dkv
+        cpu_ram_mb = size_mb + dkv
+        # cpu placement on a host with a GPU also holds the measured offload VRAM (same rule as footprint())
+        cpu_vram_mb = int(dfl.get("overhead_vram_mb", 0)) if vram_budget > 0 else 0
+    inst_gpu = 0
+    inst_cpu = 0
+    reason = ""
+    if p["engine"] == "onnx":
+        # CPU-only encoder engine: GPU placement is not applicable (never a
+        # "0-cost GPU instance" - that would divide by zero below).
+        gpu_fits = False
+    else:
+        gpu_fits = (vram_budget > 0 and gpu_vram_mb <= vram_budget
+                    and gpu_ram_mb <= ram_budget)
+    cpu_fits = cpu_ram_mb <= ram_budget and cpu_vram_mb <= vram_budget
+    if not dtier_ok:
+        reason = "tier gate: host tier %s below min_tier %s" % (tier, p.get("min_tier", "baseline"))
+    else:
+        if gpu_fits:
+            inst_gpu = min(vram_budget // gpu_vram_mb, ram_budget // gpu_ram_mb)
+        if cpu_fits:
+            inst_cpu = ram_budget // cpu_ram_mb
+            if cpu_vram_mb > 0:
+                inst_cpu = min(inst_cpu, vram_budget // cpu_vram_mb)
+        if inst_gpu == 0 and inst_cpu == 0:
+            reason = "footprint exceeds RAM and VRAM budgets"
+    # per_instance reports the GPU placement when that placement fits (it
+    # is the placement with the separate VRAM accounting), else the CPU
+    # placement.
+    if gpu_fits:
+        per_instance = {"ram_mb": gpu_ram_mb, "vram_mb": gpu_vram_mb, "slots": dpar}
+    else:
+        per_instance = {"ram_mb": cpu_ram_mb, "vram_mb": cpu_vram_mb, "slots": dpar}
+    # data-model.md section 10 (the 009 contract): total_decision_slots is the
+    # capacity of the BEST SINGLE placement of this one profile alone against
+    # the full current budgets (never additive across profiles or with
+    # running chat profiles); per_instance reports the GPU placement when it
+    # fits, else the CPU placement. Additive fields (candidate shape kept):
+    #   protocol        decision.protocol of the catalog entry
+    #   best_placement  "gpu"|"cpu" (the placement total_decision_slots uses,
+    #                   GPU on a tie) or null when nothing fits
+    #   placements      both per-instance footprints, so the scheduler's
+    #                   admission probe (sched_decision_probe) and the
+    #                   instance registry read ONE source of truth
+    #   tier_ok         whether the host tier satisfies min_tier
+    if inst_gpu > 0 and inst_gpu >= inst_cpu:
+        best = "gpu"
+    elif inst_cpu > 0:
+        best = "cpu"
+    else:
+        best = None
+    entry = {"instances_gpu": inst_gpu, "instances_cpu": inst_cpu,
+             "per_instance": per_instance,
+             "total_decision_slots": max(inst_gpu, inst_cpu) * dpar,
+             "protocol": (p.get("decision") or {}).get("protocol"),
+             "mode": decide_mode,
+             "slots_assume_mode": "throughput",
+             "effective_slots_per_instance": (1 if (decide_mode == "deterministic" and p["engine"] == "llama") else dpar),
+             "effective_total_decision_slots": max(inst_gpu, inst_cpu) * (1 if (decide_mode == "deterministic" and p["engine"] == "llama") else dpar),
+             "best_placement": best,
+             "placements": {
+                 "gpu": ({"ram_mb": gpu_ram_mb, "vram_mb": gpu_vram_mb}
+                         if p["engine"] != "onnx" else None),
+                 "cpu": {"ram_mb": cpu_ram_mb, "vram_mb": cpu_vram_mb}},
+             "tier_ok": dtier_ok}
+    if reason:
+        entry["reason"] = reason
+    decision_instances[name] = entry
+
 out = {
     "tier": tier,
     "budgets": {"ram_mb": ram_budget, "vram_mb": vram_budget,
                 "vram_live": vram_live, "storage_free_mb": storage_free},
     "profiles": profiles,
+    "decision_instances": decision_instances,
+    "decision_mode": decide_mode,
     "recommended": sorted([n for n, f in profiles.items() if f["recommended"]],
                           key=lambda n: profiles[n]["port"]),
     "coresidency_groups": [
@@ -581,6 +766,26 @@ if groups:
               % (i, ", ".join(g["profiles"]), g["ram_mb"], g["vram_mb"]))
 else:
     print("Co-residency groups: none (no profile fits this host)")
+di = plan.get("decision_instances", {})
+if di:
+    print("")
+    print("Decision capacity (max parallel instances per decide profile; capacity report, nothing reserved):")
+    print("%-14s %-8s %-14s %-14s %-15s %s" %
+          ("profile", "tier-ok", "gpu-instances", "cpu-instances", "slots/instance", "detail"))
+    for name in sorted(di):
+        r = di[name]
+        if "reason" in r and r["instances_gpu"] == 0 and r["instances_cpu"] == 0 and "tier gate" in r["reason"]:
+            tier_ok = "no"
+        else:
+            tier_ok = "yes"
+        if r["instances_gpu"] == 0 and r["instances_cpu"] == 0 and "reason" in r:
+            detail = r["reason"]
+        else:
+            detail = "RAM %d MiB / VRAM %d MiB per instance" % (
+                r["per_instance"]["ram_mb"], r["per_instance"]["vram_mb"])
+        print("%-14s %-8s %-14s %-14s %-15s %s" %
+              (name, tier_ok, r["instances_gpu"], r["instances_cpu"],
+               r["per_instance"]["slots"], detail))
 PYEOF
 }
 

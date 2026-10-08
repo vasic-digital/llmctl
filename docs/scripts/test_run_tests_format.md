@@ -104,6 +104,17 @@ under test).
   also covered by `tests/test_syntax.sh`'s `bash -n` + shebang +
   strict-mode sweep.
 
+## SKIP contract and `doc_counts.sh` (C-20)
+
+The same fake-suite harness also proves: a `SKIP-SUITE: <reason>` suite is reported `SKIP` (not `PASS`, counted
+and listed separately, never failing the run); a suite that asserted nothing and only skipped is SKIP too; a
+suite that ran and skipped some assertions is `PASS (n skipped assertion(s))`; a non-zero exit stays a FAIL even
+when the output carries the marker; and `scripts/doc_counts.sh --check` reports a `SKIP-SUITE` suite as
+`status=skipped-suite`.
+
 ## Last verified date
 
-2026-09-17
+2026-10-07
+
+Round 3 adds (C2-06, C2-10): an exit-0 suite with a `  FAIL:` line, and a SKIP-SUITE after an assertion, are FAIL in the
+harness and `status=inconsistent` (exit 2) in `doc_counts.sh`; `skip_suite` refuses once `TEST_FAILS>0`.

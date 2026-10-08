@@ -1,0 +1,28 @@
+{
+ "id": "fixt/nli-no-tokenizer",
+ "modelId": "fixt/nli-no-tokenizer",
+ "author": "fixt",
+ "private": false,
+ "gated": false,
+ "disabled": false,
+ "sha": "0123456789abcdef0123456789abcdef01234567",
+ "lastModified": "2026-10-01T00:00:00.000Z",
+ "tags": [
+  "license:mit"
+ ],
+ "siblings": [
+  {
+   "rfilename": "onnx/model.onnx",
+   "blobId": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+   "size": 1741985401,
+   "lfs": {
+    "sha256": "4444444444444444444444444444444444444444444444444444444444444444",
+    "size": 1741985401,
+    "pointerSize": 134
+   }
+  }
+ ],
+ "cardData": {
+  "license": "mit"
+ }
+}

@@ -343,4 +343,112 @@ assert_file_absent "${LLMCTL_RUNTIME_DIR}/small.run" "10e: small's reservation i
 assert_file_absent "${LLMCTL_RUNTIME_DIR}/fast.run" "10e: fast was NEVER started -- _sched_start_impl must not be reached on the non-converged path"
 assert_file_absent "${LLMCTL_RUNTIME_DIR}/vision.run" "10e: vision was NEVER started, for the same reason"
 
+# --- 11. sched_build_launch: the onnx engine arm ------------------------------
+# decide-nli is the onnx-engine profile: the launch must exec python on
+# lib/onnx_server.py (the INTERNAL encoder scoring runtime) with the profile's
+# model dir, loopback host, port, ctx cap, tokenizer and an --api-key-file
+# (the key itself never on argv).
+test_teardown_env; test_setup_env
+export LLMCTL_DRY_RUN=1
+sched_build_launch decide-nli cpu 8096 512 0 1 off f16
+assert_eq "$(command -v python3)" "${SCHED_EXEC}" "onnx arm: exec is python3 when no hash-locked venv exists"
+assert_eq "${LLMCTL_ROOT}/lib/onnx_server.py" "${SCHED_ARGS[0]}" "onnx arm: argv[0] is lib/onnx_server.py"
+assert_contains "$(printf '%s ' "${SCHED_ARGS[@]}")" "--model-dir ${LLMCTL_MODELS_DIR}/decide-nli " "onnx arm: --model-dir points at the profile dir"
+assert_contains "$(printf '%s ' "${SCHED_ARGS[@]}")" "--host 127.0.0.1 " "onnx arm: always loopback"
+assert_contains "$(printf '%s ' "${SCHED_ARGS[@]}")" "--port 8096 " "onnx arm: --port"
+assert_contains "$(printf '%s ' "${SCHED_ARGS[@]}")" "--profile decide-nli " "onnx arm: --profile"
+assert_contains "$(printf '%s ' "${SCHED_ARGS[@]}")" "--max-tokens 512 " "onnx arm: ctx passed as --max-tokens (N-20)"
+assert_contains "$(printf '%s ' "${SCHED_ARGS[@]}")" "--tokenizer " "onnx arm: --tokenizer passed from the catalog files (D-17a)"
+assert_contains "$(printf '%s ' "${SCHED_ARGS[@]}")" "--api-key-file ${LLMCTL_STATE_DIR}/keys/onnx-decide-nli.key" "onnx arm: --api-key-file under the state dir"
+case "$(printf '%s ' "${SCHED_ARGS[@]}")" in *"--api-key "*) has_key=1 ;; *) has_key=0 ;; esac
+assert_eq 0 "${has_key}" "onnx arm: no --api-key <value> on argv"
+LLMCTL_DECIDE_API_KEY=secret-should-not-leak sched_build_launch decide-nli cpu 8096 512 0 1 off f16
+case "$(printf '%s ' "${SCHED_ARGS[@]}")" in *secret-should-not-leak*) leaked=1 ;; *) leaked=0 ;; esac
+assert_eq 0 "${leaked}" "onnx arm: an env key never reaches the runtime argv"
+assert_file_absent "${LLMCTL_STATE_DIR}/keys/onnx-decide-nli.key" "onnx arm: dry-run creates no key file"
+# hash-locked venv wins when present
+mkdir -p "${LLMCTL_DATA_DIR}/venv-onnx/bin"; printf '#!/bin/sh\n' > "${LLMCTL_DATA_DIR}/venv-onnx/bin/python"; chmod +x "${LLMCTL_DATA_DIR}/venv-onnx/bin/python"
+sched_build_launch decide-nli cpu 8096 512 0 1 off f16
+assert_eq "${LLMCTL_DATA_DIR}/venv-onnx/bin/python" "${SCHED_EXEC}" "onnx arm: the hash-locked venv python is used when 'llmctl build onnx' was run"
+# real launch creates the 0600 key file
+export LLMCTL_DRY_RUN=0
+mkdir -p "${LLMCTL_MODELS_DIR}/decide-nli"
+sched_build_launch decide-nli cpu 8096 512 0 1 off f16
+assert_file_exists "${LLMCTL_STATE_DIR}/keys/onnx-decide-nli.key" "onnx arm: real launch creates the per-profile key file"
+assert_eq "600" "$(stat -c %a "${LLMCTL_STATE_DIR}/keys/onnx-decide-nli.key" 2>/dev/null || stat -f %Lp "${LLMCTL_STATE_DIR}/keys/onnx-decide-nli.key")" "onnx arm: key file mode is 0600"
+rmdir "${LLMCTL_MODELS_DIR}/decide-nli"
+out="$(sched_build_launch decide-nli cpu 8096 512 0 1 off f16 2>&1)" && rc=0 || rc=$?
+assert_eq 1 "${rc}" "onnx arm: not-downloaded model dir -> rc 1 (real mode)"
+assert_contains "${out}" "model not downloaded" "onnx arm: not-downloaded message names the download command"
+export LLMCTL_DRY_RUN=1
+
+# --- 11b. sched_build_launch: native /v1/systemone profiles (G-116) --------
+# llama.cpp #30073: a state longer than the physical batch (default 512) is a
+# HTTP 500 from the engine, so a native decision profile launches with -b/-ub
+# 4096, no prompt cache, loopback, a per-profile key FILE and one slot. A
+# letter-logit decision profile must NOT get the batch flags (golden-false:
+# its launch line stays byte-for-byte what it was).
+test_teardown_env; test_setup_env
+export LLMCTL_DRY_RUN=1
+for nat in decide-julia decide-laya decide-kev-08b decide-kev-4b decide-kev-9b decide-lev; do
+  sched_build_launch "${nat}" gpu "$(catalog_port "${nat}")" 8192 99 1 auto f16
+  line="$(printf '%s ' "${SCHED_ARGS[@]}")"
+  assert_contains "${line}" "--batch-size 4096 --ubatch-size 4096 --no-cache-prompt" "11b ${nat}: native launch carries -b/-ub 4096 and no prompt cache"
+  assert_contains "${line}" "--host 127.0.0.1 " "11b ${nat}: loopback only"
+  assert_contains "${line}" "--parallel 1 " "11b ${nat}: deterministic single slot"
+  assert_contains "${line}" "--ctx-size 8192 " "11b ${nat}: per-slot context preserved"
+  assert_contains "${line}" "--api-key-file ${LLMCTL_STATE_DIR}/keys/llama-${nat}.key" "11b ${nat}: per-profile key file"
+  case "${line}" in *"--api-key "*) has_key=1 ;; *) has_key=0 ;; esac
+  assert_eq 0 "${has_key}" "11b ${nat}: no key value on argv"
+done
+sched_build_launch decide-tiny gpu 8092 4096 99 1 auto q8_0
+case "$(printf '%s ' "${SCHED_ARGS[@]}")" in *"--ubatch-size"*|*"--no-cache-prompt"*) leaked=1 ;; *) leaked=0 ;; esac
+assert_eq 0 "${leaked}" "11b: a letter-logit decision profile gets NO native batch flags"
+sched_build_launch fast gpu 8080 4096 99 1 auto f16
+case "$(printf '%s ' "${SCHED_ARGS[@]}")" in *"--ubatch-size"*) leaked=1 ;; *) leaked=0 ;; esac
+assert_eq 0 "${leaked}" "11b: a chat profile gets NO native batch flags"
+
+# --- 12. `auto decide` (FR-030/SC-012) and the shared admission predicate ----
+# The ranking is fixed and documented (docs/hardware-tiers.md "Planner and
+# `auto decide`"): the first RECOMMENDED profile of the decide ranking wins,
+# smallest footprint first, and the choice is explained. D-24: the unknown-
+# capability message names decide.
+test_teardown_env; test_setup_env
+export LLMCTL_DRY_RUN=1
+export LLMCTL_FAKE_HW="${LLMCTL_ROOT}/tests/fixtures/hw-baseline.json"
+out="$("${LLMCTL}" auto decide 2>&1)" && rc=0 || rc=$?
+assert_eq 0 "${rc}" "12: auto decide on the baseline fixture succeeds"
+assert_contains "${out}" "capability 'decide' -> profile 'decide-tiny'" "12: auto decide picks decide-tiny (first recommended in the ranking)"
+assert_contains "${out}" "first recommended profile in the decide ranking [decide-tiny decide-nli decide-2b decide decide-pro decide-max decide-julia decide-laya decide-kev-08b decide-lev decide-kev-4b decide-kev-9b]" "12: the choice is explained with the full ranking (FR-030)"
+assert_contains "${out}" "smallest footprint first" "12: the explanation states the rule (smallest first, not highest accuracy)"
+assert_file_exists "${LLMCTL_RUNTIME_DIR}/decide-tiny.run" "12: decide-tiny reserved by the real admission path"
+out="$("${LLMCTL}" auto bogus 2>&1)" && rc=0 || rc=$?
+assert_eq 1 "${rc}" "12: auto <unknown capability> fails"
+assert_contains "${out}" "(chat|coder|vision|decide)" "12: D-24 the error lists decide among the capabilities"
+out="$("${LLMCTL}" auto chat 2>&1)" && rc=0 || rc=$?
+assert_eq 0 "${rc}" "12: auto chat still succeeds"
+case "${out}" in *"-> profile 'decide"*) picked_decide=1 ;; *) picked_decide=0 ;; esac
+assert_eq 0 "${picked_decide}" "12: auto chat never selects a decision profile (FR-006)"
+for cap in chat coder vision; do
+  case " $(sched_rank_for_capability "${cap}") " in *" decide"*) leak=1 ;; *) leak=0 ;; esac
+  assert_eq 0 "${leak}" "12: the ${cap} ranking contains no decision profile (FR-006)"
+done
+# nothing fits at all -> clear failure, never a silent pick
+test_teardown_env; test_setup_env
+export LLMCTL_DRY_RUN=1
+export LLMCTL_FAKE_HW="${LLMCTL_ROOT}/tests/fixtures/hw-tiny.json"
+out="$("${LLMCTL}" auto decide 2>&1)" && rc=0 || rc=$?
+assert_eq 1 "${rc}" "12: auto decide on a host where no decision profile fits fails"
+assert_contains "${out}" "no catalog profile for capability 'decide' fits this host" "12: ...with the explicit no-fit message"
+# the single admission predicate: boundary behaviour (used + need <= budget fits)
+assert_rc 0 "12: _sched_admission_fits accepts an exact fit" _sched_admission_fits 10 10 90 90 100 100
+assert_rc 1 "12: _sched_admission_fits refuses one MiB over on RAM" _sched_admission_fits 11 10 90 90 100 100
+assert_rc 1 "12: _sched_admission_fits refuses one MiB over on VRAM" _sched_admission_fits 10 11 90 90 100 100
+# plain `llmctl start` of a tier-gated decision profile stays allowed when it fits (documented advisory tier gate)
+test_teardown_env; test_setup_env
+export LLMCTL_DRY_RUN=1
+export LLMCTL_FAKE_HW="${LLMCTL_ROOT}/tests/fixtures/hw-baseline.json"
+out="$("${LLMCTL}" start decide-pro 2>&1)" && rc=0 || rc=$?
+assert_eq 0 "${rc}" "12: explicit start of a tier-gated profile that fits is still allowed (tier gate is advisory for start)"
+
 test_finish

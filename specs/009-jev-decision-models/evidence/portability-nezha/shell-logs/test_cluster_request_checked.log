@@ -1,0 +1,12 @@
+  ok: request_checked: 2xx GET returns exit 0
+  ok: request_checked: 2xx GET prints the real response body
+  ok: request_checked: 2xx POST returns exit 0
+  ok: request_checked: 2xx POST prints the real response body
+  ok: request_checked: 403 GET returns exit 1 (never a transport-failure code, never 0)
+  ok: request_checked: 403 GET prints the daemon's real error body
+  ok: request_checked: 404 GET returns exit 1
+  ok: request_checked: 404 GET prints the daemon's real error body
+  ok: request_checked: unreachable daemon returns curl's own transport exit code (got 7), distinct from both HTTP-status outcomes (0/1)
+  ok: cluster::request (untouched): still exits 0 on a non-2xx HTTP response - unchanged pre-existing behavior
+  ok: cluster::request (untouched): still prints the response body regardless of status - unchanged pre-existing behavior
+RESULT: PASS

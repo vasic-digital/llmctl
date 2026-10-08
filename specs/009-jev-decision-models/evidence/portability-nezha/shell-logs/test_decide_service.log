@@ -1,0 +1,75 @@
+== Linux: gateway unit (decide_service_enable) ==
+  ok: gateway unit written
+  ok: enable goes through the service manager
+  ok: …and starts it
+  ok: …after a daemon-reload
+  ok: Restart=always
+  ok: RestartSec=5
+  ok: starts at login/boot (with linger)
+  ok: ExecStart is the wrapper that allocates the port then execs: llmctl-decide serve --foreground
+  ok: the unit documents the final exec
+  ok: the binary path is baked, resolved at install time
+  ok: optional operator overrides file (port/bind/strategy)
+  ok: ExecStopPost removes the registry row
+  ok: StartLimitIntervalSec is in [Unit] (honoured there)
+  ok: StartLimitBurst is in [Unit]
+  ok: memory policy OD-14: MemoryMax = full probed RAM
+  ok: memory policy OD-14: MemoryHigh = MemoryMax (no soft throttle)
+  ok: no key material / credential variable in the unit
+== Linux: engine templates (decision engines share them) ==
+  ok: llama template: StartLimitIntervalSec in [Unit]
+  ok: llama template: StartLimitBurst in [Unit]
+  ok: llama template: per-start key rotation (ExecStartPre)
+  ok: llama template: registry publication (ExecStartPost)
+  ok: llama template: registry removal (ExecStopPost)
+  ok: llama template: NoNewPrivileges
+  ok: onnx template: StartLimitIntervalSec in [Unit]
+  ok: onnx template: StartLimitBurst in [Unit]
+  ok: onnx template: per-start key rotation (ExecStartPre)
+  ok: onnx template: registry publication (ExecStartPost)
+  ok: onnx template: registry removal (ExecStopPost)
+  ok: onnx template: NoNewPrivileges
+  ok: colibri template: StartLimitIntervalSec in [Unit]
+  ok: colibri template: StartLimitBurst in [Unit]
+  ok: colibri template: per-start key rotation (ExecStartPre)
+  ok: colibri template: registry publication (ExecStartPost)
+  ok: colibri template: registry removal (ExecStopPost)
+  ok: colibri template: NoNewPrivileges
+  ok: encoder runtime template carries the strict set
+  ok: llama template keeps the basic set only
+  ok: no un-honoured hardening directive is claimed in any unit
+== Linux: systemd-analyze --user verify (unknown keys = silently ignored settings) ==
+  ok: control needle - the verify check flags a known-bad unit
+  ok: llmctl-decide-gateway.service: no unknown or ignored keys
+  ok: llmctl-llama@.service: no unknown or ignored keys
+  ok: llmctl-onnx@.service: no unknown or ignored keys
+  ok: llmctl-colibri@.service: no unknown or ignored keys
+== Linux: disable removes the unit and the registry/port state ==
+  ok: gateway unit removed
+  ok: stopped
+  ok: disabled
+  ok: status goes through the service manager
+== per-start key rotation hook (G-028) ==
+[llmctl] wrote /home/milosvasic/llmctl-work/tmp/tmp.kcSGKqqT1A/state/services/rot.env
+[llmctl] wrote /home/milosvasic/llmctl-work/tmp/tmp.kcSGKqqT1A/state/services/nokey.env
+  ok: every start gets a NEW key (not create-if-absent)
+  ok: rotated key file is mode 0600 even under umask 022
+  ok: key directory is mode 0700
+  ok: key is 256 bits of /dev/urandom (64 hex chars)
+  ok: a service without a key file: the hook is a no-op that succeeds
+  ok: an unknown instance is a no-op too (never blocks a start)
+== macOS: launchd agents (file-content validation; NO Mac available) ==
+  ok: gateway agent written
+  ok: bootstrap goes through launchctl (dry-run line)
+  ok: gateway plist is mode 0600
+  ok: gateway plist structure (plistlib)
+[llmctl] wrote /home/milosvasic/llmctl-work/tmp/tmp.kcSGKqqT1A/LaunchAgents/com.llmctl.decide-nli.plist
+  ok: encoder-runtime plist is mode 0600
+  ok: encoder runtime plist structure (plistlib)
+  ok: macOS env record names the key FILE too (rotated before each start)
+  ok: gateway agent removed on disable
+  ok: bootout goes through launchctl
+  ok: status goes through launchctl
+  SKIP: launchd actually loading/running the agents (bootstrap/KeepAlive behaviour) is NOT exercised; only the generated files and command lines are validated (gap G-009)
+    reason: no macOS host in this environment
+RESULT: PASS

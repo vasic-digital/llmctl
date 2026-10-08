@@ -1,0 +1,14 @@
+  ok: cluster join, no daemon at all: exits non-zero
+  ok: cluster join, no daemon at all: clear unreachable message
+  ok: cluster leave, no daemon at all: exits non-zero
+  ok: cluster leave, no daemon at all: clear unreachable message
+  ok: leader node: real READY line observed
+HOSTDEP-BEGIN: success path runs only when the host curl has HTTP3 (G-089/G-106)
+  ok: cluster join against a REAL running (but CLI-unreachable) daemon: still exits non-zero, never hangs or crashes
+  ok: cluster join against a REAL running daemon: SAME unreachable message as no-daemon-at-all (no different, confusing failure mode)
+  ok: cluster leave against a REAL running daemon: exits non-zero
+  ok: cluster leave against a REAL running daemon: SAME unreachable message
+  SKIP: cluster join/leave success path (US1 Acceptance Scenarios 1/2)
+    reason: curl --version lists no HTTP3 feature (Features: alt-svc AsynchDNS brotli GSS-API HSTS HTTP2 HTTPS-proxy IDN IPv6 Kerberos Largefile libz NTLM PSL SPNEGO SSL threadsafe TLS-SRP UnixSockets zstd); llmctld serves its cluster API over HTTP/3-QUIC (UDP) only and this curl cannot speak QUIC (the certificate side - SANs, CA, client certificate - is provided by the daemon, G-106) - so no curl-based request can complete a 2xx round trip here, and US1 Acceptance Scenarios 1/2 (join genuinely reflected in the peer's node list, then genuinely removed) cannot be exercised on this host
+HOSTDEP-END
+RESULT: PASS

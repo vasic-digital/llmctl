@@ -1,0 +1,2 @@
+profile 'decide-kev-08b' passed checksum verification
+rc=0 (re-run at 2026-10-08T09:18:24Z for the same pinned files)

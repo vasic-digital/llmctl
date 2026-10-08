@@ -1,0 +1,31 @@
+=== Meta-Test Mutation for Verification Gate ===
+Constitution root: /home/milosvasic/Projects/llmctl/constitution
+Verification script: /home/milosvasic/Projects/llmctl/constitution/scripts/validation/run_verification.sh
+
+=== Mutation 1: Missing submodule detection ===
+✓ Found test submodule: verification
+→ Creating mutation backup (renaming submodule)...
+→ Running verification with missing submodule (should FAIL)...
+✓ META-TEST PASSED: Verification correctly FAILED with missing submodule
+=== REQUIRED SUBMODULES CHECK FAILED ===
+→ Restoring submodule...
+→ Verifying restored submodule works...
+✓ Restored verification passes with submodule present
+
+=== Mutation 2: Corrupted verification logic ===
+✓ Found verification script
+→ Creating mutation backup...
+→ Injecting mutation (removing a required check - making verification skip verification submodule)...
+→ Running mutated verification (should FAIL because verification submodule is missing from checks)...
+✓ META-TEST PASSED: Mutated verification correctly FAILED
+→ Restoring original verification script...
+→ Verifying restored script works...
+✓ Restored verification script passes
+
+=== ALL META-TESTS PASSED ===
+The verification gate is proven NOT to be a bluff gate.
+Both mutations were caught and correctly failed the gate.
+
+real	0m1.447s
+user	0m0.150s
+sys	0m0.329s

@@ -1,0 +1,480 @@
+openapi: 3.1.0
+info:
+  title: llmctl decision gateway
+  version: 3.1.0-draft
+  summary: Hosted-Jev-compatible typed-decision endpoint served by llmctl over HTTPS.
+  description: |
+    The decision gateway is the single network-facing decision endpoint of llmctl.
+    It speaks the TypeSafe "System One" wire shape (`POST /v1/systemone`) so that clients
+    built for the hosted service only need a different base URL, the access key, and trust
+    for the generated certificate authority.
+
+    Facts here marked [HOSTED] were established from the vendor documentation
+    (docs.typesafe.ai, retrieved 2026-10-07; see specs/009-jev-decision-models/research/web-jev-api-and-bench.md).
+    Facts marked [LLMCTL] are llmctl-defined because the vendor does not publish them.
+
+    STATUS TABLE (single source; other documents cite this table):
+
+    | Status | Condition | Retryable | Retry-After |
+    |---|---|---|---|
+    | 400 | malformed JSON, body not an object, wrong content type, more than 255 options [HOSTED answers 400 at 256] | no | no |
+    | 401 | missing or wrong key | no | no |
+    | 404 | unknown path (only after authentication) [LLMCTL] | no | no |
+    | 405 | wrong method for the path [LLMCTL] | no | no |
+    | 413 | body above the cap, rejected before reading [LLMCTL] | no | no |
+    | 422 | schema or limit violation, state over budget, unknown model, deterministic readout failure (readout_failed) | no | no |
+    | 429 | failed-authentication throttle from a source; never applied to a request carrying the valid key | yes | yes |
+    | 500 | deterministic server-side fault: a misconfigured readout setting or an engine that rejects the gateway's own request shape; retrying cannot help; NOTE the hosted SDKs retry every 5xx by default, see "SDK retry behaviour" below [LLMCTL] | no | no |
+    | 502 | transient backend failure (process died, connection refused, or an engine entry that answers 404/405 because the port now belongs to another program - a stale registry entry heals) [LLMCTL] | yes | no |
+    | 503 | not ready, draining, or a known profile has no ready instance (no on-demand start) [LLMCTL] | yes | yes |
+    | 529 | capacity saturated: all slots busy and the bounded queue full or its deadline passed [HOSTED: temporarily overloaded] | yes | yes |
+
+    SDK retry behaviour (VERIFIED in the source of the Python `typesafe-sdk`, `_core/retry.py`: `RetryPolicy.http_statuses`
+    defaults to `{408, 429, 500..599}`, `max_retries` 2, the decision is by status alone and no response header can veto it;
+    JS SDK UNCONFIRMED): SDK clients retry every 5xx, so a fixed-cause `500` from this gateway is sent up to three times
+    by a default SDK client. llmctl's own client retries only 429, 503 and 529. Callers who use the hosted SDK against this
+    gateway should pass `RetryPolicy(http_statuses={408, 429, 502, 503, 529})` (no 500). The 422 classes are never retried by
+    any of them. The status 500 is kept (not recoded to a 4xx) because the fault is the server's, not the request's.
+
+    Transport rules (not expressible in OpenAPI): HTTPS only on every address including
+    loopback; TLS 1.2 minimum; a plain-HTTP request to the port is reset, never answered
+    or redirected. No CORS headers are sent. The internal engines behind the gateway are
+    loopback-only and are NOT part of this contract.
+servers:
+  - url: https://{host}:{port}
+    variables:
+      host: { default: localhost }
+      port: { default: "8095" }
+security:
+  - bearerAuth: []
+  - apiKeyAuth: []
+paths:
+  /v1/systemone:
+    post:
+      operationId: systemOne
+      summary: Ask typed questions about a state.
+      description: |
+        One request may carry several independent questions keyed by caller-chosen names
+        [HOSTED]. Names only key the answers and never reach the model.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SystemOneRequest" }
+      responses:
+        "200":
+          description: Typed answers keyed by question name.
+          headers:
+            x-llmctl-request-id: { $ref: "#/components/headers/RequestId" }
+            x-llmctl-decide-mode:
+              description: "[LLMCTL] The serving mode of the gateway: `deterministic` (fixed seed, one slot per instance, byte-identical repeats per instance) or `throughput` (least-loaded instances, byte-identity across instances NOT promised). Present on every decision."
+              schema: { type: string, enum: [deterministic, throughput] }
+            x-llmctl-decide-instance:
+              description: "[LLMCTL] The engine instance that answered (for example `decide-tiny` or `decide-tiny.2`). Deterministic mode promises byte-identical repeats PER INSTANCE and a busy primary overflows to the next instance (FR-074), so two answers are only comparable when this value is equal. Present on every decision whose backend reports one; hosted SDKs do not surface custom headers."
+              schema: { type: string, pattern: "^[a-z0-9._-]{1,64}$" }
+            x-llmctl-decide-truncated:
+              description: "[LLMCTL] Present and true ONLY when the operator enabled the opt-in state-shortening setting and the state was shortened (head and tail kept by the gateway, or the premise shortened by an encoder runtime). The default is to reject an over-long state with 422. Question and option text are never shortened. Hosted SDKs do not surface custom headers."
+              schema: { type: string, enum: ["true"] }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SystemOneResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "405": { $ref: "#/components/responses/MethodNotAllowed" }
+        "413": { $ref: "#/components/responses/TooLarge" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "500": { $ref: "#/components/responses/Misconfigured" }
+        "502": { $ref: "#/components/responses/BackendFailure" }
+        "503": { $ref: "#/components/responses/NotReady" }
+        "529": { $ref: "#/components/responses/Overloaded" }
+  /v1/models:
+    get:
+      operationId: listModels
+      summary: List served decision models and accepted aliases.
+      description: "[LLMCTL] The vendor SDKs (typesafe-sdk 0.7.2, @typesafe-ai/sdk 0.6.0) read this endpoint as {models:[{name,description,release_date}]} and reject any other shape, so the body carries that SDK shape (`models`) AND the llmctl-defined listing (`object`/`data`) side by side."
+      responses:
+        "200":
+          description: Served models.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ModelList" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "405": { $ref: "#/components/responses/MethodNotAllowed" }
+        "503": { $ref: "#/components/responses/NotReady" }
+  /healthz:
+    get:
+      operationId: liveness
+      summary: Liveness probe (no authentication, minimal body).
+      security: []
+      responses:
+        "200":
+          description: The gateway process is alive.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                additionalProperties: false
+                properties:
+                  status: { type: string, enum: [ok] }
+        "405": { $ref: "#/components/responses/MethodNotAllowed" }
+  /readyz:
+    get:
+      operationId: readiness
+      summary: Readiness probe (no authentication, minimal body).
+      description: Ready only when at least one decision instance is `ready` and the gateway is not draining.
+      security: []
+      responses:
+        "200":
+          description: Ready to serve.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                additionalProperties: false
+                properties:
+                  status: { type: string, enum: [ready] }
+        "503":
+          description: Not ready (starting, draining, or no instance ready). Body carries no profile names or backend state.
+          headers:
+            Retry-After: { $ref: "#/components/headers/RetryAfter" }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                additionalProperties: false
+                properties:
+                  status: { type: string, enum: [not_ready] }
+        "405": { $ref: "#/components/responses/MethodNotAllowed" }
+  /metrics:
+    get:
+      operationId: metrics
+      summary: Prometheus text exposition (key-protected, bounded labels).
+      description: |
+        Labels are limited to a fixed vocabulary (profile id, question type, status class,
+        outcome). State text, question names, request identifiers and key material are never labels.
+      responses:
+        "200":
+          description: Text exposition format.
+          content:
+            text/plain:
+              schema: { type: string }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "405": { $ref: "#/components/responses/MethodNotAllowed" }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: "`Authorization: Bearer $LLMCTL_API_KEY`. The key is never accepted in the query string."
+    apiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: Alias for clients that cannot set Authorization.
+  headers:
+    RequestId:
+      description: "[LLMCTL] Correlation identifier (random 64-bit hex) echoed in logs. The vendor uses x-typesafe-request-id [HOSTED]."
+      schema: { type: string, pattern: "^[0-9a-f]{16}$" }
+    RetryAfter:
+      description: Seconds to wait before retrying.
+      schema: { type: integer, minimum: 0 }
+  schemas:
+    SystemOneRequest:
+      type: object
+      required: [state, questions]
+      additionalProperties: false
+      properties:
+        model:
+          type: string
+          description: |
+            Accepted: `jev-latest`, `jev-preview`, `jev-1.13.0` (aliases mapped to the default served profile),
+            `llmctl-<profile>` and `<profile>`. The answer reports the REAL local model id. Unknown name -> 422 `unknown_model`.
+        state:
+          description: Text, an object, or an array. State plus the longest question must fit the profile's budget.
+          oneOf:
+            - { type: string }
+            - { type: object }
+            - { type: array }
+        questions:
+          type: object
+          minProperties: 1
+          maxProperties: 32
+          description: "Keys are free names. The maximum count is a configurable llmctl limit (default 32)."
+          additionalProperties:
+            $ref: "#/components/schemas/Question"
+    Question:
+      oneOf:
+        - $ref: "#/components/schemas/NoulQuestion"
+        - $ref: "#/components/schemas/ChoiceQuestion"
+        - $ref: "#/components/schemas/ScoreQuestion"
+      discriminator:
+        propertyName: type
+    Instructions:
+      description: Question text; a string, object, array or null [HOSTED].
+      oneOf:
+        - { type: string }
+        - { type: object }
+        - { type: array }
+        - { type: "null" }
+    NoulQuestion:
+      type: object
+      required: [type]
+      additionalProperties: false
+      properties:
+        type: { const: noul }
+        instructions: { $ref: "#/components/schemas/Instructions" }
+        criteria:
+          type: object
+          additionalProperties: false
+          properties:
+            "true": { type: [string, "null"] }
+            "false": { type: [string, "null"] }
+    ChoiceQuestion:
+      type: object
+      required: [type, criteria]
+      additionalProperties: false
+      properties:
+        type: { const: choice }
+        instructions: { $ref: "#/components/schemas/Instructions" }
+        criteria:
+          type: object
+          minProperties: 2
+          maxProperties: 255
+          description: "Option -> description (null allowed). Hosted maximum 255 [HOSTED]; each profile may enforce a lower documented limit (decoder profiles: practical cap 20, hard cap 26)."
+          additionalProperties: { type: [string, object, "null"] }
+    ScoreQuestion:
+      type: object
+      required: [type, criteria]
+      additionalProperties: false
+      properties:
+        type: { const: score }
+        instructions: { $ref: "#/components/schemas/Instructions" }
+        criteria:
+          type: array
+          minItems: 2
+          maxItems: 10
+          description: Ordered level descriptions, lowest to highest; levels are numbered from 0 [HOSTED].
+          items: { type: [string, object, "null"] }
+    SystemOneResponse:
+      type: object
+      required: [model, answers, usage]
+      additionalProperties: false
+      properties:
+        model: { type: string, description: "The real local model identifier." }
+        answers:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/Answer"
+        usage:
+          type: object
+          required: [input_tokens, output_tokens]
+          additionalProperties: false
+          properties:
+            input_tokens: { type: integer, minimum: 0, description: "[LLMCTL] An estimate (about characters/4) unless the backend reports exact counts." }
+            output_tokens: { type: integer, minimum: 0 }
+    Answer:
+      oneOf:
+        - $ref: "#/components/schemas/NoulAnswer"
+        - $ref: "#/components/schemas/ChoiceAnswer"
+        - $ref: "#/components/schemas/ScoreAnswer"
+      discriminator:
+        propertyName: type
+    NoulAnswer:
+      type: object
+      required: [type, noul]
+      additionalProperties: false
+      properties:
+        type: { const: noul }
+        noul: { type: number, minimum: 0, maximum: 1, description: "Probability that the answer is yes. There is no confidence field for this type [HOSTED]. When `flags` is present it is the WORST-CASE value (the absent option holds the mass its bound allows; see `AnswerFlags`)." }
+        flags: { $ref: "#/components/schemas/AnswerFlags" }
+        upper_bounds: { $ref: "#/components/schemas/UpperBounds" }
+    ChoiceAnswer:
+      type: object
+      required: [type, choice, probabilities, confidence]
+      additionalProperties: false
+      properties:
+        type: { const: choice }
+        choice: { type: string }
+        probabilities:
+          type: object
+          additionalProperties: { type: number, minimum: 0, maximum: 1 }
+          description: Sums to 1 within 1e-6.
+        confidence:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: "(p_max - 1/n) / (1 - 1/n) [HOSTED]. A shaping convention, not a calibrated probability of being right. When `calibration` is present this is the CALIBRATED probability that the answer is correct (the profile maps the winner's own probability; chance level is 1/n, not 0) and `confidence_raw` holds the shaped value; on an answer with `flags` it is never above the winner's worst-case probability."
+        confidence_raw: { type: number, minimum: 0, maximum: 1, description: "[LLMCTL] The shaped confidence before calibration; present only with `calibration`." }
+        calibration: { $ref: "#/components/schemas/Calibration" }
+        flags: { $ref: "#/components/schemas/AnswerFlags" }
+        upper_bounds: { $ref: "#/components/schemas/UpperBounds" }
+    ScoreAnswer:
+      type: object
+      required: [type, score, legend, probabilities, confidence]
+      additionalProperties: false
+      properties:
+        type: { const: score }
+        score: { type: number, minimum: 0, description: "Expected level index, 0 to n-1 (fractional) [HOSTED]." }
+        legend:
+          type: object
+          additionalProperties: { type: [string, object, "null"] }
+          description: Level index (string) -> description.
+        probabilities:
+          type: object
+          additionalProperties: { type: number, minimum: 0, maximum: 1 }
+          description: Level index (string) -> probability; sums to 1 within 1e-6.
+        confidence:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: "[LLMCTL] Normalised-peak form over n levels; the vendor does not publish the exact formula. When `calibration` is present this is the CALIBRATED probability that the answer is correct (the profile maps the winner's own probability; chance level is 1/n, not 0) and `confidence_raw` holds the shaped value; on an answer with `flags` it is never above the winner's worst-case probability."
+        confidence_raw: { type: number, minimum: 0, maximum: 1, description: "[LLMCTL] The shaped confidence before calibration; present only with `calibration`." }
+        calibration: { $ref: "#/components/schemas/Calibration" }
+        flags: { $ref: "#/components/schemas/AnswerFlags" }
+        upper_bounds: { $ref: "#/components/schemas/UpperBounds" }
+    AnswerFlags:
+      type: array
+      minItems: 1
+      items: { type: string, enum: [option_missing] }
+      description: "[LLMCTL] Present only on an answer whose engine readout did not list every option letter (FR-076). `option_missing`: the options named in `upper_bounds` were absent from the model's first-token alternatives. They are NEVER reported as an exact 0. Exact guarantee: let p_min be the smallest probability the engine listed and U = 1 - sum(all listed probabilities); an absent option holds at most min(3 * p_min, U), and all absent options together hold at most U. `probabilities`, `score` and `confidence` are computed with the absent options placed at the allocation inside that limit that leaves the winner the SMALLEST share (a worst case, not an estimate); `choice` is always an option the engine LISTED, never an absent one. A client gate (`--min-confidence`, MCP `min_confidence`) therefore reads `confidence` as it is and does not scale it by `upper_bounds` again. Limits: the masses of the listed options are lower bounds (their own unlisted spellings are not added); an engine exposing more than three token ids for one option letter is not covered."
+    UpperBounds:
+      type: object
+      additionalProperties: { type: number, minimum: 0, maximum: 1 }
+      description: "[LLMCTL] Option key -> an upper bound on the probability of an option the engine did not list, on the same scale as `probabilities` (the share the option would hold if it held its full raw bound and every other absent option held nothing; the reported `probabilities` value never exceeds it). The raw bound of each absent option is its OWN min(3 * p_min, U): three spellings (`B`, ` B`, `▁B`) times the smallest probability the engine listed (each unlisted token is at most that small, and an option letter is the sum of its spellings), capped by the unlisted mass U = 1 - sum(listed) - so a fully listed distribution gives 0. Only with `flags`."
+    ModelList:
+      type: object
+      required: [object, data, models]
+      additionalProperties: false
+      properties:
+        models:
+          type: array
+          description: "[HOSTED SDK SHAPE] One entry per accepted model name: each served profile id and each of its aliases (the value of the request `model` field)."
+          items:
+            type: object
+            required: [name, description, release_date]
+            additionalProperties: false
+            properties:
+              name: { type: string, description: "Profile id or alias accepted by the request model field." }
+              description: { type: string, description: "Catalog `desc` of the profile (an alias entry is prefixed `Alias of <id>.`)." }
+              release_date:
+                type: string
+                format: date
+                description: "YYYY-MM-DD. The profile's `decision.release_date` when the catalog pins one, else the fixed documented default 2026-10-07 (the publication date of this contract). Never stamped per request."
+        object: { const: list }
+        data:
+          type: array
+          items:
+            type: object
+            required: [id, aliases, protocol, status, limits]
+            additionalProperties: false
+            properties:
+              id: { type: string, description: "Local profile id." }
+              aliases: { type: array, items: { type: string } }
+              protocol: { type: string, enum: [letter-logit, systemone-native, nli-onnx] }
+              status: { type: string, enum: [ready, starting, degraded, draining] }
+              limits:
+                type: object
+                required: [max_options, score_levels]
+                additionalProperties: false
+                description: "[LLMCTL] Per-profile limits; the hosted maximum of 255 options applies only where the profile supports it."
+                properties:
+                  max_options: { type: integer, minimum: 2, maximum: 255 }
+                  max_state_chars: { type: integer, minimum: 1, description: "[LLMCTL] The largest ordinary-prose state (characters) the profile accepts: the configured character cap lowered to what the engine context holds. Acceptance is decided by an ESTIMATE in tokens (digits, JSON and non-Latin scripts cost more per character), so a denser state of fewer characters can be refused with 422 validation_failed." }
+                  max_context_tokens: { type: integer, minimum: 1, description: "[LLMCTL] Estimated tokens the rendered prompt may use: the catalog ctx (per request: llama-server divides --ctx-size over its slots and the scheduler multiplies it back) minus the chat-template reserve and the reply. Encoder profiles: the pair window (premise + hypothesis)." }
+                  max_pairs: { type: integer, minimum: 1, description: "[LLMCTL] Encoder (nli-onnx) profiles: the most premise/hypothesis pairs (questions x options) one request may cost; over it is a 422 before any pass is spent." }
+                  score_levels:
+                    type: array
+                    items: { type: integer }
+                    minItems: 2
+                    maxItems: 2
+              notes: { type: string, description: "Honest labels, e.g. experimental choice/score on the NLI profile." }
+              template_hash:
+                type: string
+                pattern: "^[0-9a-f]{64}$"
+                description: "[LLMCTL] The profile's `decision.template_hash`: SHA-256 of the prompt template (as the gateway renders it) and of the readout parameters that move the probabilities (spellings, n_probs, the global readout temperature). Computed by the gateway (never stored in the catalog); calibration profiles are bound to it. Absent if it cannot be computed."
+              calibration:
+                type: object
+                required: [applied]
+                additionalProperties: false
+                description: "[LLMCTL] Present only when a calibration profile file exists for the model (`$STATE/decide/calibration/<profile>.json`). Applied, or - with a closed `reason` - not applied; a refused profile leaves answers uncalibrated."
+                properties:
+                  applied: { type: boolean }
+                  method: { type: string, enum: [temperature, platt, isotonic], description: "Applied only." }
+                  n: { type: integer, minimum: 0, description: "Labelled answers the profile was fitted on (applied only). Under 200 supports no ECE claim (SC-003)." }
+                  profile_id: { type: string, description: "The calibration profile name (applied only)." }
+                  reason: { type: string, enum: [mismatch, unbound, invalid, insecure, model_unresolved], description: "Not applied only. mismatch = bound to another model file, prompt template or readout temperature; unbound = not bound; invalid = unreadable or malformed parameters; insecure = symlink, not a regular file or writable by group/others; model_unresolved = the catalog names no single model sha256." }
+    Calibration:
+      type: object
+      required: [method, n, profile_id]
+      additionalProperties: false
+      description: "[LLMCTL] Present on an answer whose `confidence` was replaced by a calibrated probability (FR-080). Only `confidence` changes; `probabilities`, `choice`, `score`, `flags` and `upper_bounds` are the raw readout. `confidence_raw` is the shaped confidence the answer would have had."
+      properties:
+        method: { type: string, enum: [temperature, platt, isotonic] }
+        n: { type: integer, minimum: 0, description: "Labelled answers the profile was fitted on." }
+        profile_id: { type: string }
+    Error:
+      type: object
+      required: [message, error_type]
+      additionalProperties: false
+      properties:
+        message: { type: string, description: "Generic text; never exception text, paths or versions." }
+        error_type:
+          type: string
+          description: "[LLMCTL] The vendor's full vocabulary is not published (only `invalid_request` is documented)."
+          enum:
+            - invalid_request
+            - unauthorized
+            - unknown_model
+            - validation_failed
+            - payload_too_large
+            - method_not_allowed
+            - rate_limited
+            - overloaded
+            - not_ready
+            - readout_failed
+            - backend_failed
+  responses:
+    BadRequest:
+      description: "Malformed JSON, non-object body, wrong content type, or more than 255 options in a choice question (the hosted service answers 400 at 256 options)."
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    Unauthorized:
+      description: Missing or wrong key. Generic body.
+      headers:
+        WWW-Authenticate: { schema: { type: string, const: 'Bearer realm="llmctl"' } }
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    MethodNotAllowed:
+      description: Wrong method for the path (after authentication).
+      headers:
+        Allow: { schema: { type: string } }
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    TooLarge:
+      description: Body above the configured cap, rejected before it is read.
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    Unprocessable:
+      description: "Schema or limit violation (option and level counts above the profile cap, state over the profile budget, unknown model) and deterministic readout failure (readout_failed: the letter-probability mass was below the threshold; the model would answer the same way again, so it is not retryable)."
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    RateLimited:
+      description: Failed-authentication or per-source throttle.
+      headers:
+        Retry-After: { $ref: "#/components/headers/RetryAfter" }
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    Overloaded:
+      description: Capacity saturated (all slots busy and the bounded queue is full or its deadline passed). Retryable.
+      headers:
+        Retry-After: { $ref: "#/components/headers/RetryAfter" }
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    NotReady:
+      description: No ready instance, or the gateway is draining.
+      headers:
+        Retry-After: { $ref: "#/components/headers/RetryAfter" }
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    BackendFailure:
+      description: "Transient backend failure (process died, connection refused). Retryable. No fabricated probabilities are ever returned."
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    Misconfigured:
+      description: "[LLMCTL] Deterministic server-side fault: a misconfigured readout setting, or an engine that rejects the gateway's own request shape. NOT retryable (a retry fails the same way); the cause is in the gateway log. A request the model cannot fit (state too long for the engine context, empty state for an encoder, over the pair budget) is a 422 validation_failed instead, never this."
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }

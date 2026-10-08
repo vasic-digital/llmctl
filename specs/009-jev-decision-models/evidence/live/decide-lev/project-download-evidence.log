@@ -1,0 +1,33 @@
+[2026-10-08T08:54:08Z] llmctl models download decide-lev
+[2026-10-08T08:54:08Z] engine: llama  repo: ggml-org/lev-GGUF
+[2026-10-08T08:54:08Z] download: https://huggingface.co/ggml-org/lev-GGUF/resolve/3e9286a79ae857b4e1de051c92fab6dc574581ce/lev-Q4_K_M.gguf -> /home/milosvasic/.local/share/llmctl/models/decide-lev/lev-Q4_K_M.gguf.part
+[2026-10-08T08:54:36Z] curl exit: 0
+[2026-10-08T08:54:36Z] RUN: _dl_verify_file /home/milosvasic/.local/share/llmctl/models/decide-lev/lev-Q4_K_M.gguf.part 3011777440 3f61b27c00a098dbc79ed099cca3985cbe0b63d17ac7fedebf2dca1d84f7f3a8
+[2026-10-08T08:54:49Z] EXIT: 0
+[2026-10-08T08:54:49Z] renamed /home/milosvasic/.local/share/llmctl/models/decide-lev/lev-Q4_K_M.gguf.part -> /home/milosvasic/.local/share/llmctl/models/decide-lev/lev-Q4_K_M.gguf (atomic, verified)
+[2026-10-08T08:54:50Z] smoke protocol: systemone-native
+[2026-10-08T08:54:50Z] smoke: /home/milosvasic/Projects/llmctl/submodules/llama.cpp/build/bin/llama-server --model /home/milosvasic/.local/share/llmctl/models/decide-lev/lev-Q4_K_M.gguf --ctx-size 4096 --n-gpu-layers 0 --host 127.0.0.1 --port 43297
+[2026-10-08T08:55:07Z] smoke: /health OK after 16s
+[2026-10-08T08:55:07Z] RUN: _dl_decision_probe_choice 43297
+[2026-10-08T08:55:23Z] EXIT: 0
+OUT: smoke ok: protocol=systemone-native choice=billing confidence=0.7752
+OUT:   billing=0.887596
+OUT:   legal=0.112404
+[2026-10-08T08:55:23Z] RUN: _dl_decision_probe_options 43297
+[2026-10-08T08:55:43Z] EXIT: 0
+OUT: smoke ok: protocol=systemone-native choice=billing confidence=0.4373
+OUT:   billing=0.577963
+OUT:   legal=0.059702
+OUT:   team3=0.164179
+OUT:   team4=0.198156
+[2026-10-08T08:55:44Z] decision smoke PASSED: valid typed answers over /v1/systemone (2 and 4 options; shape evidence only)
+[2026-10-08T08:55:44Z] download decide-lev: SUCCESS
+[2026-10-08T09:04:39Z] llmctl models verify decide-lev
+[2026-10-08T09:04:40Z] RUN: _dl_verify_file /home/milosvasic/.local/share/llmctl/models/decide-lev/lev-Q4_K_M.gguf 3011777440 3f61b27c00a098dbc79ed099cca3985cbe0b63d17ac7fedebf2dca1d84f7f3a8
+[2026-10-08T09:04:52Z] EXIT: 0
+[2026-10-08T09:07:52Z] llmctl models verify decide-lev
+[2026-10-08T09:07:52Z] RUN: _dl_verify_file /home/milosvasic/.local/share/llmctl/models/decide-lev/lev-Q4_K_M.gguf 3011777440 3f61b27c00a098dbc79ed099cca3985cbe0b63d17ac7fedebf2dca1d84f7f3a8
+[2026-10-08T09:08:04Z] EXIT: 0
+[2026-10-08T09:16:57Z] llmctl models verify decide-lev
+[2026-10-08T09:16:57Z] RUN: _dl_verify_file /home/milosvasic/.local/share/llmctl/models/decide-lev/lev-Q4_K_M.gguf 3011777440 3f61b27c00a098dbc79ed099cca3985cbe0b63d17ac7fedebf2dca1d84f7f3a8
+[2026-10-08T09:17:07Z] EXIT: 0

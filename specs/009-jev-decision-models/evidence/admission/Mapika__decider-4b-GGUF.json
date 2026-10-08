@@ -1,0 +1,145 @@
+{
+  "schema": "llmctl.admission/1",
+  "candidate": {
+    "name": "decide",
+    "repo": "Mapika/decider-4b-GGUF",
+    "pinned": "yes",
+    "protocol_hint": "letter-logit",
+    "known_issue": "",
+    "name_collision": "",
+    "kind": "weights"
+  },
+  "slug": "Mapika__decider-4b-GGUF",
+  "mode": "paper-only",
+  "retrieved_at": "2026-10-07T16:15:28Z",
+  "existence": {
+    "verdict": "VERIFIED",
+    "evidence": "HTTP 200 from <LLMCTL_HF_BASE>/api/models/Mapika/decider-4b-GGUF",
+    "http_status": 200
+  },
+  "api": {
+    "id": "Mapika/decider-4b-GGUF",
+    "sha": "b79f09d9ba7837f1b744295ea267b55d08e958ec",
+    "lastModified": "2026-09-27T16:15:00.000Z",
+    "author": "Mapika",
+    "gated": false,
+    "private": false,
+    "disabled": false
+  },
+  "pins": [
+    {
+      "name": "decider-4b-v2.1-Q4_K_M.gguf",
+      "size": 2708804640,
+      "sha256": "c7083fcfc93f650cd66caeade4a3840ef9eeeeb1e80920907c554f70619d7c56",
+      "role": "model"
+    },
+    {
+      "name": "decider_config.json",
+      "size": 1378,
+      "sha256": null,
+      "role": "aux"
+    }
+  ],
+  "protocol": {
+    "class": "letter-logit",
+    "source": "curated hint (research/web-candidate-models.md; VENDOR-CLAIM / paper)"
+  },
+  "needs_engine_advance": false,
+  "tier": "baseline",
+  "est_memory_bytes": 3521446032,
+  "g10_subchecks": [
+    {
+      "check": "loadability",
+      "status": "PENDING",
+      "evidence": "paper-only mode: needs a real run on a host with the pinned engine"
+    },
+    {
+      "check": "smoke_answer",
+      "status": "PENDING",
+      "evidence": "paper-only mode: needs a real run on a host with the pinned engine"
+    },
+    {
+      "check": "determinism_repeats",
+      "status": "PENDING",
+      "evidence": "paper-only mode: needs a real run on a host with the pinned engine"
+    },
+    {
+      "check": "option_order_sensitivity",
+      "status": "PENDING",
+      "evidence": "paper-only mode: needs a real run on a host with the pinned engine"
+    },
+    {
+      "check": "memory_fit_measured",
+      "status": "PENDING",
+      "evidence": "paper-only mode: needs a real run on a host with the pinned engine"
+    }
+  ],
+  "gates": [
+    {
+      "gate": "G1",
+      "name": "licence allow-list",
+      "status": "PASS",
+      "evidence": "weights licence apache-2.0 (SPDX, from the HF API) is on the allow-list; licence files in repo: none"
+    },
+    {
+      "gate": "G2",
+      "name": "stable revision",
+      "status": "PASS",
+      "evidence": "immutable ref b79f09d9ba7837f1b744295ea267b55d08e958ec, lastModified 2026-09-27T16:15:00.000Z; re-verify at release"
+    },
+    {
+      "gate": "G3",
+      "name": "pinned size+sha256",
+      "status": "PENDING",
+      "evidence": "model sha256 pinned from the API LFS oid (decider-4b-v2.1-Q4_K_M.gguf=c7083fcfc93f...); aux file(s) ['decider_config.json'] are non-LFS: sha256 must be computed at pin time (not done in paper mode)"
+    },
+    {
+      "gate": "G4",
+      "name": "loadable by pinned engine",
+      "status": "PASS",
+      "evidence": "GGUF arch 'qwen35' present in the pinned tree's llm_arch_names"
+    },
+    {
+      "gate": "G5",
+      "name": "fits budgets",
+      "status": "PASS",
+      "evidence": "largest model file decider-4b-v2.1-Q4_K_M.gguf = 2708804640 B (cap 10737418240 B), tier baseline, memory ESTIMATE 3521446032 B (gguf: size*1.3) vs budget 19487261491 B (60% of /proc/meminfo MemTotal (Constitution 12.6))"
+    },
+    {
+      "gate": "G6",
+      "name": "protocol classification",
+      "status": "PASS",
+      "evidence": "letter-logit (curated hint (research/web-candidate-models.md; VENDOR-CLAIM / paper)); GGUF metadata in API: arch=qwen35, chat_template=yes (tokenizer is embedded in GGUF)"
+    },
+    {
+      "gate": "G7",
+      "name": "supply chain",
+      "status": "PASS",
+      "evidence": "pin has no pickle files"
+    },
+    {
+      "gate": "G8",
+      "name": "provenance",
+      "status": "PASS",
+      "evidence": "API author 'Mapika' == repo owner; HF-side cross-link to GitHub/PyPI not checked in paper mode"
+    },
+    {
+      "gate": "G9",
+      "name": "known-issue sweep",
+      "status": "PENDING",
+      "evidence": "live upstream issue-tracker sweep not done by this driver (offline); none recorded in the research register"
+    },
+    {
+      "gate": "G10",
+      "name": "real run",
+      "status": "PENDING",
+      "evidence": "paper-only mode: needs a real run on a host with the pinned engine"
+    }
+  ],
+  "disposition": "ADMIT-CANDIDATE",
+  "reasons": [
+    "G3 PENDING: model sha256 pinned from the API LFS oid (decider-4b-v2.1-Q4_K_M.gguf=c7083fcfc93f...); aux file(s) ['decider_config.json'] are non-LFS: sha256 must be computed at pin time (not done in paper mode)",
+    "G9 PENDING: live upstream issue-tracker sweep not done by this driver (offline); none recorded in the research register",
+    "G10 PENDING: paper-only mode: needs a real run on a host with the pinned engine"
+  ]
+}

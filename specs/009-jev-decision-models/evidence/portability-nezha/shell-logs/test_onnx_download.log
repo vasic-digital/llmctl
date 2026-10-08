@@ -1,0 +1,47 @@
+  ok: download_profile toy-onnx (stub backends, smoke enabled): exit code
+  [llmctl] downloading onnx/model.onnx from toy/onnx
+    % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                   Dload  Upload  Total   Spent   Left   Speed
+    0      0   0      0   0      0      0      0                              0100     50 100     50   0      0  55679      0                              0100     50 100     50   0      0  53304      0                              0100     50 100     50   0      0  51229      0                              0
+  verified: onnx/model.onnx
+  [llmctl] downloading onnx/spm.model from toy/onnx
+    % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                   Dload  Upload  Total   Spent   Left   Speed
+    0      0   0      0   0      0      0      0                              0100     50 100     50   0      0  62266      0                              0100     50 100     50   0      0  58962      0                              0100     50 100     50   0      0  55865      0                              0
+  verified: onnx/spm.model
+  [llmctl] downloading onnx/config.json from toy/onnx
+    % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                   Dload  Upload  Total   Spent   Left   Speed
+    0      0   0      0   0      0      0      0                              0100     65 100     65   0      0  84196      0                              0100     65 100     65   0      0  80745      0                              0100     65 100     65   0      0  77105      0                              0
+  verified: onnx/config.json
+  structural validation passed for toy-onnx (onnx model + tokenizer present)
+  [llmctl] onnx smoke test: starting onnx_server.py for toy-onnx on 127.0.0.1:59665
+  onnx smoke test passed for toy-onnx (entail/contradict/batch probes)
+  profile 'toy-onnx' downloaded and verified. Evidence: /home/milosvasic/llmctl-work/tmp/tmp.81YoM9vjo4/state/verify/toy-onnx.log
+  ok: onnx/model.onnx exists after download (subdirectory preserved)
+  ok: downloaded model sha256 matches
+  ok: structural validation ran (model.onnx found)
+  ok: structural validation ran (tokenizer found)
+  ok: onnx smoke launched the REAL lib/onnx_server.py
+  ok: evidence log shows the key goes via a 0600 file, never argv
+  ok: smoke: runtime became ready (real load-time inference)
+  ok: probe evidence: entail
+  ok: probe evidence: contradict
+  ok: probe evidence: batch
+  ok: entail probe: argmax label is entailment
+  ok: contradict probe: argmax label is contradiction
+  ok: smoke passed against the stub backends
+  ok: evidence log records overall success
+  ok: smoke ran -> the verified claim IS made
+  ok: second download: exit code
+  ok: second download: existing verified files are skipped (no re-download)
+  ok: download without deps: still rc 0 (skip-warn precedent)
+  ok: evidence log records the SKIP-with-reason line
+  ok: operator-facing skip warning
+  ok: skipped smoke: the output does NOT claim 'downloaded and verified' (D-12)
+  ok: evidence log distinguishes files-verified from fully-verified
+  ok: skipped smoke is NOT recorded as 'download toy-onnx: SUCCESS' (N-26)
+  ok: structural validation still ran before the skip
+  ok: D-14: smoke runtime is up while the shell is mid-smoke
+  ok: D-14: no orphaned onnx_server after SIGTERM to the smoke shell
+RESULT: PASS

@@ -1,0 +1,38 @@
+profile=decide-julia port=8103 date=2026-10-08T09:05:27Z host=anton
+engine: version: 0.5.0-dev (build 11379, commit 1537a0a8b)
+llama.cpp submodule: 1537a0a8b2f8711d840878b0a0677ab2213c882c b11379
+model: ggml-org/Julia-1-GGUF 16fee17949206fbf58da9347daea44d792a81211 [('Julia-1-Q8_0.gguf', 168166496, '1ea6a7e87156eeeda88cb7a36a61265b37ba7b993897b7289b99aea5b5e47069')]
+--- memory before
+               total        used        free      shared  buff/cache   available
+Mem:           30974       25854         416       15148       20252        5119
+Swap:           8191        8191           0
+6957 MiB, 12288 MiB
+--- plan row
+{
+ "budgets": {
+  "ram_mb": 1223,
+  "vram_mb": 4210,
+  "vram_live": true,
+  "storage_free_mb": 36616
+ },
+ "profile": {
+  "mode": "cpu",
+  "ram_mb": 416,
+  "vram_mb": 0,
+  "storage_mb": 160,
+  "ctx": 2048,
+  "ngl": 0,
+  "parallel": 1,
+  "flash_attn": "auto",
+  "kv_cache_type": "f16",
+  "fits": true,
+  "port": 8103,
+  "engine": "llama",
+  "capability": [
+   "decide"
+  ],
+  "min_tier": "below-minimum",
+  "tier_ok": true,
+  "recommended": true
+ }
+}

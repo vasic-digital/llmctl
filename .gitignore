@@ -18,3 +18,17 @@ vendor/*/build/
 # Release archives written next to the repo by `make archive`
 /*.tar.gz
 /*.zip
+
+# Secrets / key material — never versioned, never released (spec 009 FR-087, D-30)
+cert/
+cert/**
+decide/log.key
+*.key
+*.pem
+
+# Go decision binary (llmctl build decide)
+/build/
+
+# Python bytecode (defect D-25)
+__pycache__/
+*.pyc

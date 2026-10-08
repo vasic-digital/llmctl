@@ -1,0 +1,8 @@
+# RECONSTRUCTED (honesty note): the original start.txt of this live run was overwritten by an accidental re-run of
+# run_live.sh for the same profile directory (the re-run was refused by the scheduler, see ../decide-kev-08b-refusal-final/).
+# The two lines below are the console output of the original `LLMCTL_CTX_DECIDE_KEV_08B=2048 bin/llmctl start decide-kev-08b`
+# as it was printed at 11:03:12 (09:03:12Z) in the session; engine-cmdline.txt, memory.txt, golden/, probes/,
+# determinism-edges.json, latency.json and engine-journal-tail.txt are the ORIGINAL captures of that run.
+[llmctl] wrote /home/milosvasic/.local/state/llmctl/services/decide-kev-08b.env
+started decide-kev-08b (mode=cpu, port=8104, reserved 1030 MiB RAM + 0 MiB VRAM)
+rc=0

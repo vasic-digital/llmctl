@@ -1,0 +1,35 @@
+{
+  "files": [
+    {
+      "path": "RESULT.txt",
+      "sha256": "bcbf4404e693f65e09164c18d08349e1a1fd08b03b0961ce5dcc792af3a5b80c",
+      "size": 12
+    },
+    {
+      "path": "context.txt",
+      "sha256": "311e18ffc0c11df9bbaf027cb8c228129cca6b3aa3015cbda6406592a4c5b7e8",
+      "size": 1070
+    },
+    {
+      "path": "download.txt",
+      "sha256": "5899fa0e7077dc21b510641adbdbcc9c9e12452f992f31d3843048fea964d71f",
+      "size": 3322
+    },
+    {
+      "path": "project-download-evidence.log",
+      "sha256": "05bf9eb50e7cda39b21fdb909baf49782a32fa5712f713fcddeb970cebc70d2b",
+      "size": 2630
+    },
+    {
+      "path": "start.txt",
+      "sha256": "a3d9ae5489cbb6cbd9516873aca27b41b8d5ec9da32eb660faab94d457602879",
+      "size": 268
+    },
+    {
+      "path": "verify.txt",
+      "sha256": "c55e1a7a59c7b5fa24d9b9b8f98134bd1df62593cb004c484e8c204c79f1a4b5",
+      "size": 55
+    }
+  ],
+  "schema": 1
+}

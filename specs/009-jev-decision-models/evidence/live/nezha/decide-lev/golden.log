@@ -1,0 +1,279 @@
+N-001 200 4810ms
+N-002 200 4201ms
+N-003 200 4226ms
+N-004 200 4087ms
+N-005 200 3997ms
+N-006 200 4065ms
+N-007 200 4196ms
+N-008 200 3979ms
+N-009 200 4096ms
+N-010 200 4381ms
+N-011 200 4281ms
+N-012 200 4297ms
+N-013 200 3967ms
+N-014 200 4206ms
+N-015 200 4887ms
+N-016 200 4841ms
+N-017 200 4831ms
+N-018 200 4661ms
+N-019 200 4694ms
+N-020 200 4737ms
+N-021 200 4790ms
+N-022 200 4812ms
+N-023 200 4792ms
+N-024 200 4791ms
+N-025 200 4825ms
+N-026 200 4513ms
+N-027 200 4641ms
+N-028 200 4549ms
+N-029 200 4416ms
+N-030 200 4492ms
+N-031 200 4497ms
+N-032 200 4794ms
+N-033 200 4694ms
+N-034 200 4849ms
+N-035 200 4946ms
+N-036 200 4879ms
+N-037 200 4677ms
+N-038 200 5219ms
+N-039 200 4759ms
+N-040 200 5033ms
+N-041 200 5483ms
+N-042 200 5593ms
+N-043 200 4747ms
+N-044 200 4983ms
+N-045 200 5911ms
+N-046 200 5064ms
+N-047 200 4907ms
+N-048 200 4962ms
+N-049 200 4894ms
+N-050 200 4691ms
+N-051 200 4496ms
+N-052 200 4346ms
+N-053 200 4316ms
+N-054 200 4383ms
+N-055 200 4427ms
+N-056 200 4455ms
+N-057 200 4137ms
+N-058 200 4468ms
+N-059 200 4419ms
+N-060 200 4499ms
+C-001 200 9268ms
+C-001~p 200 9151ms
+C-002 200 8856ms
+C-002~p 200 8756ms
+C-003 200 9737ms
+C-003~p 200 9920ms
+C-004 200 7615ms
+C-004~p 200 7460ms
+C-005 200 9920ms
+C-005~p 200 9730ms
+C-006 200 8828ms
+C-006~p 200 8592ms
+C-007 200 9716ms
+C-007~p 200 9329ms
+C-008 200 9514ms
+C-008~p 200 9666ms
+C-009 200 9928ms
+C-009~p 200 10200ms
+C-010 200 10098ms
+C-010~p 200 9843ms
+C-011 200 10829ms
+C-011~p 200 10728ms
+C-012 200 11165ms
+C-012~p 200 10927ms
+C-013 200 8958ms
+C-013~p 200 8957ms
+C-014 200 9507ms
+C-014~p 200 9481ms
+C-015 200 9708ms
+C-015~p 200 9801ms
+C-016 200 9859ms
+C-016~p 200 9699ms
+C-017 200 9621ms
+C-017~p 200 9658ms
+C-018 200 9749ms
+C-018~p 200 9675ms
+C-019 200 8948ms
+C-019~p 200 8940ms
+C-020 200 8869ms
+C-020~p 200 8978ms
+C-021 200 9806ms
+C-021~p 200 9795ms
+C-022 200 9734ms
+C-022~p 200 9869ms
+C-023 200 9516ms
+C-023~p 200 9402ms
+C-024 200 10333ms
+C-024~p 200 10087ms
+C-025 200 9827ms
+C-025~p 200 9817ms
+C-026 200 10067ms
+C-026~p 200 9948ms
+C-027 200 9128ms
+C-027~p 200 8948ms
+C-028 200 10137ms
+C-028~p 200 9901ms
+C-029 200 9579ms
+C-029~p 200 9443ms
+C-030 200 9182ms
+C-030~p 200 9160ms
+C-031 200 9486ms
+C-031~p 200 9436ms
+C-032 200 10238ms
+C-032~p 200 10405ms
+C-033 200 13953ms
+C-033~p 200 13758ms
+C-034 200 13971ms
+C-034~p 200 13958ms
+C-035 200 13865ms
+C-035~p 200 13643ms
+C-036 200 13985ms
+C-036~p 200 13781ms
+C-037 200 14235ms
+C-037~p 200 14541ms
+C-038 200 24797ms
+C-038~p 200 24541ms
+C-039 200 25057ms
+C-039~p 200 24447ms
+C-040 200 25144ms
+C-040~p 200 25024ms
+C-041 200 24994ms
+C-041~p 200 24796ms
+S-001 200 4701ms
+S-002 200 4291ms
+S-003 200 4903ms
+S-004 200 5872ms
+S-005 200 5721ms
+S-006 200 5335ms
+S-007 200 5141ms
+S-008 200 6285ms
+S-009 200 6451ms
+S-010 200 8342ms
+S-011 200 7278ms
+S-012 200 7901ms
+S-013 200 6872ms
+S-014 200 6293ms
+S-015 200 7255ms
+S-016 200 6818ms
+S-017 200 7583ms
+S-018 200 6612ms
+S-019 200 7812ms
+S-020 200 8237ms
+S-021 200 7457ms
+S-022 200 8183ms
+S-023 200 8137ms
+S-024 200 8175ms
+S-025 200 8329ms
+S-026 200 8173ms
+S-027 200 7825ms
+S-028 200 8256ms
+S-029 200 9352ms
+S-030 200 8747ms
+S-031 200 10875ms
+records=173 orig=132 perm=41 well_formed=132/132
+noul   n=60 acc=0.967 CI95=[0.886,0.991] baseline=0.667 (majority) lower>baseline=True
+choice n=41 acc=0.976 CI95=[0.874,0.996] baseline=0.235 (chance) lower>baseline=True
+score  n=31 acc=0.516 CI95=[0.348,0.680] baseline=0.290 (majority) lower>baseline=True
+per-class:
+  noul:False             n=40 acc=0.975
+  noul:True              n=20 acc=0.950
+  choice:bash            n=1 acc=1.000
+  choice:billing         n=1 acc=1.000
+  choice:bug             n=1 acc=1.000
+  choice:c               n=1 acc=1.000
+  choice:chmod           n=1 acc=1.000
+  choice:client_error_4xx n=1 acc=1.000
+  choice:constant        n=1 acc=1.000
+  choice:df              n=1 acc=1.000
+  choice:docs            n=1 acc=1.000
+  choice:feat            n=1 acc=1.000
+  choice:feature_request n=1 acc=1.000
+  choice:find            n=1 acc=1.000
+  choice:fix             n=2 acc=1.000
+  choice:go              n=1 acc=1.000
+  choice:grep            n=1 acc=1.000
+  choice:group_by        n=1 acc=1.000
+  choice:haiku           n=1 acc=1.000
+  choice:javascript      n=1 acc=1.000
+  choice:kill            n=1 acc=1.000
+  choice:order_by        n=1 acc=1.000
+  choice:put             n=1 acc=1.000
+  choice:python          n=1 acc=1.000
+  choice:quadratic       n=1 acc=1.000
+  choice:redirect_3xx    n=1 acc=1.000
+  choice:refactor        n=1 acc=1.000
+  choice:rust            n=1 acc=1.000
+  choice:sales           n=1 acc=1.000
+  choice:server_error_5xx n=1 acc=1.000
+  choice:sonnet          n=1 acc=1.000
+  choice:sql             n=1 acc=1.000
+  choice:stack           n=1 acc=1.000
+  choice:status_201      n=1 acc=1.000
+  choice:status_403      n=1 acc=1.000
+  choice:status_429      n=1 acc=1.000
+  choice:status_504      n=1 acc=1.000
+  choice:success         n=1 acc=1.000
+  choice:success_2xx     n=1 acc=1.000
+  choice:technical       n=1 acc=1.000
+  choice:test            n=1 acc=0.000
+  choice:where           n=1 acc=1.000
+  score:0                n=9 acc=0.222
+  score:1                n=3 acc=1.000
+  score:2                n=4 acc=1.000
+  score:3                n=3 acc=1.000
+  score:4                n=4 acc=0.750
+  score:5                n=2 acc=0.000
+  score:6                n=3 acc=0.333
+  score:7                n=2 acc=0.000
+  score:8                n=1 acc=0.000
+per-family (own majority baseline):
+  author_count               n=1 acc=0.000 CI=[0.000,0.793] majority=1.000 lower>majority=False
+  best_model_tier            n=2 acc=1.000 CI=[0.342,1.000] majority=0.500 lower>majority=False
+  changelog_entry            n=1 acc=1.000 CI=[0.207,1.000] majority=1.000 lower>majority=False
+  ci_failures                n=2 acc=0.000 CI=[0.000,0.658] majority=0.500 lower>majority=False
+  commit_type                n=6 acc=0.833 CI=[0.436,0.970] majority=0.333 lower>majority=True
+  complexity_class           n=2 acc=1.000 CI=[0.342,1.000] majority=0.500 lower>majority=False
+  dangerous_command          n=14 acc=0.929 CI=[0.685,0.987] majority=0.500 lower>majority=True
+  data_structure             n=1 acc=1.000 CI=[0.207,1.000] majority=1.000 lower>majority=False
+  definitions                n=1 acc=0.000 CI=[0.000,0.793] majority=1.000 lower>majority=False
+  department                 n=3 acc=1.000 CI=[0.439,1.000] majority=0.333 lower>majority=True
+  description_completeness   n=2 acc=1.000 CI=[0.342,1.000] majority=0.500 lower>majority=False
+  distinct_methods           n=1 acc=0.000 CI=[0.000,0.793] majority=1.000 lower>majority=False
+  error_lines                n=1 acc=1.000 CI=[0.207,1.000] majority=1.000 lower>majority=False
+  failing_hosts              n=2 acc=0.500 CI=[0.095,0.905] majority=0.500 lower>majority=False
+  http_class                 n=4 acc=1.000 CI=[0.510,1.000] majority=0.250 lower>majority=True
+  http_semantics             n=1 acc=1.000 CI=[0.207,1.000] majority=1.000 lower>majority=False
+  http_status                n=4 acc=1.000 CI=[0.510,1.000] majority=0.250 lower>majority=True
+  imports                    n=1 acc=1.000 CI=[0.207,1.000] majority=1.000 lower>majority=False
+  is_urgent                  n=20 acc=0.950 CI=[0.764,0.991] majority=0.850 lower>majority=False
+  language_id                n=6 acc=1.000 CI=[0.610,1.000] majority=0.167 lower>majority=True
+  language_pair              n=1 acc=1.000 CI=[0.207,1.000] majority=1.000 lower>majority=False
+  log_outcome                n=1 acc=1.000 CI=[0.207,1.000] majority=1.000 lower>majority=False
+  needs_security_review      n=12 acc=1.000 CI=[0.758,1.000] majority=0.750 lower>majority=True
+  open_prs                   n=1 acc=0.000 CI=[0.000,0.793] majority=1.000 lower>majority=False
+  parameters                 n=2 acc=0.000 CI=[0.000,0.658] majority=0.500 lower>majority=False
+  pr_checklist               n=2 acc=0.500 CI=[0.095,0.905] majority=0.500 lower>majority=False
+  pr_checklist4              n=2 acc=0.500 CI=[0.095,0.905] majority=0.500 lower>majority=False
+  review_tone                n=2 acc=0.500 CI=[0.095,0.905] majority=0.500 lower>majority=False
+  severity_ladder            n=3 acc=0.667 CI=[0.208,0.939] majority=0.333 lower>majority=False
+  shell_command              n=5 acc=1.000 CI=[0.566,1.000] majority=0.200 lower>majority=True
+  spec_satisfied             n=14 acc=1.000 CI=[0.785,1.000] majority=0.500 lower>majority=True
+  sql_clause                 n=3 acc=1.000 CI=[0.439,1.000] majority=0.333 lower>majority=True
+  test_failures              n=2 acc=1.000 CI=[0.342,1.000] majority=0.500 lower>majority=False
+  ticket_reference           n=2 acc=1.000 CI=[0.342,1.000] majority=0.500 lower>majority=False
+  ticket_type                n=2 acc=1.000 CI=[0.342,1.000] majority=0.500 lower>majority=False
+  todo_count                 n=1 acc=0.000 CI=[0.000,0.793] majority=1.000 lower>majority=False
+  weekday_gap                n=2 acc=0.500 CI=[0.095,0.905] majority=0.500 lower>majority=False
+option-order flip rate: 0.000 (0 of 41 groups)
+accuracy by option count:
+    2 options n=6 acc=1.000 CI=[0.610,1.000]
+    3 options n=7 acc=1.000 CI=[0.646,1.000]
+    4 options n=7 acc=1.000 CI=[0.646,1.000]
+    5 options n=6 acc=0.833 CI=[0.436,0.970]
+    8 options n=6 acc=1.000 CI=[0.610,1.000]
+   12 options n=5 acc=1.000 CI=[0.566,1.000]
+   20 options n=4 acc=1.000 CI=[0.510,1.000]
+calibration: insufficient for calibration (n=132, need 200)
+results: /home/milosvasic/llmctl-work-live/evidence/decide-lev/golden/results.json
+rc=0

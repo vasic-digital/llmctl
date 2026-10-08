@@ -1,0 +1,87 @@
+== usage / dispatch ==
+  ok: admit with no argument is a usage error (rc 2)
+  ok: usage text lists admit
+== golden-good: permitted licence, pinned sha256, supported protocol ==
+  ok: good candidate exits 0
+  ok: paper-only pass is ADMIT-CANDIDATE (real run still owed)
+  ok: G1 licence PASS
+  ok: G3 size+sha256 pinned PASS
+  ok: G4 arch exists in pinned engine tree PASS
+  ok: G10 real run PENDING in paper-only
+  ok: revision sha recorded
+  ok: pinned sha256 comes from the API LFS oid
+  ok: pinned size comes from the API
+  ok: existence VERIFIED on HTTP 200
+  ok: five real-run sub-checks listed
+  ok: all sub-checks PENDING in paper-only
+  ok: outcome file written under the slug name
+  ok: slug recorded
+== golden-bad: forbidden licence MUST be rejected ==
+  ok: NC licence exits 11 (REJECTED)
+  ok: cc-by-nc-4.0 weights are REJECTED
+  ok: G1 FAIL on non-commercial licence
+  ok: reason names the licence
+== golden-bad: unknown licence fails closed ==
+  ok: no stated licence is REJECTED (fail closed)
+  ok: G1 evidence says licence unknown
+== golden-bad: GGUF over budget is USER-ONLY ==
+  ok: over-budget exits 10 (USER-ONLY)
+  ok: 12.7 GB GGUF is USER-ONLY
+  ok: G5 FAIL over file budget
+  ok: same file passes G5 when the budget is raised (the gate is the budget, not the file)
+== memory fit uses the host memory budget ==
+  ok: G5 FAIL when estimated memory exceeds the host budget
+== other rejecting gates ==
+  ok: G2 FAIL on a gated repo
+  ok: gated repo is USER-ONLY
+  ok: G7 FAIL on a pickle-format pin
+  ok: G3 FAIL when the model file has no LFS sha256
+  ok: G3 FAIL when nothing pinnable (safetensors only)
+  ok: no pinnable artifact is USER-ONLY
+  ok: G4 FAIL when the GGUF architecture is absent from the pinned tree
+  ok: G8 FAIL when the API author differs from the repo owner
+  ok: blocking known issue exits 12 (HOLD)
+  ok: blocking known issue is HOLD
+  ok: a non-blocking note does not block
+  ok: G9 stays PENDING (live tracker sweep not done) with a note
+== protocol classification ==
+  ok: native decision GGUF classified systemone-native
+  ok: G4 PENDING: pinned tree lacks /v1/systemone (engine advance, FR-085)
+  ok: native model is ADMIT-CANDIDATE pending the engine advance
+  ok: needs_engine_advance recorded
+  ok: native model whose arch is absent from the pinned tree is FAIL (a bump is not proven to add it)
+  ok: gguf.decision_type alone classifies native (API-derived, no curated hint)
+  ok: G6 FAIL: no hint and no API signal -> unsupported (fail closed)
+  ok: nli-onnx with tokenizer file PASS
+  ok: nli-onnx without a tokenizer file FAIL
+== existence verdicts ==
+  ok: missing repo exits 13 (NOT-FOUND)
+  ok: 404 -> NOT-FOUND
+  ok: 404 -> existence UNVERIFIED
+  ok: 401 -> existence AMBIGUOUS (private and missing look alike)
+  ok: 401 -> NOT-FOUND
+== real-run executor (non paper-only) ==
+  ok: real-run pass exits 0
+  ok: G10 PASS from the executor
+  ok: G9 still PENDING (no live sweep) -> not ADMITTED yet
+  ok: all ten gates PASS -> ADMITTED
+  ok: failing real run -> G10 FAIL
+  ok: failing real run is never ADMITTED
+  ok: no executor configured -> G10 PENDING, never a faked PASS
+== HF_TOKEN honoured, never persisted ==
+  ok: token sent as a bearer header
+  ok: token appears in no output, evidence file or stderr
+== batch + summary ==
+  ok: --all completes (rc 0) even though dispositions differ
+  ok: SUMMARY.json written
+  ok: SUMMARY.md written
+  ok: five candidate records
+  ok: two REJECTED (NC licence + harness without weights)
+  ok: one NOT-FOUND
+  ok: two ADMIT-CANDIDATE
+  ok: NOT-FOUND repo listed
+  ok: exact real-run command listed
+  ok: non-HF name gets a record too
+  ok: non-HF name existence UNVERIFIED (not probed)
+  ok: SUMMARY.md lists dispositions
+RESULT: PASS

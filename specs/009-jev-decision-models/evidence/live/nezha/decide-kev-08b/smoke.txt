@@ -1,0 +1,4 @@
+{"protocol":"systemone-native","type":"choice","choice":"billing","confidence":0.832987654,"ok":true,"probabilities":{"billing":0.916493827,"legal":0.083506173}}
+rc=0
+{"protocol":"systemone-native","type":"choice","choice":"billing","confidence":0.22541919,"ok":true,"probabilities":{"billing":0.419064393,"legal":0.037282823,"team3":0.301800598,"team4":0.241852186}}
+rc=0

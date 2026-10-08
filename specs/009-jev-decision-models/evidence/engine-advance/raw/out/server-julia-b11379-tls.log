@@ -1,0 +1,26 @@
+0.00.000.691 I srv  llama_server: initializing ...
+0.00.001.909 I cmn  common_param: common_params_print_info: verbosity = 3 (adjust with the `-lv N` CLI arg)
+0.00.005.631 I srv    load_model: loading model 'models/Julia-1-Q8_0.gguf'
+0.01.031.037 W load: control-looking token:    213 '</s>' was not control-type; this is probably a bug in the model. its type will be overridden
+0.01.087.440 I decision model reads the embeddings output, enabling embedding mode
+0.01.087.445 W embeddings enabled: setting n_batch = n_ubatch = 512
+0.01.089.382 W llama_init_from_model: model default pooling_type is [-1], but [0] was specified
+0.01.091.469 I cmn          init: llama threadpool init, n_threads = 4
+0.01.091.668 W init: embeddings required but some input tokens were not marked as outputs -> overriding
+0.01.096.194 I srv          init: decision model type: laya
+0.01.096.207 W srv    load_model: speculative decoding not supported by this context
+0.01.096.208 I srv    load_model: initializing, n_slots = 1, n_ctx_slot = 4096, kv_unified = 'false'
+0.01.098.387 I srv  llama_server: model loaded
+0.01.098.392 I srv  llama_server: listening on https://127.0.0.1:40035
+0.02.020.895 I slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = -1
+0.02.020.902 I slot launch_slot_: id  0 | task 0 | processing task, is_child = 0
+0.02.041.780 I slot      release: id  0 | task 0 | stop processing: n_tokens = 22, truncated = 0
+0.02.047.347 I slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = 12554792087
+0.02.047.351 I slot launch_slot_: id  0 | task 2 | processing task, is_child = 0
+0.02.057.256 I slot      release: id  0 | task 2 | stop processing: n_tokens = 11, truncated = 0
+0.02.100.117 I slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = 12554807563
+0.02.100.122 I slot launch_slot_: id  0 | task 4 | processing task, is_child = 0
+0.02.100.133 E srv    send_error: task id = 4, error: input (2118 tokens) is too large to process. increase the physical batch size (current batch size: 512)
+0.02.100.137 I slot      release: id  0 | task 4 | stop processing: n_tokens = 11, truncated = 0
+0.02.100.176 W srv          stop: cancel task, id_task = 4
+0.02.108.533 I srv    operator(): operator(): cleaning up before exit...

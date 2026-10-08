@@ -1,0 +1,39 @@
+== in-process end-to-end (real sockets, real TLS) ==
+  ok: go test -run TestServerEndToEnd passes
+== real server process driven by curl ==
+  ok: server announced an https address
+-- TLS trust and probes --
+  ok: healthz over HTTPS with the CA trusted
+  ok: healthz body is minimal
+  ok: Cache-Control: no-store
+  ok: nosniff
+  ok: x-request-id present
+  ok: no Server header
+  ok: no CORS headers
+  ok: without the CA, curl refuses the certificate (exit 60)
+  ok: a host name not in the certificate is refused (exit 60)
+  ok: certificate chain verifies against the CA (openssl)
+  ok: TLS 1.2+ negotiated
+  ok: a TLS 1.1 handshake does not complete (the Go test proves the server side)
+-- plain HTTP to the TLS port --
+  ok: plain HTTP request fails (curl exit 56)
+  ok: plain HTTP never receives an answer body
+-- authentication and routing order --
+  ok: no key => 401
+  ok: 401 carries WWW-Authenticate
+  ok: unknown path without a valid key => 401, not 404
+  ok: unknown path with the key => 404
+  ok: GET on the POST endpoint => 405
+  ok: 405 carries Allow
+-- decision, models, metrics --
+  ok: valid decision => 200
+  ok: decision body has answers
+  ok: models => 200
+  ok: models lists the profile
+  ok: metrics => 200
+  ok: metrics never contain the key
+-- keep-alive survives an error response (N-12), one curl invocation, one connection --
+  ok: second request after a 401 succeeds on the SAME connection (no new connect)
+-- graceful stop --
+  ok: server drained and exited 0 when stdin closed
+RESULT: PASS

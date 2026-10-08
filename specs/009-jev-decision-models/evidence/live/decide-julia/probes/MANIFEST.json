@@ -1,0 +1,35 @@
+{
+  "files": [
+    {
+      "path": "evidence.jsonl",
+      "sha256": "5cc7dd51b986057eb26d871e6573df0a45be6e413823ab937b097e14fcba014e",
+      "size": 2528
+    },
+    {
+      "path": "raw/EV-decide-julia-probes-0001-stdout.txt",
+      "sha256": "8dd7d3312fb3ba4af2391e3b67a12019998c49351dab1442a0ff31ae50b5963f",
+      "size": 4478
+    },
+    {
+      "path": "raw/EV-decide-julia-probes-0002-stdout.txt",
+      "sha256": "8dd7d3312fb3ba4af2391e3b67a12019998c49351dab1442a0ff31ae50b5963f",
+      "size": 4478
+    },
+    {
+      "path": "raw/EV-decide-julia-probes-0003-stdout.txt",
+      "sha256": "8dd7d3312fb3ba4af2391e3b67a12019998c49351dab1442a0ff31ae50b5963f",
+      "size": 4478
+    },
+    {
+      "path": "raw/responses.jsonl",
+      "sha256": "029376f402a3ccad7cc4907bbdfcc17b9048fcbb804b320283f2f49fd0f4904a",
+      "size": 8424
+    },
+    {
+      "path": "results.json",
+      "sha256": "43bcebd91c27180d29da6097460f618ebc1e6710514e358c9fff5bae3ea24470",
+      "size": 20101
+    }
+  ],
+  "schema": 1
+}

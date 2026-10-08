@@ -1,0 +1,9 @@
+--- real decision call POST /v1/systemone (from anton to nezha over LAN)
+{"model":"decide-tiny","answers":{"q":{"type":"noul","noul":0.947846437}},"usage":{"input_tokens":73,"output_tokens":1}}
+http=200
+--- local firewall state on anton (read-only)
+inactive inactive inactive 
+--- reverse: nezha (192.168.1.90) -> anton 192.168.1.115:36641 via bash /dev/tcp
+hello-from-anton
+rc=0
+listener-saw: peer 192.168.1.90

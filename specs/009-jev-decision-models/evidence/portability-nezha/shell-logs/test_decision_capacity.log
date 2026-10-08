@@ -1,0 +1,37 @@
+  ok: SC-010 baseline: every decision profile accepts exactly instances_gpu/instances_cpu instances, then refuses with numbers
+  ok: data-model s10 definition on baseline: slots = max(gpu,cpu) x slots/instance, best_placement, protocol, reason only at 0
+  ok: SC-010 workstation: every decision profile accepts exactly instances_gpu/instances_cpu instances, then refuses with numbers
+  ok: data-model s10 definition on workstation: slots = max(gpu,cpu) x slots/instance, best_placement, protocol, reason only at 0
+  ok: SC-010 constrained: every decision profile accepts exactly instances_gpu/instances_cpu instances, then refuses with numbers
+  ok: data-model s10 definition on constrained: slots = max(gpu,cpu) x slots/instance, best_placement, protocol, reason only at 0
+  ok: SC-010 vram-contended: every decision profile accepts exactly instances_gpu/instances_cpu instances, then refuses with numbers
+  ok: data-model s10 definition on vram-contended: slots = max(gpu,cpu) x slots/instance, best_placement, protocol, reason only at 0
+  ok: SC-010 tiny: every decision profile accepts exactly instances_gpu/instances_cpu instances, then refuses with numbers
+  ok: data-model s10 definition on tiny: slots = max(gpu,cpu) x slots/instance, best_placement, protocol, reason only at 0
+  ok: SC-010 apple: every decision profile accepts exactly instances_gpu/instances_cpu instances, then refuses with numbers
+  ok: data-model s10 definition on apple: slots = max(gpu,cpu) x slots/instance, best_placement, protocol, reason only at 0
+  ok: SC-010 cpu-heavy: every decision profile accepts exactly instances_gpu/instances_cpu instances, then refuses with numbers
+  ok: data-model s10 definition on cpu-heavy: slots = max(gpu,cpu) x slots/instance, best_placement, protocol, reason only at 0
+  ok: SC-010 small-exact: every decision profile accepts exactly instances_gpu/instances_cpu instances, then refuses with numbers
+  ok: data-model s10 definition on small-exact: slots = max(gpu,cpu) x slots/instance, best_placement, protocol, reason only at 0
+  ok: SC-010 ram-contended-auto-eviction: every decision profile accepts exactly instances_gpu/instances_cpu instances, then refuses with numbers
+  ok: data-model s10 definition on ram-contended-auto-eviction: slots = max(gpu,cpu) x slots/instance, best_placement, protocol, reason only at 0
+  ok: SC-010 vram-contended-coresident: every decision profile accepts exactly instances_gpu/instances_cpu instances, then refuses with numbers
+  ok: data-model s10 definition on vram-contended-coresident: slots = max(gpu,cpu) x slots/instance, best_placement, protocol, reason only at 0
+  info: 60 fixture x profile combinations checked
+  ok: probe left no reservation (.run) files
+  ok: probe left no service files
+  ok: mutation: report claiming one instance too many is detected by the admission comparison
+  ok: mutation: report claiming one instance too few is detected by the admission comparison
+  ok: baseline decide: 2 GPU instances accepted (3671 MiB VRAM each of 10444)
+  ok: refusal after the last fitting instance names the instance, placement and the exact remaining numbers
+  ok: baseline decide-pro (tier-gated): admission accepts 0 instances, like the report
+  ok: baseline decide-pro: refusal names the tier gate
+  ok: decide-nli has no GPU placement (CPU-only encoder): 0 accepted
+  ok: decide-nli gpu: refusal says the placement is not applicable
+  ok: unknown profile: probe fails loudly
+  ok: a chat profile is not a decision profile: probe refuses (FR-006)
+  ok: unknown placement: probe fails loudly
+  ok: llmctl start decide on a host with no RAM budget is refused
+  ok: refused start reports the needed numbers
+RESULT: PASS

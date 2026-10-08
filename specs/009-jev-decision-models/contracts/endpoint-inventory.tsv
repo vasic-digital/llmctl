@@ -1,0 +1,46 @@
+case_id	method	path	auth	scenario	expected_status	expected_error_type	requirement
+EP-001	POST	/v1/systemone	key	noul question, valid	200	-	FR-017,075
+EP-002	POST	/v1/systemone	key	choice question, valid (2 options)	200	-	FR-017,075
+EP-003	POST	/v1/systemone	key	choice question, valid (max options for profile)	200	-	FR-012,075
+EP-004	POST	/v1/systemone	key	score question, valid (2..10 levels)	200	-	FR-017,075
+EP-005	POST	/v1/systemone	key	several mixed questions in one request	200	-	FR-017
+EP-006	POST	/v1/systemone	key	state given as object / array / string	200	-	FR-075
+EP-007	POST	/v1/systemone	key	hosted alias model name (jev-latest) maps to served profile	200	-	FR-075
+EP-008	POST	/v1/systemone	key	state longer than profile budget, DEFAULT behaviour: rejected	422	validation_failed	FR-012
+EP-008b	POST	/v1/systemone	key	state over budget with the OPT-IN shortening setting on (decoder profile): answered, header x-llmctl-decide-truncated: true, question and option text intact	200	-	FR-012
+EP-009	POST	/v1/systemone	none	no credentials	401	unauthorized	FR-019
+EP-010	POST	/v1/systemone	wrong	wrong key	401	unauthorized	FR-019
+EP-011	POST	/v1/systemone	key	non-JSON body	400	invalid_request	FR-022
+EP-012	POST	/v1/systemone	key	JSON body that is not an object (list/string/number)	400	invalid_request	FR-022,D-08
+EP-013	POST	/v1/systemone	key	missing Content-Type / wrong Content-Type	400	invalid_request	FR-022
+EP-014	POST	/v1/systemone	key	body above cap (rejected before read)	413	payload_too_large	FR-022
+EP-015	POST	/v1/systemone	key	choice with 1 option or above the profile cap (<=255); score with 1 or 11 levels	422	validation_failed	FR-012,075
+EP-015b	POST	/v1/systemone	key	choice with 256 options (hosted answers 400 at 256)	400	invalid_request	FR-075
+EP-016	POST	/v1/systemone	key	unknown model name	422	unknown_model	FR-075
+EP-016b	POST	/v1/systemone	key	known profile with no ready instance (no on-demand start)	503	not_ready	FR-075,078
+EP-017	POST	/v1/systemone	key	state + longest question exceeds budget (encoder: question never truncated)	422	validation_failed	FR-012,077
+EP-018	POST	/v1/systemone	key	unknown field in a question / request	422	validation_failed	FR-075
+EP-019	POST	/v1/systemone	wrong	burst of failed authentications from one source; a request from the same source carrying the VALID key is still answered	429	rate_limited	FR-022
+EP-020	POST	/v1/systemone	key	all slots busy and queue full / deadline passed	529	overloaded	FR-078
+EP-021	POST	/v1/systemone	key	gateway draining or no ready instance	503	not_ready	FR-078
+EP-022	POST	/v1/systemone	key	backend returns unusable readout (letter mass below threshold): deterministic, non-retryable	422	readout_failed	FR-013,076
+EP-023	POST	/v1/systemone	key	backend process killed mid-request (transient)	502	backend_failed	FR-013,049
+EP-024	POST	/v1/systemone	key	slow client: drip-fed headers/body past the deadline (connection closed, others unaffected)	closed	-	FR-022
+EP-025	GET	/v1/systemone	key	wrong method	405	method_not_allowed	FR-022
+EP-026	POST	/v1/systemone	none	more connections than the global cap opened from ONE source while a second source keeps succeeding (per-source cap, shedding before TLS)	closed	-	FR-022,SC-006
+EP-030	GET	/v1/models	key	list served models and aliases	200	-	FR-017
+EP-031	GET	/v1/models	none	no credentials	401	unauthorized	FR-019
+EP-032	GET	/v1/models	wrong	wrong key	401	unauthorized	FR-019
+EP-033	POST	/v1/models	key	wrong method	405	method_not_allowed	FR-022
+EP-034	GET	/v1/models	key	no ready instance	503	not_ready	FR-078
+EP-040	GET	/healthz	none	liveness	200	-	FR-021,079
+EP-041	POST	/healthz	none	wrong method	405	method_not_allowed	FR-022
+EP-045	GET	/readyz	none	ready	200	-	FR-021,079
+EP-046	GET	/readyz	none	not ready / draining	503	-	FR-078,079
+EP-050	GET	/metrics	key	text exposition, bounded labels, no state/question/key content	200	-	FR-079
+EP-051	GET	/metrics	none	no credentials	401	unauthorized	FR-019,079
+EP-052	POST	/metrics	key	wrong method	405	method_not_allowed	FR-022
+EP-060	GET	/<unknown>	key	unknown path (404 only AFTER authentication)	404	invalid_request	FR-022
+EP-061	GET	/<unknown>	none	unknown path without credentials	401	unauthorized	FR-019
+EP-070	ANY	(plain HTTP to the TLS port)	none	connection reset; no HTTP answer, no redirect	reset	-	FR-066,070
+EP-071	ANY	(non-loopback address of the engine/runtime port)	none	connection refused from the second network location	refused	-	FR-073

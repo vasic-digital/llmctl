@@ -1,0 +1,9 @@
+  ok: norm_strip_timestamps replaces ISO8601 + human-readable timestamps
+  ok: two DIFFERENT real timestamps normalize to the SAME placeholder (the actual determinism property under test)
+  ok: norm_strip_temp_paths replaces /tmp/... paths
+  ok: two DIFFERENT temp paths normalize to the SAME placeholder
+  ok: norm_strip_uuids replaces a v4-shaped UUID
+  ok: norm_strip_durations replaces elapsed-time reporting
+  ok: two runs differing ONLY in timestamp/temp-path/uuid/duration normalize to byte-identical output
+  ok: paired mutation: a filter that does not actually strip timestamps is correctly detected as different from the real one's output
+RESULT: PASS

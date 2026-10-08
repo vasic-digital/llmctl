@@ -1,0 +1,140 @@
+{
+  "schema": "llmctl.admission/1",
+  "candidate": {
+    "name": "kev-9b",
+    "repo": "ggml-org/Kev-9B-GGUF",
+    "pinned": "no",
+    "protocol_hint": "systemone-native",
+    "known_issue": "note:llama.cpp#30073 large inputs rejected at default physical batch 512 (open at 2026-10-07; -b must be >= prompt length)",
+    "name_collision": "PyPI 'kev' is an unrelated 2021 ORM",
+    "kind": "weights"
+  },
+  "slug": "ggml-org__Kev-9B-GGUF",
+  "mode": "paper-only",
+  "retrieved_at": "2026-10-07T16:15:37Z",
+  "existence": {
+    "verdict": "VERIFIED",
+    "evidence": "HTTP 200 from <LLMCTL_HF_BASE>/api/models/ggml-org/Kev-9B-GGUF",
+    "http_status": 200,
+    "name_collision": "PyPI 'kev' is an unrelated 2021 ORM"
+  },
+  "api": {
+    "id": "ggml-org/Kev-9B-GGUF",
+    "sha": "ec2bbfe6620218aee2e01cc93bb78dee2a96ed58",
+    "lastModified": "2026-10-02T13:05:29.000Z",
+    "author": "ggml-org",
+    "gated": false,
+    "private": false,
+    "disabled": false
+  },
+  "pins": [
+    {
+      "name": "Kev-9B-Q4_K_M.gguf",
+      "size": 6358923744,
+      "sha256": "86a6084984a6ef6818eb12c07cdc67ed3c47b00208d41a8816c64301bc6bcbda",
+      "role": "model"
+    }
+  ],
+  "protocol": {
+    "class": "systemone-native",
+    "source": "API gguf.decision_type=kev"
+  },
+  "needs_engine_advance": true,
+  "tier": "workstation",
+  "est_memory_bytes": 8266600867,
+  "g10_subchecks": [
+    {
+      "check": "loadability",
+      "status": "PENDING",
+      "evidence": "paper-only mode: needs a real run on a host with the pinned engine; also blocked on the engine advance (FR-085)"
+    },
+    {
+      "check": "smoke_answer",
+      "status": "PENDING",
+      "evidence": "paper-only mode: needs a real run on a host with the pinned engine; also blocked on the engine advance (FR-085)"
+    },
+    {
+      "check": "determinism_repeats",
+      "status": "PENDING",
+      "evidence": "paper-only mode: needs a real run on a host with the pinned engine; also blocked on the engine advance (FR-085)"
+    },
+    {
+      "check": "option_order_sensitivity",
+      "status": "PENDING",
+      "evidence": "paper-only mode: needs a real run on a host with the pinned engine; also blocked on the engine advance (FR-085)"
+    },
+    {
+      "check": "memory_fit_measured",
+      "status": "PENDING",
+      "evidence": "paper-only mode: needs a real run on a host with the pinned engine; also blocked on the engine advance (FR-085)"
+    }
+  ],
+  "gates": [
+    {
+      "gate": "G1",
+      "name": "licence allow-list",
+      "status": "PASS",
+      "evidence": "weights licence apache-2.0 (SPDX, from the HF API) is on the allow-list; licence files in repo: none"
+    },
+    {
+      "gate": "G2",
+      "name": "stable revision",
+      "status": "PASS",
+      "evidence": "immutable ref ec2bbfe6620218aee2e01cc93bb78dee2a96ed58, lastModified 2026-10-02T13:05:29.000Z; re-verify at release"
+    },
+    {
+      "gate": "G3",
+      "name": "pinned size+sha256",
+      "status": "PASS",
+      "evidence": "1 file(s) with size+sha256 from the HF API LFS oid: Kev-9B-Q4_K_M.gguf 6358923744 B sha256:86a6084984a6..."
+    },
+    {
+      "gate": "G4",
+      "name": "loadable by pinned engine",
+      "status": "PENDING",
+      "evidence": "pending engine advance (FR-085): pinned tree has arch qwen35=yes, /v1/systemone=no; needs llama.cpp >= b11361"
+    },
+    {
+      "gate": "G5",
+      "name": "fits budgets",
+      "status": "PASS",
+      "evidence": "largest model file Kev-9B-Q4_K_M.gguf = 6358923744 B (cap 10737418240 B), tier workstation, memory ESTIMATE 8266600867 B (gguf: size*1.3) vs budget 19487261491 B (60% of /proc/meminfo MemTotal (Constitution 12.6))"
+    },
+    {
+      "gate": "G6",
+      "name": "protocol classification",
+      "status": "PASS",
+      "evidence": "systemone-native (API gguf.decision_type=kev); GGUF metadata in API: arch=qwen35, chat_template=yes (tokenizer is embedded in GGUF)"
+    },
+    {
+      "gate": "G7",
+      "name": "supply chain",
+      "status": "PASS",
+      "evidence": "pin has no pickle files"
+    },
+    {
+      "gate": "G8",
+      "name": "provenance",
+      "status": "PASS",
+      "evidence": "API author 'ggml-org' == repo owner; HF-side cross-link to GitHub/PyPI not checked in paper mode; name collision noted: PyPI 'kev' is an unrelated 2021 ORM"
+    },
+    {
+      "gate": "G9",
+      "name": "known-issue sweep",
+      "status": "PENDING",
+      "evidence": "non-blocking note recorded (llama.cpp#30073 large inputs rejected at default physical batch 512 (open at 2026-10-07; -b must be >= prompt length)); live tracker sweep not done by this driver"
+    },
+    {
+      "gate": "G10",
+      "name": "real run",
+      "status": "PENDING",
+      "evidence": "paper-only mode: needs a real run on a host with the pinned engine; also blocked on the engine advance (FR-085)"
+    }
+  ],
+  "disposition": "ADMIT-CANDIDATE",
+  "reasons": [
+    "G4 PENDING: pending engine advance (FR-085): pinned tree has arch qwen35=yes, /v1/systemone=no; needs llama.cpp >= b11361",
+    "G9 PENDING: non-blocking note recorded (llama.cpp#30073 large inputs rejected at default physical batch 512 (open at 2026-10-07; -b must be >= prompt length)); live tracker sweep not done by this driver",
+    "G10 PENDING: paper-only mode: needs a real run on a host with the pinned engine; also blocked on the engine advance (FR-085)"
+  ]
+}

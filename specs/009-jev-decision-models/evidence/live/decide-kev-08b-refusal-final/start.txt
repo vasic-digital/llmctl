@@ -1,0 +1,4 @@
+ERROR: cannot start 'decide-kev-08b': needs 2570 MiB RAM + 0 MiB VRAM, but only 1835 MiB RAM + 4213 MiB VRAM remain
+ERROR: suggested alternative that fits now: llmctl start decide-tiny
+ERROR: or free room by stopping another running profile: llmctl switch decide-kev-08b
+rc=1

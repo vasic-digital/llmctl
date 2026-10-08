@@ -1,0 +1,5 @@
+# cpu-mode (-ngl 0) native engine, same flags as the scheduler's native launch; VRAM of the engine's own pid (nvidia-smi), VmHWM, latency of states at 10/50/85% of the window; with vs without --no-op-offload
+{"label": "kev-08b ctx2048 flags=[]", "vram_idle": ["2328"], "requests(frac,status,ms)": [[0.1, 200, 319], [0.5, 200, 761], [0.85, 200, 1226]], "vram_after": ["2346"], "VmHWM_MiB": 2585}
+{"label": "kev-08b ctx2048 flags=[--no-op-offload]", "vram_idle": ["104"], "requests(frac,status,ms)": [[0.1, 200, 2347], [0.5, 200, 11181], [0.85, 200, 18245]], "vram_after": ["104"], "VmHWM_MiB": 4248}
+{"label": "laya ctx1024 flags=[]", "vram_idle": ["174"], "requests(frac,status,ms)": [[0.1, 200, 278], [0.5, 200, 140], [0.85, 200, 188]], "vram_after": ["208"], "VmHWM_MiB": 959}
+{"label": "laya ctx1024 flags=[--no-op-offload]", "vram_idle": ["104"], "requests(frac,status,ms)": [[0.1, 200, 751], [0.5, 200, 3108], [0.85, 200, 5603]], "vram_after": ["104"], "VmHWM_MiB": 869}

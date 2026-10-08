@@ -91,7 +91,7 @@ export PATH="${FAKEBIN}:${PATH}"
 # =============================================================================
 : > "${CALL_LOG}"
 out="$(FAKE_LOGINCTL_LINGER=yes bash "${FAKE_ROOT}/scripts/install.sh" 2>&1)" && rc=0 || rc=$?
-echo "${out}" | sed 's/^/  /'
+echo "${out}" | sed 's/^/  | /'
 
 assert_eq 0 "${rc}" "happy path: exit code 0"
 assert_contains "${out}" "PASS: linger is enabled" "happy path: linger PASS reported"
@@ -129,7 +129,7 @@ assert_eq 1 "${order_ok}" "happy path: real invocation order is setup -> downloa
 # =============================================================================
 : > "${CALL_LOG}"
 out2="$(FAKE_LOGINCTL_LINGER=no bash "${FAKE_ROOT}/scripts/install.sh" --profile vision 2>&1)" && rc2=0 || rc2=$?
-echo "${out2}" | sed 's/^/  /'
+echo "${out2}" | sed 's/^/  | /'
 
 assert_eq 1 "${rc2}" "linger-not-confirmed path: exit code 1 (non-zero - never silently proceeds)"
 assert_contains "${out2}" "FAIL: linger is NOT confirmed enabled" "linger-not-confirmed path: FAIL is reported"
@@ -152,7 +152,7 @@ assert_eq 0 "${status_ran_after_fail}" "linger-not-confirmed path: 'llmctl statu
 # =============================================================================
 : > "${CALL_LOG}"
 out3="$(bash "${FAKE_ROOT}/scripts/install.sh" --dry-run 2>&1)" && rc3=0 || rc3=$?
-echo "${out3}" | sed 's/^/  /'
+echo "${out3}" | sed 's/^/  | /'
 
 assert_eq 0 "${rc3}" "--dry-run: exit code 0"
 assert_contains "${out3}" "[dry-run] would run: loginctl show-user" "--dry-run: linger step is honestly skipped, not silently fabricated"
