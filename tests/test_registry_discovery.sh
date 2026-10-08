@@ -69,7 +69,7 @@ export LLMCTL_CATALOG="${TEST_TMP}/catalog.json"
 python3 - "${LLMCTL_ROOT}/models/catalog.json" "${LLMCTL_CATALOG}" "${P_SMALL}" "${P_FAST}" "${P_DEC}" <<'PY'
 import json, sys
 d = json.load(open(sys.argv[1]))
-for name, port in zip(("small", "fast", "decide-tiny"), sys.argv[3:6]):
+for name, port in zip(("small", "fast", "decide-2b"), sys.argv[3:6]):
     d["profiles"][name]["port"] = int(port)
     if "ports" in d:
         d["ports"][name] = int(port)
@@ -79,7 +79,7 @@ source "${LLMCTL_ROOT}/lib/common.sh"
 source "${LLMCTL_ROOT}/lib/os_detect.sh"
 source "${LLMCTL_ROOT}/lib/hardware.sh"
 source "${LLMCTL_ROOT}/lib/catalog.sh"
-for prof in small fast decide-tiny; do
+for prof in small fast decide-2b; do
   while IFS='|' read -r fname _ _ _; do
     mkdir -p "$(dirname "${LLMCTL_MODELS_DIR}/${prof}/${fname}")"; : > "${LLMCTL_MODELS_DIR}/${prof}/${fname}"
   done < <(catalog_files "${prof}")
@@ -166,7 +166,7 @@ echo "== 5. 20 random start/stop/kill sequences keep registry == live set (SC-01
 export LLMCTL_PORT_STRATEGY=dynamic
 bad=0
 RANDOM=7
-profs=(small fast decide-tiny)
+profs=(small fast decide-2b)
 for step in $(seq 1 20); do
   p="${profs[$(( RANDOM % 3 ))]}"
   case $(( RANDOM % 3 )) in
@@ -192,8 +192,8 @@ export LLMCTL_TLS_SAN="ip:127.0.0.1"
 export LLMCTL_DECIDE_BIND="127.0.0.1"
 mkdir -p "${TEST_TMP}/root"
 unset LLMCTL_API_KEY LLMCTL_DECIDE_PORT LLMCTL_TLS_MODE LLMCTL_DECIDE_MODE
-"${LLMCTL}" start decide-tiny >/dev/null 2>&1
-assert_eq "$(run_port decide-tiny)" "$(reg_field decide-tiny port)" "the decision engine is registered at its assigned port before the gateway starts"
+"${LLMCTL}" start decide-2b >/dev/null 2>&1
+assert_eq "$(run_port decide-2b)" "$(reg_field decide-2b port)" "the decision engine is registered at its assigned port before the gateway starts"
 GWN=decide-gateway   # the name the gateway publishes itself under
 start_gw() { # start_gw [VAR=VAL...] -> GW_PID
   env "$@" bash "${LLMCTL_ROOT}/lib/svc_hook.sh" run-gateway > "${TEST_TMP}/gw.out" 2>&1 &
@@ -228,12 +228,12 @@ assert_eq "${GW_PID}" "$(reg_field "${GWN}" pid)" "the row carries the gateway's
 assert_eq "200" "$(curl -s -o /dev/null -w '%{http_code}' --cacert "${LLMCTL_HOME}/cert/ca/ca.crt" "https://127.0.0.1:${GW_FIXED}/healthz")" "the gateway answers HTTPS on the registered port"
 assert_contains "$(tr '\0' '\n' < "/proc/${GW_PID}/environ")" "LLMCTL_DECIDE_RESOLVER=registry" "the gateway resolves backends from the registry, not from a static port table"
 # routing follows the registry within a health interval, without a gateway restart
-st_up="?"; for _ in $(seq 1 30); do st_up="$(model_status "${GW_FIXED}" decide-tiny)"; [[ "${st_up}" == "ready" || "${st_up}" == "available" ]] && break; sleep 0.5; done
-echo "    gateway status of decide-tiny with its engine registered: ${st_up}"
-"${LLMCTL}" stop decide-tiny >/dev/null 2>&1
-st_down="${st_up}"; for _ in $(seq 1 30); do st_down="$(model_status "${GW_FIXED}" decide-tiny)"; [[ "${st_down}" != "${st_up}" ]] && break; sleep 0.5; done
-echo "    gateway status of decide-tiny after its engine stopped and left the registry: ${st_down}"
-if [[ "${st_up}" == "ready" && "${st_down}" != "ready" && "${st_down}" != "?" ]]; then printf '  ok: the gateway stopped routing to the removed engine without a restart (%s -> %s)\n' "${st_up}" "${st_down}"; else printf '  FAIL: gateway view of decide-tiny did not change after the engine left the registry (%s)\n' "${st_up}" >&2; TEST_FAILS=$((TEST_FAILS+1)); fi
+st_up="?"; for _ in $(seq 1 30); do st_up="$(model_status "${GW_FIXED}" decide-2b)"; [[ "${st_up}" == "ready" || "${st_up}" == "available" ]] && break; sleep 0.5; done
+echo "    gateway status of decide-2b with its engine registered: ${st_up}"
+"${LLMCTL}" stop decide-2b >/dev/null 2>&1
+st_down="${st_up}"; for _ in $(seq 1 30); do st_down="$(model_status "${GW_FIXED}" decide-2b)"; [[ "${st_down}" != "${st_up}" ]] && break; sleep 0.5; done
+echo "    gateway status of decide-2b after its engine stopped and left the registry: ${st_down}"
+if [[ "${st_up}" == "ready" && "${st_down}" != "ready" && "${st_down}" != "?" ]]; then printf '  ok: the gateway stopped routing to the removed engine without a restart (%s -> %s)\n' "${st_up}" "${st_down}"; else printf '  FAIL: gateway view of decide-2b did not change after the engine left the registry (%s)\n' "${st_up}" >&2; TEST_FAILS=$((TEST_FAILS+1)); fi
 # FR-083: measured peak memory of the decision component (policy: no cap, OD-14)
 PEAK_KB="$(sed -n 's/^VmHWM:[[:space:]]*\([0-9]*\) kB.*/\1/p' "/proc/${GW_PID}/status")"
 if [[ "${PEAK_KB}" =~ ^[0-9]+$ && "${PEAK_KB}" -gt 0 ]]; then printf '  ok: measured gateway peak RSS %s KiB (VmHWM, FR-083)\n' "${PEAK_KB}"; else printf '  FAIL: no peak memory reading\n' >&2; TEST_FAILS=$((TEST_FAILS+1)); fi

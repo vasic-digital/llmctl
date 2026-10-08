@@ -8,6 +8,7 @@
 # Docs and tests may mention them only on a line that says they are retired/removed/ignored/historical (negative
 # assertions and migration notes), or in an allow-listed file up to a PINNED number of mentions. A control needle proves
 # the scanner sees a planted production hit.
+# .claude/ is agent tool state (worktree copies of specs/ live there), never product code.
 # C3-13: the production scan skips only the TOP-LEVEL docs/, tests/, specs/, build/, submodules/, constitution/ (and .git /
 # node_modules anywhere). A directory merely NAMED tests/, docs/ or build/ deeper in the tree (lib/tests/, scripts/build/)
 # is production and is scanned. An allow-list entry is "path:N": the file may mention a retired name at most N times, so a
@@ -18,7 +19,7 @@ cd "${LLMCTL_ROOT}"
 
 RETIRED='LLMCTL_DECIDE_BACKEND_(HOST|PORT)|LLMCTL_ONNX_FAKE|LLMCTL_DECIDE_API_KEY|LLMCTL_DECIDE_INTERNAL_KEY([^A-Za-z0-9_]|$)'
 EXPLAIN='retired|removed|no longer|ignored|historical|migration|must not|never|forbidden|negative|absent|gone|legacy|scrub|has no effect|deleted|refuse'
-TOP_EXCLUDED=" .git submodules constitution specs docs tests build node_modules evidence "
+TOP_EXCLUDED=" .git .claude submodules constitution specs docs tests build node_modules evidence "
 
 scan_production() { # $1 = root dir to scan -> prints offending file:line (paths prefixed with $1/)
   local e base
