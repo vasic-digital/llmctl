@@ -1,0 +1,8 @@
+llmctl decide gateway
+  bind:   0.0.0.0:8195 (all interfaces; use this host's name or address from other machines)
+  URL:    https://127.0.0.1:8195
+  key:    /tmp/claude-1000/-home-milosvasic-Projects-llmctl/4cea4116-8339-d4a8-4d6c-db1d21cb18d4/scratchpad/nliw/home/env (source: file; show it with `llmctl key show --yes-print`)
+  CA:     SHA-256 37:34:97:FC:75:E1:A7:08:21:F5:38:5F:B8:45:AB:49:F7:B0:F9:04:52:E3:78:68:1F:41:FD:59:7B:D1:93:79, expires 2036-10-05
+  models: 12 decision profile(s), default decide-tiny
+  pid:    1605305 (log: /tmp/claude-1000/-home-milosvasic-Projects-llmctl/4cea4116-8339-d4a8-4d6c-db1d21cb18d4/scratchpad/nliw/state/logs/decide-gateway.log)
+rc=0

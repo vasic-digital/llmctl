@@ -1,0 +1,52 @@
+profile=decide-nli date=2026-10-08T14:13:05Z host=anton kernel=7.0.0-38-generic
+venv python: Python 3.12.14  onnxruntime=1.30.0 numpy=2.5.3 sentencepiece=0.2.2 tokenizers=0.23.2
+runtime sha256: 97f48ddb3dc0b6d0c6a5b201e059f445f89bdf80d0b512e13f9074dbf5838646  lock sha256: 4ac70691134017cfaec00c4f4e7b1dea9558c5ebc622ab4b540579631bf97484
+decide binary sha256: 3cd2a8a5141b0f2cc15d86609125d7121c532edf599412850ba97d8bd385403c
+catalog entry: MoritzLaurer/deberta-v3-large-zeroshot-v2.0 cf44676c28ba7312e5c5f8f8d2c22b3e0c9cdae2 [('onnx/model.onnx', 1741985401, 'beded3d71421ceb718861af381d1a0d29037b3679c7350ebd41edbf79cdced1e'), ('onnx/spm.model', 2464616, 'c679fbf93643d19aab7ee10c0b99e460bdbc02fedf34b92b05af343b4af586fd'), ('config.json', 1019, '3b0a2a3fb311037ba72670d87cbd16f920581985178547a76936dfdb292e5271'), ('tokenizer_config.json', 1256, 'f5a1a74a632c0e9225e09a21ddf60c2e70ef5d3bfc1f261a24fd8ddab27254d2')] {'protocol': 'nli-onnx', 'max_options': 20, 'max_options_status': 'evidence-pending', 'score_levels': [2, 10], 'experimental': ['choice', 'score'], 'tier_note': 'experimental choice/score: one encoder forward pass per option (latency grows linearly with option count)'}
+--- memory before
+               total        used        free      shared  buff/cache   available
+Mem:           30974       12706        1667        3187       20242       18267
+Swap:           8191        8191           0
+16
+tmpfs            16G  5.4G  9.8G  36% /tmp
+--- plan row
+{
+ "budgets": {
+  "ram_mb": 14152,
+  "vram_mb": 7388,
+  "vram_live": true,
+  "storage_free_mb": 19054
+ },
+ "profile": {
+  "mode": "cpu",
+  "ram_mb": 3006,
+  "vram_mb": 0,
+  "storage_mb": 1663,
+  "ctx": 512,
+  "ngl": 0,
+  "parallel": 1,
+  "flash_attn": "off",
+  "fits": true,
+  "port": 8196,
+  "engine": "onnx",
+  "capability": [
+   "decide"
+  ],
+  "min_tier": "below-minimum",
+  "tier_ok": true,
+  "recommended": true,
+  "overhead_mb": 0,
+  "overhead_vram_mb": 0,
+  "window_tokens": null,
+  "memory_status": "unmeasured",
+  "unknown_overhead": [
+   "ram",
+   "vram"
+  ],
+  "experimental_types": [
+   "noul",
+   "choice",
+   "score"
+  ]
+ }
+}

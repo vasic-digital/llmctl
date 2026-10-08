@@ -1,0 +1,1 @@
+/home/milosvasic/Projects/llmctl/submodules/llama.cpp/build/bin/llama-server --model /home/milosvasic/.local/share/llmctl/models/decide-kev-4b/Kev-4B-Q4_K_M.gguf --host 127.0.0.1 --port 8105 --ctx-size 8192 --n-gpu-layers 99 --flash-attn auto --parallel 1 --jinja --api-key-file <path> --no-webui --batch-size 4096 --ubatch-size 4096 --no-cache-prompt 

@@ -1,0 +1,47 @@
+profile=decide-laya port=8107 date=2026-10-08T14:02:59Z host=anton
+engine: version: 0.5.0-dev (build 11379, commit 1537a0a8b)
+llama.cpp submodule: 1537a0a8b2f8711d840878b0a0677ab2213c882c b11379
+model: ggml-org/Laya-GGUF 22265007700297ba9e128297e82540cf28c5d7d4 [('Laya-Q8_0.gguf', 449397600, 'c06528c5746d3bb8baa72a27938be95abbfd0b226f8471e8a9e365ed0bb066d2')]
+--- memory before
+               total        used        free      shared  buff/cache   available
+Mem:           30974       15179        3320        5114       17964       15795
+Swap:           8191        8189           2
+3219 MiB, 12288 MiB
+--- plan row
+{
+ "budgets": {
+  "ram_mb": 11587,
+  "vram_mb": 7388,
+  "vram_live": true,
+  "storage_free_mb": 20650
+ },
+ "profile": {
+  "mode": "gpu",
+  "ram_mb": 2048,
+  "vram_mb": 1171,
+  "storage_mb": 428,
+  "ctx": 1024,
+  "ngl": 99,
+  "parallel": 1,
+  "flash_attn": "auto",
+  "kv_cache_type": "f16",
+  "fits": true,
+  "port": 8107,
+  "engine": "llama",
+  "capability": [
+   "decide"
+  ],
+  "min_tier": "below-minimum",
+  "tier_ok": true,
+  "recommended": true,
+  "overhead_mb": 615,
+  "overhead_vram_mb": 256,
+  "window_tokens": 1024,
+  "memory_status": "measured",
+  "unknown_overhead": [],
+  "experimental_types": [
+   "noul",
+   "score"
+  ]
+ }
+}

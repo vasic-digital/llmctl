@@ -1,0 +1,3 @@
+[llmctl] wrote /home/milosvasic/.local/state/llmctl/services/decide-kev-08b.env
+started decide-kev-08b (mode=gpu, port=8104, reserved 2048 MiB RAM + 5583 MiB VRAM)
+rc=0

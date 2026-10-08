@@ -1,0 +1,16 @@
+Oct 08 11:01:31 anton systemd[2366]: /home/milosvasic/.config/systemd/user/llmctl-llama@.service:37: Unknown key 'StartLimitIntervalSec' in section [Service], ignoring.
+Oct 08 11:01:31 anton systemd[2366]: /home/milosvasic/.config/systemd/user/llmctl-llama@.service:37: Unknown key 'StartLimitIntervalSec' in section [Service], ignoring.
+Oct 08 11:03:14 anton systemd[2366]: /home/milosvasic/.config/systemd/user/llmctl-llama@.service:37: Unknown key 'StartLimitIntervalSec' in section [Service], ignoring.
+Oct 08 11:03:14 anton systemd[2366]: Started llmctl-llama@decide-kev-08b.service - llmctl llama.cpp inference server (profile decide-kev-08b).
+Oct 08 11:04:29 anton systemd[2366]: Stopping llmctl-llama@decide-kev-08b.service - llmctl llama.cpp inference server (profile decide-kev-08b)...
+Oct 08 11:04:30 anton systemd[2366]: Stopped llmctl-llama@decide-kev-08b.service - llmctl llama.cpp inference server (profile decide-kev-08b).
+Oct 08 11:04:30 anton systemd[2366]: llmctl-llama@decide-kev-08b.service: Consumed 3min 37.719s CPU time over 1min 15.407s wall clock time, 2.4G memory peak.
+Oct 08 11:04:30 anton systemd[2366]: /home/milosvasic/.config/systemd/user/llmctl-llama@.service:37: Unknown key 'StartLimitIntervalSec' in section [Service], ignoring.
+Oct 08 11:04:30 anton systemd[2366]: /home/milosvasic/.config/systemd/user/llmctl-llama@.service:37: Unknown key 'StartLimitIntervalSec' in section [Service], ignoring.
+Oct 08 11:04:30 anton systemd[2366]: /home/milosvasic/.config/systemd/user/llmctl-llama@.service:37: Unknown key 'StartLimitIntervalSec' in section [Service], ignoring.
+Oct 08 11:04:30 anton systemd[2366]: /home/milosvasic/.config/systemd/user/llmctl-llama@.service:37: Unknown key 'StartLimitIntervalSec' in section [Service], ignoring.
+Oct 08 11:17:49 anton systemd[2366]: /home/milosvasic/.config/systemd/user/llmctl-llama@.service:37: Unknown key 'StartLimitIntervalSec' in section [Service], ignoring.
+Oct 08 11:17:49 anton systemd[2366]: /home/milosvasic/.config/systemd/user/llmctl-llama@.service:37: Unknown key 'StartLimitIntervalSec' in section [Service], ignoring.
+-- Boot dc55b84600474b68b0efc71d1940faad --
+Oct 08 16:03:31 anton systemd[6410]: /home/milosvasic/.config/systemd/user/llmctl-llama@.service:37: Unknown key 'StartLimitIntervalSec' in section [Service], ignoring.
+Oct 08 16:03:31 anton systemd[6410]: Started llmctl-llama@decide-kev-08b.service - llmctl llama.cpp inference server (profile decide-kev-08b).

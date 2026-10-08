@@ -1,0 +1,48 @@
+profile=decide-julia port=8103 date=2026-10-08T14:01:12Z host=anton
+engine: version: 0.5.0-dev (build 11379, commit 1537a0a8b)
+llama.cpp submodule: 1537a0a8b2f8711d840878b0a0677ab2213c882c b11379
+model: ggml-org/Julia-1-GGUF 16fee17949206fbf58da9347daea44d792a81211 [('Julia-1-Q8_0.gguf', 168166496, '1ea6a7e87156eeeda88cb7a36a61265b37ba7b993897b7289b99aea5b5e47069')]
+--- memory before
+               total        used        free      shared  buff/cache   available
+Mem:           30974       17009        1101        7545       20772       13964
+Swap:           8191        8191           0
+3219 MiB, 12288 MiB
+--- plan row
+{
+ "budgets": {
+  "ram_mb": 9958,
+  "vram_mb": 7388,
+  "vram_live": true,
+  "storage_free_mb": 20665
+ },
+ "profile": {
+  "mode": "gpu",
+  "ram_mb": 2048,
+  "vram_mb": 1698,
+  "storage_mb": 160,
+  "ctx": 1024,
+  "ngl": 99,
+  "parallel": 1,
+  "flash_attn": "auto",
+  "kv_cache_type": "f16",
+  "fits": true,
+  "port": 8103,
+  "engine": "llama",
+  "capability": [
+   "decide"
+  ],
+  "min_tier": "below-minimum",
+  "tier_ok": true,
+  "recommended": true,
+  "overhead_mb": 1410,
+  "overhead_vram_mb": 194,
+  "window_tokens": 1024,
+  "memory_status": "measured",
+  "unknown_overhead": [],
+  "experimental_types": [
+   "noul",
+   "choice",
+   "score"
+  ]
+ }
+}

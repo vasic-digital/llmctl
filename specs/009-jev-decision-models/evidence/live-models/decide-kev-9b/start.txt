@@ -1,0 +1,3 @@
+[llmctl] wrote /home/milosvasic/.local/state/llmctl/services/decide-kev-9b.env
+ERROR: started 'decide-kev-9b' but it never answered http://127.0.0.1:8106/health within 60s (see: llmctl logs decide-kev-9b)
+rc=1

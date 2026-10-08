@@ -1,0 +1,2 @@
+profile 'decide-kev-08b' passed checksum verification
+rc=0

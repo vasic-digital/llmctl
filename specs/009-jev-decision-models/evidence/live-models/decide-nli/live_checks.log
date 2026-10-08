@@ -1,0 +1,5 @@
+det gateway: False det engine: True
+batch argmax same: {'first_in_20': True, 'last_in_20': True, 'middle_in_3': True} max diff: {'first_in_20': 0.0, 'last_in_20': 0.0, 'middle_in_3': 0.0}
+d01 http truncated: [True] hypothesis_visible: True
+edges: {'runtime_no_key': 401, 'runtime_wrong_key': 401, 'runtime_empty_pairs': 400, 'gateway_no_key': 401, 'gateway_unknown_model': 503, 'gateway_twenty_options': 503, 'gateway_twentyone_options': 503}
+rc=0

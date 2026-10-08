@@ -1,0 +1,28 @@
+## after-start-idle 14:03:12
+VmHWM:	  682184 kB
+VmRSS:	  425364 kB
+VmSwap:	       0 kB
+MemoryCurrent=280727552 MemoryPeak=281833472 MemoryMax=32478593024 
+vram(MiB) pid=213512: 564
+3791 MiB
+## after-golden-questions 14:03:17
+VmHWM:	  682184 kB
+VmRSS:	  519440 kB
+VmSwap:	       0 kB
+MemoryCurrent=352133120 MemoryPeak=352866304 MemoryMax=32478593024 
+vram(MiB) pid=213512: 574
+3801 MiB
+## after-probes 14:03:18
+VmHWM:	  682184 kB
+VmRSS:	  520208 kB
+VmSwap:	       0 kB
+MemoryCurrent=351387648 MemoryPeak=352866304 MemoryMax=32478593024 
+vram(MiB) pid=213512: 574
+3801 MiB
+## after-edges 14:03:19
+VmHWM:	  682184 kB
+VmRSS:	  522312 kB
+VmSwap:	       0 kB
+MemoryCurrent=354635776 MemoryPeak=354766848 MemoryMax=32478593024 
+vram(MiB) pid=213512: 574
+3801 MiB

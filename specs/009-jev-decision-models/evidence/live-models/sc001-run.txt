@@ -1,0 +1,16 @@
+gateway_up 0.32s
+start rc=0
+profile_started 7.18s
+profile_ready 7.37s
+noul rc=0
+first_valid_noul 7.61s
+choice rc=0
+first_valid_choice 7.88s
+score rc=0
+first_valid_score 8.09s
+TOTAL_TO_FIRST_VALID_ALL_TYPES 8.104170800s
+noul repeats=20 distinct_answer_hashes=1
+choice repeats=20 distinct_answer_hashes=1
+score repeats=20 distinct_answer_hashes=1
+stopped decide-kev-08b
+llmctl decide gateway: stopped

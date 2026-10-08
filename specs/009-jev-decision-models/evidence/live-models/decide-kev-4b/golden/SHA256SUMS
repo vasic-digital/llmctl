@@ -1,0 +1,7 @@
+0ea3fb1a71fdef174cc09cc81708434becd62e936282c98624c7c1d7268c14dd  MANIFEST.json
+b9fe470c5e47e04433e5c755cca050a9060d47c03c4b4671b792bc05e95770c1  evidence.jsonl
+9ca1263e19e7f40c426198fdd0b19cb9fb15793ab9540501668d37563b400f0f  raw/EV-decide-kev-4b-golden-0001-stdout.txt
+9ca1263e19e7f40c426198fdd0b19cb9fb15793ab9540501668d37563b400f0f  raw/EV-decide-kev-4b-golden-0002-stdout.txt
+9ca1263e19e7f40c426198fdd0b19cb9fb15793ab9540501668d37563b400f0f  raw/EV-decide-kev-4b-golden-0003-stdout.txt
+a27d3eaefb1f2da34c87fc24f0a35f142e3f8e05ccec67dc90ba4af2bd6a9e87  raw/responses.jsonl
+43d652c8486141694219114bdfde7c043c75b1e42bfbc2603d8b0a1a88f8c9ff  results.json

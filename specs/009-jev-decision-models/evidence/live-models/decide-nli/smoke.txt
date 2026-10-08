@@ -1,0 +1,6 @@
+2026/10/08 16:14:07 llmctl decide: encoder runtime smoke: unusable NLI labels (labels entailment,not_entailment do not name both entailment and contradiction); refusing to guess a column
+llmctl-decide smoke: smoke: backend failed: The decision backend failed.
+rc=1
+2026/10/08 16:14:10 llmctl decide: encoder runtime smoke: unusable NLI labels (labels entailment,not_entailment do not name both entailment and contradiction); refusing to guess a column
+llmctl-decide smoke: smoke: backend failed: The decision backend failed.
+rc=1

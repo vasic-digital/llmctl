@@ -1,0 +1,17 @@
+[2026-10-08T13:58:39Z] llmctl models download decide-tiny
+[2026-10-08T13:58:39Z] engine: llama  repo: chaoliangUNSW/Jev-Style-0.8B-Decision-v3-GGUF
+[2026-10-08T13:58:40Z] download: https://huggingface.co/chaoliangUNSW/Jev-Style-0.8B-Decision-v3-GGUF/resolve/edf37c26a1098f83cf4264b8adbe0dca2d2ebb0c/Jev-Style-0.8B-Decision-v3-Q4_K_M.gguf -> /home/milosvasic/.local/share/llmctl/models/decide-tiny/Jev-Style-0.8B-Decision-v3-Q4_K_M.gguf.part
+[2026-10-08T13:58:46Z] curl exit: 0
+[2026-10-08T13:58:46Z] RUN: _dl_verify_file /home/milosvasic/.local/share/llmctl/models/decide-tiny/Jev-Style-0.8B-Decision-v3-Q4_K_M.gguf.part 529296864 0a19bc29bacc33e0d871146c8612b24dd14c2ed2e61cedeb7a928b0852628bac
+[2026-10-08T13:58:48Z] EXIT: 0
+[2026-10-08T13:58:48Z] renamed /home/milosvasic/.local/share/llmctl/models/decide-tiny/Jev-Style-0.8B-Decision-v3-Q4_K_M.gguf.part -> /home/milosvasic/.local/share/llmctl/models/decide-tiny/Jev-Style-0.8B-Decision-v3-Q4_K_M.gguf (atomic, verified)
+[2026-10-08T13:58:49Z] smoke protocol: letter-logit
+[2026-10-08T13:58:49Z] smoke: /home/milosvasic/Projects/llmctl/submodules/llama.cpp/build/bin/llama-server --model /home/milosvasic/.local/share/llmctl/models/decide-tiny/Jev-Style-0.8B-Decision-v3-Q4_K_M.gguf --ctx-size 512 --n-gpu-layers 0 --host 127.0.0.1 --port 46129
+[2026-10-08T13:58:56Z] smoke: /health OK after 7s
+[2026-10-08T13:58:57Z] RUN: _dl_decision_probe_choice 46129
+[2026-10-08T13:58:59Z] EXIT: 1
+OUT: llmctl-decide smoke: smoke: backend failed: The model produced no usable answer for this question.
+[2026-10-08T13:58:59Z] RUN: _dl_decision_probe_options 46129
+[2026-10-08T13:59:02Z] EXIT: 1
+OUT: llmctl-decide smoke: smoke: backend failed: The model produced no usable answer for this question.
+[2026-10-08T13:59:03Z] decision smoke FAILED: one or more llmctl-decide smoke probes failed

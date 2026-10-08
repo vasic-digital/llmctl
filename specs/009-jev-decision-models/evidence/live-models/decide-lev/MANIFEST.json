@@ -1,0 +1,180 @@
+{
+  "files": [
+    {
+      "path": "RESULT.txt",
+      "sha256": "adce7ab9847b30ed365adfabae1d6539223ce48fd530f0a0f68df0e0b9f30c97",
+      "size": 10
+    },
+    {
+      "path": "after-stop-active.txt",
+      "sha256": "cb6f82a52d11c260ee6936511d22d5a7db55f8e7c5afe9f03ea847350ce860c5",
+      "size": 9
+    },
+    {
+      "path": "cli-ask.txt",
+      "sha256": "54f7742c3963dd1e3716150cd978de55e40d7129b361eeafe6193c107dd2dd9f",
+      "size": 374
+    },
+    {
+      "path": "context.txt",
+      "sha256": "c223ca00b2c1b3bf2180ccebb834f0be73a36a7d268240cb7abf4d987c9403fe",
+      "size": 1243
+    },
+    {
+      "path": "determinism-edges.json",
+      "sha256": "8c3ba5b8bd627a9974c0dca1e6ad99de3d88f2b9ff82fecc464c9d2ac699146c",
+      "size": 3644
+    },
+    {
+      "path": "engine-cmdline.txt",
+      "sha256": "77d79a8177af1d6d3b804762bbe1be5d885d11e561f76c2b588a5dead30a2467",
+      "size": 346
+    },
+    {
+      "path": "engine-journal-tail.txt",
+      "sha256": "67a5314fd1e464671ec076df4babc4ac700a35b89f420a834bc8d1e432dbfbe7",
+      "size": 1362
+    },
+    {
+      "path": "engine-libs.txt",
+      "sha256": "eeb7c55051258d482e869f920e3e4dd5237bf620696e36d74255cb82a6626c6b",
+      "size": 342
+    },
+    {
+      "path": "gateway-models.txt",
+      "sha256": "f8570afaef8603269932097288b040e2676794f31c9e7896f54c9e14445975c2",
+      "size": 1476
+    },
+    {
+      "path": "golden-stats.txt",
+      "sha256": "8fbc41acb083e63d962e16303b4c300ec280b9e7cdec02d95a0b45af3b960052",
+      "size": 6342
+    },
+    {
+      "path": "golden.log",
+      "sha256": "837d050f53b2d61b6ab0d17bd5b818068aa022d717d7af236aa5debcfd41ad0f",
+      "size": 9240
+    },
+    {
+      "path": "golden/MANIFEST.json",
+      "sha256": "c5c15fad477ca96021a998c5f95c2fda0a29c019200aa9e85d58fb071b9012c1",
+      "size": 1010
+    },
+    {
+      "path": "golden/SHA256SUMS",
+      "sha256": "ba9dbdad8cd31fa5d068df9d58da28b588f78caf0f2d96ab79b8908f32261df4",
+      "size": 647
+    },
+    {
+      "path": "golden/evidence.jsonl",
+      "sha256": "eb6ab701d3f8b7ad6f89362286f6f741a10c01487bec100cf2c3526600067c62",
+      "size": 2349
+    },
+    {
+      "path": "golden/raw/EV-decide-lev-golden-0001-stdout.txt",
+      "sha256": "e5e24a812d3978797c4cd21017ed552c7aefbf8f8645c9ed2f1a656257520432",
+      "size": 15991
+    },
+    {
+      "path": "golden/raw/EV-decide-lev-golden-0002-stdout.txt",
+      "sha256": "e5e24a812d3978797c4cd21017ed552c7aefbf8f8645c9ed2f1a656257520432",
+      "size": 15991
+    },
+    {
+      "path": "golden/raw/EV-decide-lev-golden-0003-stdout.txt",
+      "sha256": "e5e24a812d3978797c4cd21017ed552c7aefbf8f8645c9ed2f1a656257520432",
+      "size": 15991
+    },
+    {
+      "path": "golden/raw/responses.jsonl",
+      "sha256": "e440350e3ad3aa0d180f1c492d457ccfdd86b1a4198ee9266904b5d70cd885ea",
+      "size": 72919
+    },
+    {
+      "path": "golden/results.json",
+      "sha256": "ed0aa8f106b26c8fdaacd47cb6f71407a5a507b125446e16d4097087a6ec1207",
+      "size": 144530
+    },
+    {
+      "path": "latency.json",
+      "sha256": "6aa7ff94ace62a3ac796fb3f265d6bb319aa867de16f85d6f73afdca1367fbce",
+      "size": 190
+    },
+    {
+      "path": "memory.txt",
+      "sha256": "33cd74fd101b568af93999b46286460c1e0fb94fe317c60547b3ec9921ab6462",
+      "size": 769
+    },
+    {
+      "path": "probes-stats.txt",
+      "sha256": "f6f4eb15ebe4d3602a25629c9c284d92b0a67fe6d52a384ac417900fdc83e893",
+      "size": 1637
+    },
+    {
+      "path": "probes.log",
+      "sha256": "8ec145ef010ff1622b26ae2a5b95473fda597d84bfd032c0e384aa388e2350b7",
+      "size": 2119
+    },
+    {
+      "path": "probes/MANIFEST.json",
+      "sha256": "b68cb3e17d5721a3009f0813dcded65e657e3856b32e005cef8f780850fe2de4",
+      "size": 1005
+    },
+    {
+      "path": "probes/SHA256SUMS",
+      "sha256": "edb150490e67f0880a60740e5fbd89fe1482d6e55c1f2c2753ad8360fed7b888",
+      "size": 647
+    },
+    {
+      "path": "probes/evidence.jsonl",
+      "sha256": "b6a448cc5d3e9c9e259dae86431763a867454850f2b849d7dbad97cfa732d52f",
+      "size": 2507
+    },
+    {
+      "path": "probes/raw/EV-decide-lev-probes-0001-stdout.txt",
+      "sha256": "dfd294dff309e0322e9d46b9a6b06e998242d1fce003be9faa2a9feb3e527296",
+      "size": 4550
+    },
+    {
+      "path": "probes/raw/EV-decide-lev-probes-0002-stdout.txt",
+      "sha256": "dfd294dff309e0322e9d46b9a6b06e998242d1fce003be9faa2a9feb3e527296",
+      "size": 4550
+    },
+    {
+      "path": "probes/raw/EV-decide-lev-probes-0003-stdout.txt",
+      "sha256": "dfd294dff309e0322e9d46b9a6b06e998242d1fce003be9faa2a9feb3e527296",
+      "size": 4550
+    },
+    {
+      "path": "probes/raw/responses.jsonl",
+      "sha256": "96e55f01f9db050516138ab421c9aef3bbf7fd5bc1d9a28685e69cb98decf4fc",
+      "size": 8423
+    },
+    {
+      "path": "probes/results.json",
+      "sha256": "5a07de28f5553afd2bf7b6f61dce0b51c905dc46d9f129d66bc6417e74b32225",
+      "size": 22184
+    },
+    {
+      "path": "smoke.txt",
+      "sha256": "16da95899da139965d459a46e45835423682d05e11b81da7a1ae2a3ad2f5f449",
+      "size": 373
+    },
+    {
+      "path": "start.txt",
+      "sha256": "30bdc19f40091a68783714f61312d80ed7ea7f052bf44717f9b34ad2621f5cf2",
+      "size": 161
+    },
+    {
+      "path": "stop.txt",
+      "sha256": "2ed420e035b2ae5f58b9e295b786a1d9da74e192ebb8fa8112558b4f5b6cb751",
+      "size": 24
+    },
+    {
+      "path": "verify.txt",
+      "sha256": "c55e1a7a59c7b5fa24d9b9b8f98134bd1df62593cb004c484e8c204c79f1a4b5",
+      "size": 55
+    }
+  ],
+  "schema": 1
+}

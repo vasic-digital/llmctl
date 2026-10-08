@@ -1,0 +1,3 @@
+[llmctl] wrote /home/milosvasic/.local/state/llmctl/services/decide-lev.env
+started decide-lev (mode=gpu, port=8108, reserved 2048 MiB RAM + 6994 MiB VRAM)
+rc=0

@@ -1,0 +1,1 @@
+argv: /tmp/claude-1000/-home-milosvasic-Projects-llmctl/4cea4116-8339-d4a8-4d6c-db1d21cb18d4/scratchpad/nliw/data/venv-onnx/bin/python lib/onnx_server.py --model-dir <data>/models/decide-nli --host 127.0.0.1 --port 8196 --profile decide-nli --max-tokens 512 --api-key-file <path> --tokenizer spm.model (pid 1583986)

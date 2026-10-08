@@ -1,0 +1,51 @@
+profile=decide-kev-9b port=8106 date=2026-10-08T14:06:36Z host=anton
+engine: version: 0.5.0-dev (build 11379, commit 1537a0a8b)
+llama.cpp submodule: 1537a0a8b2f8711d840878b0a0677ab2213c882c b11379
+model: ggml-org/Kev-9B-GGUF ec2bbfe6620218aee2e01cc93bb78dee2a96ed58 [('Kev-9B-Q4_K_M.gguf', 6358923744, '86a6084984a6ef6818eb12c07cdc67ed3c47b00208d41a8816c64301bc6bcbda')]
+--- memory before
+               total        used        free      shared  buff/cache   available
+Mem:           30974       13219        4058        3152       17247       17754
+Swap:           8191        8191           0
+3219 MiB, 12288 MiB
+--- plan row
+{
+ "budgets": {
+  "ram_mb": 13613,
+  "vram_mb": 7388,
+  "vram_live": true,
+  "storage_free_mb": 20588
+ },
+ "profile": {
+  "mode": "gpu",
+  "ram_mb": 2048,
+  "vram_mb": 7088,
+  "storage_mb": 6064,
+  "ctx": 8192,
+  "ngl": 99,
+  "parallel": 1,
+  "flash_attn": "auto",
+  "kv_cache_type": "f16",
+  "fits": true,
+  "port": 8106,
+  "engine": "llama",
+  "capability": [
+   "decide"
+  ],
+  "min_tier": "workstation",
+  "tier_ok": false,
+  "recommended": false,
+  "overhead_mb": 0,
+  "overhead_vram_mb": 0,
+  "window_tokens": null,
+  "memory_status": "unmeasured",
+  "unknown_overhead": [
+   "ram",
+   "vram"
+  ],
+  "experimental_types": [
+   "noul",
+   "choice",
+   "score"
+  ]
+ }
+}

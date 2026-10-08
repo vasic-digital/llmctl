@@ -1,0 +1,23 @@
+engine pid=1069346 cmdline: submodules/llama.cpp/build/bin/llama-server --model /home/milosvasic/.local/share/llmctl/models/decide-laya/Laya-Q8_0.gguf --ctx-size 1024 --n-gpu-layers 99 --host 127.0.0.1 --port 46140 --ssl-key-file <path> --ssl-cert-file /tmp/claude-1000/-home-milosvasic-Projects-llmctl/4cea4116-8339-d4a8-4d6c-db1d21cb18d4/scratchpad/home/cert/v-1/chain.pem 
+--- https /health with CA verification:
+{"status":"ok"}
+http=200 ssl_verify=0
+--- plain http to the TLS port (must NOT answer 200):
+http=000
+--- TLS handshake:
+subject=CN=anton
+issuer=CN=llmctl local CA (anton)
+Verification: OK
+New, TLSv1.3, Cipher is TLS_AES_256_GCM_SHA384
+Protocol: TLSv1.3
+Verify return code: 0 (ok)
+    Protocol  : TLSv1.3
+    Verify return code: 0 (ok)
+    Protocol  : TLSv1.3
+    Verify return code: 0 (ok)
+--- without CA (system trust) must fail verification:
+http=000
+--- RSS idle:
+VmHWM:	  685816 kB
+VmRSS:	  453216 kB
+engine stopped (pid 1069346)
