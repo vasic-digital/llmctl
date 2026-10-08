@@ -20,17 +20,62 @@ cp -R "${LLMCTL_ROOT}/models" "${W}/"   # internal/gateway tests read ../../mode
 mkdir -p "${W}/specs/009-jev-decision-models"   # cmd/llmctl-decide tests read the CLI contract
 cp -R "${LLMCTL_ROOT}/specs/009-jev-decision-models/contracts" "${W}/specs/009-jev-decision-models/"
 [[ -f "${LLMCTL_ROOT}/helix-deps.yaml" ]] && cp "${LLMCTL_ROOT}/helix-deps.yaml" "${W}/"
+# Repo files outside cmd/ + internal/ that the Go tests read by relative path. A missing one made the
+# control RED and let mutants be "killed" by the open() error instead of by the test meant to catch them.
+mkdir -p "${W}/lib" "${W}/docs" "${W}/specs/009-jev-decision-models/evidence/review-2"
+cp "${LLMCTL_ROOT}/lib/decide.sh" "${W}/lib/"   # cmd/llmctl-decide TestFrontEndWordsMatchLibDecideSh
+cp "${LLMCTL_ROOT}/docs/decide-gateway.md" "${LLMCTL_ROOT}/docs/registry-discovery.md" "${W}/docs/"   # internal/contract
+cp "${LLMCTL_ROOT}/specs/009-jev-decision-models/evidence/review-2/ctx-measurements.json" \
+   "${W}/specs/009-jev-decision-models/evidence/review-2/"   # internal/contract
+
+PKGS=(./internal/server ./internal/keyring ./internal/certs ./internal/audit ./internal/placement ./internal/metrics ./internal/gateway ./internal/contract ./cmd/llmctl-decide)
+
+# Fixture completeness, discovered mechanically: every "../../<path>" literal in a test of a mutated package
+# must exist in the copy (a new relative read added later is caught here, not by a bogus kill).
+missing=0; seen=0
+while IFS= read -r rel; do
+  seen=$((seen+1))
+  [[ -e "${W}/${rel#../../}" ]] || { printf '  FAIL: test fixture missing from the scratch copy: %s\n' "${rel}" >&2; missing=$((missing+1)); }
+done < <(cd "${LLMCTL_ROOT}" && grep -ohE '"\.\./\.\./[A-Za-z0-9_./-]+"' "${PKGS[@]/#.\//}" -r --include='*_test.go' | tr -d '"' | grep -v '/etc/passwd$' | sort -u)
+[[ ${seen} -gt 0 ]] || { echo "  FAIL: fixture scan found no relative reads at all (instrument blind?)" >&2; missing=1; }   # control needle: the lib/decide.sh read exists
+assert_eq "0" "${missing}" "every relative-path test fixture is present in the scratch copy (${seen} checked)"
 
 TO="${DECIDE_MUTATION_TIMEOUT:-300s}"
 gotest() { ( cd "${W}" && go test -count=1 -timeout "${TO}" "$@" ) >"${TEST_TMP}/out" 2>&1; }
 
 echo "== control: unmutated copy is GREEN =="
-rc=0; gotest ./internal/server ./internal/keyring ./internal/certs ./internal/audit ./internal/placement ./internal/metrics ./internal/gateway ./cmd/llmctl-decide || rc=$?
-assert_eq "0" "${rc}" "control run passes"
+rc=0
+if [[ -n "${DECIDE_MUTATION_ONLY:-}" ]]; then echo "  (DECIDE_MUTATION_ONLY set: full control skipped; each mutant's own target control still runs)"
+else gotest "${PKGS[@]}" || rc=$?; assert_eq "0" "${rc}" "control run passes"; fi
+[[ ${rc} -eq 0 ]] || { echo "--- control output (failing lines) ---" >&2; grep -E -- '--- FAIL|^FAIL|\.go:[0-9]+:' "${TEST_TMP}/out" | head -20 >&2; }
+
+# A kill is attributed only when the IDENTICAL go test target (pkg + flags, incl. -run/-race) is GREEN on
+# the unmutated copy: then the mutation is the only difference and the failure is caused by it. A build or
+# setup failure is an invalid mutant, never a kill.
+declare -A CONTROL_OK=()
+control_for() {
+  local key="$*"
+  [[ -n "${CONTROL_OK[${key}]:-}" ]] && { [[ "${CONTROL_OK[${key}]}" == ok ]]; return; }
+  local rc=0; gotest "$@" || rc=$?
+  if [[ ${rc} -eq 0 ]] && grep -qE '^ok ' "${TEST_TMP}/out" && ! grep -q 'no tests to run' "${TEST_TMP}/out"; then
+    CONTROL_OK[${key}]=ok
+  else
+    CONTROL_OK[${key}]=bad
+    printf '  FAIL: control for target [%s] is not GREEN with tests run (no kill on it can be attributed): %s\n' \
+      "${key}" "$(grep -m1 -E -- '--- FAIL|no tests to run|\[(build|setup) failed\]' "${TEST_TMP}/out")" >&2
+    TEST_FAILS=$((TEST_FAILS+1))
+  fi
+  [[ "${CONTROL_OK[${key}]}" == ok ]]
+}
+KILL_LEDGER="${DECIDE_MUTATION_LEDGER:-${TEST_TMP}/kill_ledger.tsv}"
+: >"${KILL_LEDGER}"
 
 # kill <name> <file> <old> <new> <go test pkg> [-run regexp]
 kill() {
   local name="$1" file="$2" old="$3" new="$4" pkg="$5"; shift 5
+  # DECIDE_MUTATION_ONLY=<ERE>: run only the matching mutants (debugging aid; a full run leaves it unset)
+  if [[ -n "${DECIDE_MUTATION_ONLY:-}" ]] && ! [[ "${name}" =~ ${DECIDE_MUTATION_ONLY} ]]; then return 0; fi
+  control_for "${pkg}" "$@" || return 0
   cp "${W}/${file}" "${TEST_TMP}/orig"
   if ! python3 - "${W}/${file}" "${old}" "${new}" <<'PY' 2>"${TEST_TMP}/mut.err"
 import sys
@@ -46,10 +91,21 @@ PY
   local rc=0
   gotest "${pkg}" "$@" || rc=$?
   cp "${TEST_TMP}/orig" "${W}/${file}"
+  local by
+  by="$(grep -E '^\s*--- FAIL: |^panic: test timed out' "${TEST_TMP}/out" | sed -E 's/^\s*--- FAIL: //; s/ \(.*//' | sort -u | paste -sd, -)" || true   # no FAIL line (survivor) must not trip set -e/pipefail
   if [[ ${rc} -eq 0 ]]; then
     printf '  FAIL: mutant SURVIVED: %s\n' "${name}" >&2; TEST_FAILS=$((TEST_FAILS+1))
+    printf 'SURVIVED\t%s\t-\n' "${name}" >>"${KILL_LEDGER}"
+  elif grep -qE '\[(build|setup) failed\]' "${TEST_TMP}/out"; then
+    printf '  FAIL: invalid mutant (does not compile, no test ran): %s (%s)\n' "${name}" \
+      "$(grep -m1 -E '\.go:[0-9]+:[0-9]+: ' "${TEST_TMP}/out")" >&2; TEST_FAILS=$((TEST_FAILS+1))
+    printf 'INVALID\t%s\t-\n' "${name}" >>"${KILL_LEDGER}"
+  elif [[ -z "${by}" ]]; then
+    printf '  FAIL: mutant run failed without a failing test (setup error, not a kill): %s\n' "${name}" >&2; TEST_FAILS=$((TEST_FAILS+1))
+    printf 'NOTEST\t%s\t-\n' "${name}" >>"${KILL_LEDGER}"
   else
-    printf '  ok: killed - %s (%s)\n' "${name}" "$(grep -m1 -E '^--- FAIL|panic: test timed out' "${TEST_TMP}/out" | sed 's/ (.*//')"
+    printf '  ok: killed - %s (%s)\n' "${name}" "${by}"
+    printf 'KILLED\t%s\t%s\n' "${name}" "${by}" >>"${KILL_LEDGER}"
   fi
 }
 
@@ -118,17 +174,20 @@ kill "throttled sources evicted for a newcomer" internal/server/throttle.go '		i
 kill "full table of throttled sources admits a newcomer" internal/server/throttle.go 'if len(t.m) >= t.max && !t.makeRoom(now) {' 'if false && !t.makeRoom(now) {' ./internal/server
 kill "GetConfigForClient result not hardened" internal/server/server.go '			return hardenTLS(c.Clone()), nil' '			return c, nil' ./internal/server
 kill "audit write failure not counted" internal/server/handlers.go '		s.metrics.Inc(metrics.AuditWriteFailure)' '		_ = metrics.AuditWriteFailure' ./internal/server
-kill "audit write failure never reported" internal/server/handlers.go '		s.auditErr.Do(func() {' '		_ = s.auditErr; func() {' ./internal/server
-kill "credential gate shorter than the longest key" internal/server/handlers.go 'const maxCredentialBytes = keyring.MaxKeyLen' 'const maxCredentialBytes = 500' ./internal/server
+# (the earlier form of this mutant, '_ = s.auditErr; func() {', never compiled - unbalanced braces and a
+#  copied sync.Once - so it was "killed" by the build failure, not by a test; both forms below compile)
+kill "audit write failure never reported" internal/server/handlers.go '		s.auditErr.Do(func() {' '		s.auditErr.Do(func() { return;' ./internal/server
+kill "audit write failure reported on every failure (once-guard dropped)" internal/server/handlers.go '		s.auditErr.Do(func() {' '		func(f func()) { f() }(func() {' ./internal/server
+kill "credential gate shorter than the longest key" internal/server/handlers.go 'const maxCredentialBytes = keyring.MaxKeyLen' 'const maxCredentialBytes = keyring.MaxKeyLen - 12' ./internal/server   # (keeps the keyring import used: the old '= 500' form did not compile)
 
 echo "== A-03 / A-06 / A-07 / A-12 keyring =="
 kill "rotate refuses a well-formed weak old key (the remedy fails)" internal/keyring/keyring.go '	if hadOld && !keyRE.MatchString(old) {' '	if hadOld {' ./internal/keyring
 kill "rotate keeps a weak old key as PREVIOUS" internal/keyring/keyring.go ' && WeakKey(old) == "" // a weak key was never accepted' ' // MUTANT' ./internal/keyring
-kill "rotate --grace keeps a key the environment shadowed" internal/keyring/keyring.go '	accepted := hadOld && old != "" && old == effective' '	accepted := hadOld && old != ""' ./internal/keyring
+kill "rotate --grace keeps a key the environment shadowed" internal/keyring/keyring.go '	accepted := hadOld && old != "" && old == effective' '	accepted := hadOld && old != "" && (old == effective || effective != "")' ./internal/keyring   # (keeps "effective" used: the old form did not compile)
 kill "A2-01 PREVIOUS accepted although the key comes from the environment (CLI and gateway environments differ)" internal/keyring/keyring.go '	if res.Source != "file" {' '	if false {' ./internal/keyring
 kill "A2-01 a weak PREVIOUS is accepted" internal/keyring/keyring.go ' && WeakKey(prev) == "" && isDigits(exp)' ' && isDigits(exp)' ./internal/keyring
-kill "entropy floor off" internal/keyring/keyring.go '	if why := WeakKey(value); why != "" {' '	if false {' ./internal/keyring
-kill "comparison on raw (variable-length) bytes" internal/keyring/keyring.go '		ok |= ctEqual(cand, digest(k.Reveal()))' '		ok |= ctEqual([]byte(candidate), []byte(k.Reveal()))' ./internal/keyring
+kill "entropy floor off" internal/keyring/keyring.go '	if why := WeakKey(value); why != "" {' '	if why := WeakKey(value); false && why != "" {' ./internal/keyring   # (the old 'if false {' left "why" undefined: did not compile)
+kill "comparison on raw (variable-length) bytes" internal/keyring/keyring.go '		ok |= ctEqual(cand, digest(k.Reveal()))' '		_ = cand; ok |= ctEqual([]byte(candidate), []byte(k.Reveal()))' ./internal/keyring   # (keeps "cand" used: the old form did not compile)
 kill "env file opened following symlinks" internal/keyring/env.go 'os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK' 'os.O_RDONLY|syscall.O_NONBLOCK' ./internal/keyring
 kill "env file opened blocking (FIFO hangs)" internal/keyring/env.go 'os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK' 'os.O_RDONLY|syscall.O_NOFOLLOW' ./internal/keyring
 kill "tighten chmods the PATH, not the checked descriptor" internal/keyring/env.go 'fchmodFn   = func(f *os.File, m os.FileMode) error { return f.Chmod(m) }' 'fchmodFn   = func(f *os.File, m os.FileMode) error { return os.Chmod(f.Name(), m) }' ./internal/keyring
