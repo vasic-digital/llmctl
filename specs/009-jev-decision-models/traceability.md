@@ -35,7 +35,7 @@ Rule for `tasks.md`: every row below becomes ≥ 1 task with a RED-first test wh
 | FR-076 | readout guards | P3, P4 | U, I | Q6 |
 | FR-078 | backpressure, drain | P2, P5 | I, X | Q9; EP-020/021/046 |
 | FR-080 | calibration tooling (OD-23: delivered in 3.1.0) | P5 | U, I | Q6; `decide calibrate` DONE (T134: `internal/calibrate/*_test.go`, `cmd/llmctl-decide/cmd_calibrate_test.go`, `evidence/cmd-REPORT.md`); gateway applies the profile + catalog `decision.template_hash` PENDING (T137) |
-| FR-081 | CLI ergonomics (OD-23: all four commands delivered in 3.1.0) | P5 | I, E | `contracts/cli.md` tests; `completions` DONE (T132 `cmd_completions_test.go`), `probe-order` DONE (T133 `cmd_probeorder_test.go`), `calibrate` DONE (T134), `scale` PENDING (T135); the "planned, not in 3.1.0" markers are reverted only when T135 passes (T136) |
+| FR-081 | CLI ergonomics (OD-23: all four commands delivered in 3.1.0) | P5 | I, E | `contracts/cli.md` tests; `completions` DONE (T132 `cmd_completions_test.go`), `probe-order` DONE (T133 `cmd_probeorder_test.go`), `calibrate` DONE (T134), `scale` DONE (T135, `tests/test_decide_scale.sh`); the scale "planned, not in 3.1.0" markers are reverted (T136 stays open until T138) |
 | FR-082 | engine HTTPS verification | P4 | I | post-build check + handshake |
 | FR-083 | unit hardening probes | P3, P5 | I, S | doctor canary |
 | FR-085 | gated engine advance | P7 | I, E | engine gate record |

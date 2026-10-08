@@ -106,7 +106,7 @@ These run the engine's own `/v1/systemone` endpoint and are served by the gatewa
 * The opt-in cluster CLI (`llmctl cluster|tenant|apikey`) needs a host `curl` that lists the `HTTP3` feature (`curl --version`); otherwise it reports `llmctld unreachable` and its suites SKIP. It was verified against a real
   `llmctld` with a real curl 8.22.0 built with ngtcp2/nghttp3 in a **private test prefix** (not packaged by llmctl; loopback and one node only; the second-peer join scenario was not exercised). How to get such a curl:
   [llmctld-cluster-tls](llmctld-cluster-tls.md#getting-a-curl-that-lists-http3). What the cluster daemon's pieces really do (wired versus library only): [faq](faq.md).
-* Multi-instance serving is a capacity *report* (`decide capacity`); instances are started through the scheduler.
+* Multi-instance serving of one decision profile is `llmctl decide scale <profile> <N>` (admission-bounded; instances beyond the first need the port-registry binary, `llmctl build decide`). `decide capacity` stays a read-only report of how many would fit.
 * `LD_LIBRARY_PATH` shadowing (G-129) is fixed for the services llmctl starts (systemd units; the launch wrapper `hk_run_engine` prepends the engine's directory, **macOS statically only**). A `llama-server` you launch by hand from a shell whose
   `LD_LIBRARY_PATH` points at a system `libggml` can still fail with `undefined symbol ggml_...` ([runbooks](runbooks.md#ld_library_path-shadowing)). The engine version stamp reads `build 1` on a shallow clone (G-132).
 * Candidate-model admission (`llmctl admit`) mechanical dispositions differ from the research register for three candidates (G-014).

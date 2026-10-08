@@ -35,7 +35,7 @@ known limit: [`docs/limitations.md`](docs/limitations.md); every known gap: `spe
 - **Manual QA waived by the operator, 2026-10-08; the constitution gate is operator-waived, not satisfied.** No person ran the live manual-QA pass the project's constitution (section 11.4.185) requires before a tag; this release rests on the automated gates, the independent reviews and the full test suite.
 - **macOS: verified statically only.** Linux is the live-verified platform; Windows is unsupported.
 - **Version.** The `VERSION` file and `llmctl version` now both read `3.1.0` (`llmctl version` printed a stale `0.1.0` before; `tests/test_cli.sh` now also asserts it equals `VERSION`). The catalog's own `version` field is the schema version (still `1`) and is unchanged.
-- **Accuracy figures are provisional** (agent-authored labels, human review pending). Decision profiles whose measured Wilson lower bound does not clear the majority/chance baseline for an answer type are to be labelled `experimental` per profile and type; every admitted profile ships and nothing is hidden. The label itself is not implemented yet (task T138).
+- **Accuracy figures are provisional** (agent-authored labels, human review pending). Every decision profile carries a per-question-type **maturity** (`measured` / `experimental` / `unmeasured`, derived from its golden run by `scripts/maturity_from_golden.py`): a type whose measured Wilson lower bound does not clear the majority/chance baseline, or that has no live golden run yet, is labelled experimental in `GET /v1/models` (`experimental_types`), in `llmctl plan` and on the answer itself (`maturity: "experimental"`). Every admitted profile still ships and nothing is hidden. Per-profile table: `docs/hardware-tiers.md`.
 - **Second host.** Portability runs used `nezha.local` (ALT Linux, CPU only).
 
 ### Added
@@ -51,6 +51,11 @@ known limit: [`docs/limitations.md`](docs/limitations.md); every known gap: `spe
   `$LLMCTL_HOME/cert`, bounded concurrency/queue/connection caps, failed-auth throttling, deterministic mode
   (fixed seed, one slot per instance), structured request log with a keyed state hash. Endpoint contract:
   `specs/009-jev-decision-models/contracts/`; evidence: `tests/test_gateway_endpoints.sh`.
+- **`llmctl decide scale <profile> <N>`** (`lib/scheduler.sh` `sched_decision_scale`; test `tests/test_decide_scale.sh`): start or stop
+  instances of one decision profile until exactly N run. Keys `<profile>`, `<profile>.2`, ...; admission-bounded and all-or-nothing
+  (exit 3 with the needed-vs-remaining RAM/VRAM numbers, nothing started); scale-down stops the highest-numbered instance first;
+  ports beyond the primary come from the registry allocator. A failed `llmctl switch` restores the same instance **count** of a
+  scaled profile, not necessarily the same keys.
 - **`llmctl decide smoke`** (`--url URL --protocol letter-logit|nli-onnx|systemone-native [--key-file F] [--options N]
   [--expect-choice KEY] [--json]`): one deterministic question through the production driver; exit 0 only for a valid
   typed answer, 1 backend failure, 2 usage, 6 unreachable. The post-download smoke of decision GGUF profiles runs on it.
@@ -66,6 +71,24 @@ known limit: [`docs/limitations.md`](docs/limitations.md); every known gap: `spe
   `decide-laya` and `decide-kev-08b` were run through the real scheduler + HTTPS gateway with the golden set (agent-authored,
   human review pending; Wilson intervals in `docs/decision-models.md`); `decide-kev-4b`, `decide-kev-9b`, `decide-lev` were
   refused by the scheduler on that host (not run). Evidence: `specs/009-jev-decision-models/evidence/live/NATIVE-REPORT.md`.
+- **`llmctl decide scale <profile> <N>`**: starts or stops instances of one decision profile until N run, bounded by the same admission control as `start`
+  (instance keys `<profile>`, `<profile>.2`, ...; registry-allocated ports; refusal exit 3 with the exact numbers; `LLMCTL_DECIDE_MODE=throughput` marks multi-instance use).
+  If an instance fails to start, every instance that this call started is rolled back (stopped, registry row withdrawn, reservation, port hold and service env removed);
+  with `SCHED_SCALE_BESTEFFORT=1` the instances that did start are kept instead and the failures are reported. Logic: `lib/scheduler.sh` `sched_decision_scale`; suite: `tests/test_decide_scale.sh`.
+- **`llmctl decide calibrate | probe-order | completions`**: `calibrate` fits a confidence calibration (temperature, Platt or isotonic; accuracy with an interval, baseline,
+  ECE / MCE / Brier) from a label file and writes a profile bound to the model hash and the prompt-template hash (refuses a claim below 200 labels; the gateway applies a
+  matching profile to `confidence` only, never to `probabilities`); `probe-order` measures how often the answer changes when the options are re-ordered; `completions bash|zsh`
+  prints shell completion. `docs/calibration-tool-fields.md` lists which response fields an external calibration tool may rely on.
+- **Per-profile x question-type maturity labels** end to end: catalog `maturity` object per profile (evidence-referenced), `experimental_types` on `GET /v1/models`, a "Maturity" block in `llmctl plan`,
+  and `maturity: "experimental"` on answers of an unmeasured type (see the status note above). Tests: `internal/gateway/maturity_test.go`, `internal/server/maturity_test.go`, `tests/test_planner.sh`.
+- **`llmctl doctor` decision checks** (every line prefixed `decide:`; skipped silently when `llmctl-decide` is not built): access key present and mode 0600, the gateway certificate (checked by `llmctl-decide cert doctor`),
+  the private `onnx` venv, engine HTTPS support (`--ssl-key-file`), gateway port free or served by this gateway, and a loopback-only versus network-reachable bind note (`docs/cloud-exposure.md`). Suite: `tests/test_doctor_decide.sh`.
+- **Gateway stress scenario** `tests/test_gateway_stress.sh` (real `llmctl-decide serve` in front of an in-repo fake engine, loopback only): a fixed burst against concurrency 1 / queue 1 is answered `200` or
+  `529` + `Retry-After` (never a hang, `/healthz` stays answerable); `serve --stop` during an in-flight request flips `/readyz` first, lets the request finish with `200`, then exits; resident memory stays small.
+- **`llmctl status --json`**: machine-readable running state (LLMCTL-F1); a `switch` whose rollback also failed exits 75 (LLMCTL-F2).
+- **Per-profile context-size and KV-cache-type overrides**: `LLMCTL_CTX_<PROFILE>` and `LLMCTL_KVTYPE_<PROFILE>` (validated; a context below 512 is refused because `--ctx-size 0` means the model's native window and would be
+  estimated at about 0 MiB); the planner's KV estimate is now KV-type-aware (`KV_TYPE_RATIO`, block-size ratios derived from llama.cpp's `ggml-common.h`; only `q4_0` has a live measurement, the other ratios are derived,
+  not measured) and a non-f16 type reaches the real `llama-server` command line (`--cache-type-k/-v`). Documented in `docs/scripts/catalog.md` and `docs/architecture.md`.
 - **`run-engine` library path (G-129)**: `lib/svc_hook.sh run-engine` prepends the engine's own directory to
   `LD_LIBRARY_PATH` (`DYLD_LIBRARY_PATH` on macOS) when it ships `libggml*`, so a caller's system `libggml` cannot shadow it.
 - **`onnx` engine**: the internal encoder scoring runtime `lib/onnx_server.py` (loopback only, key from a 0600 file,
@@ -112,6 +135,8 @@ known limit: [`docs/limitations.md`](docs/limitations.md); every known gap: `spe
 - **Go toolchain requirement**: building the decision binary needs Go >= 1.25 (`go.mod`); without Go the shell front end says
   exactly what to run. The rest of llmctl still needs only bash/python3/curl; `make test` suites that exercise the Go binary
   SKIP with a reason when `go` is absent.
+- **Catalog defaults of `small` and `vision` raised** to `ctx` 55000 and 24000 with `q4_0` KV quantization (they were 8192 / f16). Re-checked live on real hardware with a 50045-token and an 18022-token prompt
+  (both far past the old ceiling), the server still rejecting an over-long prompt with its own error; VRAM growth +4040 MiB (`small`) and +3760 MiB (`vision`) over idle (`docs/qa/`). Override with `LLMCTL_CTX_<PROFILE>` / `LLMCTL_KVTYPE_<PROFILE>`.
 - **New submodule** `submodules/containers` (vasic-digital/Containers, rootless container runtime), declared in `helix-deps.yaml`.
 
 - **Engine pin advance: llama.cpp `b10969` -> `b11379`** (commit `1537a0a8b`, first tag with the native `/v1/systemone` and the abort fix needed for newer decision models). Evidence: `specs/009-jev-decision-models/evidence/engine-advance*`
@@ -138,6 +163,12 @@ known limit: [`docs/limitations.md`](docs/limitations.md); every known gap: `spe
   (N-13), trust-on-first-use catalog files (D-13), orphaned smoke runtimes (D-14), "downloaded and verified" printed after a skipped
   smoke (D-12), option-forging text in the state (D-28), lower-case article read as option A (N-03), silent zero / NaN readouts (N-04),
   and the documentation/test-hygiene items D-24, D-25, D-26, N-08, N-25, N-26, N-27, N-28.
+- **Planner and scheduler (admission control)**: admission no longer double-counts already-running profiles against a live budget; the auto-eviction loop now converges against the live budget, credits freed memory only
+  when `svc_stop` really succeeded, and reports non-convergence instead of falling through unverified or retrying the same failed stop up to 16 times; the VRAM budget uses real free VRAM, not the card's static total.
+- **`llmctl start` / `switch`**: success is reported only after the model answers its readiness probe; a `wait_ready` timeout caused by an external port conflict says so; `switch` can no longer strand the host with
+  zero running services (restores the previous set, exit 75 when the restore also fails); the readiness wait no longer blocks 60 s on a dry-run start; a colibri profile that would crash-loop on the LAN-bind guard is warned about first.
+- **Cluster**: `ForwardModelStart`'s retry loop could never retry and its per-attempt timeout was too tight (both fixed, with a test that waits for real per-node FSM catch-up).
+- **Release scripts**: the release-notes file must live under `$HOME` (snap-confined `glab` cannot read `/tmp`); `release_publish_forge` no longer passes `gh`'s `--title` to `glab`.
 - Release archives can no longer contain untracked secrets (`.env`, `cert/**`, `*.key`; D-30, `tests/test_release_no_secrets.sh`).
 
 ### Security
@@ -217,6 +248,16 @@ Reconciled with [`docs/limitations.md`](docs/limitations.md), which is the full 
 - Release gate: manual QA waived by the operator (above). macOS verified statically only; Windows unsupported.
 - Native decision profiles: `decide-lev`, `decide-kev-4b`, `decide-kev-9b` were refused by the scheduler for RAM on the development host and were never run; the planner under-reserves native models (a fix is in progress), "CPU mode" can still use VRAM on a CUDA build (0.1-2.3 GiB measured), windows are 1024 tokens (`decide-julia`, `decide-laya`) and 2048 (`decide-kev-08b`) and longer states answer `422`; option-order flip rates are large for some (Julia-1 41.5%, provisional).
 - The engine advance (llama.cpp b10969 to b11379) was verified on CPU with one model; CUDA, MoE, vision, colibri and performance after the 392-commit jump are not covered (G-118).
+- **Planner overhead is unmeasured for most profiles.** `defaults.overhead_mb` (activation / compute buffers above weights + KV) is measured for `decide-julia`, `decide-laya`, `decide-kev-08b` and `decide-lev` (reported `partial`: its VRAM half was only measured on a CPU-only host);
+  in this tree 18 of the 22 catalog profiles carry none, among them the decision profiles `decide-tiny`, `decide`, `decide-pro`, `decide-nli`, `decide-2b`, `decide-max`, `decide-kev-4b`, `decide-kev-9b`. For those the planner books 0 (a floor, not a measurement):
+  `llmctl plan --json` reports `memory_status` and `unknown_overhead`, and the human plan marks the row `overhead UNKNOWN`. A recommendation for such a profile is not evidence that it fits (T139, G-137, G-138).
+- **Maturity labels are mostly `unmeasured`**: six profiles (`decide-tiny`, `decide`, `decide-pro`, `decide-nli`, `decide-2b`, `decide-max`) plus `decide-kev-9b` have no live golden run, so all their types are experimental by definition;
+  `decide-julia` is experimental on all three types, and `score` is experimental on `decide-kev-08b` and `decide-laya`. Golden labels are agent-authored (human review pending).
+- **Open at the time of writing** (`specs/009-jev-decision-models/tasks.md`, `evidence/sc004-closure.md`): live runs of the six originally pinned models (T061, T068), option-order / options-vs-accuracy run (T064), JevBench adapter run (T065),
+  two high-severity source-findings rows needing the real encoder model (D-01, D-06; T129), SBOM / SHA256SUMS / reproducible-archive steps in the release scripts (T126), the final independent review (T128), the candidate-fingerprinted readiness verdict (T124),
+  and the tag, forge publication and re-download verification (T127). None of these is claimed done here.
+- **`decide scale`** is admission-bounded on the host it runs on; instances beyond what the host can hold are refused with numbers, and throughput mode gives up byte-identical answers across instances (identity is promised per instance only).
+- The OpenAPI contract `specs/009-jev-decision-models/contracts/openapi.yaml` keeps `info.version: 3.1.0-draft` until the tag is cut; `tests/test_version_consistency.sh` accepts `3.1.0` or `3.1.0-draft` and the version marker is flipped together with the tag (T127).
 - The cluster daemon is exercised with real processes on one machine only; quota enforcement on inference traffic, drain on a minority partition, OIDC and automatic restart of a failed node's models are not wired ([faq](docs/faq.md)). The cluster CLI needs a curl with HTTP3.
 - A minimal live exercise of the seven coding agents, an authenticated call from a second machine and behaviour behind an active firewall are not verified.
 

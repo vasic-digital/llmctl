@@ -404,17 +404,26 @@ scripted-heredoc happy path, abort path).
 
 ### How do I run N parallel instances of one decision profile?
 
-**Status: current behavior — you can't, via the scheduler, in v1.**
+**Status: current behavior — `llmctl decide scale <profile> <N>`.**
 `llmctl decide capacity` (and the planner's `decision_instances`) is a
 **read-only capacity report**: it tells you how many instances *would* fit
 in GPU mode or CPU mode (alternative placements, never additive;
 `total_decision_slots = max(gpu, cpu) × parallel`), but it reserves and
-launches nothing. The scheduler starts exactly one instance per profile
-because ports are fixed per profile; `LLMCTL_PORT_<PROFILE>` (e.g.
-`LLMCTL_PORT_DECIDE_TINY`) provides exactly one port override. Running 2×
-`decide-tiny` today requires a second ad-hoc profile entry or a manual
-`llama-server` invocation on your own port. Candidate future work:
-`sched_start --count N` with ephemeral port allocation.
+launches nothing. `llmctl decide scale decide-tiny 2` is what starts them:
+
+* Instance keys are `decide-tiny`, `decide-tiny.2`, `decide-tiny.3` … The primary keeps its documented port;
+  every further instance gets a port from the registry allocator (so instances beyond the first need the
+  registry binary: `llmctl build decide`; without it the scale is refused before anything starts).
+* Scale-up is **admission-bounded** by the same RAM/VRAM budget check `llmctl start` uses and is
+  **all-or-nothing**: if instance K does not fit, nothing is started and the command exits **3** with the
+  numbers (what the instance needs, what remains, how many more would fit).
+* Scale-down stops the **highest-numbered** instances first. Asking for the current count is a no-op.
+* A runtime failure while scaling up rolls back every instance started in that call (exit 1).
+* After a failed `llmctl switch`, the restore brings back the same **count** of instances of a scaled
+  profile, not necessarily the same keys (if only `decide-tiny.3` was running it comes back as `decide-tiny`).
+* `LLMCTL_DECIDE_MODE=deterministic` (default) serves a profile from its primary and overflows to the next
+  instance only when the primary is saturated; `throughput` spreads least-loaded and marks every response
+  `x-llmctl-decide-mode: throughput`.
 
 ### Is the decide gateway wire-compatible with the official hosted Jev API?
 
@@ -439,10 +448,10 @@ than hosted Jev's 64k-token context.
 
 ### How are the decision models' sha256 pins maintained?
 
-**Status: current behavior.** All three decide profiles ship pinned
+**Status: current behavior.** All twelve decide profiles ship pinned
 per-file sha256 + byte size + an immutable `hf_revision` commit hash in
-`models/catalog.json` (captured 2026-10-06 from the Hugging Face API via
-`hf-mirror.com`; raw values archived in
+`models/catalog.json` (the original three were captured 2026-10-06 from the Hugging Face API via
+`hf-mirror.com`; their raw values are archived in
 [`docs/research/decision-model-hashes.md`](research/decision-model-hashes.md)).
 There is no live-fetch fallback for these LFS weights — the `null`-sha256
 API-lookup escape hatch is only for small non-LFS files. Download

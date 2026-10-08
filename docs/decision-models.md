@@ -361,15 +361,15 @@ Laya BYO-ONNX verification).
   (n·p_max − 1)/(n−1)` is a shaping convention (1.0 when one option has
   all the mass, 0.0 at uniform). Do not read it as "probability this
   answer is correct".
-* **Multi-instance is capacity-report-only in v1.**
+* **`decide capacity` only reports; `decide scale` starts.**
   `llmctl decide capacity` (and the planner's `decision_instances`
   subtree) reports how many parallel instances of each decision profile
-  *would* fit — it starts nothing and reserves nothing. v1 cannot launch
-  N co-resident copies of one profile, because ports are fixed per
-  profile; `LLMCTL_PORT_<PROFILE>` provides exactly one port override.
-  Running 2× `decide-tiny` today requires a second ad-hoc profile or a
-  manual `llama-server` invocation. Candidate future work:
-  `sched_start --count N` with ephemeral port allocation.
+  *would* fit — it starts nothing and reserves nothing.
+  `llmctl decide scale <profile> <N>` launches them: admission-bounded
+  (exit 3 with the needed-vs-remaining numbers, nothing started),
+  instance keys `<profile>`, `<profile>.2`, …, registry-allocated ports for
+  every instance beyond the primary, scale-down stops the highest-numbered
+  instance first. See the [FAQ](faq.md) for the full behaviour.
 * **Native profiles need `LLMCTL_DECIDE_NATIVE=1` and the b11379 engine.** Without the variable the gateway
   answers `503 not_ready` for them; on an older pinned engine `/v1/systemone` is a 404 and the model does not
   load. Their working windows are short on purpose (1024 tokens for `decide-julia` and `decide-laya`, 2048 for

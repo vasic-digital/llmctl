@@ -59,7 +59,7 @@ side-effect-free.
   the exact usage hint `usage: llmctl models download <profile>`.
 * **`models` with an unknown subcommand** (`models frob`): exits **1** and
   reports `unknown models subcommand: frob`.
-* **`models list`**: asserts every one of the 10 catalog profiles (`fast`,
+* **`models list`**: asserts that each of the 10 original chat/coder profiles (`fast`,
   `coder`, `vision`, `vision-pro`, `moe-fast`, `small`, `ws-dense-32b`,
   `ws-moe-30b`, `colibri-glm`, `colibri-qwen36`) appears somewhere in its
   rendered output.
