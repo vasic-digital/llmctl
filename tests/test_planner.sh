@@ -46,9 +46,9 @@ assert_eq "False" "$(printf '%s' "${plan}" | json_stdin 'd["profiles"]["ws-dense
 # per profile) still fits, and the CPU-only decide-nli (RAM 3006, VRAM 0)
 # joins on RAM alone (RAM 2048*4+3006 = 11198 <= 25904). decide-2b
 # (2048/3006) would push VRAM to 12128 > 10444 -> new group 3 of one.
-assert_eq "fast coder vision|moe-fast small decide-tiny decide decide-nli|decide-2b decide-julia decide-kev-08b|decide-kev-4b decide-laya decide-lev" \
+assert_eq "fast coder vision|moe-fast small decide-tiny decide decide-nli|decide-2b decide-julia decide-kev-08b|decide-kev-4b decide-laya|decide-lev" \
   "$(printf '%s' "${plan}" | json_stdin '"|".join(" ".join(g["profiles"]) for g in d["coresidency_groups"])')" \
-  "baseline co-residency groups (decide-nli joins group 2 as VRAM-0; decide-2b spills to group 3 with decide-julia/decide-kev-08b, whose measured working-set overheads fill the VRAM budget; decide-kev-4b starts group 4)"
+  "baseline co-residency groups (decide-nli joins group 2 as VRAM-0; decide-2b spills to group 3 with decide-julia/decide-kev-08b, whose measured working-set overheads fill the VRAM budget; decide-kev-4b and decide-laya share group 4; decide-lev ends alone in group 5)"
 
 # --- onnx footprint branch (decide-nli) --------------------------------------
 # Catalog pins: files sum to 1744456292 B = 1663 MiB (1741985401 model.onnx
@@ -83,9 +83,9 @@ assert_eq "colibri" "$(printf '%s' "${plan}" | json_stdin 'd["profiles"]["colibr
 # (vram 0, RAM 3006) + decide-2b (3006) = 11937 fits; decide-max (10174)
 # would reach 22111 > ... (captured: it fits too, 22111 <= 27852) -> one
 # group of five.
-assert_eq "fast coder|vision vision-pro|moe-fast small|ws-dense-32b|ws-moe-30b colibri-glm colibri-qwen36 decide-tiny|decide decide-pro decide-nli decide-max decide-2b decide-julia decide-kev-08b|decide-kev-4b decide-kev-9b decide-laya decide-lev" \
+assert_eq "fast coder|vision vision-pro|moe-fast small|ws-dense-32b|ws-moe-30b colibri-glm colibri-qwen36 decide-tiny|decide decide-pro decide-nli decide-max decide-2b decide-julia|decide-kev-08b decide-kev-4b decide-kev-9b decide-laya decide-lev" \
   "$(printf '%s' "${plan}" | json_stdin '"|".join(" ".join(g["profiles"]) for g in d["coresidency_groups"])')" \
-  "workstation co-residency groups (group 6 = the five remaining letter/NLI decide profiles + the small native ones up to decide-kev-08b; group 7 = the remaining native profiles; measured planner output)"
+  "workstation co-residency groups (group 6 = the five remaining letter/NLI decide profiles + the small native ones up to decide-julia; group 7 = decide-kev-08b and the remaining native profiles; measured planner output)"
 
 # --- apple: M4 Max 64GB unified ----------------------------------------------
 plan="$(plan_for apple)"
@@ -96,10 +96,33 @@ assert_eq "fast coder vision vision-pro moe-fast small ws-dense-32b ws-moe-30b c
 assert_eq "False" "$(printf '%s' "${plan}" | json_stdin 'd["profiles"]["colibri-glm"]["tier_ok"]')" "apple gates colibri-glm"
 assert_eq "gpu" "$(printf '%s' "${plan}" | json_stdin 'd["profiles"]["fast"]["mode"]')" "apple fast uses unified-memory GPU"
 
+# memory_status accounts for BOTH halves; an unmeasured half is reported UNKNOWN (booked 0 is a floor, never a measurement)
+assert_eq "partial vram" "$(printf '%s' "${plan}" | json_stdin 'd["profiles"]["decide-lev"]["memory_status"] + " " + "|".join(d["profiles"]["decide-lev"]["unknown_overhead"])')" \
+  "T139: decide-lev (RAM measured, VRAM not) is partial with unknown_overhead=[vram]"
+assert_eq "measured " "$(printf '%s' "${plan}" | json_stdin 'd["profiles"]["decide-julia"]["memory_status"] + " " + "|".join(d["profiles"]["decide-julia"]["unknown_overhead"])')" \
+  "T139 golden-false: fully measured decide-julia has no unknown overhead"
+assert_eq "unmeasured ram|vram" "$(printf '%s' "${plan}" | json_stdin 'd["profiles"]["decide-tiny"]["memory_status"] + " " + "|".join(d["profiles"]["decide-tiny"]["unknown_overhead"])')" \
+  "T139: decide-tiny has both halves UNKNOWN"
+
 # --- plan human rendering does not crash -------------------------------------
 human="$(plan_for baseline | catalog_plan_human)"
+assert_contains "${human}" "overhead UNKNOWN (ram,vram" "T139: human plan flags a recommended profile whose overhead is UNKNOWN (booked as 0)"
+if [[ "${human}" == *"experimental: none"* ]]; then assert_eq "absent" "present" "T138: a fully measured profile never prints 'experimental: none'"; else assert_eq "ok" "ok" "T138: a fully measured profile never prints 'experimental: none'"; fi
+assert_contains "$(printf '%s\n' "${human}" | grep 'decide-lev ')" "all types measured" "T138: fully measured decide-lev prints 'all types measured'"
 assert_contains "${human}" "Host tier:   baseline" "human plan header"
 assert_contains "${human}" "Co-residency groups" "human plan groups"
+# T138: the plan shows each decision profile's per-type maturity (from the catalog's evidence-derived object)
+assert_eq "noul,choice,score" "$(printf '%s' "${plan}" | json_stdin '",".join(d["profiles"]["decide-kev-9b"]["experimental_types"])')" \
+  "T138: unmeasured decide-kev-9b lists every type as experimental"
+assert_eq "score" "$(printf '%s' "${plan}" | json_stdin '",".join(d["profiles"]["decide-kev-08b"]["experimental_types"])')" \
+  "T138: decide-kev-08b is experimental on score only"
+assert_eq "" "$(printf '%s' "${plan}" | json_stdin '",".join(d["profiles"]["decide-lev"]["experimental_types"])')" \
+  "T138: fully measured decide-lev has no experimental type"
+assert_eq "False" "$(printf '%s' "${plan}" | json_stdin '"experimental_types" in d["profiles"]["fast"]')" \
+  "T138: golden-false: a non-decision profile carries no maturity field"
+assert_contains "${human}" "Maturity (decision profiles" "T138: human plan has the maturity section"
+assert_contains "${human}" "decide-kev-08b" "T138: human plan lists decide-kev-08b"
+assert_contains "${human}" "experimental: score" "T138: human plan names the experimental type"
 
 # --- catalog_classify_tier is the SAME tier `catalog_plan_json` computes ------
 # catalog_classify_tier's own doc comment says it is "exposed as its own

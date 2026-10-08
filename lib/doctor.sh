@@ -31,6 +31,101 @@ _doc_check_cmd() {
   fi
 }
 
+# Decision-gateway prerequisites (T082, FR-032). Every line is prefixed "decide:". Skipped silently
+# when llmctl-decide is not built (portreg_bin already WARNed about that above). The API key VALUE is
+# never read into output, only its presence and file mode.
+_doc_decide_checks() {
+  local bin; bin="$(portreg_bin 2>/dev/null)" || return 0
+  local home="${LLMCTL_HOME:-${HOME}/llmctl}"
+  local envf="${LLMCTL_ENV_FILE:-${LLMCTL_ROOT}/.env}"
+
+  # API key file: presence + mode.
+  local keyval=""
+  if [[ -f "${envf}" ]]; then
+    keyval="$(sed -n 's/^LLMCTL_API_KEY=//p' "${envf}" 2>/dev/null | tail -n1 | tr -d "'\" \t\r")"
+  fi
+  if [[ -n "${keyval}" ]]; then
+    local m; m="$(stat -c %a "${envf}" 2>/dev/null || stat -f %Lp "${envf}" 2>/dev/null || echo '?')"
+    if [[ "${m}" =~ ^[0-7]00$ ]]; then
+      _doc_pass "decide: API key present in ${envf} (mode ${m})"
+    else
+      _doc_fail "decide: API key file ${envf} is mode ${m} (want 600; fix: chmod 600 '${envf}')"
+    fi
+  elif [[ -n "${LLMCTL_API_KEY:-}" ]]; then
+    _doc_pass "decide: API key supplied via the environment"
+  else
+    _doc_warn "decide: no API key yet in ${envf} (the gateway generates one on first 'serve')"
+  fi
+
+  # Certificate: delegate to the real `cert doctor` (key match, expiry, chain, SAN drift, modes).
+  if [[ -d "${home}/cert" ]]; then
+    local line st name detail cout crc=0 nparsed=0 nfail=0
+    cout="$("${bin}" cert --home "${home}" doctor 2>&1)" || crc=$?
+    while IFS= read -r line; do
+      st="${line%% *}"; line="${line#"${st}"}"; line="${line#"${line%%[![:space:]]*}"}"
+      name="${line%% *}"; detail="${line#"${name}"}"; detail="${detail#"${detail%%[![:space:]]*}"}"
+      case "${st}" in
+        OK|ok)     nparsed=$((nparsed+1)); _doc_pass "decide: certificate ${name} - ${detail}" ;;
+        WARN|warn) nparsed=$((nparsed+1)); _doc_warn "decide: certificate ${name} - ${detail}" ;;
+        FAIL|fail) nparsed=$((nparsed+1)); nfail=$((nfail+1)); _doc_fail "decide: certificate ${name} - ${detail}" ;;
+      esac
+    done <<< "${cout}"
+    if [[ "${nparsed}" -eq 0 || ( "${crc}" -ne 0 && "${nfail}" -eq 0 ) ]]; then
+      _doc_fail "decide: certificate doctor failed (exit ${crc}): $(printf '%s' "${cout}" | head -c 300 | paste -sd' ' -)"
+    fi
+  else
+    _doc_warn "decide: no gateway certificate under ${home}/cert (created on first 'serve' or: llmctl-decide cert ensure)"
+  fi
+
+  # Private venv for the onnx engine (import checks follow below).
+  if [[ -x "${LLMCTL_DATA_DIR}/venv-onnx/bin/python" ]]; then
+    _doc_pass "decide: private venv ${LLMCTL_DATA_DIR}/venv-onnx present"
+  else
+    _doc_warn "decide: private venv ${LLMCTL_DATA_DIR}/venv-onnx absent (only needed for onnx encoder profiles: llmctl build onnx)"
+  fi
+
+  # Engine HTTPS: the engine must accept --ssl-key-file for the TLS-to-engine hop.
+  local ls="${LLMCTL_LLAMA_SERVER_BIN:-${LLMCTL_ROOT}/submodules/llama.cpp/build/bin/llama-server}"
+  if [[ -x "${ls}" ]]; then
+    local lhelp; lhelp="$("${ls}" --help 2>&1 || true)"
+    if [[ "${lhelp}" == *--ssl-key-file* ]]; then
+      _doc_pass "decide: engine HTTPS supported (${ls} accepts --ssl-key-file)"
+    else
+      _doc_warn "decide: engine HTTPS not supported by ${ls} (no --ssl-key-file; rebuild with SSL: llmctl build llama)"
+    fi
+  else
+    _doc_warn "decide: engine HTTPS unknown - llama-server not built (llmctl build llama)"
+  fi
+
+  # Gateway port: free, or already served by our own running gateway.
+  local port="${LLMCTL_DECIDE_PORT:-8095}"
+  local gstat gpid=""
+  if gstat="$("${bin}" serve --status 2>/dev/null)"; then
+    gpid="$(printf '%s' "${gstat}" | sed -n 's/.*running pid \([0-9][0-9]*\).*/\1/p')"
+    if ! have_cmd ss || [[ -z "${gpid}" ]]; then
+      _doc_warn "decide: gateway is running but its listening port cannot be verified (ss or pid unavailable)"
+    elif ss -ltnpH "sport = :${port}" 2>/dev/null | grep -q "pid=${gpid},"; then
+      _doc_pass "decide: gateway port ${port} served by the running llmctl gateway (pid ${gpid})"
+    else
+      _doc_warn "decide: gateway pid ${gpid} is not listening on port ${port} (configured LLMCTL_DECIDE_PORT=${port}; it was started on another port: restart it or fix the setting)"
+    fi
+  elif python3 -c 'import socket,sys
+s=socket.socket(); s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+try: s.bind(("127.0.0.1", int(sys.argv[1])))
+except OSError: sys.exit(1)' "${port}" 2>/dev/null; then
+    _doc_pass "decide: gateway port ${port} is free"
+  else
+    _doc_warn "decide: gateway port ${port} is in use by another process (set LLMCTL_DECIDE_PORT or stop it)"
+  fi
+
+  # Firewall / bind note.
+  local bind="${LLMCTL_DECIDE_BIND:-${LLMCTL_BIND_HOST:-0.0.0.0}}"
+  case "${bind}" in
+    127.*|::1|localhost) _doc_pass "decide: gateway binds loopback only (${bind}); no firewall exposure" ;;
+    *) _doc_warn "decide: gateway binds ${bind} (reachable from the network): put a firewall allow-list or reverse proxy in front, see docs/cloud-exposure.md" ;;
+  esac
+}
+
 doctor_run() {
   bold "llmctl doctor - environment self-diagnosis"
 
@@ -150,6 +245,8 @@ print("; ".join(u))' 2>/dev/null || true)"
       _doc_warn "registry rows that cannot be certified (https, no CA found): ${_doc_unknown} - set LLMCTL_CACERT, or forget them with: llmctl-decide registry reconcile --prune-unknown-after 24h"
     fi
   fi
+
+  _doc_decide_checks
 
   # Units installed by an earlier llmctl keep their old body until `llmctl install` is re-run
   # (G-067: StartLimitIntervalSec in [Service] is ignored by systemd).

@@ -307,17 +307,17 @@ _sched_ensure_key_file() {
 # _sched_svc_write_env <profile> - svc_write_env with the profile's registration
 # metadata (kind) passed through the environment of that one call.
 _sched_svc_write_env() {
-  local p="$1" kind=chat
-  _sched_is_decision "${p}" && kind=decide
+  local p="$1" bp="${2:-$1}" kind=chat   # bp: the catalog profile behind instance key p (decide.2 -> decide)
+  _sched_is_decision "${bp}" && kind=decide
   local -x LLMCTL_SVC_KIND="${kind}"
-  svc_write_env "${p}" "$(catalog_engine "${p}")" "${SCHED_EXEC}" "${SCHED_ARGS[@]}"
+  svc_write_env "${p}" "$(catalog_engine "${bp}")" "${SCHED_EXEC}" "${SCHED_ARGS[@]}"
 }
 
 # _sched_registry_publish <profile> <port> - publish a READY service in the
 # registry with its real process identity. Never fatal: the engine is up and
 # serving; a registry failure is reported loudly, not hidden.
 _sched_registry_publish() {
-  local p="$1" port="$2" name pid token engine kind="chat" health="/health" loop=0 keyf=""
+  local p="$1" port="$2" bp="${3:-$1}" name pid token engine kind="chat" health="/health" loop=0 keyf=""
   portreg_active || return 0
   name="$(_sched_reg_name "${p}")"
   pid="$(svc_main_pid "${p}" 2>/dev/null || true)"
@@ -325,17 +325,17 @@ _sched_registry_publish() {
     warn "registry: cannot determine the process id of '${p}'; it is NOT published (llmctl discover will not list it)"
     return 0
   fi
-  engine="$(catalog_engine "${p}")"
+  engine="$(catalog_engine "${bp}")"
   token="$(basename "${SCHED_EXEC:-}")"
   case "${token}" in python|python3|python3.*) token="$(basename "${SCHED_ARGS[0]:-}")" ;; esac
   [[ "${engine}" == "colibri" ]] && health="/v1/models"
-  if _sched_is_decision "${p}"; then kind=decide; loop=1; fi
+  if _sched_is_decision "${bp}"; then kind=decide; loop=1; fi
   local i
   for (( i=0; i<${#SCHED_ARGS[@]}; i++ )); do
     [[ "${SCHED_ARGS[i]}" == "--api-key-file" ]] && keyf="${SCHED_ARGS[i+1]:-}"
     [[ "${SCHED_ARGS[i]}" == "--host" ]] && case "${SCHED_ARGS[i+1]:-}" in 127.*|localhost|::1) loop=1 ;; esac
   done
-  if ! portreg_register "${name}" "${port}" "${pid}" "${token}" http "${health}" "${kind}" "${p}" "${name}" "${loop}" "${keyf}"; then
+  if ! portreg_register "${name}" "${port}" "${pid}" "${token}" http "${health}" "${kind}" "${bp}" "${name}" "${loop}" "${keyf}"; then
     warn "registry: registering '${p}' (port ${port}, pid ${pid}) failed; it is running but not discoverable (see: llmctl-decide registry list)"
   fi
 }
@@ -383,7 +383,7 @@ sched_build_launch() {
           throughput)    ;;
           *) die "LLMCTL_DECIDE_MODE='${dmode}' is not valid (deterministic|throughput)" ;;
         esac
-        local dkey="${LLMCTL_STATE_DIR}/keys/llama-${profile}.key"
+        local dkey="${LLMCTL_STATE_DIR}/keys/llama-${SCHED_INSTANCE_KEY:-${profile}}.key"   # SCHED_INSTANCE_KEY: decide scale gives each instance its own key file
         _sched_ensure_key_file "${dkey}"
         SCHED_ARGS=(--model "${model}" --host 127.0.0.1 --port "${port}"
                     --ctx-size "$(( ctx * parallel ))" --n-gpu-layers "${ngl}"
@@ -630,6 +630,212 @@ sched_decision_probe() {
   done
   printf 'accepted=%s\nrefused=cannot start instance %s of '"'"'%s'"'"' (%s placement): needs %s MiB RAM + %s MiB VRAM, but only %s MiB RAM + %s MiB VRAM remain\n' \
     "${n}" "$(( n + 1 ))" "${profile}" "${placement}" "${ram}" "${vram}" "$(( ram_budget - used_ram ))" "$(( vram_budget - used_vram ))"
+}
+
+# --- decide scale (T135, T071; OD-23, FR-027..FR-029) -------------------------
+# sched_decision_scale <profile> <N>: start/stop instances of ONE decision
+# profile until exactly N run. Instance keys are <profile>, <profile>.2,
+# <profile>.3, ...; each key has its own service env, reservation record,
+# registry row, port hold and internal key file. Scale-up is admission-bounded
+# by the SAME predicate `llmctl start` uses (_sched_admission_fits, seeded by
+# _sched_initial_used) and ALL-OR-NOTHING: when instance K does not fit nothing
+# is started, the refusal (exit 3) carries the exact numbers. Scale-down stops
+# the highest-numbered instances first. Ports: the primary keeps its documented
+# port (portreg_allocate); every further instance is allocated by the registry
+# (portreg_allocate_dynamic). Deterministic mode (the default): the gateway
+# serves a profile from its primary and overflows to the next instance only when
+# the primary is saturated (byte-identity per instance); throughput mode spreads
+# least-loaded and is marked in every response (x-llmctl-decide-mode: throughput).
+sched_decision_scale() { scheduler::with_lock _sched_decision_scale_impl "$@"; }
+
+# _sched_scale_key <profile> <ordinal> -> instance key (ordinal 1 = the profile itself)
+_sched_scale_key() {
+  if (( $2 == 1 )); then printf '%s\n' "$1"; else printf '%s.%s\n' "$1" "$2"; fi
+}
+
+# _sched_scale_running <profile> -> running ordinals, ascending, one per line
+_sched_scale_running() {
+  local p="$1" f b n
+  {
+    [[ -f "$(_sched_run_file "${p}")" ]] && echo 1
+    for f in "${LLMCTL_RUNTIME_DIR}/${p}".*.run; do
+      [[ -e "${f}" ]] || continue
+      b="$(basename "${f}" .run)"; n="${b#"${p}".}"
+      if [[ "${n}" =~ ^[0-9]+$ ]] && (( n >= 2 )); then echo "${n}"; fi
+    done
+  } | sort -n
+}
+
+# _sched_base_profile <instance-key> -> the catalog profile behind a key (decide.2 -> decide)
+_sched_base_profile() {
+  local k="$1" b
+  if [[ "${k}" =~ ^(.+)\.([0-9]+)$ ]]; then
+    b="${BASH_REMATCH[1]}"
+    if catalog_exists "${b}"; then printf '%s\n' "${b}"; return 0; fi
+  fi
+  printf '%s\n' "${k}"
+}
+
+# _sched_scale_rollback <key...> - undo instances started by THIS scale call (newest first):
+# stop, withdraw the registry row, drop the reservation, the port hold and the service env.
+_sched_scale_rollback() {
+  local i k
+  for (( i=$#; i>=1; i-- )); do
+    k="${!i}"
+    if svc_stop "${k}"; then sched_registry_withdraw "${k}"; fi
+    portreg_release "$(_sched_reg_name "${k}")"
+    rm -f "$(_sched_run_file "${k}")" "${LLMCTL_SERVICES_DIR}/$(_svc_instance_key "${k}").env"
+    warn "rolled back ${k} (the scale did not complete)"
+  done
+}
+
+_sched_decision_scale_impl() {
+  local profile="${1:-}" target="${2:-}"
+  [[ -n "${profile}" && -n "${target}" ]] || { err "usage: llmctl decide scale <profile> <N>"; return 2; }
+  [[ "${target}" =~ ^[0-9]+$ ]] || { err "decide scale: N must be a non-negative integer, got '${target}'"; return 2; }
+  catalog_exists "${profile}" || { err "unknown profile: ${profile} (see: llmctl models list)"; return 1; }
+  _sched_is_decision "${profile}" || { err "'${profile}' is not a decision profile (decide scale only scales decision profiles)"; return 1; }
+  local dmode="${LLMCTL_DECIDE_MODE:-deterministic}"
+  case "${dmode}" in deterministic|throughput) ;; *) err "LLMCTL_DECIDE_MODE='${dmode}' is not valid (deterministic|throughput)"; return 1 ;; esac
+  sched_load_backend
+  ensure_state_dirs
+  sched_running >/dev/null   # reconcile post-reboot reservations before the budget is read
+
+  local -a running=()
+  local n
+  while IFS= read -r n; do [[ -n "${n}" ]] && running+=("${n}"); done < <(_sched_scale_running "${profile}")
+  local cur=${#running[@]}
+
+  if (( target == cur )); then
+    info "${profile}: already ${cur} instance(s) running; nothing to do"
+    return 0
+  fi
+
+  local key
+  if (( target < cur )); then
+    local i
+    for (( i=cur-1; i>=target; i-- )); do
+      key="$(_sched_scale_key "${profile}" "${running[i]}")"
+      if svc_stop "${key}"; then sched_registry_withdraw "${key}"; fi
+      rm -f "$(_sched_run_file "${key}")" "${LLMCTL_SERVICES_DIR}/$(_svc_instance_key "${key}").env"
+      info "stopped ${key}"
+    done
+    info "${profile}: scaled down to ${target} instance(s)"
+    return 0
+  fi
+
+  # --- scale up: choose the lowest free ordinals, then admit ALL of them first
+  local need=$(( target - cur )) o=1
+  local -a fresh=()
+  while (( ${#fresh[@]} < need )); do
+    local taken=0 r
+    for r in ${running[@]+"${running[@]}"}; do [[ "${r}" == "${o}" ]] && taken=1; done
+    (( taken )) || fresh+=("${o}")
+    o=$(( o + 1 ))
+  done
+
+  local plan_file; plan_file="$(mktemp)"
+  hw_probe_json | catalog_plan_json > "${plan_file}"
+  local fits ram vram ram_budget vram_budget used_ram used_vram nofit_reason
+  fits="$(json_query "${plan_file}" "str(d['profiles']['${profile}']['fits'])")"
+  ram="$(json_query "${plan_file}" "d['profiles']['${profile}']['ram_mb']")"
+  vram="$(json_query "${plan_file}" "d['profiles']['${profile}']['vram_mb']")"
+  ram_budget="$(json_query "${plan_file}" 'd["budgets"]["ram_mb"]')"
+  vram_budget="$(json_query "${plan_file}" 'd["budgets"]["vram_mb"]')"
+  nofit_reason="$(json_query "${plan_file}" "d['decision_instances']['${profile}'].get('reason') or 'footprint exceeds the RAM/VRAM budgets'")"
+  read -r used_ram used_vram < <(_sched_initial_used "${plan_file}")
+
+  local f accepted=0
+  for f in "${fresh[@]}"; do
+    key="$(_sched_scale_key "${profile}" "${f}")"
+    if [[ "${fits}" != "True" ]]; then
+      rm -f "${plan_file}"
+      err "cannot scale '${profile}' to ${target}: instance ${f} (${key}) does not fit this host: ${nofit_reason} (needs ${ram} MiB RAM + ${vram} MiB VRAM; budgets ${ram_budget} MiB RAM + ${vram_budget} MiB VRAM; nothing was started)"
+      return 3
+    fi
+    if ! _sched_admission_fits "${ram}" "${vram}" "${used_ram}" "${used_vram}" "${ram_budget}" "${vram_budget}"; then
+      rm -f "${plan_file}"
+      err "cannot scale '${profile}' to ${target}: instance ${f} (${key}) needs ${ram} MiB RAM + ${vram} MiB VRAM, but only $(( ram_budget - used_ram )) MiB RAM + $(( vram_budget - used_vram )) MiB VRAM remain (${accepted} more instance(s) would fit; ${cur} running; nothing was started)"
+      return 3
+    fi
+    accepted=$(( accepted + 1 ))
+    used_ram=$(( used_ram + ram )); used_vram=$(( used_vram + vram ))
+  done
+
+  # A real run needs the registry allocator for any instance beyond the primary
+  # (a guessed port cannot be bind-tested): refuse BEFORE anything is started.
+  if [[ "${LLMCTL_DRY_RUN:-0}" != "1" ]] && ! portreg_active; then
+    for f in "${fresh[@]}"; do
+      if (( f > 1 )); then
+        rm -f "${plan_file}"
+        err "cannot scale '${profile}' to ${target}: additional instances need registry-allocated ports, but the registry binary is unavailable (build it: llmctl build decide)"
+        return 1
+      fi
+    done
+  fi
+
+  local mode doc_port port ctx ngl parallel fa kv_type reg_name started=0
+  local -a started_keys=()
+  mode="$(json_query "${plan_file}" "d['profiles']['${profile}']['mode']")"
+  doc_port="$(json_query "${plan_file}" "d['profiles']['${profile}']['port']")"
+  ctx="$(json_query "${plan_file}" "d['profiles']['${profile}']['ctx']")"
+  ngl="$(json_query "${plan_file}" "d['profiles']['${profile}']['ngl']")"
+  parallel="$(json_query "${plan_file}" "d['profiles']['${profile}']['parallel']")"
+  fa="$(json_query "${plan_file}" "d['profiles']['${profile}']['flash_attn']")"
+  kv_type="$(json_query "${plan_file}" "d['profiles']['${profile}'].get('kv_cache_type', 'f16')")"
+  rm -f "${plan_file}"
+
+  # Failure policy: by default a runtime failure rolls back every instance started in THIS call
+  # (all-or-nothing). SCHED_SCALE_BESTEFFORT=1 (the restore after a failed switch) instead keeps every
+  # instance that does start - a secondary that cannot restart must never cost the primary - and reports
+  # what could not be started.
+  local besteffort="${SCHED_SCALE_BESTEFFORT:-0}" ok
+  local -a failed_keys=()
+  for f in "${fresh[@]}"; do
+    key="$(_sched_scale_key "${profile}" "${f}")"
+    reg_name="$(_sched_reg_name "${key}")"
+    ok=1
+    if (( f == 1 )); then
+      port="$(portreg_allocate "${reg_name}" "${profile}" "${doc_port}")" || ok=0
+    else
+      port="$(portreg_allocate_dynamic "${reg_name}" "${profile}" "$(( doc_port + 1000 * (f - 1) ))")" || ok=0
+    fi
+    if (( ! ok )); then
+      err "cannot start '${key}': no usable port"
+    else
+      SCHED_INSTANCE_KEY="${key}" sched_build_launch "${profile}" "${mode}" "${port}" "${ctx}" "${ngl}" "${parallel}" "${fa}" "${kv_type}"
+      _sched_svc_write_env "${key}" "${profile}"
+      if ! svc_start "${key}"; then
+        err "failed to start '${key}': the service backend refused to start it (see: llmctl logs ${key})"
+        ok=0
+      elif ! _sched_wait_ready "${port}" "/health"; then
+        err "started '${key}' but it never answered http://127.0.0.1:${port}/health within ${LLMCTL_READY_TIMEOUT:-60}s (see: llmctl logs ${key})"
+        svc_stop "${key}" || true
+        ok=0
+      fi
+    fi
+    if (( ! ok )); then
+      portreg_release "${reg_name}"
+      rm -f "${LLMCTL_SERVICES_DIR}/$(_svc_instance_key "${key}").env"
+      if [[ "${besteffort}" == "1" ]]; then failed_keys+=("${key}"); continue; fi
+      _sched_scale_rollback ${started_keys[@]+"${started_keys[@]}"}
+      return 1
+    fi
+    _sched_write_reservation "${key}" "${mode}" "${port}" "${ram}" "${vram}"
+    _sched_registry_publish "${key}" "${port}" "${profile}"
+    info "started ${key} (mode=${mode}, port=${port}, reserved ${ram} MiB RAM + ${vram} MiB VRAM)"
+    started=$(( started + 1 )); started_keys+=("${key}")
+  done
+  if (( ${#failed_keys[@]} > 0 )); then
+    err "${profile}: ${started} of ${need} instance(s) started; could not start: ${failed_keys[*]} (kept every instance that did start)"
+    return 1
+  fi
+  info "${profile}: scaled up to ${target} instance(s) (${started} started)"
+  if [[ "${dmode}" == "throughput" ]]; then
+    info "decide mode: throughput - requests spread least-loaded across the instances and every response is marked 'x-llmctl-decide-mode: throughput' (byte-identity is not guaranteed)"
+  else
+    info "decide mode: deterministic - requests are served by the primary instance and overflow to the next instance only when it is saturated (byte-identity per instance)"
+  fi
 }
 
 # --- core operations ----------------------------------------------------------
@@ -1022,6 +1228,38 @@ _sched_stop_impl() {
   done
 }
 
+# _sched_restore_set <key...> - restart a previously-running set of instance KEYS (rollback of a failed
+# switch). A key is not a catalog profile: plain profiles go through _sched_start_impl; every profile with
+# scaled instances (decide.2, ...) is brought back through the scale path, to its previous instance count.
+# The restore is BEST-EFFORT (SCHED_SCALE_BESTEFFORT=1): every instance that can start is kept, a secondary that
+# fails never stops the primary, and the ones that could not be restored are reported (the switch then exits 75).
+# It restores the same COUNT of instances, not necessarily the same keys: if only decide.3 was running it comes
+# back as decide, on the documented port. A scaled-down or rolled-back instance leaves no service env behind.
+_sched_restore_set() {
+  local k b
+  local -a plain=() bases=() counts=()
+  local i found
+  for k in "$@"; do
+    b="$(_sched_base_profile "${k}")"
+    found=0
+    for (( i=0; i<${#bases[@]}; i++ )); do
+      if [[ "${bases[i]}" == "${b}" ]]; then counts[i]=$(( counts[i] + 1 )); found=1; fi
+    done
+    (( found )) || { bases+=("${b}"); counts+=(1); }
+  done
+  for (( i=0; i<${#bases[@]}; i++ )); do
+    if (( counts[i] > 1 )) || [[ " $* " == *" ${bases[i]}."[0-9]* ]]; then :; else plain+=("${bases[i]}"); fi
+  done
+  local rc=0
+  [[ ${#plain[@]} -eq 0 ]] || _sched_start_impl "${plain[@]}" || rc=$?
+  for (( i=0; i<${#bases[@]}; i++ )); do
+    if (( counts[i] > 1 )) || [[ " $* " == *" ${bases[i]}."[0-9]* ]]; then
+      SCHED_SCALE_BESTEFFORT=1 _sched_decision_scale_impl "${bases[i]}" "${counts[i]}" || rc=$?
+    fi
+  done
+  return "${rc}"
+}
+
 # sched_switch <profile> - the public, locking entrypoint (mirrors
 # sched_start/sched_stop/sched_auto above - see their shared header
 # comment on why a switch-shaped operation must run as ONE atomic locked
@@ -1072,7 +1310,7 @@ _sched_switch_impl() {
   err "switch to '${target}' failed - restoring the previously-running set: ${previously_running[*]:-<none>}"
   if [[ "${#previously_running[@]}" -gt 0 ]]; then
     local rollback_rc=0
-    _sched_start_impl "${previously_running[@]}" || rollback_rc=$?
+    _sched_restore_set "${previously_running[@]}" || rollback_rc=$?
     if [[ "${rollback_rc}" -eq 0 ]]; then
       err "rollback succeeded - the previously-running profile(s) are running again"
     else
@@ -1328,7 +1566,9 @@ sched_status() {
   printf '%-16s %-6s %-8s %-10s %-10s %-8s %s\n' "profile" "port" "mode" "RAM MiB" "VRAM MiB" "enabled" "state"
   local p port mode ram vram en state last_log
   while IFS=$'\t' read -r p port mode ram vram en state last_log; do
-    printf '%-16s %-6s %-8s %-10s %-10s %-8s %s\n' "${p}" "${port}" "${mode}" "${ram}" "${vram}" "${en}" "${state}"
+    local label="${p}" base; base="$(_sched_base_profile "${p}")"
+    [[ "${base}" == "${p}" ]] || label="${base} #${p##*.}"
+    printf '%-16s %-6s %-8s %-10s %-10s %-8s %s\n' "${label}" "${port}" "${mode}" "${ram}" "${vram}" "${en}" "${state}"
     [[ "${state}" == "failed (crash-loop)" ]] && printf '  last log line: %s\n' "${last_log}"
   done < <(_sched_status_rows)
   # Explicit, since a `while read ... <(proc-sub)` loop's own exit status
@@ -1360,8 +1600,11 @@ for line in sys.stdin.read().splitlines():
     if not line:
         continue
     p, port, mode, ram, vram, en, state, last_log = line.split("\t")
+    base, _, ordn = p.rpartition(".")
+    inst = {"instance": p} if (base and ordn.isdigit()) else {}
     rows.append({
-        "profile": p,
+        "profile": base if inst else p,
+        **inst,
         "port": int(port) if port.isdigit() else port,
         "mode": mode,
         "ram_mb": int(ram) if ram.isdigit() else ram,

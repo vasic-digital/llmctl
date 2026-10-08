@@ -567,10 +567,18 @@ for name in sorted(catalog["profiles"].keys()):
     if "decide" in p.get("capability", []):
         # T139: what the planner booked above weights + KV, and the window it was measured at (None = unmeasured)
         pdfl = p.get("defaults", {})
-        pmem = (p.get("memory") or {}).get("ram") or {}
+        pmemo = p.get("memory") or {}
+        unknown = [h for h in ("ram", "vram") if (pmemo.get(h) or {}).get("status") != "measured"]
         fp.update({"overhead_mb": int(pdfl.get("overhead_mb", 0)), "overhead_vram_mb": int(pdfl.get("overhead_vram_mb", 0)),
                    "window_tokens": pdfl.get("window_tokens"),
-                   "memory_status": "measured" if pmem.get("status") == "measured" else "unmeasured"})
+                   # both halves must be measured; an unmeasured half is booked as 0 (a floor, not a measurement) and
+                   # reported UNKNOWN in unknown_overhead so the plan never presents it as a measurement
+                   "memory_status": "measured" if not unknown else ("unmeasured" if len(unknown) == 2 else "partial"),
+                   "unknown_overhead": unknown})
+        # T138: question types the profile has not measured above its baseline (experimental | unmeasured), fixed order
+        pmat = p.get("maturity") or {}
+        fp["experimental_types"] = [t for t in ("noul", "choice", "score")
+                                    if (pmat.get(t) or {}).get("status", "unmeasured") != "measured"]
     profiles[name] = fp
 
 # Co-residency groups: greedy bin-packing over the recommended profiles in
@@ -750,6 +758,8 @@ for name in sorted(plan["profiles"], key=lambda n: plan["profiles"][n]["port"]):
     p = plan["profiles"][name]
     if p["recommended"]:
         verdict, why = "FITS", "recommended"
+        if p.get("unknown_overhead"):
+            why += " (overhead UNKNOWN (%s): booked 0 until measured)" % ",".join(p["unknown_overhead"])
     elif not p["tier_ok"]:
         verdict, why = "GATED", "needs min_tier=%s" % p["min_tier"]
     else:
@@ -757,6 +767,14 @@ for name in sorted(plan["profiles"], key=lambda n: plan["profiles"][n]["port"]):
     print("%-16s %-6s %-9s %-8s %-8s %-6s %-5s %-4s %s" %
           (name, p["port"], verdict, p["mode"], p["ram_mb"], p["vram_mb"],
            p["ctx"], p["ngl"], why))
+dec = [n for n in sorted(plan["profiles"], key=lambda n: plan["profiles"][n]["port"])
+       if "experimental_types" in plan["profiles"][n]]
+if dec:
+    print("")
+    print("Maturity (decision profiles; a type not measured above its baseline answers with maturity=experimental):")
+    for n in dec:
+        et = plan["profiles"][n]["experimental_types"]
+        print("  %-16s %s" % (n, "all types measured" if not et else "experimental: " + ", ".join(et)))
 print("")
 groups = plan["coresidency_groups"]
 if groups:

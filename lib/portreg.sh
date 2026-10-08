@@ -86,6 +86,27 @@ portreg_allocate() {
   "${bin}" port allocate "${name}" --profile "${profile}" --fixed "${documented}"
 }
 
+# portreg_allocate_dynamic <name> <profile> <planning-port> -> prints the port.
+# For the 2nd..Nth instance of one profile (`llmctl decide scale`): the
+# documented port belongs to the primary, so the registry allocator hands out a
+# bind-tested port of LLMCTL_PORT_RANGE (`port allocate --strategy dynamic`; a
+# taken explicit LLMCTL_PORT_<PROFILE> override still fails naming the port and
+# the variable). Without an active registry a REAL run is refused (a guessed
+# port could not be bind-tested); a dry run prints <planning-port>, which is
+# never bound or reserved.
+portreg_allocate_dynamic() {
+  local name="$1" profile="$2" planning="$3"
+  if ! portreg_active; then
+    if [[ "${LLMCTL_DRY_RUN:-0}" == "1" ]]; then
+      printf '%s\n' "${planning}"
+      return 0
+    fi
+    err "an additional instance of '${profile}' needs a registry-allocated port, but the registry binary is unavailable (build it: llmctl build decide)"
+    return 1
+  fi
+  "$(portreg_bin)" port allocate "${name}" --profile "${profile}" --strategy dynamic
+}
+
 # portreg_release <name> - drop the port hold (idempotent, quiet).
 portreg_release() {
   portreg_active || return 0

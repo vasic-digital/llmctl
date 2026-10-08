@@ -119,8 +119,8 @@ description: "Task list for 009-jev-decision-models (Jev-class decision models i
 
 - [x] T080 [P] [TDD] [SUBAGENT] [US7] `lib/service_linux.sh`: gateway + instance units, hardening directives verified on this host's systemd, `StartLimit*` in `[Unit]`, memory policy per OD-14 (default: recorded 2026-09-15 decision; measured peak recorded) (FR-083) (FR-031, FR-033, FR-083) <!-- reconciled 2026-10-08: done: tests/test_services.sh, tests/test_decide_service.sh PASS; docs/qa/dynamic-ports-validation/live-systemd-user-run.txt -->
 - [x] T081 [P] [TDD] [SUBAGENT] [US7] `lib/service_macos.sh`: launchd agents for gateway and encoder runtime (D-32), plist mode 0600, no key in args; macOS verified by file inspection and dry-run only unless a Mac is available (record honestly) <!-- reconciled 2026-10-08: done: tests/test_macos_plist.sh PASS (labelled statically verified only, OD-29) -->
-- [ ] T082 [TDD] [US7] `doctor` checks: key, cert expiry/drift, venv, engine HTTPS, ports, firewall note (FR-032) (FR-032) <!-- reconciled 2026-10-08: open: lib/doctor.sh checks registry, binary, onnx; key/cert drift/engine HTTPS/firewall note and the stale-unit WARN are not all evidenced (G-062, G-067) | remaining: lead -->
-- [ ] T083 [TDD] [US7] Drain/readiness flip, graceful stop, backpressure under load; stress scenario `tests/test_gateway_stress.sh` (FR-078) <!-- reconciled 2026-10-08: open: drain, backpressure tests exist (internal/server/server_test.go TestGracefulDrain, TestSaturation529); tests/test_gateway_stress.sh absent | remaining: lead -->
+- [x] T082 [TDD] [US7] `doctor` checks: key, cert expiry/drift, venv, engine HTTPS, ports, firewall note (FR-032) (FR-032) <!-- reconciled 2026-10-08: done: tests/test_doctor_decide.sh PASS after review NO-GO fixes (cert-doctor failure => FAIL, empty key => WARN, running gateway must listen on the configured port (needs ss, else WARN), no SIGPIPE on engine help; mutations cert FAIL->warn and venv forced-true now caught). Not covered: a real onnx venv content check beyond presence -->
+- [x] T083 [TDD] [US7] Drain/readiness flip, graceful stop, backpressure under load; stress scenario `tests/test_gateway_stress.sh` (FR-078) <!-- reconciled 2026-10-08: done: tests/test_gateway_stress.sh PASS (529+Retry-After burst, graceful stop, RSS bound; readiness flip observed as closed listener over HTTPS, 503 asserted in Go TestGracefulDrain) -->
 - [ ] T084 [P] [TDD] [SUBAGENT] [US7] `calibrate`, `probe-order`, `schema`, `completions`, `interactive`, decision log opt-in (ideas 1-I05, 2-I05) (FR-080, FR-081) <!-- reconciled 2026-10-08: open: calibrate/probe-order/completions done (T132-T134), schema done (internal/schema); decision-log opt-in not done (G-135) | remaining: lead -->
 - [ ] T085 [REVIEW] [US7] Independent review <!-- reconciled 2026-10-08: open: no US7 review record | remaining: lead: final review -->
 
@@ -151,7 +151,7 @@ description: "Task list for 009-jev-decision-models (Jev-class decision models i
 ## Phase 10: User Story 9 — Stable contract for wider tooling (P3)
 
 - [x] T110 [TDD] [US9] Contract tests from `contracts/openapi.yaml` and `endpoint-inventory.tsv` (inventory ⇄ OpenAPI status cross-check script `tests/test_contract_sync.sh`) <!-- reconciled 2026-10-08: done: internal/contract/inventory_test.go (inventory vs openapi); internal/server/server.go status table -->
-- [ ] T111 [US9] Fields-for-calibration-tools page and stability statement (idea 3-I10) <!-- reconciled 2026-10-08: open: no fields-for-calibration-tools page or stability statement found under docs/ | remaining: docs agent -->
+- [x] T111 [US9] Fields-for-calibration-tools page and stability statement (idea 3-I10) <!-- reconciled 2026-10-08: done: docs/calibration-tool-fields.md (fields + stability statement), linked from README -->
 
 ## Phase 11: User Story 8 — Docs in sync and release 3.1.0 (P1, runs last; tasks carry [US8])
 
@@ -198,7 +198,7 @@ Phase 1 + 2 + US1 (T001–T045): a hardened, key-protected HTTPS gateway answeri
 - [x] T132 [TDD] Implement `llmctl decide completions {bash|zsh}` (FR-081, OD-23) <!-- reconciled 2026-10-08: done: specs/009-jev-decision-models/evidence/cmd-REPORT.md; cmd/llmctl-decide/cmd_completions.go + cmd_completions_test.go -->
 - [x] T133 [TDD] Implement `llmctl decide probe-order` (FR-080, OD-23) <!-- reconciled 2026-10-08: done: specs/009-jev-decision-models/evidence/cmd-REPORT.md; cmd/llmctl-decide/cmd_probeorder.go + cmd_probeorder_test.go -->
 - [x] T134 [TDD] Implement `llmctl decide calibrate` (FR-080: accuracy +- interval, baseline, ECE/MCE/Brier, temperature|platt|isotonic fit, profile bound to model sha + template hash, refuses claims below 200 labels) (OD-23) <!-- reconciled 2026-10-08: done: specs/009-jev-decision-models/evidence/cmd-REPORT.md; cmd/llmctl-decide/cmd_calibrate.go, internal/calibrate/ -->
-- [ ] T135 [TDD] Implement `llmctl decide scale <profile> <N>` (admission-bounded; instance keys <profile>, <profile>.2 ...; registry-allocated ports; throughput mode marking) (OD-23) <!-- reconciled 2026-10-08: open: decide scale not implemented | remaining: scale agent / lead -->
+- [x] T135 [TDD] Implement `llmctl decide scale <profile> <N>` (admission-bounded; instance keys <profile>, <profile>.2 ...; registry-allocated ports; throughput mode marking) (OD-23) <!-- done 2026-10-08: lib/scheduler.sh sched_decision_scale + tests/test_decide_scale.sh (dry-run, fixture); real-engine start unverified -->
 - [ ] T136 Revert the "planned, not in 3.1.0" markers in contracts/cli.md, traceability.md, docs and changelog once T132-T135 pass <!-- reconciled 2026-10-08: blocked: waits for T135 (and T137/T138 for the calibration and maturity markers) | remaining: lead -->
 - [x] T137 [TDD] Gateway applies a calibration profile (FR-080): publish `decision.template_hash` in the catalog; load with calibrate.LoadProfile(path, liveModelSHA, liveTemplateHash) (refuses unbound/mismatched); add calibrate.FromProfile; apply to confidence only; opt-in decision log (FR-080, env LLMCTL_DECIDE_LOG_STATE) — after agent NATIVE releases internal/gateway <!-- reconciled 2026-10-08: open: in progress: internal/gateway/calibration.go and calibration_test.go exist uncommitted; models/catalog.json has no decision.template_hash; not yet verified | remaining: calibration agent -->
 - [ ] T138 [TDD] Per-profile x type maturity labels (OD-24): catalog `maturity` field (measured-evidence reference), /v1/models exposes `experimental_types`, plan/doc tables show it, response metadata flags experimental answers; catalog test requires evidence reference <!-- reconciled 2026-10-08: open: no catalog maturity field, no experimental_types in /v1/models | remaining: lead -->
@@ -281,8 +281,8 @@ Changes versus the previous ticks: T027, T040, T041, T050, T051, T056, T057, T06
 | T075 | open | no US5 review record | lead: final review |
 | T080 | done | tests/test_services.sh, tests/test_decide_service.sh PASS; docs/qa/dynamic-ports-validation/live-systemd-user-run.txt | - |
 | T081 | done | tests/test_macos_plist.sh PASS (labelled statically verified only, OD-29) | - |
-| T082 | open | lib/doctor.sh checks registry, binary, onnx; key/cert drift/engine HTTPS/firewall note and the stale-unit WARN are not all evidenced (G-062, G-067) | lead |
-| T083 | open | drain, backpressure tests exist (internal/server/server_test.go TestGracefulDrain, TestSaturation529); tests/test_gateway_stress.sh absent | lead |
+| T082 | done | tests/test_doctor_decide.sh PASS | - |
+| T083 | done | tests/test_gateway_stress.sh PASS; internal/server TestGracefulDrain, TestSaturation529 | - |
 | T084 | open | calibrate/probe-order/completions done (T132-T134), schema done (internal/schema); decision-log opt-in not done (G-135) | lead |
 | T085 | open | no US7 review record | lead: final review |
 | T090 | done | lib/admit.sh, tests/test_admit.sh PASS | - |

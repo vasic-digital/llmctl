@@ -201,7 +201,7 @@ answers per instance) or `throughput`.
 **Applying a calibration profile (FR-080).** `llmctl-decide calibrate` fits a recalibrator on operator-labelled answers and
 writes `$LLMCTL_STATE_DIR/decide/calibration/<profile>.json` (mode 0600), bound to the model file's sha256 and to the prompt
 template hash. The gateway loads that file for each decision profile **at start and on `SIGHUP`** (`kill -HUP $(cat
-$LLMCTL_STATE_DIR/decide/gateway.pid)`; `cert reload` sends the same signal) - a profile written later is NOT picked up until
+$LLMCTL_STATE_DIR/decide/gateway.pid)`; `llmctl decide serve` reloads the certificate pair on the same signal; there is no `cert reload` subcommand) - a profile written later is NOT picked up until
 then. It is applied only when all of this holds: the file is a regular, non-symlink file owned by the gateway's user and not
 writable by group/others; it is bound; its `model_sha256` equals the catalog's single `files[role=model].sha256` (the downloaded,
 checksum-verified file - the gateway does not re-hash a multi-GB model at start); its `template_hash` equals the live template hash;

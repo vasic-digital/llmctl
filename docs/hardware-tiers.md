@@ -156,7 +156,7 @@ otherwise the profile does not fit and `llmctl start` refuses with the exact num
 above and below).
 
 Known gap, stated plainly: that estimate **under-reserves the native `/v1/systemone` profiles** - their measured working set above weights and KV (compute buffers) is larger
-than the flat rule sees, which is why `decide-julia`, `decide-laya` and `decide-kev-08b` carry a hand-measured `overhead_mb` and the others do not yet. A fix to the estimate is in progress, so this page
+than the flat rule sees, which is why `decide-julia`, `decide-laya`, `decide-kev-08b` and `decide-lev` carry a measured `overhead_mb` (derived from recorded evidence by `scripts/overhead_from_memory.py`) and the other decision profiles do not yet. For a profile without a measured half the planner books **0** for it, which is a floor and not a measurement: `llmctl plan --json` reports `memory_status` (`measured`, `partial` or `unmeasured`) and `unknown_overhead` (the unmeasured halves: `ram`, `vram`), and the human plan marks such a recommendation `overhead UNKNOWN`. In particular `decide-lev` is `partial` (its VRAM half was only measured on a CPU-only host) and the unmeasured profiles (e.g. `decide-kev-4b`, `decide-2b`) can be recommended on a RAM-constrained fixture such as `ram-contended-auto-eviction` while a smaller, measured profile such as `decide-kev-08b` is refused - that row is **not** evidence they fit. This page
 deliberately does **not** list reserved-memory figures for the native profiles: run `llmctl plan` on the host you care about. On the development host the scheduler refused to start `decide-kev-4b`,
 `decide-kev-9b` and `decide-lev` for lack of free RAM (it printed the numbers); refusing with numbers is the intended behaviour on a RAM-constrained host
 (`specs/009-jev-decision-models/evidence/live/NATIVE-REPORT.md`).
@@ -183,17 +183,39 @@ unchanged on every fixture. `decide-pro` and `decide-max` (min_tier
 recommended list profiles are ordered by catalog port, so `decide-max`
 (8097) precedes `decide-2b` (8098).
 
+## Per-type maturity of the decision profiles (T138)
+
+Each decision profile carries a `maturity` object per question type (`noul`, `choice`, `score`), derived from its golden-run output by `scripts/maturity_from_golden.py`:
+`measured` means the Wilson lower bound clears the baseline; `experimental` means it does not; `unmeasured` means no live golden run yet. Anything but `measured` is
+shown as experimental: `GET /v1/models` lists it in `experimental_types`, `llmctl plan` prints it, and answers of that type carry `maturity: "experimental"`.
+A type missing from a profile's object counts as unmeasured. Values below are copied from `models/catalog.json` (lb = lower bound):
+
+| profile | noul | choice | score |
+|---|---|---|---|
+| `decide-tiny` | unmeasured | unmeasured | unmeasured |
+| `decide` | unmeasured | unmeasured | unmeasured |
+| `decide-pro` | unmeasured | unmeasured | unmeasured |
+| `decide-nli` | unmeasured | unmeasured | unmeasured |
+| `decide-2b` | unmeasured | unmeasured | unmeasured |
+| `decide-max` | unmeasured | unmeasured | unmeasured |
+| `decide-julia` | experimental (lb 0.425 vs base 0.667, n=60) | experimental (lb 0.216 vs base 0.235, n=41) | experimental (lb 0.114 vs base 0.290, n=31) |
+| `decide-kev-08b` | measured (lb 0.701 vs base 0.667, n=60) | measured (lb 0.745 vs base 0.235, n=41) | experimental (lb 0.161 vs base 0.290, n=31) |
+| `decide-kev-4b` | measured (lb 0.863 vs base 0.667, n=60) | measured (lb 0.914 vs base 0.235, n=41) | measured (lb 0.438 vs base 0.290, n=31) |
+| `decide-kev-9b` | unmeasured | unmeasured | unmeasured |
+| `decide-laya` | experimental (lb 0.592 vs base 0.667, n=60) | measured (lb 0.660 vs base 0.235, n=41) | experimental (lb 0.186 vs base 0.290, n=31) |
+| `decide-lev` | measured (lb 0.886 vs base 0.667, n=60) | measured (lb 0.874 vs base 0.235, n=41) | measured (lb 0.348 vs base 0.290, n=31) |
+
 | fixture | decision profiles added to the recommended set | `auto decide` picks |
 |---|---|---|
 | `apple` | `decide-tiny`, `decide`, `decide-pro`, `decide-nli`, `decide-max`, `decide-2b`, `decide-julia`, `decide-kev-08b`, `decide-kev-4b`, `decide-kev-9b`, `decide-laya`, `decide-lev` | `decide-tiny` |
 | `baseline` | `decide-tiny`, `decide`, `decide-nli`, `decide-2b`, `decide-julia`, `decide-kev-08b`, `decide-kev-4b`, `decide-laya`, `decide-lev` | `decide-tiny` |
 | `constrained` | `decide-tiny`, `decide`, `decide-nli`, `decide-2b`, `decide-julia`, `decide-kev-08b`, `decide-kev-4b`, `decide-laya`, `decide-lev` | `decide-tiny` |
 | `cpu-heavy` | `decide-tiny`, `decide`, `decide-pro`, `decide-nli`, `decide-max`, `decide-2b`, `decide-julia`, `decide-kev-08b`, `decide-kev-4b`, `decide-kev-9b`, `decide-laya`, `decide-lev` | `decide-tiny` |
-| `ram-contended-auto-eviction` | `decide-tiny`, `decide`, `decide-nli`, `decide-2b`, `decide-julia`, `decide-kev-08b`, `decide-kev-4b`, `decide-laya`, `decide-lev` | `decide-tiny` |
-| `small-exact` | `decide-tiny`, `decide-nli`, `decide-julia`, `decide-kev-08b`, `decide-laya` | `decide-tiny` |
+| `ram-contended-auto-eviction` | `decide-tiny`, `decide`, `decide-nli`, `decide-2b`, `decide-kev-4b`, `decide-lev` | `decide-tiny` |
+| `small-exact` | `decide-tiny`, `decide-nli`, `decide-julia`, `decide-laya` | `decide-tiny` |
 | `tiny` | none | no fit |
 | `vram-contended-coresident` | `decide-tiny`, `decide`, `decide-nli`, `decide-2b`, `decide-julia`, `decide-kev-08b`, `decide-kev-4b`, `decide-laya`, `decide-lev` | `decide-tiny` |
-| `vram-contended` | `decide-tiny`, `decide`, `decide-nli`, `decide-2b`, `decide-julia`, `decide-kev-08b`, `decide-kev-4b`, `decide-laya`, `decide-lev` | `decide-tiny` |
+| `vram-contended` | `decide-tiny`, `decide`, `decide-nli`, `decide-2b`, `decide-julia`, `decide-kev-4b`, `decide-laya`, `decide-lev` | `decide-tiny` |
 | `workstation` | `decide-tiny`, `decide`, `decide-pro`, `decide-nli`, `decide-max`, `decide-2b`, `decide-julia`, `decide-kev-08b`, `decide-kev-4b`, `decide-kev-9b`, `decide-laya`, `decide-lev` | `decide-tiny` |
 
 **`auto decide` ranking** (`sched_rank_for_capability decide`, fixed): `decide-tiny`,

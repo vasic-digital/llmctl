@@ -266,6 +266,7 @@ fastest path to a running model.
 | [`docs/cloud-exposure.md`](docs/cloud-exposure.md) | Exposing the HTTPS gateway beyond the LAN: VPN, SSH tunnel, port-forward, reverse proxy, tunnel services, with the security consequences stated |
 | [`docs/runbooks.md`](docs/runbooks.md) | Operations: key rotation (and its environment-key caveat), certificate renew/reload, stuck engines, port conflicts, registry reconcile, vantage image, release archive, stale units, LD_LIBRARY_PATH, backup/restore, upgrade/rollback |
 | [`docs/limitations.md`](docs/limitations.md) | Honest limits: not a safety guardrail, no calibration claim, option-order sensitivity, determinism scope, what was and was not verified live |
+| [`docs/calibration-tool-fields.md`](docs/calibration-tool-fields.md) | Response fields a calibration or evaluation tool may rely on, and the (limited) stability statement |
 | [`docs/glossary.md`](docs/glossary.md) | Terms used across the decision documentation |
 | [`docs/related-tools.md`](docs/related-tools.md) | Third-party tools with similar names, and how they relate (or do not) to llmctl |
 | [`docs/golden-set.md`](docs/golden-set.md) | The golden question set and its statistics tooling (labels agent-authored, human review pending) |

@@ -106,7 +106,11 @@ decide_serve --status </dev/null >/dev/null; assert_eq "serve|--status" "$(paste
 out="$(LLMCTL_DRY_RUN=1 decide_serve --foreground --port 9000)"
 assert_contains "${out}" "DRY-RUN:" "decide_serve honours LLMCTL_DRY_RUN"
 assert_contains "${out}" "serve --foreground --port 9000" "dry-run shows the generic delegation"
-cmd_decide scale decide-tiny 2 </dev/null >/dev/null; assert_eq "scale|decide-tiny|2" "$(paste -sd'|' "${STUB_ARGS}")" "cmd_decide delegates the other Go subcommands"
+cmd_decide calibrate --profile decide-tiny </dev/null >/dev/null; assert_eq "calibrate|--profile|decide-tiny" "$(paste -sd'|' "${STUB_ARGS}")" "cmd_decide delegates the other Go subcommands"
+# scale is NOT a Go subcommand: it is handled by the scheduler (tests/test_decide_scale.sh) and must never reach the binary
+: > "${STUB_ARGS}"; cmd_decide scale decide-tiny abc </dev/null >/dev/null 2>&1 && rc=0 || rc=$?
+assert_eq 2 "${rc}" "cmd_decide scale routes to the scheduler (bad N -> rc 2)"
+assert_eq "" "$(cat "${STUB_ARGS}")" "cmd_decide scale is not forwarded to the Go binary"
 out="$(cmd_decide bogus 2>&1)" && rc=0 || rc=$?
 assert_eq 2 "${rc}" "unknown decide subcommand -> rc 2"
 

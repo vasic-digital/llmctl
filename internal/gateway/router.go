@@ -152,7 +152,7 @@ func (r *Router) Models() []server.ModelInfo {
 			}
 		}
 		m := server.ModelInfo{ID: id, Protocol: s.Protocol, Status: status, MaxOptions: s.MaxOptions,
-			ScoreLevels: s.ScoreLevels, Notes: s.Notes, Description: s.Desc, ReleaseDate: s.ReleaseDate}
+			ScoreLevels: s.ScoreLevels, Notes: s.Notes, Description: s.Desc, ReleaseDate: s.ReleaseDate, Maturity: s.Maturity}
 		lim := s.Limits(r.cfg.BaseLimits)
 		// advertise what the engine really serves when it says (B2-05): the smaller of the
 		// configured and the reported per-slot budget
@@ -324,4 +324,19 @@ func (r *Router) DecisionMeta(profile string) server.DecisionMeta {
 		m.CalibrationProfile = st.ProfileID
 	}
 	return m
+}
+
+var _ server.MaturityReporter = (*Router)(nil)
+
+// Maturity returns "experimental" when the profile has not measured the question type above its baseline
+// (status experimental or unmeasured), "" otherwise (measured, no entry, unknown profile).
+func (r *Router) Maturity(profile, qtype string) string {
+	mm := r.specs[profile].Maturity
+	if len(mm) == 0 {
+		return "" // the catalog publishes no maturity for this profile
+	}
+	if e, ok := mm[qtype]; !ok || e.Experimental() { // a missing type is unmeasured, i.e. experimental
+		return "experimental"
+	}
+	return ""
 }

@@ -196,10 +196,15 @@ decide_serve() {
   _decide_exec serve "$@"
 }
 
+# decide_scale <profile> <N> - start/stop instances of one decision profile until N run (admission-bounded,
+# refusal exit 3 with exact numbers). The logic lives in the scheduler (lib/scheduler.sh sched_decision_scale),
+# the one place that owns budgets, reservations and service keys; this is only the front-end entry.
+decide_scale() { sched_decision_scale "$@"; }
+
 # The ONE list of Go subcommands the front end forwards verbatim (those with their own wrapper -
 # ask batch models key cert serve - are handled in cmd_decide). tests/test_decide_cli.sh compares it
 # with the commands the binary registers, so a new Go subcommand cannot be silently unreachable.
-_DECIDE_FORWARDED="scale calibrate probe-order schema completions registry port discover smoke mcp vantage"
+_DECIDE_FORWARDED="calibrate probe-order schema completions registry port discover smoke mcp vantage"
 _decide_is_forwarded() {
   local w
   for w in ${_DECIDE_FORWARDED}; do [[ "$1" == "${w}" ]] && return 0; done
@@ -579,6 +584,7 @@ cmd_decide() {
     serve)       decide_serve "$@" ;;
     key)         decide_key "$@" ;;
     cert)        decide_cert "$@" ;;
+    scale)       decide_scale "$@" ;;
     help|-h|--help) decide_usage ;;
     "")
       # Bare 'llmctl decide': the interactive wizard is the TTY intent;
@@ -586,7 +592,7 @@ cmd_decide() {
       if [[ -t 0 && -t 1 ]]; then
         decide_interactive
       else
-        err "decide: missing subcommand (ask|batch|models|capacity|status|interactive|serve|key|cert|calibrate|probe-order|completions|help)"
+        err "decide: missing subcommand (ask|batch|models|capacity|status|interactive|serve|key|cert|scale|calibrate|probe-order|completions|help)"
         return 2
       fi
       ;;
@@ -595,7 +601,7 @@ cmd_decide() {
         decide_passthrough "${sub}" "$@"
         return $?
       fi
-      err "unknown decide subcommand: ${sub} (ask|batch|models|capacity|status|interactive|serve|key|cert|calibrate|probe-order|completions|help)"
+      err "unknown decide subcommand: ${sub} (ask|batch|models|capacity|status|interactive|serve|key|cert|scale|calibrate|probe-order|completions|help)"
       return 2
       ;;
   esac

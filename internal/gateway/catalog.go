@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/vasic-digital/llmctl/internal/contract"
+	"github.com/vasic-digital/llmctl/internal/server"
 )
 
 // Decision protocols (catalog `decision.protocol`).
@@ -68,13 +69,25 @@ type ProfileSpec struct {
 	// value the downloader verified), "" when the catalog names none or several (SingleModelSHA).
 	// It is the "live model" a calibration profile must be bound to.
 	ModelSHA256 string
+	// Maturity is the catalog's per-type maturity (T138): nil = none published.
+	Maturity map[string]server.MaturityInfo
+}
+
+// rawMaturity is one question type's catalog maturity entry (T138; derived by scripts/maturity_from_golden.py).
+type rawMaturity struct {
+	Status     string   `json:"status"`
+	LowerBound *float64 `json:"lower_bound"`
+	Baseline   *float64 `json:"baseline"`
+	N          int      `json:"n"`
+	Reason     string   `json:"reason"`
 }
 
 type rawCatalog struct {
 	Profiles map[string]struct {
-		Port       int      `json:"port"`
-		Desc       string   `json:"desc"`
-		Capability []string `json:"capability"`
+		Maturity   map[string]rawMaturity `json:"maturity"`
+		Port       int                    `json:"port"`
+		Desc       string                 `json:"desc"`
+		Capability []string               `json:"capability"`
 		Files      []struct {
 			Role   string  `json:"role"`
 			SHA256 *string `json:"sha256"`
@@ -189,6 +202,17 @@ func ParseCatalog(data []byte) ([]ProfileSpec, error) {
 		msha, _ := SingleModelSHA(modelShas) // "" when unresolvable: never guessed
 		s := ProfileSpec{ModelSHA256: msha, ID: id, Protocol: d.Protocol, Port: p.Port, MaxOptions: DefaultMaxOptions,
 			ScoreLevels: [2]int{2, 10}, Experimental: d.Experimental, Notes: d.TierNote, Desc: p.Desc}
+		if len(p.Maturity) > 0 {
+			s.Maturity = map[string]server.MaturityInfo{}
+			for t, m := range p.Maturity {
+				switch m.Status {
+				case "measured", "experimental", "unmeasured":
+				default:
+					return nil, fmt.Errorf("gateway: profile %s: maturity.%s.status %q", id, t, m.Status)
+				}
+				s.Maturity[t] = server.MaturityInfo{Status: m.Status, LowerBound: m.LowerBound, Baseline: m.Baseline, N: m.N, Reason: m.Reason}
+			}
+		}
 		if p.Defaults != nil {
 			if c := p.Defaults.Ctx; c != nil {
 				if *c < 16 || *c > 1<<24 {

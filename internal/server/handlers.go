@@ -359,8 +359,8 @@ func maturityOf(m map[string]MaturityInfo) (map[string]maturityView, []string) {
 	var exp []string
 	for _, t := range []string{"noul", "choice", "score"} {
 		e, ok := m[t]
-		if !ok {
-			continue
+		if !ok { // a type absent from a published maturity map is unmeasured (same rule as the planner)
+			e = MaturityInfo{Status: "unmeasured", Reason: "not yet measured"}
 		}
 		v := maturityView{Status: e.Status, LowerBound: e.LowerBound, Baseline: e.Baseline, Reason: e.Reason}
 		if e.Status != "unmeasured" {

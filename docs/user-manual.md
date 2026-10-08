@@ -628,6 +628,15 @@ Service registry and port allocator (details: [registry-discovery](registry-disc
 (no network, no key). The MCP server itself is `build/llmctl-decide mcp` (stdio, one tool `decide`; a configuration problem becomes a tool error,
 never a default answer). See [agents](agents/README.md).
 
+### decide calibrate | probe-order | completions
+
+Implemented in the `llmctl-decide` binary (operator decision OD-23); `llmctl decide <name>` forwards to them. `scale` is **not** implemented (planned).
+`calibrate --profile P --labels F [--method temperature|platt|isotonic]` reports accuracy with a Wilson interval, baselines and ECE/MCE/Brier and
+writes a profile bound to the model sha256 and the prompt-template hash (with fewer than 200 labels, isotonic with fewer than 1000, or all-same outcomes, only the report is printed: no profile is written at all). `probe-order
+--questions F [--permute K]` measures option-order sensitivity. `completions {bash|zsh}` prints a completion script. Flags, label-file format and
+exit codes: [scripts/decide](scripts/decide.md#calibrate-probe-order-completions-od-23); how the gateway applies a profile:
+[decide-gateway](decide-gateway.md#calibration-and-the-decision-log); readable fields: [calibration-tool-fields](calibration-tool-fields.md).
+
 ### admit
 
 `llmctl admit <hf-repo> [--paper-only] [--json]` runs the candidate-model admission gates G1-G10; `llmctl admit --all` and `--summarize` cover the

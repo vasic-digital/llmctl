@@ -85,3 +85,14 @@ func TestModelsListingPublishesMaturityPerType(t *testing.T) {
 		t.Errorf("a profile without maturity data must not publish the keys: %s", r.body)
 	}
 }
+
+// A type missing from a non-empty maturity map is listed as unmeasured (experimental), like the planner.
+func TestMaturityOfMissingTypeIsUnmeasured(t *testing.T) {
+	v, exp := maturityOf(map[string]MaturityInfo{"noul": {Status: "measured"}})
+	if v["choice"].Status != "unmeasured" || v["score"].Status != "unmeasured" || v["choice"].Reason != "not yet measured" {
+		t.Errorf("missing types = %+v", v)
+	}
+	if strings.Join(exp, ",") != "choice,score" {
+		t.Errorf("experimental_types = %v, want choice,score", exp)
+	}
+}
