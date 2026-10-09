@@ -1,0 +1,53 @@
+P-001 200 9263ms
+P-002 200 6394ms
+P-003 422 7649ms MALFORMED(http 422)
+P-004 200 6279ms
+P-005 422 8668ms MALFORMED(http 422)
+P-006 200 6692ms
+P-007 422 5772ms MALFORMED(http 422)
+P-008 422 5389ms MALFORMED(http 422)
+P-009 422 8394ms MALFORMED(http 422)
+P-010 422 7201ms MALFORMED(http 422)
+P-011 422 7327ms MALFORMED(http 422)
+P-012 200 6627ms
+P-013 422 5576ms MALFORMED(http 422)
+P-014 200 5272ms
+P-015 200 5558ms
+P-016 422 6043ms MALFORMED(http 422)
+P-017 422 7664ms MALFORMED(http 422)
+P-018 200 7409ms
+P-019 200 8753ms
+P-020 422 7728ms MALFORMED(http 422)
+P-021 422 8320ms MALFORMED(http 422)
+P-022 200 8061ms
+P-023 200 5160ms
+records=23 orig=23 perm=0 well_formed=11/23
+noul   n=12 acc=0.583 CI95=[0.320,0.807] baseline=0.583 (majority) lower>baseline=False
+choice n=6 acc=0.500 CI95=[0.188,0.812] baseline=0.500 (majority) lower>baseline=False
+score  n=4 acc=0.000 CI95=[0.000,0.490] baseline=0.500 (majority) lower>baseline=False
+per-class:
+  noul:False             n=7 acc=0.571
+  noul:True              n=5 acc=0.600
+  choice:billing         n=3 acc=1.000
+  choice:eight           n=1 acc=0.000
+  choice:haiku           n=1 acc=0.000
+  choice:monday          n=1 acc=0.000
+  score:0                n=1 acc=0.000
+  score:1                n=2 acc=0.000
+  score:7                n=1 acc=0.000
+per-family (own majority baseline):
+  arithmetic                 n=3 acc=0.000 CI=[0.000,0.561] majority=0.333 lower>majority=False
+  date_reasoning             n=3 acc=0.333 CI=[0.061,0.792] majority=0.667 lower>majority=False
+  double_negative            n=3 acc=0.667 CI=[0.208,0.939] majority=0.667 lower>majority=False
+  forged_option              n=3 acc=0.667 CI=[0.208,0.939] majority=0.333 lower>majority=False
+  injection                  n=3 acc=0.667 CI=[0.208,0.939] majority=0.333 lower>majority=False
+  irrelevant_state           n=6 acc=0.333 CI=[0.097,0.700] majority=0.333 lower>majority=False
+  minimal_state              n=1 acc=1.000 CI=[0.207,1.000] majority=1.000 lower>majority=False
+option-order flip rate: n/a (0 of 0 groups)
+accuracy by option count:
+    3 options n=4 acc=0.750 CI=[0.301,0.954]
+    4 options n=1 acc=0.000 CI=[0.000,0.793]
+    7 options n=1 acc=0.000 CI=[0.000,0.793]
+calibration: insufficient for calibration (n=10, need 200)
+results: /home/milosvasic/llmctl-work/evidence/decide-pro/probes/results.json
+rc=1

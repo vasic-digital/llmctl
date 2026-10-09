@@ -1,0 +1,178 @@
+{
+ "profile": "decide-nli",
+ "note": "synthetic state text; no golden-set text; keys never recorded",
+ "gateway_status": [
+  200,
+  200,
+  200,
+  200,
+  200,
+  200,
+  200,
+  200
+ ],
+ "gateway_bodies_sha256": [
+  "f12eb0a632cc7e61fc997d50043c6c1fcd224b82fb2f24d12f7f1d010934216d"
+ ],
+ "gateway_byte_identical_8of8": true,
+ "gateway_latency_ms": [
+  3361.0,
+  4639.7,
+  3366.2,
+  2443.6,
+  4257.5,
+  4397.7,
+  4332.5,
+  4213.0
+ ],
+ "gateway_sample_body": "{\"model\":\"decide-nli\",\"answers\":{\"route\":{\"type\":\"choice\",\"choice\":\"billing\",\"probabilities\":{\"billing\":0.976178706,\"shipping\":0.004384589,\"technical\":0.019436705},\"confidence\":0.964268059,\"maturity\":\"experimental\"},\"angry\":{\"type\":\"noul\",\"noul\":0.61127238,\"maturity\":\"experimental\"},\"urgency\":{\"type\":\"score\",\"score\":2.114016122,\"legend\":{\"0\":\"can wait\",\"1\":\"this week\",\"2\":\"today\",\"3\":\"right now\"},\"probabilities\":{\"0\":0.049194288,\"1\":0.321298916,\"2\":0.095803182,\"3\":0.533703614},\"confidence\":0.378271486,\"maturity\":\"experimental\"}},\"usage\":{\"input_tokens\":276,\"output_tokens\":0}}",
+ "engine_status": [
+  200,
+  200,
+  200,
+  200,
+  200,
+  200,
+  200,
+  200
+ ],
+ "engine_bodies_sha256": [
+  "64424b6f5e130ae720f8bde82d802ffd6dc3b2c27b872343958fe1a4e5d05b4f"
+ ],
+ "engine_byte_identical_8of8": true,
+ "engine_latency_ms_3pairs": [
+  935.3,
+  1688.6,
+  898.4,
+  1290.2,
+  1730.7,
+  1828.9,
+  1369.2,
+  1645.7
+ ],
+ "engine_sample": {
+  "labels": [
+   "entailment",
+   "not_entailment"
+  ],
+  "label_source": "config:config.json",
+  "truncated": [
+   false,
+   false,
+   false
+  ],
+  "model": "llmctl-decide-nli",
+  "max_tokens": 512,
+  "scores": [
+   [
+    0.47270327899909675,
+    0.5272967210009032
+   ],
+   [
+    0.0018546957300610075,
+    0.9981453042699391
+   ],
+   [
+    0.0004134587490544572,
+    0.9995865412509455
+   ]
+  ]
+ },
+ "batch_composition": {
+  "alone": [
+   0.9964139763000809,
+   0.003586023699919262
+  ],
+  "variants": {
+   "first_in_20": {
+    "max_abs_diff": 0.0,
+    "byte_identical": true,
+    "argmax_same": true
+   },
+   "last_in_20": {
+    "max_abs_diff": 0.0,
+    "byte_identical": true,
+    "argmax_same": true
+   },
+   "middle_in_3": {
+    "max_abs_diff": 0.0,
+    "byte_identical": true,
+    "argmax_same": true
+   }
+  },
+  "interpretation": "padding to the longest row can change the last decimals; argmax must not change"
+ },
+ "d01_http": {
+  "labels": [
+   "entailment",
+   "not_entailment"
+  ],
+  "long_state_truncated": [
+   true
+  ],
+  "long_scores": [
+   0.994704434733478,
+   0.005295565266522037
+  ],
+  "short_state_scores": [
+   0.9983498976927316,
+   0.0016501023072683248
+  ],
+  "long_state_contradicting_hypothesis_scores": [
+   0.0008127549474584669,
+   0.9991872450525415
+  ],
+  "label_source": "config:config.json",
+  "entailment_long_vs_contradicting": [
+   0.994704434733478,
+   0.0008127549474584669
+  ],
+  "hypothesis_visible_to_model": true
+ },
+ "d01_gateway_long_state": {
+  "status": 422,
+  "x-llmctl-decide-truncated": null,
+  "body": "{\"message\":\"State plus question exceeds the budget.\",\"error_type\":\"validation_failed\"}"
+ },
+ "hypothesis_too_long_runtime": {
+  "status": 422,
+  "body": "{\"error\": \"hypothesis_too_long\", \"message\": \"hypothesis alone needs 700 tokens; max_tokens=512 leaves no room for the premise\"}"
+ },
+ "edges": {
+  "runtime_no_key": {
+   "status": 401,
+   "ms": 3.1,
+   "body": "{\"error\": \"unauthorized\", \"message\": \"missing or invalid bearer key\"}"
+  },
+  "runtime_wrong_key": {
+   "status": 401,
+   "ms": 0.7,
+   "body": "{\"error\": \"unauthorized\", \"message\": \"missing or invalid bearer key\"}"
+  },
+  "runtime_empty_pairs": {
+   "status": 400,
+   "ms": 1.4,
+   "body": "{\"error\": \"bad_request\", \"message\": \"pairs must be a non-empty array\"}"
+  },
+  "gateway_no_key": {
+   "status": 401,
+   "ms": 2.9,
+   "body": "{\"message\":\"Authentication required.\",\"error_type\":\"unauthorized\"}"
+  },
+  "gateway_unknown_model": {
+   "status": 422,
+   "ms": 3.7,
+   "body": "{\"message\":\"Unknown model.\",\"error_type\":\"unknown_model\"}"
+  },
+  "gateway_twenty_options": {
+   "status": 200,
+   "ms": 4661.0,
+   "body": "{\"model\":\"decide-nli\",\"answers\":{\"c\":{\"type\":\"choice\",\"choice\":\"opt11\",\"probabilities\":{\"opt00\":0.036483492,\"opt01\":0.012379097,\"opt02\":0.045459141,\"opt03\":0.042025473,\"opt04\":0.047519561,\"opt05\":0.039001285,\"opt06\":0.044672952,\"opt07\":0.043849906,\"opt08\":0.04334318,\"opt09\":0.043263888,\"opt10\":0.056"
+  },
+  "gateway_twentyone_options": {
+   "status": 422,
+   "ms": 4.9,
+   "body": "{\"message\":\"Request failed validation.\",\"error_type\":\"validation_failed\"}"
+  }
+ }
+}

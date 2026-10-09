@@ -1,0 +1,193 @@
+{
+  "meta": {
+    "fixture_sha256": {
+      "questions": "4d6d0538af09b3dd893ef636f36d1b796beb66f4c3f57c7dd489397ecbff8ef4"
+    },
+    "labeled_by": "agent-authored; human-review-pending",
+    "permute_groups": false,
+    "profile": "decide-2b",
+    "run_id": "decide-2b-smoke",
+    "seed": "20261007",
+    "sets": [
+      "questions"
+    ]
+  },
+  "records": [
+    {
+      "attempts": 1,
+      "calibration": null,
+      "confidence": 0.943570059,
+      "confidence_raw": null,
+      "difficulty": "easy",
+      "error": null,
+      "expected": "bug",
+      "family": "ticket_type",
+      "id": "C-001",
+      "item": "C-001",
+      "latency_ms": 3154,
+      "option_count": 2,
+      "option_order": null,
+      "p_pred": 0.971785029,
+      "pair_id": null,
+      "pair_variant": null,
+      "perm_group": "pg-C-001",
+      "predicted": "bug",
+      "request_id": "fd173f10bbfae8f2",
+      "scale": null,
+      "set": "questions",
+      "status": 200,
+      "type": "choice",
+      "variant": "orig",
+      "well_formed": true
+    },
+    {
+      "attempts": 1,
+      "calibration": null,
+      "confidence": 0.478290472,
+      "confidence_raw": null,
+      "difficulty": "easy",
+      "error": null,
+      "expected": "feature_request",
+      "family": "ticket_type",
+      "id": "C-002",
+      "item": "C-002",
+      "latency_ms": 2676,
+      "option_count": 2,
+      "option_order": null,
+      "p_pred": 0.739145236,
+      "pair_id": null,
+      "pair_variant": null,
+      "perm_group": "pg-C-002",
+      "predicted": "feature_request",
+      "request_id": "2884ef6e3823bdad",
+      "scale": null,
+      "set": "questions",
+      "status": 200,
+      "type": "choice",
+      "variant": "orig",
+      "well_formed": true
+    },
+    {
+      "attempts": 1,
+      "calibration": null,
+      "confidence": 0.966491538,
+      "confidence_raw": null,
+      "difficulty": "easy",
+      "error": null,
+      "expected": "success",
+      "family": "log_outcome",
+      "id": "C-003",
+      "item": "C-003",
+      "latency_ms": 3437,
+      "option_count": 2,
+      "option_order": null,
+      "p_pred": 0.983245769,
+      "pair_id": null,
+      "pair_variant": null,
+      "perm_group": "pg-C-003",
+      "predicted": "success",
+      "request_id": "78c44b08109dd30e",
+      "scale": null,
+      "set": "questions",
+      "status": 200,
+      "type": "choice",
+      "variant": "orig",
+      "well_formed": true
+    }
+  ],
+  "report": {
+    "accuracy_by_option_count": {
+      "2": {
+        "accuracy": 1.0,
+        "correct": 3,
+        "n": 3,
+        "wilson_high": 1.0,
+        "wilson_low": 0.4385029682449546
+      }
+    },
+    "accuracy_by_scale": {},
+    "by_type": {
+      "choice": {
+        "accuracy": 1.0,
+        "baseline": 0.5,
+        "baseline_kind": "chance",
+        "chance_level": 0.5,
+        "correct": 3,
+        "lower_bound_exceeds_baseline": false,
+        "majority_label": "bug",
+        "majority_share": 0.3333333333333333,
+        "n": 3,
+        "wilson_high": 1.0,
+        "wilson_low": 0.4385029682449546
+      }
+    },
+    "calibrated_records": 0,
+    "calibration": {
+      "n": 3,
+      "required": 200,
+      "status": "insufficient for calibration"
+    },
+    "calibration_input": "p_pred = the winner's own raw probability; the gateway's served `confidence` (calibrated when a profile is applied) and `confidence_raw` are never used",
+    "flip": {
+      "flip_rate": null,
+      "flipped": 0,
+      "groups": 0
+    },
+    "orig_items": 3,
+    "pair_consistency": {
+      "agree": 0,
+      "agreement": null,
+      "pairs": 0
+    },
+    "per_class": {
+      "choice:bug": {
+        "accuracy": 1.0,
+        "correct": 1,
+        "n": 1,
+        "wilson_high": 1.0,
+        "wilson_low": 0.20654931437723745
+      },
+      "choice:feature_request": {
+        "accuracy": 1.0,
+        "correct": 1,
+        "n": 1,
+        "wilson_high": 1.0,
+        "wilson_low": 0.20654931437723745
+      },
+      "choice:success": {
+        "accuracy": 1.0,
+        "correct": 1,
+        "n": 1,
+        "wilson_high": 1.0,
+        "wilson_low": 0.20654931437723745
+      }
+    },
+    "per_family": {
+      "log_outcome": {
+        "accuracy": 1.0,
+        "correct": 1,
+        "lower_bound_exceeds_majority": false,
+        "majority_share": 1.0,
+        "n": 1,
+        "wilson_high": 1.0,
+        "wilson_low": 0.20654931437723745
+      },
+      "ticket_type": {
+        "accuracy": 1.0,
+        "correct": 2,
+        "lower_bound_exceeds_majority": false,
+        "majority_share": 0.5,
+        "n": 2,
+        "wilson_high": 1.0,
+        "wilson_low": 0.34238022750665303
+      }
+    },
+    "perm_items": 0,
+    "records": 3,
+    "well_formed": {
+      "n": 3,
+      "ok": 3,
+      "rate": 1.0
+    }
+  }
+}

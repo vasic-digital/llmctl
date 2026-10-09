@@ -1,0 +1,10 @@
+profile=decide-max ctx=8192 port=41341 date=2026-10-08T17:19:13Z host=nezha nproc=8
+model_file=jevk5-9b-v0.3.3-Q8_0.gguf bytes=9527501280 (9086.1 MiB) sha256=283de8fd216ad2200506d9236e574ddb5902b16e6a806a6fa38e9dd1b4286edf
+repo=alibiserikbay/JevK5-GGUF@ec67b0bfce5119a8b11a2cdb430bb43e3fa3e82a
+ 19:19:13 up 23:54,  4 users,  load average: 4.12, 4.33, 4.32
+               total        used        free      shared  buff/cache   available
+Mem:           64086        4527       11822         266       49295       59559
+Swap:          48426           2       48424
+model name	: 11th Gen Intel(R) Core(TM) i7-1165G7 @ 2.80GHz
+version: 0.5.0-dev (build 1, commit 1537a0a)
+built with GNU 14.3.1 for Linux x86_64

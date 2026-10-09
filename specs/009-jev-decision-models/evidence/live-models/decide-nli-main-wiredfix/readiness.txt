@@ -1,0 +1,1 @@
+ready_after_s=7 healthz={"status": "ok"} readyz={"status": "ready"}

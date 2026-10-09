@@ -1,0 +1,35 @@
+{
+  "files": [
+    {
+      "path": "evidence.jsonl",
+      "sha256": "d287be8b50acb198a7c4115d351a9fe3d6dfcc959d9ae5647c38799578961360",
+      "size": 2604
+    },
+    {
+      "path": "raw/EV-decide-golden-0001-stdout.txt",
+      "sha256": "089b6d1fef4134a05c49bda31fde3248cbecda88b2be14fa179f167dce691d9c",
+      "size": 15748
+    },
+    {
+      "path": "raw/EV-decide-golden-0002-stdout.txt",
+      "sha256": "089b6d1fef4134a05c49bda31fde3248cbecda88b2be14fa179f167dce691d9c",
+      "size": 15748
+    },
+    {
+      "path": "raw/EV-decide-golden-0003-stdout.txt",
+      "sha256": "089b6d1fef4134a05c49bda31fde3248cbecda88b2be14fa179f167dce691d9c",
+      "size": 15748
+    },
+    {
+      "path": "raw/responses.jsonl",
+      "sha256": "d651e8064b1bc0e9fc7e35a23aaf90f19b2a21345fa803499838c5c4d8d2219c",
+      "size": 40397
+    },
+    {
+      "path": "results.json",
+      "sha256": "25247b2e1168cd8295830a24401a3ffa3e41ad45b6a70cec106571a33229e8da",
+      "size": 143426
+    }
+  ],
+  "schema": 1
+}

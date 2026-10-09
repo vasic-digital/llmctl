@@ -1,0 +1,20 @@
+{"component": "onnx-runtime", "event": "model_loaded", "model": "onnx/model.onnx", "inputs": ["input_ids", "attention_mask"], "tokenizer": "spm.model", "max_tokens": 512}
+{"component": "onnx-runtime", "event": "smoke", "ok": true, "detail": "labels=2", "label_source": "config:config.json"}
+{"component": "onnx-runtime", "event": "listening", "host": "127.0.0.1", "port": 8196, "profile": "decide-nli", "ready": true, "max_tokens": 512, "max_pairs": 64}
+{"component": "onnx-runtime", "event": "score", "pairs": 2, "truncated": 0}
+{"component": "onnx-runtime", "event": "score", "pairs": 4, "truncated": 0}
+{"component": "onnx-runtime", "event": "score", "pairs": 3, "truncated": 0}
+{"component": "onnx-runtime", "event": "score", "pairs": 3, "truncated": 0}
+{"component": "onnx-runtime", "event": "score", "pairs": 3, "truncated": 0}
+{"component": "onnx-runtime", "event": "score", "pairs": 3, "truncated": 0}
+{"component": "onnx-runtime", "event": "score", "pairs": 3, "truncated": 0}
+{"component": "onnx-runtime", "event": "score", "pairs": 3, "truncated": 0}
+{"component": "onnx-runtime", "event": "score", "pairs": 3, "truncated": 0}
+{"component": "onnx-runtime", "event": "score", "pairs": 3, "truncated": 0}
+{"component": "onnx-runtime", "event": "score", "pairs": 1, "truncated": 0}
+{"component": "onnx-runtime", "event": "score", "pairs": 20, "truncated": 0}
+{"component": "onnx-runtime", "event": "score", "pairs": 20, "truncated": 0}
+{"component": "onnx-runtime", "event": "score", "pairs": 3, "truncated": 0}
+{"component": "onnx-runtime", "event": "score", "pairs": 1, "truncated": 1}
+{"component": "onnx-runtime", "event": "score", "pairs": 1, "truncated": 0}
+{"component": "onnx-runtime", "event": "score", "pairs": 1, "truncated": 1}

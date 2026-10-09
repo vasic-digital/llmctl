@@ -1,0 +1,58 @@
+{
+ "engine_prompt_overhead_tokens_for_one_noul_question": 97,
+ "gateway_state_2100_tokens": {
+  "state_tokens": 2100,
+  "state_chars": 2854,
+  "status": 200,
+  "ms": 88629,
+  "body": null,
+  "usage": {
+   "input_tokens": 2197,
+   "output_tokens": 0
+  },
+  "window_ctx": 8192
+ },
+ "engine_direct_50pct_window": {
+  "state_tokens": 3999,
+  "state_chars": 5434,
+  "engine_status": 200,
+  "ms": 179026,
+  "body": null,
+  "usage": {
+   "input_tokens": 4096,
+   "output_tokens": 0
+  },
+  "VmHWM_MiB_after": 5586.3,
+  "VmRSS_MiB_after": 5586.3
+ },
+ "engine_direct_max_fit": {
+  "state_tokens": 8089,
+  "state_chars": 10967,
+  "engine_status": 200,
+  "ms": 387607,
+  "body": null,
+  "usage": {
+   "input_tokens": 8186,
+   "output_tokens": 0
+  },
+  "VmHWM_MiB_after": 5682.0,
+  "VmRSS_MiB_after": 5682.0
+ },
+ "engine_direct_over_window_by_64": {
+  "state_tokens": 8159,
+  "state_chars": 11065,
+  "engine_status": 400,
+  "ms": 5,
+  "body": "{\"error\":{\"code\":400,\"message\":\"request (8256 tokens) exceeds the available context size (8192 tokens), try increasing it\",\"type\":\"exceed_context_size_error\",\"n_prompt_tokens\":8256,\"n_ctx\":8192}}",
+  "VmHWM_MiB_after": 5688.1,
+  "VmRSS_MiB_after": 5688.1
+ },
+ "gateway_state_115pct_of_window_raised_char_cap": {
+  "state_tokens": 9420,
+  "state_chars": 12767,
+  "status": 422,
+  "ms": 7,
+  "body": "{\"message\":\"State plus question exceeds the budget.\",\"error_type\":\"validation_failed\"}",
+  "window_ctx": 8192
+ }
+}

@@ -1,0 +1,8 @@
+c5301defb73a949536fe741b597d3bd089df4109
+ M internal/gateway/letter.go
+0c16f65ac17941bc0bdebd00194bd909caa1e092acbd1c76e3490d9ab6b2a50f  build/llmctl-decide
+               total        used        free      shared  buff/cache   available
+Mem:           30974        8639        2428         296       20582       22334
+memory.used [MiB]
+7435 MiB
+VmRSS:	 4678348 kB

@@ -1,0 +1,79 @@
+{
+ "profile": "decide-2b",
+ "gateway_status": [
+  422,
+  422,
+  422,
+  422,
+  422,
+  422,
+  422,
+  422
+ ],
+ "gateway_bodies_sha256": [
+  "45a98136d35d732233eb5881663cb9600cad14822e7b7aac96efffa46b3496ee"
+ ],
+ "gateway_byte_identical_8of8": false,
+ "gateway_latency_ms": [
+  3307.8,
+  2198.7,
+  2502.0,
+  2268.0,
+  2527.5,
+  2163.8,
+  2719.6,
+  2217.4
+ ],
+ "gateway_sample_body": "{\"message\":\"The model produced no usable answer for this question.\",\"error_type\":\"readout_failed\"}",
+ "engine_status": [],
+ "engine_bodies_sha256": [],
+ "engine_byte_identical_8of8": null,
+ "engine_model_field_is_a_local_path": null,
+ "gateway_model_field": null,
+ "edges": {
+  "single_option_choice": {
+   "status": 422,
+   "ms": 4.3,
+   "body": "{\"message\":\"Request failed validation.\",\"error_type\":\"validation_failed\"}"
+  },
+  "no_key": {
+   "status": 401,
+   "ms": 3.0,
+   "body": "{\"message\":\"Authentication required.\",\"error_type\":\"unauthorized\"}"
+  },
+  "wrong_key": {
+   "status": 401,
+   "ms": 27.9,
+   "body": "{\"message\":\"Authentication required.\",\"error_type\":\"unauthorized\"}"
+  },
+  "unknown_model": {
+   "status": 422,
+   "ms": 2.2,
+   "body": "{\"message\":\"Unknown model.\",\"error_type\":\"unknown_model\"}"
+  },
+  "state_6500_chars": {
+   "status": 422,
+   "ms": 27653.9,
+   "body": "{\"message\":\"The model produced no usable answer for this question.\",\"error_type\":\"readout_failed\"}"
+  },
+  "state_8000_chars": {
+   "status": 422,
+   "ms": 34573.9,
+   "body": "{\"message\":\"The model produced no usable answer for this question.\",\"error_type\":\"readout_failed\"}"
+  },
+  "state_9000_chars_over_gateway_cap": {
+   "status": 422,
+   "ms": 5.6,
+   "body": "{\"message\":\"State plus question exceeds the budget.\",\"error_type\":\"validation_failed\"}"
+  },
+  "state_dense_7500_hex_chars_token_overflow": {
+   "status": null,
+   "note": "SKIPPED for window >= 4096: ~6.7k-token state needs > 15 min on this CPU (the lev run hit the 900 s gateway timeout -> 502); the large-state behaviour is covered by long-state.json (engine_direct_max_fit)"
+  },
+  "twenty_options": {
+   "status": 422,
+   "ms": 7099.4,
+   "body": "{\"message\":\"The model produced no usable answer for this question.\",\"error_type\":\"readout_failed\"}"
+  }
+ }
+}

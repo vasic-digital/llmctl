@@ -1,0 +1,2 @@
+llmctl decide gateway: stopped
+rc=0

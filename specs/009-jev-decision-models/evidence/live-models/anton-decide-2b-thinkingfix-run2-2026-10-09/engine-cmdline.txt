@@ -1,0 +1,1 @@
+/home/milosvasic/Projects/llmctl/submodules/llama.cpp/build/bin/llama-server --model /home/milosvasic/.local/share/llmctl/models/decide-2b/jevk5-2b-v0.2-Q8_0.gguf --host 127.0.0.1 --port 8197 --ctx-size 8192 --n-gpu-layers 0 --flash-attn auto --parallel 1 --jinja --api-key-file <keyfile> --no-webui --cache-type-k q8_0 --cache-type-v q8_0

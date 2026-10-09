@@ -1,0 +1,11 @@
+bounded-run: bounded-run-live-decide-pro.scope MemoryMax=10G MemoryHigh=8589934592 TasksMax=500 CPUQuota=1200% SwapMax=0 timeout=5400s
+--- smoke:
+per-family (own majority baseline):
+  log_outcome                n=1 acc=1.000 CI=[0.207,1.000] majority=1.000 lower>majority=False
+  ticket_type                n=2 acc=1.000 CI=[0.342,1.000] majority=0.500 lower>majority=False
+option-order flip rate: n/a (0 of 0 groups)
+accuracy by option count:
+    2 options n=3 acc=1.000 CI=[0.439,1.000]
+calibration: insufficient for calibration (n=3, need 200)
+results: /home/milosvasic/Projects/llmctl/specs/009-jev-decision-models/evidence/live-models/anton-decide-pro-thinkingfix-2026-10-09/smoke/results.json
+rc=0

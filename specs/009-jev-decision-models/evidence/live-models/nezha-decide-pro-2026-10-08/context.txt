@@ -1,0 +1,10 @@
+profile=decide-pro ctx=8192 port=37173 date=2026-10-08T15:55:56Z host=nezha nproc=8
+model_file=spark-x2.5-4b-rizzo-flow-lora-q8_0.gguf bytes=4375021216 (4172.3 MiB) sha256=dbec3c89d33984772324e65a8ed56b48e958e301b856cb870a7c1b385d01691a
+repo=rizzoaiacademy/rizzo-flow@55633c8cbd2b826bd3eefdeb05310450996649df
+ 17:55:56 up 22:31,  4 users,  load average: 4.32, 4.37, 4.46
+               total        used        free      shared  buff/cache   available
+Mem:           64086        4780       11586         271       49283       59306
+Swap:          48426           0       48426
+model name	: 11th Gen Intel(R) Core(TM) i7-1165G7 @ 2.80GHz
+version: 0.5.0-dev (build 1, commit 1537a0a)
+built with GNU 14.3.1 for Linux x86_64

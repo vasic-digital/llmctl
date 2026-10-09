@@ -1,0 +1,5 @@
+some avg10=0.00 avg60=0.02 avg300=0.04 total=10264823
+full avg10=0.00 avg60=0.02 avg300=0.04 total=10099297
+               total        used        free      shared  buff/cache   available
+Mem:           30974        9330        1145         298       21179       21643
+Swap:           8191        3805        4386

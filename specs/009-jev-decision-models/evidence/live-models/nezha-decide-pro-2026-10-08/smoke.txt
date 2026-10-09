@@ -1,0 +1,4 @@
+{"protocol":"letter-logit","type":"choice","choice":"billing","confidence":0.263031522,"ok":true,"probabilities":{"billing":0.631515761,"legal":0.368484239}}
+rc=0
+llmctl-decide smoke: smoke: the engine readout is flagged (option_missing): an option letter is absent from its first-token alternatives
+rc=1

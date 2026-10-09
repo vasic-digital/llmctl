@@ -1,0 +1,178 @@
+{
+ "profile": "decide-nli",
+ "note": "synthetic state text; no golden-set text; keys never recorded",
+ "gateway_status": [
+  503,
+  503,
+  503,
+  503,
+  503,
+  503,
+  503,
+  503
+ ],
+ "gateway_bodies_sha256": [
+  "02cb0e4b464b9c09440c65c9e5b9245f65d8652b797dbd0e0694ff3370c1aee9"
+ ],
+ "gateway_byte_identical_8of8": false,
+ "gateway_latency_ms": [
+  3.6,
+  2.3,
+  2.4,
+  2.2,
+  2.3,
+  2.6,
+  2.3,
+  2.3
+ ],
+ "gateway_sample_body": "{\"message\":\"Service not ready.\",\"error_type\":\"not_ready\"}",
+ "engine_status": [
+  200,
+  200,
+  200,
+  200,
+  200,
+  200,
+  200,
+  200
+ ],
+ "engine_bodies_sha256": [
+  "64424b6f5e130ae720f8bde82d802ffd6dc3b2c27b872343958fe1a4e5d05b4f"
+ ],
+ "engine_byte_identical_8of8": true,
+ "engine_latency_ms_3pairs": [
+  647.5,
+  902.2,
+  777.3,
+  695.7,
+  805.6,
+  811.5,
+  807.3,
+  728.8
+ ],
+ "engine_sample": {
+  "labels": [
+   "entailment",
+   "not_entailment"
+  ],
+  "label_source": "config:config.json",
+  "truncated": [
+   false,
+   false,
+   false
+  ],
+  "model": "llmctl-decide-nli",
+  "max_tokens": 512,
+  "scores": [
+   [
+    0.47270327899909675,
+    0.5272967210009032
+   ],
+   [
+    0.0018546957300610075,
+    0.9981453042699391
+   ],
+   [
+    0.0004134587490544572,
+    0.9995865412509455
+   ]
+  ]
+ },
+ "batch_composition": {
+  "alone": [
+   0.9964139763000809,
+   0.003586023699919262
+  ],
+  "variants": {
+   "first_in_20": {
+    "max_abs_diff": 0.0,
+    "byte_identical": true,
+    "argmax_same": true
+   },
+   "last_in_20": {
+    "max_abs_diff": 0.0,
+    "byte_identical": true,
+    "argmax_same": true
+   },
+   "middle_in_3": {
+    "max_abs_diff": 0.0,
+    "byte_identical": true,
+    "argmax_same": true
+   }
+  },
+  "interpretation": "padding to the longest row can change the last decimals; argmax must not change"
+ },
+ "d01_http": {
+  "labels": [
+   "entailment",
+   "not_entailment"
+  ],
+  "long_state_truncated": [
+   true
+  ],
+  "long_scores": [
+   0.994704434733478,
+   0.005295565266522037
+  ],
+  "short_state_scores": [
+   0.9983498976927316,
+   0.0016501023072683248
+  ],
+  "long_state_contradicting_hypothesis_scores": [
+   0.0008127549474584669,
+   0.9991872450525415
+  ],
+  "label_source": "config:config.json",
+  "entailment_long_vs_contradicting": [
+   0.994704434733478,
+   0.0008127549474584669
+  ],
+  "hypothesis_visible_to_model": true
+ },
+ "d01_gateway_long_state": {
+  "status": 503,
+  "x-llmctl-decide-truncated": null,
+  "body": "{\"message\":\"Service not ready.\",\"error_type\":\"not_ready\"}"
+ },
+ "hypothesis_too_long_runtime": {
+  "status": 422,
+  "body": "{\"error\": \"hypothesis_too_long\", \"message\": \"hypothesis alone needs 700 tokens; max_tokens=512 leaves no room for the premise\"}"
+ },
+ "edges": {
+  "runtime_no_key": {
+   "status": 401,
+   "ms": 1.1,
+   "body": "{\"error\": \"unauthorized\", \"message\": \"missing or invalid bearer key\"}"
+  },
+  "runtime_wrong_key": {
+   "status": 401,
+   "ms": 3.0,
+   "body": "{\"error\": \"unauthorized\", \"message\": \"missing or invalid bearer key\"}"
+  },
+  "runtime_empty_pairs": {
+   "status": 400,
+   "ms": 3.9,
+   "body": "{\"error\": \"bad_request\", \"message\": \"pairs must be a non-empty array\"}"
+  },
+  "gateway_no_key": {
+   "status": 401,
+   "ms": 2.4,
+   "body": "{\"message\":\"Authentication required.\",\"error_type\":\"unauthorized\"}"
+  },
+  "gateway_unknown_model": {
+   "status": 503,
+   "ms": 2.3,
+   "body": "{\"message\":\"Service not ready.\",\"error_type\":\"not_ready\"}"
+  },
+  "gateway_twenty_options": {
+   "status": 503,
+   "ms": 2.3,
+   "body": "{\"message\":\"Service not ready.\",\"error_type\":\"not_ready\"}"
+  },
+  "gateway_twentyone_options": {
+   "status": 503,
+   "ms": 2.3,
+   "body": "{\"message\":\"Service not ready.\",\"error_type\":\"not_ready\"}"
+  }
+ }
+}

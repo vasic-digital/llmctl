@@ -1,0 +1,17 @@
+C-001 200 7355ms
+C-002 200 7123ms
+C-003 200 16709ms
+records=3 orig=3 perm=0 well_formed=3/3
+choice n=3 acc=1.000 CI95=[0.439,1.000] baseline=0.500 (chance) lower>baseline=False
+per-class:
+  choice:bug             n=1 acc=1.000
+  choice:feature_request n=1 acc=1.000
+  choice:success         n=1 acc=1.000
+per-family (own majority baseline):
+  log_outcome                n=1 acc=1.000 CI=[0.207,1.000] majority=1.000 lower>majority=False
+  ticket_type                n=2 acc=1.000 CI=[0.342,1.000] majority=0.500 lower>majority=False
+option-order flip rate: n/a (0 of 0 groups)
+accuracy by option count:
+    2 options n=3 acc=1.000 CI=[0.439,1.000]
+calibration: insufficient for calibration (n=3, need 200)
+results: /home/milosvasic/Projects/llmctl/specs/009-jev-decision-models/evidence/live-models/anton-decide-pro-thinkingfix-2026-10-09/smoke/results.json

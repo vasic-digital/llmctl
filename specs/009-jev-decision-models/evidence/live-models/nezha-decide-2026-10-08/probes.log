@@ -1,0 +1,53 @@
+P-001 422 4898ms MALFORMED(http 422)
+P-002 422 3830ms MALFORMED(http 422)
+P-003 422 4289ms MALFORMED(http 422)
+P-004 422 3367ms MALFORMED(http 422)
+P-005 422 4610ms MALFORMED(http 422)
+P-006 422 3629ms MALFORMED(http 422)
+P-007 422 3204ms MALFORMED(http 422)
+P-008 422 2953ms MALFORMED(http 422)
+P-009 422 4538ms MALFORMED(http 422)
+P-010 422 4044ms MALFORMED(http 422)
+P-011 422 3646ms MALFORMED(http 422)
+P-012 422 3290ms MALFORMED(http 422)
+P-013 422 3128ms MALFORMED(http 422)
+P-014 422 2891ms MALFORMED(http 422)
+P-015 422 2887ms MALFORMED(http 422)
+P-016 422 3301ms MALFORMED(http 422)
+P-017 422 4106ms MALFORMED(http 422)
+P-018 422 3790ms MALFORMED(http 422)
+P-019 422 4682ms MALFORMED(http 422)
+P-020 422 4118ms MALFORMED(http 422)
+P-021 422 4591ms MALFORMED(http 422)
+P-022 422 4401ms MALFORMED(http 422)
+P-023 422 2670ms MALFORMED(http 422)
+records=23 orig=23 perm=0 well_formed=0/23
+noul   n=12 acc=0.000 CI95=[0.000,0.242] baseline=0.583 (majority) lower>baseline=False
+choice n=6 acc=0.000 CI95=[0.000,0.390] baseline=0.500 (majority) lower>baseline=False
+score  n=4 acc=0.000 CI95=[0.000,0.490] baseline=0.500 (majority) lower>baseline=False
+per-class:
+  noul:False             n=7 acc=0.000
+  noul:True              n=5 acc=0.000
+  choice:billing         n=3 acc=0.000
+  choice:eight           n=1 acc=0.000
+  choice:haiku           n=1 acc=0.000
+  choice:monday          n=1 acc=0.000
+  score:0                n=1 acc=0.000
+  score:1                n=2 acc=0.000
+  score:7                n=1 acc=0.000
+per-family (own majority baseline):
+  arithmetic                 n=3 acc=0.000 CI=[0.000,0.561] majority=0.333 lower>majority=False
+  date_reasoning             n=3 acc=0.000 CI=[0.000,0.561] majority=0.667 lower>majority=False
+  double_negative            n=3 acc=0.000 CI=[0.000,0.561] majority=0.667 lower>majority=False
+  forged_option              n=3 acc=0.000 CI=[0.000,0.561] majority=0.333 lower>majority=False
+  injection                  n=3 acc=0.000 CI=[0.000,0.561] majority=0.333 lower>majority=False
+  irrelevant_state           n=6 acc=0.000 CI=[0.000,0.390] majority=0.333 lower>majority=False
+  minimal_state              n=1 acc=0.000 CI=[0.000,0.793] majority=1.000 lower>majority=False
+option-order flip rate: n/a (0 of 0 groups)
+accuracy by option count:
+    3 options n=4 acc=0.000 CI=[0.000,0.490]
+    4 options n=1 acc=0.000 CI=[0.000,0.793]
+    7 options n=1 acc=0.000 CI=[0.000,0.793]
+calibration: insufficient for calibration (n=0, need 200)
+results: /home/milosvasic/llmctl-work/evidence/decide/probes/results.json
+rc=1

@@ -1,0 +1,1 @@
+INVALID RUN - kept for honesty. Gateway was never told the engine address (LLMCTL_DECIDE_ENDPOINT_DECIDE_NLI unset) so all 173 requests got 503 not_ready; RESULT.txt "COMPLETED" refers only to the script finishing. Root cause + fix: run_live_nli.sh wiring (tests/test_run_live_nli.sh). Not model evidence.

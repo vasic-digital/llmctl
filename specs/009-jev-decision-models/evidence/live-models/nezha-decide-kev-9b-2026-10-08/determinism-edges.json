@@ -1,0 +1,90 @@
+{
+ "profile": "decide-kev-9b",
+ "gateway_status": [
+  200,
+  200,
+  200,
+  200,
+  200,
+  200,
+  200,
+  200
+ ],
+ "gateway_bodies_sha256": [
+  "ab067a81a0b671d8aa2dff6b55084003dd04258ac31907ecc563f53bbd0732fb"
+ ],
+ "gateway_byte_identical_8of8": true,
+ "gateway_latency_ms": [
+  12670.0,
+  11125.9,
+  12677.9,
+  10899.9,
+  11246.8,
+  10990.6,
+  11750.3,
+  11544.8
+ ],
+ "gateway_sample_body": "{\"model\":\"decide-kev-9b\",\"answers\":{\"route\":{\"type\":\"choice\",\"choice\":\"billing\",\"probabilities\":{\"billing\":0.958690944,\"shipping\":0.025385135,\"technical\":0.01592392},\"confidence\":0.938036416,\"maturity\":\"experimental\"},\"angry\":{\"type\":\"noul\",\"noul\":0.804193019,\"maturity\":\"experimental\"},\"urgency\":{\"type\":\"score\",\"score\":1.848040814,\"legend\":{\"0\":\"can wait\",\"1\":\"this week\",\"2\":\"today\",\"3\":\"right now\"},\"probabilities\":{\"0\":0.085377153,\"1\":0.313284629,\"2\":0.269258468,\"3\":0.33207975},\"confidence\":0.109439666,\"maturity\":\"experimental\"}},\"usage\":{\"input_tokens\":118,\"output_tokens\":0}}",
+ "engine_status": [
+  200,
+  200,
+  200,
+  200,
+  200,
+  200,
+  200,
+  200
+ ],
+ "engine_bodies_sha256": [
+  "c75db03ea51c4af9be8cc320be5c2914eb473d7afb482e5cf24659f724cf542d"
+ ],
+ "engine_byte_identical_8of8": true,
+ "engine_model_field_is_a_local_path": "/home/milosvasic/llmctl-work/models/decide-kev-9b/Kev-9B-Q4_K_M.gguf",
+ "gateway_model_field": "decide-kev-9b",
+ "edges": {
+  "single_option_choice": {
+   "status": 422,
+   "ms": 4.4,
+   "body": "{\"message\":\"Request failed validation.\",\"error_type\":\"validation_failed\"}"
+  },
+  "no_key": {
+   "status": 401,
+   "ms": 3.1,
+   "body": "{\"message\":\"Authentication required.\",\"error_type\":\"unauthorized\"}"
+  },
+  "wrong_key": {
+   "status": 401,
+   "ms": 28.0,
+   "body": "{\"message\":\"Authentication required.\",\"error_type\":\"unauthorized\"}"
+  },
+  "unknown_model": {
+   "status": 422,
+   "ms": 2.2,
+   "body": "{\"message\":\"Unknown model.\",\"error_type\":\"unknown_model\"}"
+  },
+  "state_6500_chars": {
+   "status": 200,
+   "ms": 243040.3,
+   "body": "{\"model\":\"decide-kev-9b\",\"answers\":{\"route\":{\"type\":\"choice\",\"choice\":\"billing\",\"probabilities\":{\"billing\":0.443673484,\"shipping\":0.187048459,\"technical\":0.369278057},\"confidence\":0.165510226,\"maturity\":\"experimental\"},\"angry\":{\"type\":\"noul\",\"noul\":0.195682914,\"maturity\":\"experimental\"},\"urgency\":{\""
+  },
+  "state_8000_chars": {
+   "status": 200,
+   "ms": 298592.3,
+   "body": "{\"model\":\"decide-kev-9b\",\"answers\":{\"route\":{\"type\":\"choice\",\"choice\":\"billing\",\"probabilities\":{\"billing\":0.432843525,\"shipping\":0.202342856,\"technical\":0.364813619},\"confidence\":0.149265288,\"maturity\":\"experimental\"},\"angry\":{\"type\":\"noul\",\"noul\":0.199010275,\"maturity\":\"experimental\"},\"urgency\":{\""
+  },
+  "state_9000_chars_over_gateway_cap": {
+   "status": 422,
+   "ms": 3.4,
+   "body": "{\"message\":\"State plus question exceeds the budget.\",\"error_type\":\"validation_failed\"}"
+  },
+  "state_dense_7500_hex_chars_token_overflow": {
+   "status": null,
+   "note": "SKIPPED for window >= 4096: ~6.7k-token state needs > 15 min on this CPU (the lev run hit the 900 s gateway timeout -> 502); the large-state behaviour is covered by long-state.json (engine_direct_max_fit)"
+  },
+  "twenty_options": {
+   "status": 200,
+   "ms": 15586.1,
+   "body": "{\"model\":\"decide-kev-9b\",\"answers\":{\"c\":{\"type\":\"choice\",\"choice\":\"opt02\",\"probabilities\":{\"opt00\":0.052996823,\"opt01\":0.075304817,\"opt02\":0.081822168,\"opt03\":0.079856761,\"opt04\":0.061576614,\"opt05\":0.047684445,\"opt06\":0.058738179,\"opt07\":0.048587995,\"opt08\":0.052065096,\"opt09\":0.049892512,\"opt10\":0"
+  }
+ }
+}

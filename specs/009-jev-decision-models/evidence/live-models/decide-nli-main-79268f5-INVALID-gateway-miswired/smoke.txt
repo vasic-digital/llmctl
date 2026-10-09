@@ -1,0 +1,4 @@
+{"protocol":"nli-onnx","type":"choice","choice":"billing","confidence":0.929806114,"ok":true,"probabilities":{"billing":0.964903057,"legal":0.035096943}}
+rc=0
+{"protocol":"nli-onnx","type":"choice","choice":"billing","confidence":0.698052779,"ok":true,"probabilities":{"billing":0.773539584,"legal":0.028136375,"team3":0.099437793,"team4":0.098886247}}
+rc=0

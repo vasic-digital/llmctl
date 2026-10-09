@@ -1,0 +1,35 @@
+{
+  "files": [
+    {
+      "path": "evidence.jsonl",
+      "sha256": "b4b90d07b65ffc41f013ed14255a0558001d5a2e845375bebae2c313f5eac42d",
+      "size": 2652
+    },
+    {
+      "path": "raw/EV-decide-nli-golden-0001-stdout.txt",
+      "sha256": "089b6d1fef4134a05c49bda31fde3248cbecda88b2be14fa179f167dce691d9c",
+      "size": 15748
+    },
+    {
+      "path": "raw/EV-decide-nli-golden-0002-stdout.txt",
+      "sha256": "089b6d1fef4134a05c49bda31fde3248cbecda88b2be14fa179f167dce691d9c",
+      "size": 15748
+    },
+    {
+      "path": "raw/EV-decide-nli-golden-0003-stdout.txt",
+      "sha256": "089b6d1fef4134a05c49bda31fde3248cbecda88b2be14fa179f167dce691d9c",
+      "size": 15748
+    },
+    {
+      "path": "raw/responses.jsonl",
+      "sha256": "8f4b0aa0ccfed2d5e8d39f9b62513b3ab53dadcbf1c1ee731f0e2daa017cfaef",
+      "size": 33298
+    },
+    {
+      "path": "results.json",
+      "sha256": "5dcfa8d65dd4b71d02ab07945e8d0930542cc7996afc2ec8629c69588dfd9414",
+      "size": 143428
+    }
+  ],
+  "schema": 1
+}

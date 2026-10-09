@@ -1,0 +1,2 @@
+{"model":"decide-lev","answers":{"q":{"type":"choice","choice":"billing","probabilities":{"billing":0.874788071,"shipping":0.039341837,"technical":0.085870092},"confidence":0.812182106}},"usage":{"input_tokens":240,"output_tokens":0},"evidence":{"profile":"decide-lev","port":8095,"latency_ms":6480.256,"mode":"deterministic","instance":"decide-lev","calibrated":false}}
+rc=0

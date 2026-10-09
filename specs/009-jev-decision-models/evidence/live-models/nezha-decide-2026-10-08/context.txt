@@ -1,0 +1,10 @@
+profile=decide ctx=8192 port=43923 date=2026-10-08T15:38:09Z host=nezha nproc=8
+model_file=decider-4b-v2.1-Q4_K_M.gguf bytes=2708804640 (2583.3 MiB) sha256=c7083fcfc93f650cd66caeade4a3840ef9eeeeb1e80920907c554f70619d7c56
+repo=Mapika/decider-4b-GGUF@b79f09d9ba7837f1b744295ea267b55d08e958ec
+ 17:38:09 up 22:13,  4 users,  load average: 4.22, 4.53, 4.63
+               total        used        free      shared  buff/cache   available
+Mem:           64086        4671       14199         271       46779       59415
+Swap:          48426           0       48426
+model name	: 11th Gen Intel(R) Core(TM) i7-1165G7 @ 2.80GHz
+version: 0.5.0-dev (build 1, commit 1537a0a)
+built with GNU 14.3.1 for Linux x86_64

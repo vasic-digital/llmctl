@@ -1,0 +1,20 @@
+{
+ "engine_prompt_overhead_tokens_for_one_noul_question": null,
+ "gateway_state_2100_tokens": {
+  "state_tokens": 2100,
+  "state_chars": 2854,
+  "status": 422,
+  "ms": 78063,
+  "body": "{\"message\":\"The model produced no usable answer for this question.\",\"error_type\":\"readout_failed\"}",
+  "usage": null,
+  "window_ctx": 8192
+ },
+ "gateway_state_115pct_of_window_raised_char_cap": {
+  "state_tokens": 9420,
+  "state_chars": 12767,
+  "status": 422,
+  "ms": 12,
+  "body": "{\"message\":\"State plus question exceeds the budget.\",\"error_type\":\"validation_failed\"}",
+  "window_ctx": 8192
+ }
+}

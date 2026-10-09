@@ -1,0 +1,11 @@
+[
+ {
+  "id": "P-005",
+  "status": 502,
+  "request_id": "5d735e681de44454",
+  "attempts": 3,
+  "latency_ms": 27015,
+  "error": null,
+  "body": "{\"message\":\"The decision backend failed.\",\"error_type\":\"backend_failed\"}"
+ }
+]

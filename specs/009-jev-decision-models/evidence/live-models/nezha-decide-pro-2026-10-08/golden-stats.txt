@@ -1,0 +1,104 @@
+records=173 orig=132 perm=41 well_formed=68/132
+noul   n=60 acc=0.567 CI95=[0.441,0.684] baseline=0.667 (majority) lower>baseline=False
+choice n=41 acc=0.488 CI95=[0.343,0.635] baseline=0.235 (chance) lower>baseline=True
+score  n=31 acc=0.290 CI95=[0.161,0.466] baseline=0.290 (majority) lower>baseline=False
+per-class:
+  noul:False             n=40 acc=0.675
+  noul:True              n=20 acc=0.350
+  choice:bash            n=1 acc=0.000
+  choice:billing         n=1 acc=1.000
+  choice:bug             n=1 acc=1.000
+  choice:c               n=1 acc=1.000
+  choice:chmod           n=1 acc=0.000
+  choice:client_error_4xx n=1 acc=1.000
+  choice:constant        n=1 acc=0.000
+  choice:df              n=1 acc=1.000
+  choice:docs            n=1 acc=1.000
+  choice:feat            n=1 acc=0.000
+  choice:feature_request n=1 acc=1.000
+  choice:find            n=1 acc=0.000
+  choice:fix             n=2 acc=0.000
+  choice:go              n=1 acc=0.000
+  choice:grep            n=1 acc=0.000
+  choice:group_by        n=1 acc=0.000
+  choice:haiku           n=1 acc=1.000
+  choice:javascript      n=1 acc=0.000
+  choice:kill            n=1 acc=0.000
+  choice:order_by        n=1 acc=0.000
+  choice:put             n=1 acc=1.000
+  choice:python          n=1 acc=1.000
+  choice:quadratic       n=1 acc=0.000
+  choice:redirect_3xx    n=1 acc=1.000
+  choice:refactor        n=1 acc=0.000
+  choice:rust            n=1 acc=1.000
+  choice:sales           n=1 acc=1.000
+  choice:server_error_5xx n=1 acc=1.000
+  choice:sonnet          n=1 acc=1.000
+  choice:sql             n=1 acc=1.000
+  choice:stack           n=1 acc=1.000
+  choice:status_201      n=1 acc=0.000
+  choice:status_403      n=1 acc=0.000
+  choice:status_429      n=1 acc=1.000
+  choice:status_504      n=1 acc=0.000
+  choice:success         n=1 acc=1.000
+  choice:success_2xx     n=1 acc=0.000
+  choice:technical       n=1 acc=1.000
+  choice:test            n=1 acc=0.000
+  choice:where           n=1 acc=0.000
+  score:0                n=9 acc=0.444
+  score:1                n=3 acc=0.667
+  score:2                n=4 acc=0.250
+  score:3                n=3 acc=0.333
+  score:4                n=4 acc=0.250
+  score:5                n=2 acc=0.000
+  score:6                n=3 acc=0.000
+  score:7                n=2 acc=0.000
+  score:8                n=1 acc=0.000
+per-family (own majority baseline):
+  author_count               n=1 acc=0.000 CI=[0.000,0.793] majority=1.000 lower>majority=False
+  best_model_tier            n=2 acc=1.000 CI=[0.342,1.000] majority=0.500 lower>majority=False
+  changelog_entry            n=1 acc=1.000 CI=[0.207,1.000] majority=1.000 lower>majority=False
+  ci_failures                n=2 acc=0.000 CI=[0.000,0.658] majority=0.500 lower>majority=False
+  commit_type                n=6 acc=0.167 CI=[0.030,0.564] majority=0.333 lower>majority=False
+  complexity_class           n=2 acc=0.000 CI=[0.000,0.658] majority=0.500 lower>majority=False
+  dangerous_command          n=14 acc=0.357 CI=[0.163,0.612] majority=0.500 lower>majority=False
+  data_structure             n=1 acc=1.000 CI=[0.207,1.000] majority=1.000 lower>majority=False
+  definitions                n=1 acc=0.000 CI=[0.000,0.793] majority=1.000 lower>majority=False
+  department                 n=3 acc=1.000 CI=[0.439,1.000] majority=0.333 lower>majority=True
+  description_completeness   n=2 acc=0.000 CI=[0.000,0.658] majority=0.500 lower>majority=False
+  distinct_methods           n=1 acc=0.000 CI=[0.000,0.793] majority=1.000 lower>majority=False
+  error_lines                n=1 acc=0.000 CI=[0.000,0.793] majority=1.000 lower>majority=False
+  failing_hosts              n=2 acc=0.000 CI=[0.000,0.658] majority=0.500 lower>majority=False
+  http_class                 n=4 acc=0.750 CI=[0.301,0.954] majority=0.250 lower>majority=True
+  http_semantics             n=1 acc=1.000 CI=[0.207,1.000] majority=1.000 lower>majority=False
+  http_status                n=4 acc=0.250 CI=[0.046,0.699] majority=0.250 lower>majority=False
+  imports                    n=1 acc=0.000 CI=[0.000,0.793] majority=1.000 lower>majority=False
+  is_urgent                  n=20 acc=0.950 CI=[0.764,0.991] majority=0.850 lower>majority=False
+  language_id                n=6 acc=0.667 CI=[0.300,0.903] majority=0.167 lower>majority=True
+  language_pair              n=1 acc=0.000 CI=[0.000,0.793] majority=1.000 lower>majority=False
+  log_outcome                n=1 acc=1.000 CI=[0.207,1.000] majority=1.000 lower>majority=False
+  needs_security_review      n=12 acc=0.833 CI=[0.552,0.953] majority=0.750 lower>majority=False
+  open_prs                   n=1 acc=0.000 CI=[0.000,0.793] majority=1.000 lower>majority=False
+  parameters                 n=2 acc=0.500 CI=[0.095,0.905] majority=0.500 lower>majority=False
+  pr_checklist               n=2 acc=0.000 CI=[0.000,0.658] majority=0.500 lower>majority=False
+  pr_checklist4              n=2 acc=0.000 CI=[0.000,0.658] majority=0.500 lower>majority=False
+  review_tone                n=2 acc=1.000 CI=[0.342,1.000] majority=0.500 lower>majority=False
+  severity_ladder            n=3 acc=0.667 CI=[0.208,0.939] majority=0.333 lower>majority=False
+  shell_command              n=5 acc=0.200 CI=[0.036,0.624] majority=0.200 lower>majority=False
+  spec_satisfied             n=14 acc=0.000 CI=[0.000,0.215] majority=0.500 lower>majority=False
+  sql_clause                 n=3 acc=0.000 CI=[0.000,0.561] majority=0.333 lower>majority=False
+  test_failures              n=2 acc=0.000 CI=[0.000,0.658] majority=0.500 lower>majority=False
+  ticket_reference           n=2 acc=1.000 CI=[0.342,1.000] majority=0.500 lower>majority=False
+  ticket_type                n=2 acc=1.000 CI=[0.342,1.000] majority=0.500 lower>majority=False
+  todo_count                 n=1 acc=0.000 CI=[0.000,0.793] majority=1.000 lower>majority=False
+  weekday_gap                n=2 acc=0.500 CI=[0.095,0.905] majority=0.500 lower>majority=False
+option-order flip rate: 0.000 (0 of 14 groups)
+accuracy by option count:
+    2 options n=6 acc=0.833 CI=[0.436,0.970]
+    3 options n=7 acc=0.714 CI=[0.359,0.918]
+    4 options n=7 acc=0.429 CI=[0.158,0.750]
+    5 options n=6 acc=0.167 CI=[0.030,0.564]
+    8 options n=6 acc=0.667 CI=[0.300,0.903]
+   12 options n=5 acc=0.200 CI=[0.036,0.624]
+   20 options n=4 acc=0.250 CI=[0.046,0.699]
+calibration: insufficient for calibration (n=68, need 200)

@@ -1,0 +1,29 @@
+[
+ {
+  "id": "N-045",
+  "status": 502,
+  "request_id": "3a84919d3a1d8cab",
+  "attempts": 3,
+  "latency_ms": 27018,
+  "error": null,
+  "body": "{\"message\":\"The decision backend failed.\",\"error_type\":\"backend_failed\"}"
+ },
+ {
+  "id": "C-009",
+  "status": 502,
+  "request_id": "c7d687fc86f3cddf",
+  "attempts": 3,
+  "latency_ms": 27013,
+  "error": null,
+  "body": "{\"message\":\"The decision backend failed.\",\"error_type\":\"backend_failed\"}"
+ },
+ {
+  "id": "C-012",
+  "status": 502,
+  "request_id": "83d396ef5b545c2b",
+  "attempts": 3,
+  "latency_ms": 27013,
+  "error": null,
+  "body": "{\"message\":\"The decision backend failed.\",\"error_type\":\"backend_failed\"}"
+ }
+]

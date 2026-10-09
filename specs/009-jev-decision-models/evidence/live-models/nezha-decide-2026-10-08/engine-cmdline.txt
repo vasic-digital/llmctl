@@ -1,0 +1,1 @@
+/home/milosvasic/llmctl-work/llama.cpp/build/bin/llama-server --model /home/milosvasic/llmctl-work/models/decide/decider-4b-v2.1-Q4_K_M.gguf --host 127.0.0.1 --port 43923 --ctx-size 8192 --n-gpu-layers 0 --flash-attn auto --parallel 1 --jinja --api-key-file <keyfile> --no-webui --cache-type-k q8_0 --cache-type-v q8_0 

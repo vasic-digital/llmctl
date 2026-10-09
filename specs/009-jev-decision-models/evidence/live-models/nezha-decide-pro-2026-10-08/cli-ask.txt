@@ -1,0 +1,2 @@
+{"model":"decide-pro","answers":{"q":{"type":"choice","choice":"billing","probabilities":{"billing":0.990738065,"shipping":0.008093654,"technical":0.001168281},"confidence":0.986107097,"maturity":"experimental"}},"usage":{"input_tokens":109,"output_tokens":1},"evidence":{"profile":"decide-pro","port":8095,"latency_ms":6543.879,"mode":"deterministic","instance":"decide-pro","calibrated":false}}
+rc=0

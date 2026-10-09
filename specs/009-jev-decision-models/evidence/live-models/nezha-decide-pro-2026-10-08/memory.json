@@ -1,0 +1,82 @@
+[
+ {
+  "label": "after-health-cold",
+  "t": "15:55:57",
+  "VmRSS_kB": 4581092,
+  "VmHWM_kB": 4581092,
+  "VmSwap_kB": 0,
+  "Threads": 15,
+  "VmRSS_MiB": 4473.7,
+  "VmHWM_MiB": 4473.7
+ },
+ {
+  "label": "idle-warm-after-smoke",
+  "t": "15:56:09",
+  "VmRSS_kB": 4608144,
+  "VmHWM_kB": 4608144,
+  "VmSwap_kB": 0,
+  "Threads": 15,
+  "VmRSS_MiB": 4500.1,
+  "VmHWM_MiB": 4500.1
+ },
+ {
+  "label": "after-golden",
+  "t": "16:19:49",
+  "VmRSS_kB": 7379320,
+  "VmHWM_kB": 7379320,
+  "VmSwap_kB": 0,
+  "Threads": 15,
+  "VmRSS_MiB": 7206.4,
+  "VmHWM_MiB": 7206.4
+ },
+ {
+  "label": "after-probes",
+  "t": "16:22:30",
+  "VmRSS_kB": 7667860,
+  "VmHWM_kB": 7667860,
+  "VmSwap_kB": 0,
+  "Threads": 15,
+  "VmRSS_MiB": 7488.1,
+  "VmHWM_MiB": 7488.1
+ },
+ {
+  "label": "after-edges",
+  "t": "16:27:21",
+  "VmRSS_kB": 7851492,
+  "VmHWM_kB": 7851492,
+  "VmSwap_kB": 0,
+  "Threads": 15,
+  "VmRSS_MiB": 7667.5,
+  "VmHWM_MiB": 7667.5
+ },
+ {
+  "label": "after-gateway-2100",
+  "t": "16:29:50",
+  "VmRSS_kB": 7924180,
+  "VmHWM_kB": 7924180,
+  "VmSwap_kB": 0,
+  "Threads": 15,
+  "VmRSS_MiB": 7738.5,
+  "VmHWM_MiB": 7738.5
+ },
+ {
+  "label": "after-gateway-115pct",
+  "t": "16:29:54",
+  "VmRSS_kB": 7919312,
+  "VmHWM_kB": 7923548,
+  "VmSwap_kB": 0,
+  "Threads": 15,
+  "VmRSS_MiB": 7733.7,
+  "VmHWM_MiB": 7737.8
+ },
+ {
+  "label": "final",
+  "t": "16:29:54",
+  "VmRSS_kB": 7919312,
+  "VmHWM_kB": 7923548,
+  "VmSwap_kB": 0,
+  "Threads": 15,
+  "VmRSS_MiB": 7733.7,
+  "VmHWM_MiB": 7737.8
+ }
+]

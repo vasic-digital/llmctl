@@ -1,0 +1,2 @@
+llmctl-decide ask: the model produced no usable answer (HTTP 422 readout_failed: The model produced no usable answer for this question.)
+rc=1

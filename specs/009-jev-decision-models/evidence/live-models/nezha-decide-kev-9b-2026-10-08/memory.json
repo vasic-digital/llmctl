@@ -1,0 +1,112 @@
+[
+ {
+  "label": "after-health-cold",
+  "t": "16:30:00",
+  "VmRSS_kB": 9449808,
+  "VmHWM_kB": 9449808,
+  "VmSwap_kB": 0,
+  "Threads": 15,
+  "VmRSS_MiB": 9228.3,
+  "VmHWM_MiB": 9228.3
+ },
+ {
+  "label": "idle-warm-after-smoke",
+  "t": "16:30:05",
+  "VmRSS_kB": 9531020,
+  "VmHWM_kB": 9531020,
+  "VmSwap_kB": 0,
+  "Threads": 15,
+  "VmRSS_MiB": 9307.6,
+  "VmHWM_MiB": 9307.6
+ },
+ {
+  "label": "after-golden",
+  "t": "16:45:52",
+  "VmRSS_kB": 9982600,
+  "VmHWM_kB": 9982600,
+  "VmSwap_kB": 0,
+  "Threads": 15,
+  "VmRSS_MiB": 9748.6,
+  "VmHWM_MiB": 9748.6
+ },
+ {
+  "label": "after-probes",
+  "t": "16:47:31",
+  "VmRSS_kB": 9982600,
+  "VmHWM_kB": 9982600,
+  "VmSwap_kB": 0,
+  "Threads": 15,
+  "VmRSS_MiB": 9748.6,
+  "VmHWM_MiB": 9748.6
+ },
+ {
+  "label": "after-edges",
+  "t": "16:59:53",
+  "VmRSS_kB": 12207568,
+  "VmHWM_kB": 12207568,
+  "VmSwap_kB": 0,
+  "Threads": 15,
+  "VmRSS_MiB": 11921.5,
+  "VmHWM_MiB": 11921.5
+ },
+ {
+  "label": "after-gateway-2100",
+  "t": "17:02:28",
+  "VmRSS_kB": 13668804,
+  "VmHWM_kB": 13668804,
+  "VmSwap_kB": 0,
+  "Threads": 15,
+  "VmRSS_MiB": 13348.4,
+  "VmHWM_MiB": 13348.4
+ },
+ {
+  "label": "after-engine_direct_50pct_window",
+  "t": "17:07:49",
+  "VmRSS_kB": 17607456,
+  "VmHWM_kB": 17607456,
+  "VmSwap_kB": 0,
+  "Threads": 15,
+  "VmRSS_MiB": 17194.8,
+  "VmHWM_MiB": 17194.8
+ },
+ {
+  "label": "after-engine_direct_max_fit",
+  "t": "17:19:07",
+  "VmRSS_kB": 17615264,
+  "VmHWM_kB": 17615264,
+  "VmSwap_kB": 0,
+  "Threads": 15,
+  "VmRSS_MiB": 17202.4,
+  "VmHWM_MiB": 17202.4
+ },
+ {
+  "label": "after-engine_direct_over_window_by_64",
+  "t": "17:19:08",
+  "VmRSS_kB": 17621560,
+  "VmHWM_kB": 17621560,
+  "VmSwap_kB": 0,
+  "Threads": 15,
+  "VmRSS_MiB": 17208.6,
+  "VmHWM_MiB": 17208.6
+ },
+ {
+  "label": "after-gateway-115pct",
+  "t": "17:19:11",
+  "VmRSS_kB": 17621724,
+  "VmHWM_kB": 17621724,
+  "VmSwap_kB": 0,
+  "Threads": 15,
+  "VmRSS_MiB": 17208.7,
+  "VmHWM_MiB": 17208.7
+ },
+ {
+  "label": "final",
+  "t": "17:19:11",
+  "VmRSS_kB": 17621724,
+  "VmHWM_kB": 17621724,
+  "VmSwap_kB": 0,
+  "Threads": 15,
+  "VmRSS_MiB": 17208.7,
+  "VmHWM_MiB": 17208.7
+ }
+]
