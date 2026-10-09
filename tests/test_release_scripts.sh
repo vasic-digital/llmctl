@@ -69,6 +69,64 @@ case "$(tar -tzf "${A}")" in *untracked.env*) assert_eq "absent" "present" "arch
 rm -f "${FX}/untracked.env"
 assert_eq 1 "$(gzip -l "${A}" >/dev/null 2>&1 && printf '%s' "$(head -c10 "${A}" | od -An -tx1 | tr -d ' ' | cut -c9-16 | grep -c '^00000000$')")" "archive: gzip header mtime zero (gzip -n)"
 
+# --- archive: the independent secret scan is part of the step (release blocker 1.8) ---------------------
+# golden-bad: a tracked secret-looking path (id_rsa) must make `archive` fail and leave no archive behind;
+# golden-good (control): a clean tree passed above; a tracked nested zip holding a Keynote-style *.key is
+# refused unless the EXACT "<outer>!<inner>" allow entry exists.
+FX2="${TEST_TMP}/fx2"; git clone -q "${FX}" "${FX2}"
+(cd "${FX2}" && git config user.email t@example.invalid && git config user.name t && printf 'x\n' > id_rsa && git add id_rsa \
+   && git commit -q -m secret && git tag -a v9.9.20 -m x)
+OUT2="${TEST_TMP}/out2"
+rc=0; out="$("${REL}" --root "${FX2}" --out "${OUT2}" --tag v9.9.20 archive 2>&1)" || rc=$?
+assert_eq 1 "$([[ ${rc} -ne 0 ]] && echo 1 || echo 0)" "archive: planted id_rsa makes archive exit non-zero"
+assert_contains "${out}" "SECRET PATH" "archive: scanner finding is reported"
+assert_eq "absent" "$([[ -e "${OUT2}/llmctl-v9.9.20.tar.gz" ]] && echo present || echo absent)" "archive: refused archive is not left in --out"
+rc=0; "${REL}" --root "${FX2}" --out "${OUT2}" --tag v9.9.20 all >/dev/null 2>&1 || rc=$?
+assert_eq 1 "$([[ ${rc} -ne 0 ]] && echo 1 || echo 0)" "all: planted id_rsa fails the whole run"
+(cd "${FX2}" && git rm -q -f id_rsa && mkdir -p archive && python3 -c "
+import zipfile
+z=zipfile.ZipFile('archive/old.zip','w'); z.writestr('top/docs/deck.key','PK-not-a-credential'); z.close()" \
+   && git add archive/old.zip && git commit -q -m nested && git tag -a v9.9.21 -m x)
+rc=0; "${REL}" --root "${FX2}" --out "${OUT2}" --tag v9.9.21 archive >/dev/null 2>&1 || rc=$?
+assert_eq 1 "$([[ ${rc} -ne 0 ]] && echo 1 || echo 0)" "archive: nested *.key refused without an allow entry"
+printf 'archive/old.zip!docs/deck.key\n' > "${TEST_TMP}/allow.txt"
+rc=0; BA_PUBLIC_ALLOWLIST="${TEST_TMP}/allow.txt" "${REL}" --root "${FX2}" --out "${OUT2}" --tag v9.9.21 archive >/dev/null 2>&1 || rc=$?
+assert_eq 0 "${rc}" "archive: exact nested allow entry accepts the Keynote-style member"
+assert_eq "present" "$([[ -s "${OUT2}/llmctl-v9.9.21.tar.gz" ]] && echo present || echo absent)" "archive: allowed archive is produced"
+
+# R-1: an exact allow entry must NOT exempt a longer / prefix sibling. The siblings carry a real PEM block, so the
+# only thing that can let them through is an over-wide (startswith) match of the allow entry.
+(cd "${FX2}" && python3 -c "
+import zipfile
+pem=b'-----BEGIN RSA PRIVATE KEY-----\nMIIBOgIBAAJBAKj34GkxFhD90vcNLYLInFEX6Ppy1tPf9Cnzj4p4WGeKLs1Pt8Qu\n-----END RSA PRIVATE KEY-----\n'
+z=zipfile.ZipFile('archive/old.zip','w')
+z.writestr('top/docs/deck.key','PK-not-a-credential')
+z.writestr('top/docs/deck.key.bak',pem)
+z.writestr('top/docs/deck.keynote',pem)
+z.close()" && git add archive/old.zip && git commit -q -m siblings && git tag -a v9.9.22 -m x)
+rc=0; out="$(BA_PUBLIC_ALLOWLIST="${TEST_TMP}/allow.txt" "${REL}" --root "${FX2}" --out "${OUT2}" --tag v9.9.22 archive 2>&1)" || rc=$?
+assert_eq 1 "$([[ ${rc} -ne 0 ]] && echo 1 || echo 0)" "archive: exact allow entry does not exempt its longer siblings"
+assert_contains "${out}" "deck.key.bak" "archive: the .bak sibling is reported (not covered by the exact entry)"
+assert_contains "${out}" "deck.keynote" "archive: the .keynote sibling is reported (not covered by the exact entry)"
+assert_eq "absent" "$([[ -e "${OUT2}/llmctl-v9.9.22.tar.gz" ]] && echo present || echo absent)" "archive: siblings archive is not left behind"
+printf 'archive/old.zip!docs/deck.key\narchive/old.zip!docs/deck.key.bak\narchive/old.zip!docs/deck.keynote\n' > "${TEST_TMP}/allow3.txt"
+rc=0; BA_PUBLIC_ALLOWLIST="${TEST_TMP}/allow3.txt" "${REL}" --root "${FX2}" --out "${OUT2}" --tag v9.9.22 archive >/dev/null 2>&1 || rc=$?
+assert_eq 0 "${rc}" "archive: control - exact entries for all three members accept the archive"
+
+# R-2: a missing scanner must refuse (rc != 0) and leave no archive.
+SCR="${TEST_TMP}/relcopy"; mkdir -p "${SCR}/release"
+cp "${REL}" "${SCR}/release.sh"; [[ -d "$(dirname "${REL}")/lib" ]] && cp -r "$(dirname "${REL}")/lib" "${SCR}/lib"
+cp "$(dirname "${REL}")"/release/*.sh "${SCR}/release/" 2>/dev/null || true
+OUT3="${TEST_TMP}/out3"
+rc=0; out="$("${SCR}/release.sh" --root "${FX}" --out "${OUT3}" --tag v9.9.9 archive 2>&1)" || rc=$?
+assert_eq 1 "$([[ ${rc} -ne 0 ]] && echo 1 || echo 0)" "archive: a missing scanner makes archive exit non-zero"
+assert_contains "${out}" "missing - refusing to ship an unscanned archive" "archive: missing scanner is named in the refusal"
+assert_eq "absent" "$([[ -e "${OUT3}/llmctl-v9.9.9.tar.gz" ]] && echo present || echo absent)" "archive: no unscanned archive is left behind"
+
+# R-4: the loaded allow manifests are announced on stderr when BA_PUBLIC_ALLOWLIST is set.
+rc=0; out="$(BA_PUBLIC_ALLOWLIST="${TEST_TMP}/allow3.txt" "${REL}" --root "${FX2}" --out "${OUT2}" --tag v9.9.22 archive 2>&1 >/dev/null)" || rc=$?
+assert_contains "${out}" "allow manifests: ${TEST_TMP}/allow3.txt" "archive: BA_PUBLIC_ALLOWLIST announces the manifests it loaded"
+
 # --- sbom ----------------------------------------------------------------------
 "${REL}" "${R[@]}" sbom >/dev/null
 S="${OUT}/llmctl-v9.9.9.sbom.cdx.json"

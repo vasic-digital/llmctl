@@ -68,7 +68,28 @@ for e in sys.stdin.buffer.read().split(b"\0"):
   (cd "${ROOT}" && LC_ALL=C tar --null --no-recursion --sort=name --mtime="@${ct}" \
       --owner=0 --group=0 --numeric-owner --format=gnu --transform "s,^,${NAME}/," -T "${list}" -cf -) \
     | gzip -n -9 > "${OUT}/${ARCHIVE}"
-  rm -f "${list}"; echo "archive: ${OUT}/${ARCHIVE}"
+  rm -f "${list}"
+  scan_archive_or_refuse "${OUT}/${ARCHIVE}" || return 1
+  echo "archive: ${OUT}/${ARCHIVE}"
+}
+
+# Independent post-scan (scripts/release/scan_archive.py, same scanner build_archive.sh runs): a tracked secret-looking
+# path or PEM block, also inside a nested archive such as archive/llmctl.zip, REFUSES the archive - it is removed so
+# no later step (checksums, publish) can ship it. Allow manifests: BA_PUBLIC_ALLOWLIST (colon list) or the defaults.
+scan_archive_or_refuse() {
+  local tgz="$1" here sc mf rc=0; here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  sc="${here}/release/scan_archive.py"
+  [[ -f "${sc}" ]] || { rm -f "${tgz}"; echo "archive: scanner ${sc} missing - refusing to ship an unscanned archive" >&2; return 1; }
+  local -a allow=()
+  if [[ -n "${BA_PUBLIC_ALLOWLIST:-}" ]]; then
+    while IFS= read -r mf; do [[ -n "${mf}" ]] && allow+=(--allow "${mf}"); done < <(printf '%s\n' "${BA_PUBLIC_ALLOWLIST}" | tr ':' '\n')
+  else
+    for mf in "${here}/release/public_allowlist.txt" "${here}/../tests/fixtures/PUBLIC_FIXTURES.txt"; do [[ -f "${mf}" ]] && allow+=(--allow "${mf}"); done
+  fi
+  [[ -z "${BA_PUBLIC_ALLOWLIST:-}" ]] || echo "archive: allow manifests: ${BA_PUBLIC_ALLOWLIST}" >&2
+  python3 -I "${sc}" ${allow[@]+"${allow[@]}"} "${tgz}" || rc=$?
+  if ((rc!=0)); then rm -f "${tgz}"; echo "archive: scan_archive.py exit ${rc} - archive REFUSED and removed" >&2; return 1; fi
+  echo "archive: scan clean"
 }
 
 # parse go.mod/go.sum/.gitmodules/gitlinks -> JSON model on stdout

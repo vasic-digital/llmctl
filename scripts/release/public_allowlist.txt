@@ -3,11 +3,23 @@
 # file, so an exemption can never widen into a subtree (scripts/release/build_archive.sh,
 # scripts/release/scan_archive.py both refuse a malformed entry).
 #
-# Keynote slide deck of the vendored llama.cpp documentation (a *.key extension, not key material).
+# Keynote document of the vendored llama.cpp documentation (the only key-LIKE thing about it is the *.key
+# extension; it is not key material). Justification, measured: Keynote document format (a ZIP of *.iwa,
+# *.plist, Data/*.png and *.jpeg/*.jpg members); sha256 32dede0548e6501b4b60d89b4afc3445a9a45c5df6fcee0c2bb9fe75592908c9,
+# 488591 bytes; zero PEM private-key markers in the raw bytes and in the greppable members (plist/png/jpeg). The
+# *.iwa members are snappy-compressed, so a PEM grep cannot see inside them - for those the claim rests on the
+# document format and provenance above, not on a content scan.
 submodules/llama.cpp/docs/development/llama-star/idea-arch.key
-# The same Keynote deck under the paths it had earlier in history (the shipped .git carries the whole HEAD
-# history, and it is judged by path too - C2-05) and inside the tracked legacy archive/llmctl.zip (C2-16).
+# The same Keynote deck under the path it had earlier in history (the shipped .git carries the whole HEAD
+# history, and it is judged by path too - C2-05). A plain entry applies ONLY to that exact repo-relative path;
+# it does NOT cover the copy inside archive/llmctl.zip (see the nested "<outer>!<inner>" entry below).
 vendor/llama.cpp/docs/development/llama-star/idea-arch.key
+# Nested form for the same deck inside the tracked legacy archive/llmctl.zip (scan_archive.py matches
+# "<outer-path>!<inner-path>"; sha256 of the member 32dede0548e6501b4b60d89b4afc3445a9a45c5df6fcee0c2bb9fe75592908c9,
+# 488591 bytes, a Keynote document: ZIP of .iwa/.plist/.png/.jpeg/.jpg members, 0 PEM private-key markers in the
+# greppable members).
+archive/llmctl.zip!vendor/llama.cpp/docs/development/llama-star/idea-arch.key
+# Another earlier-history path of the same deck (plain entry, exact path only).
 submodules/llama.cpp/docs/llama-star/idea-arch.key
 # Test-configuration templates of the Containers submodule (CONTAINERS_REMOTE_* host settings;
 # reviewed: no password, token or key material in any of them).
