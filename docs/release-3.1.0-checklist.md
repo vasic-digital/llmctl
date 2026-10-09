@@ -87,7 +87,7 @@ others are instructions that have not been run.
    git -C constitution fetch origin
    git -C constitution merge-base --is-ancestor 3e8e85556b14d7c5f3ea3f8f5551213c34ddf8ce origin/main && echo pin-reachable
    ```
-7. **Open operator decisions that change the release content** (not blockers by themselves): G-156 (default `LLMCTL_DECIDE_TIMEOUT` 8 s on CPU engines), G-157 (`decide` `mass_threshold`),
+7. **Open operator decisions that change the release content** (not blockers by themselves): G-156 (default `LLMCTL_DECIDE_TIMEOUT` 8 s on CPU engines; mitigated launcher-side by the CPU-adaptive 120 s default, FIXED-PENDING-VERIFY, the contract default itself is still the operator's call), G-157 (`decide` `mass_threshold`),
    G-158 (`decide-max` never run), G-159 (planner overhead wiring), G-160 (golden harness counts `max_options` refusals as malformed), T142 (the profiles the scheduler first refused: `decide-lev` and `decide-kev-4b` later RAN on the dev host, commit `0197297`; `decide-kev-9b` and the final-values `decide-kev-08b` run still need RAM/VRAM headroom). The CHANGELOG states each as open.
 8. **Archive scan finding (measured 2026-10-09) — decide before tagging.** `scripts/release.sh archive` packs every *tracked* file, including `archive/llmctl.zip`
    (45,950,200 bytes, tracked since `f4b5754`, 72% of the 63,954,958-byte archive). The independent scanner reports a secret-looking path inside that nested zip:

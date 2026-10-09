@@ -351,7 +351,7 @@ error lists `chat|coder|vision|decide`. See `docs/hardware-tiers.md`
   succeeds (`_sched_registry_publish`, real pid via `svc_main_pid`), withdrawn
   with its port hold on `stop`, `disable`, `switch` and `auto` eviction
   (`sched_registry_withdraw`). Decision profiles are probed at the public
-  `/health` (keyed engines answer `/v1/models` with 401).
+  at the engine's own health path from `portreg_health_path` (`/health` for llama, `/readyz` for the onnx encoder; keyed engines answer `/v1/models` with 401).
 * **Decision engines (FR-073/FR-074)**: loopback only, a per-profile key
   **file** (`$LLMCTL_STATE_DIR/keys/llama-<profile>.key`, `--api-key-file`),
   `--no-webui`; deterministic mode (default) launches `--parallel 1` with the
@@ -369,6 +369,9 @@ whole state in one physical batch and answers HTTP 500 "input (N tokens) is too 
 letter-logit decision profile and every chat profile keep their launch line unchanged. The `decide` ranking appends the six
 native profiles after `decide-max` (ascending footprint). Test: `tests/test_scheduler.sh` section 11b.
 
+## Health path and CPU-adaptive deadline
+
+The readiness wait (`_sched_wait_ready`) and the registry publish use `portreg_health_path <engine>` (llama `/health`, colibri `/v1/models`, onnx `/readyz`), so a decision profile on the `onnx` engine is awaited and registered at its truthful readiness endpoint. The decision gateway's per-request deadline is adapted by `lib/decide_timeout.sh` when a CPU-placed llama decision instance is running or enabled (see `docs/scripts/decide_timeout.md`).
 ## Last verified date
 
 2026-10-07

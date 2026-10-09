@@ -4,6 +4,8 @@
 to the chat engines (llama-server, colibri): those have no authentication of their own and must never be exposed beyond a trusted LAN
 (see "Safety guarantees" in the [README](../README.md)).
 
+Serving only machines on your own LAN (the common case) is [lan-exposure](lan-exposure.md); persistent start at boot is [persistent-services](persistent-services.md); certificate and key procedures are in [runbooks](runbooks.md).
+
 ## What you are exposing
 
 The gateway is the only llmctl component designed to face a network. Out of the box it already:
@@ -36,7 +38,7 @@ router. Add the private address (or MagicDNS/host name) to the certificate so cl
 ```bash
 export LLMCTL_TLS_SAN="dns:gw.tailnet.example,ip:100.64.0.7"     # your overlay name / address
 llmctl decide cert renew --san "$LLMCTL_TLS_SAN"                    # re-issue the leaf with the new SANs
-llmctl decide serve --stop && llmctl decide serve                   # or send SIGHUP to reload the pair
+llmctl decide serve --stop && llmctl decide serve                   # or send SIGHUP (first field of gateway.pid) to reload the pair
 ```
 
 Then export the CA **public** certificate once and install it on each client (the key travels separately, over a channel you trust):
@@ -68,7 +70,7 @@ it is per-session, not a service.
 Forwarding `TCP 8095` from the router to the host makes the gateway reachable from the Internet. If you do this:
 
 1. **Add the public name or address to the certificate** (`LLMCTL_TLS_SAN=dns:gw.example.org` or `ip:203.0.113.7`, then
-   `llmctl decide cert renew --san ...`). Without it a verifying client correctly refuses the connection.
+   `llmctl decide cert renew --san ...`, then signal the gateway: `kill -HUP "$(awk '{print $1}' "$LLMCTL_STATE_DIR/decide/gateway.pid")"`). Without it a verifying client correctly refuses the connection. The default CA only allows LAN-class names; a public DNS name needs a CA created with it listed ([runbooks](runbooks.md#renew--reload-the-certificate)).
 2. Keep the key at its generated strength (256 bits); the entropy floor refuses weak operator-supplied keys, but a **throttle does not
    make guessing impossible** (`docs/tls-and-keys.md`).
 3. Allow only the source addresses you need (`ufw`, `nftables`, router ACL). A firewall in front is the stated answer to a

@@ -63,3 +63,7 @@ both directions).
   "row without a live service".
 - `portreg_register` retries, for `LLMCTL_REGISTER_IDENTITY_WAIT` seconds (default 10), the one refusal "pid ... is not
   (yet) running ..." (the registry now proves process identity before taking the fingerprint, C2-07).
+
+## Health path per engine (`portreg_health_path`)
+
+`portreg_health_path <engine>` is the single source of the HTTP path an engine really answers when healthy: `llama` -> `/health`, `colibri` -> `/v1/models`, `onnx` -> `/readyz` (200 only once the load-time smoke passed; `/healthz` is liveness only and stays 200 when the smoke failed). The registry health path (`LLMCTL_REG_HEALTH` in the instance env record), the registration waiter and the scheduler readiness wait all use it. Before this was one function the onnx runtime was waited on at `/health`, so `decide-nli` was never registered (or was removed after the reconciler grace). An instance enabled before the fix keeps the old value in its env record until `llmctl enable <profile>` is re-run. Test: `tests/test_health_path_engines.sh`.

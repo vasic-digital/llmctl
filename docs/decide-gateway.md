@@ -31,6 +31,8 @@ llmctl decide serve [--port N] [--bind H]       # detached; prints URL, key LOCA
 llmctl decide serve --foreground                # exec in place (what the systemd/launchd unit runs)
 llmctl decide serve --status                    # rc 0 only for a verified, running gateway
 llmctl decide serve --stop                      # signals only a process verified to be this gateway
+llmctl decide serve --enable [--now]            # persistent boot-time user service (systemd user unit / launchd agent)
+llmctl decide serve --disable                   # stop, disable and remove that service
 ```
 
 * The Go binary is built once by `llmctl build decide` (`LLMCTL_DECIDE_BIN` overrides the path);
@@ -46,9 +48,14 @@ llmctl decide serve --stop                      # signals only a process verifie
   and persisted to the installation `.env` (mode 0600); the certificate chain is created under `$LLMCTL_HOME/cert`.
 * The gateway does not start engines: engines are scheduled by `llmctl enable`/`auto` (or found in the registry,
   see "Finding engines"); a profile without a ready engine answers `503 not_ready` instead of starting one.
+* `--enable` is idempotent on Linux (on macOS it boots the agent out first; UNCONFIRMED on real launchd), applies a changed unit file with `try-restart`, refuses while an installed engine unit is stale (`llmctl install`) and starts the
+  service at once (`--now` spells that out); `--disable` removes it. Registered engines are probed at the path they
+  serve: llama `/health`, onnx `/readyz` (truthful readiness; `/healthz` is liveness only), colibri `/v1/models` (a wrong path makes the registry mark the entry
+  unhealthy and remove it after the reconciler grace, 30 s by default).
 * On boot it runs as a user service (`llmctl-decide-gateway.service` / launchd agent) whose wrapper allocates the port
   and publishes the gateway in the registry (`docs/registry-discovery.md`).
 * `LLMCTL_DRY_RUN=1 llmctl decide serve ...` prints the delegation and starts nothing.
+* Persistent operation (linger, `gateway.conf`, drop-ins, stop behaviour): [persistent-services](persistent-services.md). Serving other machines: [lan-exposure](lan-exposure.md). Certificate/key procedures: [runbooks](runbooks.md).
 
 ## Engines are chosen by the catalog, not by a flag
 
@@ -180,7 +187,7 @@ handshake/read deadlines, the end-to-end `LLMCTL_DECIDE_TIMEOUT` and a graceful 
 
 ### The end-to-end budget and slow (CPU) engines
 
-`LLMCTL_DECIDE_TIMEOUT` (seconds, default `8`, kept below the hosted SDK's 10 s timeout) is the ONE deadline of a
+`LLMCTL_DECIDE_TIMEOUT` (seconds, Go default `8`, kept below the hosted SDK's 10 s timeout; raised to `120` by the launcher when a CPU-placed decision engine is served and nothing is set explicitly, see "CPU-adaptive default" below) is the ONE deadline of a
 request: queue wait plus the engine call(s). There is no separate per-attempt deadline and the gateway does not
 retry an engine call, with one exception: after an engine answers `401` it re-reads the engine key file once and retries
 once with the new key (`internal/gateway/driver.go`; never with the same key, never a loop). When the budget expires the engine connection is closed (the engine logs `cancel task`) and the
@@ -202,7 +209,59 @@ before decode, queue wait and margin, so `LLMCTL_DECIDE_TIMEOUT=60` would only j
 question with a ~1000-token prompt costs ~46 s. Raise the budget for such an engine accordingly. **Do not retry a `deadline_exceeded` 502**: each
 retry cancels the engine task and restarts the whole prefill, so it is guaranteed waste (the golden runner
 `scripts/golden/run_golden.py` therefore records it after one attempt; an `engine_error` 502 is still retried). The
-default is deliberately unchanged; raising it above the hosted SDK's 10 s is an operator choice for CPU engines.
+Go default is deliberately unchanged (8 s); raising it above the hosted SDK's 10 s is a choice made by the launcher for CPU
+engines (below) or by the operator.
+
+#### CPU-adaptive default (launcher-side, G-156)
+
+Measured on one CPU-only host (nezha.local, 8 threads, `decide-pro`, same pinned tree, same golden set): with the
+gateway default of 8 s, **98 of 132** golden requests were well-formed and **45 answers were HTTP 502**, every one carrying
+`x-llmctl-decide-reason: deadline_exceeded` and `x-llmctl-decide-deadline-ms: 8000`; with `LLMCTL_DECIDE_TIMEOUT=300` the
+same host returned **131 of 132** well-formed and **0** 502
+(`specs/009-jev-decision-models/evidence/live-models/nezha-pinned-decide-pro-default8s-control-2026-10-09/` vs
+`nezha-pinned-decide-pro-2026-10-09/`). On that CPU the HTTP 200 latency is median 7.6 s (`decide-pro`, max 21.0 s) and
+13.3 s (`decide-max`, 9B, p95 18.7 s, max 22.0 s): an 8 s budget cut about a third of the requests (45 of 132 golden requests, HTTP 502).
+
+So the two ways the gateway is launched - the boot service (`lib/svc_hook.sh run-gateway`, the systemd unit / launchd agent)
+and `llmctl decide serve` (`lib/decide.sh`) - apply a **CPU-adaptive default** (`lib/decide_timeout.sh`):
+
+* if `LLMCTL_DECIDE_TIMEOUT` is **not** set in the environment (including the unit's `gateway.conf` / the agent's environment), and
+* at least one decision instance that is **running or enabled** has a CPU-only llama.cpp placement: the layer-offload flag
+  (`--n-gpu-layers N`, `--n-gpu-layers=N`, `--gpu-layers N`, `--gpu-layers=N`, `-ngl N` or `-ngl=N`) has the value `0`
+  (leading zeros allowed; when the flag is repeated the **last** occurrence wins, as in llama.cpp; partial offload, any value
+  above 0, or no flag at all counts as not CPU). Read from the instance records under `$LLMCTL_SERVICES_DIR`. The CPU-only
+  **onnx NLI encoder does not count**: measured on CPU it answers in a median 433 ms (p95 1585 ms, max 2837 ms,
+  `evidence/live-models/nezha-pinned-decide-nli-2026-10-09/`), well inside 8 s, and counting it would raise the deadline on every
+  GPU host that merely runs the encoder,
+
+then the launcher exports `LLMCTL_DECIDE_TIMEOUT=120` (about 5 x the slowest measured answer, so a request that is
+merely slow completes while a wedged engine is still cut off in two minutes). The deadline is **one global value**: a single
+CPU llama instance raises it for **all** profiles, so a wedged GPU engine is then cut off at 120 s instead of 8 s. Per-profile
+timeouts (a deadline chosen from the profile a request is routed to) are the future refinement; nothing implements them today.
+An **explicit `LLMCTL_DECIDE_TIMEOUT` always wins**
+(`8` stays `8`). A host whose decision engines are all on GPU keeps the 8 s default. Chat-only CPU instances do not count.
+The start-up banner shows the effective value and where it came from:
+
+```
+  timeout: 8s per request (default; set LLMCTL_DECIDE_TIMEOUT to change)
+  timeout: 120s per request (cpu-adaptive: CPU-placed decide-pro; an explicit LLMCTL_DECIDE_TIMEOUT overrides)
+  timeout: 300s per request (env LLMCTL_DECIDE_TIMEOUT)
+```
+
+**Stopping a gateway with slow requests in flight.** On stop (SIGTERM/SIGINT) the gateway drains: readiness flips, new work is
+answered 503, and in-flight requests may finish for at most `LLMCTL_DECIDE_DRAIN_GRACE` (default **15 s**; the process waits
+that plus 2 s), after which remaining connections are closed. A CPU request can legitimately run for up to the 120 s adaptive
+deadline, so a request still running when the 15 s grace ends is cut off by the stop and the client sees a closed connection,
+not an answer. The grace is a separate tunable and is not adapted to the request deadline (gap G-161); raise
+`LLMCTL_DECIDE_DRAIN_GRACE` explicitly if stopping must wait for slow CPU requests (and give the unit/agent a stop timeout
+that is not shorter).
+
+Limits: the value is decided when the gateway starts. A CPU instance started or enabled later does not change a running
+gateway - restart it (`llmctl decide serve --stop` then start, or restart the unit). The 120 s is a documented default
+derived from one host's measurements, not a guarantee: very long prompts still need the sizing above. `llmctl decide ask` has its own
+per-attempt client wait (30 s by default, `--timeout` / `LLMCTL_DECIDE_TIMEOUT` in the client's environment); a client waiting 30 s
+cannot use a gateway budget above that, so set it as well on a CPU deployment. Because the adaptive value exceeds the hosted
+SDK's 10 s timeout, an SDK client with the default 10 s still gives up first - that is the trade-off of serving CPU engines at all.
 
 ### Connection admission (FR-022, "without affecting others")
 

@@ -15,3 +15,14 @@ Usage: verify_manifest.py [DIR]      (default tests/fixtures/golden)
 ```
 
 Usage and options: see the header above and run the script with `--help` where it supports it.
+
+## Observed behaviour (2026-10-09)
+
+```
+$ python3 -I scripts/golden/verify_manifest.py
+manifest ok: <repo>/tests/fixtures/golden                         (rc 0)
+```
+
+Run against a scratch copy of the fixture directory with one line appended that is not JSON (`echo x >> questions.jsonl`), it exits **1** with a Python traceback
+(`json.decoder.JSONDecodeError: Expecting value: line 1 column 1`) rather than a one-line problem message: the failure is detected, but the report is unfriendly (the script itself was not changed).
+Drift in bytes or counts is reported as problems with exit 1 (header above). Used by the golden-set procedure in [golden-set](../golden-set.md); run it after every `build_manifest.py`.

@@ -284,6 +284,63 @@ generic, so Laya-class models work via a bring-your-own-ONNX path:
 (`LLMCTL_CATALOG` is the same override the test suites use; editing a
 copy keeps the shipped catalog pristine.)
 
+## Bring your own encoder (FR-008): verified worked example
+
+A USER-ONLY encoder (not in the shipped catalog) was run end to end on
+2026-10-09 with `cross-encoder/nli-deberta-v3-xsmall` (Apache-2.0, 286.7 MB,
+revision `a150876415327c80daeff35ca6f68f5ed8cf5c24`). The only override seam
+is `LLMCTL_CATALOG`, which **replaces** the whole catalog (there is no merge
+overlay), so you edit a **copy**. Evidence (captured outputs, sha256
+manifest, findings): `specs/009-jev-decision-models/evidence/byo-encoder/`.
+
+```bash
+# 1. copy the shipped catalog and add the profile (fragment: evidence/byo-encoder/overlay-profile-used.json).
+#    The port must be unique AND appear both in profiles.<name>.port and in the top-level "ports" map.
+cp models/catalog.json ~/llmctl-byo.json
+python3 - <<'PY'
+import json, os
+p = os.path.expanduser("~/llmctl-byo.json")
+cat = json.load(open(p))
+frag = json.load(open("specs/009-jev-decision-models/evidence/byo-encoder/overlay-profile-used.json"))
+cat["profiles"].update(frag["profiles"]); cat["ports"].update(frag["ports"])   # port 18191; change it if taken
+json.dump(cat, open(p, "w"), indent=2)
+PY
+export LLMCTL_CATALOG=~/llmctl-byo.json
+
+llmctl models list | grep byo-nli-xsmall          # listed: onnx, below-minimum, decide
+llmctl build onnx                                  # once: the hash-locked private venv (onnxruntime + sentencepiece)
+llmctl models download byo-nli-xsmall              # every file sha256-verified, then the built-in onnx smoke
+llmctl models verify byo-nli-xsmall                # "passed checksum verification"
+llmctl start byo-nli-xsmall                        # the engine (loopback only); or: llmctl enable byo-nli-xsmall
+llmctl decide smoke --url http://127.0.0.1:18191 --protocol nli-onnx \
+    --key-file "${LLMCTL_STATE_DIR:-$HOME/.local/state/llmctl}/keys/onnx-byo-nli-xsmall.key" --options 3
+llmctl decide serve --enable                       # the HTTPS gateway discovers the profile from the catalog
+llmctl decide ask --profile byo-nli-xsmall --type choice --state "I was charged twice for March." \
+    --instructions "Which team handles this?" \
+    --criteria '{"billing":"invoices, charges, refunds","legal":"contracts","support":"technical problems"}' --json
+```
+
+What the pins must contain: `onnx/model.onnx` (or `model.onnx`), a tokenizer
+(`spm.model` or `tokenizer.json`), `config.json` with a real `id2label`
+naming `entailment` and `contradiction`, real `size` + `sha256` per file and an
+immutable `hf_revision`; `"engine": "onnx"`, `"capability": ["decide"]`,
+`"decision": {"protocol": "nli-onnx", ...}`. Mark the profile USER-ONLY by
+keeping it out of `models/catalog.json` (your copy only) and leaving
+`provenance.benchmark.class` `unverified` and `maturity`/`memory` `unmeasured`
+until you measure them. `tests/test_catalog_json.sh` logic accepts such an
+overlay except its repository-maintenance check that every shipped pin has
+huggingface.co re-verification evidence (not a requirement for your copy).
+
+Verified in the run: overlay accepted, 4 files downloaded and sha256-verified,
+engine loaded the real ONNX model and answered, `decide smoke` rc 0, the
+gateway listed the profile and returned a typed `choice` answer (maturity
+`experimental`, `calibrated:false`). **Not claimed:** decision accuracy for
+this encoder (unmeasured) and measured RAM/VRAM. Note: on Linux
+`llmctl start/enable` uses the generated systemd user units, which point at
+the default state dir, so run with default `LLMCTL_*_DIR` (the evidence run
+used scratch dirs and therefore started the engine with the argv llmctl
+generated; see the README there).
+
 ## Encoder runtime tests (no test seam in production code)
 
 (Historical: the candidate's `LLMCTL_ONNX_FAKE` seam was removed.) The runtime is tested with REAL sockets and
@@ -349,6 +406,8 @@ the pin. The 2026-10-06 pins were captured from the HF API via
 Laya BYO-ONNX verification).
 
 ## Live results (nezha, CPU)
+
+> Index of every live run (host, date, tree provenance, validity, headline numbers): [`specs/009-jev-decision-models/evidence/live-models/INDEX.md`](../specs/009-jev-decision-models/evidence/live-models/INDEX.md). Newer pinned nezha runs (2026-10-09, `nezha-pinned-*`) are listed there with their provenance caveats.
 
 Real-model runs on the LAN host `nezha` (i7-1165G7, 8 threads, 64 GB RAM, **CPU only**, `--n-gpu-layers 0`, ctx 8192, llama.cpp `0.5.0-dev` commit `1537a0a`, golden set of 132 originals + 41 option-order permutations, plus 23 probes). Run 2026-10-08. Evidence (copied verbatim, `SHA256SUMS` re-verified locally for every `golden/` and `probes/` directory):
 `specs/009-jev-decision-models/evidence/live-models/nezha-<profile>-2026-10-08/`.

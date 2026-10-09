@@ -55,6 +55,52 @@ items carry `scale`. Probes carry `probe_class`, `expected_behaviour` and, for i
 * **Position bias is measured, not removed.** The flip-rate probe shows sensitivity to option order for
   the tested profile; it does not fix it.
 
+## JevBench public tier
+
+`scripts/bench/jevbench_adapter.py` runs the upstream JevBench harness (`python -m jevbench.cli run --adapter typesafe
+--endpoint URL --key-env LLMCTL_API_KEY --model PROFILE ...`) against the decide gateway and writes `RUN/summary.json`.
+It is always labelled `tier: public-tier`, `contamination: possible`, `official_score: false`, and refuses to run without
+`--public-tier`. It is not an official score: the public items may be in training data, and the licences of the upstream
+easy (48) and hard (111) splits are UNCONFIRMED (only the harness and the 72 original public items are MIT).
+
+```bash
+git clone https://github.com/fstandhartinger/jevbench ~/jevbench   # outside this repository
+python3 scripts/bench/jevbench_adapter.py --public-tier --verify-only --jevbench-dir ~/jevbench \
+    --expect-commit bb05a335bc809e61b20c0f745d25499a82b326fc --run-dir /srv/runs/jb1          # provenance check only
+LLMCTL_API_KEY=... python3 scripts/bench/jevbench_adapter.py --public-tier --jevbench-dir ~/jevbench \
+    --expect-commit bb05a335bc809e61b20c0f745d25499a82b326fc --splits original \
+    --endpoint https://127.0.0.1:8095 --model llmctl-default --ssl-cert-file ~/.config/llmctl/ca.pem \
+    --run-dir /srv/runs/jb1 --evidence-dir specs/009-jev-decision-models/evidence/jevbench/llmctl-default
+```
+
+* Fail closed: the checkout must be at `--expect-commit` (exactly 40 hex digits) with a clean tree, and the sha256 of each split must equal the
+  upstream `datasets/manifest.json` value, otherwise exit 2 and nothing runs. "Clean" covers tracked, untracked AND gitignored files
+  (a gitignored file can still change the harness); `__pycache__` / `*.pyc` are tolerated and the child runs with
+  `PYTHONDONTWRITEBYTECODE=1`. The run directory and the checkout are compared by real path (a symlink into the checkout is refused).
+  Duplicate task ids across the selected splits and empty `--allow-licence` entries are refused (exit 2).
+* The child is started as `python -E -s -m jevbench.cli run ...` (argv list, no shell, no inherited `PYTHONPATH`). `SSL_CERT_FILE` is set in the
+  child environment only. `--harness-cmd` replaces the launcher (tests only) and is recorded as `harness_override: true` in the summary.
+* Tally table (every scored item lands in exactly one bucket): **answered** (200, valid distribution; then correct / wrong), **refused**
+  (HTTP 422, 502, 503, 529 and timeouts, `refused_by_status` names the code, `timeout` for timeouts), **malformed** (the gateway answered 200
+  but the answer could not be parsed or was invalid), **failed_other** (everything else: 401, 403, **429**, 5xx not listed, connection
+  refused ...). 429 is deliberately `failed_other`, not a refusal: the caller was throttled, the gateway did not decline the item; the
+  summary also names it in `access_stop`.
+  Accuracy is reported over all scored items and over answered items, each with a Wilson interval, plus the majority/chance baseline.
+* Calibration: only when at least 200 items are licence-clean (licence in `--allow-licence`, default MIT; expected not null; no
+  exclude reason) and answered. Below that the summary says `insufficient: N<200` and no CSV is written; at 200 or more a
+  `calibration.csv` (`p_pred,correct`) is written that `llmctl-decide calibrate --labels` accepts.
+* An HTTPS gateway with a private CA: the harness uses urllib, which honours `SSL_CERT_FILE`; `--ssl-cert-file` sets it for the child only.
+* The run directory (raw responses, ledger, results) stays outside git. Tracked evidence gets item ids and aggregates only, and a README
+  saying raw outputs stay out of git unless every item is MIT.
+* Verified against the upstream source at the pinned commit (`jevbench/cli.py`, `runner.py`, `adapters/typesafe.py`) and by
+  `tests/py/test_jevbench_adapter.py::RealHarnessContractTests`, which runs the REAL stdlib harness against a stand-in gateway (skipped with a
+  reason when `~/.cache/jb/jevbench` is not at the pinned commit; clone it shallow there to run it): the CLI flags, the result field names
+  (`task_id ok valid correct predicted probs status_code model error`) and the exit code 3 of an incomplete harness run.
+* The harness stops after 3 consecutive non-422 errors or right after a 401/403/429 answer (upstream `Runner.run_all`). The adapter then
+  exits 3 explicitly: `summary.complete` is false when items are unattempted, and `summary.access_stop.status_codes` names the code, which also
+  makes the exit 3 when the stop answer was the last item. An unparseable or duplicated line in `results.jsonl` also yields exit 3 with
+  `results_unparseable_lines` / `results_duplicate_ids` and `complete: false` (the summary is still written).
+
 ## How to run
 
 ```bash

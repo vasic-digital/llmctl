@@ -15,6 +15,7 @@ One page per script, library or test suite (Constitution 11.4.18). Test pages st
 | [create_release](create_release.md) | Overview |
 | [decide](decide.md) | Overview |
 | [doc_counts](doc_counts.md) | Overview |
+| [decide_timeout](decide_timeout.md) | Overview |
 | [doctor](doctor.md) | Overview |
 | [download](download.md) | Overview |
 | [engine](engine.md) | Overview |
@@ -30,6 +31,7 @@ One page per script, library or test suite (Constitution 11.4.18). Test pages st
 | [install_opencode](install_opencode.md) | Overview |
 | [install_pi](install_pi.md) | Overview |
 | [lib_normalize_common](lib_normalize_common.md) | Overview |
+| [jevbench_adapter](jevbench_adapter.md) | Overview |
 | [llmctl](llmctl.md) | Overview |
 | [normalize_aider](normalize_aider.md) | Overview |
 | [normalize_claude_code](normalize_claude_code.md) | Overview |

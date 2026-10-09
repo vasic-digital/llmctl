@@ -546,6 +546,7 @@ it in CI.
 
 ```
 llmctl decide serve [--foreground] [--status] [--stop] [--bind H] [--port N]
+llmctl decide serve --enable [--now] | --disable
 ```
 
 Runs the Go HTTPS gateway (Jev/TypeSafe-shaped `POST /v1/systemone`; default port
@@ -559,6 +560,16 @@ Every `/v1/*` request needs `Authorization: Bearer <key>`; `/healthz` and `/read
 open. Point a TypeSafe SDK at it with `TYPESAFE_BASE_URL=https://127.0.0.1:8095`,
 `TYPESAFE_API_KEY=$LLMCTL_API_KEY` and the local CA (`SSL_CERT_FILE`). Full reference:
 `docs/decide-gateway.md`.
+
+`--enable` installs the gateway as a persistent boot-time user service (`llmctl-decide-gateway.service`
+on Linux, a launchd agent on macOS), enables it and starts it (`--now` is the explicit spelling of that
+default); `--disable` stops it, disables it and removes the unit and the gateway's registry row. Both are
+idempotent and take no other flag (set the port and bind in `$LLMCTL_STATE_DIR/decide/gateway.conf`). `--enable`
+refuses (rc 1) while an installed engine unit predates the current generator, naming it; the fix is
+`llmctl install`. To pick up a changed unit or wrapper: `systemctl --user restart llmctl-decide-gateway.service`.
+Persistent engines register at the path they really serve (llama `/health`, onnx `/readyz` (truthful readiness; `/healthz` is liveness only), colibri `/v1/models`).
+Evidence: `tests/test_decide_serve_enable.sh` (systemctl stubbed, no real unit is created; macOS is a dry run only).
+The full service picture (linger, `gateway.conf`, drop-ins, CPU-adaptive timeout, the 15 s drain grace on stop, LAN binding) is in [persistent-services](persistent-services.md) and [lan-exposure](lan-exposure.md).
 
 Real evidence (`tests/test_gateway_endpoints.sh`): the built binary serves HTTPS and
 answers every reachable row of the endpoint inventory (including `401` for an absent or
@@ -628,9 +639,15 @@ Service registry and port allocator (details: [registry-discovery](registry-disc
 (no network, no key). The MCP server itself is `build/llmctl-decide mcp` (stdio, one tool `decide`; a configuration problem becomes a tool error,
 never a default answer). See [agents](agents/README.md).
 
+### decide scale
+
+`llmctl decide scale <profile> <N>` starts or stops instances of one decision profile until `N` run (OD-23; shell scheduler, `lib/scheduler.sh`). Instances are `<profile>`, `<profile>.2`, ...; scale-up is admission-bounded and all-or-nothing
+(exit 3 with the needed-versus-remaining MiB, nothing started), further instances get registry-allocated ports (`llmctl build decide` provides the allocator), scale-down stops the highest-numbered first.
+`LLMCTL_DECIDE_MODE=deterministic|throughput` chooses how the gateway spreads requests. Details, exit codes and sample output: [scripts/decide](scripts/decide.md#scale-od-23). Reporting only, without starting anything: `llmctl decide capacity`.
+
 ### decide calibrate | probe-order | completions
 
-Implemented in the `llmctl-decide` binary (operator decision OD-23); `llmctl decide <name>` forwards to them. `scale` is **not** implemented (planned).
+Implemented in the `llmctl-decide` binary (operator decision OD-23); `llmctl decide <name>` forwards to them.
 `calibrate --profile P --labels F [--method temperature|platt|isotonic]` reports accuracy with a Wilson interval, baselines and ECE/MCE/Brier and
 writes a profile bound to the model sha256 and the prompt-template hash (with fewer than 200 labels, isotonic with fewer than 1000, or all-same outcomes, only the report is printed: no profile is written at all). `probe-order
 --questions F [--permute K]` measures option-order sensitivity. `completions {bash|zsh}` prints a completion script. Flags, label-file format and
@@ -747,7 +764,7 @@ the relevant `lib/*.sh` module.
 | `LLMCTL_DECIDE_TEMPERATURE` | Calibration temperature dividing letter logprobs before renormalization in the gateway's `letter-logit` driver (default `1.0`). |
 | `LLMCTL_DECIDE_NO_INTERACTIVE=1` | Makes every `decide` interactive path exit 2 — set it in CI. |
 | `LLMCTL_DECIDE_MAX_OPTIONS` | Practical cap on choice options (default `20`; hard cap 26). |
-| `LLMCTL_DECIDE_TIMEOUT` | Seconds: the gateway's end-to-end budget per request (default `8`) and, for `decide ask`, the per-attempt wait (default `30`; `--timeout` overrides). |
+| `LLMCTL_DECIDE_TIMEOUT` | Seconds: the gateway's end-to-end budget per request (default `8`; when unset and a CPU-placed llama decision instance (offload 0; the onnx encoder does not count) is running or enabled, the launcher (`svc_hook.sh run-gateway` / `decide serve`) raises it to `120` and the start-up banner says `cpu-adaptive`; an explicit value always wins, see `docs/decide-gateway.md`) and, for `decide ask`, the per-attempt wait (default `30`; `--timeout` overrides). |
 | `LLMCTL_API_KEY` | The one access key of the decision gateway and llmctl's own clients (environment, else installation `.env`, else generated on first `decide serve`). Never printed except by `decide key show --yes-print`. |
 | `LLMCTL_DECIDE_MAX_STATE_CHARS` | State budget for decoder profiles (default `8192`); over-budget is rejected with 422 unless `LLMCTL_DECIDE_TRUNCATE=1` (then head+tail shortened, header `x-llmctl-decide-truncated: true`). |
 | `LLMCTL_ONNX_MAX_PAIRS` / `LLMCTL_ONNX_MAX_BODY_BYTES` / `LLMCTL_ONNX_MAX_CONCURRENCY` / `LLMCTL_ONNX_SOCKET_TIMEOUT` | Limits of the internal encoder scoring runtime (`lib/onnx_server.py`; defaults 64 / 4 MiB / 4 / 30 s). (Historical: the retired `LLMCTL_ONNX_FAKE` seam no longer exists.) the runtime key comes from a 0600 `--api-key-file`, never the environment. |

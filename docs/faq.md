@@ -544,3 +544,35 @@ None of them. See [related-tools](related-tools.md).
 
 In the default deterministic mode the same request gets byte-identical answers from the same engine instance on the same device placement. A busy primary can overflow
 to another instance (named in `x-llmctl-decide-instance`), and a CPU and a GPU run may differ in the last digits ([limitations](limitations.md)).
+
+### From another machine, `https://HOST:8095` fails certificate verification although the CA is trusted.
+
+The host in the URL must be in the certificate's SAN list. `llmctl decide cert show` prints `sans`; add the missing name or address with
+`llmctl decide cert renew --san dns:NAME,ip:ADDR` and then signal the running gateway (`kill -HUP "$(awk '{print $1}' "$LLMCTL_STATE_DIR/decide/gateway.pid")"`), because it keeps serving the old pair
+until it reloads. This is the nezha experience (`nezha.local` and the LAN address failed until re-issued with SANs); see [lan-exposure](lan-exposure.md).
+A `.local` name can also fail only in llmctl's own client when the resolver does not do mDNS: use the address.
+
+### I renewed the certificate and the new name is still refused / my extra names disappeared.
+
+Two separate effects, both observed: the gateway serves the new leaf only after SIGHUP or a restart, and each `cert renew` rebuilds the SAN list from the host plus the `--san` / `LLMCTL_TLS_SAN` of **that** run, so pass the full list every time.
+A name outside the CA's constraints (a public DNS name) is refused with exit 5; see [runbooks](runbooks.md#renew--reload-the-certificate).
+
+### Does the gateway come back after a reboot or logout?
+
+Only if it is a user service with linger: `llmctl decide serve --enable` installs `llmctl-decide-gateway.service` and runs `loginctl enable-linger`; engines need `llmctl enable <profile>` (a plain `start` does not survive a reboot).
+[persistent-services](persistent-services.md) has the unit, `gateway.conf`, drop-ins and how to verify. A real reboot was not performed on the development host.
+
+### A slow CPU request was cut off when I restarted the gateway.
+
+On stop the gateway drains in-flight requests for at most 15 s (`LLMCTL_DECIDE_DRAIN_GRACE`), while the CPU-adaptive request deadline is 120 s; a request still running after the grace is closed. This is a known open gap (G-161) and the behaviour is unchanged;
+the two values to raise together and the caveat that this was not exercised are in [persistent-services](persistent-services.md#stopping-the-15-s-drain-grace-g-161).
+
+### How do I back up and restore the certificate and the key?
+
+Archive `$LLMCTL_HOME/cert/` and the installation `.env` with owner-only modes, restore them with the same modes, then run `llmctl decide cert doctor` and `llmctl decide key doctor`.
+Clients keep working as long as the CA is the same. The exercised procedure and the failure you get from a loosened key file are in [runbooks](runbooks.md#backup-and-restore).
+
+### What does the engine pin mean for upgrade and rollback?
+
+The llama.cpp pin is the submodule commit recorded by the release tag (`b10969` in 3.0.2, `b11379` in 3.1.0). Moving to another tag with `git checkout` plus `git submodule update --init --recursive`, then `llmctl build all` and `llmctl install`, moves the engine with it.
+Certificates, keys and models are untouched. See [runbooks](runbooks.md#upgrade-and-rollback).

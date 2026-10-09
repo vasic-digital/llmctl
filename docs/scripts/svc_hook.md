@@ -37,3 +37,7 @@ ggml_flash_attn_ext_set_n_kv_max` (reproduced: `specs/009-jev-decision-models/ev
 without `libggml*` beside them are untouched. The Linux unit already sets `LD_LIBRARY_PATH=<engine dir>` in its
 EnvironmentFile (`svc_write_env`). Test: `tests/test_service_ops_hardening.sh` (G-129). The macOS path was verified
 statically only (no Mac).
+
+## Health path used by `register` and `run-gateway` (G-162 follow-up)
+
+`register` waits for, and registers, a service at the path from `portreg_health_path` (llama `/health`, colibri `/v1/models`, onnx `/readyz`), read from the instance env record's `LLMCTL_REG_HEALTH`. A record written before the fix may still say `/health` for an onnx profile; re-run `llmctl enable <profile>` to rewrite it. `run-gateway` sources `lib/decide_timeout.sh` and applies the CPU-adaptive request deadline (`docs/scripts/decide_timeout.md`) before starting the gateway.

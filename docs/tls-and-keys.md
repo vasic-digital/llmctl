@@ -4,7 +4,7 @@
 |---|---|
 | Scope | `llmctl decide serve`, `llmctl decide key`, `llmctl decide cert` |
 | Spec anchors | FR-019, FR-022, FR-057..FR-073, FR-087 |
-| Revision | 1 (2026-10-07) |
+| Revision | 2 (2026-10-09) |
 
 ## Contents
 
@@ -16,6 +16,8 @@
 - [Request log](#request-log)
 - [Loopback engines and port squatting](#loopback-engines-and-port-squatting)
 - [Honest limits](#honest-limits)
+
+Procedures (rotate, renew, back up, restore, upgrade) are in [runbooks](runbooks.md); serving other machines is [lan-exposure](lan-exposure.md).
 
 ## Access key
 
@@ -56,6 +58,9 @@
   `llmctl_decide_key_source_errors_total` counts every failed refresh, and after the grace **every request is refused** until the
   source is usable again. Nothing is silently kept alive. At start the gateway reads the accepted-key set once and refuses to
   start (exit 4) if that fails, so a configuration that cannot keep serving fails at start, not seconds into production.
+
+Observed with the real binary on a scratch gateway (2026-10-09): `key rotate --grace 20` while the gateway ran -> the new key answered 200 within 2 s (the shortest wait tried) without a restart, the old key answered 200 inside the grace and **401 after it**.
+The stored overlap lives in the env file as `LLMCTL_API_KEY_PREVIOUS` and `LLMCTL_API_KEY_PREVIOUS_EXPIRES` (epoch seconds); `key doctor` then adds `rotation overlap: a previous key is stored in the env file`.
 
 ## Certificates and private-key files
 

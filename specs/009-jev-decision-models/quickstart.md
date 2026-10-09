@@ -84,7 +84,7 @@ Prereq: golden question set (≥ 30 questions over the three types, hash-pinned,
 llmctl decide calibrate --profile <p> --labels tests/fixtures/golden/<p>.csv --report $RUN/<p>-report.json
 llmctl decide probe-order --profile <p> --questions tests/fixtures/golden/order.jsonl
 ```
-Expected per profile that fits: all answers well-formed; accuracy with sample size, interval and baseline from the same tool, exceeds baseline; letter mass recorded (decoder profiles); option-order flip rate recorded; encoder RSS idle/peak/after-N recorded; profiles that cannot fit list the exact numbers and `not-exercised`. Optional: JevBench public tier through its `typesafe` adapter pointed at the gateway, labelled "public tier, contamination possible".
+Expected per profile that fits: all answers well-formed; accuracy with sample size, interval and baseline from the same tool, exceeds baseline; letter mass recorded (decoder profiles); option-order flip rate recorded; encoder RSS idle/peak/after-N recorded; profiles that cannot fit list the exact numbers and `not-exercised`. Optional: JevBench public tier through its `typesafe` adapter pointed at the gateway, labelled "public tier, contamination possible" (`scripts/bench/jevbench_adapter.py --public-tier`, see `docs/golden-set.md`).
 
 ## Q7 Second-vantage reachability
 

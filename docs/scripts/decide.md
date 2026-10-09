@@ -180,6 +180,47 @@ Label file: CSV with header; required `p_pred` (probability the answer gave to i
 
 Details and limits: `specs/009-jev-decision-models/contracts/cli.md`.
 
+## scale (OD-23)
+
+`llmctl decide scale <profile> <N>` - start or stop instances of **one decision profile** until exactly `N` run. It is implemented in the shell scheduler (`sched_decision_scale` in `lib/scheduler.sh`; `decide_scale` in `lib/decide.sh` is a one-line call), not in the Go binary; `_DECIDE_FORWARDED` lists it only so the command table matches.
+
+* Instance keys: `<profile>`, `<profile>.2`, `<profile>.3`, ... Each has its own service env file, reservation record, registry row, port hold and internal key file. The primary keeps its documented port; every further instance gets a registry-allocated port (`portreg_allocate_dynamic`, base port + 1000 x (ordinal - 1) as the starting hint).
+* Scale **up** is admission-bounded by the same predicate `llmctl start` uses and is all-or-nothing: if instance K does not fit, nothing is started and the command exits **3** with the numbers (`cannot scale 'P' to N: instance K (P.K) needs A MiB RAM + B MiB VRAM, but only C MiB RAM + D MiB VRAM remain (M more instance(s) would fit; R running; nothing was started)`).
+  A runtime failure (no usable port, unit refused to start, engine never answered its health path within `LLMCTL_READY_TIMEOUT`, default 60 s) rolls back every instance started in this call (exit 1). `SCHED_SCALE_BESTEFFORT=1`, set by the restore after a failed `llmctl switch`, keeps what did start and exits 1 with the list of what could not.
+* Scale **down** stops the highest-numbered instances first and withdraws their registry rows. `N` equal to the current count prints `already N instance(s) running; nothing to do` (exit 0). `N = 0` stops them all.
+* More than one instance needs the registry allocator (`llmctl build decide`); without it a real run is refused before anything is reserved (exit 1, message names the build command).
+* `LLMCTL_DECIDE_MODE=deterministic` (default) serves a profile from its primary and overflows to the next instance only when the primary is saturated (byte-identity per instance); `throughput` spreads least-loaded and marks every response `x-llmctl-decide-mode: throughput`. Any other value is refused (exit 1).
+* Exit codes: 0 done / nothing to do, 1 unknown or non-decision profile, runtime failure, 2 usage (missing profile or `N`, `N` not a non-negative integer), 3 refused by admission.
+
+Argument errors, run against the real `bin/llmctl` with scratch state directories:
+
+```
+$ llmctl decide scale                      ERROR: usage: llmctl decide scale <profile> <N>                                  (rc 2)
+$ llmctl decide scale decide-nli x         ERROR: decide scale: N must be a non-negative integer, got 'x'                    (rc 2)
+$ llmctl decide scale nosuch 2             ERROR: unknown profile: nosuch (see: llmctl models list)                         (rc 1)
+$ llmctl decide scale fast 2               ERROR: 'fast' is not a decision profile (decide scale only scales decision profiles)  (rc 1)
+```
+
+Dry run (`LLMCTL_DRY_RUN=1`, scratch `XDG_*` directories, nothing started):
+
+```
+$ LLMCTL_DRY_RUN=1 llmctl decide scale decide-nli 2
+[llmctl] wrote <state>/services/decide-nli.env
+[dry-run] systemctl --user start llmctl-onnx@decide-nli.service
+started decide-nli (mode=cpu, port=8096, reserved 3006 MiB RAM + 0 MiB VRAM)
+[llmctl] wrote <state>/services/decide-nli.2.env
+[dry-run] systemctl --user start llmctl-onnx@decide-nli.2.service
+started decide-nli.2 (mode=cpu, port=9096, reserved 3006 MiB RAM + 0 MiB VRAM)
+decide-nli: scaled up to 2 instance(s) (2 started)
+decide mode: deterministic - requests are served by the primary instance and overflow to the next instance only when it is saturated (byte-identity per instance)
+```
+
+Tests: `tests/test_decide_scale.sh` (fixture backend: admission refusals, rollback on start failure, port-hold release, best-effort restore, registry-allocator requirement; last run: `RESULT: PASS`). **UNCONFIRMED:** a real (non dry-run) start of a second engine instance was not run in this pass (task T135 records "real-engine start unverified").
+
+## Persistent gateway: `serve --enable` and the CPU-adaptive timeout
+
+* `llmctl decide serve --enable [--now]` installs and enables the gateway as a boot-time user service (systemd user unit on Linux, launchd agent on macOS) and `--disable` stops, disables and removes it. It is idempotent, refuses while an installed engine unit is stale (`llmctl install`), and under `LLMCTL_DRY_RUN=1` writes no unit. A re-enable over a changed unit does `systemctl --user try-restart`. Tests: `tests/test_decide_serve_enable.sh` (stubbed `systemctl`; macOS is dry-run only). Operator guide: `docs/persistent-services.md`.
+* `decide_serve` sources `lib/decide_timeout.sh` and, when `LLMCTL_DECIDE_TIMEOUT` is not set and a CPU-placed llama decision instance is running or enabled, exports `LLMCTL_DECIDE_TIMEOUT=120` (source `cpu-adaptive`); an explicit value always wins, and the gateway banner prints the effective value and its source. Details: `docs/scripts/decide_timeout.md`; test: `tests/test_decide_timeout_adapt.sh`.
 ## Related scripts
 
 * Sources `lib/common.sh` and `lib/catalog.sh`; `capacity`/`status` use
