@@ -1,0 +1,144 @@
+#!/usr/bin/env bash
+# bounded-run - run a command inside a transient systemd --user scope with hard
+# resource limits and an optional wall-clock timeout.  Containment is by cgroup
+# (systemctl --user kill/stop on the scope) - no process-group or pid signalling
+# is ever done here, so a bad pgid can never reach "kill -1" (constitution 11.4.263).
+#
+# usage: bounded-run [-m MEM] [-t TASKS] [-c CPU%] [-s SWAP] [-T SECONDS] [-n NAME] [-q] [--tiny] [--no-disk-tmp] -- CMD [ARGS...]
+#   -m  MemoryMax   (systemd size, e.g. 6G)           default: 50% of MemTotal; < 1 GiB is refused unless --tiny
+#       minimums: go test -race 4G; builds / archives 6G+; llama-server = model size + 3G (docs/host-safety.md)
+#   -t  TasksMax    (count)                           default: clamp(nproc*128, 512, 8192)
+#   -c  CPUQuota    (percent of ONE cpu, e.g. 400)    default: 75% of all CPUs
+#   -s  MemorySwapMax                                 default: min(MemoryMax/2, SwapTotal/4) (not 0: shmem/tmpfs is only reclaimable via swap)
+#   -T  wall-clock timeout in seconds (0 = none)      default: 0
+#   -n  scope name suffix                             default: <pid>
+#   -q  quiet (no banner)
+#   --tiny         allow MemoryMax < 1 GiB (deliberate tiny containment tests only)
+#   --no-disk-tmp  do NOT redirect TMPDIR (default: a per-run 0700 dir on DISK, removed on exit; /tmp is RAM-backed tmpfs and its
+#                  pages are charged, unreclaimably, to the writing cgroup -> memcg OOM -> GNOME "Application Stopped")
+# env: BOUNDED_RUN_MEM / _TASKS / _CPU / _SWAP / _TIMEOUT supply the defaults; BOUNDED_RUN_TMP_ROOT moves the TMPDIR root.
+# exit: the command's status; 124 on timeout; 125 on bounded-run's own error.
+# Processes the command leaves behind (orphans) are killed when it exits - the scope is the unit.
+# The memory high watermark is set to 75% of MemoryMax (reclaim/throttle before kill).
+# Only a scope THIS run created is ever killed: if a scope named bounded-run-<NAME>.scope already exists the run
+# exits 125 and leaves it alone; a start race lost to another run leaves no "started" marker, so neither the cleanup
+# nor the timeout watchdog of the loser signals the winner's scope.
+set -uo pipefail
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# installed copy lives next to lib.sh in ~/.local/share/hostsafety; repo copy next to it
+for cand in "${here}/lib.sh" "${HOSTSAFETY_LIB:-/nonexistent}" "${XDG_DATA_HOME:-${HOME}/.local/share}/hostsafety/lib.sh"; do
+  if [[ -r "${cand}" ]]; then
+    # shellcheck source=lib.sh
+    source "${cand}"; break
+  fi
+done
+type hs_memtotal_bytes >/dev/null 2>&1 || { echo "bounded-run: hostsafety lib.sh not found" >&2; exit 125; }
+
+mem_total="$(hs_memtotal_bytes)" || exit 125
+cpus="$(hs_nproc)"
+mem="${BOUNDED_RUN_MEM:-$((mem_total / 2))}"
+tasks="${BOUNDED_RUN_TASKS:-$(hs_clamp $((cpus * 128)) 512 8192)}"
+cpu="${BOUNDED_RUN_CPU:-$((cpus * 75))}"
+swap="${BOUNDED_RUN_SWAP:-}"   # empty => computed below from the resolved MemoryMax
+tiny=0 disk_tmp=1
+timeout_s="${BOUNDED_RUN_TIMEOUT:-0}"
+name="$$" quiet=0
+# long flags (getopts has none): strip them from the arg list, stop at "--"
+_args=()
+for _a in "$@"; do
+  if [[ "${_a}" == -- ]]; then _args+=("$@"); break; fi
+  shift
+  case "${_a}" in --tiny) tiny=1 ;; --no-disk-tmp) disk_tmp=0 ;; *) _args+=("${_a}") ;; esac
+done
+set -- "${_args[@]}"
+while getopts ':m:t:c:s:T:n:qh' o; do
+  case "${o}" in
+    m) mem="${OPTARG}" ;; t) tasks="${OPTARG}" ;; c) cpu="${OPTARG}" ;;
+    s) swap="${OPTARG}" ;; T) timeout_s="${OPTARG}" ;; n) name="${OPTARG}" ;; q) quiet=1 ;;
+    h) sed -n '2,26p' "${BASH_SOURCE[0]}"; exit 0 ;;
+    *) echo "bounded-run: bad option -${OPTARG:-?}" >&2; exit 125 ;;
+  esac
+done
+shift $((OPTIND - 1))
+[[ "${1:-}" == "--" ]] && shift
+(( $# > 0 )) || { echo "bounded-run: no command given (usage: bounded-run [opts] -- CMD...)" >&2; exit 125; }
+[[ "${tasks}" =~ ^[0-9]+$ && "${cpu}" =~ ^[0-9]+$ && "${timeout_s}" =~ ^[0-9]+$ ]] || { echo "bounded-run: tasks/cpu/timeout must be integers" >&2; exit 125; }
+[[ "${name}" =~ ^[A-Za-z0-9_.-]+$ ]] || { echo "bounded-run: bad scope name '${name}'" >&2; exit 125; }
+
+# resolve MemoryMax into bytes for the 80% MemoryHigh watermark
+mem_bytes="$(numfmt --from=iec "${mem}" 2>/dev/null)" || { echo "bounded-run: bad memory size '${mem}'" >&2; exit 125; }
+min_bytes=$((1024 * 1024 * 1024))
+if (( mem_bytes < min_bytes && ! tiny )); then
+  echo "bounded-run: MemoryMax ${mem} is below 1 GiB - refused. Small caps OOM-kill ordinary tools (git, zip, go) and GNOME then shows 'Application Stopped'." >&2
+  echo "bounded-run: use at least go test -race 4G, builds/archives 6G, llama-server model+3G; pass --tiny only for a deliberate tiny containment test (docs/host-safety.md)." >&2
+  exit 125
+fi
+high=$((mem_bytes * 75 / 100))   # a real gap below Max: the kernel reclaims/throttles here long before any kill
+if [[ -z "${swap}" ]]; then      # shmem/tmpfs pages are only reclaimable via swap; a little swap beats an OOM kill, never more than 1/4 of the device
+  swap="$(hs_min $((mem_bytes / 2)) $(($(hs_swaptotal_bytes) / 4)))"
+fi
+unit="bounded-run-${name}.scope"
+# Only a scope THIS run created may be killed: a name collision must never reach another run's scope.
+_ls="$(systemctl --user show "${unit}" -p LoadState --value 2>/dev/null)"
+if [[ -n "${_ls}" && "${_ls}" != not-found ]]; then
+  echo "bounded-run: scope ${unit} already exists (LoadState=${_ls}) - refusing; pick another -n NAME. The running scope is untouched." >&2
+  exit 125
+fi
+
+run_tmp=""
+if (( disk_tmp )); then
+  tmp_root="${BOUNDED_RUN_TMP_ROOT:-${XDG_CACHE_HOME:-${HOME}/.cache}/bounded-run/tmp}"
+  mkdir -p "${tmp_root}" 2>/dev/null && chmod 0700 "${tmp_root}" && run_tmp="$(mktemp -d "${tmp_root}/${name}.XXXXXX" 2>/dev/null)" \
+    || { echo "bounded-run: cannot create a disk-backed TMPDIR under ${tmp_root} (use --no-disk-tmp to skip)" >&2; exit 125; }
+  chmod 0700 "${run_tmp}"
+  export TMPDIR="${run_tmp}" TEMP="${run_tmp}" TMP="${run_tmp}" GOTMPDIR="${run_tmp}"   # inherited by the scope's command
+fi
+(( quiet )) || echo "bounded-run: ${unit} MemoryMax=${mem} MemoryHigh=${high} TasksMax=${tasks} CPUQuota=${cpu}% SwapMax=${swap}${run_tmp:+ TMPDIR=${run_tmp}} timeout=${timeout_s}s" >&2
+flag="$(mktemp "${XDG_RUNTIME_DIR:-/tmp}/bounded-run.XXXXXX")" || exit 125
+started="${flag}.started"   # written by the wrapper INSIDE the scope we created: proof that the scope is ours
+# shellcheck disable=SC2329  # invoked via trap
+cleanup() { rm -f "${flag}" "${started}"; [[ -n "${run_tmp}" && -d "${run_tmp}" ]] && rm -rf -- "${run_tmp}"; return 0; }
+trap cleanup EXIT
+
+systemd-run --user --scope --quiet --collect --unit="${unit}" \
+  -p MemoryMax="${mem_bytes}" -p MemoryHigh="${high}" -p MemorySwapMax="${swap}" \
+  -p TasksMax="${tasks}" -p CPUQuota="${cpu}%" -p OOMPolicy=kill \
+  -- bash -c 'echo "$$" >"$1"; shift; exec "$@"' bounded-run-wrap "${started}" "$@" &
+runner=$!
+
+watchdog=""
+if (( timeout_s > 0 )); then
+  (
+    # watchdog fds are detached from any $(...) capture (shell-instrument footgun I7)
+    sleep "${timeout_s}"
+    [[ -s "${started}" ]] || exit 0      # our scope never started (e.g. lost a name race): nothing of ours to kill
+    echo timeout >"${flag}"
+    systemctl --user kill --kill-whom=all --signal=SIGTERM "${unit}" 2>/dev/null
+    sleep 3
+    systemctl --user kill --kill-whom=all --signal=SIGKILL "${unit}" 2>/dev/null
+    systemctl --user stop "${unit}" 2>/dev/null
+  ) >/dev/null 2>&1 &
+  watchdog=$!
+fi
+
+# forward INT/TERM to the scope (by cgroup), never by pgid
+# shellcheck disable=SC2329  # invoked via trap
+forward() { [[ -s "${started}" ]] && systemctl --user kill --kill-whom=all --signal="$1" "${unit}" 2>/dev/null; return 0; }
+trap 'forward SIGTERM' TERM
+trap 'forward SIGINT' INT
+
+wait "${runner}"; rc=$?
+while [[ ${rc} -ge 128 && -z "$(cat "${flag}" 2>/dev/null)" ]] && kill -0 "${runner}" 2>/dev/null; do wait "${runner}"; rc=$?; done
+# the scope is the unit of containment: anything the command left behind dies with the run (only if it is OURS)
+if [[ -s "${started}" ]]; then systemctl --user kill --kill-whom=all --signal=SIGKILL "${unit}" >/dev/null 2>&1; fi
+if [[ -n "${watchdog}" ]]; then
+  # stop the sleeping watchdog subshell and its sleep child without signalling a group
+  pkill -P "${watchdog}" 2>/dev/null
+  kill "${watchdog}" 2>/dev/null
+  wait "${watchdog}" 2>/dev/null
+fi
+if [[ "$(cat "${flag}" 2>/dev/null)" == "timeout" ]]; then
+  (( quiet )) || echo "bounded-run: TIMEOUT after ${timeout_s}s - scope ${unit} terminated" >&2
+  exit 124
+fi
+exit "${rc}"
