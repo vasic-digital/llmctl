@@ -161,8 +161,11 @@ that bounds it (1024 / 1024 / 2048 tokens, so a longer state is answered `422`);
 `decide-kev-9b` and `decide-lev` carry **no measured overhead yet** - they could not be admitted on the
 test host, so their reservation is weights + the flat KV rule only and is likely an under-estimate.
 A "cpu mode" (`-ngl 0`) placement is not VRAM-free either: a CUDA build offloads large-batch ops to the GPU
-(`--op-offload`), and the planner books no VRAM for it - measured 0.1-0.2 GiB for Julia-1/Laya and 2.3 GiB for
-Kev-0.8B (`evidence/live/op-offload-vram-experiment.txt`; `--no-op-offload` removes it but is ~15x slower).
+(`--op-offload`). On a host with a GPU the planner books that VRAM (measured 0.1-0.2 GiB for Julia-1/Laya, 2.3 GiB for
+Kev-0.8B, 4.4 GiB for Kev-4B, which is one `nvidia-smi` sample taken 20 s after start with no request sent, not a peak under load: `evidence/live/op-offload-vram-experiment.txt`,
+`evidence/live/decide-kev-4b/cpu-mode-vram-live-2026-10-08.txt`; `--no-op-offload` removes it but is ~15x slower); a profile
+whose cpu-mode VRAM is unmeasured books its gpu-mode peak as a ceiling when that is known, else 0 and is reported UNKNOWN
+(see `docs/hardware-tiers.md`, G-138).
 
 **Live results** (this host: Ryzen/RTX 3060 12 GB, ~5 GB RAM available, `evidence/live/NATIVE-REPORT.md`):
 the scheduler admitted `decide-julia` and `decide-laya` (cpu mode); `decide-kev-08b` ran once under the
@@ -344,6 +347,71 @@ the pin. The 2026-10-06 pins were captured from the HF API via
 [`docs/research/encoder-model-hashes.md`](research/encoder-model-hashes.md)
 (`decide-nli`'s ONNX export + tokenizer, the JevK5 2B/9B GGUFs, and the
 Laya BYO-ONNX verification).
+
+## Live results (nezha, CPU)
+
+Real-model runs on the LAN host `nezha` (i7-1165G7, 8 threads, 64 GB RAM, **CPU only**, `--n-gpu-layers 0`, ctx 8192, llama.cpp `0.5.0-dev` commit `1537a0a`, golden set of 132 originals + 41 option-order permutations, plus 23 probes). Run 2026-10-08. Evidence (copied verbatim, `SHA256SUMS` re-verified locally for every `golden/` and `probes/` directory):
+`specs/009-jev-decision-models/evidence/live-models/nezha-<profile>-2026-10-08/`.
+
+**These nezha numbers are PRE-FIX** (they predate the `enable_thinking=false` change in `internal/gateway/letter.go`); the letter-logit profiles' post-fix status is in [anton CPU thinking-fix runs (2026-10-09)](#anton-cpu-thinking-fix-runs-2026-10-09) below.
+
+Provenance caveat: the llmctl tree on nezha was an uncommitted snapshot (no `.git`; the exact source commit is **UNCONFIRMED** — an informal diff suggested it sits between commits `339cb6c` and `f1a22ea`, but no hash-comparison file was captured, so treat that as a lead, not a fact), so these results are **not** pinned to a repository commit and predate HEAD fixes (e.g. `9367d90`). Calibration is "insufficient (n=132, need 200)" on every run; no result below is a calibrated probability.
+
+| profile | model (sha256 prefix) | protocol seen | golden well-formed | noul acc [95% CI] (baseline) | choice acc [CI] (baseline) | score acc [CI] (baseline) | p50 latency |
+|---|---|---|---|---|---|---|---|
+| decide-lev | lev Q4_K_M (3f61b27c) | systemone-native | 132/132 | 0.967 [0.886,0.991] (0.667) | 0.976 [0.874,0.996] (0.235) | 0.516 [0.348,0.680] (0.290) | 8.2 s |
+| decide-kev-4b | Kev-4B Q4_K_M (33ae6b18) | systemone-native | 132/132 | 0.950 [0.863,0.983] (0.667) | 1.000 [0.914,1.000] (0.235) | 0.613 [0.438,0.763] (0.290) | 2.5 s |
+| decide-kev-9b | Kev-9B Q4_K_M (86a60849) | systemone-native | 132/132 | 0.967 [0.886,0.991] (0.667) | 1.000 [0.914,1.000] (0.235) | 0.710 [0.534,0.839] (0.290) | 4.6 s |
+| decide-pro | spark-x2.5-4b q8_0 (dbec3c89) | letter-logit | **68/132** | 0.567 [0.441,0.684] (0.667) | 0.488 [0.343,0.635] (0.235) | 0.290 [0.161,0.466] (0.290) | 7.2 s |
+| decide (decider-4b) | decider-4b-v2.1 Q4_K_M (c7083fcf) | letter-logit | **0/132** | 0.000 | 0.000 | 0.000 | n/a |
+| decide-2b | jevk5-2b-v0.2 Q8_0 (17222f27) | letter-logit | **0/132** | 0.000 | 0.000 | 0.000 | n/a |
+| decide-max | jevk5-9b-v0.3.3 Q8_0 (283de8fd) | n/a | **no result** | - | - | - | - |
+
+What the data shows (and what it does not):
+
+- **decide-lev, decide-kev-4b, decide-kev-9b** ran to completion with every golden request well-formed (0 malformed, 0 HTTP 503/not_ready lines in `golden.log`). For all three the lower CI bound of the `noul`, `choice` and `score` groups exceeds the stated baseline (`lower>baseline=True` in `golden-stats.txt`). The `score` group is the weak one (0.52-0.71). On the 23-request probe set only `noul` clears its baseline for lev/kev-4b/kev-9b; `choice` and `score` probes (n=6, n=4) are too small to separate from baseline. n is small throughout; per-family intervals are wide.
+- **decide-pro** (letter-logit) is **PARTIAL / unusable**: only 68 of 132 golden requests (and 11 of 23 probes) were well-formed; the rest returned HTTP 422 `readout_failed` and are counted MALFORMED by `run_golden.py`. Its accuracy over the 132 does not beat the majority baseline on `noul` or `score`. Its `latency.json` covers only the 84 successful golden calls. The 4-option `smoke` failed with `option_missing` (an option letter absent from the first-token alternatives); the 2-option smoke returned rc=0.
+- **decide-2b and decide (decider-4b)** produced **0/132 well-formed** (every request HTTP 422 `readout_failed`: "The model produced no usable answer"); their 0.000 accuracies are *malformed-rate artefacts, not model accuracy*. The saved `root-cause-first-tok.txt` probes (max_tokens 1, logprobs) show the engine returning the first token in `reasoning_content` with empty `content`; the thinking-template cause is now **CONFIRMED live for decide-2b**: after the `enable_thinking=false` fix the same profile went from 0/132 to 128/132 well-formed (anton run 2, below). Pre-fix observation: decide-2b opens with a reasoning preamble ("The"/"Thinking", p~0.78 / ~1.0, option letters absent from the top 8), which a one-token letter-logit readout cannot read. For **decide (decider-4b)** the top-1 first token *is* a letter ("A", logprob -2.301) yet every request was still rejected, so its pre-fix cause was left open here (letter probability mass ~0.12, versus ~0.75 for decide-pro); the post-fix anton diagnosis (below) identifies the rejection criterion as the catalog `mass_threshold` 0.5 against a combined letter mass of 0.44-0.47. decide-pro's first-token alternatives include "We"/"The"/"First" competing with the letters. This is observed on this snapshot only; HEAD later changed `max_options` for JevK5 profiles (`9367d90`) and these two profiles were not re-run on HEAD.
+- **No result was invalidated by 503/not_ready**: the only `503|not_ready` matches in the copied logs are a single false hit each in `decide` and `decide-pro` (the strings are `S-022 .. 5036ms` / `C-015~p ..` lines matched by an unrelated digit pattern, not HTTP 503); the failures are 422 readout failures, reported as MALFORMED.
+- **decide-max** (JevK5 9B Q8_0): **no result as of 2026-10-08** (`run_all.sh` on nezha, golden phase started 17:19Z, had not finished when the directory was copied); the copied directory is an in-progress snapshot (smoke failed with "no usable answer"; no `RESULT.txt`, no stats). It is **not** a result.
+- `RESULT.txt` says `COMPLETED` for every finished profile, including the ones with 0/132 well-formed: it means "the harness finished", not "the model worked". Use `well_formed` and the per-group CIs.
+- All numbers are CPU-only (no GPU), single run, uncalibrated; they say nothing about GPU behaviour or about any model not listed.
+
+### decide-2b after the thinking fix (anton, CPU) - INCOMPLETE run, not a result
+
+Run 2026-10-08 on host `anton` (CPU only) against `decide-2b` (letter-logit) with the then-uncommitted `chat_template_kwargs.enable_thinking=false` change in `internal/gateway/letter.go` (tree HEAD `c5301de` plus that change, committed later as `5184565`; `context.txt`). Evidence: `specs/009-jev-decision-models/evidence/live-models/anton-decide-2b-thinkingfix-2026-10-08/` (see its `README.md`). The run was interrupted by a host hang, so it is **incomplete**.
+
+- 58 of 132 golden requests were well-formed (before the fix: 0/132). In `golden.log` 88 requests are `MALFORMED(http 502)` (each after about 27 s), 8 are `MALFORMED(http 422)` and 3 are `MALFORMED(URLError)`.
+- Accuracy over the well-formed answers does not beat the baselines (per-group lines in `golden.log`; for example `ticket_type` n=2 and `weekday_gap` n=2 are far too small to say anything). Calibration reported "insufficient for calibration (n=58, need 200)".
+- The cause of the HTTP 502 responses in this run is **UNCONFIRMED**: the gateway returned 502 after about 27 s, but no engine-side evidence in this directory identifies why. The complete run 2 (below) had 0 x 502 for the same profile.
+- This is not evidence that the fix works or fails; it shows only that 0/132 became 58/132 on a single, interrupted, CPU-only run. `decide-2b` stays listed as not reliable above.
+
+### anton CPU thinking-fix runs (2026-10-09)
+
+Host `anton` (CPU engine, `-ngl 0`, GPU not used), tree HEAD `c5301de` plus the then-uncommitted `internal/gateway/letter.go` (`chat_template_kwargs.enable_thinking=false`) and `resolver.go` changes, now committed as `5184565` (the failing-first run of `TestLetterRequestDisablesThinking` is recorded in `specs/009-jev-decision-models/evidence/g155/failing-first-2026-10-09.txt`: RED on `5184565~1`, GREEN on `5184565`); `build/llmctl-decide` sha256 `0c16f65a...a50f`. Single runs, uncalibrated (n<200), golden 132 originals + 41 permutations and 23 probes. Evidence: `specs/009-jev-decision-models/evidence/live-models/anton-decide-2b-thinkingfix-run2-2026-10-09/`, `anton-decide-pro-thinkingfix-2026-10-09/`, `anton-decide-thinkingfix-2026-10-09/`, `anton-decide-max-not-exercised-2026-10-09.md` (each README, `golden-stats.txt`, `probes-stats.txt`). Earlier run 1 of decide-2b (above, 58/132, interrupted) is superseded by run 2.
+
+| profile | golden well-formed | noul acc [95% CI] (baseline) | choice acc [CI] (baseline) | score acc [CI] (baseline) | probes well-formed | status |
+|---|---|---|---|---|---|---|
+| decide-2b | 128/132 (pre-fix 0/132) | 0.883 [0.778,0.942] (0.667) beats | 0.732 [0.581,0.843] (0.235) beats | 0.290 [0.161,0.466] (0.290) **does not** beat | 23/23 | works for noul and choice; score is not shown to be better than majority |
+| decide-pro | 112/132 (143 x 200, 29 x 502, 1 x 422 over 173 records) | 0.867 [0.758,0.931] (0.667) beats | 0.659 [0.505,0.784] (0.235) beats | 0.645 [0.469,0.789] (0.290) beats | 22/23 | works, but 502 `backend_failed` on long prompts on a CPU engine |
+| decide (decider-4b) | smoke 1/3, golden/probes NOT run | none | none | none | not run | not usable at the current `mass_threshold` |
+| decide-max (9B Q8_0) | NOT exercised | none | none | none | not run | no result |
+
+- **decide-2b:** option-order flip rate 0.081 (3 of 37 groups); HTTP 200 latency median 2.9 s, max 4.5 s. The 4 malformed golden originals are 8 x HTTP 422 records (C-038..C-041 and permutations), all with `option_count=20` while the catalog `max_options` for decide-2b is 16 (`9367d90`). That is consistent with a gateway max_options refusal, but the response body was not captured, so the reason code is **UNCONFIRMED**. They are not model errors.
+- **decide-pro:** 29 x HTTP 502 `backend_failed` on golden (+1 on probes), each about 27 s, `attempts: 3` (the client retries 502 up to `--retries 2`, so about 9 s per attempt). By option count: 12 -> 10, 20 -> 8, 3 -> 3, 8 -> 1, none (noul/score) -> 7. engine.log shows CPU prompt processing at about 21.6 tokens/s (a 168-token prompt took 7.8 s) and `srv stop: cancel task`. A candidate cause exists in the source: the gateway's end-to-end budget `LLMCTL_DECIDE_TIMEOUT` defaults to 8 s (`internal/server/limits.go`, `handlers.go`: a deadline error becomes a 502 with `x-llmctl-decide-reason: deadline_exceeded`). The runs did not override it, but the response headers were not captured, so the 8 s deadline as the cause of these 502s is **INFERRED, not observed**. Accuracy at 12/20 options (0.00, n=5 / n=4) covers only the few answers that finished in time. Option-order flip rate 0.034 (1 of 29 groups); HTTP 200 median 6.6 s.
+- **decide (decider-4b Q4_K_M):** smoke 1/3 well-formed; C-001 and C-002 returned HTTP 422 `readout_failed` at 2 options (not a max_options refusal). Diagnosis from captured first-token `top_logprobs`: with the fix the answer letter moves into `content` and its mass rises from 0.12 to 0.44-0.47, but the top-32 holds under half of the mass (diffuse first token), so the combined option-letter mass is below the catalog `mass_threshold` 0.5. The thinking fix works for this model; the model is a diffuse-first-token model for this prompt format. Options not applied: a lower `mass_threshold` with evidence, or a different prompt/readout.
+- **decide-max:** not run. The GGUF `jevk5-9b-v0.3.3-Q8_0.gguf` is 8.87 GiB; measured shape on this host is about model + 3 GB resident (expected peak 12-13 GB), above the 10G bounded-run cap. Needs a larger cap with a fresh host-safety review or a GPU with at least 12 GB free.
+- All numbers are CPU-only, single run, small n; the malformed items are excluded from accuracy denominators by `stats.py`. The fix is committed (`5184565`); these runs predate that commit and were made on the uncommitted tree described above, and none was re-run on the committed tree.
+
+### decide-nli live result (anton, CPU, wired run)
+
+Run 2026-10-08 on host `anton` (CPU only), the real ONNX encoder `decide-nli` (DeBERTa-v3-large zeroshot, fp32) through the HTTPS gateway, tree HEAD `c5301de` plus the then-uncommitted fix to the live-run harness (committed since as `c00da7b`). Evidence: `specs/009-jev-decision-models/evidence/live-models/decide-nli-main-wiredfix/` (see its `README.md`; `golden/` and `probes/` `SHA256SUMS` re-verified). Single run, uncalibrated (n=132, need 200).
+
+- 132/132 golden and 23/23 probes well-formed; determinism true; option-order flip rate 0 of 41 groups; p50 latency 1543 ms (golden), p95 5552 ms.
+- `choice` accuracy 0.829, 95% CI [0.687, 0.915], n=41, **beats** its chance baseline 0.235.
+- `noul` 0.533 (majority baseline 0.667) and `score` 0.226 (majority baseline 0.290) do **not** beat their baselines: the NLI encoder is not shown to be good at `noul` or `score`. Use it for `choice`, and treat its `noul`/`score` output as unreliable.
+- An earlier anton run (`decide-nli-main-79268f5-INVALID-gateway-miswired`) is invalid and superseded: the harness had not told the gateway the engine address (173 requests got 503).
+- This closes the "no real-model evidence" gap for the encoder path only. The letter-logit profiles (`decide`, `decide-2b`, `decide-pro`) failed live in the nezha table above and remain separate open defects.
 
 ## Honest limitations
 

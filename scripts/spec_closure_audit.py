@@ -360,8 +360,8 @@ def render(res, root=None, spec=None):
         L.append("| %s | %d | %d | %d | %d | %d |" % (sev, sum(c.values()), c.get("FIXED", 0), c.get("DEMOTED", 0),
                                                     c.get("ACCEPTED-LIMITATION", 0), c.get("OPEN", 0)))
     L.append("")
-    L.append("**Open high/critical rows (gate): %d** %s" % (
-        len(res["open_high"]), "(" + ", ".join(r["id"] for r in res["open_high"]) + ")" if res["open_high"] else ""))
+    L.append(("**Open high/critical rows (gate): %d** %s" % (
+        len(res["open_high"]), "(" + ", ".join(r["id"] for r in res["open_high"]) + ")" if res["open_high"] else "")).rstrip())
     L.append("")
     L.append("## Rows")
     L.append("")

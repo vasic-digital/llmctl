@@ -4,7 +4,7 @@
  "counts": {
   "H": {
    "FIXED": 8,
-   "OPEN": 1
+   "DEMOTED": 1
   },
   "M": {
    "FIXED": 28,
@@ -17,9 +17,7 @@
    "ACCEPTED-LIMITATION": 1
   }
  },
- "open_high": [
-  "D-06"
- ],
+ "open_high": [],
  "rows": [
   {
    "id": "D-01",
@@ -124,8 +122,20 @@
    "red": "specs/009-jev-decision-models/evidence/p1-red-original/d01_d15.jsonl:6",
    "guards": [],
    "green": "",
-   "closure": "OPEN",
-   "reason": "D-06: needs a live/real-model run: environment-gated, was SKIP: real-model inference needs onnxruntime + sentencepiece + the 1.7 GB model; not exercisable offline. Stays an OPEN live-va"
+   "closure": "DEMOTED",
+   "reason": "override: The finding is 'no real-model evidence'. That gap is closed: (1) the real ONNX encoder decide-nli (MoritzLaurer/deberta-v3-large-zeroshot-v2.0, fp32 onnx 1741985401 B, checksum-verified) ran live on host anton (CPU) through the HTTPS gateway at tree HEAD c5301de plus the then-uncommitted run_live_nli.sh fix: 132/132 golden and 23/23 probes well-formed, choice acc 0.829 CI[0.687,0.915] beats its chance baseline 0.235, determinism true, p50 1543 ms. NOT claimed: noul (0.533, baseline 0.667) and score (0.226, baseline 0.290) do NOT beat their majority baselines, so the NLI encoder is not shown to be good at noul/score; calibration insufficient (n=132, need 200). (2) captured live runs of the logprob-letter readout on llama-server exist (nezha, CPU, pre-HEAD snapshot, commit UNCONFIRMED): decide-pro PARTIAL 68/132 well-formed, decide 0/132, decide-2b 0/132. That is evidence of the readout path FAILING live; those letter-logit defects are separate OPEN defects, tracked as gaps-register G-155 (high, OPEN), not closed here and not hidden by this demotion. Rule applied: D-06 is an evidence-gap row, so T129's 'demoted with captured evidence' route is used for it; the code defect it exposed (G-155) falls under SC-004's 'fixed with a failing-first test' and keeps SC-004 unmet for release until closed. A first anton run (decide-nli-main-79268f5-INVALID-gateway-miswired) is superseded: the harness did not tell the gateway the engine address (173x 503).",
+   "override_evidence": [
+    "specs/009-jev-decision-models/evidence/live-models/decide-nli-main-wiredfix/README.md",
+    "specs/009-jev-decision-models/evidence/live-models/decide-nli-main-wiredfix/RESULT.txt",
+    "specs/009-jev-decision-models/evidence/live-models/decide-nli-main-wiredfix/golden-stats.txt",
+    "specs/009-jev-decision-models/evidence/live-models/decide-nli-main-wiredfix/probes-stats.txt",
+    "specs/009-jev-decision-models/evidence/live-models/decide-nli-main-wiredfix/latency.json",
+    "specs/009-jev-decision-models/evidence/live-models/decide-nli-main-wiredfix/live_checks.log",
+    "specs/009-jev-decision-models/evidence/live-models/decide-nli-main-wiredfix/golden/SHA256SUMS",
+    "specs/009-jev-decision-models/evidence/live-models/nezha-decide-pro-2026-10-08/golden-stats.txt",
+    "specs/009-jev-decision-models/evidence/live-models/nezha-decide-2b-2026-10-08/golden-stats.txt",
+    "specs/009-jev-decision-models/evidence/live-models/nezha-decide-2026-10-08/golden-stats.txt"
+   ]
   },
   {
    "id": "D-07",

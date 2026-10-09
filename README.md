@@ -139,8 +139,7 @@ See `docs/hardware-tiers.md`. The baseline reference machine (Ryzen 7 2700X,
 Threadripper, 32 GB VRAM) unlock the `ws-*` profiles and full co-residency;
 `colibri-glm` (a 744B MoE that streams weights from ~380 GB of NVMe) is gated
 to `datacenter`. The catalog also carries **decision profiles** (capability `decide`) for typed
-noul/choice/score decisions, from `decide-nli`, `decide-2b` and the other servable profiles (`decide-tiny` is catalogued but not servable yet)
-(DeBERTa-v3-large zero-shot NLI on the `onnx` engine, any tier) up to workstation-tier
+noul/choice/score decisions, from `decide-kev-08b` and the other native profiles (`decide-kev-08b`, `decide-kev-4b` and `decide-lev` verified live; `decide-julia` ran live but clears no baseline (G-140); `decide-kev-9b` only on the unpinned nezha snapshot, not on a commit-pinned tree), `decide-nli` (encoder; use it for `choice` - its `noul` and `score` output does not beat the majority baselines), and the letter-logit profiles (**per-profile status, anton CPU, 2026-10-09, with the thinking-mode fix**: `decide-2b` 128/132 well-formed and good on `noul`/`choice`, `decide-pro` 112/132 with HTTP 502 deadline expiries on a slow CPU engine (G-156), `decide` **not usable at its current `mass_threshold`** (G-157), `decide-max` **not exercised**; the earlier nezha numbers 0/132, 0/132 and 68/132 are PRE-fix, from an unpinned snapshot; see `docs/decision-models.md`); `decide-tiny` is catalogued but not servable yet. `decide-nli` is a DeBERTa-v3-large zero-shot NLI encoder on the `onnx` engine (any tier). The catalogue runs up to workstation-tier
 profiles. The authoritative, current profile table (tiers, sizes, ports, source-labelled
 benchmarks) is `docs/decision-models.md`.
 
@@ -284,6 +283,7 @@ fastest path to a running model.
 | [`docs/research/README.md`](docs/research/README.md) | Index of the decision-models research briefs (Jev ecosystem survey, verified HF hashes, encoder-model hashes, implementation architecture map) |
 | [`docs/qa/decision-models-validation/README.md`](docs/qa/decision-models-validation/README.md) | Captured evidence for the decision-models feature's validation runs (iteration 1: 34 PASS / 7 pre-existing environment FAIL; iteration 2: 36 PASS / 7 environment FAIL) |
 | [`docs/validation.md`](docs/validation.md) | The project's V&V (validation & verification) contract |
+| [`docs/host-safety.md`](docs/host-safety.md) | Host-hang safeguards after the 2026-10-08 incident: cgroup limits, `bounded-run`, the memory-pressure guard, and the root-only steps |
 | [`docs/validation_and_verification.md`](docs/validation_and_verification.md) | Why fully-deterministic V&V matters for CLI-agent-driven development |
 | [`docs/CONTINUATION.md`](docs/CONTINUATION.md) | Live session-resumption state: current phase, next action, per-phase findings (Constitution §12.10) |
 | [`docs/commit-fully-integration.md`](docs/commit-fully-integration.md) | The `commit-fully` tooling integration |

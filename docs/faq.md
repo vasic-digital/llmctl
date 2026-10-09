@@ -409,9 +409,9 @@ scripted-heredoc happy path, abort path).
 **read-only capacity report**: it tells you how many instances *would* fit
 in GPU mode or CPU mode (alternative placements, never additive;
 `total_decision_slots = max(gpu, cpu) × parallel`), but it reserves and
-launches nothing. `llmctl decide scale decide-2b 2` is what starts them:
+launches nothing. `llmctl decide scale decide-kev-08b 2` is what starts them:
 
-* Instance keys are `decide-2b`, `decide-2b.2`, `decide-2b.3` … The primary keeps its documented port;
+* Instance keys are `decide-kev-08b`, `decide-kev-08b.2`, `decide-kev-08b.3` … The primary keeps its documented port;
   every further instance gets a port from the registry allocator (so instances beyond the first need the
   registry binary: `llmctl build decide`; without it the scale is refused before anything starts).
 * Scale-up is **admission-bounded** by the same RAM/VRAM budget check `llmctl start` uses and is
@@ -420,7 +420,7 @@ launches nothing. `llmctl decide scale decide-2b 2` is what starts them:
 * Scale-down stops the **highest-numbered** instances first. Asking for the current count is a no-op.
 * A runtime failure while scaling up rolls back every instance started in that call (exit 1).
 * After a failed `llmctl switch`, the restore brings back the same **count** of instances of a scaled
-  profile, not necessarily the same keys (if only `decide-2b.3` was running it comes back as `decide-2b`).
+  profile, not necessarily the same keys (if only `decide-kev-08b.3` was running it comes back as `decide-kev-08b`).
 * `LLMCTL_DECIDE_MODE=deterministic` (default) serves a profile from its primary and overflows to the next
   instance only when the primary is saturated; `throughput` spreads least-loaded and marks every response
   `x-llmctl-decide-mode: throughput`.
@@ -475,8 +475,8 @@ onnx` creates a hash-locked private venv (`--require-hashes`) with
 DeBERTa-class `spm.model` tokenizer) and `tokenizers` (`tokenizer.json`
 repos). `llmctl doctor` reports missing `onnxruntime`/`sentencepiece`
 as **WARN, not FAIL**, because every `llama`-engine profile (including
-`decide`/`decide-pro`/`decide-2b`/`decide-max`) is fully functional
-without them, and the runner itself dies with a clear, actionable error at
+`decide`/`decide-pro`/`decide-2b`/`decide-max`) runs without them (whether
+each of those answers well is a separate matter: see `docs/decision-models.md`, live results), and the runner itself dies with a clear, actionable error at
 launch when a package is missing. Install with
 `llmctl build onnx`. Decisions are NLI
 entailment: premise = state, one hypothesis per option, one encoder

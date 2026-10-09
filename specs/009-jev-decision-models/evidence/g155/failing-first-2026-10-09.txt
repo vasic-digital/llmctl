@@ -1,0 +1,10 @@
+# G-155 failing-first evidence (2026-10-09)
+# test TestLetterRequestDisablesThinking run against internal/gateway/letter.go from 5184565~1 (pre-fix), then against 5184565
+== pre-fix (RED)
+--- FAIL: TestLetterRequestDisablesThinking (0.00s)
+    letter_test.go:75: mode deterministic: letter-logit request must carry chat_template_kwargs.enable_thinking=false, got <nil>
+FAIL
+FAIL	github.com/vasic-digital/llmctl/internal/gateway	0.010s
+FAIL
+== fix (GREEN)
+ok  	github.com/vasic-digital/llmctl/internal/gateway	0.011s

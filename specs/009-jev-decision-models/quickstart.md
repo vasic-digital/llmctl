@@ -53,11 +53,11 @@ Expected: owner-only modes; second start reuses key and certificate; env value w
 
 ## Q3 First typed answers (real model)
 
-Prereq: `llmctl models download decide-2b` verified; gateway running.
+Prereq: `llmctl models download decide-kev-08b` verified; llama.cpp >= b11379; gateway running with `LLMCTL_DECIDE_NATIVE=1` (decide-kev-08b is the smallest profile verified live end to end, `evidence/live/decide-kev-08b/`; decide-2b and decide answered 0/132 well-formed on the PRE-fix nezha run (unpinned snapshot; with the thinking-mode fix decide-2b reaches 128/132 on anton, decide stays unusable at its current mass_threshold), see `docs/decision-models.md`).
 ```
-llmctl decide ask --profile decide-2b --type noul   --state "Disk usage is 97% and rising" --instructions "Is immediate action needed?" --json
-llmctl decide ask --profile decide-2b --type choice --state-file tests/fixtures/ticket1.txt --criteria '{"billing":"…","bug":"…","other":"…"}' --json
-llmctl decide ask --profile decide-2b --type score  --state-file tests/fixtures/review1.txt --criteria '["poor","ok","good"]' --json
+llmctl decide ask --profile decide-kev-08b --type noul   --state "Disk usage is 97% and rising" --instructions "Is immediate action needed?" --json
+llmctl decide ask --profile decide-kev-08b --type choice --state-file tests/fixtures/ticket1.txt --criteria '{"billing":"…","bug":"…","other":"…"}' --json
+llmctl decide ask --profile decide-kev-08b --type score  --state-file tests/fixtures/review1.txt --criteria '["poor","ok","good"]' --json
 ```
 Expected: valid JSON; `noul` ∈ [0,1] with no confidence field; choice probabilities sum to 1 (±1e-6), `confidence` ∈ [0,1]; score within [0, n−1]; `evidence` shows the profile and unquantised latency; exit 0. Evidence class `real-model`.
 
@@ -124,8 +124,8 @@ Expected: valid requests keep being answered; no gateway exit or hang; no unboun
 
 ```
 llmctl plan --json | jq '.decision_instances'
-llmctl decide scale decide-2b <N from the report>      # succeeds
-llmctl decide scale decide-2b <N+1>                    # exit 3 with needed-vs-available numbers
+llmctl decide scale decide-kev-08b <N from the report>      # succeeds
+llmctl decide scale decide-kev-08b <N+1>                    # exit 3 with needed-vs-available numbers
 ```
 Expected: the reported `total_decision_slots` equals the number the scheduler really admitted; the refusal changes nothing on the host; the already-running vision server is untouched.
 
@@ -180,7 +180,7 @@ Expected: identical assets/checksums/notes on both forges; archive's own suite p
 ## Q17 Dynamic ports and discovery (FR-088..091, SC-015)
 
 ```bash
-LLMCTL_PORT_STRATEGY=dynamic llmctl start decide-2b            # port allocated from LLMCTL_PORT_RANGE, bind-tested
+LLMCTL_PORT_STRATEGY=dynamic llmctl start decide-kev-08b            # port allocated from LLMCTL_PORT_RANGE, bind-tested
 llmctl discover --json                                            # registry rows == live processes
 python3 - <<'PY'
 # occupy a default port, start three instances, kill one, assert the registry and gateway routing follow within one health interval

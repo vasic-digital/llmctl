@@ -9,11 +9,11 @@
 
 | Severity | Rows | FIXED | DEMOTED | ACCEPTED-LIMITATION | OPEN |
 |---|---:|---:|---:|---:|---:|
-| H | 9 | 8 | 0 | 0 | 1 |
+| H | 9 | 8 | 1 | 0 | 0 |
 | M | 31 | 28 | 1 | 0 | 2 |
 | L | 20 | 15 | 4 | 1 | 0 |
 
-**Open high/critical rows (gate): 1** (D-06)
+**Open high/critical rows (gate): 0**
 
 ## Rows
 
@@ -24,7 +24,7 @@
 | D-03 | H | **FIXED** | D-03=RED | specs/009-jev-decision-models/evidence/p1-red-original/d01_d15.jsonl:3 | OK tests/test_regression_defects.sh::D-03: serve --api-key is refused (no key on argv, rc 2)<br>OK tests/test_onnx_runtime.sh::process-level key/bind checks | PASS (test_onnx_runtime.sh, test_regression_defects.sh) | RED observed, guard exists, GREEN recorded |
 | D-04 | H | **FIXED** | D-04=RED | specs/009-jev-decision-models/evidence/p1-red-original/d01_d15.jsonl:4 | OK tests/test_onnx_server.sh::--host ${h} refused (loopback 127.0.0.1 only)<br>OK tests/test_onnx_runtime.sh::process-level key/bind checks<br>OK tests/fixtures/onnx_rt_contract.py::legacy /health (profile-leaking, backend-less) no long | PASS (test_no_retired_vars.sh, test_onnx_runtime.sh, test_onnx_server.sh) | RED observed, guard exists, GREEN recorded |
 | D-05 | H | **FIXED** | D-05=RED | specs/009-jev-decision-models/evidence/p1-red-original/d01_d15.jsonl:5 | OK cmd/llmctl-decide/cmd_serve_test.go::TestServeStopNeverSignalsUnrelatedProcess<br>OK tests/test_gateway_endpoints.sh::stop refuses a pidfile that names an unrelated process | PASS (go:cmd/llmctl-decide, test_gateway_endpoints.sh) | RED observed, guard exists, GREEN recorded |
-| D-06 | H | **OPEN** | D-06=SKIP | specs/009-jev-decision-models/evidence/p1-red-original/d01_d15.jsonl:6 | - | - | D-06: needs a live/real-model run: environment-gated, was SKIP: real-model inference needs onnxruntime + sentencepiece + the 1.7 GB model; not exercisable offline. Stays an OPEN live-va |
+| D-06 | H | **DEMOTED** | D-06=SKIP | specs/009-jev-decision-models/evidence/p1-red-original/d01_d15.jsonl:6 | - | - | override: The finding is 'no real-model evidence'. That gap is closed: (1) the real ONNX encoder decide-nli (MoritzLaurer/deberta-v3-large-zeroshot-v2.0, fp32 onnx 1741985401 B, checksum-verified) ran live on host anton  |
 | D-07 | M | **FIXED** | D-07=RED | specs/009-jev-decision-models/evidence/p1-red-original/d01_d15.jsonl:7 | OK tests/fixtures/onnx_rt_contract.py::K2: logits count != id2label count -> 500 JSON (D-07,  | PASS (test_no_retired_vars.sh, test_onnx_runtime.sh) | RED observed, guard exists, GREEN recorded |
 | D-08 | M | **FIXED** | D-08=RED | specs/009-jev-decision-models/evidence/p1-red-original/d01_d15.jsonl:8 | OK tests/fixtures/onnx_rt_contract.py::unsupported method -> 405 JSON (not an HTML page)<br>OK internal/contract/request_test.go::TestRejections400<br>OK tests/test_gateway_endpoints.sh::row EP-012 | PASS (go:internal/contract, test_gateway_endpoints.sh, test_no_retired_vars.sh) | RED observed, guard exists, GREEN recorded |
 | D-09 | M | **FIXED** | D-09=RED | specs/009-jev-decision-models/evidence/p1-red-original/d01_d15.jsonl:9 | OK internal/server/server_test.go::TestBackendErrorMapping<br>OK tests/fixtures/onnx_rt_contract.py::half-sent headers: connection is closed by the socket <br>OK internal/gateway/driver.go (engine text never reaches a client: backendFailed) | PASS (go:internal/gateway, go:internal/server, test_no_retired_vars.sh) | RED observed, guard exists, GREEN recorded |
@@ -91,5 +91,5 @@
 
 ## Gap register cross-check
 
-152 rows, 54 OPEN: G-001, G-002, G-003, G-004, G-010, G-011, G-013, G-014, G-017, G-018, G-019, G-020, G-021, G-022, G-023, G-032, G-034, G-035, G-043, G-050, G-055, G-060, G-061, G-062, G-063, G-065, G-075, G-076, G-079, G-090, G-091, G-093, G-097, G-098, G-101, G-104, G-107, G-111, G-113, G-114, G-117, G-118, G-124, G-126, G-130, G-131, G-132, G-137, G-138, G-141, G-142, G-145, G-148, G-151
+158 rows, 60 OPEN: G-001, G-002, G-003, G-004, G-010, G-011, G-013, G-014, G-017, G-018, G-019, G-020, G-021, G-022, G-023, G-032, G-034, G-035, G-043, G-050, G-055, G-060, G-061, G-062, G-063, G-065, G-075, G-076, G-079, G-090, G-091, G-093, G-097, G-098, G-101, G-104, G-107, G-111, G-113, G-114, G-117, G-118, G-124, G-126, G-130, G-131, G-132, G-137, G-138, G-141, G-142, G-145, G-148, G-151, G-155, G-156, G-157, G-158, G-159, G-160
 
