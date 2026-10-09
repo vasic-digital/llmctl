@@ -306,9 +306,33 @@ _decide_gateway_write_plist() {
 }
 
 decide_service_enable() {
-  local plist; plist="$(_decide_gateway_write_plist)"
-  info "installed ${DECIDE_GATEWAY_LABEL} agent: ${plist}"
-  _svc_launchctl bootstrap "$(_svc_domain)" "${plist}"
+  local plist
+  if [[ "${LLMCTL_DRY_RUN}" == "1" ]]; then
+    plist="$(_decide_gateway_plist_path)"
+    printf '[dry-run] write %s\n' "${plist}"     # a dry run writes no plist
+  else
+    plist="$(_decide_gateway_write_plist)"
+    info "installed ${DECIDE_GATEWAY_LABEL} agent: ${plist}"
+  fi
+  # `launchctl bootstrap` on an already loaded label fails; boot it out first (failure ignored: not loaded yet) so
+  # a re-enable is idempotent and also applies a changed plist.
+  _svc_launchctl bootout "$(_svc_domain)/${DECIDE_GATEWAY_LABEL}" || true
+  _decide_launchctl_bootstrap_retry "${plist}"
+}
+
+# _decide_launchctl_bootstrap_retry <plist> - `launchctl bootout` returns before the job is gone, so an
+# immediate `bootstrap` can fail (error 5, I/O error). Retry up to LLMCTL_LAUNCHD_BOOTSTRAP_TRIES (default 5)
+# times, sleeping LLMCTL_LAUNCHD_RETRY_SLEEP seconds (default 1) between tries; the last failure is returned.
+_decide_launchctl_bootstrap_retry() {
+  local plist="$1" tries="${LLMCTL_LAUNCHD_BOOTSTRAP_TRIES:-5}" n=1 rc=0
+  while :; do
+    rc=0
+    _svc_launchctl bootstrap "$(_svc_domain)" "${plist}" || rc=$?
+    (( rc == 0 )) && return 0
+    (( n >= tries )) && return "${rc}"
+    sleep "${LLMCTL_LAUNCHD_RETRY_SLEEP:-1}"
+    n=$((n+1))
+  done
 }
 
 decide_service_disable() {

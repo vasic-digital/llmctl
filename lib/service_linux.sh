@@ -642,8 +642,16 @@ _decide_gateway_write_unit() {
 # decide_service_enable - install + enable + start the gateway user service
 # (called by `llmctl decide serve --enable`).
 decide_service_enable() {
-  _decide_gateway_write_unit >/dev/null
-  info "installed ${DECIDE_GATEWAY_UNIT} into $(svc_unit_dir)"
+  local upath old="" changed=0
+  upath="$(svc_unit_dir)/${DECIDE_GATEWAY_UNIT}"
+  if [[ "${LLMCTL_DRY_RUN}" == "1" ]]; then
+    printf '[dry-run] write %s\n' "${upath}"     # a dry run writes no unit file
+  else
+    [[ -f "${upath}" ]] && old="$(cat "${upath}")"
+    _decide_gateway_write_unit >/dev/null
+    info "installed ${DECIDE_GATEWAY_UNIT} into $(svc_unit_dir)"
+    [[ -n "${old}" && "${old}" != "$(cat "${upath}")" ]] && changed=1
+  fi
   _svc_sys daemon-reload
   if [[ "${LLMCTL_DRY_RUN}" == "1" ]]; then
     printf '[dry-run] loginctl enable-linger %s\n' "${USER:-$(id -un)}"
@@ -652,7 +660,15 @@ decide_service_enable() {
       || warn "loginctl enable-linger failed; retry with: sudo loginctl enable-linger ${USER:-$(id -un)}"
   fi
   _svc_sys enable "${DECIDE_GATEWAY_UNIT}"
-  _svc_sys start "${DECIDE_GATEWAY_UNIT}"
+  if (( changed )); then
+    # `start` on a running unit is a no-op, so a re-enable over a CHANGED unit file would leave the old
+    # definition in force: `restart` applies the new definition to a running unit AND starts a stopped
+    # one (a start followed by a try-restart would start a stopped gateway twice).
+    info "unit definition changed: restarting ${DECIDE_GATEWAY_UNIT} to apply it"
+    _svc_sys restart "${DECIDE_GATEWAY_UNIT}"
+  else
+    _svc_sys start "${DECIDE_GATEWAY_UNIT}"
+  fi
 }
 
 # decide_service_disable - stop + disable + remove the unit and the gateway's

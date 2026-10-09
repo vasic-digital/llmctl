@@ -40,6 +40,8 @@ _sh_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${_sh_dir}/common.sh"
 # shellcheck source=portreg.sh
 source "${_sh_dir}/portreg.sh"
+# shellcheck source=decide_timeout.sh
+source "${_sh_dir}/decide_timeout.sh"
 
 # _hk_get <env-file> <KEY> -> value of KEY (shell-unquoted for the simple
 # escapes printf %q produces), empty when absent.
@@ -211,6 +213,8 @@ hk_run_gateway() {
   port="$(portreg_allocate gateway gateway "${LLMCTL_DECIDE_PORT:-8095}")" || exit 1
   export LLMCTL_DECIDE_PORT="${port}"
   export LLMCTL_DECIDE_RESOLVER="${LLMCTL_DECIDE_RESOLVER:-registry}"
+  # G-156: CPU-placed decision engines get a larger documented deadline unless one is set explicitly.
+  decide_timeout_adapt
   exec "${bin}" serve --foreground
 }
 

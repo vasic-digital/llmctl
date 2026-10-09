@@ -508,6 +508,7 @@ func (p *prepared) banner(w io.Writer) {
 		fmt.Fprintf(w, "  cert:   mode %s, SHA-256 %s, expires %s\n", info.Mode, info.LeafFingerprint, info.NotAfter.UTC().Format("2006-01-02"))
 	}
 	fmt.Fprintf(w, "  models: %d decision profile(s), default %s\n", len(p.specs), p.profiles.Default())
+	fmt.Fprintf(w, "  timeout: %s\n", describeTimeout(p.env, p.sLimits.Timeout))
 	if p.decPath != "" {
 		text := "state text not logged"
 		if p.decState {
@@ -515,6 +516,29 @@ func (p *prepared) banner(w io.Writer) {
 		}
 		fmt.Fprintf(w, "  decision log: %s (%s)\n", p.decPath, text)
 	}
+}
+
+// describeTimeout is the banner text for the effective per-request deadline and its source (G-156):
+//
+//	default       no LLMCTL_DECIDE_TIMEOUT in the environment - the 8 s contract default
+//	env           an explicit LLMCTL_DECIDE_TIMEOUT (environment, gateway.conf, plist)
+//	cpu-adaptive  raised by the launcher (lib/decide_timeout.sh) because a decision engine runs CPU-only
+//
+// The source label is only honoured together with a timeout value and only for the one known value, so a
+// stray LLMCTL_DECIDE_TIMEOUT_SOURCE cannot misreport where the number came from.
+func describeTimeout(env map[string]string, eff time.Duration) string {
+	secs := strconv.FormatFloat(eff.Seconds(), 'f', -1, 64)
+	if strings.TrimSpace(env["LLMCTL_DECIDE_TIMEOUT"]) == "" {
+		return secs + "s per request (default; set LLMCTL_DECIDE_TIMEOUT to change)"
+	}
+	if env["LLMCTL_DECIDE_TIMEOUT_SOURCE"] == "cpu-adaptive" {
+		note := ""
+		if n := strings.TrimSpace(env["LLMCTL_DECIDE_TIMEOUT_NOTE"]); n != "" {
+			note = ": CPU-placed " + n
+		}
+		return secs + "s per request (cpu-adaptive" + note + "; an explicit LLMCTL_DECIDE_TIMEOUT overrides)"
+	}
+	return secs + "s per request (env LLMCTL_DECIDE_TIMEOUT)"
 }
 
 // decisionWriter returns the decision sink as a server.DecisionWriter, or a true nil when it is off

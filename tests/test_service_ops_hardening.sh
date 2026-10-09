@@ -369,4 +369,31 @@ for id in "acme" "acme-eu" "tenant-1" "Tenant.3" "a_b-c"; do
   assert_eq 0 "${rc}" "C3-08 control: tenant id '${id}' is still accepted"
 done
 
+# --- launchd: bootout is async, so bootstrap right after it can fail (error 5): bounded retry ---------------------
+# `launchctl` is a stub that fails bootstrap the first N calls and records every call.
+mkdir -p "${TEST_TMP}/lc"
+LCLOG="${TEST_TMP}/lc/launchctl.log"; LCCNT="${TEST_TMP}/lc/count"
+cat > "${TEST_TMP}/lc/launchctl" <<LCEOF
+#!/bin/sh
+echo "launchctl \$*" >> "${LCLOG}"
+if [ "\$1" = bootstrap ]; then
+  n=\$(cat "${LCCNT}" 2>/dev/null || echo 0); n=\$((n+1)); echo "\$n" > "${LCCNT}"
+  [ "\$n" -le "\${LC_FAIL_FIRST:-0}" ] && exit 5
+fi
+exit 0
+LCEOF
+chmod +x "${TEST_TMP}/lc/launchctl"
+lc_bootstrap_try() {  # <fail-first-N> -> rc; bootstrap call count in LCCNT
+  : > "${LCLOG}"; rm -f "${LCCNT}"
+  ( source "${LLMCTL_ROOT}/lib/common.sh"; source "${LLMCTL_ROOT}/lib/service_macos.sh"
+    PATH="${TEST_TMP}/lc:${PATH}" LC_FAIL_FIRST="$1" LLMCTL_DRY_RUN=0 LLMCTL_LAUNCHD_RETRY_SLEEP=0 \
+      _decide_launchctl_bootstrap_retry /tmp/x.plist ) >/dev/null 2>&1
+}
+rc=0; lc_bootstrap_try 2 || rc=$?
+assert_eq 0 "${rc}" "launchd: bootstrap that fails twice (async bootout) succeeds on the retry"
+assert_eq 3 "$(cat "${LCCNT}")" "launchd: bootstrap was attempted 3 times (2 failures + 1 success)"
+rc=0; lc_bootstrap_try 99 || rc=$?
+assert_eq 5 "${rc}" "launchd: a persistently failing bootstrap returns the launchctl error"
+assert_eq 5 "$(cat "${LCCNT}")" "launchd: the retry is bounded at 5 attempts"
+
 test_finish

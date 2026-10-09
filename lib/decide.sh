@@ -40,6 +40,8 @@ _decide_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${_decide_dir}/common.sh"
 # shellcheck source=catalog.sh
 source "${_decide_dir}/catalog.sh"
+# shellcheck source=decide_timeout.sh
+source "${_decide_dir}/decide_timeout.sh"
 
 LLMCTL_DECIDE_PORT="${LLMCTL_DECIDE_PORT:-8095}"
 LLMCTL_DECIDE_NO_INTERACTIVE="${LLMCTL_DECIDE_NO_INTERACTIVE:-0}"
@@ -68,6 +70,12 @@ USAGE
                                 wizard (TTY, or --interactive for piped stdin)
   llmctl decide serve [--foreground] [--status] [--stop] [--bind H] [--port N]
                                 HTTPS gateway (POST /v1/systemone, default port 8095)
+  llmctl decide serve --enable [--now] | --disable
+                                install+enable+start (or stop+disable+remove) the gateway as a boot-time
+                                user service (systemd user unit / launchd agent); idempotent; refuses while
+                                an installed engine unit is stale (fix: llmctl install)
+  llmctl decide scale <profile> <N>  start/stop instances of one decision profile until N run
+                                (admission-bounded; refusal exit 3 with exact numbers)
   llmctl decide calibrate --profile P --labels F [--method temperature|platt|isotonic]
         [--catalog F] [--state-dir D] [--model-sha H] [--template-hash H] [--unbound] [--dry-run] [--json]
                                 accuracy +- Wilson interval, baseline, ECE/MCE/Brier over labelled answers
@@ -186,14 +194,57 @@ decide_models() { _decide_exec models "$@"; }
 decide_key()    { _decide_exec key "$@"; }
 decide_cert()   { _decide_exec cert "$@"; }
 
-# decide_serve [flags...] - the Go gateway lifecycle (start/--foreground/--status/--stop).
-# LLMCTL_DRY_RUN=1 prints the command line and starts nothing.
+# decide_serve [flags...] - the Go gateway lifecycle (start/--foreground/--status/--stop) plus the boot-time
+# service front end (--enable [--now] / --disable, handled here: the unit/agent logic is the service backend's
+# decide_service_enable/disable in lib/service_linux.sh / lib/service_macos.sh).
+# LLMCTL_DRY_RUN=1 prints the command line (or the service-manager commands) and starts/changes nothing.
 decide_serve() {
+  local a enable=0 disable=0 now=0 other=0
+  for a in "$@"; do
+    case "${a}" in
+      --enable)  enable=1 ;;
+      --disable) disable=1 ;;
+      --now)     now=1 ;;
+      *)         other=1 ;;
+    esac
+  done
+  if (( enable || disable || now )); then
+    if (( enable && disable )); then err "decide serve: --enable and --disable are mutually exclusive"; return 2; fi
+    if (( ! enable && ! disable )); then err "decide serve: --now only applies to --enable"; return 2; fi
+    if (( disable && now )); then err "decide serve: --now only applies to --enable"; return 2; fi
+    if (( other )); then
+      err "decide serve: --enable/--disable take no other flag (set port/bind in ${LLMCTL_STATE_DIR}/decide/gateway.conf); --now is optional and means start immediately"
+      return 2
+    fi
+    decide_serve_service "$([[ "${enable}" == 1 ]] && echo enable || echo disable)"
+    return $?
+  fi
   if [[ "${LLMCTL_DRY_RUN:-0}" == "1" ]]; then
     printf 'DRY-RUN: %s serve %s\n' "$(_decide_bin_path)" "$*"
     return 0
   fi
+  # G-156: CPU-placed decision engines get a larger documented deadline unless one is set explicitly.
+  decide_timeout_adapt
   _decide_exec serve "$@"
+}
+
+# decide_serve_service enable|disable - install/enable/start (or stop/disable/remove) the gateway as a boot-time
+# user service (systemd user unit on Linux, launchd agent on macOS). Idempotent. `enable` starts the service
+# right away (--now is accepted as the explicit spelling of that default); it refuses while an installed engine
+# unit template is stale, with the same message style as the restart-bound refusal of `llmctl enable`.
+decide_serve_service() {
+  local op="$1" stale
+  sched_load_backend
+  if [[ "${op}" == "enable" ]]; then
+    stale="$(svc_stale_units 2>/dev/null | grep -v '^llmctl-decide-gateway\.service:' || true)"
+    if [[ -n "${stale}" ]]; then
+      err "refusing to enable the decision gateway service: an installed unit predates the current generator ($(printf '%s' "${stale}" | paste -sd';' - | sed 's/;/; /g')). Regenerate the units with: llmctl install"
+      return 1
+    fi
+    decide_service_enable
+  else
+    decide_service_disable
+  fi
 }
 
 # decide_scale <profile> <N> - start/stop instances of one decision profile until N run (admission-bounded,
