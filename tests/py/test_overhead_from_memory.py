@@ -56,6 +56,24 @@ class Parsers(unittest.TestCase):
         with self.assertRaises(ValueError):
             ofm.parse_pid_vram("nothing here\n")
 
+    def test_cpu_mode_apps_txt_takes_the_pid_the_transcript_names(self):
+        # T139/G-138: a cpu-mode (-ngl 0) run recorded as an nvidia-smi compute-apps listing plus the operator's
+        # "=> engine pid P holds N MiB" line.  The vision pid at the SAME binary path must NOT be picked.
+        txt = ("cmd: llmctl start x (mode=cpu)\n"
+               "6608, 3069 MiB, /opt/other/llama-server\n"
+               "3160295, 3752 MiB, /repo/build/bin/llama-server\n"
+               "1842432, 4460 MiB, /repo/build/bin/llama-server\n"
+               "=> engine pid 1842432 holds 4460 MiB VRAM in cpu mode (-ngl 0); scheduler booked 0 MiB VRAM\n")
+        self.assertEqual(ofm.parse_cpu_mode_apps(txt), 4460)
+        # the named pid's row is the authority: a conclusion line that disagrees with the listing is refused
+        with self.assertRaises(ValueError):
+            ofm.parse_cpu_mode_apps(txt.replace("holds 4460 MiB", "holds 4000 MiB"))
+        # a named pid with no listing row, and a transcript with no conclusion line, are errors, never a guess
+        with self.assertRaises(ValueError):
+            ofm.parse_cpu_mode_apps(txt.replace("=> engine pid 1842432", "=> engine pid 999"))
+        with self.assertRaises(ValueError):
+            ofm.parse_cpu_mode_apps("1842432, 4460 MiB, /x/llama-server\n")
+
 
 class Derive(unittest.TestCase):
     def setUp(self):
@@ -84,6 +102,16 @@ class Derive(unittest.TestCase):
         self.assertEqual(d["decide-x"]["memory"]["ram"]["peak_hwm_mib"], 600.0)
         self.assertEqual(d["decide-x"]["memory"]["ram"]["weights_mib"], 100.0)
         self.assertEqual(d["decide-x"]["memory"]["vram"]["peak_mib"], 1200)
+
+    def test_cpu_mode_apps_format_derives_the_same_margin(self):
+        with open(os.path.join(self.root, "ev", "cpu.txt"), "w") as f:
+            f.write("1, 4460 MiB, /x/llama-server\n=> engine pid 1 holds 4460 MiB VRAM in cpu mode\n")
+        cat = copy.deepcopy(self.cat)
+        cat["profiles"]["decide-x"]["memory"]["vram"] = {"status": "measured", "format": "cpu-mode-apps-txt",
+                                                         "evidence": "ev/cpu.txt", "host": "t"}
+        d = ofm.derive(cat, self.root)
+        self.assertEqual(d["decide-x"]["defaults"]["overhead_vram_mb"], 4906)   # ceil(4460 x 1.10) = 4906
+        self.assertEqual(d["decide-x"]["memory"]["vram"]["peak_mib"], 4460)
 
     def test_unmeasured_profile_declares_no_numbers(self):
         d = ofm.derive(self.cat, self.root)

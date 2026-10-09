@@ -474,6 +474,68 @@ assert_eq "194" "$(printf '%s' "${pj}" | json_stdin 'd["decision_instances"]["de
 assert_eq "0" "$(printf '%s' "${pj3}" | json_stdin 'd["decision_instances"]["decide-julia"]["placements"]["cpu"]["vram_mb"]')" "T139: capacity cpu placement on a CPU-only host books 0 VRAM"
 assert_eq "1" "$(printf '%s' "${pj}" | json_stdin 'd["decision_instances"]["decide-julia"]["instances_cpu"]')" "T139: 204 // 194 = 1 cpu-mode instance (VRAM-bound), not 25904 // 1698 = 15"
 
+# --- G-138: cpu-mode (-ngl 0) VRAM of the native decision profiles on a CUDA host ---------------------------------
+# Live 2026-10-08 (specs/009-jev-decision-models/evidence/live/decide-kev-4b/cpu-mode-vram-live-2026-10-08.txt):
+# `llmctl start decide-kev-4b` -> "mode=cpu ... reserved 3916 MiB RAM + 0 MiB VRAM" while nvidia-smi showed the engine
+# pid holding 4460 MiB (llama.cpp op-offload).  Hand-computed booking: ceil(4460 x 1.10) = 4906 MiB.
+#   free VRAM 6000 -> budget int(6000 x 0.85) = 5100 : gpu need 7328 > 5100 -> cpu mode, VRAM 4906 <= 5100 -> fits
+#   free VRAM 5000 -> budget 4250 < 4906 -> refused (mode none), never "cpu, 0 MiB"
+# decide-lev has a measured gpu peak (3926 MiB) but NO cpu-mode VRAM measurement: UNMEASURED.  Its cpu-mode offload is
+# a subset of what the gpu placement holds in all 4 profiles measured in both modes (julia 176<212, laya 232<574,
+# kev-08b 2382<2900, kev-4b 4460<7328), so the measured gpu peak is booked as a CEILING, flagged not-measured.
+write_hw "${TEST_TMP}/hw-gpu-6000.json" 6000
+write_hw "${TEST_TMP}/hw-gpu-5000.json" 5000
+write_hw "${TEST_TMP}/hw-gpu-4000.json" 4000
+pk="$(plan_hw "${TEST_TMP}/hw-gpu-6000.json")"
+assert_eq "cpu 4906 True measured" "$(printf '%s' "${pk}" | json_stdin 'd["profiles"]["decide-kev-4b"]["mode"] + " " + str(d["profiles"]["decide-kev-4b"]["vram_mb"]) + " " + str(d["profiles"]["decide-kev-4b"]["fits"]) + " " + d["profiles"]["decide-kev-4b"]["cpu_vram_provenance"]')" \
+  "G-138: kev-4b in cpu mode on a CUDA host books its measured 4460 x 1.10 = 4906 MiB VRAM (was 0), provenance measured"
+assert_eq "4906" "$(printf '%s' "${pk}" | json_stdin 'd["decision_instances"]["decide-kev-4b"]["placements"]["cpu"]["vram_mb"]')" "G-138: the capacity report books the same 4906 MiB for the cpu placement"
+assert_eq "ram" "$(printf '%s' "${pk}" | json_stdin '"|".join(d["profiles"]["decide-kev-4b"]["unknown_overhead"])')" "G-138: kev-4b's VRAM half is now measured; only its RAM overhead stays UNKNOWN"
+pk2="$(plan_hw "${TEST_TMP}/hw-gpu-5000.json")"
+assert_eq "none False 4906" "$(printf '%s' "${pk2}" | json_stdin 'd["profiles"]["decide-kev-4b"]["mode"] + " " + str(d["profiles"]["decide-kev-4b"]["fits"]) + " " + str(d["profiles"]["decide-kev-4b"]["vram_mb"])')" \
+  "G-138: kev-4b is refused when the 4906 MiB offload exceeds the VRAM budget (4250), never booked as 0"
+pk3="$(plan_hw "${TEST_TMP}/hw-nogpu.json")"
+assert_eq "cpu 0 n/a" "$(printf '%s' "${pk3}" | json_stdin 'd["profiles"]["decide-kev-4b"]["mode"] + " " + str(d["profiles"]["decide-kev-4b"]["vram_mb"]) + " " + d["profiles"]["decide-kev-4b"]["cpu_vram_provenance"]')" \
+  "G-138 golden-false: a CPU-only host books 0 VRAM for kev-4b (no CUDA build, no offload), provenance n/a"
+# decide-lev: unmeasured cpu-mode VRAM -> ceiling = measured gpu peak 3926, flagged
+pl="$(plan_hw "${TEST_TMP}/hw-gpu-4000.json")"
+assert_eq "none 3926 gpu-peak-ceiling" "$(printf '%s' "${pl}" | json_stdin 'd["profiles"]["decide-lev"]["mode"] + " " + str(d["profiles"]["decide-lev"]["vram_mb"]) + " " + d["profiles"]["decide-lev"]["cpu_vram_provenance"]')" \
+  "G-138: lev (cpu-mode VRAM UNMEASURED) books its measured gpu peak 3926 MiB as a ceiling and is refused on a 3400 MiB budget"
+assert_eq "3926" "$(printf '%s' "${pl}" | json_stdin 'd["decision_instances"]["decide-lev"]["placements"]["cpu"]["vram_mb"]')" \
+  "G-138: the capacity report books lev's cpu placement at the same 3926 MiB ceiling (cpu_offload_vram, not plain overhead_vram_mb = 0)"
+# decide-kev-9b: no cpu-mode VRAM measurement -> provenance is the documented floor, never mislabelled measured
+assert_eq "floor" "$(printf '%s' "${pk}" | json_stdin 'd["profiles"]["decide-kev-9b"]["cpu_vram_provenance"]')" \
+  "G-138: kev-9b's cpu-mode VRAM is a floor (not a measurement) and is labelled so"
+assert_eq "partial vram" "$(printf '%s' "${pl}" | json_stdin 'd["profiles"]["decide-lev"]["memory_status"] + " " + "|".join(d["profiles"]["decide-lev"]["unknown_overhead"])')" \
+  "G-138: ...and stays reported partial/UNKNOWN(vram): a ceiling is not a measurement"
+# profiles with neither a cpu-mode measurement nor a gpu peak stay UNMEASURED and book the old 0, flagged
+assert_eq "0 unmeasured" "$(printf '%s' "${pk}" | json_stdin 'str(d["profiles"]["decide-tiny"]["overhead_vram_mb"]) + " " + d["profiles"]["decide-tiny"]["cpu_vram_provenance"]')" \
+  "G-138: an unmeasured profile with no gpu peak declares provenance unmeasured (booked 0, UNKNOWN)"
+# mutation 1 (data): remove the kev-4b cpu-mode measurement -> the planner books the pre-fix 0 MiB, so the 4906 assertion
+# above is genuinely load-bearing (and the profile is flagged unmeasured, not silently measured)
+MUT_CAT="${TEST_TMP}/catalog-no-cpu-vram.json"
+python3 - "${LLMCTL_CATALOG}" "${MUT_CAT}" <<'PYEOF'
+import json, sys
+d = json.load(open(sys.argv[1]))
+k = d["profiles"]["decide-kev-4b"]
+k["defaults"].pop("overhead_vram_mb")
+k["memory"]["vram"] = {"status": "unmeasured", "reason": "mutation: measurement removed"}
+k["memory"]["gpu"] = {"status": "unmeasured", "reason": "mutation: no gpu peak either, so no ceiling"}
+json.dump(d, open(sys.argv[2], "w"))
+PYEOF
+mut_plan="$(LLMCTL_CATALOG="${MUT_CAT}" plan_hw "${TEST_TMP}/hw-gpu-4000.json")"
+assert_eq "0 unmeasured" "$(printf '%s' "${mut_plan}" | json_stdin 'str(d["profiles"]["decide-kev-4b"]["vram_mb"]) + " " + d["profiles"]["decide-kev-4b"]["cpu_vram_provenance"]')" \
+  "G-138 mutation (data): without the cpu-mode measurement kev-4b is booked 0 and flagged unmeasured - the 4906 assertion is load-bearing"
+# mutation 2 (logic): a planner whose helper ignores the measurement (returns 0) must fail the same expectation
+MUT_DIR="${TEST_TMP}/mutroot"; mkdir -p "${MUT_DIR}"; cp -R "${LLMCTL_ROOT}/lib" "${MUT_DIR}/lib"
+MUT_LIB="${MUT_DIR}/lib/catalog.sh"
+sed -i 's/return ovh_v, "measured"/return 0, "measured"/' "${MUT_LIB}"
+assert_eq "1" "$(grep -c 'return 0, "measured"' "${MUT_LIB}")" "G-138 mutation (logic): the mutated planner differs from the real one in exactly the measured-return line"
+mut_v="$(LLMCTL_FAKE_HW="${TEST_TMP}/hw-gpu-4000.json" bash -c 'source "$1/lib/common.sh"; source "$1/lib/os_detect.sh"; source "$1/lib/hardware.sh"; source "$2"; hw_probe_json | catalog_plan_json' _ "${MUT_DIR}" "${MUT_LIB}" | json_stdin 'd["profiles"]["decide-kev-4b"]["vram_mb"]')"
+assert_eq "0" "${mut_v}" "G-138 mutation (logic): a helper that drops the measured offload books 0 MiB VRAM, which the 4906 assertion rejects"
+assert_contains "$(printf '%s' "${pk}" | catalog_plan_human | grep 'decide-kev-4b ')" "cpu-mode VRAM measured" "G-138: the human plan says how a cpu-mode VRAM booking was derived"
+assert_contains "$(printf '%s' "${pl}" | catalog_plan_human | grep 'decide-lev ')" "cpu-mode VRAM gpu-peak-ceiling" "G-138: ...and flags a ceiling that is not a measurement"
+
 # --- Live run 2026-10-08 (primary host "anton", 12288 MiB GPU, another process holding 3219 MiB) ------------------
 # Evidence: specs/009-jev-decision-models/evidence/live-models/<profile>/memory.txt (the engine pid's VRAM and the
 # process VmHWM, sampled after start / golden questions / probes / window-filling edges) and live-models.jsonl.

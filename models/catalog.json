@@ -1555,11 +1555,11 @@
       "memory": {
         "ram": {
           "status": "unmeasured",
-          "reason": "the model is not downloaded on any host that has measured memory so far (G-137); measure it and re-run scripts/overhead_from_memory.py --write"
+          "reason": "nezha CPU memory-summary evidence exists at specs/009-jev-decision-models/evidence/live-models/nezha-decide-2026-10-08/memory-summary.json (uncommitted snapshot, commit UNCONFIRMED) but is NOT wired into the planner: booking a CPU-only RAM peak into the estimated GPU VRAM footprint (gpu_booking) is an undecided planner semantic; see specs/009-jev-decision-models/evidence/memory-wiring-proposal.md"
         },
         "vram": {
           "status": "unmeasured",
-          "reason": "the model is not downloaded on any host that has measured memory so far (G-137); measure it and re-run scripts/overhead_from_memory.py --write"
+          "reason": "VRAM half unmeasured: the only run of this profile on record is on nezha, a CPU-only host (i7-1165G7, no GPU); no GPU-host run of this profile exists yet"
         }
       }
     },
@@ -1630,11 +1630,11 @@
       "memory": {
         "ram": {
           "status": "unmeasured",
-          "reason": "the model is not downloaded on any host that has measured memory so far (G-137); measure it and re-run scripts/overhead_from_memory.py --write"
+          "reason": "nezha CPU memory-summary evidence exists at specs/009-jev-decision-models/evidence/live-models/nezha-decide-pro-2026-10-08/memory-summary.json (uncommitted snapshot, commit UNCONFIRMED) but is NOT wired into the planner: booking a CPU-only RAM peak into the estimated GPU VRAM footprint (gpu_booking) is an undecided planner semantic; see specs/009-jev-decision-models/evidence/memory-wiring-proposal.md"
         },
         "vram": {
           "status": "unmeasured",
-          "reason": "the model is not downloaded on any host that has measured memory so far (G-137); measure it and re-run scripts/overhead_from_memory.py --write"
+          "reason": "VRAM half unmeasured: the only run of this profile on record is on nezha, a CPU-only host (i7-1165G7, no GPU); no GPU-host run of this profile exists yet"
         }
       }
     },
@@ -1793,11 +1793,11 @@
       "memory": {
         "ram": {
           "status": "unmeasured",
-          "reason": "the model is not downloaded on any host that has measured memory so far (G-137); measure it and re-run scripts/overhead_from_memory.py --write"
+          "reason": "nezha CPU memory-summary evidence exists at specs/009-jev-decision-models/evidence/live-models/nezha-decide-2b-2026-10-08/memory-summary.json (uncommitted snapshot, commit UNCONFIRMED) but is NOT wired into the planner: booking a CPU-only RAM peak into the estimated GPU VRAM footprint (gpu_booking) is an undecided planner semantic; see specs/009-jev-decision-models/evidence/memory-wiring-proposal.md"
         },
         "vram": {
           "status": "unmeasured",
-          "reason": "the model is not downloaded on any host that has measured memory so far (G-137); measure it and re-run scripts/overhead_from_memory.py --write"
+          "reason": "VRAM half unmeasured: the only run of this profile on record is on nezha, a CPU-only host (i7-1165G7, no GPU); no GPU-host run of this profile exists yet"
         }
       }
     },
@@ -2078,6 +2078,7 @@
         "ngl": 99,
         "parallel": 1,
         "flash_attn": "auto",
+        "overhead_vram_mb": 4906,
         "gpu_vram_mb": 7328,
         "gpu_ram_mb": 4899
       },
@@ -2135,11 +2136,14 @@
       "memory": {
         "ram": {
           "status": "unmeasured",
-          "reason": "NEZHA run pending"
+          "reason": "nezha CPU memory-summary evidence exists at specs/009-jev-decision-models/evidence/live-models/nezha-decide-kev-4b-2026-10-08/memory-summary.json (uncommitted snapshot, commit UNCONFIRMED) but is NOT wired into the planner: booking a CPU-only RAM peak into the estimated GPU VRAM footprint (gpu_booking) is an undecided planner semantic; see specs/009-jev-decision-models/evidence/memory-wiring-proposal.md"
         },
         "vram": {
-          "status": "unmeasured",
-          "reason": "measured only on a CPU-only host (no CUDA build, so no offload); a CUDA host with enough free RAM to load it was not available (the scheduler refused it, NATIVE-REPORT.md section 3)"
+          "status": "measured",
+          "format": "cpu-mode-apps-txt",
+          "evidence": "specs/009-jev-decision-models/evidence/live/decide-kev-4b/cpu-mode-vram-live-2026-10-08.txt",
+          "host": "anton",
+          "peak_mib": 4460
         },
         "gpu": {
           "status": "measured",
@@ -2210,11 +2214,11 @@
       "memory": {
         "ram": {
           "status": "unmeasured",
-          "reason": "NEZHA run pending"
+          "reason": "nezha CPU memory-summary evidence exists at specs/009-jev-decision-models/evidence/live-models/nezha-decide-kev-9b-2026-10-08/memory-summary.json (uncommitted snapshot, commit UNCONFIRMED) but is NOT wired into the planner: booking a CPU-only RAM peak into the estimated GPU VRAM footprint (gpu_booking) is an undecided planner semantic; see specs/009-jev-decision-models/evidence/memory-wiring-proposal.md"
         },
         "vram": {
           "status": "unmeasured",
-          "reason": "measured only on a CPU-only host (no CUDA build, so no offload); a CUDA host with enough free RAM to load it was not available (the scheduler refused it, NATIVE-REPORT.md section 3)"
+          "reason": "VRAM half unmeasured: nezha is CPU-only (i7-1165G7, no GPU) and the one GPU-host attempt on anton failed cudaMalloc of a 4016 MiB compute buffer at start (see memory.gpu lower-bound), so no engine-pid VRAM peak exists"
         },
         "gpu": {
           "status": "lower-bound",
