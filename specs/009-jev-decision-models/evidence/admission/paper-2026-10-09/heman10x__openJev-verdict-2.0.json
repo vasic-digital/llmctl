@@ -1,0 +1,121 @@
+{
+  "schema": "llmctl.admission/1",
+  "candidate": {
+    "name": "verdict-2.0",
+    "repo": "heman10x/openJev-verdict-2.0",
+    "pinned": "no",
+    "protocol_hint": "unsupported",
+    "known_issue": "",
+    "name_collision": "",
+    "kind": "weights"
+  },
+  "slug": "heman10x__openJev-verdict-2.0",
+  "mode": "paper-only",
+  "retrieved_at": "2026-10-09T14:24:54Z",
+  "existence": {
+    "verdict": "AMBIGUOUS",
+    "evidence": "HTTP 401: huggingface.co answers 401 for both private and non-existent repos; cannot be told apart anonymously",
+    "http_status": 401
+  },
+  "api": {},
+  "pins": [],
+  "protocol": {
+    "class": "unsupported",
+    "source": "none"
+  },
+  "needs_engine_advance": false,
+  "tier": null,
+  "g10_subchecks": [
+    {
+      "check": "loadability",
+      "status": "SKIP",
+      "evidence": "not attempted: candidate does not exist or was not readable (existence AMBIGUOUS)"
+    },
+    {
+      "check": "smoke_answer",
+      "status": "SKIP",
+      "evidence": "not attempted: candidate does not exist or was not readable (existence AMBIGUOUS)"
+    },
+    {
+      "check": "determinism_repeats",
+      "status": "SKIP",
+      "evidence": "not attempted: candidate does not exist or was not readable (existence AMBIGUOUS)"
+    },
+    {
+      "check": "option_order_sensitivity",
+      "status": "SKIP",
+      "evidence": "not attempted: candidate does not exist or was not readable (existence AMBIGUOUS)"
+    },
+    {
+      "check": "memory_fit_measured",
+      "status": "SKIP",
+      "evidence": "not attempted: candidate does not exist or was not readable (existence AMBIGUOUS)"
+    }
+  ],
+  "disposition": "NOT-FOUND",
+  "reasons": [
+    "existence AMBIGUOUS: HTTP 401: huggingface.co answers 401 for both private and non-existent repos; cannot be told apart anonymously"
+  ],
+  "gates": [
+    {
+      "gate": "G1",
+      "name": "licence allow-list",
+      "status": "SKIP",
+      "evidence": "not attempted: candidate does not exist or was not readable (existence AMBIGUOUS)"
+    },
+    {
+      "gate": "G2",
+      "name": "stable revision",
+      "status": "SKIP",
+      "evidence": "not attempted: candidate does not exist or was not readable (existence AMBIGUOUS)"
+    },
+    {
+      "gate": "G3",
+      "name": "pinned size+sha256",
+      "status": "SKIP",
+      "evidence": "not attempted: candidate does not exist or was not readable (existence AMBIGUOUS)"
+    },
+    {
+      "gate": "G4",
+      "name": "loadable by pinned engine",
+      "status": "SKIP",
+      "evidence": "not attempted: candidate does not exist or was not readable (existence AMBIGUOUS)"
+    },
+    {
+      "gate": "G5",
+      "name": "fits budgets",
+      "status": "SKIP",
+      "evidence": "not attempted: candidate does not exist or was not readable (existence AMBIGUOUS)"
+    },
+    {
+      "gate": "G6",
+      "name": "protocol classification",
+      "status": "SKIP",
+      "evidence": "not attempted: candidate does not exist or was not readable (existence AMBIGUOUS)"
+    },
+    {
+      "gate": "G7",
+      "name": "supply chain",
+      "status": "SKIP",
+      "evidence": "not attempted: candidate does not exist or was not readable (existence AMBIGUOUS)"
+    },
+    {
+      "gate": "G8",
+      "name": "provenance",
+      "status": "SKIP",
+      "evidence": "not attempted: candidate does not exist or was not readable (existence AMBIGUOUS)"
+    },
+    {
+      "gate": "G9",
+      "name": "known-issue sweep",
+      "status": "SKIP",
+      "evidence": "not attempted: candidate does not exist or was not readable (existence AMBIGUOUS)"
+    },
+    {
+      "gate": "G10",
+      "name": "real run",
+      "status": "SKIP",
+      "evidence": "not attempted: candidate does not exist or was not readable (existence AMBIGUOUS)"
+    }
+  ]
+}

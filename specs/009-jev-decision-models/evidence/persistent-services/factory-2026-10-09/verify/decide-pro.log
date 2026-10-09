@@ -1,0 +1,24 @@
+[2026-10-09T14:11:02Z] llmctl models download decide-pro
+[2026-10-09T14:11:02Z] engine: llama  repo: rizzoaiacademy/rizzo-flow
+[2026-10-09T14:11:03Z] download: https://huggingface.co/rizzoaiacademy/rizzo-flow/resolve/55633c8cbd2b826bd3eefdeb05310450996649df/spark-x2.5-4b-rizzo-flow-lora-q8_0.gguf -> /home/milos/.local/share/llmctl/models/decide-pro/spark-x2.5-4b-rizzo-flow-lora-q8_0.gguf.part
+[2026-10-09T14:29:01Z] curl exit: 0
+[2026-10-09T14:29:01Z] RUN: _dl_verify_file /home/milos/.local/share/llmctl/models/decide-pro/spark-x2.5-4b-rizzo-flow-lora-q8_0.gguf.part 4375021216 dbec3c89d33984772324e65a8ed56b48e958e301b856cb870a7c1b385d01691a
+[2026-10-09T14:29:11Z] EXIT: 0
+[2026-10-09T14:29:11Z] renamed /home/milos/.local/share/llmctl/models/decide-pro/spark-x2.5-4b-rizzo-flow-lora-q8_0.gguf.part -> /home/milos/.local/share/llmctl/models/decide-pro/spark-x2.5-4b-rizzo-flow-lora-q8_0.gguf (atomic, verified)
+[2026-10-09T14:29:11Z] smoke protocol: letter-logit
+[2026-10-09T14:29:11Z] smoke: /home/milos/llmctl-3.1.0-factory/submodules/llama.cpp/build/bin/llama-server --model /home/milos/.local/share/llmctl/models/decide-pro/spark-x2.5-4b-rizzo-flow-lora-q8_0.gguf --ctx-size 512 --n-gpu-layers 0 --host 127.0.0.1 --port 51293
+[2026-10-09T14:29:12Z] smoke: /health OK after 1s
+[2026-10-09T14:29:12Z] RUN: _dl_decision_probe_choice 51293
+[2026-10-09T14:29:13Z] EXIT: 0
+OUT: smoke ok: protocol=letter-logit choice=billing confidence=0.9605
+OUT:   billing=0.980237
+OUT:   legal=0.019763
+[2026-10-09T14:29:13Z] RUN: _dl_decision_probe_options 51293
+[2026-10-09T14:29:13Z] EXIT: 0
+OUT: smoke ok: protocol=letter-logit choice=billing confidence=0.9929
+OUT:   billing=0.994698
+OUT:   legal=0.004580
+OUT:   team3=0.000541
+OUT:   team4=0.000180
+[2026-10-09T14:29:14Z] decision smoke PASSED: choice == billing (2 options), valid typed answer (4 options)
+[2026-10-09T14:29:14Z] download decide-pro: SUCCESS

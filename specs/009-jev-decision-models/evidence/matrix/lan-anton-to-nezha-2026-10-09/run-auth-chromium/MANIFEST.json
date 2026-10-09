@@ -1,0 +1,45 @@
+{
+  "files": [
+    {
+      "path": "evidence.jsonl",
+      "sha256": "592a06c9d23e1145a16341612004a1dd606d44016c9cc5860f211009ad44c719",
+      "size": 4686
+    },
+    {
+      "path": "matrix.json",
+      "sha256": "0db2c76bfe32048213c3fb9d20df593229475a331840f386336469ba8ad43593",
+      "size": 6729
+    },
+    {
+      "path": "raw/EV-lan-auth-chromium-0001-stdout.txt",
+      "sha256": "aa9600ad086d9aa8ba158175783833d985bcb3d9df45a79c67639abbb47d0c29",
+      "size": 13
+    },
+    {
+      "path": "raw/EV-lan-auth-chromium-0002-stdout.txt",
+      "sha256": "aa9600ad086d9aa8ba158175783833d985bcb3d9df45a79c67639abbb47d0c29",
+      "size": 13
+    },
+    {
+      "path": "raw/EV-lan-auth-chromium-0003-stdout.txt",
+      "sha256": "6a763049f8416fa6f5c861c1c9d35194ce160e6e2623dc7dc52f3520180f069e",
+      "size": 391
+    },
+    {
+      "path": "raw/EV-lan-auth-chromium-0004-stdout.txt",
+      "sha256": "293a9fd9358f7ee044a602023a1f2e7c66eb7d9bb58f2f0f62e704d7f68d08e5",
+      "size": 392
+    },
+    {
+      "path": "raw/EV-lan-auth-chromium-0005-stdout.txt",
+      "sha256": "a87fc515a56cbaf8a60260d0535664296858e8d9ba5f44b8657f0f6ef41a2a5b",
+      "size": 389
+    },
+    {
+      "path": "raw/EV-lan-auth-chromium-0006-stdout.txt",
+      "sha256": "1bf4235c59f5f25f7e34be9a2253daebe0e3607ad49bfd22eee3242e63732495",
+      "size": 399
+    }
+  ],
+  "schema": 1
+}

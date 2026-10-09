@@ -1,0 +1,179 @@
+{
+ "vantage": "anton-lan -> nezha",
+ "target": "https://192.168.1.90:8095",
+ "date": "2026-10-09",
+ "per_profile_explicit_model": {
+  "cells": 60,
+  "pass": 60,
+  "fail": 0,
+  "by_client": {
+   "curl": {
+    "decide-nli": {
+     "pass": 3,
+     "of": 3,
+     "ms_median": 315
+    },
+    "decide-2b": {
+     "pass": 3,
+     "of": 3,
+     "ms_median": 1949
+    },
+    "decide-pro": {
+     "pass": 3,
+     "of": 3,
+     "ms_median": 5548
+    },
+    "decide-max": {
+     "pass": 3,
+     "of": 3,
+     "ms_median": 9512
+    }
+   },
+   "python-urllib": {
+    "decide-nli": {
+     "pass": 3,
+     "of": 3,
+     "ms_median": 262
+    },
+    "decide-2b": {
+     "pass": 3,
+     "of": 3,
+     "ms_median": 1955
+    },
+    "decide-pro": {
+     "pass": 3,
+     "of": 3,
+     "ms_median": 5587
+    },
+    "decide-max": {
+     "pass": 3,
+     "of": 3,
+     "ms_median": 9551
+    }
+   },
+   "python-requests": {
+    "decide-nli": {
+     "pass": 3,
+     "of": 3,
+     "ms_median": 351
+    },
+    "decide-2b": {
+     "pass": 3,
+     "of": 3,
+     "ms_median": 2058
+    },
+    "decide-pro": {
+     "pass": 3,
+     "of": 3,
+     "ms_median": 5708
+    },
+    "decide-max": {
+     "pass": 3,
+     "of": 3,
+     "ms_median": 9851
+    }
+   },
+   "node-fetch": {
+    "decide-nli": {
+     "pass": 3,
+     "of": 3,
+     "ms_median": 273
+    },
+    "decide-2b": {
+     "pass": 3,
+     "of": 3,
+     "ms_median": 2027
+    },
+    "decide-pro": {
+     "pass": 3,
+     "of": 3,
+     "ms_median": 5623
+    },
+    "decide-max": {
+     "pass": 3,
+     "of": 3,
+     "ms_median": 9645
+    }
+   },
+   "go-nethttp": {
+    "decide-nli": {
+     "pass": 3,
+     "of": 3,
+     "ms_median": 234
+    },
+    "decide-2b": {
+     "pass": 3,
+     "of": 3,
+     "ms_median": 1950
+    },
+    "decide-pro": {
+     "pass": 3,
+     "of": 3,
+     "ms_median": 5508
+    },
+    "decide-max": {
+     "pass": 3,
+     "of": 3,
+     "ms_median": 9682
+    }
+   }
+  },
+  "latency_ms": {
+   "decide-nli": {
+    "min": 174,
+    "median": 273,
+    "max": 403
+   },
+   "decide-2b": {
+    "min": 1602,
+    "median": 1955,
+    "max": 2145
+   },
+   "decide-pro": {
+    "min": 4627,
+    "median": 5587,
+    "max": 5786
+   },
+   "decide-max": {
+    "min": 7805,
+    "median": 9589,
+    "max": 9908
+   }
+  }
+ },
+ "full_matrix_run_no_model_sent": {
+  "curl": {
+   "fail": 6,
+   "pass": 20
+  },
+  "python-urllib": {
+   "fail": 8,
+   "pass": 18
+  },
+  "python-requests": {
+   "fail": 12,
+   "pass": 14
+  },
+  "node-fetch": {
+   "fail": 13,
+   "pass": 13
+  },
+  "go-nethttp": {
+   "fail": 12,
+   "pass": 14
+  },
+  "chromium": {
+   "not-exercised": 15,
+   "pass": 6,
+   "fail": 5
+  }
+ },
+ "harness_totals": {
+  "cells": 156,
+  "classes_beyond_fr069": 0,
+  "fail": 56,
+  "not-exercised": 15,
+  "pass": 85
+ },
+ "harness_verdict": "FAIL (see README for classified causes)"
+}

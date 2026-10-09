@@ -1,0 +1,24 @@
+[2026-10-09T14:11:02Z] llmctl models download decide-lev
+[2026-10-09T14:11:02Z] engine: llama  repo: ggml-org/lev-GGUF
+[2026-10-09T14:11:03Z] download: https://huggingface.co/ggml-org/lev-GGUF/resolve/3e9286a79ae857b4e1de051c92fab6dc574581ce/lev-Q4_K_M.gguf -> /home/milos/.local/share/llmctl/models/decide-lev/lev-Q4_K_M.gguf.part
+[2026-10-09T14:24:52Z] curl exit: 0
+[2026-10-09T14:24:52Z] RUN: _dl_verify_file /home/milos/.local/share/llmctl/models/decide-lev/lev-Q4_K_M.gguf.part 3011777440 3f61b27c00a098dbc79ed099cca3985cbe0b63d17ac7fedebf2dca1d84f7f3a8
+[2026-10-09T14:24:59Z] EXIT: 0
+[2026-10-09T14:24:59Z] renamed /home/milos/.local/share/llmctl/models/decide-lev/lev-Q4_K_M.gguf.part -> /home/milos/.local/share/llmctl/models/decide-lev/lev-Q4_K_M.gguf (atomic, verified)
+[2026-10-09T14:25:00Z] smoke protocol: systemone-native
+[2026-10-09T14:25:00Z] smoke: /home/milos/llmctl-3.1.0-factory/submodules/llama.cpp/build/bin/llama-server --model /home/milos/.local/share/llmctl/models/decide-lev/lev-Q4_K_M.gguf --ctx-size 4096 --n-gpu-layers 0 --host 127.0.0.1 --port 39189
+[2026-10-09T14:25:03Z] smoke: /health OK after 3s
+[2026-10-09T14:25:03Z] RUN: _dl_decision_probe_choice 39189
+[2026-10-09T14:25:03Z] EXIT: 0
+OUT: smoke ok: protocol=systemone-native choice=billing confidence=0.7507
+OUT:   billing=0.875349
+OUT:   legal=0.124651
+[2026-10-09T14:25:03Z] RUN: _dl_decision_probe_options 39189
+[2026-10-09T14:25:04Z] EXIT: 0
+OUT: smoke ok: protocol=systemone-native choice=billing confidence=0.3594
+OUT:   billing=0.519530
+OUT:   legal=0.060532
+OUT:   team3=0.151568
+OUT:   team4=0.268370
+[2026-10-09T14:25:04Z] decision smoke PASSED: valid typed answers over /v1/systemone (2 and 4 options; shape evidence only)
+[2026-10-09T14:25:04Z] download decide-lev: SUCCESS

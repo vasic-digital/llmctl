@@ -1,0 +1,14 @@
+[
+ {
+  "request": "GET /v1/models auth=key",
+  "status": 200,
+  "headers": {
+   "content-type": "application/json; charset=utf-8",
+   "x-llmctl-request-id": "28f233600f7c1bc7"
+  },
+  "body": "{\"object\":\"list\",\"data\":[{\"id\":\"decide-2b\",\"aliases\":[\"llmctl-decide-2b\"],\"protocol\":\"letter-logit\",\"status\":\"ready\",\"limits\":{\"max_options\":16,\"score_levels\":[2,10],\"max_state_chars\":8192,\"max_context_tokens\":8063},\"template_hash\":\"a9fe279e594629b9b26645f4b67f500b7f1373bfc77cf99c30d223b11275a83a\",\"maturity\":{\"choice\":{\"status\":\"unmeasured\",\"reason\":\"not yet measured\"},\"noul\":{\"status\":\"unmeasured\",\"reason\":\"not yet measured\"},\"score\":{\"status\":\"unmeasured\",\"reason\":\"not yet measured\"}},\"experimental_types\":[\"noul\",\"choice\",\"score\"]},{\"id\":\"decide-max\",\"aliases\":[\"llmctl-decide-max\"],\"protocol\":\"letter-logit\",\"status\":\"ready\",\"limits\":{\"max_options\":16,\"score_levels\":[2,10],\"max_state_chars\":8192,\"max_context_tokens\":8063},\"template_hash\":\"a9fe279e594629b9b26645f4b67f500b7f1373bfc77cf99c30d223b11275a83a\",\"maturity\":{\"choice\":{\"status\":\"unmeasured\",\"reason\":\"not yet measured\"},\"noul\":{\"status\":\"unmeasured\",\"reason\":\"not yet measured\"},\"score\":{\"status\":\"unmeasured\",\"reason\":\"not yet measured\"}},\"experimental_types\":[\"noul\",\"choice\",\"score\"]},{\"id\":\"decide-nli\",\"aliases\":[\"llmctl-decide-nli\"],\"protocol\":\"nli-onnx\",\"status\":\"ready\",\"limits\":{\"max_options\":20,\"score_levels\":[2,10],\"max",
+  "error": null,
+  "trust": null,
+  "note": "model entry keys ['aliases', 'experimental_types', 'id', 'limits', 'maturity', 'protocol', 'status', 'template_hash']; model entry keys ['aliases', 'experimental_types', 'id', 'limits', 'maturity', 'protocol', 'status', 'template_hash']; model entry keys ['aliases', 'experimental_types', 'id', 'limits', 'maturity', 'notes', 'protocol', 'status', 'template_hash']; model entry keys ['aliases', 'experimental_types', 'id', 'limits', 'maturity', 'protocol', 'status', 'template_hash']"
+ }
+]

@@ -1,0 +1,1443 @@
+{
+ "generated": "2026-10-09",
+ "method": "llmctl admit --all --paper-only (live HF API metadata only; no weights)",
+ "llama_cpp_pin": "b11379",
+ "records": [
+  {
+   "candidate": "gliner2.5-decide-gguf",
+   "repo": "3ntr0py-t4m3r/GLiNER2.5-Decide-GGUF",
+   "disposition": "USER-ONLY",
+   "existence": "VERIFIED",
+   "protocol": "systemone-native",
+   "gates": {
+    "G1": "PASS",
+    "G2": "PASS",
+    "G3": "PASS",
+    "G4": "FAIL",
+    "G5": "PASS",
+    "G6": "PASS",
+    "G7": "PASS",
+    "G8": "PASS",
+    "G9": "PENDING",
+    "G10": "SKIP"
+   },
+   "registered_profile": null,
+   "revision": "e043e5ccff28181296b5441bd0f4ad502c815412",
+   "gated_repo": false,
+   "pins": [
+    {
+     "name": "models/gliner2.5-decide-q4_k_m.gguf",
+     "size": 299547616,
+     "sha256": "44b496627d85c19e"
+    }
+   ],
+   "est_memory_bytes": 389411900,
+   "tier": "below-minimum",
+   "first_reason": "G4: GGUF arch 'deberta-v3' is absent from the pinned tree and an engine bump is not proven to add it (custom / patched architecture)"
+  },
+  {
+   "candidate": "winnow-12b",
+   "repo": "EldanRing/Winnow-12B",
+   "disposition": "USER-ONLY",
+   "existence": "VERIFIED",
+   "protocol": "unsupported",
+   "gates": {
+    "G1": "PASS",
+    "G2": "PASS",
+    "G3": "PASS",
+    "G4": "SKIP",
+    "G5": "FAIL",
+    "G6": "FAIL",
+    "G7": "PASS",
+    "G8": "PASS",
+    "G9": "PENDING",
+    "G10": "SKIP"
+   },
+   "registered_profile": null,
+   "revision": "859a2cb24921d8b579badce6caa469f9290f3bc1",
+   "gated_repo": false,
+   "pins": [
+    {
+     "name": "gguf/Winnow-12B-Q8_0.gguf",
+     "size": 12669646592,
+     "sha256": "b710efc4c0d048ee"
+    }
+   ],
+   "est_memory_bytes": 16470540569,
+   "tier": "workstation",
+   "first_reason": "G5: over the file-size budget: largest model file gguf/Winnow-12B-Q8_0.gguf = 12669646592 B (cap 10737418240 B), tier workstation, memory ESTIMATE 16470540569 B (gguf: size*1.3) vs budget 19487239372 B (60% of /proc/meminfo MemTotal (Constitution 12.6))"
+  },
+  {
+   "candidate": "winnow-e4b",
+   "repo": "EldanRing/Winnow-E4B",
+   "disposition": "USER-ONLY",
+   "existence": "VERIFIED",
+   "protocol": "unsupported",
+   "gates": {
+    "G1": "PASS",
+    "G2": "PASS",
+    "G3": "PASS",
+    "G4": "SKIP",
+    "G5": "PASS",
+    "G6": "FAIL",
+    "G7": "PASS",
+    "G8": "PASS",
+    "G9": "PENDING",
+    "G10": "SKIP"
+   },
+   "registered_profile": null,
+   "revision": "ed891438b340bb60e2962e335fe100b2796c2124",
+   "gated_repo": false,
+   "pins": [
+    {
+     "name": "gguf/Winnow-E4B-Q8_0.gguf",
+     "size": 8005437472,
+     "sha256": "840e3f50e5a9c218"
+    }
+   ],
+   "est_memory_bytes": 10407068713,
+   "tier": "workstation",
+   "first_reason": "G6: unsupported / unclassified protocol (curated hint 'unsupported'); fail closed"
+  },
+  {
+   "candidate": "kestrel-decider-230m",
+   "repo": "Kestrelyn/kestrel-decider-230m",
+   "disposition": "REJECTED",
+   "existence": "VERIFIED",
+   "protocol": "unsupported",
+   "gates": {
+    "G1": "FAIL",
+    "G2": "PASS",
+    "G3": "FAIL",
+    "G4": "SKIP",
+    "G5": "SKIP",
+    "G6": "FAIL",
+    "G7": "PASS",
+    "G8": "PASS",
+    "G9": "PENDING",
+    "G10": "SKIP"
+   },
+   "registered_profile": null,
+   "revision": "003149456109ee8647e4d7990b711f35779be097",
+   "gated_repo": false,
+   "pins": [],
+   "est_memory_bytes": null,
+   "tier": null,
+   "first_reason": "G1: weights licence other is not on the allow-list ['apache-2.0', 'mit', 'bsd-2-clause', 'bsd-3-clause', 'cc-by-4.0', 'cc0-1.0', 'isc', 'unlicense']; licence files in repo: ['LICENSE']"
+  },
+  {
+   "candidate": "verdictml-small",
+   "repo": "Manav2op/verdict-small",
+   "disposition": "USER-ONLY",
+   "existence": "VERIFIED",
+   "protocol": "unsupported",
+   "gates": {
+    "G1": "PASS",
+    "G2": "PASS",
+    "G3": "PASS",
+    "G4": "SKIP",
+    "G5": "PASS",
+    "G6": "FAIL",
+    "G7": "PASS",
+    "G8": "PASS",
+    "G9": "PENDING",
+    "G10": "SKIP"
+   },
+   "registered_profile": null,
+   "revision": "085a41e0ea269f00483dd202a286cfb68f7aa63a",
+   "gated_repo": false,
+   "pins": [
+    {
+     "name": "onnx/model_quantized.onnx",
+     "size": 118070929,
+     "sha256": "2d1e4fc7da536425"
+    }
+   ],
+   "est_memory_bytes": 713977305,
+   "tier": "below-minimum",
+   "first_reason": "G6: unsupported / unclassified protocol (curated hint 'unsupported'); fail closed"
+  },
+  {
+   "candidate": "decider-2b",
+   "repo": "Mapika/decider-2b-GGUF",
+   "disposition": "ADMIT-CANDIDATE",
+   "existence": "VERIFIED",
+   "protocol": "letter-logit",
+   "gates": {
+    "G1": "PASS",
+    "G2": "PASS",
+    "G3": "PENDING",
+    "G4": "PASS",
+    "G5": "PASS",
+    "G6": "PASS",
+    "G7": "PASS",
+    "G8": "PASS",
+    "G9": "PENDING",
+    "G10": "PENDING"
+   },
+   "registered_profile": null,
+   "revision": "ff2e5e687327eda9ac34e9a3ca84d3f400672c87",
+   "gated_repo": false,
+   "pins": [
+    {
+     "name": "decider-2b-v11-Q4_K_M.gguf",
+     "size": 1274396800,
+     "sha256": "b7c132a67934d51c"
+    },
+    {
+     "name": "decider_config.json",
+     "size": 1240,
+     "sha256": "NONE(non-LFS)"
+    }
+   ],
+   "est_memory_bytes": 1656715840,
+   "tier": "baseline",
+   "first_reason": "G3 PENDING: model sha256 pinned from the API LFS oid (decider-2b-v11-Q4_K_M.gguf=b7c132a67934...); aux file(s) ['decider_config.json'] are non-LFS: sha256 must be computed at pin time (not done in paper mode)"
+  },
+  {
+   "candidate": "decide",
+   "repo": "Mapika/decider-4b-GGUF",
+   "disposition": "ADMIT-CANDIDATE",
+   "existence": "VERIFIED",
+   "protocol": "letter-logit",
+   "gates": {
+    "G1": "PASS",
+    "G2": "PASS",
+    "G3": "PENDING",
+    "G4": "PASS",
+    "G5": "PASS",
+    "G6": "PASS",
+    "G7": "PASS",
+    "G8": "PASS",
+    "G9": "PENDING",
+    "G10": "PENDING"
+   },
+   "registered_profile": "decide",
+   "revision": "b79f09d9ba7837f1b744295ea267b55d08e958ec",
+   "gated_repo": false,
+   "pins": [
+    {
+     "name": "decider-4b-v2.1-Q4_K_M.gguf",
+     "size": 2708804640,
+     "sha256": "c7083fcfc93f650c"
+    },
+    {
+     "name": "decider_config.json",
+     "size": 1378,
+     "sha256": "NONE(non-LFS)"
+    }
+   ],
+   "est_memory_bytes": 3521446032,
+   "tier": "baseline",
+   "first_reason": "G3 PENDING: model sha256 pinned from the API LFS oid (decider-4b-v2.1-Q4_K_M.gguf=c7083fcfc93f...); aux file(s) ['decider_config.json'] are non-LFS: sha256 must be computed at pin time (not done in paper mode)"
+  },
+  {
+   "candidate": "decide-nli",
+   "repo": "MoritzLaurer/deberta-v3-large-zeroshot-v2.0",
+   "disposition": "ADMIT-CANDIDATE",
+   "existence": "VERIFIED",
+   "protocol": "nli-onnx",
+   "gates": {
+    "G1": "PASS",
+    "G2": "PASS",
+    "G3": "PASS",
+    "G4": "PASS",
+    "G5": "PASS",
+    "G6": "PASS",
+    "G7": "PASS",
+    "G8": "PASS",
+    "G9": "PENDING",
+    "G10": "PENDING"
+   },
+   "registered_profile": "decide-nli",
+   "revision": "cf44676c28ba7312e5c5f8f8d2c22b3e0c9cdae2",
+   "gated_repo": false,
+   "pins": [
+    {
+     "name": "onnx/model.onnx",
+     "size": 1741985401,
+     "sha256": "beded3d71421ceb7"
+    },
+    {
+     "name": "onnx/spm.model",
+     "size": 2464616,
+     "sha256": "c679fbf93643d19a"
+    }
+   ],
+   "est_memory_bytes": 3149849013,
+   "tier": "baseline",
+   "first_reason": "G9 PENDING: live upstream issue-tracker sweep not done by this driver (offline); none recorded in the research register"
+  },
+  {
+   "candidate": "strands-decider-2b-v21",
+   "repo": "StrandsAgents/strands-decider-2B-hobson-v21",
+   "disposition": "USER-ONLY",
+   "existence": "VERIFIED",
+   "protocol": "unsupported",
+   "gates": {
+    "G1": "PASS",
+    "G2": "PASS",
+    "G3": "FAIL",
+    "G4": "SKIP",
+    "G5": "SKIP",
+    "G6": "FAIL",
+    "G7": "PASS",
+    "G8": "PASS",
+    "G9": "PENDING",
+    "G10": "SKIP"
+   },
+   "registered_profile": null,
+   "revision": "2b52a6235c1b8306bbfa30b00b9d4b74b63a39f5",
+   "gated_repo": false,
+   "pins": [],
+   "est_memory_bytes": null,
+   "tier": null,
+   "first_reason": "G3: no GGUF or ONNX file in the repo to pin (siblings: ['.gitattributes', 'LICENSE.md', 'MANIFEST.sha256', 'README.md', 'chat_template.jinja', 'eval/internal/eval.log', 'eval/internal/recipe_heldout.json', 'eval/jevbench-w4096/health.json'])"
+  },
+  {
+   "candidate": "neohorse-jev-4b",
+   "repo": "TokenRhythm/NeoHorse-Jev-4B-GGUF",
+   "disposition": "USER-ONLY",
+   "existence": "VERIFIED",
+   "protocol": "unsupported",
+   "gates": {
+    "G1": "PASS",
+    "G2": "PASS",
+    "G3": "PASS",
+    "G4": "SKIP",
+    "G5": "PASS",
+    "G6": "FAIL",
+    "G7": "PASS",
+    "G8": "PASS",
+    "G9": "PENDING",
+    "G10": "SKIP"
+   },
+   "registered_profile": null,
+   "revision": "b1bc36970f69cef2bfea75aec8f820fd3d20b040",
+   "gated_repo": false,
+   "pins": [
+    {
+     "name": "NeoHorse-Jev-4B-Q4_K_M.gguf",
+     "size": 3394729184,
+     "sha256": "d2d81e946be2f449"
+    }
+   ],
+   "est_memory_bytes": 4413147939,
+   "tier": "workstation",
+   "first_reason": "G6: unsupported / unclassified protocol (curated hint 'unsupported'); fail closed"
+  },
+  {
+   "candidate": "decide-2b+max",
+   "repo": "alibiserikbay/JevK5-GGUF",
+   "disposition": "ADMIT-CANDIDATE",
+   "existence": "VERIFIED",
+   "protocol": "letter-logit",
+   "gates": {
+    "G1": "PASS",
+    "G2": "PASS",
+    "G3": "PASS",
+    "G4": "PASS",
+    "G5": "PASS",
+    "G6": "PASS",
+    "G7": "PASS",
+    "G8": "PASS",
+    "G9": "PENDING",
+    "G10": "PENDING"
+   },
+   "registered_profile": "decide-max",
+   "revision": "ec67b0bfce5119a8b11a2cdb430bb43e3fa3e82a",
+   "gated_repo": false,
+   "pins": [
+    {
+     "name": "jevk5-2b-v0.2-Q8_0.gguf",
+     "size": 2012012000,
+     "sha256": "17222f27a89273ac"
+    },
+    {
+     "name": "jevk5-9b-v0.3.3-Q8_0.gguf",
+     "size": 9527501280,
+     "sha256": "283de8fd216ad220"
+    }
+   ],
+   "est_memory_bytes": 12385751664,
+   "tier": "workstation",
+   "first_reason": "G9 PENDING: live upstream issue-tracker sweep not done by this driver (offline); none recorded in the research register"
+  },
+  {
+   "candidate": "anyjev",
+   "repo": "-",
+   "disposition": "REJECTED",
+   "existence": "UNVERIFIED",
+   "protocol": "unsupported",
+   "gates": {
+    "G1": "SKIP",
+    "G2": "SKIP",
+    "G3": "SKIP",
+    "G4": "SKIP",
+    "G5": "SKIP",
+    "G6": "SKIP",
+    "G7": "SKIP",
+    "G8": "SKIP",
+    "G9": "SKIP",
+    "G10": "SKIP"
+   },
+   "registered_profile": null,
+   "revision": null,
+   "gated_repo": null,
+   "pins": [],
+   "est_memory_bytes": null,
+   "tier": null,
+   "first_reason": "no weights artifact: harness / library, not a model (kind=harness)"
+  },
+  {
+   "candidate": "apus-openjev-4b",
+   "repo": "apus-ailab/APUS-OpenJev-v1-4B-GGUF",
+   "disposition": "ADMIT-CANDIDATE",
+   "existence": "VERIFIED",
+   "protocol": "letter-logit",
+   "gates": {
+    "G1": "PASS",
+    "G2": "PASS",
+    "G3": "PASS",
+    "G4": "PASS",
+    "G5": "PASS",
+    "G6": "PASS",
+    "G7": "PASS",
+    "G8": "PASS",
+    "G9": "PENDING",
+    "G10": "PENDING"
+   },
+   "registered_profile": null,
+   "revision": "7389d774472c9e29ddc84fffb392951f0f25de74",
+   "gated_repo": false,
+   "pins": [
+    {
+     "name": "APUS-OpenJev-v1-4B-Q8_0.gguf",
+     "size": 4482403168,
+     "sha256": "5e57075a169a76de"
+    }
+   ],
+   "est_memory_bytes": 5827124118,
+   "tier": "workstation",
+   "first_reason": "G9 PENDING: live upstream issue-tracker sweep not done by this driver (offline); none recorded in the research register"
+  },
+  {
+   "candidate": "autotrust-jev-9b",
+   "repo": "autotrust/JEV-9B",
+   "disposition": "USER-ONLY",
+   "existence": "VERIFIED",
+   "protocol": "unsupported",
+   "gates": {
+    "G1": "PASS",
+    "G2": "PASS",
+    "G3": "FAIL",
+    "G4": "SKIP",
+    "G5": "SKIP",
+    "G6": "FAIL",
+    "G7": "PASS",
+    "G8": "PASS",
+    "G9": "PENDING",
+    "G10": "SKIP"
+   },
+   "registered_profile": null,
+   "revision": "b63f651ce8ed64481d3f5e73ecdb05f740042f01",
+   "gated_repo": false,
+   "pins": [],
+   "est_memory_bytes": null,
+   "tier": null,
+   "first_reason": "G3: no GGUF or ONNX file in the repo to pin (siblings: ['.gitattributes', 'README.md', 'adapter/README.md', 'adapter/adapter_config.json', 'adapter/adapter_model.safetensors', 'adapter_vllm/adapter_config.json', 'adapter_vllm/adapter_model.safetensors', 'adapter_vllm/decision_head.json'])"
+  },
+  {
+   "candidate": "bev-decider-0.4b",
+   "repo": "avbiswas/bev-decider-0.4B",
+   "disposition": "REJECTED",
+   "existence": "VERIFIED",
+   "protocol": "unsupported",
+   "gates": {
+    "G1": "FAIL",
+    "G2": "PASS",
+    "G3": "FAIL",
+    "G4": "SKIP",
+    "G5": "SKIP",
+    "G6": "FAIL",
+    "G7": "PASS",
+    "G8": "PASS",
+    "G9": "PENDING",
+    "G10": "SKIP"
+   },
+   "registered_profile": null,
+   "revision": "cf5138b5b465343d09c3b4fbd71eaca36d989d34",
+   "gated_repo": false,
+   "pins": [],
+   "est_memory_bytes": null,
+   "tier": null,
+   "first_reason": "G1: weights licence cc-by-nc-4.0 is not on the allow-list ['apache-2.0', 'mit', 'bsd-2-clause', 'bsd-3-clause', 'cc-by-4.0', 'cc0-1.0', 'isc', 'unlicense']; licence files in repo: none"
+  },
+  {
+   "candidate": "decide-tiny",
+   "repo": "chaoliangUNSW/Jev-Style-0.8B-Decision-v3-GGUF",
+   "disposition": "ADMIT-CANDIDATE",
+   "existence": "VERIFIED",
+   "protocol": "letter-logit",
+   "gates": {
+    "G1": "PASS",
+    "G2": "PASS",
+    "G3": "PASS",
+    "G4": "PASS",
+    "G5": "PASS",
+    "G6": "PASS",
+    "G7": "PASS",
+    "G8": "PASS",
+    "G9": "PENDING",
+    "G10": "PENDING"
+   },
+   "registered_profile": "decide-tiny",
+   "revision": "edf37c26a1098f83cf4264b8adbe0dca2d2ebb0c",
+   "gated_repo": false,
+   "pins": [
+    {
+     "name": "Jev-Style-0.8B-Decision-v3-Q4_K_M.gguf",
+     "size": 529296864,
+     "sha256": "0a19bc29bacc33e0"
+    }
+   ],
+   "est_memory_bytes": 688085923,
+   "tier": "below-minimum",
+   "first_reason": "G9 PENDING: live upstream issue-tracker sweep not done by this driver (offline); none recorded in the research register"
+  },
+  {
+   "candidate": "clm",
+   "repo": "-",
+   "disposition": "REJECTED",
+   "existence": "UNVERIFIED",
+   "protocol": "unsupported",
+   "gates": {
+    "G1": "SKIP",
+    "G2": "SKIP",
+    "G3": "SKIP",
+    "G4": "SKIP",
+    "G5": "SKIP",
+    "G6": "SKIP",
+    "G7": "SKIP",
+    "G8": "SKIP",
+    "G9": "SKIP",
+    "G10": "SKIP"
+   },
+   "registered_profile": null,
+   "revision": null,
+   "gated_repo": null,
+   "pins": [],
+   "est_memory_bytes": null,
+   "tier": null,
+   "first_reason": "no weights artifact: harness / library, not a model (kind=harness)"
+  },
+  {
+   "candidate": "open-jev-deberta",
+   "repo": "com-kotobalabs/open-jev-deberta-v3-large",
+   "disposition": "USER-ONLY",
+   "existence": "VERIFIED",
+   "protocol": "unsupported",
+   "gates": {
+    "G1": "PASS",
+    "G2": "PASS",
+    "G3": "FAIL",
+    "G4": "SKIP",
+    "G5": "SKIP",
+    "G6": "FAIL",
+    "G7": "PASS",
+    "G8": "PASS",
+    "G9": "PENDING",
+    "G10": "SKIP"
+   },
+   "registered_profile": null,
+   "revision": "188ee67a5c93122b916e5acd5bdb0cb3623e380a",
+   "gated_repo": false,
+   "pins": [],
+   "est_memory_bytes": null,
+   "tier": null,
+   "first_reason": "G3: no GGUF or ONNX file in the repo to pin (siblings: ['.gitattributes', 'README.md', 'added_tokens.json', 'config.json', 'head.safetensors', 'model.safetensors', 'open_jev_config.json', 'special_tokens_map.json'])"
+  },
+  {
+   "candidate": "djev",
+   "repo": "-",
+   "disposition": "REJECTED",
+   "existence": "UNVERIFIED",
+   "protocol": "unsupported",
+   "gates": {
+    "G1": "SKIP",
+    "G2": "SKIP",
+    "G3": "SKIP",
+    "G4": "SKIP",
+    "G5": "SKIP",
+    "G6": "SKIP",
+    "G7": "SKIP",
+    "G8": "SKIP",
+    "G9": "SKIP",
+    "G10": "SKIP"
+   },
+   "registered_profile": null,
+   "revision": null,
+   "gated_repo": null,
+   "pins": [],
+   "est_memory_bytes": null,
+   "tier": null,
+   "first_reason": "no weights artifact: harness / library, not a model (kind=harness)"
+  },
+  {
+   "candidate": "edgejev",
+   "repo": "-",
+   "disposition": "REJECTED",
+   "existence": "UNVERIFIED",
+   "protocol": "unsupported",
+   "gates": {
+    "G1": "SKIP",
+    "G2": "SKIP",
+    "G3": "SKIP",
+    "G4": "SKIP",
+    "G5": "SKIP",
+    "G6": "SKIP",
+    "G7": "SKIP",
+    "G8": "SKIP",
+    "G9": "SKIP",
+    "G10": "SKIP"
+   },
+   "registered_profile": null,
+   "revision": null,
+   "gated_repo": null,
+   "pins": [],
+   "est_memory_bytes": null,
+   "tier": null,
+   "first_reason": "no weights artifact: harness / library, not a model (kind=harness)"
+  },
+  {
+   "candidate": "gliner2.5-decide",
+   "repo": "fastino/GLiNER2.5-Decide",
+   "disposition": "USER-ONLY",
+   "existence": "VERIFIED",
+   "protocol": "unsupported",
+   "gates": {
+    "G1": "PASS",
+    "G2": "PASS",
+    "G3": "FAIL",
+    "G4": "SKIP",
+    "G5": "SKIP",
+    "G6": "FAIL",
+    "G7": "PASS",
+    "G8": "PASS",
+    "G9": "PENDING",
+    "G10": "SKIP"
+   },
+   "registered_profile": null,
+   "revision": "9d1bfb848cd16d93ee56ccbc59cd92bf0f284d90",
+   "gated_repo": false,
+   "pins": [],
+   "est_memory_bytes": null,
+   "tier": null,
+   "first_reason": "G3: no GGUF or ONNX file in the repo to pin (siblings: ['.gitattributes', 'GLiNER-2.5-Decision-HF-Banner.png', 'README.md', 'SKILL.md', 'config.json', 'encoder_config/config.json', 'model.safetensors', 'special_tokens_map.json'])"
+  },
+  {
+   "candidate": "bespoke-nimble-9b",
+   "repo": "ggml-org/Bespoke-Nimble-9B-v3-GGUF",
+   "disposition": "REJECTED",
+   "existence": "VERIFIED",
+   "protocol": "systemone-native",
+   "gates": {
+    "G1": "FAIL",
+    "G2": "PASS",
+    "G3": "PASS",
+    "G4": "PASS",
+    "G5": "PASS",
+    "G6": "PASS",
+    "G7": "PASS",
+    "G8": "PASS",
+    "G9": "PENDING",
+    "G10": "SKIP"
+   },
+   "registered_profile": null,
+   "revision": "a72bdbadb355ca3014f7f9d2585380917cc59971",
+   "gated_repo": false,
+   "pins": [
+    {
+     "name": "Bespoke-Nimble-9B-v3-Q4_K_M.gguf",
+     "size": 6324185632,
+     "sha256": "613a9b8c77ae1648"
+    }
+   ],
+   "est_memory_bytes": 8221441321,
+   "tier": "workstation",
+   "first_reason": "G1: weights licence cc-by-nc-4.0 is not on the allow-list ['apache-2.0', 'mit', 'bsd-2-clause', 'bsd-3-clause', 'cc-by-4.0', 'cc0-1.0', 'isc', 'unlicense']; licence files in repo: none"
+  },
+  {
+   "candidate": "clef-flash",
+   "repo": "ggml-org/Clef-Flash-GGUF",
+   "disposition": "HOLD",
+   "existence": "VERIFIED",
+   "protocol": "systemone-native",
+   "gates": {
+    "G1": "PASS",
+    "G2": "PASS",
+    "G3": "PASS",
+    "G4": "PASS",
+    "G5": "PASS",
+    "G6": "PASS",
+    "G7": "PASS",
+    "G8": "PASS",
+    "G9": "FAIL",
+    "G10": "SKIP"
+   },
+   "registered_profile": null,
+   "revision": "4a192915ef971886004b5b13294f2b4c7a7fc39d",
+   "gated_repo": false,
+   "pins": [
+    {
+     "name": "Clef-Flash-Q4_K_M.gguf",
+     "size": 6486448288,
+     "sha256": "fd3e90605e810330"
+    }
+   ],
+   "est_memory_bytes": 8432382774,
+   "tier": "workstation",
+   "first_reason": "G9: blocking open issue recorded: llama.cpp#30064 Q8_0 head quantisation collapses probabilities toward uniform (open at 2026-10-07); also needs b11371+"
+  },
+  {
+   "candidate": "julia-1",
+   "repo": "ggml-org/Julia-1-GGUF",
+   "disposition": "ADMIT-CANDIDATE",
+   "existence": "VERIFIED",
+   "protocol": "systemone-native",
+   "gates": {
+    "G1": "PASS",
+    "G2": "PASS",
+    "G3": "PASS",
+    "G4": "PASS",
+    "G5": "PASS",
+    "G6": "PASS",
+    "G7": "PASS",
+    "G8": "PASS",
+    "G9": "PENDING",
+    "G10": "PENDING"
+   },
+   "registered_profile": "decide-julia",
+   "revision": "16fee17949206fbf58da9347daea44d792a81211",
+   "gated_repo": false,
+   "pins": [
+    {
+     "name": "Julia-1-Q8_0.gguf",
+     "size": 168166496,
+     "sha256": "1ea6a7e87156eeed"
+    }
+   ],
+   "est_memory_bytes": 218616444,
+   "tier": "below-minimum",
+   "first_reason": "G9 PENDING: non-blocking note recorded (llama.cpp#30073 large inputs rejected at default physical batch 512 (open at 2026-10-07; -b must be >= prompt length)); live tracker sweep not done by this driver"
+  },
+  {
+   "candidate": "kev-0.8b",
+   "repo": "ggml-org/Kev-0.8B-GGUF",
+   "disposition": "ADMIT-CANDIDATE",
+   "existence": "VERIFIED",
+   "protocol": "systemone-native",
+   "gates": {
+    "G1": "PASS",
+    "G2": "PASS",
+    "G3": "PASS",
+    "G4": "PASS",
+    "G5": "PASS",
+    "G6": "PASS",
+    "G7": "PASS",
+    "G8": "PASS",
+    "G9": "PENDING",
+    "G10": "PENDING"
+   },
+   "registered_profile": "decide-kev-08b",
+   "revision": "e551e319d483ff57e1ff208924b349d397cffc1c",
+   "gated_repo": false,
+   "pins": [
+    {
+     "name": "Kev-0.8B-Q8_0.gguf",
+     "size": 812406304,
+     "sha256": "27278f34eb3273bc"
+    }
+   ],
+   "est_memory_bytes": 1056128195,
+   "tier": "below-minimum",
+   "first_reason": "G9 PENDING: non-blocking note recorded (llama.cpp#30073 large inputs rejected at default physical batch 512 (open at 2026-10-07; -b must be >= prompt length)); live tracker sweep not done by this driver"
+  },
+  {
+   "candidate": "kev-4b",
+   "repo": "ggml-org/Kev-4B-GGUF",
+   "disposition": "ADMIT-CANDIDATE",
+   "existence": "VERIFIED",
+   "protocol": "systemone-native",
+   "gates": {
+    "G1": "PASS",
+    "G2": "PASS",
+    "G3": "PASS",
+    "G4": "PASS",
+    "G5": "PASS",
+    "G6": "PASS",
+    "G7": "PASS",
+    "G8": "PASS",
+    "G9": "PENDING",
+    "G10": "PENDING"
+   },
+   "registered_profile": "decide-kev-4b",
+   "revision": "d924f2e2c3872da8b8aaf3eb4453b4126deceb79",
+   "gated_repo": false,
+   "pins": [
+    {
+     "name": "Kev-4B-Q4_K_M.gguf",
+     "size": 3033489824,
+     "sha256": "33ae6b18926502b2"
+    }
+   ],
+   "est_memory_bytes": 3943536771,
+   "tier": "baseline",
+   "first_reason": "G9 PENDING: non-blocking note recorded (llama.cpp#30073 large inputs rejected at default physical batch 512 (open at 2026-10-07; -b must be >= prompt length)); live tracker sweep not done by this driver"
+  },
+  {
+   "candidate": "kev-9b",
+   "repo": "ggml-org/Kev-9B-GGUF",
+   "disposition": "ADMIT-CANDIDATE",
+   "existence": "VERIFIED",
+   "protocol": "systemone-native",
+   "gates": {
+    "G1": "PASS",
+    "G2": "PASS",
+    "G3": "PASS",
+    "G4": "PASS",
+    "G5": "PASS",
+    "G6": "PASS",
+    "G7": "PASS",
+    "G8": "PASS",
+    "G9": "PENDING",
+    "G10": "PENDING"
+   },
+   "registered_profile": "decide-kev-9b",
+   "revision": "ec2bbfe6620218aee2e01cc93bb78dee2a96ed58",
+   "gated_repo": false,
+   "pins": [
+    {
+     "name": "Kev-9B-Q4_K_M.gguf",
+     "size": 6358923744,
+     "sha256": "86a6084984a6ef68"
+    }
+   ],
+   "est_memory_bytes": 8266600867,
+   "tier": "workstation",
+   "first_reason": "G9 PENDING: non-blocking note recorded (llama.cpp#30073 large inputs rejected at default physical batch 512 (open at 2026-10-07; -b must be >= prompt length)); live tracker sweep not done by this driver"
+  },
+  {
+   "candidate": "laya",
+   "repo": "ggml-org/Laya-GGUF",
+   "disposition": "ADMIT-CANDIDATE",
+   "existence": "VERIFIED",
+   "protocol": "systemone-native",
+   "gates": {
+    "G1": "PASS",
+    "G2": "PASS",
+    "G3": "PASS",
+    "G4": "PASS",
+    "G5": "PASS",
+    "G6": "PASS",
+    "G7": "PASS",
+    "G8": "PASS",
+    "G9": "PENDING",
+    "G10": "PENDING"
+   },
+   "registered_profile": "decide-laya",
+   "revision": "22265007700297ba9e128297e82540cf28c5d7d4",
+   "gated_repo": false,
+   "pins": [
+    {
+     "name": "Laya-Q8_0.gguf",
+     "size": 449397600,
+     "sha256": "c06528c5746d3bb8"
+    }
+   ],
+   "est_memory_bytes": 584216880,
+   "tier": "below-minimum",
+   "first_reason": "G9 PENDING: non-blocking note recorded (llama.cpp#30073 large inputs rejected at default physical batch 512 (open at 2026-10-07; -b must be >= prompt length)); live tracker sweep not done by this driver"
+  },
+  {
+   "candidate": "openjev-gguf",
+   "repo": "ggml-org/OpenJev-GGUF",
+   "disposition": "REJECTED",
+   "existence": "VERIFIED",
+   "protocol": "systemone-native",
+   "gates": {
+    "G1": "FAIL",
+    "G2": "PASS",
+    "G3": "PASS",
+    "G4": "PASS",
+    "G5": "FAIL",
+    "G6": "PASS",
+    "G7": "PASS",
+    "G8": "PASS",
+    "G9": "PENDING",
+    "G10": "SKIP"
+   },
+   "registered_profile": null,
+   "revision": "10840f375658dea7afc5ff4711127bca8218b560",
+   "gated_repo": false,
+   "pins": [
+    {
+     "name": "OpenJev-Q4_K_M.gguf",
+     "size": 18973872288,
+     "sha256": "38b512277edaeec6"
+    }
+   ],
+   "est_memory_bytes": 24666033974,
+   "tier": "workstation",
+   "first_reason": "G1: weights licence cc-by-nc-4.0 is not on the allow-list ['apache-2.0', 'mit', 'bsd-2-clause', 'bsd-3-clause', 'cc-by-4.0', 'cc0-1.0', 'isc', 'unlicense']; licence files in repo: none"
+  },
+  {
+   "candidate": "lev",
+   "repo": "ggml-org/lev-GGUF",
+   "disposition": "ADMIT-CANDIDATE",
+   "existence": "VERIFIED",
+   "protocol": "systemone-native",
+   "gates": {
+    "G1": "PASS",
+    "G2": "PASS",
+    "G3": "PASS",
+    "G4": "PASS",
+    "G5": "PASS",
+    "G6": "PASS",
+    "G7": "PASS",
+    "G8": "PASS",
+    "G9": "PENDING",
+    "G10": "PENDING"
+   },
+   "registered_profile": "decide-lev",
+   "revision": "3e9286a79ae857b4e1de051c92fab6dc574581ce",
+   "gated_repo": false,
+   "pins": [
+    {
+     "name": "lev-Q4_K_M.gguf",
+     "size": 3011777440,
+     "sha256": "3f61b27c00a098db"
+    }
+   ],
+   "est_memory_bytes": 3915310672,
+   "tier": "baseline",
+   "first_reason": "G9 PENDING: non-blocking note recorded (llama.cpp#30073 large inputs rejected at default physical batch 512 (open at 2026-10-07; -b must be >= prompt length)); live tracker sweep not done by this driver"
+  },
+  {
+   "candidate": "verdict-2.0",
+   "repo": "heman10x/openJev-verdict-2.0",
+   "disposition": "NOT-FOUND",
+   "existence": "AMBIGUOUS",
+   "protocol": "unsupported",
+   "gates": {
+    "G1": "SKIP",
+    "G2": "SKIP",
+    "G3": "SKIP",
+    "G4": "SKIP",
+    "G5": "SKIP",
+    "G6": "SKIP",
+    "G7": "SKIP",
+    "G8": "SKIP",
+    "G9": "SKIP",
+    "G10": "SKIP"
+   },
+   "registered_profile": null,
+   "revision": null,
+   "gated_repo": null,
+   "pins": [],
+   "est_memory_bytes": null,
+   "tier": null,
+   "first_reason": "existence AMBIGUOUS: HTTP 401: huggingface.co answers 401 for both private and non-existent repos; cannot be told apart anonymously"
+  },
+  {
+   "candidate": "verdict-151m",
+   "repo": "heman10x/rlcd-modernbert-151m",
+   "disposition": "USER-ONLY",
+   "existence": "VERIFIED",
+   "protocol": "unsupported",
+   "gates": {
+    "G1": "PASS",
+    "G2": "PASS",
+    "G3": "PASS",
+    "G4": "SKIP",
+    "G5": "PASS",
+    "G6": "FAIL",
+    "G7": "PASS",
+    "G8": "PASS",
+    "G9": "PENDING",
+    "G10": "SKIP"
+   },
+   "registered_profile": null,
+   "revision": "8af2496eb63c7fa66d7d234e1f62629380030eb4",
+   "gated_repo": false,
+   "pins": [
+    {
+     "name": "model.onnx",
+     "size": 606323181,
+     "sha256": "4ae01f822538b000"
+    }
+   ],
+   "est_memory_bytes": 1446355683,
+   "tier": "below-minimum",
+   "first_reason": "G6: unsupported / unclassified protocol (curated hint 'unsupported'); fail closed"
+  },
+  {
+   "candidate": "kev-4b-upstream",
+   "repo": "jaredpalmer/kev-4b",
+   "disposition": "USER-ONLY",
+   "existence": "VERIFIED",
+   "protocol": "unsupported",
+   "gates": {
+    "G1": "PASS",
+    "G2": "PASS",
+    "G3": "FAIL",
+    "G4": "SKIP",
+    "G5": "SKIP",
+    "G6": "FAIL",
+    "G7": "PASS",
+    "G8": "PASS",
+    "G9": "PENDING",
+    "G10": "SKIP"
+   },
+   "registered_profile": null,
+   "revision": "6cfce5c2fa4b4bd64026336ab649c5ca78857d52",
+   "gated_repo": false,
+   "pins": [],
+   "est_memory_bytes": null,
+   "tier": null,
+   "first_reason": "G3: no GGUF or ONNX file in the repo to pin (siblings: ['.gitattributes', 'README.md', 'adapter_config.json', 'adapter_model.safetensors', 'added_tokens.json', 'head.pt', 'merges.txt', 'provenance.json'])"
+  },
+  {
+   "candidate": "jevhome-b",
+   "repo": "jevhome/jevhome-B",
+   "disposition": "REJECTED",
+   "existence": "VERIFIED",
+   "protocol": "unsupported",
+   "gates": {
+    "G1": "FAIL",
+    "G2": "PASS",
+    "G3": "PASS",
+    "G4": "SKIP",
+    "G5": "PASS",
+    "G6": "FAIL",
+    "G7": "PASS",
+    "G8": "PASS",
+    "G9": "PENDING",
+    "G10": "SKIP"
+   },
+   "registered_profile": null,
+   "revision": "392d71b69843599e1eba953f2193d85b569a2220",
+   "gated_repo": false,
+   "pins": [
+    {
+     "name": "model.onnx",
+     "size": 599020668,
+     "sha256": "0be781db501f83f9"
+    }
+   ],
+   "est_memory_bytes": 1435401914,
+   "tier": "below-minimum",
+   "first_reason": "G1: weights licence cc-by-nc-4.0 is not on the allow-list ['apache-2.0', 'mit', 'bsd-2-clause', 'bsd-3-clause', 'cc-by-4.0', 'cc0-1.0', 'isc', 'unlicense']; licence files in repo: none"
+  },
+  {
+   "candidate": "local-jev",
+   "repo": "-",
+   "disposition": "REJECTED",
+   "existence": "UNVERIFIED",
+   "protocol": "unsupported",
+   "gates": {
+    "G1": "SKIP",
+    "G2": "SKIP",
+    "G3": "SKIP",
+    "G4": "SKIP",
+    "G5": "SKIP",
+    "G6": "SKIP",
+    "G7": "SKIP",
+    "G8": "SKIP",
+    "G9": "SKIP",
+    "G10": "SKIP"
+   },
+   "registered_profile": null,
+   "revision": null,
+   "gated_repo": null,
+   "pins": [],
+   "est_memory_bytes": null,
+   "tier": null,
+   "first_reason": "no weights artifact: harness / library, not a model (kind=harness)"
+  },
+  {
+   "candidate": "opendecider-nano",
+   "repo": "manjunathshiva/opendecider-nano",
+   "disposition": "USER-ONLY",
+   "existence": "VERIFIED",
+   "protocol": "unsupported",
+   "gates": {
+    "G1": "PASS",
+    "G2": "PASS",
+    "G3": "FAIL",
+    "G4": "SKIP",
+    "G5": "SKIP",
+    "G6": "FAIL",
+    "G7": "PASS",
+    "G8": "PASS",
+    "G9": "PENDING",
+    "G10": "SKIP"
+   },
+   "registered_profile": null,
+   "revision": "10c4b349f63d28186a46eacb6478cfce29c488e8",
+   "gated_repo": false,
+   "pins": [],
+   "est_memory_bytes": null,
+   "tier": null,
+   "first_reason": "G3: no GGUF or ONNX file in the repo to pin (siblings: ['.gitattributes', 'LICENSE', 'README.md', 'config.json', 'head.safetensors', 'model.safetensors', 'opendecider.json', 'tokenizer.json'])"
+  },
+  {
+   "candidate": "opendecider-small",
+   "repo": "manjunathshiva/opendecider-small-GGUF",
+   "disposition": "USER-ONLY",
+   "existence": "VERIFIED",
+   "protocol": "unsupported",
+   "gates": {
+    "G1": "PASS",
+    "G2": "PASS",
+    "G3": "PASS",
+    "G4": "SKIP",
+    "G5": "PASS",
+    "G6": "FAIL",
+    "G7": "PASS",
+    "G8": "PASS",
+    "G9": "PENDING",
+    "G10": "SKIP"
+   },
+   "registered_profile": null,
+   "revision": "342a16eef89b8133eb1b49b1e930b7c8acbf473a",
+   "gated_repo": false,
+   "pins": [
+    {
+     "name": "opendecider-small-q4_k_m.gguf",
+     "size": 2497278848,
+     "sha256": "039b057d7591eff2"
+    }
+   ],
+   "est_memory_bytes": 3246462502,
+   "tier": "baseline",
+   "first_reason": "G6: unsupported / unclassified protocol (curated hint 'unsupported'); fail closed"
+  },
+  {
+   "candidate": "typecastlm",
+   "repo": "mihailgribov/typecastlm-qwen3.5-3.8b",
+   "disposition": "USER-ONLY",
+   "existence": "VERIFIED",
+   "protocol": "unsupported",
+   "gates": {
+    "G1": "PASS",
+    "G2": "PASS",
+    "G3": "PASS",
+    "G4": "SKIP",
+    "G5": "PASS",
+    "G6": "FAIL",
+    "G7": "PASS",
+    "G8": "PASS",
+    "G9": "PENDING",
+    "G10": "SKIP"
+   },
+   "registered_profile": null,
+   "revision": "0984c3e832f7c28495134bc1d22c66bb0e0a555d",
+   "gated_repo": false,
+   "pins": [
+    {
+     "name": "typecastlm-qwen3.5-3.8b-q8_0.gguf",
+     "size": 4007900672,
+     "sha256": "3908eb3829c62855"
+    }
+   ],
+   "est_memory_bytes": 5210270873,
+   "tier": "workstation",
+   "first_reason": "G6: unsupported / unclassified protocol (curated hint 'unsupported'); fail closed"
+  },
+  {
+   "candidate": "laya-typed-decisions-gguf",
+   "repo": "mys/laya-typed-decisions-GGUF",
+   "disposition": "USER-ONLY",
+   "existence": "VERIFIED",
+   "protocol": "unsupported",
+   "gates": {
+    "G1": "PASS",
+    "G2": "PASS",
+    "G3": "PASS",
+    "G4": "SKIP",
+    "G5": "PASS",
+    "G6": "FAIL",
+    "G7": "PASS",
+    "G8": "PASS",
+    "G9": "PENDING",
+    "G10": "SKIP"
+   },
+   "registered_profile": null,
+   "revision": "1e9e8ba1f5271316601e0fefd940786660bd6964",
+   "gated_repo": false,
+   "pins": [
+    {
+     "name": "laya_typed_decisions_ud_q4_k_m.gguf",
+     "size": 423581888,
+     "sha256": "42919cae9c11f744"
+    }
+   ],
+   "est_memory_bytes": 550656454,
+   "tier": "below-minimum",
+   "first_reason": "G6: unsupported / unclassified protocol (curated hint 'unsupported'); fail closed"
+  },
+  {
+   "candidate": "kev-onnx",
+   "repo": "onnx-community/kev-4b-ONNX",
+   "disposition": "USER-ONLY",
+   "existence": "VERIFIED",
+   "protocol": "unsupported",
+   "gates": {
+    "G1": "PASS",
+    "G2": "PASS",
+    "G3": "PASS",
+    "G4": "SKIP",
+    "G5": "PASS",
+    "G6": "FAIL",
+    "G7": "PASS",
+    "G8": "PASS",
+    "G9": "PENDING",
+    "G10": "SKIP"
+   },
+   "registered_profile": null,
+   "revision": "195bdf73096df2bca7150223c9279af7893163c4",
+   "gated_repo": false,
+   "pins": [
+    {
+     "name": "onnx/model_q4.onnx",
+     "size": 1600231,
+     "sha256": "37b7a5755e02634b"
+    }
+   ],
+   "est_memory_bytes": 539271258,
+   "tier": "below-minimum",
+   "first_reason": "G6: unsupported / unclassified protocol (curated hint 'unsupported'); fail closed"
+  },
+  {
+   "candidate": "openjev-27b",
+   "repo": "openjev/openjev",
+   "disposition": "REJECTED",
+   "existence": "VERIFIED",
+   "protocol": "unsupported",
+   "gates": {
+    "G1": "FAIL",
+    "G2": "PASS",
+    "G3": "FAIL",
+    "G4": "SKIP",
+    "G5": "SKIP",
+    "G6": "FAIL",
+    "G7": "PASS",
+    "G8": "PASS",
+    "G9": "PENDING",
+    "G10": "SKIP"
+   },
+   "registered_profile": null,
+   "revision": "ac97900fd034fdd7e7e536f3d4c21b836cae0750",
+   "gated_repo": false,
+   "pins": [],
+   "est_memory_bytes": null,
+   "tier": null,
+   "first_reason": "G1: weights licence cc-by-nc-4.0 is not on the allow-list ['apache-2.0', 'mit', 'bsd-2-clause', 'bsd-3-clause', 'cc-by-4.0', 'cc0-1.0', 'isc', 'unlicense']; licence files in repo: ['LICENSE']"
+  },
+  {
+   "candidate": "pplx-decider-27b",
+   "repo": "perplexity-ai/pplx-decider-v1-27b",
+   "disposition": "USER-ONLY",
+   "existence": "VERIFIED",
+   "protocol": "unsupported",
+   "gates": {
+    "G1": "PASS",
+    "G2": "PASS",
+    "G3": "FAIL",
+    "G4": "SKIP",
+    "G5": "SKIP",
+    "G6": "FAIL",
+    "G7": "PASS",
+    "G8": "PASS",
+    "G9": "PENDING",
+    "G10": "SKIP"
+   },
+   "registered_profile": null,
+   "revision": "b01a5cbaca5391f73bd55103d4f27e8982cd5e60",
+   "gated_repo": false,
+   "pins": [],
+   "est_memory_bytes": null,
+   "tier": null,
+   "first_reason": "G3: no GGUF or ONNX file in the repo to pin (siblings: ['.gitattributes', 'LICENSE', 'NOTICE', 'README.md', 'chat_template.jinja', 'config.json', 'decision_config.json', 'inference.py'])"
+  },
+  {
+   "candidate": "poorjev",
+   "repo": "-",
+   "disposition": "REJECTED",
+   "existence": "UNVERIFIED",
+   "protocol": "unsupported",
+   "gates": {
+    "G1": "SKIP",
+    "G2": "SKIP",
+    "G3": "SKIP",
+    "G4": "SKIP",
+    "G5": "SKIP",
+    "G6": "SKIP",
+    "G7": "SKIP",
+    "G8": "SKIP",
+    "G9": "SKIP",
+    "G10": "SKIP"
+   },
+   "registered_profile": null,
+   "revision": null,
+   "gated_repo": null,
+   "pins": [],
+   "est_memory_bytes": null,
+   "tier": null,
+   "first_reason": "no weights artifact: harness / library, not a model (kind=harness)"
+  },
+  {
+   "candidate": "fern",
+   "repo": "reoring/fern",
+   "disposition": "USER-ONLY",
+   "existence": "VERIFIED",
+   "protocol": "unsupported",
+   "gates": {
+    "G1": "PASS",
+    "G2": "PASS",
+    "G3": "FAIL",
+    "G4": "SKIP",
+    "G5": "SKIP",
+    "G6": "FAIL",
+    "G7": "PASS",
+    "G8": "PASS",
+    "G9": "PENDING",
+    "G10": "SKIP"
+   },
+   "registered_profile": null,
+   "revision": "7d2150283b341a79d5c6738c0cc50bf38d01c15f",
+   "gated_repo": false,
+   "pins": [],
+   "est_memory_bytes": null,
+   "tier": null,
+   "first_reason": "G3: no GGUF or ONNX file in the repo to pin (siblings: ['.gitattributes', 'README.md', 'chat_template.jinja', 'config.json', 'eval.json', 'generation_config.json', 'model.safetensors', 'tokenizer.json'])"
+  },
+  {
+   "candidate": "decide-pro",
+   "repo": "rizzoaiacademy/rizzo-flow",
+   "disposition": "ADMIT-CANDIDATE",
+   "existence": "VERIFIED",
+   "protocol": "letter-logit",
+   "gates": {
+    "G1": "PASS",
+    "G2": "PASS",
+    "G3": "PASS",
+    "G4": "PASS",
+    "G5": "PASS",
+    "G6": "PASS",
+    "G7": "PASS",
+    "G8": "PASS",
+    "G9": "PENDING",
+    "G10": "PENDING"
+   },
+   "registered_profile": "decide-pro",
+   "revision": "55633c8cbd2b826bd3eefdeb05310450996649df",
+   "gated_repo": false,
+   "pins": [
+    {
+     "name": "spark-x2.5-4b-rizzo-flow-lora-q8_0.gguf",
+     "size": 4375021216,
+     "sha256": "dbec3c89d3398477"
+    }
+   ],
+   "est_memory_bytes": 5687527580,
+   "tier": "workstation",
+   "first_reason": "G9 PENDING: live upstream issue-tracker sweep not done by this driver (offline); none recorded in the research register"
+  },
+  {
+   "candidate": "semif",
+   "repo": "-",
+   "disposition": "REJECTED",
+   "existence": "UNVERIFIED",
+   "protocol": "unsupported",
+   "gates": {
+    "G1": "SKIP",
+    "G2": "SKIP",
+    "G3": "SKIP",
+    "G4": "SKIP",
+    "G5": "SKIP",
+    "G6": "SKIP",
+    "G7": "SKIP",
+    "G8": "SKIP",
+    "G9": "SKIP",
+    "G10": "SKIP"
+   },
+   "registered_profile": null,
+   "revision": null,
+   "gated_repo": null,
+   "pins": [],
+   "est_memory_bytes": null,
+   "tier": null,
+   "first_reason": "no weights artifact: harness / library, not a model (kind=harness)"
+  },
+  {
+   "candidate": "rsi-jev",
+   "repo": "shgao/rsi-jev-v1.0-qwen3.5-2b",
+   "disposition": "USER-ONLY",
+   "existence": "VERIFIED",
+   "protocol": "unsupported",
+   "gates": {
+    "G1": "PASS",
+    "G2": "PASS",
+    "G3": "FAIL",
+    "G4": "SKIP",
+    "G5": "SKIP",
+    "G6": "FAIL",
+    "G7": "PASS",
+    "G8": "PASS",
+    "G9": "PENDING",
+    "G10": "SKIP"
+   },
+   "registered_profile": null,
+   "revision": "8211ae3fcba839f752489eca1d2faa44d6f73812",
+   "gated_repo": false,
+   "pins": [],
+   "est_memory_bytes": null,
+   "tier": null,
+   "first_reason": "G3: no GGUF or ONNX file in the repo to pin (siblings: ['.gitattributes', 'README.md', 'code/load_release.py', 'code/rsijev/__init__.py', 'code/rsijev/arch.py', 'code/rsijev/contract.py', 'code/rsijev/data.py', 'code/rsijev/encode.py'])"
+  },
+  {
+   "candidate": "startlux-decision-4b",
+   "repo": "startlux-models/StartLux-Decision-4B-Q8_0-GGUF",
+   "disposition": "REJECTED",
+   "existence": "VERIFIED",
+   "protocol": "unsupported",
+   "gates": {
+    "G1": "FAIL",
+    "G2": "PASS",
+    "G3": "PASS",
+    "G4": "SKIP",
+    "G5": "PASS",
+    "G6": "FAIL",
+    "G7": "PASS",
+    "G8": "PASS",
+    "G9": "PENDING",
+    "G10": "SKIP"
+   },
+   "registered_profile": null,
+   "revision": "3e98f4efc5b9f1c9c9232cc40f862a3b872cc33f",
+   "gated_repo": false,
+   "pins": [
+    {
+     "name": "StartLux-Decision-4B-Q8_0.gguf",
+     "size": 4482402816,
+     "sha256": "3de47f14ca280781"
+    }
+   ],
+   "est_memory_bytes": 5827123660,
+   "tier": "workstation",
+   "first_reason": "G1: weights licence cc-by-nc-4.0 is not on the allow-list ['apache-2.0', 'mit', 'bsd-2-clause', 'bsd-3-clause', 'cc-by-4.0', 'cc0-1.0', 'isc', 'unlicense']; licence files in repo: ['LICENSE']"
+  }
+ ]
+}

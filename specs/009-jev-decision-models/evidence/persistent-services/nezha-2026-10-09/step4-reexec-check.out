@@ -1,0 +1,49 @@
+### BEFORE
+2026-10-09T13:38:55Z
+               total        used        free      shared  buff/cache   available
+Mem:              62           9           3           0          51          52
+some avg10=0.00 avg60=0.00 avg300=0.00 total=0
+full avg10=0.00 avg60=0.00 avg300=0.00 total=0
+llmctl-decide-gateway.service            enabled=enabled active=active MainPID=439182
+llmctl-onnx@decide-nli.service           enabled=enabled active=active MainPID=438543
+llmctl-llama@decide-2b.service           enabled=enabled active=active MainPID=434516
+llmctl-llama@decide.service              enabled=enabled active=active MainPID=435315
+### enablement symlinks
+lrwxrwxrwx 1 milosvasic milosvasic   67 Oct  9 15:35 llmctl-decide-gateway.service -> /home/milosvasic/.config/systemd/user/llmctl-decide-gateway.service
+lrwxrwxrwx 1 milosvasic milosvasic   59 Oct  9 15:34 llmctl-llama@decide-2b.service -> /home/milosvasic/.config/systemd/user/llmctl-llama@.service
+lrwxrwxrwx 1 milosvasic milosvasic   59 Oct  9 15:34 llmctl-llama@decide.service -> /home/milosvasic/.config/systemd/user/llmctl-llama@.service
+lrwxrwxrwx 1 milosvasic milosvasic   58 Oct  9 15:33 llmctl-onnx@decide-nli.service -> /home/milosvasic/.config/systemd/user/llmctl-onnx@.service
+### linger
+Linger=yes
+### verify (llmctl units only)
+verify done
+### simulate tmpfs wipe of llmctl reservation files (llmctl's own *.run only)
+[llmctl] reconciled missing reservation for 'decide-2b' (enabled + genuinely active, no .run marker - likely a post-reboot state desync)
+[llmctl] reconciled missing reservation for 'decide-nli' (enabled + genuinely active, no .run marker - likely a post-reboot state desync)
+[llmctl] reconciled missing reservation for 'decide' (enabled + genuinely active, no .run marker - likely a post-reboot state desync)
+profile          port   mode     RAM MiB    VRAM MiB   enabled  state
+decide-2b        8098   cpu      3006       0          yes      running
+decide-nli       8096   cpu      3006       0          yes      running
+decide           8093   cpu      3671       0          yes      running
+decide-2b.run
+decide-nli.run
+decide.run
+### daemon-reexec
+### AFTER-REEXEC
+2026-10-09T13:39:03Z
+               total        used        free      shared  buff/cache   available
+Mem:              62           9           3           0          51          52
+some avg10=0.00 avg60=0.00 avg300=0.00 total=0
+full avg10=0.00 avg60=0.00 avg300=0.00 total=0
+llmctl-decide-gateway.service            enabled=enabled active=active MainPID=439182
+llmctl-onnx@decide-nli.service           enabled=enabled active=active MainPID=438543
+llmctl-llama@decide-2b.service           enabled=enabled active=active MainPID=434516
+llmctl-llama@decide.service              enabled=enabled active=active MainPID=435315
+profile          port   mode     RAM MiB    VRAM MiB   enabled  state
+decide-2b        8098   cpu      3006       0          yes      running
+decide-nli       8096   cpu      3006       0          yes      running
+decide           8093   cpu      3671       0          yes      running
+model                    status   protocol         calibration                template       aliases
+decide                   ready    letter-logit     -                          a9fe279e5946   jev-latest,jev-1.13.0,jev-preview,llmctl-decide
+decide-2b                ready    letter-logit     -                          a9fe279e5946   llmctl-decide-2b
+decide-nli               ready    nli-onnx         -                          2b80870d1fe8   llmctl-decide-nli

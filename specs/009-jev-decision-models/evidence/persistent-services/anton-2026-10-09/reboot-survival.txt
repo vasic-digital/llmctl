@@ -1,0 +1,64 @@
+# is-enabled / is-active
+llmctl-decide-gateway enabled=enabled active=active
+llmctl-onnx@decide-nli enabled=enabled active=active
+llmctl-llama@decide-kev-08b enabled=enabled active=active
+llmctl-llama@vision enabled=enabled active=active
+
+# wants
+lrwxrwxrwx 1 milosvasic milosvasic 67 Oct  9 15:33 llmctl-decide-gateway.service -> /home/milosvasic/.config/systemd/user/llmctl-decide-gateway.service
+lrwxrwxrwx 1 milosvasic milosvasic 59 Oct  9 15:32 llmctl-llama@decide-kev-08b.service -> /home/milosvasic/.config/systemd/user/llmctl-llama@.service
+lrwxrwxrwx 1 milosvasic milosvasic 59 Sep 17 14:10 llmctl-llama@vision.service -> /home/milosvasic/.config/systemd/user/llmctl-llama@.service
+lrwxrwxrwx 1 milosvasic milosvasic 58 Oct  9 15:30 llmctl-onnx@decide-nli.service -> /home/milosvasic/.config/systemd/user/llmctl-onnx@.service
+
+State=active
+Linger=yes
+
+# verify
+/usr/lib/systemd/user/spice-vdagent.service:23: Unknown key 'StandardError' in section [Install], ignoring.
+verify rc=0
+
+# limits
+## llmctl-decide-gateway
+Wants=network-online.target
+After=-.mount network-online.target basic.target app.slice
+Restart=always
+MainPID=3294687
+MemoryCurrent=9437184
+MemoryHigh=1610612736
+MemoryMax=2147483648
+TasksMax=512
+## llmctl-onnx@decide-nli
+Wants=network-online.target
+After=-.mount basic.target network-online.target "app-llmctl\\x2donnx.slice"
+Restart=always
+MainPID=3241341
+MemoryCurrent=5104279552
+MemoryHigh=6442450944
+MemoryMax=8589934592
+TasksMax=1024
+## llmctl-llama@decide-kev-08b
+Wants=network-online.target
+After=-.mount basic.target network-online.target "app-llmctl\\x2dllama.slice"
+Restart=always
+MainPID=3263590
+MemoryCurrent=1296130048
+MemoryHigh=3221225472
+MemoryMax=4294967296
+TasksMax=512
+## llmctl-llama@vision
+Wants=network-online.target
+After=basic.target "app-llmctl\\x2dllama.slice" network-online.target -.mount
+Restart=always
+MainPID=2842
+MemoryCurrent=226205696
+MemoryHigh=32478593024
+MemoryMax=32478593024
+TasksMax=37109
+
+# dirs
+1
+26:LLMCTL_STATE_DIR="${LLMCTL_STATE_DIR:-${XDG_STATE_HOME}/llmctl}"
+30:  LLMCTL_RUNTIME_DIR="${LLMCTL_RUNTIME_DIR:-${XDG_RUNTIME_DIR}/llmctl}"
+32:  LLMCTL_RUNTIME_DIR="${LLMCTL_RUNTIME_DIR:-${LLMCTL_STATE_DIR}/run}"
+39:export LLMCTL_CONFIG_DIR LLMCTL_DATA_DIR LLMCTL_STATE_DIR LLMCTL_RUNTIME_DIR
+/run/user/1000

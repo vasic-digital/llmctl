@@ -1,0 +1,17 @@
+[
+ {
+  "request": "GET /v1/systemone auth=key",
+  "status": 405,
+  "headers": {
+   "allow": "POST",
+   "content-type": "application/json; charset=utf-8",
+   "x-llmctl-request-id": "c431ae4395a32033"
+  },
+  "body": "{\"message\":\"Method not allowed.\",\"error_type\":\"method_not_allowed\"}",
+  "error": null,
+  "trust": [
+   "spki-pin ok"
+  ],
+  "note": null
+ }
+]

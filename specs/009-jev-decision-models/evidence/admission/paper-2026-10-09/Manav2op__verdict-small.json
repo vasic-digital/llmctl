@@ -1,0 +1,137 @@
+{
+  "schema": "llmctl.admission/1",
+  "candidate": {
+    "name": "verdictml-small",
+    "repo": "Manav2op/verdict-small",
+    "pinned": "no",
+    "protocol_hint": "unsupported",
+    "known_issue": "",
+    "name_collision": "",
+    "kind": "weights"
+  },
+  "slug": "Manav2op__verdict-small",
+  "mode": "paper-only",
+  "retrieved_at": "2026-10-09T14:24:24Z",
+  "existence": {
+    "verdict": "VERIFIED",
+    "evidence": "HTTP 200 from <LLMCTL_HF_BASE>/api/models/Manav2op/verdict-small",
+    "http_status": 200
+  },
+  "api": {
+    "id": "Manav2op/verdict-small",
+    "sha": "085a41e0ea269f00483dd202a286cfb68f7aa63a",
+    "lastModified": "2026-09-24T09:55:59.000Z",
+    "author": "Manav2op",
+    "gated": false,
+    "private": false,
+    "disabled": false
+  },
+  "pins": [
+    {
+      "name": "onnx/model_quantized.onnx",
+      "size": 118070929,
+      "sha256": "2d1e4fc7da536425e6ec017a803ec6164b7f4331254be84d022fb94adc4b5179",
+      "role": "model"
+    }
+  ],
+  "protocol": {
+    "class": "unsupported",
+    "source": "curated hint 'unsupported'"
+  },
+  "needs_engine_advance": false,
+  "tier": "below-minimum",
+  "est_memory_bytes": 713977305,
+  "g10_subchecks": [
+    {
+      "check": "loadability",
+      "status": "SKIP",
+      "evidence": "not attempted: earlier gate(s) failed: ['G6']"
+    },
+    {
+      "check": "smoke_answer",
+      "status": "SKIP",
+      "evidence": "not attempted: earlier gate(s) failed: ['G6']"
+    },
+    {
+      "check": "determinism_repeats",
+      "status": "SKIP",
+      "evidence": "not attempted: earlier gate(s) failed: ['G6']"
+    },
+    {
+      "check": "option_order_sensitivity",
+      "status": "SKIP",
+      "evidence": "not attempted: earlier gate(s) failed: ['G6']"
+    },
+    {
+      "check": "memory_fit_measured",
+      "status": "SKIP",
+      "evidence": "not attempted: earlier gate(s) failed: ['G6']"
+    }
+  ],
+  "gates": [
+    {
+      "gate": "G1",
+      "name": "licence allow-list",
+      "status": "PASS",
+      "evidence": "weights licence apache-2.0 (SPDX, from the HF API) is on the allow-list; licence files in repo: none"
+    },
+    {
+      "gate": "G2",
+      "name": "stable revision",
+      "status": "PASS",
+      "evidence": "immutable ref 085a41e0ea269f00483dd202a286cfb68f7aa63a, lastModified 2026-09-24T09:55:59.000Z; re-verify at release"
+    },
+    {
+      "gate": "G3",
+      "name": "pinned size+sha256",
+      "status": "PASS",
+      "evidence": "1 file(s) with size+sha256 from the HF API LFS oid (auto-selected): onnx/model_quantized.onnx 118070929 B sha256:2d1e4fc7da53..."
+    },
+    {
+      "gate": "G4",
+      "name": "loadable by pinned engine",
+      "status": "SKIP",
+      "evidence": "no supported runtime exists for an unclassified protocol (the failure is recorded at G6)"
+    },
+    {
+      "gate": "G5",
+      "name": "fits budgets",
+      "status": "PASS",
+      "evidence": "largest model file onnx/model_quantized.onnx = 118070929 B (cap 10737418240 B), tier below-minimum, memory ESTIMATE 713977305 B (onnx: size*1.5+512MiB) vs budget 19487239372 B (60% of /proc/meminfo MemTotal (Constitution 12.6))"
+    },
+    {
+      "gate": "G6",
+      "name": "protocol classification",
+      "status": "FAIL",
+      "evidence": "unsupported / unclassified protocol (curated hint 'unsupported'); fail closed"
+    },
+    {
+      "gate": "G7",
+      "name": "supply chain",
+      "status": "PASS",
+      "evidence": "pin has no pickle files"
+    },
+    {
+      "gate": "G8",
+      "name": "provenance",
+      "status": "PASS",
+      "evidence": "API author 'Manav2op' == repo owner; HF-side cross-link to GitHub/PyPI not checked in paper mode"
+    },
+    {
+      "gate": "G9",
+      "name": "known-issue sweep",
+      "status": "PENDING",
+      "evidence": "live upstream issue-tracker sweep not done by this driver (offline); none recorded in the research register"
+    },
+    {
+      "gate": "G10",
+      "name": "real run",
+      "status": "SKIP",
+      "evidence": "not attempted: earlier gate(s) failed: ['G6']"
+    }
+  ],
+  "disposition": "USER-ONLY",
+  "reasons": [
+    "G6: unsupported / unclassified protocol (curated hint 'unsupported'); fail closed"
+  ]
+}

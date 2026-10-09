@@ -1,0 +1,15 @@
+[
+ {
+  "request": "GET /v1/models auth=wrong",
+  "status": 401,
+  "headers": {
+   "content-type": "application/json; charset=utf-8",
+   "www-authenticate": "Bearer realm=\"llmctl\"",
+   "x-llmctl-request-id": "59e02006783bdbb0"
+  },
+  "body": "{\"message\":\"Authentication required.\",\"error_type\":\"unauthorized\"}",
+  "error": null,
+  "trust": null,
+  "note": null
+ }
+]

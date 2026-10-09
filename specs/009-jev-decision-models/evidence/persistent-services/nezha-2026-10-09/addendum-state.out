@@ -1,0 +1,25 @@
+llmctl-decide-gateway              enabled=enabled active=active rss_MiB=22
+llmctl-onnx@decide-nli             enabled=enabled active=active rss_MiB=3210
+llmctl-llama@decide-2b             enabled=enabled active=active rss_MiB=2267
+llmctl-llama@decide-pro            enabled=enabled active=active rss_MiB=4523
+llmctl-llama@decide-max            enabled=enabled active=active rss_MiB=9708
+llmctl-llama@decide                enabled=disabled active=inactive rss_MiB=-
+LLMCTL_DECIDE_TIMEOUT=120
+               total        used        free      shared  buff/cache   available
+Mem:              62           8           6           0          48          53
+some avg10=0.00 avg60=0.00 avg300=0.00 total=0
+full avg10=0.00 avg60=0.00 avg300=0.00 total=0
+-- No entries --
+profile          port   mode     RAM MiB    VRAM MiB   enabled  state
+decide-2b        8098   cpu      3006       0          yes      running
+decide-max       8097   cpu      10174      0          yes      running
+decide-nli       8096   cpu      3006       0          yes      running
+decide-pro       8094   cpu      5260       0          yes      running
+/home/milosvasic/.config/systemd/user/llmctl-decide-gateway.service.d/:
+50-llmctl-limits.conf
+
+/home/milosvasic/.config/systemd/user/llmctl-llama@decide-max.service.d/:
+50-llmctl-limits.conf
+
+/home/milosvasic/.config/systemd/user/llmctl-llama@decide-pro.service.d/:
+50-llmctl-limits.conf

@@ -1,0 +1,24 @@
+[2026-10-09T14:11:02Z] llmctl models download decide-kev-08b
+[2026-10-09T14:11:02Z] engine: llama  repo: ggml-org/Kev-0.8B-GGUF
+[2026-10-09T14:11:03Z] download: https://huggingface.co/ggml-org/Kev-0.8B-GGUF/resolve/e551e319d483ff57e1ff208924b349d397cffc1c/Kev-0.8B-Q8_0.gguf -> /home/milos/.local/share/llmctl/models/decide-kev-08b/Kev-0.8B-Q8_0.gguf.part
+[2026-10-09T14:14:48Z] curl exit: 0
+[2026-10-09T14:14:48Z] RUN: _dl_verify_file /home/milos/.local/share/llmctl/models/decide-kev-08b/Kev-0.8B-Q8_0.gguf.part 812406304 27278f34eb3273bceea4c053dc50dd61a5161da21a718c4aacdf8fd5830771d0
+[2026-10-09T14:14:50Z] EXIT: 0
+[2026-10-09T14:14:50Z] renamed /home/milos/.local/share/llmctl/models/decide-kev-08b/Kev-0.8B-Q8_0.gguf.part -> /home/milos/.local/share/llmctl/models/decide-kev-08b/Kev-0.8B-Q8_0.gguf (atomic, verified)
+[2026-10-09T14:14:50Z] smoke protocol: systemone-native
+[2026-10-09T14:14:50Z] smoke: /home/milos/llmctl-3.1.0-factory/submodules/llama.cpp/build/bin/llama-server --model /home/milos/.local/share/llmctl/models/decide-kev-08b/Kev-0.8B-Q8_0.gguf --ctx-size 4096 --n-gpu-layers 0 --host 127.0.0.1 --port 36953
+[2026-10-09T14:14:52Z] smoke: /health OK after 2s
+[2026-10-09T14:14:52Z] RUN: _dl_decision_probe_choice 36953
+[2026-10-09T14:14:52Z] EXIT: 0
+OUT: smoke ok: protocol=systemone-native choice=billing confidence=0.8301
+OUT:   billing=0.915033
+OUT:   legal=0.084967
+[2026-10-09T14:14:52Z] RUN: _dl_decision_probe_options 36953
+[2026-10-09T14:14:52Z] EXIT: 0
+OUT: smoke ok: protocol=systemone-native choice=billing confidence=0.2261
+OUT:   billing=0.419574
+OUT:   legal=0.038075
+OUT:   team3=0.300029
+OUT:   team4=0.242321
+[2026-10-09T14:14:52Z] decision smoke PASSED: valid typed answers over /v1/systemone (2 and 4 options; shape evidence only)
+[2026-10-09T14:14:52Z] download decide-kev-08b: SUCCESS

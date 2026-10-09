@@ -1,0 +1,15 @@
+[
+ {
+  "request": "POST /v1/systemone auth=wrong",
+  "status": 429,
+  "headers": {
+   "content-type": "application/json; charset=utf-8",
+   "retry-after": "54",
+   "x-llmctl-request-id": "5dd71d630c236a5b"
+  },
+  "body": "{\"message\":\"Too many requests.\",\"error_type\":\"rate_limited\"}",
+  "error": null,
+  "trust": null,
+  "note": "status 429 != expected 401"
+ }
+]

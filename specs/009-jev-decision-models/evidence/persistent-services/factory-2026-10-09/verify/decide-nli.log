@@ -1,0 +1,36 @@
+[2026-10-09T14:11:02Z] llmctl models download decide-nli
+[2026-10-09T14:11:02Z] engine: onnx  repo: MoritzLaurer/deberta-v3-large-zeroshot-v2.0
+[2026-10-09T14:11:03Z] download: https://huggingface.co/MoritzLaurer/deberta-v3-large-zeroshot-v2.0/resolve/cf44676c28ba7312e5c5f8f8d2c22b3e0c9cdae2/onnx/model.onnx -> /home/milos/.local/share/llmctl/models/decide-nli/onnx/model.onnx.part
+[2026-10-09T14:19:17Z] curl exit: 0
+[2026-10-09T14:19:17Z] RUN: _dl_verify_file /home/milos/.local/share/llmctl/models/decide-nli/onnx/model.onnx.part 1741985401 beded3d71421ceb718861af381d1a0d29037b3679c7350ebd41edbf79cdced1e
+[2026-10-09T14:19:21Z] EXIT: 0
+[2026-10-09T14:19:21Z] renamed /home/milos/.local/share/llmctl/models/decide-nli/onnx/model.onnx.part -> /home/milos/.local/share/llmctl/models/decide-nli/onnx/model.onnx (atomic, verified)
+[2026-10-09T14:19:21Z] download: https://huggingface.co/MoritzLaurer/deberta-v3-large-zeroshot-v2.0/resolve/cf44676c28ba7312e5c5f8f8d2c22b3e0c9cdae2/onnx/spm.model -> /home/milos/.local/share/llmctl/models/decide-nli/onnx/spm.model.part
+[2026-10-09T14:19:26Z] curl exit: 0
+[2026-10-09T14:19:26Z] RUN: _dl_verify_file /home/milos/.local/share/llmctl/models/decide-nli/onnx/spm.model.part 2464616 c679fbf93643d19aab7ee10c0b99e460bdbc02fedf34b92b05af343b4af586fd
+[2026-10-09T14:19:26Z] EXIT: 0
+[2026-10-09T14:19:26Z] renamed /home/milos/.local/share/llmctl/models/decide-nli/onnx/spm.model.part -> /home/milos/.local/share/llmctl/models/decide-nli/onnx/spm.model (atomic, verified)
+[2026-10-09T14:19:26Z] download: https://huggingface.co/MoritzLaurer/deberta-v3-large-zeroshot-v2.0/resolve/cf44676c28ba7312e5c5f8f8d2c22b3e0c9cdae2/config.json -> /home/milos/.local/share/llmctl/models/decide-nli/config.json.part
+[2026-10-09T14:19:27Z] curl exit: 0
+[2026-10-09T14:19:27Z] RUN: _dl_verify_file /home/milos/.local/share/llmctl/models/decide-nli/config.json.part 1019 3b0a2a3fb311037ba72670d87cbd16f920581985178547a76936dfdb292e5271
+[2026-10-09T14:19:27Z] EXIT: 0
+[2026-10-09T14:19:27Z] renamed /home/milos/.local/share/llmctl/models/decide-nli/config.json.part -> /home/milos/.local/share/llmctl/models/decide-nli/config.json (atomic, verified)
+[2026-10-09T14:19:27Z] download: https://huggingface.co/MoritzLaurer/deberta-v3-large-zeroshot-v2.0/resolve/cf44676c28ba7312e5c5f8f8d2c22b3e0c9cdae2/tokenizer_config.json -> /home/milos/.local/share/llmctl/models/decide-nli/tokenizer_config.json.part
+[2026-10-09T14:19:28Z] curl exit: 0
+[2026-10-09T14:19:28Z] RUN: _dl_verify_file /home/milos/.local/share/llmctl/models/decide-nli/tokenizer_config.json.part 1256 f5a1a74a632c0e9225e09a21ddf60c2e70ef5d3bfc1f261a24fd8ddab27254d2
+[2026-10-09T14:19:28Z] EXIT: 0
+[2026-10-09T14:19:28Z] renamed /home/milos/.local/share/llmctl/models/decide-nli/tokenizer_config.json.part -> /home/milos/.local/share/llmctl/models/decide-nli/tokenizer_config.json (atomic, verified)
+[2026-10-09T14:19:28Z] structural check passed: model /home/milos/.local/share/llmctl/models/decide-nli/onnx/model.onnx, tokenizer /home/milos/.local/share/llmctl/models/decide-nli/onnx/spm.model
+[2026-10-09T14:19:28Z] smoke: /home/milos/.local/share/llmctl/venv-onnx/bin/python /home/milos/llmctl-3.1.0-factory/lib/onnx_server.py --model-dir /home/milos/.local/share/llmctl/models/decide-nli --host 127.0.0.1 --port 47589 --profile decide-nli --tokenizer spm.model --api-key-file <throwaway 0600 file>
+[2026-10-09T14:19:33Z] smoke: /readyz OK after 5s
+[2026-10-09T14:19:33Z] RUN: _dl_onnx_probe_entail 47589 /tmp/.private/milos/llmctl-smoke-key.GmJlRZ
+[2026-10-09T14:19:33Z] EXIT: 0
+OUT: {"top": "entailment", "label_source": "config:config.json", "scores": [0.998666, 0.001334], "truncated": [false]}
+[2026-10-09T14:19:33Z] RUN: _dl_onnx_probe_contradict 47589 /tmp/.private/milos/llmctl-smoke-key.GmJlRZ
+[2026-10-09T14:19:33Z] EXIT: 0
+OUT: {"top": "not_entailment", "label_source": "config:config.json", "scores": [0.000454, 0.999546], "truncated": [false]}
+[2026-10-09T14:19:33Z] RUN: _dl_onnx_probe_batch 47589 /tmp/.private/milos/llmctl-smoke-key.GmJlRZ
+[2026-10-09T14:19:33Z] EXIT: 0
+OUT: {"rows": 2, "labels": ["entailment", "not_entailment"]}
+[2026-10-09T14:19:34Z] onnx smoke PASSED: entailed pair scores entailment, contradicted pair does not, batch contract holds
+[2026-10-09T14:19:34Z] download decide-nli: SUCCESS

@@ -1,0 +1,17 @@
+Fri Oct  9 03:10:03 PM UTC 2026
+Mem:          257226       96443        2631       40996      202260      160783
+psi: cat: /proc/pressure/memory: No such file or directory
+memory.used [MiB], memory.total [MiB], utilization.gpu [%]
+18 MiB, 32607 MiB, 0 %
+llmctl-decide-gateway.service RSS_MiB=24 MemHigh=2147483648 MemMax=3221225472 cur=16MiB
+llmctl-llama@decide-2b.service RSS_MiB=7807 MemHigh=6442450944 MemMax=8589934592 cur=6121MiB
+llmctl-llama@decide-julia.service RSS_MiB=329 MemHigh=2147483648 MemMax=3221225472 cur=265MiB
+llmctl-llama@decide-kev-08b.service RSS_MiB=1024 MemHigh=4294967296 MemMax=6442450944 cur=427MiB
+llmctl-llama@decide-kev-4b.service RSS_MiB=5044 MemHigh=8589934592 MemMax=10737418240 cur=2545MiB
+llmctl-llama@decide-kev-9b.service RSS_MiB=9644 MemHigh=17179869184 MemMax=21474836480 cur=4069MiB
+llmctl-llama@decide-laya.service RSS_MiB=446 MemHigh=2147483648 MemMax=3221225472 cur=146MiB
+llmctl-llama@decide-lev.service RSS_MiB=4992 MemHigh=8589934592 MemMax=10737418240 cur=2553MiB
+llmctl-llama@decide-max.service RSS_MiB=17618 MemHigh=25769803776 MemMax=30064771072 cur=8604MiB
+llmctl-llama@decide-pro.service RSS_MiB=7710 MemHigh=10737418240 MemMax=12884901888 cur=3954MiB
+llmctl-onnx@decide-nli.service RSS_MiB=3189 MemHigh=6442450944 MemMax=8589934592 cur=3210MiB
+LISTEN 0      4096               *:8095             *:*    

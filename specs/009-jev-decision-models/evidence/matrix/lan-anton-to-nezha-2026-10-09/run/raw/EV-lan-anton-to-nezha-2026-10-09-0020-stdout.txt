@@ -1,0 +1,14 @@
+[
+ {
+  "request": "GET /readyz auth=none",
+  "status": 200,
+  "headers": {
+   "content-type": "application/json; charset=utf-8",
+   "x-llmctl-request-id": "a11465fa763f6f72"
+  },
+  "body": "{\"status\":\"ready\"}",
+  "error": null,
+  "trust": null,
+  "note": null
+ }
+]

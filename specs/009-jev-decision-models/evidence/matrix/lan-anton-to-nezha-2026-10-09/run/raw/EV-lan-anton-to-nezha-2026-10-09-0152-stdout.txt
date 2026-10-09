@@ -1,0 +1,17 @@
+[
+ {
+  "request": "GET /metrics auth=none",
+  "status": 429,
+  "headers": {
+   "content-type": "application/json; charset=utf-8",
+   "retry-after": "30",
+   "x-llmctl-request-id": "7938633951d9dbe1"
+  },
+  "body": "{\"message\":\"Too many requests.\",\"error_type\":\"rate_limited\"}",
+  "error": null,
+  "trust": [
+   "spki-pin ok"
+  ],
+  "note": "status 429 != expected 401"
+ }
+]

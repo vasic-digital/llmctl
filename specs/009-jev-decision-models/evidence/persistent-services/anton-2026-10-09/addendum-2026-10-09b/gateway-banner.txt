@@ -1,0 +1,1 @@
+  timeout: 8s per request (default; set LLMCTL_DECIDE_TIMEOUT to change)

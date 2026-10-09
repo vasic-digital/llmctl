@@ -1,0 +1,18 @@
+## wants
+lrwxrwxrwx  1 milos milos   62 Oct  9 19:49 llmctl-decide-gateway.service -> /home/milos/.config/systemd/user/llmctl-decide-gateway.service
+lrwxrwxrwx  1 milos milos   54 Oct  9 19:41 llmctl-llama@decide-2b.service -> /home/milos/.config/systemd/user/llmctl-llama@.service
+lrwxrwxrwx  1 milos milos   54 Oct  9 19:48 llmctl-llama@decide-julia.service -> /home/milos/.config/systemd/user/llmctl-llama@.service
+lrwxrwxrwx  1 milos milos   54 Oct  9 19:48 llmctl-llama@decide-kev-08b.service -> /home/milos/.config/systemd/user/llmctl-llama@.service
+lrwxrwxrwx  1 milos milos   54 Oct  9 19:48 llmctl-llama@decide-kev-4b.service -> /home/milos/.config/systemd/user/llmctl-llama@.service
+lrwxrwxrwx  1 milos milos   54 Oct  9 19:48 llmctl-llama@decide-kev-9b.service -> /home/milos/.config/systemd/user/llmctl-llama@.service
+lrwxrwxrwx  1 milos milos   54 Oct  9 19:48 llmctl-llama@decide-laya.service -> /home/milos/.config/systemd/user/llmctl-llama@.service
+lrwxrwxrwx  1 milos milos   54 Oct  9 19:48 llmctl-llama@decide-lev.service -> /home/milos/.config/systemd/user/llmctl-llama@.service
+lrwxrwxrwx  1 milos milos   54 Oct  9 19:48 llmctl-llama@decide-max.service -> /home/milos/.config/systemd/user/llmctl-llama@.service
+lrwxrwxrwx  1 milos milos   54 Oct  9 19:41 llmctl-llama@decide-pro.service -> /home/milos/.config/systemd/user/llmctl-llama@.service
+lrwxrwxrwx  1 milos milos   53 Oct  9 19:41 llmctl-onnx@decide-nli.service -> /home/milos/.config/systemd/user/llmctl-onnx@.service
+## linger
+Linger=yes
+## is-enabled/active
+llmctl-decide-gateway.service enabled active
+## verify
+verify-rc=0

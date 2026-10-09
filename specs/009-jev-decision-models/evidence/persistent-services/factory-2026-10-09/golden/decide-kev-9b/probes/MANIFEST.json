@@ -1,0 +1,60 @@
+{
+  "files": [
+    {
+      "path": "evidence.jsonl",
+      "sha256": "2774bc63060d02c03caca69684a29fd65b0626e3a75d6e2a1e948eb03b1d9e0f",
+      "size": 4892
+    },
+    {
+      "path": "raw/EV-probes-1-0004-stdout.txt",
+      "sha256": "56d47c6b11585d9b8cf5eaa8fa50e29871da6e842bdd53ff4392fb89d68090db",
+      "size": 4604
+    },
+    {
+      "path": "raw/EV-probes-1-0005-stdout.txt",
+      "sha256": "56d47c6b11585d9b8cf5eaa8fa50e29871da6e842bdd53ff4392fb89d68090db",
+      "size": 4604
+    },
+    {
+      "path": "raw/EV-probes-1-0006-stdout.txt",
+      "sha256": "56d47c6b11585d9b8cf5eaa8fa50e29871da6e842bdd53ff4392fb89d68090db",
+      "size": 4604
+    },
+    {
+      "path": "raw/EV-questions-1-0001-stdout.txt",
+      "sha256": "a6d90b9a7623acd8b4f185c136b2adda7eb6fa0d851bdd7f9ea77149e3ba78a0",
+      "size": 15863
+    },
+    {
+      "path": "raw/EV-questions-1-0002-stdout.txt",
+      "sha256": "a6d90b9a7623acd8b4f185c136b2adda7eb6fa0d851bdd7f9ea77149e3ba78a0",
+      "size": 15863
+    },
+    {
+      "path": "raw/EV-questions-1-0003-stdout.txt",
+      "sha256": "a6d90b9a7623acd8b4f185c136b2adda7eb6fa0d851bdd7f9ea77149e3ba78a0",
+      "size": 15863
+    },
+    {
+      "path": "raw/responses.jsonl",
+      "sha256": "6c5b578a08c4946bc7fcb97ace2181812b8822184ce622c3a26103086cc052b7",
+      "size": 90834
+    },
+    {
+      "path": "results.json",
+      "sha256": "9fa221919b6bf06ddbd330798d24341ce6566fec209750c4ee493c8393452207",
+      "size": 24106
+    },
+    {
+      "path": "run-probes.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    },
+    {
+      "path": "run-questions.log",
+      "sha256": "5b2d70deb253f76fa50951d18e0d924ec79f01c903efd9627f78bb54bd566c18",
+      "size": 9278
+    }
+  ],
+  "schema": 1
+}

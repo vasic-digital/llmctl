@@ -1,0 +1,121 @@
+{
+ "cells": [
+  {
+   "case_id": "EP-050",
+   "client": "node-fetch",
+   "evidence_id": "EV-lan-ep050-1-0001",
+   "reason": "GET /metrics: metrics body is not text exposition",
+   "reason_class": null,
+   "result": "fail",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-050",
+   "client": "go-nethttp",
+   "evidence_id": "EV-lan-ep050-1-0002",
+   "reason": null,
+   "reason_class": null,
+   "result": "pass",
+   "vantage": "host"
+  }
+ ],
+ "clients": {
+  "go-nethttp": "available",
+  "node-fetch": "available"
+ },
+ "completeness": {
+  "complete": false,
+  "problems": [
+   "case EP-001 exists in the harness but not in the inventory (inventory row removed?)",
+   "case EP-002 exists in the harness but not in the inventory (inventory row removed?)",
+   "case EP-003 exists in the harness but not in the inventory (inventory row removed?)",
+   "case EP-004 exists in the harness but not in the inventory (inventory row removed?)",
+   "case EP-005 exists in the harness but not in the inventory (inventory row removed?)",
+   "case EP-006 exists in the harness but not in the inventory (inventory row removed?)",
+   "case EP-007 exists in the harness but not in the inventory (inventory row removed?)",
+   "case EP-008 exists in the harness but not in the inventory (inventory row removed?)",
+   "case EP-008b exists in the harness but not in the inventory (inventory row removed?)",
+   "case EP-009 exists in the harness but not in the inventory (inventory row removed?)",
+   "case EP-010 exists in the harness but not in the inventory (inventory row removed?)",
+   "case EP-011 exists in the harness but not in the inventory (inventory row removed?)",
+   "case EP-012 exists in the harness but not in the inventory (inventory row removed?)",
+   "case EP-013 exists in the harness but not in the inventory (inventory row removed?)",
+   "case EP-014 exists in the harness but not in the inventory (inventory row removed?)",
+   "case EP-015 exists in the harness but not in the inventory (inventory row removed?)",
+   "case EP-015b exists in the harness but not in the inventory (inventory row removed?)",
+   "case EP-016 exists in the harness but not in the inventory (inventory row removed?)",
+   "case EP-016b exists in the harness but not in the inventory (inventory row removed?)",
+   "case EP-017 exists in the harness but not in the inventory (inventory row removed?)",
+   "case EP-018 exists in the harness but not in the inventory (inventory row removed?)",
+   "case EP-019 exists in the harness but not in the inventory (inventory row removed?)",
+   "case EP-020 exists in the harness but not in the inventory (inventory row removed?)",
+   "case EP-021 exists in the harness but not in the inventory (inventory row removed?)",
+   "case EP-022 exists in the harness but not in the inventory (inventory row removed?)",
+   "case EP-023 exists in the harness but not in the inventory (inventory row removed?)",
+   "case EP-024 exists in the harness but not in the inventory (inventory row removed?)",
+   "case EP-025 exists in the harness but not in the inventory (inventory row removed?)",
+   "case EP-026 exists in the harness but not in the inventory (inventory row removed?)",
+   "case EP-030 exists in the harness but not in the inventory (inventory row removed?)",
+   "case EP-031 exists in the harness but not in the inventory (inventory row removed?)",
+   "case EP-032 exists in the harness but not in the inventory (inventory row removed?)",
+   "case EP-033 exists in the harness but not in the inventory (inventory row removed?)",
+   "case EP-034 exists in the harness but not in the inventory (inventory row removed?)",
+   "case EP-040 exists in the harness but not in the inventory (inventory row removed?)",
+   "case EP-041 exists in the harness but not in the inventory (inventory row removed?)",
+   "case EP-045 exists in the harness but not in the inventory (inventory row removed?)",
+   "case EP-046 exists in the harness but not in the inventory (inventory row removed?)",
+   "case EP-051 exists in the harness but not in the inventory (inventory row removed?)",
+   "case EP-052 exists in the harness but not in the inventory (inventory row removed?)",
+   "case EP-060 exists in the harness but not in the inventory (inventory row removed?)",
+   "case EP-061 exists in the harness but not in the inventory (inventory row removed?)",
+   "case EP-070 exists in the harness but not in the inventory (inventory row removed?)",
+   "case EP-071 exists in the harness but not in the inventory (inventory row removed?)"
+  ]
+ },
+ "evidence_class": "real-component",
+ "inventory": {
+  "case_ids": [
+   "EP-050"
+  ],
+  "path": "/tmp/claude-1000/-home-milosvasic-Projects-llmctl/4cea4116-8339-d4a8-4d6c-db1d21cb18d4/scratchpad/lan/inv-050.tsv",
+  "rows": 1,
+  "sha256": "abccd70070630b4ced051460a4b4f42008eb07790413f4f4e021d07190b395d5"
+ },
+ "leak_scan": {
+  "control_needle_found": true,
+  "rc": 0,
+  "status": "clean"
+ },
+ "not_exercised_classes": {
+  "env": "env-gap",
+  "fr069": {
+   "agent-outside-subset": "agents outside their defined subset (FR-069)",
+   "browser-non-get": "browser client on non-GET cases (FR-069)",
+   "sdk-no-ca-trust": "hosted SDK where no CA-trust mechanism works (FR-069; recorded as a trust-configuration failure)"
+  },
+  "proposed_beyond_fr069": {
+   "sdk-outside-subset": "SDK exposes only POST /v1/systemone and GET /v1/models; other cases are outside its surface",
+   "transport-not-per-client": "transport-level behaviour (slow client, connection cap, engine port) is client-independent; executed once by the stdlib socket helper under python-urllib (and curl for the engine port)"
+  }
+ },
+ "pending_adapters": {
+  "agent:*": "the seven coding-agent adapters are wired later (defined subset: one authenticated success call + one unauthenticated call each)",
+  "llmctl-cli": "llmctl-decide ask adapter is wired later (T-runner follow-up)"
+ },
+ "pending_vantages": [
+  "second-machine"
+ ],
+ "run_id": "lan-ep050-1",
+ "summary": {
+  "cells": 2,
+  "classes_beyond_fr069": 0,
+  "fail": 1,
+  "pass": 1
+ },
+ "target": "https://192.168.1.90:8095",
+ "vantages": {
+  "host": "exercised",
+  "second-machine": "pending-vantage (vantage helper not wired yet)"
+ },
+ "verdict": "FAIL"
+}

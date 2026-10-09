@@ -1,0 +1,16 @@
+[
+ {
+  "request": "GET /readyz auth=none",
+  "status": 200,
+  "headers": {
+   "content-type": "application/json; charset=utf-8",
+   "x-llmctl-request-id": "4c0701d0abea8e91"
+  },
+  "body": "{\"status\":\"ready\"}",
+  "error": null,
+  "trust": [
+   "spki-pin ok"
+  ],
+  "note": null
+ }
+]

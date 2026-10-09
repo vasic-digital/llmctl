@@ -1,0 +1,14 @@
+[
+ {
+  "request": "GET /healthz auth=none",
+  "status": 200,
+  "headers": {
+   "content-type": "application/json; charset=utf-8",
+   "x-llmctl-request-id": "593e75f43894603b"
+  },
+  "body": "{\"status\":\"ok\"}",
+  "error": null,
+  "trust": null,
+  "note": null
+ }
+]

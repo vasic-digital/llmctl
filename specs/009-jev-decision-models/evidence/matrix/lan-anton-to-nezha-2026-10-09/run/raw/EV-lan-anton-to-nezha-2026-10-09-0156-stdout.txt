@@ -1,0 +1,25 @@
+[
+ {
+  "request": "GET /healthz auth=none",
+  "status": 200,
+  "headers": {
+   "content-type": "application/json; charset=utf-8",
+   "x-llmctl-request-id": "ffcc2e5ebd236e4b"
+  },
+  "body": "{\"status\":\"ok\"}",
+  "error": null,
+  "trust": [
+   "spki-pin ok"
+  ],
+  "note": "control: same client over HTTPS"
+ },
+ {
+  "request": "GET /healthz auth=none",
+  "status": null,
+  "headers": {},
+  "body": "",
+  "error": "net::ERR_CONNECTION_RESET",
+  "trust": null,
+  "note": "plain HTTP to the TLS port"
+ }
+]

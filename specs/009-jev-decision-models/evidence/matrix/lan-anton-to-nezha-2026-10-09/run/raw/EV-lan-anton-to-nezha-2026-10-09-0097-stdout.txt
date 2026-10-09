@@ -1,0 +1,15 @@
+[
+ {
+  "request": "POST /healthz auth=none",
+  "status": 405,
+  "headers": {
+   "allow": "GET",
+   "content-type": "application/json; charset=utf-8",
+   "x-llmctl-request-id": "4cb06ba52f936493"
+  },
+  "body": "{\"message\":\"Method not allowed.\",\"error_type\":\"method_not_allowed\"}",
+  "error": null,
+  "trust": null,
+  "note": null
+ }
+]

@@ -1,0 +1,1 @@
+{"protocol":"nli-onnx","type":"choice","choice":"billing","confidence":0.841595436,"ok":true,"probabilities":{"billing":0.894396957,"legal":0.064043718,"team3":0.041559325}}

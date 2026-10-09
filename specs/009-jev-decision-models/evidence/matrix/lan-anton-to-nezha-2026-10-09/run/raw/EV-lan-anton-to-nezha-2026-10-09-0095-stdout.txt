@@ -1,0 +1,15 @@
+[
+ {
+  "request": "POST /v1/models auth=key",
+  "status": 405,
+  "headers": {
+   "allow": "GET",
+   "content-type": "application/json; charset=utf-8",
+   "x-llmctl-request-id": "a57851c39141f9f8"
+  },
+  "body": "{\"message\":\"Method not allowed.\",\"error_type\":\"method_not_allowed\"}",
+  "error": null,
+  "trust": null,
+  "note": null
+ }
+]

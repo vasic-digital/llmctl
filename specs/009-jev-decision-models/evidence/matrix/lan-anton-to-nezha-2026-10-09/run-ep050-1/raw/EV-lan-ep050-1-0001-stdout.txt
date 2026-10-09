@@ -1,0 +1,14 @@
+[
+ {
+  "request": "GET /metrics auth=key",
+  "status": 200,
+  "headers": {
+   "content-type": "text/plain; version=0.0.4; charset=utf-8",
+   "x-llmctl-request-id": "24e147466c2370eb"
+  },
+  "body": "",
+  "error": "adapter produced invalid base64",
+  "trust": null,
+  "note": "metrics body is not text exposition"
+ }
+]

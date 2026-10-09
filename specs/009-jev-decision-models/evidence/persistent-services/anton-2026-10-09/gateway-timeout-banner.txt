@@ -1,0 +1,1 @@
+64:  timeout: 120s per request (cpu-adaptive: CPU-placed decide-nli; an explicit LLMCTL_DECIDE_TIMEOUT overrides)

@@ -1,0 +1,15 @@
+[
+ {
+  "request": "GET /v1/does-not-exist auth=none",
+  "status": 401,
+  "headers": {
+   "content-type": "application/json; charset=utf-8",
+   "www-authenticate": "Bearer realm=\"llmctl\"",
+   "x-llmctl-request-id": "2ae2529a6fe4879b"
+  },
+  "body": "{\"message\":\"Authentication required.\",\"error_type\":\"unauthorized\"}",
+  "error": null,
+  "trust": null,
+  "note": null
+ }
+]

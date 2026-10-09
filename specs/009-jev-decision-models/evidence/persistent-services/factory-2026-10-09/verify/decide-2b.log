@@ -1,0 +1,24 @@
+[2026-10-09T14:11:02Z] llmctl models download decide-2b
+[2026-10-09T14:11:02Z] engine: llama  repo: alibiserikbay/JevK5-GGUF
+[2026-10-09T14:11:03Z] download: https://huggingface.co/alibiserikbay/JevK5-GGUF/resolve/ec67b0bfce5119a8b11a2cdb430bb43e3fa3e82a/jevk5-2b-v0.2-Q8_0.gguf -> /home/milos/.local/share/llmctl/models/decide-2b/jevk5-2b-v0.2-Q8_0.gguf.part
+[2026-10-09T14:20:15Z] curl exit: 0
+[2026-10-09T14:20:15Z] RUN: _dl_verify_file /home/milos/.local/share/llmctl/models/decide-2b/jevk5-2b-v0.2-Q8_0.gguf.part 2012012000 17222f27a89273aca7614e34083a530b0d90cd51cffeb225c7acc8e79a7e0eba
+[2026-10-09T14:20:20Z] EXIT: 0
+[2026-10-09T14:20:20Z] renamed /home/milos/.local/share/llmctl/models/decide-2b/jevk5-2b-v0.2-Q8_0.gguf.part -> /home/milos/.local/share/llmctl/models/decide-2b/jevk5-2b-v0.2-Q8_0.gguf (atomic, verified)
+[2026-10-09T14:20:20Z] smoke protocol: letter-logit
+[2026-10-09T14:20:20Z] smoke: /home/milos/llmctl-3.1.0-factory/submodules/llama.cpp/build/bin/llama-server --model /home/milos/.local/share/llmctl/models/decide-2b/jevk5-2b-v0.2-Q8_0.gguf --ctx-size 512 --n-gpu-layers 0 --host 127.0.0.1 --port 57509
+[2026-10-09T14:20:21Z] smoke: /health OK after 1s
+[2026-10-09T14:20:21Z] RUN: _dl_decision_probe_choice 57509
+[2026-10-09T14:20:21Z] EXIT: 0
+OUT: smoke ok: protocol=letter-logit choice=billing confidence=0.5639
+OUT:   billing=0.781934
+OUT:   legal=0.218066
+[2026-10-09T14:20:21Z] RUN: _dl_decision_probe_options 57509
+[2026-10-09T14:20:22Z] EXIT: 0
+OUT: smoke ok: protocol=letter-logit choice=billing confidence=0.7113
+OUT:   billing=0.783479
+OUT:   legal=0.109771
+OUT:   team3=0.067161
+OUT:   team4=0.039589
+[2026-10-09T14:20:22Z] decision smoke PASSED: choice == billing (2 options), valid typed answer (4 options)
+[2026-10-09T14:20:22Z] download decide-2b: SUCCESS

@@ -1,0 +1,16 @@
+[
+ {
+  "request": "GET /v1/does-not-exist auth=key",
+  "status": 404,
+  "headers": {
+   "content-type": "application/json; charset=utf-8",
+   "x-llmctl-request-id": "7fb4caa7f415a136"
+  },
+  "body": "{\"message\":\"Not found.\",\"error_type\":\"invalid_request\"}",
+  "error": null,
+  "trust": [
+   "spki-pin ok"
+  ],
+  "note": null
+ }
+]

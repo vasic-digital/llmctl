@@ -1,0 +1,12 @@
+[llmctl] downloading onnx/model.onnx from cross-encoder/nli-deberta-v3-xsmall
+verified: onnx/model.onnx
+[llmctl] downloading spm.model from cross-encoder/nli-deberta-v3-xsmall
+verified: spm.model
+[llmctl] downloading config.json from cross-encoder/nli-deberta-v3-xsmall
+verified: config.json
+[llmctl] downloading tokenizer_config.json from cross-encoder/nli-deberta-v3-xsmall
+verified: tokenizer_config.json
+structural validation passed for byo-nli-xsmall (onnx model + tokenizer present)
+[llmctl] onnx smoke test: starting onnx_server.py for byo-nli-xsmall on 127.0.0.1:34581
+onnx smoke test passed for byo-nli-xsmall (entail/contradict/batch probes)
+profile 'byo-nli-xsmall' downloaded and verified. Evidence: /home/milosvasic/.cache/llmctl-byo-demo/state/verify/byo-nli-xsmall.log

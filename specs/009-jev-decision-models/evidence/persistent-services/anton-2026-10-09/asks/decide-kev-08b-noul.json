@@ -1,0 +1,1 @@
+{"model":"decide-kev-08b","answers":{"q":{"type":"noul","noul":0.109495347}},"usage":{"input_tokens":39,"output_tokens":0},"evidence":{"profile":"decide-kev-08b","port":8095,"latency_ms":25.998,"mode":"deterministic","instance":"decide-kev-08b","calibrated":false}}

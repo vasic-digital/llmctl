@@ -1,0 +1,26 @@
+[
+ {
+  "request": "POST /v1/systemone auth=key",
+  "status": 422,
+  "headers": {
+   "content-type": "application/json; charset=utf-8",
+   "x-llmctl-request-id": "916bccfe56e91a0f"
+  },
+  "body": "{\"message\":\"Request failed validation.\",\"error_type\":\"validation_failed\"}",
+  "error": null,
+  "trust": null,
+  "note": null
+ },
+ {
+  "request": "POST /v1/systemone auth=key",
+  "status": 422,
+  "headers": {
+   "content-type": "application/json; charset=utf-8",
+   "x-llmctl-request-id": "b4aafb5f3a5bd95b"
+  },
+  "body": "{\"message\":\"Request failed validation.\",\"error_type\":\"validation_failed\"}",
+  "error": null,
+  "trust": null,
+  "note": null
+ }
+]

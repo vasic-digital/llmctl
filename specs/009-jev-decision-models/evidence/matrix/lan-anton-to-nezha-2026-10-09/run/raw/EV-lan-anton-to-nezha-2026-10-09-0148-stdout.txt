@@ -1,0 +1,16 @@
+[
+ {
+  "request": "GET /healthz auth=none",
+  "status": 200,
+  "headers": {
+   "content-type": "application/json; charset=utf-8",
+   "x-llmctl-request-id": "a1a5fe1ae528e869"
+  },
+  "body": "{\"status\":\"ok\"}",
+  "error": null,
+  "trust": [
+   "spki-pin ok"
+  ],
+  "note": null
+ }
+]

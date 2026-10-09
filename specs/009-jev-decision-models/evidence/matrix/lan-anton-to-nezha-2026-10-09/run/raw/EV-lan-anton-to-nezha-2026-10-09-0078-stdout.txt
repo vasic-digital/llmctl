@@ -1,0 +1,23 @@
+[
+ {
+  "request": "GET /healthz auth=none",
+  "status": 200,
+  "headers": {
+   "content-type": "application/json; charset=utf-8",
+   "x-llmctl-request-id": "69ac34fa74af077d"
+  },
+  "body": "{\"status\":\"ok\"}",
+  "error": null,
+  "trust": null,
+  "note": "control: same client over HTTPS"
+ },
+ {
+  "request": "GET /healthz auth=none",
+  "status": null,
+  "headers": {},
+  "body": "",
+  "error": "ConnectionError: ('Connection aborted.', ConnectionResetError(104, 'Connection reset by peer'))",
+  "trust": null,
+  "note": "plain HTTP to the TLS port"
+ }
+]

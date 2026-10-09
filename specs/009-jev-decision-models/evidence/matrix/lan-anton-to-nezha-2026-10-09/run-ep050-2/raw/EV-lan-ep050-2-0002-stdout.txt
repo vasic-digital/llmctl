@@ -1,0 +1,14 @@
+[
+ {
+  "request": "GET /metrics auth=key",
+  "status": 200,
+  "headers": {
+   "content-type": "text/plain; version=0.0.4; charset=utf-8",
+   "x-llmctl-request-id": "7c85a889991d82e0"
+  },
+  "body": "# HELP llmctl_decide_requests_total Requests by endpoint, profile and status class.\n# TYPE llmctl_decide_requests_total counter\nllmctl_decide_requests_total{endpoint=\"/healthz\",profile=\"other\",status_class=\"2xx\"} 546\nllmctl_decide_requests_total{endpoint=\"/healthz\",profile=\"other\",status_class=\"4xx\"} 5\nllmctl_decide_requests_total{endpoint=\"/metrics\",profile=\"other\",status_class=\"2xx\"} 15\nllmctl_decide_requests_total{endpoint=\"/metrics\",profile=\"other\",status_class=\"4xx\"} 17\nllmctl_decide_requests_total{endpoint=\"/readyz\",profile=\"other\",status_class=\"2xx\"} 7\nllmctl_decide_requests_total{endpoint=\"/v1/models\",profile=\"other\",status_class=\"2xx\"} 9\nllmctl_decide_requests_total{endpoint=\"/v1/models\",profile=\"other\",status_class=\"4xx\"} 29\nllmctl_decide_requests_total{endpoint=\"/v1/systemone\",profile=\"decide\",status_class=\"5xx\"} 37\nllmctl_decide_requests_total{endpoint=\"/v1/systemone\",profile=\"decide-2b\",status_class=\"2xx\"} 34\nllmctl_decide_requests_total{endpoint=\"/v1/systemone\",profile=\"decide-max\",status_class=\"2xx\"} 34\nllmctl_decide_requests_total{endpoint=\"/v1/systemone\",profile=\"decide-nli\",status_class=\"2xx\"} 35\nllmctl_decide_requests_total{endpoint=\"/v1/systemone\",profile=\"decid",
+  "error": null,
+  "trust": null,
+  "note": null
+ }
+]

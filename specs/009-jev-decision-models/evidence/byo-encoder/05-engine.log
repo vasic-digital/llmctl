@@ -1,0 +1,5 @@
+{"component": "onnx-runtime", "event": "model_loaded", "model": "onnx/model.onnx", "inputs": ["input_ids", "attention_mask"], "tokenizer": "spm.model", "max_tokens": 512}
+{"component": "onnx-runtime", "event": "smoke", "ok": true, "detail": "labels=3", "label_source": "config:config.json"}
+{"component": "onnx-runtime", "event": "listening", "host": "127.0.0.1", "port": 18191, "profile": "byo-nli-xsmall", "ready": true, "max_tokens": 512, "max_pairs": 64}
+{"component": "onnx-runtime", "event": "score", "pairs": 3, "truncated": 0}
+{"component": "onnx-runtime", "event": "score", "pairs": 3, "truncated": 0}

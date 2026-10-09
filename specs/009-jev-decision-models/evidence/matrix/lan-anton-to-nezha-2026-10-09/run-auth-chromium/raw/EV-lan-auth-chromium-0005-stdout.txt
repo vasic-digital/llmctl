@@ -1,0 +1,17 @@
+[
+ {
+  "request": "GET /metrics auth=none",
+  "status": 401,
+  "headers": {
+   "content-type": "application/json; charset=utf-8",
+   "www-authenticate": "Bearer realm=\"llmctl\"",
+   "x-llmctl-request-id": "3d6d87cbab9e4950"
+  },
+  "body": "{\"message\":\"Authentication required.\",\"error_type\":\"unauthorized\"}",
+  "error": null,
+  "trust": [
+   "spki-pin ok"
+  ],
+  "note": null
+ }
+]

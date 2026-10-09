@@ -1,0 +1,38 @@
+== models verify
+profile 'decide' passed checksum verification
+profile 'decide-pro' passed checksum verification
+profile 'decide-2b' passed checksum verification
+profile 'decide-max' passed checksum verification
+profile 'decide-nli' passed checksum verification
+== plan (head)
+Host tier:   baseline
+Budgets:     RAM 49746 MiB (avail - 4GiB), VRAM 0 MiB (total - 15%), storage 133745 MiB free
+
+profile          port   verdict   mode     RAM MiB  VRAM   ctx   ngl  why
+fast             8080   FITS      cpu      5716     0      8192  0    recommended
+coder            8081   FITS      cpu      21793    0      32768 0    recommended
+vision           8082   FITS      cpu      4030     0      24000 0    recommended
+vision-pro       8083   GATED     cpu      9824     0      16384 0    needs min_tier=workstation
+moe-fast         8084   FITS      cpu      15644    0      16384 0    recommended
+small            8085   FITS      cpu      3859     0      55000 0    recommended
+ws-dense-32b     8086   GATED     cpu      23027    0      32768 0    needs min_tier=workstation
+ws-moe-30b       8087   GATED     cpu      25889    0      32768 0    needs min_tier=workstation
+colibri-glm      8090   GATED     colibri  24576    0      8192  0    needs min_tier=datacenter
+colibri-qwen36   8091   GATED     colibri  8192     0      8192  0    needs min_tier=workstation
+decide-tiny      8092   FITS      cpu      1592     0      4096  0    recommended (overhead UNKNOWN (ram,vram): booked 0 until measured)
+decide           8093   FITS      cpu      3671     0      8192  0    recommended (overhead UNKNOWN (ram,vram): booked 0 until measured)
+decide-pro       8094   GATED     cpu      5260     0      8192  0    needs min_tier=workstation
+decide-nli       8096   FITS      cpu      3006     0      512   0    recommended (overhead UNKNOWN (ram,vram): booked 0 until measured)
+decide-max       8097   GATED     cpu      10174    0      8192  0    needs min_tier=workstation
+decide-2b        8098   FITS      cpu      3006     0      8192  0    recommended (overhead UNKNOWN (ram,vram): booked 0 until measured)
+== final
+Fri Oct  9 13:40:51 UTC 2026
+               total        used        free      shared  buff/cache   available
+Mem:              62          10           2           0          51          52
+some avg10=0.00 avg60=0.00 avg300=0.00 total=0
+full avg10=0.00 avg60=0.00 avg300=0.00 total=0
+22520 /home/milosvasic/llmctl-3.1.0/build/llmctl-decide serve --foreground
+llmctl-onnx@decide-nli cgroup mem: 0 MiB
+llmctl-llama@decide-2b cgroup mem: 0 MiB
+llmctl-llama@decide cgroup mem: 0 MiB
+llmctl-decide-gateway cgroup mem: 14 MiB

@@ -1,0 +1,15 @@
+[
+ {
+  "request": "GET /v1/systemone auth=key",
+  "status": 405,
+  "headers": {
+   "allow": "POST",
+   "content-type": "application/json; charset=utf-8",
+   "x-llmctl-request-id": "b7c75585bf128fdd"
+  },
+  "body": "{\"message\":\"Method not allowed.\",\"error_type\":\"method_not_allowed\"}",
+  "error": null,
+  "trust": null,
+  "note": null
+ }
+]

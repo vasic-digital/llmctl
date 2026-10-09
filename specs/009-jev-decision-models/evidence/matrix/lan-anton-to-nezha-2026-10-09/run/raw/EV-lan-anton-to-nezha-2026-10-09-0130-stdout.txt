@@ -1,0 +1,23 @@
+[
+ {
+  "request": "GET /healthz auth=none",
+  "status": 200,
+  "headers": {
+   "content-type": "application/json; charset=utf-8",
+   "x-llmctl-request-id": "3f0d8f343bb28df0"
+  },
+  "body": "{\"status\":\"ok\"}",
+  "error": null,
+  "trust": null,
+  "note": "control: same client over HTTPS"
+ },
+ {
+  "request": "GET /healthz auth=none",
+  "status": null,
+  "headers": {},
+  "body": "",
+  "error": "Get \"http://192.168.1.90:8095/healthz\": read tcp 192.168.1.115:42504->192.168.1.90:8095: read: connection reset by peer",
+  "trust": null,
+  "note": "plain HTTP to the TLS port"
+ }
+]

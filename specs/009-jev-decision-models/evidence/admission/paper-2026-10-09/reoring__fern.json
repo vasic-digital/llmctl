@@ -1,0 +1,130 @@
+{
+  "schema": "llmctl.admission/1",
+  "candidate": {
+    "name": "fern",
+    "repo": "reoring/fern",
+    "pinned": "no",
+    "protocol_hint": "unsupported",
+    "known_issue": "",
+    "name_collision": "",
+    "kind": "weights"
+  },
+  "slug": "reoring__fern",
+  "mode": "paper-only",
+  "retrieved_at": "2026-10-09T14:24:35Z",
+  "existence": {
+    "verdict": "VERIFIED",
+    "evidence": "HTTP 200 from <LLMCTL_HF_BASE>/api/models/reoring/fern",
+    "http_status": 200
+  },
+  "api": {
+    "id": "reoring/fern",
+    "sha": "7d2150283b341a79d5c6738c0cc50bf38d01c15f",
+    "lastModified": "2026-09-26T05:39:42.000Z",
+    "author": "reoring",
+    "gated": false,
+    "private": false,
+    "disabled": false
+  },
+  "pins": [],
+  "protocol": {
+    "class": "unsupported",
+    "source": "curated hint 'unsupported'"
+  },
+  "needs_engine_advance": false,
+  "tier": null,
+  "g10_subchecks": [
+    {
+      "check": "loadability",
+      "status": "SKIP",
+      "evidence": "not attempted: earlier gate(s) failed: ['G3', 'G6']"
+    },
+    {
+      "check": "smoke_answer",
+      "status": "SKIP",
+      "evidence": "not attempted: earlier gate(s) failed: ['G3', 'G6']"
+    },
+    {
+      "check": "determinism_repeats",
+      "status": "SKIP",
+      "evidence": "not attempted: earlier gate(s) failed: ['G3', 'G6']"
+    },
+    {
+      "check": "option_order_sensitivity",
+      "status": "SKIP",
+      "evidence": "not attempted: earlier gate(s) failed: ['G3', 'G6']"
+    },
+    {
+      "check": "memory_fit_measured",
+      "status": "SKIP",
+      "evidence": "not attempted: earlier gate(s) failed: ['G3', 'G6']"
+    }
+  ],
+  "gates": [
+    {
+      "gate": "G1",
+      "name": "licence allow-list",
+      "status": "PASS",
+      "evidence": "weights licence apache-2.0 (SPDX, from the HF API) is on the allow-list; licence files in repo: none"
+    },
+    {
+      "gate": "G2",
+      "name": "stable revision",
+      "status": "PASS",
+      "evidence": "immutable ref 7d2150283b341a79d5c6738c0cc50bf38d01c15f, lastModified 2026-09-26T05:39:42.000Z; re-verify at release"
+    },
+    {
+      "gate": "G3",
+      "name": "pinned size+sha256",
+      "status": "FAIL",
+      "evidence": "no GGUF or ONNX file in the repo to pin (siblings: ['.gitattributes', 'README.md', 'chat_template.jinja', 'config.json', 'eval.json', 'generation_config.json', 'model.safetensors', 'tokenizer.json'])"
+    },
+    {
+      "gate": "G4",
+      "name": "loadable by pinned engine",
+      "status": "SKIP",
+      "evidence": "no supported runtime exists for an unclassified protocol (the failure is recorded at G6)"
+    },
+    {
+      "gate": "G5",
+      "name": "fits budgets",
+      "status": "SKIP",
+      "evidence": "no model file pinned, nothing to size (the failure is recorded at G3)"
+    },
+    {
+      "gate": "G6",
+      "name": "protocol classification",
+      "status": "FAIL",
+      "evidence": "unsupported / unclassified protocol (curated hint 'unsupported'); fail closed"
+    },
+    {
+      "gate": "G7",
+      "name": "supply chain",
+      "status": "PASS",
+      "evidence": "pin has no pickle files"
+    },
+    {
+      "gate": "G8",
+      "name": "provenance",
+      "status": "PASS",
+      "evidence": "API author 'reoring' == repo owner; HF-side cross-link to GitHub/PyPI not checked in paper mode"
+    },
+    {
+      "gate": "G9",
+      "name": "known-issue sweep",
+      "status": "PENDING",
+      "evidence": "live upstream issue-tracker sweep not done by this driver (offline); none recorded in the research register"
+    },
+    {
+      "gate": "G10",
+      "name": "real run",
+      "status": "SKIP",
+      "evidence": "not attempted: earlier gate(s) failed: ['G3', 'G6']"
+    }
+  ],
+  "disposition": "USER-ONLY",
+  "reasons": [
+    "G3: no GGUF or ONNX file in the repo to pin (siblings: ['.gitattributes', 'README.md', 'chat_template.jinja', 'config.json', 'eval.json', 'generation_config.json', 'model.safetensors', 'tokenizer.json'])",
+    "G6: unsupported / unclassified protocol (curated hint 'unsupported'); fail closed"
+  ]
+}

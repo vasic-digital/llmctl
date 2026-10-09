@@ -1,0 +1,23 @@
+[
+ {
+  "request": "GET /healthz auth=none",
+  "status": 200,
+  "headers": {
+   "content-type": "application/json; charset=utf-8",
+   "x-llmctl-request-id": "4e4aeb885aaeb55b"
+  },
+  "body": "{\"status\":\"ok\"}",
+  "error": null,
+  "trust": null,
+  "note": "control: same client over HTTPS"
+ },
+ {
+  "request": "GET /healthz auth=none",
+  "status": null,
+  "headers": {},
+  "body": "",
+  "error": "curl rc=56: curl: (56) Recv failure: Connection reset by peer ",
+  "trust": null,
+  "note": "plain HTTP to the TLS port"
+ }
+]

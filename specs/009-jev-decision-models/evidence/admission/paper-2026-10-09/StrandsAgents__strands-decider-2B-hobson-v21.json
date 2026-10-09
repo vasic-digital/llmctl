@@ -1,0 +1,130 @@
+{
+  "schema": "llmctl.admission/1",
+  "candidate": {
+    "name": "strands-decider-2b-v21",
+    "repo": "StrandsAgents/strands-decider-2B-hobson-v21",
+    "pinned": "no",
+    "protocol_hint": "unsupported",
+    "known_issue": "",
+    "name_collision": "",
+    "kind": "weights"
+  },
+  "slug": "StrandsAgents__strands-decider-2B-hobson-v21",
+  "mode": "paper-only",
+  "retrieved_at": "2026-10-09T14:24:26Z",
+  "existence": {
+    "verdict": "VERIFIED",
+    "evidence": "HTTP 200 from <LLMCTL_HF_BASE>/api/models/StrandsAgents/strands-decider-2B-hobson-v21",
+    "http_status": 200
+  },
+  "api": {
+    "id": "StrandsAgents/strands-decider-2B-hobson-v21",
+    "sha": "2b52a6235c1b8306bbfa30b00b9d4b74b63a39f5",
+    "lastModified": "2026-10-05T16:03:52.000Z",
+    "author": "StrandsAgents",
+    "gated": false,
+    "private": false,
+    "disabled": false
+  },
+  "pins": [],
+  "protocol": {
+    "class": "unsupported",
+    "source": "curated hint 'unsupported'"
+  },
+  "needs_engine_advance": false,
+  "tier": null,
+  "g10_subchecks": [
+    {
+      "check": "loadability",
+      "status": "SKIP",
+      "evidence": "not attempted: earlier gate(s) failed: ['G3', 'G6']"
+    },
+    {
+      "check": "smoke_answer",
+      "status": "SKIP",
+      "evidence": "not attempted: earlier gate(s) failed: ['G3', 'G6']"
+    },
+    {
+      "check": "determinism_repeats",
+      "status": "SKIP",
+      "evidence": "not attempted: earlier gate(s) failed: ['G3', 'G6']"
+    },
+    {
+      "check": "option_order_sensitivity",
+      "status": "SKIP",
+      "evidence": "not attempted: earlier gate(s) failed: ['G3', 'G6']"
+    },
+    {
+      "check": "memory_fit_measured",
+      "status": "SKIP",
+      "evidence": "not attempted: earlier gate(s) failed: ['G3', 'G6']"
+    }
+  ],
+  "gates": [
+    {
+      "gate": "G1",
+      "name": "licence allow-list",
+      "status": "PASS",
+      "evidence": "weights licence apache-2.0 (SPDX, from the HF API) is on the allow-list; licence files in repo: ['LICENSE.md']"
+    },
+    {
+      "gate": "G2",
+      "name": "stable revision",
+      "status": "PASS",
+      "evidence": "immutable ref 2b52a6235c1b8306bbfa30b00b9d4b74b63a39f5, lastModified 2026-10-05T16:03:52.000Z; re-verify at release"
+    },
+    {
+      "gate": "G3",
+      "name": "pinned size+sha256",
+      "status": "FAIL",
+      "evidence": "no GGUF or ONNX file in the repo to pin (siblings: ['.gitattributes', 'LICENSE.md', 'MANIFEST.sha256', 'README.md', 'chat_template.jinja', 'eval/internal/eval.log', 'eval/internal/recipe_heldout.json', 'eval/jevbench-w4096/health.json'])"
+    },
+    {
+      "gate": "G4",
+      "name": "loadable by pinned engine",
+      "status": "SKIP",
+      "evidence": "no supported runtime exists for an unclassified protocol (the failure is recorded at G6)"
+    },
+    {
+      "gate": "G5",
+      "name": "fits budgets",
+      "status": "SKIP",
+      "evidence": "no model file pinned, nothing to size (the failure is recorded at G3)"
+    },
+    {
+      "gate": "G6",
+      "name": "protocol classification",
+      "status": "FAIL",
+      "evidence": "unsupported / unclassified protocol (curated hint 'unsupported'); fail closed"
+    },
+    {
+      "gate": "G7",
+      "name": "supply chain",
+      "status": "PASS",
+      "evidence": "pin has no pickle files"
+    },
+    {
+      "gate": "G8",
+      "name": "provenance",
+      "status": "PASS",
+      "evidence": "API author 'StrandsAgents' == repo owner; HF-side cross-link to GitHub/PyPI not checked in paper mode"
+    },
+    {
+      "gate": "G9",
+      "name": "known-issue sweep",
+      "status": "PENDING",
+      "evidence": "live upstream issue-tracker sweep not done by this driver (offline); none recorded in the research register"
+    },
+    {
+      "gate": "G10",
+      "name": "real run",
+      "status": "SKIP",
+      "evidence": "not attempted: earlier gate(s) failed: ['G3', 'G6']"
+    }
+  ],
+  "disposition": "USER-ONLY",
+  "reasons": [
+    "G3: no GGUF or ONNX file in the repo to pin (siblings: ['.gitattributes', 'LICENSE.md', 'MANIFEST.sha256', 'README.md', 'chat_template.jinja', 'eval/internal/eval.log', 'eval/internal/recipe_heldout.json', 'eval/jevbench-w4096/health.json'])",
+    "G6: unsupported / unclassified protocol (curated hint 'unsupported'); fail closed"
+  ]
+}

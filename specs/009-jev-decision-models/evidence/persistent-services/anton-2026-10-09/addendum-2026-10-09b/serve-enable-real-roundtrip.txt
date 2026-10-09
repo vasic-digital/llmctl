@@ -1,0 +1,9 @@
+# real (non-stubbed) llmctl decide serve --disable / --enable round trip on host anton, 2026-10-09 ~16:12-16:14 CEST
+disable: removed llmctl-decide-gateway.service; is-active=inactive; unit file removed (the .d drop-in 10-hostsafety.conf is kept)
+enable : installed into ~/.config/systemd/user; symlink created under default.target.wants; is-active=active; is-enabled=enabled
+listen : 127.0.0.1:8095 (llmctl-decide)
+unit   : regenerated unit identical to the pre-disable unit (diff empty)
+re-enable while running: MainPID 3740948 unchanged, ActiveEnterTimestamp 16:13:00 unchanged (unit content unchanged => no restart)
+decide models afterwards: decide-kev-08b ready (systemone-native), decide-nli ready (nli-onnx)
+journal: Stopped 16:12:56, Started 16:13:00
+NOT covered: reboot survival of the re-enabled unit (shown earlier in reboot-survival.txt for the previous install); macOS still dry-run only.

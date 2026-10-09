@@ -1,0 +1,15 @@
+[
+ {
+  "request": "GET /v1/models auth=none",
+  "status": 429,
+  "headers": {
+   "content-type": "application/json; charset=utf-8",
+   "retry-after": "43",
+   "x-llmctl-request-id": "88d958ebec24a12c"
+  },
+  "body": "{\"message\":\"Too many requests.\",\"error_type\":\"rate_limited\"}",
+  "error": null,
+  "trust": null,
+  "note": "status 429 != expected 401"
+ }
+]

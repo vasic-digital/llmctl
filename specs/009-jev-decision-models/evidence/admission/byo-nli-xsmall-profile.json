@@ -1,0 +1,93 @@
+{
+ "profiles": {
+  "byo-nli-xsmall": {
+   "capability": [
+    "decide"
+   ],
+   "min_tier": "below-minimum",
+   "port": 8096,
+   "defaults": {
+    "ctx": 512,
+    "ngl": 0,
+    "parallel": 1,
+    "flash_attn": "off"
+   },
+   "desc": "BYO example: cross-encoder/nli-deberta-v3-xsmall (Apache-2.0) NLI encoder via catalog overlay (FR-008 / 3-I12).",
+   "engine": "onnx",
+   "hf_repo": "cross-encoder/nli-deberta-v3-xsmall",
+   "hf_revision": "a150876415327c80daeff35ca6f68f5ed8cf5c24",
+   "license": "Apache-2.0",
+   "provenance": {
+    "benchmark": {
+     "value": "no accuracy figure recorded; zeroshot-NLI capability claim is the upstream model card's task family only",
+     "class": "unverified"
+    }
+   },
+   "decision": {
+    "protocol": "nli-onnx",
+    "max_options": 20,
+    "max_options_status": "evidence-pending",
+    "score_levels": [
+     2,
+     10
+    ],
+    "experimental": [
+     "choice",
+     "score"
+    ],
+    "tier_note": "experimental choice/score: one encoder forward pass per option (latency grows linearly with option count)"
+   },
+   "files": [
+    {
+     "name": "onnx/model.onnx",
+     "size": 284200859,
+     "sha256": "7105da41f625c42eca24e9465ec99150d02a80e644659d7a1daa93a6357155d4",
+     "role": "model"
+    },
+    {
+     "name": "spm.model",
+     "size": 2464616,
+     "sha256": "c679fbf93643d19aab7ee10c0b99e460bdbc02fedf34b92b05af343b4af586fd",
+     "role": "tokenizer"
+    },
+    {
+     "name": "config.json",
+     "size": 1053,
+     "sha256": "8d9f07bf7ba54a6fc3b1962483056f94c39dcf188db4cf61843e1c88f94b2342",
+     "role": "config"
+    },
+    {
+     "name": "tokenizer_config.json",
+     "size": 1346,
+     "sha256": "f3eecd07c370ef0bf7dd3780d3cd68cf9c8b00c267e21a208ddcd8f82bfec1a6",
+     "role": "config"
+    }
+   ],
+   "maturity": {
+    "noul": {
+     "status": "unmeasured",
+     "reason": "not yet measured"
+    },
+    "choice": {
+     "status": "unmeasured",
+     "reason": "not yet measured"
+    },
+    "score": {
+     "status": "unmeasured",
+     "reason": "not yet measured"
+    }
+   },
+   "memory": {
+    "ram": {
+     "status": "unmeasured",
+     "reason": "the model is not downloaded on any host that has measured memory so far (G-137); measure it and re-run scripts/overhead_from_memory.py --write"
+    },
+    "vram": {
+     "status": "unmeasured",
+     "reason": "the model is not downloaded on any host that has measured memory so far (G-137); measure it and re-run scripts/overhead_from_memory.py --write"
+    }
+   }
+  }
+ },
+ "note": "profile fragment to merge into a COPY of models/catalog.json and point LLMCTL_CATALOG at it; validated 2026-10-09 with 'llmctl models list' (listed), no download performed"
+}

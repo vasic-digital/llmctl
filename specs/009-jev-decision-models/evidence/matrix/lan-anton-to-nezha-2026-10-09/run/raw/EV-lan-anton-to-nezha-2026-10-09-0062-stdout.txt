@@ -1,0 +1,14 @@
+[
+ {
+  "request": "POST /v1/systemone auth=key",
+  "status": 400,
+  "headers": {
+   "content-type": "application/json; charset=utf-8",
+   "x-llmctl-request-id": "d45c7d1bfc3ec427"
+  },
+  "body": "{\"message\":\"Content-Type must be application/json.\",\"error_type\":\"invalid_request\"}",
+  "error": null,
+  "trust": null,
+  "note": null
+ }
+]

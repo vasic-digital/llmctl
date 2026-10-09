@@ -1,0 +1,902 @@
+[
+ {
+  "profile": "decide-nli",
+  "client": "curl",
+  "qtype": "noul",
+  "ms": 215,
+  "status": 200,
+  "maturity": [
+   "experimental"
+  ],
+  "strict_problems": [
+   "q: bad noul answer"
+  ],
+  "answer_type": "noul",
+  "result": "pass"
+ },
+ {
+  "profile": "decide-nli",
+  "client": "curl",
+  "qtype": "choice",
+  "ms": 315,
+  "status": 200,
+  "maturity": [
+   "experimental"
+  ],
+  "strict_problems": [
+   "q: keys ['choice', 'confidence', 'maturity', 'probabilities', 'type']"
+  ],
+  "answer_type": "choice",
+  "result": "pass"
+ },
+ {
+  "profile": "decide-nli",
+  "client": "curl",
+  "qtype": "score",
+  "ms": 358,
+  "status": 200,
+  "maturity": [
+   "experimental"
+  ],
+  "strict_problems": [
+   "q: keys ['confidence', 'legend', 'maturity', 'probabilities', 'score', 'type']"
+  ],
+  "answer_type": "score",
+  "result": "pass"
+ },
+ {
+  "profile": "decide-nli",
+  "client": "python-urllib",
+  "qtype": "noul",
+  "ms": 174,
+  "status": 200,
+  "maturity": [
+   "experimental"
+  ],
+  "strict_problems": [
+   "q: bad noul answer"
+  ],
+  "answer_type": "noul",
+  "result": "pass"
+ },
+ {
+  "profile": "decide-nli",
+  "client": "python-urllib",
+  "qtype": "choice",
+  "ms": 262,
+  "status": 200,
+  "maturity": [
+   "experimental"
+  ],
+  "strict_problems": [
+   "q: keys ['choice', 'confidence', 'maturity', 'probabilities', 'type']"
+  ],
+  "answer_type": "choice",
+  "result": "pass"
+ },
+ {
+  "profile": "decide-nli",
+  "client": "python-urllib",
+  "qtype": "score",
+  "ms": 331,
+  "status": 200,
+  "maturity": [
+   "experimental"
+  ],
+  "strict_problems": [
+   "q: keys ['confidence', 'legend', 'maturity', 'probabilities', 'score', 'type']"
+  ],
+  "answer_type": "score",
+  "result": "pass"
+ },
+ {
+  "profile": "decide-nli",
+  "client": "python-requests",
+  "qtype": "noul",
+  "ms": 265,
+  "status": 200,
+  "maturity": [
+   "experimental"
+  ],
+  "strict_problems": [
+   "q: bad noul answer"
+  ],
+  "answer_type": "noul",
+  "result": "pass"
+ },
+ {
+  "profile": "decide-nli",
+  "client": "python-requests",
+  "qtype": "choice",
+  "ms": 351,
+  "status": 200,
+  "maturity": [
+   "experimental"
+  ],
+  "strict_problems": [
+   "q: keys ['choice', 'confidence', 'maturity', 'probabilities', 'type']"
+  ],
+  "answer_type": "choice",
+  "result": "pass"
+ },
+ {
+  "profile": "decide-nli",
+  "client": "python-requests",
+  "qtype": "score",
+  "ms": 403,
+  "status": 200,
+  "maturity": [
+   "experimental"
+  ],
+  "strict_problems": [
+   "q: keys ['confidence', 'legend', 'maturity', 'probabilities', 'score', 'type']"
+  ],
+  "answer_type": "score",
+  "result": "pass"
+ },
+ {
+  "profile": "decide-nli",
+  "client": "node-fetch",
+  "qtype": "noul",
+  "ms": 206,
+  "status": 200,
+  "maturity": [
+   "experimental"
+  ],
+  "strict_problems": [
+   "q: bad noul answer"
+  ],
+  "answer_type": "noul",
+  "result": "pass"
+ },
+ {
+  "profile": "decide-nli",
+  "client": "node-fetch",
+  "qtype": "choice",
+  "ms": 273,
+  "status": 200,
+  "maturity": [
+   "experimental"
+  ],
+  "strict_problems": [
+   "q: keys ['choice', 'confidence', 'maturity', 'probabilities', 'type']"
+  ],
+  "answer_type": "choice",
+  "result": "pass"
+ },
+ {
+  "profile": "decide-nli",
+  "client": "node-fetch",
+  "qtype": "score",
+  "ms": 340,
+  "status": 200,
+  "maturity": [
+   "experimental"
+  ],
+  "strict_problems": [
+   "q: keys ['confidence', 'legend', 'maturity', 'probabilities', 'score', 'type']"
+  ],
+  "answer_type": "score",
+  "result": "pass"
+ },
+ {
+  "profile": "decide-nli",
+  "client": "go-nethttp",
+  "qtype": "noul",
+  "ms": 199,
+  "status": 200,
+  "maturity": [
+   "experimental"
+  ],
+  "strict_problems": [
+   "q: bad noul answer"
+  ],
+  "answer_type": "noul",
+  "result": "pass"
+ },
+ {
+  "profile": "decide-nli",
+  "client": "go-nethttp",
+  "qtype": "choice",
+  "ms": 234,
+  "status": 200,
+  "maturity": [
+   "experimental"
+  ],
+  "strict_problems": [
+   "q: keys ['choice', 'confidence', 'maturity', 'probabilities', 'type']"
+  ],
+  "answer_type": "choice",
+  "result": "pass"
+ },
+ {
+  "profile": "decide-nli",
+  "client": "go-nethttp",
+  "qtype": "score",
+  "ms": 305,
+  "status": 200,
+  "maturity": [
+   "experimental"
+  ],
+  "strict_problems": [
+   "q: keys ['confidence', 'legend', 'maturity', 'probabilities', 'score', 'type']"
+  ],
+  "answer_type": "score",
+  "result": "pass"
+ },
+ {
+  "profile": "decide-2b",
+  "client": "curl",
+  "qtype": "noul",
+  "ms": 1681,
+  "status": 200,
+  "maturity": [
+   "experimental"
+  ],
+  "strict_problems": [
+   "q: bad noul answer"
+  ],
+  "answer_type": "noul",
+  "result": "pass"
+ },
+ {
+  "profile": "decide-2b",
+  "client": "curl",
+  "qtype": "choice",
+  "ms": 1949,
+  "status": 200,
+  "maturity": [
+   "experimental"
+  ],
+  "strict_problems": [
+   "q: keys ['choice', 'confidence', 'maturity', 'probabilities', 'type']"
+  ],
+  "answer_type": "choice",
+  "result": "pass"
+ },
+ {
+  "profile": "decide-2b",
+  "client": "curl",
+  "qtype": "score",
+  "ms": 2145,
+  "status": 200,
+  "maturity": [
+   "experimental"
+  ],
+  "strict_problems": [
+   "q: keys ['confidence', 'legend', 'maturity', 'probabilities', 'score', 'type']"
+  ],
+  "answer_type": "score",
+  "result": "pass"
+ },
+ {
+  "profile": "decide-2b",
+  "client": "python-urllib",
+  "qtype": "noul",
+  "ms": 1648,
+  "status": 200,
+  "maturity": [
+   "experimental"
+  ],
+  "strict_problems": [
+   "q: bad noul answer"
+  ],
+  "answer_type": "noul",
+  "result": "pass"
+ },
+ {
+  "profile": "decide-2b",
+  "client": "python-urllib",
+  "qtype": "choice",
+  "ms": 1955,
+  "status": 200,
+  "maturity": [
+   "experimental"
+  ],
+  "strict_problems": [
+   "q: keys ['choice', 'confidence', 'maturity', 'probabilities', 'type']"
+  ],
+  "answer_type": "choice",
+  "result": "pass"
+ },
+ {
+  "profile": "decide-2b",
+  "client": "python-urllib",
+  "qtype": "score",
+  "ms": 2057,
+  "status": 200,
+  "maturity": [
+   "experimental"
+  ],
+  "strict_problems": [
+   "q: keys ['confidence', 'legend', 'maturity', 'probabilities', 'score', 'type']"
+  ],
+  "answer_type": "score",
+  "result": "pass"
+ },
+ {
+  "profile": "decide-2b",
+  "client": "python-requests",
+  "qtype": "noul",
+  "ms": 1680,
+  "status": 200,
+  "maturity": [
+   "experimental"
+  ],
+  "strict_problems": [
+   "q: bad noul answer"
+  ],
+  "answer_type": "noul",
+  "result": "pass"
+ },
+ {
+  "profile": "decide-2b",
+  "client": "python-requests",
+  "qtype": "choice",
+  "ms": 2058,
+  "status": 200,
+  "maturity": [
+   "experimental"
+  ],
+  "strict_problems": [
+   "q: keys ['choice', 'confidence', 'maturity', 'probabilities', 'type']"
+  ],
+  "answer_type": "choice",
+  "result": "pass"
+ },
+ {
+  "profile": "decide-2b",
+  "client": "python-requests",
+  "qtype": "score",
+  "ms": 2133,
+  "status": 200,
+  "maturity": [
+   "experimental"
+  ],
+  "strict_problems": [
+   "q: keys ['confidence', 'legend', 'maturity', 'probabilities', 'score', 'type']"
+  ],
+  "answer_type": "score",
+  "result": "pass"
+ },
+ {
+  "profile": "decide-2b",
+  "client": "node-fetch",
+  "qtype": "noul",
+  "ms": 1679,
+  "status": 200,
+  "maturity": [
+   "experimental"
+  ],
+  "strict_problems": [
+   "q: bad noul answer"
+  ],
+  "answer_type": "noul",
+  "result": "pass"
+ },
+ {
+  "profile": "decide-2b",
+  "client": "node-fetch",
+  "qtype": "choice",
+  "ms": 2027,
+  "status": 200,
+  "maturity": [
+   "experimental"
+  ],
+  "strict_problems": [
+   "q: keys ['choice', 'confidence', 'maturity', 'probabilities', 'type']"
+  ],
+  "answer_type": "choice",
+  "result": "pass"
+ },
+ {
+  "profile": "decide-2b",
+  "client": "node-fetch",
+  "qtype": "score",
+  "ms": 2106,
+  "status": 200,
+  "maturity": [
+   "experimental"
+  ],
+  "strict_problems": [
+   "q: keys ['confidence', 'legend', 'maturity', 'probabilities', 'score', 'type']"
+  ],
+  "answer_type": "score",
+  "result": "pass"
+ },
+ {
+  "profile": "decide-2b",
+  "client": "go-nethttp",
+  "qtype": "noul",
+  "ms": 1602,
+  "status": 200,
+  "maturity": [
+   "experimental"
+  ],
+  "strict_problems": [
+   "q: bad noul answer"
+  ],
+  "answer_type": "noul",
+  "result": "pass"
+ },
+ {
+  "profile": "decide-2b",
+  "client": "go-nethttp",
+  "qtype": "choice",
+  "ms": 1950,
+  "status": 200,
+  "maturity": [
+   "experimental"
+  ],
+  "strict_problems": [
+   "q: keys ['choice', 'confidence', 'maturity', 'probabilities', 'type']"
+  ],
+  "answer_type": "choice",
+  "result": "pass"
+ },
+ {
+  "profile": "decide-2b",
+  "client": "go-nethttp",
+  "qtype": "score",
+  "ms": 2022,
+  "status": 200,
+  "maturity": [
+   "experimental"
+  ],
+  "strict_problems": [
+   "q: keys ['confidence', 'legend', 'maturity', 'probabilities', 'score', 'type']"
+  ],
+  "answer_type": "score",
+  "result": "pass"
+ },
+ {
+  "profile": "decide-pro",
+  "client": "curl",
+  "qtype": "noul",
+  "ms": 4700,
+  "status": 200,
+  "maturity": [
+   "experimental"
+  ],
+  "strict_problems": [
+   "q: bad noul answer"
+  ],
+  "answer_type": "noul",
+  "result": "pass"
+ },
+ {
+  "profile": "decide-pro",
+  "client": "curl",
+  "qtype": "choice",
+  "ms": 5624,
+  "status": 200,
+  "maturity": [
+   "experimental"
+  ],
+  "strict_problems": [
+   "q: keys ['choice', 'confidence', 'maturity', 'probabilities', 'type']"
+  ],
+  "answer_type": "choice",
+  "result": "pass"
+ },
+ {
+  "profile": "decide-pro",
+  "client": "curl",
+  "qtype": "score",
+  "ms": 5548,
+  "status": 200,
+  "maturity": [
+   "experimental"
+  ],
+  "strict_problems": [
+   "q: keys ['confidence', 'legend', 'maturity', 'probabilities', 'score', 'type']"
+  ],
+  "answer_type": "score",
+  "result": "pass"
+ },
+ {
+  "profile": "decide-pro",
+  "client": "python-urllib",
+  "qtype": "noul",
+  "ms": 4627,
+  "status": 200,
+  "maturity": [
+   "experimental"
+  ],
+  "strict_problems": [
+   "q: bad noul answer"
+  ],
+  "answer_type": "noul",
+  "result": "pass"
+ },
+ {
+  "profile": "decide-pro",
+  "client": "python-urllib",
+  "qtype": "choice",
+  "ms": 5732,
+  "status": 200,
+  "maturity": [
+   "experimental"
+  ],
+  "strict_problems": [
+   "q: keys ['choice', 'confidence', 'maturity', 'probabilities', 'type']"
+  ],
+  "answer_type": "choice",
+  "result": "pass"
+ },
+ {
+  "profile": "decide-pro",
+  "client": "python-urllib",
+  "qtype": "score",
+  "ms": 5587,
+  "status": 200,
+  "maturity": [
+   "experimental"
+  ],
+  "strict_problems": [
+   "q: keys ['confidence', 'legend', 'maturity', 'probabilities', 'score', 'type']"
+  ],
+  "answer_type": "score",
+  "result": "pass"
+ },
+ {
+  "profile": "decide-pro",
+  "client": "python-requests",
+  "qtype": "noul",
+  "ms": 4710,
+  "status": 200,
+  "maturity": [
+   "experimental"
+  ],
+  "strict_problems": [
+   "q: bad noul answer"
+  ],
+  "answer_type": "noul",
+  "result": "pass"
+ },
+ {
+  "profile": "decide-pro",
+  "client": "python-requests",
+  "qtype": "choice",
+  "ms": 5786,
+  "status": 200,
+  "maturity": [
+   "experimental"
+  ],
+  "strict_problems": [
+   "q: keys ['choice', 'confidence', 'maturity', 'probabilities', 'type']"
+  ],
+  "answer_type": "choice",
+  "result": "pass"
+ },
+ {
+  "profile": "decide-pro",
+  "client": "python-requests",
+  "qtype": "score",
+  "ms": 5708,
+  "status": 200,
+  "maturity": [
+   "experimental"
+  ],
+  "strict_problems": [
+   "q: keys ['confidence', 'legend', 'maturity', 'probabilities', 'score', 'type']"
+  ],
+  "answer_type": "score",
+  "result": "pass"
+ },
+ {
+  "profile": "decide-pro",
+  "client": "node-fetch",
+  "qtype": "noul",
+  "ms": 4691,
+  "status": 200,
+  "maturity": [
+   "experimental"
+  ],
+  "strict_problems": [
+   "q: bad noul answer"
+  ],
+  "answer_type": "noul",
+  "result": "pass"
+ },
+ {
+  "profile": "decide-pro",
+  "client": "node-fetch",
+  "qtype": "choice",
+  "ms": 5758,
+  "status": 200,
+  "maturity": [
+   "experimental"
+  ],
+  "strict_problems": [
+   "q: keys ['choice', 'confidence', 'maturity', 'probabilities', 'type']"
+  ],
+  "answer_type": "choice",
+  "result": "pass"
+ },
+ {
+  "profile": "decide-pro",
+  "client": "node-fetch",
+  "qtype": "score",
+  "ms": 5623,
+  "status": 200,
+  "maturity": [
+   "experimental"
+  ],
+  "strict_problems": [
+   "q: keys ['confidence', 'legend', 'maturity', 'probabilities', 'score', 'type']"
+  ],
+  "answer_type": "score",
+  "result": "pass"
+ },
+ {
+  "profile": "decide-pro",
+  "client": "go-nethttp",
+  "qtype": "noul",
+  "ms": 4644,
+  "status": 200,
+  "maturity": [
+   "experimental"
+  ],
+  "strict_problems": [
+   "q: bad noul answer"
+  ],
+  "answer_type": "noul",
+  "result": "pass"
+ },
+ {
+  "profile": "decide-pro",
+  "client": "go-nethttp",
+  "qtype": "choice",
+  "ms": 5625,
+  "status": 200,
+  "maturity": [
+   "experimental"
+  ],
+  "strict_problems": [
+   "q: keys ['choice', 'confidence', 'maturity', 'probabilities', 'type']"
+  ],
+  "answer_type": "choice",
+  "result": "pass"
+ },
+ {
+  "profile": "decide-pro",
+  "client": "go-nethttp",
+  "qtype": "score",
+  "ms": 5508,
+  "status": 200,
+  "maturity": [
+   "experimental"
+  ],
+  "strict_problems": [
+   "q: keys ['confidence', 'legend', 'maturity', 'probabilities', 'score', 'type']"
+  ],
+  "answer_type": "score",
+  "result": "pass"
+ },
+ {
+  "profile": "decide-max",
+  "client": "curl",
+  "qtype": "noul",
+  "ms": 8019,
+  "status": 200,
+  "maturity": [
+   "experimental"
+  ],
+  "strict_problems": [
+   "q: bad noul answer"
+  ],
+  "answer_type": "noul",
+  "result": "pass"
+ },
+ {
+  "profile": "decide-max",
+  "client": "curl",
+  "qtype": "choice",
+  "ms": 9589,
+  "status": 200,
+  "maturity": [
+   "experimental"
+  ],
+  "strict_problems": [
+   "q: keys ['choice', 'confidence', 'maturity', 'probabilities', 'type']"
+  ],
+  "answer_type": "choice",
+  "result": "pass"
+ },
+ {
+  "profile": "decide-max",
+  "client": "curl",
+  "qtype": "score",
+  "ms": 9512,
+  "status": 200,
+  "maturity": [
+   "experimental"
+  ],
+  "strict_problems": [
+   "q: keys ['confidence', 'legend', 'maturity', 'probabilities', 'score', 'type']"
+  ],
+  "answer_type": "score",
+  "result": "pass"
+ },
+ {
+  "profile": "decide-max",
+  "client": "python-urllib",
+  "qtype": "noul",
+  "ms": 7888,
+  "status": 200,
+  "maturity": [
+   "experimental"
+  ],
+  "strict_problems": [
+   "q: bad noul answer"
+  ],
+  "answer_type": "noul",
+  "result": "pass"
+ },
+ {
+  "profile": "decide-max",
+  "client": "python-urllib",
+  "qtype": "choice",
+  "ms": 9551,
+  "status": 200,
+  "maturity": [
+   "experimental"
+  ],
+  "strict_problems": [
+   "q: keys ['choice', 'confidence', 'maturity', 'probabilities', 'type']"
+  ],
+  "answer_type": "choice",
+  "result": "pass"
+ },
+ {
+  "profile": "decide-max",
+  "client": "python-urllib",
+  "qtype": "score",
+  "ms": 9668,
+  "status": 200,
+  "maturity": [
+   "experimental"
+  ],
+  "strict_problems": [
+   "q: keys ['confidence', 'legend', 'maturity', 'probabilities', 'score', 'type']"
+  ],
+  "answer_type": "score",
+  "result": "pass"
+ },
+ {
+  "profile": "decide-max",
+  "client": "python-requests",
+  "qtype": "noul",
+  "ms": 7996,
+  "status": 200,
+  "maturity": [
+   "experimental"
+  ],
+  "strict_problems": [
+   "q: bad noul answer"
+  ],
+  "answer_type": "noul",
+  "result": "pass"
+ },
+ {
+  "profile": "decide-max",
+  "client": "python-requests",
+  "qtype": "choice",
+  "ms": 9908,
+  "status": 200,
+  "maturity": [
+   "experimental"
+  ],
+  "strict_problems": [
+   "q: keys ['choice', 'confidence', 'maturity', 'probabilities', 'type']"
+  ],
+  "answer_type": "choice",
+  "result": "pass"
+ },
+ {
+  "profile": "decide-max",
+  "client": "python-requests",
+  "qtype": "score",
+  "ms": 9851,
+  "status": 200,
+  "maturity": [
+   "experimental"
+  ],
+  "strict_problems": [
+   "q: keys ['confidence', 'legend', 'maturity', 'probabilities', 'score', 'type']"
+  ],
+  "answer_type": "score",
+  "result": "pass"
+ },
+ {
+  "profile": "decide-max",
+  "client": "node-fetch",
+  "qtype": "noul",
+  "ms": 8036,
+  "status": 200,
+  "maturity": [
+   "experimental"
+  ],
+  "strict_problems": [
+   "q: bad noul answer"
+  ],
+  "answer_type": "noul",
+  "result": "pass"
+ },
+ {
+  "profile": "decide-max",
+  "client": "node-fetch",
+  "qtype": "choice",
+  "ms": 9833,
+  "status": 200,
+  "maturity": [
+   "experimental"
+  ],
+  "strict_problems": [
+   "q: keys ['choice', 'confidence', 'maturity', 'probabilities', 'type']"
+  ],
+  "answer_type": "choice",
+  "result": "pass"
+ },
+ {
+  "profile": "decide-max",
+  "client": "node-fetch",
+  "qtype": "score",
+  "ms": 9645,
+  "status": 200,
+  "maturity": [
+   "experimental"
+  ],
+  "strict_problems": [
+   "q: keys ['confidence', 'legend', 'maturity', 'probabilities', 'score', 'type']"
+  ],
+  "answer_type": "score",
+  "result": "pass"
+ },
+ {
+  "profile": "decide-max",
+  "client": "go-nethttp",
+  "qtype": "noul",
+  "ms": 7805,
+  "status": 200,
+  "maturity": [
+   "experimental"
+  ],
+  "strict_problems": [
+   "q: bad noul answer"
+  ],
+  "answer_type": "noul",
+  "result": "pass"
+ },
+ {
+  "profile": "decide-max",
+  "client": "go-nethttp",
+  "qtype": "choice",
+  "ms": 9839,
+  "status": 200,
+  "maturity": [
+   "experimental"
+  ],
+  "strict_problems": [
+   "q: keys ['choice', 'confidence', 'maturity', 'probabilities', 'type']"
+  ],
+  "answer_type": "choice",
+  "result": "pass"
+ },
+ {
+  "profile": "decide-max",
+  "client": "go-nethttp",
+  "qtype": "score",
+  "ms": 9682,
+  "status": 200,
+  "maturity": [
+   "experimental"
+  ],
+  "strict_problems": [
+   "q: keys ['confidence', 'legend', 'maturity', 'probabilities', 'score', 'type']"
+  ],
+  "answer_type": "score",
+  "result": "pass"
+ }
+]

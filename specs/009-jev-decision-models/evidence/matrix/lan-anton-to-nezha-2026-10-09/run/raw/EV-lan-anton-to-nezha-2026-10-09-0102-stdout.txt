@@ -1,0 +1,14 @@
+[
+ {
+  "request": "GET /v1/does-not-exist auth=key",
+  "status": 404,
+  "headers": {
+   "content-type": "application/json; charset=utf-8",
+   "x-llmctl-request-id": "c8c1806facad85b0"
+  },
+  "body": "{\"message\":\"Not found.\",\"error_type\":\"invalid_request\"}",
+  "error": null,
+  "trust": null,
+  "note": null
+ }
+]

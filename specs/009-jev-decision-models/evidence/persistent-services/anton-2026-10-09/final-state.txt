@@ -1,0 +1,20 @@
+## llmctl-decide-gateway (warnings+errors since 15:25)
+-- No entries --
+## llmctl-onnx@decide-nli (warnings+errors since 15:25)
+-- No entries --
+## llmctl-llama@decide-kev-08b (warnings+errors since 15:25)
+-- No entries --
+## llmctl-llama@vision (warnings+errors since 15:25)
+-- No entries --
+
+profile          port   mode     RAM MiB    VRAM MiB   enabled  state
+decide-kev-08b   8104   gpu      2048       2900       yes      running
+decide-nli       8096   cpu      3006       0          yes      running
+vision           8082   gpu      2048       4030       yes      running
+               total        used        free      shared  buff/cache   available
+Mem:           30974        9719        2065         942       20562       21254
+Swap:           8191        3503        4688
+some avg10=0.00 avg60=0.00 avg300=0.00 total=76998699
+full avg10=0.00 avg60=0.00 avg300=0.00 total=72214493
+memory.used [MiB], memory.free [MiB]
+10038 MiB, 1873 MiB

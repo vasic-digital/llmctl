@@ -1,0 +1,4 @@
+{"object":"list","data":[{"id":"byo-nli-xsmall","aliases":["jev-latest","jev-1.13.0","jev-preview","llmctl-byo-nli-xsmall"],"protocol":"nli-onnx","status":"ready","limits":{"max_options":20,"score_levels":[2,10],"max_state_chars":1250,"max_context_tokens":512,"max_pairs":64},"notes":"experimental choice/score: one encoder forward pass per option (latency grows linearly with option count)","template_hash":"<redacted>","maturity":{"choice":{"status":"unmeasured","reason":"not yet measured"},"noul":{"status":"unmeasured","reason":"not yet meas
+---ask
+{"model":"byo-nli-xsmall","answers":{"q":{"type":"choice","choice":"billing","probabilities":{"billing":0.440368902,"legal":0.356815342,"support":0.202815756},"confidence":0.160553353,"maturity":"experimental"}},"usage":{"input_tokens":117,"output_tokens":0},"evidence":{"profile":"byo-nli-xsmall","port":18195,"latency_ms":62.653,"mode":"deterministic","instance":"byo-nli-xsmall","calibrated":false}}
+rc=0

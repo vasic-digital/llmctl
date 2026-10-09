@@ -1,0 +1,55 @@
+### before
+llmctl-decide-gateway.service 2752941
+llmctl-llama@decide-2b.service 2385134
+llmctl-llama@decide-julia.service 2707064
+llmctl-llama@decide-kev-08b.service 2702470
+llmctl-llama@decide-kev-4b.service 2686292
+llmctl-llama@decide-kev-9b.service 2681784
+llmctl-llama@decide-laya.service 2711731
+llmctl-llama@decide-lev.service 2693124
+llmctl-llama@decide-max.service 2677824
+llmctl-llama@decide-pro.service 2385658
+llmctl-onnx@decide-nli.service 2383325
+decide-2b.run
+decide-julia.run
+decide-kev-08b.run
+decide-kev-4b.run
+decide-kev-9b.run
+decide-laya.run
+decide-lev.run
+decide-max.run
+decide-nli.run
+decide-pro.run
+[llmctl] reconciled missing reservation for 'decide-2b' (enabled + genuinely active, no .run marker - likely a post-reboot state desync)
+[llmctl] reconciled missing reservation for 'decide-julia' (enabled + genuinely active, no .run marker - likely a post-reboot state desync)
+[llmctl] reconciled missing reservation for 'decide-kev-08b' (enabled + genuinely active, no .run marker - likely a post-reboot state desync)
+[llmctl] reconciled missing reservation for 'decide-kev-4b' (enabled + genuinely active, no .run marker - likely a post-reboot state desync)
+[llmctl] reconciled missing reservation for 'decide-kev-9b' (enabled + genuinely active, no .run marker - likely a post-reboot state desync)
+[llmctl] reconciled missing reservation for 'decide-laya' (enabled + genuinely active, no .run marker - likely a post-reboot state desync)
+[llmctl] reconciled missing reservation for 'decide-lev' (enabled + genuinely active, no .run marker - likely a post-reboot state desync)
+[llmctl] reconciled missing reservation for 'decide-max' (enabled + genuinely active, no .run marker - likely a post-reboot state desync)
+[llmctl] reconciled missing reservation for 'decide-nli' (enabled + genuinely active, no .run marker - likely a post-reboot state desync)
+[llmctl] reconciled missing reservation for 'decide-pro' (enabled + genuinely active, no .run marker - likely a post-reboot state desync)
+profile          port   mode     RAM MiB    VRAM MiB   enabled  state
+decide-2b        8098   gpu      2048       3006       yes      running
+decide-julia     8103   gpu      2048       212        yes      running
+decide-kev-08b   8104   gpu      2048       2900       yes      running
+decide-kev-4b    8105   gpu      4899       7328       yes      running
+decide-kev-9b    8106   gpu      2048       11104      yes      running
+decide-laya      8107   gpu      2048       574        yes      running
+decide-lev       8108   gpu      3130       3926       yes      running
+decide-max       8097   gpu      2048       10174      yes      running
+decide-nli       8096   cpu      3006       0          yes      running
+decide-pro       8094   gpu      2048       5260       yes      running
+### after reexec
+llmctl-decide-gateway.service 2752941 active
+llmctl-llama@decide-2b.service 2385134 active
+llmctl-llama@decide-julia.service 2707064 active
+llmctl-llama@decide-kev-08b.service 2702470 active
+llmctl-llama@decide-kev-4b.service 2686292 active
+llmctl-llama@decide-kev-9b.service 2681784 active
+llmctl-llama@decide-laya.service 2711731 active
+llmctl-llama@decide-lev.service 2693124 active
+llmctl-llama@decide-max.service 2677824 active
+llmctl-llama@decide-pro.service 2385658 active
+llmctl-onnx@decide-nli.service 2383325 active

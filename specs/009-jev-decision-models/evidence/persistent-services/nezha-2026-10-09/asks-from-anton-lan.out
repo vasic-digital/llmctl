@@ -1,0 +1,25 @@
+2026-10-09T13:45:42Z
+## anton->192.168.1.90:8095 (TLS verified vs CA, SAN ip) profile=decide-nli type=noul
+{"model":"decide-nli","answers":{"q":{"type":"noul","noul":0.862188647,"maturity":"experimental"}},"usage":{"input_tokens":15,"output_tokens":0},"evidence":{"profile":"decide-nli","port":8095,"latency_ms":90.925,"mode":"deterministic","instance":"decide-nli","calibrated":false}}
+## anton->192.168.1.90:8095 (TLS verified vs CA, SAN ip) profile=decide-nli type=choice
+{"model":"decide-nli","answers":{"q":{"type":"choice","choice":"billing","probabilities":{"billing":0.926031732,"legal":0.073968268},"confidence":0.852063464,"maturity":"experimental"}},"usage":{"input_tokens":69,"output_tokens":0},"evidence":{"profile":"decide-nli","port":8095,"latency_ms":199.128,"mode":"deterministic","instan
+## anton->192.168.1.90:8095 (TLS verified vs CA, SAN ip) profile=decide-nli type=score
+{"model":"decide-nli","answers":{"q":{"type":"score","score":3.493107605,"legend":{"0":"very negative","1":"negative","2":"neutral","3":"positive","4":"very positive"},"probabilities":{"0":0.000041508,"1":0.000085367,"2":0.002715026,"3":0.50104021,"4":0.496117889},"confidence":0.376300262,"maturity":"experimental"}},"usage":{"in
+## anton->192.168.1.90:8095 (TLS verified vs CA, SAN ip) profile=decide-2b type=noul
+{"model":"decide-2b","answers":{"q":{"type":"noul","noul":0.934229165,"maturity":"experimental"}},"usage":{"input_tokens":71,"output_tokens":1},"evidence":{"profile":"decide-2b","port":8095,"latency_ms":1283.512,"mode":"deterministic","instance":"decide-2b","calibrated":false}}
+## anton->192.168.1.90:8095 (TLS verified vs CA, SAN ip) profile=decide-2b type=choice
+{"model":"decide-2b","answers":{"q":{"type":"choice","choice":"billing","probabilities":{"billing":0.952157583,"legal":0.047842417},"confidence":0.904315166,"maturity":"experimental"}},"usage":{"input_tokens":105,"output_tokens":1},"evidence":{"profile":"decide-2b","port":8095,"latency_ms":1547.292,"mode":"deterministic","instan
+## anton->192.168.1.90:8095 (TLS verified vs CA, SAN ip) profile=decide-2b type=score
+{"model":"decide-2b","answers":{"q":{"type":"score","score":3.598263931,"legend":{"0":"very negative","1":"negative","2":"neutral","3":"positive","4":"very positive"},"probabilities":{"0":0.003844083,"1":0.000266672,"2":0.000599307,"3":0.384361107,"4":0.610928831},"confidence":0.513661039,"maturity":"experimental"}},"usage":{"in
+## anton->192.168.1.90:8095 (TLS verified vs CA, SAN ip) profile=decide-pro type=noul
+{"model":"decide-pro","answers":{"q":{"type":"noul","noul":0.978092715,"maturity":"experimental"}},"usage":{"input_tokens":71,"output_tokens":1},"evidence":{"profile":"decide-pro","port":8095,"latency_ms":3599.978,"mode":"deterministic","instance":"decide-pro","calibrated":false}}
+## anton->192.168.1.90:8095 (TLS verified vs CA, SAN ip) profile=decide-pro type=choice
+{"model":"decide-pro","answers":{"q":{"type":"choice","choice":"billing","probabilities":{"billing":0.998561012,"legal":0.001438988},"confidence":0.997122024,"maturity":"experimental"}},"usage":{"input_tokens":105,"output_tokens":1},"evidence":{"profile":"decide-pro","port":8095,"latency_ms":4453.078,"mode":"deterministic","inst
+## anton->192.168.1.90:8095 (TLS verified vs CA, SAN ip) profile=decide-pro type=score
+{"model":"decide-pro","answers":{"q":{"type":"score","score":3.658681784,"legend":{"0":"very negative","1":"negative","2":"neutral","3":"positive","4":"very positive"},"probabilities":{"0":0.000228729,"1":0.000257872,"2":0.000317921,"3":0.338993842,"4":0.660201636},"confidence":0.575252045,"maturity":"experimental"}},"usage":{"i
+## anton->192.168.1.90:8095 (TLS verified vs CA, SAN ip) profile=decide-max type=noul
+{"model":"decide-max","answers":{"q":{"type":"noul","noul":0.994534064,"maturity":"experimental"}},"usage":{"input_tokens":71,"output_tokens":1},"evidence":{"profile":"decide-max","port":8095,"latency_ms":6819.561,"mode":"deterministic","instance":"decide-max","calibrated":false}}
+## anton->192.168.1.90:8095 (TLS verified vs CA, SAN ip) profile=decide-max type=choice
+{"model":"decide-max","answers":{"q":{"type":"choice","choice":"billing","probabilities":{"billing":0.999868081,"legal":0.000131919},"confidence":0.999736161,"maturity":"experimental"}},"usage":{"input_tokens":105,"output_tokens":1},"evidence":{"profile":"decide-max","port":8095,"latency_ms":8196.011,"mode":"deterministic","inst
+## anton->192.168.1.90:8095 (TLS verified vs CA, SAN ip) profile=decide-max type=score
+{"model":"decide-max","answers":{"q":{"type":"score","score":3.878005695,"legend":{"0":"very negative","1":"negative","2":"neutral","3":"positive","4":"very positive"},"probabilities":{"0":0.000328781,"1":0.000465617,"2":0.000817649,"3":0.117647032,"4":0.880740921},"confidence":0.850926151,"maturity":"experimental"}},"usage":{"i

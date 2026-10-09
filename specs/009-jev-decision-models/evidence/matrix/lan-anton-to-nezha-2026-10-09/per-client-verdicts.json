@@ -1,0 +1,112 @@
+{
+ "curl": {
+  "decide-nli": {
+   "pass": 3,
+   "of": 3,
+   "ms_median": 315
+  },
+  "decide-2b": {
+   "pass": 3,
+   "of": 3,
+   "ms_median": 1949
+  },
+  "decide-pro": {
+   "pass": 3,
+   "of": 3,
+   "ms_median": 5548
+  },
+  "decide-max": {
+   "pass": 3,
+   "of": 3,
+   "ms_median": 9512
+  }
+ },
+ "python-urllib": {
+  "decide-nli": {
+   "pass": 3,
+   "of": 3,
+   "ms_median": 262
+  },
+  "decide-2b": {
+   "pass": 3,
+   "of": 3,
+   "ms_median": 1955
+  },
+  "decide-pro": {
+   "pass": 3,
+   "of": 3,
+   "ms_median": 5587
+  },
+  "decide-max": {
+   "pass": 3,
+   "of": 3,
+   "ms_median": 9551
+  }
+ },
+ "python-requests": {
+  "decide-nli": {
+   "pass": 3,
+   "of": 3,
+   "ms_median": 351
+  },
+  "decide-2b": {
+   "pass": 3,
+   "of": 3,
+   "ms_median": 2058
+  },
+  "decide-pro": {
+   "pass": 3,
+   "of": 3,
+   "ms_median": 5708
+  },
+  "decide-max": {
+   "pass": 3,
+   "of": 3,
+   "ms_median": 9851
+  }
+ },
+ "node-fetch": {
+  "decide-nli": {
+   "pass": 3,
+   "of": 3,
+   "ms_median": 273
+  },
+  "decide-2b": {
+   "pass": 3,
+   "of": 3,
+   "ms_median": 2027
+  },
+  "decide-pro": {
+   "pass": 3,
+   "of": 3,
+   "ms_median": 5623
+  },
+  "decide-max": {
+   "pass": 3,
+   "of": 3,
+   "ms_median": 9645
+  }
+ },
+ "go-nethttp": {
+  "decide-nli": {
+   "pass": 3,
+   "of": 3,
+   "ms_median": 234
+  },
+  "decide-2b": {
+   "pass": 3,
+   "of": 3,
+   "ms_median": 1950
+  },
+  "decide-pro": {
+   "pass": 3,
+   "of": 3,
+   "ms_median": 5508
+  },
+  "decide-max": {
+   "pass": 3,
+   "of": 3,
+   "ms_median": 9682
+  }
+ }
+}

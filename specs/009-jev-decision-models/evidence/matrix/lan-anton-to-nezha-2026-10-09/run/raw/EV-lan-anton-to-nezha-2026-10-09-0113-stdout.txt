@@ -1,0 +1,38 @@
+[
+ {
+  "request": "POST /v1/systemone auth=key",
+  "status": 400,
+  "headers": {
+   "content-type": "application/json; charset=utf-8",
+   "x-llmctl-request-id": "df419695d4df5fca"
+  },
+  "body": "{\"message\":\"Request body must be a JSON object.\",\"error_type\":\"invalid_request\"}",
+  "error": null,
+  "trust": null,
+  "note": null
+ },
+ {
+  "request": "POST /v1/systemone auth=key",
+  "status": 400,
+  "headers": {
+   "content-type": "application/json; charset=utf-8",
+   "x-llmctl-request-id": "c5c110fa7dbf19f0"
+  },
+  "body": "{\"message\":\"Request body must be a JSON object.\",\"error_type\":\"invalid_request\"}",
+  "error": null,
+  "trust": null,
+  "note": null
+ },
+ {
+  "request": "POST /v1/systemone auth=key",
+  "status": 400,
+  "headers": {
+   "content-type": "application/json; charset=utf-8",
+   "x-llmctl-request-id": "2e601f41c7700734"
+  },
+  "body": "{\"message\":\"Request body must be a JSON object.\",\"error_type\":\"invalid_request\"}",
+  "error": null,
+  "trust": null,
+  "note": null
+ }
+]

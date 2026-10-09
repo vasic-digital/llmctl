@@ -1,0 +1,10 @@
+building the onnx encoder runtime venv at /home/milos/.local/share/llmctl/venv-onnx
+[llmctl] hash-locked pins: numpy==2.4.6 numpy==2.5.3 onnxruntime==1.30.0 sentencepiece==0.2.2 tokenizers==0.23.2 (every file verified with --require-hashes; lock: /home/milos/llmctl-3.1.0-factory/lib/lock/requirements-onnx.lock)
+[llmctl] onnx runtime venv ready: /home/milos/.local/share/llmctl/venv-onnx/bin/python
+ONNX_EXIT=0
+WARN: submodule submodules/llama.cpp not initialized
+WARN: submodule submodules/colibri not initialized
+[llmctl] initializing submodules (git submodule update --init)
+fatal: not a git repository (or any parent up to mount point /)
+Stopping at filesystem boundary (GIT_DISCOVERY_ACROSS_FILESYSTEM not set).
+LLAMA_EXIT=128

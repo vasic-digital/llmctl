@@ -1,0 +1,14 @@
+[
+ {
+  "request": "POST /v1/systemone auth=key",
+  "status": 422,
+  "headers": {
+   "content-type": "application/json; charset=utf-8",
+   "x-llmctl-request-id": "07371c8f626eff63"
+  },
+  "body": "{\"message\":\"Unknown model.\",\"error_type\":\"unknown_model\"}",
+  "error": null,
+  "trust": null,
+  "note": null
+ }
+]

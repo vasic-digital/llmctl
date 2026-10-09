@@ -1,0 +1,14 @@
+[
+ {
+  "request": "GET /v1/models auth=key",
+  "status": 200,
+  "headers": {
+   "content-type": "application/json; charset=utf-8",
+   "x-llmctl-request-id": "d4637a2c371f8e45"
+  },
+  "body": "",
+  "error": "adapter produced invalid base64",
+  "trust": null,
+  "note": "body is not JSON (JSONDecodeError)"
+ }
+]

@@ -1,0 +1,9 @@
+profile 'byo-nli-xsmall' passed checksum verification
+rc=0
+[llmctl] wrote /home/milosvasic/.cache/llmctl-byo-demo/state/services/byo-nli-xsmall.env
+Job for llmctl-onnx@byo-nli-xsmall.service failed because of unavailable resources or another system error.
+See "systemctl --user status llmctl-onnx@byo-nli-xsmall.service" and "journalctl --user -xeu llmctl-onnx@byo-nli-xsmall.service" for details.
+ERROR: failed to start 'byo-nli-xsmall': the service backend refused to start it (see: llmctl logs byo-nli-xsmall; on Linux, check 'llmctl install' has been run and 'systemctl --user status llmctl-onnx@byo-nli-xsmall.service')
+rc=1
+no llmctl services running
+rc=0

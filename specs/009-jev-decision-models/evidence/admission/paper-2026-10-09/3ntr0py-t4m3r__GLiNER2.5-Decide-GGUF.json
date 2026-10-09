@@ -1,0 +1,137 @@
+{
+  "schema": "llmctl.admission/1",
+  "candidate": {
+    "name": "gliner2.5-decide-gguf",
+    "repo": "3ntr0py-t4m3r/GLiNER2.5-Decide-GGUF",
+    "pinned": "no",
+    "protocol_hint": "unsupported",
+    "known_issue": "",
+    "name_collision": "",
+    "kind": "weights"
+  },
+  "slug": "3ntr0py-t4m3r__GLiNER2.5-Decide-GGUF",
+  "mode": "paper-only",
+  "retrieved_at": "2026-10-09T14:24:32Z",
+  "existence": {
+    "verdict": "VERIFIED",
+    "evidence": "HTTP 200 from <LLMCTL_HF_BASE>/api/models/3ntr0py-t4m3r/GLiNER2.5-Decide-GGUF",
+    "http_status": 200
+  },
+  "api": {
+    "id": "3ntr0py-t4m3r/GLiNER2.5-Decide-GGUF",
+    "sha": "e043e5ccff28181296b5441bd0f4ad502c815412",
+    "lastModified": "2026-10-04T21:53:35.000Z",
+    "author": "3ntr0py-t4m3r",
+    "gated": false,
+    "private": false,
+    "disabled": false
+  },
+  "pins": [
+    {
+      "name": "models/gliner2.5-decide-q4_k_m.gguf",
+      "size": 299547616,
+      "sha256": "44b496627d85c19e407ffb188866456ef6c8b73ca1efd36b31981c28a96346b5",
+      "role": "model"
+    }
+  ],
+  "protocol": {
+    "class": "systemone-native",
+    "source": "API gguf.decision_type=gliner"
+  },
+  "needs_engine_advance": false,
+  "tier": "below-minimum",
+  "est_memory_bytes": 389411900,
+  "g10_subchecks": [
+    {
+      "check": "loadability",
+      "status": "SKIP",
+      "evidence": "not attempted: earlier gate(s) failed: ['G4']"
+    },
+    {
+      "check": "smoke_answer",
+      "status": "SKIP",
+      "evidence": "not attempted: earlier gate(s) failed: ['G4']"
+    },
+    {
+      "check": "determinism_repeats",
+      "status": "SKIP",
+      "evidence": "not attempted: earlier gate(s) failed: ['G4']"
+    },
+    {
+      "check": "option_order_sensitivity",
+      "status": "SKIP",
+      "evidence": "not attempted: earlier gate(s) failed: ['G4']"
+    },
+    {
+      "check": "memory_fit_measured",
+      "status": "SKIP",
+      "evidence": "not attempted: earlier gate(s) failed: ['G4']"
+    }
+  ],
+  "gates": [
+    {
+      "gate": "G1",
+      "name": "licence allow-list",
+      "status": "PASS",
+      "evidence": "weights licence apache-2.0 (SPDX, from the HF API) is on the allow-list; licence files in repo: none"
+    },
+    {
+      "gate": "G2",
+      "name": "stable revision",
+      "status": "PASS",
+      "evidence": "immutable ref e043e5ccff28181296b5441bd0f4ad502c815412, lastModified 2026-10-04T21:53:35.000Z; re-verify at release"
+    },
+    {
+      "gate": "G3",
+      "name": "pinned size+sha256",
+      "status": "PASS",
+      "evidence": "1 file(s) with size+sha256 from the HF API LFS oid (auto-selected): models/gliner2.5-decide-q4_k_m.gguf 299547616 B sha256:44b496627d85..."
+    },
+    {
+      "gate": "G4",
+      "name": "loadable by pinned engine",
+      "status": "FAIL",
+      "evidence": "GGUF arch 'deberta-v3' is absent from the pinned tree and an engine bump is not proven to add it (custom / patched architecture)"
+    },
+    {
+      "gate": "G5",
+      "name": "fits budgets",
+      "status": "PASS",
+      "evidence": "largest model file models/gliner2.5-decide-q4_k_m.gguf = 299547616 B (cap 10737418240 B), tier below-minimum, memory ESTIMATE 389411900 B (gguf: size*1.3) vs budget 19487239372 B (60% of /proc/meminfo MemTotal (Constitution 12.6))"
+    },
+    {
+      "gate": "G6",
+      "name": "protocol classification",
+      "status": "PASS",
+      "evidence": "systemone-native (API gguf.decision_type=gliner); GGUF metadata in API: arch=deberta-v3, chat_template=not reported (tokenizer is embedded in GGUF)"
+    },
+    {
+      "gate": "G7",
+      "name": "supply chain",
+      "status": "PASS",
+      "evidence": "pin has no pickle files"
+    },
+    {
+      "gate": "G8",
+      "name": "provenance",
+      "status": "PASS",
+      "evidence": "API author '3ntr0py-t4m3r' == repo owner; HF-side cross-link to GitHub/PyPI not checked in paper mode"
+    },
+    {
+      "gate": "G9",
+      "name": "known-issue sweep",
+      "status": "PENDING",
+      "evidence": "live upstream issue-tracker sweep not done by this driver (offline); none recorded in the research register"
+    },
+    {
+      "gate": "G10",
+      "name": "real run",
+      "status": "SKIP",
+      "evidence": "not attempted: earlier gate(s) failed: ['G4']"
+    }
+  ],
+  "disposition": "USER-ONLY",
+  "reasons": [
+    "G4: GGUF arch 'deberta-v3' is absent from the pinned tree and an engine bump is not proven to add it (custom / patched architecture)"
+  ]
+}

@@ -1,0 +1,138 @@
+{
+  "schema": "llmctl.admission/1",
+  "candidate": {
+    "name": "julia-1",
+    "repo": "ggml-org/Julia-1-GGUF",
+    "pinned": "no",
+    "protocol_hint": "systemone-native",
+    "known_issue": "note:llama.cpp#30073 large inputs rejected at default physical batch 512 (open at 2026-10-07; -b must be >= prompt length)",
+    "name_collision": "",
+    "kind": "weights"
+  },
+  "slug": "ggml-org__Julia-1-GGUF",
+  "mode": "paper-only",
+  "retrieved_at": "2026-10-09T14:24:14Z",
+  "existence": {
+    "verdict": "VERIFIED",
+    "evidence": "HTTP 200 from <LLMCTL_HF_BASE>/api/models/ggml-org/Julia-1-GGUF",
+    "http_status": 200
+  },
+  "api": {
+    "id": "ggml-org/Julia-1-GGUF",
+    "sha": "16fee17949206fbf58da9347daea44d792a81211",
+    "lastModified": "2026-10-01T21:31:06.000Z",
+    "author": "ggml-org",
+    "gated": false,
+    "private": false,
+    "disabled": false
+  },
+  "pins": [
+    {
+      "name": "Julia-1-Q8_0.gguf",
+      "size": 168166496,
+      "sha256": "1ea6a7e87156eeeda88cb7a36a61265b37ba7b993897b7289b99aea5b5e47069",
+      "role": "model"
+    }
+  ],
+  "protocol": {
+    "class": "systemone-native",
+    "source": "API gguf.decision_type=laya"
+  },
+  "needs_engine_advance": false,
+  "tier": "below-minimum",
+  "est_memory_bytes": 218616444,
+  "g10_subchecks": [
+    {
+      "check": "loadability",
+      "status": "PENDING",
+      "evidence": "paper-only mode: needs a real run on a host with the pinned engine"
+    },
+    {
+      "check": "smoke_answer",
+      "status": "PENDING",
+      "evidence": "paper-only mode: needs a real run on a host with the pinned engine"
+    },
+    {
+      "check": "determinism_repeats",
+      "status": "PENDING",
+      "evidence": "paper-only mode: needs a real run on a host with the pinned engine"
+    },
+    {
+      "check": "option_order_sensitivity",
+      "status": "PENDING",
+      "evidence": "paper-only mode: needs a real run on a host with the pinned engine"
+    },
+    {
+      "check": "memory_fit_measured",
+      "status": "PENDING",
+      "evidence": "paper-only mode: needs a real run on a host with the pinned engine"
+    }
+  ],
+  "gates": [
+    {
+      "gate": "G1",
+      "name": "licence allow-list",
+      "status": "PASS",
+      "evidence": "weights licence apache-2.0 (SPDX, from the HF API) is on the allow-list; licence files in repo: none"
+    },
+    {
+      "gate": "G2",
+      "name": "stable revision",
+      "status": "PASS",
+      "evidence": "immutable ref 16fee17949206fbf58da9347daea44d792a81211, lastModified 2026-10-01T21:31:06.000Z; re-verify at release"
+    },
+    {
+      "gate": "G3",
+      "name": "pinned size+sha256",
+      "status": "PASS",
+      "evidence": "1 file(s) with size+sha256 from the HF API LFS oid: Julia-1-Q8_0.gguf 168166496 B sha256:1ea6a7e87156..."
+    },
+    {
+      "gate": "G4",
+      "name": "loadable by pinned engine",
+      "status": "PASS",
+      "evidence": "arch modern-bert and /v1/systemone both present in the pinned tree"
+    },
+    {
+      "gate": "G5",
+      "name": "fits budgets",
+      "status": "PASS",
+      "evidence": "largest model file Julia-1-Q8_0.gguf = 168166496 B (cap 10737418240 B), tier below-minimum, memory ESTIMATE 218616444 B (gguf: size*1.3) vs budget 19487239372 B (60% of /proc/meminfo MemTotal (Constitution 12.6))"
+    },
+    {
+      "gate": "G6",
+      "name": "protocol classification",
+      "status": "PASS",
+      "evidence": "systemone-native (API gguf.decision_type=laya); GGUF metadata in API: arch=modern-bert, chat_template=not reported (tokenizer is embedded in GGUF)"
+    },
+    {
+      "gate": "G7",
+      "name": "supply chain",
+      "status": "PASS",
+      "evidence": "pin has no pickle files"
+    },
+    {
+      "gate": "G8",
+      "name": "provenance",
+      "status": "PASS",
+      "evidence": "API author 'ggml-org' == repo owner; HF-side cross-link to GitHub/PyPI not checked in paper mode"
+    },
+    {
+      "gate": "G9",
+      "name": "known-issue sweep",
+      "status": "PENDING",
+      "evidence": "non-blocking note recorded (llama.cpp#30073 large inputs rejected at default physical batch 512 (open at 2026-10-07; -b must be >= prompt length)); live tracker sweep not done by this driver"
+    },
+    {
+      "gate": "G10",
+      "name": "real run",
+      "status": "PENDING",
+      "evidence": "paper-only mode: needs a real run on a host with the pinned engine"
+    }
+  ],
+  "disposition": "ADMIT-CANDIDATE",
+  "reasons": [
+    "G9 PENDING: non-blocking note recorded (llama.cpp#30073 large inputs rejected at default physical batch 512 (open at 2026-10-07; -b must be >= prompt length)); live tracker sweep not done by this driver",
+    "G10 PENDING: paper-only mode: needs a real run on a host with the pinned engine"
+  ]
+}

@@ -1,0 +1,149 @@
+profile          port   mode     RAM MiB    VRAM MiB   enabled  state
+decide-2b        8098   gpu      2048       3006       yes      running
+decide-julia     8103   gpu      2048       212        yes      running
+decide-kev-08b   8104   gpu      2048       2900       yes      running
+decide-kev-4b    8105   gpu      4899       7328       yes      running
+decide-kev-9b    8106   gpu      2048       11104      yes      running
+decide-laya      8107   gpu      2048       574        yes      running
+decide-lev       8108   gpu      3130       3926       yes      running
+decide-max       8097   gpu      2048       10174      yes      running
+decide-nli       8096   cpu      3006       0          yes      running
+decide-pro       8094   gpu      2048       5260       yes      running
+model                    status   protocol         calibration                template       aliases
+decide-2b                ready    letter-logit     -                          a9fe279e5946   llmctl-decide-2b
+decide-julia             ready    systemone-native -                          e213a1cfc589   llmctl-decide-julia
+decide-kev-08b           ready    systemone-native -                          e213a1cfc589   llmctl-decide-kev-08b
+decide-kev-4b            ready    systemone-native -                          e213a1cfc589   llmctl-decide-kev-4b
+decide-kev-9b            ready    systemone-native -                          e213a1cfc589   llmctl-decide-kev-9b
+decide-laya              ready    systemone-native -                          e213a1cfc589   llmctl-decide-laya
+decide-lev               ready    systemone-native -                          e213a1cfc589   llmctl-decide-lev
+decide-max               ready    letter-logit     -                          a9fe279e5946   llmctl-decide-max
+decide-nli               ready    nli-onnx         -                          2b80870d1fe8   llmctl-decide-nli
+decide-pro               ready    letter-logit     -                          a9fe279e5946   llmctl-decide-pro
+{
+  "tier": "workstation",
+  "budgets": {
+    "ram_mb": 156664,
+    "vram_mb": 27268,
+    "vram_live": true,
+    "storage_free_mb": 171424
+  },
+  "decision_instances": {
+    "decide": {
+      "instances_gpu": 7,
+      "instances_cpu": 42,
+      "per_instance": {
+        "ram_mb": 2048,
+        "vram_mb": 3671,
+        "slots": 2
+      },
+      "total_decision_slots": 84,
+      "protocol": "letter-logit",
+      "mode": "deterministic",
+      "slots_assume_mode": "throughput",
+      "effective_slots_per_instance": 1,
+      "effective_total_decision_slots": 42,
+      "best_placement": "cpu",
+      "placements": {
+        "gpu": {
+          "ram_mb": 2048,
+          "vram_mb": 3671
+        },
+        "cpu": {
+          "ram_mb": 3671,
+          "vram_mb": 0
+        }
+      },
+      "tier_ok": true
+    },
+    "decide-2b": {
+      "instances_gpu": 9,
+      "instances_cpu": 52,
+      "per_instance": {
+        "ram_mb": 2048,
+        "vram_mb": 3006,
+        "slots": 2
+      },
+      "total_decision_slots": 104,
+      "protocol": "letter-logit",
+      "mode": "deterministic",
+      "slots_assume_mode": "throughput",
+      "effective_slots_per_instance": 1,
+      "effective_total_decision_slots": 52,
+      "best_placement": "cpu",
+      "placements": {
+        "gpu": {
+          "ram_mb": 2048,
+          "vram_mb": 3006
+        },
+        "cpu": {
+          "ram_mb": 3006,
+          "vram_mb": 0
+        }
+      },
+      "tier_ok": true
+    },
+    "decide-julia": {
+      "instances_gpu": 76,
+      "instances_cpu": 92,
+      "per_instance": {
+        "ram_mb": 2048,
+        "vram_mb": 212,
+        "slots": 1
+      },
+      "total_decision_slots": 92,
+      "protocol": "systemone-native",
+      "mode": "deterministic",
+      "slots_assume_mode": "throughput",
+      "effective_slots_per_instance": 1,
+      "effective_total_decision_slots": 92,
+      "best_placement": "cpu",
+      "placements": {
+        "gpu": {
+          "ram_mb": 2048,
+          "vram_mb": 212
+        },
+        "cpu": {
+          "ram_mb": 1698,
+          "vram_mb": 194
+        }
+      },
+      "tier_ok": true
+    },
+    "decide-kev-08b": {
+      "instances_gpu": 9,
+      "instances_cpu": 10,
+      "per_instance": {
+        "ram_mb": 2048,
+        "vram_mb": 2900,
+        "slots": 1
+      },
+      "total_decision_slots": 10,
+      "protocol": "systemone-native",
+      "mode": "deterministic",
+      "slots_assume_mode": "throughput",
+      "effective_slots_per_instance": 1,
+      "effective_total_decision_slots": 10,
+      "best_placement": "cpu",
+      "placements": {
+        "gpu": {
+          "ram_mb": 2048,
+          "vram_mb": 2900
+        },
+        "cpu": {
+          "ram_mb": 5583,
+          "vram_mb": 2621
+        }
+      },
+      "tier_ok": true
+    },
+    "decide-kev-4b": {
+      "instances_gpu": 3,
+      "instances_cpu": 5,
+      "per_instance": {
+        "ram_mb": 4899,
+        "vram_mb": 7328,
+        "slots": 1
+      },
+      "total_decision_slots": 5,
+      "protocol": "syst

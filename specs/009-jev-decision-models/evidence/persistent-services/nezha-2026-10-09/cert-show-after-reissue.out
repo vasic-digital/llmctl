@@ -1,0 +1,14 @@
+mode           ca-leaf
+dir            /home/milosvasic/llmctl/cert
+version        2
+ca_cert        /home/milosvasic/llmctl/cert/ca/ca.crt
+leaf_cert      /home/milosvasic/llmctl/cert/v-2/leaf.crt
+leaf_key       /home/milosvasic/llmctl/cert/v-2/leaf.key
+chain          /home/milosvasic/llmctl/cert/v-2/chain.pem
+ca_sha256      57:B2:5A:F6:11:31:29:29:0C:C4:4C:49:AC:E0:D4:07:21:4D:66:3E:29:74:42:47:1C:F6:FF:19:BD:B7:62:3C
+leaf_sha256    04:42:5C:82:63:08:CE:41:4C:82:B3:BD:C9:24:B8:AB:C1:54:BB:C5:02:17:86:95:06:7D:9F:9B:4C:1A:58:73
+sans           nezha,localhost,nezha.local,127.0.0.1,::1,192.168.1.90,10.152.21.129,10.1.106.73,fc00:bbbb:bbbb:bb01:d:0:18:1581
+not_before     2026-10-09T13:39:51Z
+not_after      2027-11-10T13:44:51Z
+days_left      396
+ca_key_on_host true

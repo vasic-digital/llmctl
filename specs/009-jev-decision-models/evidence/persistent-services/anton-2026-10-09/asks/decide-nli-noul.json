@@ -1,0 +1,1 @@
+{"model":"decide-nli","answers":{"q":{"type":"noul","noul":0.03619723,"maturity":"experimental"}},"usage":{"input_tokens":53,"output_tokens":0},"evidence":{"profile":"decide-nli","port":8095,"latency_ms":516.959,"mode":"deterministic","instance":"decide-nli","calibrated":false}}

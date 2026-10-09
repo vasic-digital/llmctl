@@ -1,0 +1,17 @@
+[
+ {
+  "request": "GET /v1/models auth=none",
+  "status": 401,
+  "headers": {
+   "content-type": "application/json; charset=utf-8",
+   "www-authenticate": "Bearer realm=\"llmctl\"",
+   "x-llmctl-request-id": "2fe77bcb32add306"
+  },
+  "body": "{\"message\":\"Authentication required.\",\"error_type\":\"unauthorized\"}",
+  "error": null,
+  "trust": [
+   "spki-pin ok"
+  ],
+  "note": null
+ }
+]

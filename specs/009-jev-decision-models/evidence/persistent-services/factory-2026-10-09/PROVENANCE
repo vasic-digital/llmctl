@@ -1,0 +1,9 @@
+host: the-factory (10.6.100.221), user milos, ALT Linux 11.1, kernel 6.12, installed 2026-10-09
+install dir: ~/llmctl-3.1.0-factory
+HEAD at snapshot time: d9cf7a5ede1e16fc6e3f5a583ca91504fa83427e (local HEAD has since moved; the deployed tree = that HEAD + the patch below)
+snapshot: git archive HEAD (head.tgz sha256 cbec27e0ead52669bf9ab27ec44f61815b0ccab3fdc3de2587d76f51b310b078), no submodules
+working-tree patch (git diff HEAD excluding specs/*/evidence): c7844bda23e9ad1a88e9f7f40f7ca5f47248b236cb5d516c6e91d004d8452633  (first attempt 3c4fbfb3...cc57, superseded; reversed before applying)
+untracked files tarball (excl. evidence/.claude/build): 5844229c9d3a261e98f73e0035678a96cffb38ba4441a58582748c553a4a3a29
+llama.cpp: submodule 1537a0a8b2f8711d840878b0a0677ab2213c882c (git archive; .git marker files faked so engine_ensure_submodules passes)
+llmctl-decide: cross-compiled CGO_ENABLED=0 linux/amd64 from the patched tree, sha256 ca30dcd0e38f71f94146b2d7e22c7e89defddca9c1cbef738fa034b4a6c0d927
+containers submodule 4a8f04e05f3535d77c48f69b89687f9fcc896fbf

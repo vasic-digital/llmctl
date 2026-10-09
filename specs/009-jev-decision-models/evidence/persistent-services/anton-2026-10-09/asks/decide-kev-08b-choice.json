@@ -1,0 +1,1 @@
+{"model":"decide-kev-08b","answers":{"q":{"type":"choice","choice":"degraded","probabilities":{"healthy":0.064390047,"degraded":0.547517017,"down":0.388092936},"confidence":0.321275526}},"usage":{"input_tokens":52,"output_tokens":0},"evidence":{"profile":"decide-kev-08b","port":8095,"latency_ms":74.62,"mode":"deterministic","instance":"decide-kev-08b","calibrated":false}}

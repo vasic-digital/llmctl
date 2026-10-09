@@ -1,0 +1,137 @@
+{
+  "schema": "llmctl.admission/1",
+  "candidate": {
+    "name": "bespoke-nimble-9b",
+    "repo": "ggml-org/Bespoke-Nimble-9B-v3-GGUF",
+    "pinned": "no",
+    "protocol_hint": "systemone-native",
+    "known_issue": "",
+    "name_collision": "",
+    "kind": "weights"
+  },
+  "slug": "ggml-org__Bespoke-Nimble-9B-v3-GGUF",
+  "mode": "paper-only",
+  "retrieved_at": "2026-10-09T14:24:22Z",
+  "existence": {
+    "verdict": "VERIFIED",
+    "evidence": "HTTP 200 from <LLMCTL_HF_BASE>/api/models/ggml-org/Bespoke-Nimble-9B-v3-GGUF",
+    "http_status": 200
+  },
+  "api": {
+    "id": "ggml-org/Bespoke-Nimble-9B-v3-GGUF",
+    "sha": "a72bdbadb355ca3014f7f9d2585380917cc59971",
+    "lastModified": "2026-10-02T13:06:20.000Z",
+    "author": "ggml-org",
+    "gated": false,
+    "private": false,
+    "disabled": false
+  },
+  "pins": [
+    {
+      "name": "Bespoke-Nimble-9B-v3-Q4_K_M.gguf",
+      "size": 6324185632,
+      "sha256": "613a9b8c77ae1648b234d7202464d2e8e8da632910e9c59fbb22c13e027ca999",
+      "role": "model"
+    }
+  ],
+  "protocol": {
+    "class": "systemone-native",
+    "source": "API gguf.decision_type=nimble"
+  },
+  "needs_engine_advance": false,
+  "tier": "workstation",
+  "est_memory_bytes": 8221441321,
+  "g10_subchecks": [
+    {
+      "check": "loadability",
+      "status": "SKIP",
+      "evidence": "not attempted: earlier gate(s) failed: ['G1']"
+    },
+    {
+      "check": "smoke_answer",
+      "status": "SKIP",
+      "evidence": "not attempted: earlier gate(s) failed: ['G1']"
+    },
+    {
+      "check": "determinism_repeats",
+      "status": "SKIP",
+      "evidence": "not attempted: earlier gate(s) failed: ['G1']"
+    },
+    {
+      "check": "option_order_sensitivity",
+      "status": "SKIP",
+      "evidence": "not attempted: earlier gate(s) failed: ['G1']"
+    },
+    {
+      "check": "memory_fit_measured",
+      "status": "SKIP",
+      "evidence": "not attempted: earlier gate(s) failed: ['G1']"
+    }
+  ],
+  "gates": [
+    {
+      "gate": "G1",
+      "name": "licence allow-list",
+      "status": "FAIL",
+      "evidence": "weights licence cc-by-nc-4.0 is not on the allow-list ['apache-2.0', 'mit', 'bsd-2-clause', 'bsd-3-clause', 'cc-by-4.0', 'cc0-1.0', 'isc', 'unlicense']; licence files in repo: none"
+    },
+    {
+      "gate": "G2",
+      "name": "stable revision",
+      "status": "PASS",
+      "evidence": "immutable ref a72bdbadb355ca3014f7f9d2585380917cc59971, lastModified 2026-10-02T13:06:20.000Z; re-verify at release"
+    },
+    {
+      "gate": "G3",
+      "name": "pinned size+sha256",
+      "status": "PASS",
+      "evidence": "1 file(s) with size+sha256 from the HF API LFS oid (auto-selected): Bespoke-Nimble-9B-v3-Q4_K_M.gguf 6324185632 B sha256:613a9b8c77ae..."
+    },
+    {
+      "gate": "G4",
+      "name": "loadable by pinned engine",
+      "status": "PASS",
+      "evidence": "arch qwen35 and /v1/systemone both present in the pinned tree"
+    },
+    {
+      "gate": "G5",
+      "name": "fits budgets",
+      "status": "PASS",
+      "evidence": "largest model file Bespoke-Nimble-9B-v3-Q4_K_M.gguf = 6324185632 B (cap 10737418240 B), tier workstation, memory ESTIMATE 8221441321 B (gguf: size*1.3) vs budget 19487239372 B (60% of /proc/meminfo MemTotal (Constitution 12.6))"
+    },
+    {
+      "gate": "G6",
+      "name": "protocol classification",
+      "status": "PASS",
+      "evidence": "systemone-native (API gguf.decision_type=nimble); GGUF metadata in API: arch=qwen35, chat_template=yes (tokenizer is embedded in GGUF)"
+    },
+    {
+      "gate": "G7",
+      "name": "supply chain",
+      "status": "PASS",
+      "evidence": "pin has no pickle files"
+    },
+    {
+      "gate": "G8",
+      "name": "provenance",
+      "status": "PASS",
+      "evidence": "API author 'ggml-org' == repo owner; HF-side cross-link to GitHub/PyPI not checked in paper mode"
+    },
+    {
+      "gate": "G9",
+      "name": "known-issue sweep",
+      "status": "PENDING",
+      "evidence": "live upstream issue-tracker sweep not done by this driver (offline); none recorded in the research register"
+    },
+    {
+      "gate": "G10",
+      "name": "real run",
+      "status": "SKIP",
+      "evidence": "not attempted: earlier gate(s) failed: ['G1']"
+    }
+  ],
+  "disposition": "REJECTED",
+  "reasons": [
+    "G1: weights licence cc-by-nc-4.0 is not on the allow-list ['apache-2.0', 'mit', 'bsd-2-clause', 'bsd-3-clause', 'cc-by-4.0', 'cc0-1.0', 'isc', 'unlicense']; licence files in repo: none"
+  ]
+}

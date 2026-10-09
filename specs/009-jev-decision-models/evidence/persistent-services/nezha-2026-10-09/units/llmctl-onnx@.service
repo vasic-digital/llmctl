@@ -1,0 +1,64 @@
+[Unit]
+Description=llmctl onnx encoder decision server (profile %i)
+After=network-online.target
+Wants=network-online.target
+# Restart bounds belong in [Unit]: systemd ignores StartLimitIntervalSec= in
+# [Service] ("Unknown key ... ignoring", reproduced with systemd-analyze
+# --user verify on systemd 259), which silently left the interval at its
+# default. Restart=always never fires again once the burst is exhausted
+# (until reset-failed) - the crash-loop signal FR-044 surfaces in status.
+StartLimitBurst=5
+StartLimitIntervalSec=60
+
+[Service]
+Type=simple
+# The hooks below find the state/registry/log locations through these (the
+# manager's own environment would silently differ from the installing shell's
+# when LLMCTL_STATE_DIR & co. are overridden - registry and units must agree).
+Environment="LLMCTL_ROOT=/home/milosvasic/llmctl-3.1.0"
+Environment="LLMCTL_STATE_DIR=/home/milosvasic/.local/state/llmctl"
+Environment="LLMCTL_LOG_DIR=/home/milosvasic/.local/state/llmctl/logs"
+Environment="LLMCTL_SERVICES_DIR=/home/milosvasic/.local/state/llmctl/services"
+Environment="LLMCTL_DECIDE_BIN=/home/milosvasic/llmctl-3.1.0/build/llmctl-decide"
+EnvironmentFile=/home/milosvasic/.local/state/llmctl/services/%i.env
+# Root-caused 2026-09-17 (real repro on this host's systemd 259, not
+# guessed): systemd's $VAR/${VAR} expansion in ExecStart= applies ONLY to
+# the argument list, NEVER to the executable path itself (word 0) - a bare
+# "ExecStart=${LLMCTL_EXEC} ${LLMCTL_ARGS}" therefore made systemd try to
+# literally exec a program named "${LLMCTL_EXEC}", which always fails with
+# status=203/EXEC. The fix: exec through a shell, whose OWN path is a fixed,
+# parse-time-resolvable literal, and let that shell resolve the dynamic
+# executable from its inherited environment at RUN time.
+#
+# `set -f` (independent review, 2026-09-17): systemd's own expansion
+# word-splits but never globs; bash's $LLMCTL_ARGS expansion DOES glob, so a
+# literal "a*b" argument was silently expanded into pathname matches. `set -f`
+# restores systemd's no-globbing behaviour exactly.
+#
+# Hooks (lib/svc_hook.sh): ExecStartPre rotates the engine's internal key
+# file on EVERY start (G-028: a true per-start key, not create-if-absent; a
+# no-op for services without a key file); ExecStartPost detaches a waiter that
+# publishes the service in the registry once it answers its health endpoint;
+# ExecStopPost removes the row (the port hold stays so a restart reuses the
+# port, FR-088). Registration failures never fail the unit (the "-" prefix).
+ExecStartPre=/bin/bash "/home/milosvasic/llmctl-3.1.0/lib/svc_hook.sh" prestart %i
+ExecStart=/bin/bash -c 'set -f; exec "$LLMCTL_EXEC" $LLMCTL_ARGS'
+ExecStartPost=-/bin/bash "/home/milosvasic/llmctl-3.1.0/lib/svc_hook.sh" register %i
+ExecStopPost=-/bin/bash "/home/milosvasic/llmctl-3.1.0/lib/svc_hook.sh" unregister %i
+Restart=always
+RestartSec=5
+MemoryHigh=64086M
+MemoryMax=64086M
+NoNewPrivileges=yes
+ProtectSystem=full
+UMask=0077
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictSUIDSGID=yes
+LockPersonality=yes
+RestrictRealtime=yes
+SystemCallArchitectures=native
+StandardOutput=append:/home/milosvasic/.local/state/llmctl/logs/%i.log
+StandardError=append:/home/milosvasic/.local/state/llmctl/logs/%i.log
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,41 @@
+[
+ {
+  "request": "POST /v1/systemone auth=key",
+  "status": 503,
+  "headers": {
+   "content-type": "application/json; charset=utf-8",
+   "retry-after": "1",
+   "x-llmctl-request-id": "096810b91398ea0b"
+  },
+  "body": "{\"message\":\"Service not ready.\",\"error_type\":\"not_ready\"}",
+  "error": null,
+  "trust": null,
+  "note": "status 503 != expected 200"
+ },
+ {
+  "request": "POST /v1/systemone auth=key",
+  "status": 503,
+  "headers": {
+   "content-type": "application/json; charset=utf-8",
+   "retry-after": "1",
+   "x-llmctl-request-id": "e110c3f726e9f9d5"
+  },
+  "body": "{\"message\":\"Service not ready.\",\"error_type\":\"not_ready\"}",
+  "error": null,
+  "trust": null,
+  "note": "status 503 != expected 200"
+ },
+ {
+  "request": "POST /v1/systemone auth=key",
+  "status": 503,
+  "headers": {
+   "content-type": "application/json; charset=utf-8",
+   "retry-after": "1",
+   "x-llmctl-request-id": "311328d9b0687c4a"
+  },
+  "body": "{\"message\":\"Service not ready.\",\"error_type\":\"not_ready\"}",
+  "error": null,
+  "trust": null,
+  "note": "status 503 != expected 200"
+ }
+]

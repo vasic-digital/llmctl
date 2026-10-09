@@ -1,0 +1,1512 @@
+{
+ "cells": [
+  {
+   "case_id": "EP-001",
+   "client": "curl",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0001",
+   "reason": "POST /v1/systemone: status 503 != expected 200",
+   "reason_class": null,
+   "result": "fail",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-002",
+   "client": "curl",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0002",
+   "reason": "POST /v1/systemone: status 503 != expected 200",
+   "reason_class": null,
+   "result": "fail",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-004",
+   "client": "curl",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0003",
+   "reason": "POST /v1/systemone: status 503 != expected 200",
+   "reason_class": null,
+   "result": "fail",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-006",
+   "client": "curl",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0004",
+   "reason": "POST /v1/systemone: status 503 != expected 200; POST /v1/systemone: status 503 != expected 200; POST /v1/systemone: status 503 != expected 200",
+   "reason_class": null,
+   "result": "fail",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-007",
+   "client": "curl",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0005",
+   "reason": "POST /v1/systemone: status 503 != expected 200",
+   "reason_class": null,
+   "result": "fail",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-009",
+   "client": "curl",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0006",
+   "reason": null,
+   "reason_class": null,
+   "result": "pass",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-010",
+   "client": "curl",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0007",
+   "reason": null,
+   "reason_class": null,
+   "result": "pass",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-011",
+   "client": "curl",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0008",
+   "reason": null,
+   "reason_class": null,
+   "result": "pass",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-012",
+   "client": "curl",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0009",
+   "reason": null,
+   "reason_class": null,
+   "result": "pass",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-013",
+   "client": "curl",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0010",
+   "reason": null,
+   "reason_class": null,
+   "result": "pass",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-016",
+   "client": "curl",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0011",
+   "reason": null,
+   "reason_class": null,
+   "result": "pass",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-018",
+   "client": "curl",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0012",
+   "reason": null,
+   "reason_class": null,
+   "result": "pass",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-025",
+   "client": "curl",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0013",
+   "reason": null,
+   "reason_class": null,
+   "result": "pass",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-030",
+   "client": "curl",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0014",
+   "reason": "GET /v1/models: model entry keys ['aliases', 'experimental_types', 'id', 'limits', 'maturity', 'protocol', 'status', 'template_hash']; GET /v1/models: model entry keys ['aliases', 'experimental_types', 'id', 'limits', 'maturity', 'protocol', 'status', 'template_hash']; GET /v1/models: model entry keys ['aliases', 'experimental_types', 'id', 'limits', 'maturity', 'notes', 'protocol', 'status', 'template_hash']; GET /v1/models: model entry keys ['aliases', 'experimental_types', 'id', 'limits', 'maturity', 'protocol', 'status', 'template_hash']",
+   "reason_class": null,
+   "result": "fail",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-031",
+   "client": "curl",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0015",
+   "reason": null,
+   "reason_class": null,
+   "result": "pass",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-032",
+   "client": "curl",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0016",
+   "reason": null,
+   "reason_class": null,
+   "result": "pass",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-033",
+   "client": "curl",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0017",
+   "reason": null,
+   "reason_class": null,
+   "result": "pass",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-040",
+   "client": "curl",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0018",
+   "reason": null,
+   "reason_class": null,
+   "result": "pass",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-041",
+   "client": "curl",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0019",
+   "reason": null,
+   "reason_class": null,
+   "result": "pass",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-045",
+   "client": "curl",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0020",
+   "reason": null,
+   "reason_class": null,
+   "result": "pass",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-050",
+   "client": "curl",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0021",
+   "reason": null,
+   "reason_class": null,
+   "result": "pass",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-051",
+   "client": "curl",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0022",
+   "reason": null,
+   "reason_class": null,
+   "result": "pass",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-052",
+   "client": "curl",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0023",
+   "reason": null,
+   "reason_class": null,
+   "result": "pass",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-060",
+   "client": "curl",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0024",
+   "reason": null,
+   "reason_class": null,
+   "result": "pass",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-061",
+   "client": "curl",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0025",
+   "reason": null,
+   "reason_class": null,
+   "result": "pass",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-070",
+   "client": "curl",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0026",
+   "reason": null,
+   "reason_class": null,
+   "result": "pass",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-001",
+   "client": "python-urllib",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0027",
+   "reason": "POST /v1/systemone: status 503 != expected 200",
+   "reason_class": null,
+   "result": "fail",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-002",
+   "client": "python-urllib",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0028",
+   "reason": "POST /v1/systemone: status 503 != expected 200",
+   "reason_class": null,
+   "result": "fail",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-004",
+   "client": "python-urllib",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0029",
+   "reason": "POST /v1/systemone: status 503 != expected 200",
+   "reason_class": null,
+   "result": "fail",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-006",
+   "client": "python-urllib",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0030",
+   "reason": "POST /v1/systemone: status 503 != expected 200; POST /v1/systemone: status 503 != expected 200; POST /v1/systemone: status 503 != expected 200",
+   "reason_class": null,
+   "result": "fail",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-007",
+   "client": "python-urllib",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0031",
+   "reason": "POST /v1/systemone: status 503 != expected 200",
+   "reason_class": null,
+   "result": "fail",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-009",
+   "client": "python-urllib",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0032",
+   "reason": null,
+   "reason_class": null,
+   "result": "pass",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-010",
+   "client": "python-urllib",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0033",
+   "reason": null,
+   "reason_class": null,
+   "result": "pass",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-011",
+   "client": "python-urllib",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0034",
+   "reason": null,
+   "reason_class": null,
+   "result": "pass",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-012",
+   "client": "python-urllib",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0035",
+   "reason": null,
+   "reason_class": null,
+   "result": "pass",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-013",
+   "client": "python-urllib",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0036",
+   "reason": null,
+   "reason_class": null,
+   "result": "pass",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-016",
+   "client": "python-urllib",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0037",
+   "reason": null,
+   "reason_class": null,
+   "result": "pass",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-018",
+   "client": "python-urllib",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0038",
+   "reason": null,
+   "reason_class": null,
+   "result": "pass",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-025",
+   "client": "python-urllib",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0039",
+   "reason": null,
+   "reason_class": null,
+   "result": "pass",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-030",
+   "client": "python-urllib",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0040",
+   "reason": "GET /v1/models: model entry keys ['aliases', 'experimental_types', 'id', 'limits', 'maturity', 'protocol', 'status', 'template_hash']; GET /v1/models: model entry keys ['aliases', 'experimental_types', 'id', 'limits', 'maturity', 'protocol', 'status', 'template_hash']; GET /v1/models: model entry keys ['aliases', 'experimental_types', 'id', 'limits', 'maturity', 'notes', 'protocol', 'status', 'template_hash']; GET /v1/models: model entry keys ['aliases', 'experimental_types', 'id', 'limits', 'maturity', 'protocol', 'status', 'template_hash']",
+   "reason_class": null,
+   "result": "fail",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-031",
+   "client": "python-urllib",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0041",
+   "reason": null,
+   "reason_class": null,
+   "result": "pass",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-032",
+   "client": "python-urllib",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0042",
+   "reason": null,
+   "reason_class": null,
+   "result": "pass",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-033",
+   "client": "python-urllib",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0043",
+   "reason": null,
+   "reason_class": null,
+   "result": "pass",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-040",
+   "client": "python-urllib",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0044",
+   "reason": null,
+   "reason_class": null,
+   "result": "pass",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-041",
+   "client": "python-urllib",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0045",
+   "reason": null,
+   "reason_class": null,
+   "result": "pass",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-045",
+   "client": "python-urllib",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0046",
+   "reason": null,
+   "reason_class": null,
+   "result": "pass",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-050",
+   "client": "python-urllib",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0047",
+   "reason": null,
+   "reason_class": null,
+   "result": "pass",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-051",
+   "client": "python-urllib",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0048",
+   "reason": "GET /metrics: status 429 != expected 401",
+   "reason_class": null,
+   "result": "fail",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-052",
+   "client": "python-urllib",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0049",
+   "reason": null,
+   "reason_class": null,
+   "result": "pass",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-060",
+   "client": "python-urllib",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0050",
+   "reason": null,
+   "reason_class": null,
+   "result": "pass",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-061",
+   "client": "python-urllib",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0051",
+   "reason": "GET /v1/does-not-exist: status 429 != expected 401",
+   "reason_class": null,
+   "result": "fail",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-070",
+   "client": "python-urllib",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0052",
+   "reason": null,
+   "reason_class": null,
+   "result": "pass",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-001",
+   "client": "python-requests",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0053",
+   "reason": "POST /v1/systemone: status 503 != expected 200",
+   "reason_class": null,
+   "result": "fail",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-002",
+   "client": "python-requests",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0054",
+   "reason": "POST /v1/systemone: status 503 != expected 200",
+   "reason_class": null,
+   "result": "fail",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-004",
+   "client": "python-requests",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0055",
+   "reason": "POST /v1/systemone: status 503 != expected 200",
+   "reason_class": null,
+   "result": "fail",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-006",
+   "client": "python-requests",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0056",
+   "reason": "POST /v1/systemone: status 503 != expected 200; POST /v1/systemone: status 503 != expected 200; POST /v1/systemone: status 503 != expected 200",
+   "reason_class": null,
+   "result": "fail",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-007",
+   "client": "python-requests",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0057",
+   "reason": "POST /v1/systemone: status 503 != expected 200",
+   "reason_class": null,
+   "result": "fail",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-009",
+   "client": "python-requests",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0058",
+   "reason": "POST /v1/systemone: status 429 != expected 401",
+   "reason_class": null,
+   "result": "fail",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-010",
+   "client": "python-requests",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0059",
+   "reason": "POST /v1/systemone: status 429 != expected 401",
+   "reason_class": null,
+   "result": "fail",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-011",
+   "client": "python-requests",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0060",
+   "reason": null,
+   "reason_class": null,
+   "result": "pass",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-012",
+   "client": "python-requests",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0061",
+   "reason": null,
+   "reason_class": null,
+   "result": "pass",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-013",
+   "client": "python-requests",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0062",
+   "reason": null,
+   "reason_class": null,
+   "result": "pass",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-016",
+   "client": "python-requests",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0063",
+   "reason": null,
+   "reason_class": null,
+   "result": "pass",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-018",
+   "client": "python-requests",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0064",
+   "reason": null,
+   "reason_class": null,
+   "result": "pass",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-025",
+   "client": "python-requests",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0065",
+   "reason": null,
+   "reason_class": null,
+   "result": "pass",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-030",
+   "client": "python-requests",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0066",
+   "reason": "GET /v1/models: model entry keys ['aliases', 'experimental_types', 'id', 'limits', 'maturity', 'protocol', 'status', 'template_hash']; GET /v1/models: model entry keys ['aliases', 'experimental_types', 'id', 'limits', 'maturity', 'protocol', 'status', 'template_hash']; GET /v1/models: model entry keys ['aliases', 'experimental_types', 'id', 'limits', 'maturity', 'notes', 'protocol', 'status', 'template_hash']; GET /v1/models: model entry keys ['aliases', 'experimental_types', 'id', 'limits', 'maturity', 'protocol', 'status', 'template_hash']",
+   "reason_class": null,
+   "result": "fail",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-031",
+   "client": "python-requests",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0067",
+   "reason": "GET /v1/models: status 429 != expected 401",
+   "reason_class": null,
+   "result": "fail",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-032",
+   "client": "python-requests",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0068",
+   "reason": "GET /v1/models: status 429 != expected 401",
+   "reason_class": null,
+   "result": "fail",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-033",
+   "client": "python-requests",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0069",
+   "reason": null,
+   "reason_class": null,
+   "result": "pass",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-040",
+   "client": "python-requests",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0070",
+   "reason": null,
+   "reason_class": null,
+   "result": "pass",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-041",
+   "client": "python-requests",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0071",
+   "reason": null,
+   "reason_class": null,
+   "result": "pass",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-045",
+   "client": "python-requests",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0072",
+   "reason": null,
+   "reason_class": null,
+   "result": "pass",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-050",
+   "client": "python-requests",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0073",
+   "reason": null,
+   "reason_class": null,
+   "result": "pass",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-051",
+   "client": "python-requests",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0074",
+   "reason": "GET /metrics: status 429 != expected 401",
+   "reason_class": null,
+   "result": "fail",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-052",
+   "client": "python-requests",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0075",
+   "reason": null,
+   "reason_class": null,
+   "result": "pass",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-060",
+   "client": "python-requests",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0076",
+   "reason": null,
+   "reason_class": null,
+   "result": "pass",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-061",
+   "client": "python-requests",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0077",
+   "reason": "GET /v1/does-not-exist: status 429 != expected 401",
+   "reason_class": null,
+   "result": "fail",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-070",
+   "client": "python-requests",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0078",
+   "reason": null,
+   "reason_class": null,
+   "result": "pass",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-001",
+   "client": "node-fetch",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0079",
+   "reason": "POST /v1/systemone: status 503 != expected 200",
+   "reason_class": null,
+   "result": "fail",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-002",
+   "client": "node-fetch",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0080",
+   "reason": "POST /v1/systemone: status 503 != expected 200",
+   "reason_class": null,
+   "result": "fail",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-004",
+   "client": "node-fetch",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0081",
+   "reason": "POST /v1/systemone: status 503 != expected 200",
+   "reason_class": null,
+   "result": "fail",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-006",
+   "client": "node-fetch",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0082",
+   "reason": "POST /v1/systemone: status 503 != expected 200; POST /v1/systemone: status 503 != expected 200; POST /v1/systemone: status 503 != expected 200",
+   "reason_class": null,
+   "result": "fail",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-007",
+   "client": "node-fetch",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0083",
+   "reason": "POST /v1/systemone: status 503 != expected 200",
+   "reason_class": null,
+   "result": "fail",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-009",
+   "client": "node-fetch",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0084",
+   "reason": "POST /v1/systemone: status 429 != expected 401",
+   "reason_class": null,
+   "result": "fail",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-010",
+   "client": "node-fetch",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0085",
+   "reason": "POST /v1/systemone: status 429 != expected 401",
+   "reason_class": null,
+   "result": "fail",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-011",
+   "client": "node-fetch",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0086",
+   "reason": null,
+   "reason_class": null,
+   "result": "pass",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-012",
+   "client": "node-fetch",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0087",
+   "reason": null,
+   "reason_class": null,
+   "result": "pass",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-013",
+   "client": "node-fetch",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0088",
+   "reason": null,
+   "reason_class": null,
+   "result": "pass",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-016",
+   "client": "node-fetch",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0089",
+   "reason": null,
+   "reason_class": null,
+   "result": "pass",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-018",
+   "client": "node-fetch",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0090",
+   "reason": null,
+   "reason_class": null,
+   "result": "pass",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-025",
+   "client": "node-fetch",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0091",
+   "reason": null,
+   "reason_class": null,
+   "result": "pass",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-030",
+   "client": "node-fetch",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0092",
+   "reason": "GET /v1/models: body is not JSON (JSONDecodeError)",
+   "reason_class": null,
+   "result": "fail",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-031",
+   "client": "node-fetch",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0093",
+   "reason": "GET /v1/models: status 429 != expected 401",
+   "reason_class": null,
+   "result": "fail",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-032",
+   "client": "node-fetch",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0094",
+   "reason": "GET /v1/models: status 429 != expected 401",
+   "reason_class": null,
+   "result": "fail",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-033",
+   "client": "node-fetch",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0095",
+   "reason": null,
+   "reason_class": null,
+   "result": "pass",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-040",
+   "client": "node-fetch",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0096",
+   "reason": null,
+   "reason_class": null,
+   "result": "pass",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-041",
+   "client": "node-fetch",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0097",
+   "reason": null,
+   "reason_class": null,
+   "result": "pass",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-045",
+   "client": "node-fetch",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0098",
+   "reason": null,
+   "reason_class": null,
+   "result": "pass",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-050",
+   "client": "node-fetch",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0099",
+   "reason": "GET /metrics: metrics body is not text exposition",
+   "reason_class": null,
+   "result": "fail",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-051",
+   "client": "node-fetch",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0100",
+   "reason": "GET /metrics: status 429 != expected 401",
+   "reason_class": null,
+   "result": "fail",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-052",
+   "client": "node-fetch",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0101",
+   "reason": null,
+   "reason_class": null,
+   "result": "pass",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-060",
+   "client": "node-fetch",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0102",
+   "reason": null,
+   "reason_class": null,
+   "result": "pass",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-061",
+   "client": "node-fetch",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0103",
+   "reason": "GET /v1/does-not-exist: status 429 != expected 401",
+   "reason_class": null,
+   "result": "fail",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-070",
+   "client": "node-fetch",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0104",
+   "reason": null,
+   "reason_class": null,
+   "result": "pass",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-001",
+   "client": "go-nethttp",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0105",
+   "reason": "POST /v1/systemone: status 503 != expected 200",
+   "reason_class": null,
+   "result": "fail",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-002",
+   "client": "go-nethttp",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0106",
+   "reason": "POST /v1/systemone: status 503 != expected 200",
+   "reason_class": null,
+   "result": "fail",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-004",
+   "client": "go-nethttp",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0107",
+   "reason": "POST /v1/systemone: status 503 != expected 200",
+   "reason_class": null,
+   "result": "fail",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-006",
+   "client": "go-nethttp",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0108",
+   "reason": "POST /v1/systemone: status 503 != expected 200; POST /v1/systemone: status 503 != expected 200; POST /v1/systemone: status 503 != expected 200",
+   "reason_class": null,
+   "result": "fail",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-007",
+   "client": "go-nethttp",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0109",
+   "reason": "POST /v1/systemone: status 503 != expected 200",
+   "reason_class": null,
+   "result": "fail",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-009",
+   "client": "go-nethttp",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0110",
+   "reason": "POST /v1/systemone: status 429 != expected 401",
+   "reason_class": null,
+   "result": "fail",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-010",
+   "client": "go-nethttp",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0111",
+   "reason": "POST /v1/systemone: status 429 != expected 401",
+   "reason_class": null,
+   "result": "fail",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-011",
+   "client": "go-nethttp",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0112",
+   "reason": null,
+   "reason_class": null,
+   "result": "pass",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-012",
+   "client": "go-nethttp",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0113",
+   "reason": null,
+   "reason_class": null,
+   "result": "pass",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-013",
+   "client": "go-nethttp",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0114",
+   "reason": null,
+   "reason_class": null,
+   "result": "pass",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-016",
+   "client": "go-nethttp",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0115",
+   "reason": null,
+   "reason_class": null,
+   "result": "pass",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-018",
+   "client": "go-nethttp",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0116",
+   "reason": null,
+   "reason_class": null,
+   "result": "pass",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-025",
+   "client": "go-nethttp",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0117",
+   "reason": null,
+   "reason_class": null,
+   "result": "pass",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-030",
+   "client": "go-nethttp",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0118",
+   "reason": "GET /v1/models: model entry keys ['aliases', 'experimental_types', 'id', 'limits', 'maturity', 'protocol', 'status', 'template_hash']; GET /v1/models: model entry keys ['aliases', 'experimental_types', 'id', 'limits', 'maturity', 'protocol', 'status', 'template_hash']; GET /v1/models: model entry keys ['aliases', 'experimental_types', 'id', 'limits', 'maturity', 'notes', 'protocol', 'status', 'template_hash']; GET /v1/models: model entry keys ['aliases', 'experimental_types', 'id', 'limits', 'maturity', 'protocol', 'status', 'template_hash']",
+   "reason_class": null,
+   "result": "fail",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-031",
+   "client": "go-nethttp",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0119",
+   "reason": "GET /v1/models: status 429 != expected 401",
+   "reason_class": null,
+   "result": "fail",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-032",
+   "client": "go-nethttp",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0120",
+   "reason": "GET /v1/models: status 429 != expected 401",
+   "reason_class": null,
+   "result": "fail",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-033",
+   "client": "go-nethttp",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0121",
+   "reason": null,
+   "reason_class": null,
+   "result": "pass",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-040",
+   "client": "go-nethttp",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0122",
+   "reason": null,
+   "reason_class": null,
+   "result": "pass",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-041",
+   "client": "go-nethttp",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0123",
+   "reason": null,
+   "reason_class": null,
+   "result": "pass",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-045",
+   "client": "go-nethttp",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0124",
+   "reason": null,
+   "reason_class": null,
+   "result": "pass",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-050",
+   "client": "go-nethttp",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0125",
+   "reason": null,
+   "reason_class": null,
+   "result": "pass",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-051",
+   "client": "go-nethttp",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0126",
+   "reason": "GET /metrics: status 429 != expected 401",
+   "reason_class": null,
+   "result": "fail",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-052",
+   "client": "go-nethttp",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0127",
+   "reason": null,
+   "reason_class": null,
+   "result": "pass",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-060",
+   "client": "go-nethttp",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0128",
+   "reason": null,
+   "reason_class": null,
+   "result": "pass",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-061",
+   "client": "go-nethttp",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0129",
+   "reason": "GET /v1/does-not-exist: status 429 != expected 401",
+   "reason_class": null,
+   "result": "fail",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-070",
+   "client": "go-nethttp",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0130",
+   "reason": null,
+   "reason_class": null,
+   "result": "pass",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-001",
+   "client": "chromium",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0131",
+   "reason": "class:browser-non-get: a browser CLI client issues GET navigations only",
+   "reason_class": "browser-non-get",
+   "result": "not-exercised",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-002",
+   "client": "chromium",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0132",
+   "reason": "class:browser-non-get: a browser CLI client issues GET navigations only",
+   "reason_class": "browser-non-get",
+   "result": "not-exercised",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-004",
+   "client": "chromium",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0133",
+   "reason": "class:browser-non-get: a browser CLI client issues GET navigations only",
+   "reason_class": "browser-non-get",
+   "result": "not-exercised",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-006",
+   "client": "chromium",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0134",
+   "reason": "class:browser-non-get: a browser CLI client issues GET navigations only",
+   "reason_class": "browser-non-get",
+   "result": "not-exercised",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-007",
+   "client": "chromium",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0135",
+   "reason": "class:browser-non-get: a browser CLI client issues GET navigations only",
+   "reason_class": "browser-non-get",
+   "result": "not-exercised",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-009",
+   "client": "chromium",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0136",
+   "reason": "class:browser-non-get: a browser CLI client issues GET navigations only",
+   "reason_class": "browser-non-get",
+   "result": "not-exercised",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-010",
+   "client": "chromium",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0137",
+   "reason": "class:browser-non-get: a browser CLI client issues GET navigations only",
+   "reason_class": "browser-non-get",
+   "result": "not-exercised",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-011",
+   "client": "chromium",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0138",
+   "reason": "class:browser-non-get: a browser CLI client issues GET navigations only",
+   "reason_class": "browser-non-get",
+   "result": "not-exercised",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-012",
+   "client": "chromium",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0139",
+   "reason": "class:browser-non-get: a browser CLI client issues GET navigations only",
+   "reason_class": "browser-non-get",
+   "result": "not-exercised",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-013",
+   "client": "chromium",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0140",
+   "reason": "class:browser-non-get: a browser CLI client issues GET navigations only",
+   "reason_class": "browser-non-get",
+   "result": "not-exercised",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-016",
+   "client": "chromium",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0141",
+   "reason": "class:browser-non-get: a browser CLI client issues GET navigations only",
+   "reason_class": "browser-non-get",
+   "result": "not-exercised",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-018",
+   "client": "chromium",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0142",
+   "reason": "class:browser-non-get: a browser CLI client issues GET navigations only",
+   "reason_class": "browser-non-get",
+   "result": "not-exercised",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-025",
+   "client": "chromium",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0143",
+   "reason": null,
+   "reason_class": null,
+   "result": "pass",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-030",
+   "client": "chromium",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0144",
+   "reason": "GET /v1/models: model entry keys ['aliases', 'experimental_types', 'id', 'limits', 'maturity', 'protocol', 'status', 'template_hash']; GET /v1/models: model entry keys ['aliases', 'experimental_types', 'id', 'limits', 'maturity', 'protocol', 'status', 'template_hash']; GET /v1/models: model entry keys ['aliases', 'experimental_types', 'id', 'limits', 'maturity', 'notes', 'protocol', 'status', 'template_hash']; GET /v1/models: model entry keys ['aliases', 'experimental_types', 'id', 'limits', 'maturity', 'protocol', 'status', 'template_hash']",
+   "reason_class": null,
+   "result": "fail",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-031",
+   "client": "chromium",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0145",
+   "reason": "GET /v1/models: status 429 != expected 401",
+   "reason_class": null,
+   "result": "fail",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-032",
+   "client": "chromium",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0146",
+   "reason": "GET /v1/models: status 429 != expected 401",
+   "reason_class": null,
+   "result": "fail",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-033",
+   "client": "chromium",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0147",
+   "reason": "class:browser-non-get: a browser CLI client issues GET navigations only",
+   "reason_class": "browser-non-get",
+   "result": "not-exercised",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-040",
+   "client": "chromium",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0148",
+   "reason": null,
+   "reason_class": null,
+   "result": "pass",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-041",
+   "client": "chromium",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0149",
+   "reason": "class:browser-non-get: a browser CLI client issues GET navigations only",
+   "reason_class": "browser-non-get",
+   "result": "not-exercised",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-045",
+   "client": "chromium",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0150",
+   "reason": null,
+   "reason_class": null,
+   "result": "pass",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-050",
+   "client": "chromium",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0151",
+   "reason": null,
+   "reason_class": null,
+   "result": "pass",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-051",
+   "client": "chromium",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0152",
+   "reason": "GET /metrics: status 429 != expected 401",
+   "reason_class": null,
+   "result": "fail",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-052",
+   "client": "chromium",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0153",
+   "reason": "class:browser-non-get: a browser CLI client issues GET navigations only",
+   "reason_class": "browser-non-get",
+   "result": "not-exercised",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-060",
+   "client": "chromium",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0154",
+   "reason": null,
+   "reason_class": null,
+   "result": "pass",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-061",
+   "client": "chromium",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0155",
+   "reason": "GET /v1/does-not-exist: status 429 != expected 401",
+   "reason_class": null,
+   "result": "fail",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-070",
+   "client": "chromium",
+   "evidence_id": "EV-lan-anton-to-nezha-2026-10-09-0156",
+   "reason": null,
+   "reason_class": null,
+   "result": "pass",
+   "vantage": "host"
+  }
+ ],
+ "clients": {
+  "chromium": "available",
+  "curl": "available",
+  "go-nethttp": "available",
+  "node-fetch": "available",
+  "python-requests": "available",
+  "python-urllib": "available"
+ },
+ "completeness": {
+  "complete": false,
+  "problems": [
+   "case EP-003 exists in the harness but not in the inventory (inventory row removed?)",
+   "case EP-005 exists in the harness but not in the inventory (inventory row removed?)",
+   "case EP-008 exists in the harness but not in the inventory (inventory row removed?)",
+   "case EP-008b exists in the harness but not in the inventory (inventory row removed?)",
+   "case EP-014 exists in the harness but not in the inventory (inventory row removed?)",
+   "case EP-015 exists in the harness but not in the inventory (inventory row removed?)",
+   "case EP-015b exists in the harness but not in the inventory (inventory row removed?)",
+   "case EP-016b exists in the harness but not in the inventory (inventory row removed?)",
+   "case EP-017 exists in the harness but not in the inventory (inventory row removed?)",
+   "case EP-019 exists in the harness but not in the inventory (inventory row removed?)",
+   "case EP-020 exists in the harness but not in the inventory (inventory row removed?)",
+   "case EP-021 exists in the harness but not in the inventory (inventory row removed?)",
+   "case EP-022 exists in the harness but not in the inventory (inventory row removed?)",
+   "case EP-023 exists in the harness but not in the inventory (inventory row removed?)",
+   "case EP-024 exists in the harness but not in the inventory (inventory row removed?)",
+   "case EP-026 exists in the harness but not in the inventory (inventory row removed?)",
+   "case EP-034 exists in the harness but not in the inventory (inventory row removed?)",
+   "case EP-046 exists in the harness but not in the inventory (inventory row removed?)",
+   "case EP-071 exists in the harness but not in the inventory (inventory row removed?)"
+  ]
+ },
+ "evidence_class": "real-component",
+ "inventory": {
+  "case_ids": [
+   "EP-001",
+   "EP-002",
+   "EP-004",
+   "EP-006",
+   "EP-007",
+   "EP-009",
+   "EP-010",
+   "EP-011",
+   "EP-012",
+   "EP-013",
+   "EP-016",
+   "EP-018",
+   "EP-025",
+   "EP-030",
+   "EP-031",
+   "EP-032",
+   "EP-033",
+   "EP-040",
+   "EP-041",
+   "EP-045",
+   "EP-050",
+   "EP-051",
+   "EP-052",
+   "EP-060",
+   "EP-061",
+   "EP-070"
+  ],
+  "path": "/tmp/claude-1000/-home-milosvasic-Projects-llmctl/4cea4116-8339-d4a8-4d6c-db1d21cb18d4/scratchpad/lan/inventory-subset.tsv",
+  "rows": 26,
+  "sha256": "1c33c774c5d28d9539a66703b85dc74cee78d7ee085bbe8a080ff2ef6ae6a511"
+ },
+ "leak_scan": {
+  "control_needle_found": true,
+  "rc": 0,
+  "status": "clean"
+ },
+ "not_exercised_classes": {
+  "env": "env-gap",
+  "fr069": {
+   "agent-outside-subset": "agents outside their defined subset (FR-069)",
+   "browser-non-get": "browser client on non-GET cases (FR-069)",
+   "sdk-no-ca-trust": "hosted SDK where no CA-trust mechanism works (FR-069; recorded as a trust-configuration failure)"
+  },
+  "proposed_beyond_fr069": {
+   "sdk-outside-subset": "SDK exposes only POST /v1/systemone and GET /v1/models; other cases are outside its surface",
+   "transport-not-per-client": "transport-level behaviour (slow client, connection cap, engine port) is client-independent; executed once by the stdlib socket helper under python-urllib (and curl for the engine port)"
+  }
+ },
+ "pending_adapters": {
+  "agent:*": "the seven coding-agent adapters are wired later (defined subset: one authenticated success call + one unauthenticated call each)",
+  "llmctl-cli": "llmctl-decide ask adapter is wired later (T-runner follow-up)"
+ },
+ "pending_vantages": [
+  "second-machine"
+ ],
+ "run_id": "lan-anton-to-nezha-2026-10-09",
+ "summary": {
+  "cells": 156,
+  "classes_beyond_fr069": 0,
+  "fail": 56,
+  "not-exercised": 15,
+  "pass": 85
+ },
+ "target": "https://192.168.1.90:8095",
+ "vantages": {
+  "host": "exercised",
+  "second-machine": "pending-vantage (vantage helper not wired yet)"
+ },
+ "verdict": "FAIL"
+}

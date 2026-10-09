@@ -1,0 +1,40 @@
+{
+  "files": [
+    {
+      "path": "evidence.jsonl",
+      "sha256": "74a261db04df512a7e15b94588fc20c462616d63fecd65440b0b3a3f115d6981",
+      "size": 2376
+    },
+    {
+      "path": "raw/EV-questions-1-0001-stdout.txt",
+      "sha256": "a6d90b9a7623acd8b4f185c136b2adda7eb6fa0d851bdd7f9ea77149e3ba78a0",
+      "size": 15863
+    },
+    {
+      "path": "raw/EV-questions-1-0002-stdout.txt",
+      "sha256": "a6d90b9a7623acd8b4f185c136b2adda7eb6fa0d851bdd7f9ea77149e3ba78a0",
+      "size": 15863
+    },
+    {
+      "path": "raw/EV-questions-1-0003-stdout.txt",
+      "sha256": "a6d90b9a7623acd8b4f185c136b2adda7eb6fa0d851bdd7f9ea77149e3ba78a0",
+      "size": 15863
+    },
+    {
+      "path": "raw/responses.jsonl",
+      "sha256": "b963c0e64813fddcebae55c446d0f0fb0df59a075d4a37279a8cc9d9c058521a",
+      "size": 81301
+    },
+    {
+      "path": "results.json",
+      "sha256": "3aa5aa25885fc04ae1f01dcb6a34aebdba63c4020e6aa8b2804cc84b9e5d7161",
+      "size": 157737
+    },
+    {
+      "path": "run-questions.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    }
+  ],
+  "schema": 1
+}

@@ -1,0 +1,28 @@
+records=23 orig=23 perm=0 well_formed=23/23
+noul   n=12 acc=0.833 CI95=[0.552,0.953] baseline=0.583 (majority) lower>baseline=False
+choice n=6 acc=0.833 CI95=[0.436,0.970] baseline=0.500 (majority) lower>baseline=False
+score  n=4 acc=0.750 CI95=[0.301,0.954] baseline=0.500 (majority) lower>baseline=False
+per-class:
+  noul:False             n=7 acc=0.857
+  noul:True              n=5 acc=0.800
+  choice:billing         n=3 acc=1.000
+  choice:eight           n=1 acc=1.000
+  choice:haiku           n=1 acc=1.000
+  choice:monday          n=1 acc=0.000
+  score:0                n=1 acc=0.000
+  score:1                n=2 acc=1.000
+  score:7                n=1 acc=1.000
+per-family (own majority baseline):
+  arithmetic                 n=3 acc=0.667 CI=[0.208,0.939] majority=0.333 lower>majority=False
+  date_reasoning             n=3 acc=0.333 CI=[0.061,0.792] majority=0.667 lower>majority=False
+  double_negative            n=3 acc=1.000 CI=[0.439,1.000] majority=0.667 lower>majority=False
+  forged_option              n=3 acc=0.667 CI=[0.208,0.939] majority=0.333 lower>majority=False
+  injection                  n=3 acc=1.000 CI=[0.439,1.000] majority=0.333 lower>majority=True
+  irrelevant_state           n=6 acc=1.000 CI=[0.610,1.000] majority=0.333 lower>majority=True
+  minimal_state              n=1 acc=1.000 CI=[0.207,1.000] majority=1.000 lower>majority=False
+option-order flip rate: n/a (0 of 0 groups)
+accuracy by option count:
+    3 options n=4 acc=1.000 CI=[0.510,1.000]
+    4 options n=1 acc=1.000 CI=[0.207,1.000]
+    7 options n=1 acc=0.000 CI=[0.000,0.793]
+calibration: insufficient for calibration (n=22, need 200)

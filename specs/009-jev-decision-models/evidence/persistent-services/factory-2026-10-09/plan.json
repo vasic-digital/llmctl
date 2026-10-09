@@ -1,0 +1,1094 @@
+{
+  "tier": "workstation",
+  "budgets": {
+    "ram_mb": 156627,
+    "vram_mb": 27268,
+    "vram_live": true,
+    "storage_free_mb": 171424
+  },
+  "profiles": {
+    "coder": {
+      "mode": "gpu",
+      "ram_mb": 2048,
+      "vram_mb": 21793,
+      "storage_mb": 17697,
+      "ctx": 32768,
+      "ngl": 99,
+      "parallel": 1,
+      "flash_attn": "auto",
+      "kv_cache_type": "f16",
+      "fits": true,
+      "gpu_vram_mb": 21793,
+      "vram_provenance": "estimated",
+      "vram_evidence": null,
+      "cpu_vram_provenance": "unmeasured",
+      "port": 8081,
+      "engine": "llama",
+      "capability": [
+        "coder",
+        "chat"
+      ],
+      "min_tier": "baseline",
+      "tier_ok": true,
+      "recommended": true
+    },
+    "colibri-glm": {
+      "mode": "colibri",
+      "ram_mb": 24576,
+      "vram_mb": 0,
+      "storage_mb": 409389,
+      "ctx": 8192,
+      "ngl": 0,
+      "parallel": 1,
+      "flash_attn": "off",
+      "fits": false,
+      "port": 8090,
+      "engine": "colibri",
+      "capability": [
+        "chat",
+        "coder"
+      ],
+      "min_tier": "datacenter",
+      "tier_ok": false,
+      "recommended": false
+    },
+    "colibri-qwen36": {
+      "mode": "colibri",
+      "ram_mb": 8192,
+      "vram_mb": 0,
+      "storage_mb": 20164,
+      "ctx": 8192,
+      "ngl": 0,
+      "parallel": 1,
+      "flash_attn": "off",
+      "fits": true,
+      "port": 8091,
+      "engine": "colibri",
+      "capability": [
+        "chat",
+        "coder"
+      ],
+      "min_tier": "workstation",
+      "tier_ok": true,
+      "recommended": true
+    },
+    "decide": {
+      "mode": "gpu",
+      "ram_mb": 2048,
+      "vram_mb": 3671,
+      "storage_mb": 2583,
+      "ctx": 8192,
+      "ngl": 99,
+      "parallel": 2,
+      "flash_attn": "auto",
+      "kv_cache_type": "q8_0",
+      "fits": true,
+      "gpu_vram_mb": 3671,
+      "vram_provenance": "estimated",
+      "vram_evidence": null,
+      "cpu_vram_provenance": "unmeasured",
+      "port": 8093,
+      "engine": "llama",
+      "capability": [
+        "decide"
+      ],
+      "min_tier": "baseline",
+      "tier_ok": true,
+      "recommended": true,
+      "overhead_mb": 0,
+      "overhead_vram_mb": 0,
+      "window_tokens": null,
+      "memory_status": "unmeasured",
+      "unknown_overhead": [
+        "ram",
+        "vram"
+      ],
+      "experimental_types": [
+        "noul",
+        "choice",
+        "score"
+      ]
+    },
+    "decide-2b": {
+      "mode": "gpu",
+      "ram_mb": 2048,
+      "vram_mb": 3006,
+      "storage_mb": 1918,
+      "ctx": 8192,
+      "ngl": 99,
+      "parallel": 2,
+      "flash_attn": "auto",
+      "kv_cache_type": "q8_0",
+      "fits": true,
+      "gpu_vram_mb": 3006,
+      "vram_provenance": "estimated",
+      "vram_evidence": null,
+      "cpu_vram_provenance": "unmeasured",
+      "assigned_port": 8098,
+      "port": 8098,
+      "engine": "llama",
+      "capability": [
+        "decide"
+      ],
+      "min_tier": "baseline",
+      "tier_ok": true,
+      "recommended": true,
+      "overhead_mb": 0,
+      "overhead_vram_mb": 0,
+      "window_tokens": null,
+      "memory_status": "unmeasured",
+      "unknown_overhead": [
+        "ram",
+        "vram"
+      ],
+      "experimental_types": [
+        "noul",
+        "choice",
+        "score"
+      ]
+    },
+    "decide-julia": {
+      "mode": "gpu",
+      "ram_mb": 2048,
+      "vram_mb": 212,
+      "storage_mb": 160,
+      "ctx": 1024,
+      "ngl": 99,
+      "parallel": 1,
+      "flash_attn": "auto",
+      "kv_cache_type": "f16",
+      "fits": true,
+      "gpu_vram_mb": 212,
+      "vram_provenance": "measured",
+      "vram_evidence": "specs/009-jev-decision-models/evidence/live-models/decide-julia/memory.txt",
+      "cpu_vram_provenance": "measured",
+      "assigned_port": 8103,
+      "port": 8103,
+      "engine": "llama",
+      "capability": [
+        "decide"
+      ],
+      "min_tier": "below-minimum",
+      "tier_ok": true,
+      "recommended": true,
+      "overhead_mb": 1410,
+      "overhead_vram_mb": 194,
+      "window_tokens": 1024,
+      "memory_status": "measured",
+      "unknown_overhead": [],
+      "experimental_types": [
+        "noul",
+        "choice",
+        "score"
+      ]
+    },
+    "decide-kev-08b": {
+      "mode": "gpu",
+      "ram_mb": 2048,
+      "vram_mb": 2900,
+      "storage_mb": 774,
+      "ctx": 2048,
+      "ngl": 99,
+      "parallel": 1,
+      "flash_attn": "auto",
+      "kv_cache_type": "f16",
+      "fits": true,
+      "gpu_vram_mb": 2900,
+      "vram_provenance": "measured",
+      "vram_evidence": "specs/009-jev-decision-models/evidence/live-models/decide-kev-08b/memory.txt",
+      "cpu_vram_provenance": "measured",
+      "assigned_port": 8104,
+      "port": 8104,
+      "engine": "llama",
+      "capability": [
+        "decide"
+      ],
+      "min_tier": "below-minimum",
+      "tier_ok": true,
+      "recommended": true,
+      "overhead_mb": 4553,
+      "overhead_vram_mb": 2621,
+      "window_tokens": 2048,
+      "memory_status": "measured",
+      "unknown_overhead": [],
+      "experimental_types": [
+        "score"
+      ]
+    },
+    "decide-kev-4b": {
+      "mode": "gpu",
+      "ram_mb": 4899,
+      "vram_mb": 7328,
+      "storage_mb": 2892,
+      "ctx": 8192,
+      "ngl": 99,
+      "parallel": 1,
+      "flash_attn": "auto",
+      "kv_cache_type": "f16",
+      "fits": true,
+      "gpu_vram_mb": 7328,
+      "vram_provenance": "measured",
+      "vram_evidence": "specs/009-jev-decision-models/evidence/live-models/decide-kev-4b/memory.txt",
+      "cpu_vram_provenance": "measured",
+      "assigned_port": 8105,
+      "port": 8105,
+      "engine": "llama",
+      "capability": [
+        "decide"
+      ],
+      "min_tier": "baseline",
+      "tier_ok": true,
+      "recommended": true,
+      "overhead_mb": 0,
+      "overhead_vram_mb": 4906,
+      "window_tokens": null,
+      "memory_status": "partial",
+      "unknown_overhead": [
+        "ram"
+      ],
+      "experimental_types": []
+    },
+    "decide-kev-9b": {
+      "mode": "gpu",
+      "ram_mb": 2048,
+      "vram_mb": 11104,
+      "storage_mb": 6064,
+      "ctx": 8192,
+      "ngl": 99,
+      "parallel": 1,
+      "flash_attn": "auto",
+      "kv_cache_type": "f16",
+      "fits": true,
+      "gpu_vram_mb": 11104,
+      "vram_provenance": "lower-bound",
+      "vram_evidence": "specs/009-jev-decision-models/evidence/live-models.jsonl",
+      "cpu_vram_provenance": "floor",
+      "assigned_port": 8106,
+      "port": 8106,
+      "engine": "llama",
+      "capability": [
+        "decide"
+      ],
+      "min_tier": "workstation",
+      "tier_ok": true,
+      "recommended": true,
+      "overhead_mb": 0,
+      "overhead_vram_mb": 0,
+      "window_tokens": null,
+      "memory_status": "unmeasured",
+      "unknown_overhead": [
+        "ram",
+        "vram"
+      ],
+      "experimental_types": [
+        "noul",
+        "choice",
+        "score"
+      ]
+    },
+    "decide-laya": {
+      "mode": "gpu",
+      "ram_mb": 2048,
+      "vram_mb": 574,
+      "storage_mb": 428,
+      "ctx": 1024,
+      "ngl": 99,
+      "parallel": 1,
+      "flash_attn": "auto",
+      "kv_cache_type": "f16",
+      "fits": true,
+      "gpu_vram_mb": 574,
+      "vram_provenance": "measured",
+      "vram_evidence": "specs/009-jev-decision-models/evidence/live-models/decide-laya/memory.txt",
+      "cpu_vram_provenance": "measured",
+      "assigned_port": 8107,
+      "port": 8107,
+      "engine": "llama",
+      "capability": [
+        "decide"
+      ],
+      "min_tier": "below-minimum",
+      "tier_ok": true,
+      "recommended": true,
+      "overhead_mb": 615,
+      "overhead_vram_mb": 256,
+      "window_tokens": 1024,
+      "memory_status": "measured",
+      "unknown_overhead": [],
+      "experimental_types": [
+        "noul",
+        "score"
+      ]
+    },
+    "decide-lev": {
+      "mode": "gpu",
+      "ram_mb": 3130,
+      "vram_mb": 3926,
+      "storage_mb": 2872,
+      "ctx": 8192,
+      "ngl": 99,
+      "parallel": 1,
+      "flash_attn": "auto",
+      "kv_cache_type": "f16",
+      "fits": true,
+      "gpu_vram_mb": 3926,
+      "vram_provenance": "measured",
+      "vram_evidence": "specs/009-jev-decision-models/evidence/live-models/decide-lev/memory.txt",
+      "cpu_vram_provenance": "gpu-peak-ceiling",
+      "assigned_port": 8108,
+      "port": 8108,
+      "engine": "llama",
+      "capability": [
+        "decide"
+      ],
+      "min_tier": "baseline",
+      "tier_ok": true,
+      "recommended": true,
+      "overhead_mb": 3098,
+      "overhead_vram_mb": 0,
+      "window_tokens": 8192,
+      "memory_status": "partial",
+      "unknown_overhead": [
+        "vram"
+      ],
+      "experimental_types": []
+    },
+    "decide-max": {
+      "mode": "gpu",
+      "ram_mb": 2048,
+      "vram_mb": 10174,
+      "storage_mb": 9086,
+      "ctx": 8192,
+      "ngl": 99,
+      "parallel": 2,
+      "flash_attn": "auto",
+      "kv_cache_type": "q8_0",
+      "fits": true,
+      "gpu_vram_mb": 10174,
+      "vram_provenance": "estimated",
+      "vram_evidence": null,
+      "cpu_vram_provenance": "unmeasured",
+      "assigned_port": 8097,
+      "port": 8097,
+      "engine": "llama",
+      "capability": [
+        "decide"
+      ],
+      "min_tier": "workstation",
+      "tier_ok": true,
+      "recommended": true,
+      "overhead_mb": 0,
+      "overhead_vram_mb": 0,
+      "window_tokens": null,
+      "memory_status": "unmeasured",
+      "unknown_overhead": [
+        "ram",
+        "vram"
+      ],
+      "experimental_types": [
+        "noul",
+        "choice",
+        "score"
+      ]
+    },
+    "decide-nli": {
+      "mode": "cpu",
+      "ram_mb": 3006,
+      "vram_mb": 0,
+      "storage_mb": 1663,
+      "ctx": 512,
+      "ngl": 0,
+      "parallel": 1,
+      "flash_attn": "off",
+      "fits": true,
+      "assigned_port": 8096,
+      "port": 8096,
+      "engine": "onnx",
+      "capability": [
+        "decide"
+      ],
+      "min_tier": "below-minimum",
+      "tier_ok": true,
+      "recommended": true,
+      "overhead_mb": 0,
+      "overhead_vram_mb": 0,
+      "window_tokens": null,
+      "memory_status": "unmeasured",
+      "unknown_overhead": [
+        "ram",
+        "vram"
+      ],
+      "experimental_types": [
+        "noul",
+        "choice",
+        "score"
+      ]
+    },
+    "decide-pro": {
+      "mode": "gpu",
+      "ram_mb": 2048,
+      "vram_mb": 5260,
+      "storage_mb": 4172,
+      "ctx": 8192,
+      "ngl": 99,
+      "parallel": 2,
+      "flash_attn": "auto",
+      "kv_cache_type": "q8_0",
+      "fits": true,
+      "gpu_vram_mb": 5260,
+      "vram_provenance": "estimated",
+      "vram_evidence": null,
+      "cpu_vram_provenance": "unmeasured",
+      "assigned_port": 8094,
+      "port": 8094,
+      "engine": "llama",
+      "capability": [
+        "decide"
+      ],
+      "min_tier": "workstation",
+      "tier_ok": true,
+      "recommended": true,
+      "overhead_mb": 0,
+      "overhead_vram_mb": 0,
+      "window_tokens": null,
+      "memory_status": "unmeasured",
+      "unknown_overhead": [
+        "ram",
+        "vram"
+      ],
+      "experimental_types": [
+        "noul",
+        "choice",
+        "score"
+      ]
+    },
+    "decide-tiny": {
+      "mode": "gpu",
+      "ram_mb": 2048,
+      "vram_mb": 1592,
+      "storage_mb": 504,
+      "ctx": 4096,
+      "ngl": 99,
+      "parallel": 4,
+      "flash_attn": "auto",
+      "kv_cache_type": "q8_0",
+      "fits": true,
+      "gpu_vram_mb": 1592,
+      "vram_provenance": "estimated",
+      "vram_evidence": null,
+      "cpu_vram_provenance": "unmeasured",
+      "port": 8092,
+      "engine": "llama",
+      "capability": [
+        "decide"
+      ],
+      "min_tier": "below-minimum",
+      "tier_ok": true,
+      "recommended": true,
+      "overhead_mb": 0,
+      "overhead_vram_mb": 0,
+      "window_tokens": null,
+      "memory_status": "unmeasured",
+      "unknown_overhead": [
+        "ram",
+        "vram"
+      ],
+      "experimental_types": [
+        "noul",
+        "choice",
+        "score"
+      ]
+    },
+    "fast": {
+      "mode": "gpu",
+      "ram_mb": 2048,
+      "vram_mb": 5716,
+      "storage_mb": 4692,
+      "ctx": 8192,
+      "ngl": 99,
+      "parallel": 1,
+      "flash_attn": "auto",
+      "kv_cache_type": "f16",
+      "fits": true,
+      "gpu_vram_mb": 5716,
+      "vram_provenance": "estimated",
+      "vram_evidence": null,
+      "cpu_vram_provenance": "unmeasured",
+      "port": 8080,
+      "engine": "llama",
+      "capability": [
+        "chat"
+      ],
+      "min_tier": "baseline",
+      "tier_ok": true,
+      "recommended": true
+    },
+    "moe-fast": {
+      "mode": "gpu",
+      "ram_mb": 2048,
+      "vram_mb": 15644,
+      "storage_mb": 11548,
+      "ctx": 16384,
+      "ngl": 99,
+      "parallel": 2,
+      "flash_attn": "auto",
+      "kv_cache_type": "f16",
+      "fits": true,
+      "gpu_vram_mb": 15644,
+      "vram_provenance": "estimated",
+      "vram_evidence": null,
+      "cpu_vram_provenance": "unmeasured",
+      "port": 8084,
+      "engine": "llama",
+      "capability": [
+        "chat"
+      ],
+      "min_tier": "baseline",
+      "tier_ok": true,
+      "recommended": true
+    },
+    "small": {
+      "mode": "gpu",
+      "ram_mb": 2048,
+      "vram_mb": 3859,
+      "storage_mb": 1925,
+      "ctx": 55000,
+      "ngl": 99,
+      "parallel": 1,
+      "flash_attn": "auto",
+      "kv_cache_type": "q4_0",
+      "fits": true,
+      "gpu_vram_mb": 3859,
+      "vram_provenance": "estimated",
+      "vram_evidence": null,
+      "cpu_vram_provenance": "unmeasured",
+      "port": 8085,
+      "engine": "llama",
+      "capability": [
+        "chat"
+      ],
+      "min_tier": "baseline",
+      "tier_ok": true,
+      "recommended": true
+    },
+    "vision": {
+      "mode": "gpu",
+      "ram_mb": 2048,
+      "vram_mb": 4030,
+      "storage_mb": 3186,
+      "ctx": 24000,
+      "ngl": 99,
+      "parallel": 1,
+      "flash_attn": "auto",
+      "kv_cache_type": "q4_0",
+      "fits": true,
+      "gpu_vram_mb": 4030,
+      "vram_provenance": "estimated",
+      "vram_evidence": null,
+      "cpu_vram_provenance": "unmeasured",
+      "port": 8082,
+      "engine": "llama",
+      "capability": [
+        "vision",
+        "chat"
+      ],
+      "min_tier": "baseline",
+      "tier_ok": true,
+      "recommended": true
+    },
+    "vision-pro": {
+      "mode": "gpu",
+      "ram_mb": 2048,
+      "vram_mb": 9824,
+      "storage_mb": 7776,
+      "ctx": 16384,
+      "ngl": 99,
+      "parallel": 1,
+      "flash_attn": "auto",
+      "kv_cache_type": "f16",
+      "fits": true,
+      "gpu_vram_mb": 9824,
+      "vram_provenance": "estimated",
+      "vram_evidence": null,
+      "cpu_vram_provenance": "unmeasured",
+      "port": 8083,
+      "engine": "llama",
+      "capability": [
+        "vision",
+        "chat"
+      ],
+      "min_tier": "workstation",
+      "tier_ok": true,
+      "recommended": true
+    },
+    "ws-dense-32b": {
+      "mode": "gpu",
+      "ram_mb": 2048,
+      "vram_mb": 23027,
+      "storage_mb": 18931,
+      "ctx": 32768,
+      "ngl": 99,
+      "parallel": 1,
+      "flash_attn": "auto",
+      "kv_cache_type": "f16",
+      "fits": true,
+      "gpu_vram_mb": 23027,
+      "vram_provenance": "estimated",
+      "vram_evidence": null,
+      "cpu_vram_provenance": "unmeasured",
+      "port": 8086,
+      "engine": "llama",
+      "capability": [
+        "chat",
+        "coder"
+      ],
+      "min_tier": "workstation",
+      "tier_ok": true,
+      "recommended": true
+    },
+    "ws-moe-30b": {
+      "mode": "gpu",
+      "ram_mb": 2048,
+      "vram_mb": 25889,
+      "storage_mb": 17697,
+      "ctx": 32768,
+      "ngl": 99,
+      "parallel": 2,
+      "flash_attn": "auto",
+      "kv_cache_type": "f16",
+      "fits": true,
+      "gpu_vram_mb": 25889,
+      "vram_provenance": "estimated",
+      "vram_evidence": null,
+      "cpu_vram_provenance": "unmeasured",
+      "port": 8087,
+      "engine": "llama",
+      "capability": [
+        "chat",
+        "coder"
+      ],
+      "min_tier": "workstation",
+      "tier_ok": true,
+      "recommended": true
+    }
+  },
+  "decision_instances": {
+    "decide": {
+      "instances_gpu": 7,
+      "instances_cpu": 42,
+      "per_instance": {
+        "ram_mb": 2048,
+        "vram_mb": 3671,
+        "slots": 2
+      },
+      "total_decision_slots": 84,
+      "protocol": "letter-logit",
+      "mode": "deterministic",
+      "slots_assume_mode": "throughput",
+      "effective_slots_per_instance": 1,
+      "effective_total_decision_slots": 42,
+      "best_placement": "cpu",
+      "placements": {
+        "gpu": {
+          "ram_mb": 2048,
+          "vram_mb": 3671
+        },
+        "cpu": {
+          "ram_mb": 3671,
+          "vram_mb": 0
+        }
+      },
+      "tier_ok": true
+    },
+    "decide-2b": {
+      "instances_gpu": 9,
+      "instances_cpu": 52,
+      "per_instance": {
+        "ram_mb": 2048,
+        "vram_mb": 3006,
+        "slots": 2
+      },
+      "total_decision_slots": 104,
+      "protocol": "letter-logit",
+      "mode": "deterministic",
+      "slots_assume_mode": "throughput",
+      "effective_slots_per_instance": 1,
+      "effective_total_decision_slots": 52,
+      "best_placement": "cpu",
+      "placements": {
+        "gpu": {
+          "ram_mb": 2048,
+          "vram_mb": 3006
+        },
+        "cpu": {
+          "ram_mb": 3006,
+          "vram_mb": 0
+        }
+      },
+      "tier_ok": true
+    },
+    "decide-julia": {
+      "instances_gpu": 76,
+      "instances_cpu": 92,
+      "per_instance": {
+        "ram_mb": 2048,
+        "vram_mb": 212,
+        "slots": 1
+      },
+      "total_decision_slots": 92,
+      "protocol": "systemone-native",
+      "mode": "deterministic",
+      "slots_assume_mode": "throughput",
+      "effective_slots_per_instance": 1,
+      "effective_total_decision_slots": 92,
+      "best_placement": "cpu",
+      "placements": {
+        "gpu": {
+          "ram_mb": 2048,
+          "vram_mb": 212
+        },
+        "cpu": {
+          "ram_mb": 1698,
+          "vram_mb": 194
+        }
+      },
+      "tier_ok": true
+    },
+    "decide-kev-08b": {
+      "instances_gpu": 9,
+      "instances_cpu": 10,
+      "per_instance": {
+        "ram_mb": 2048,
+        "vram_mb": 2900,
+        "slots": 1
+      },
+      "total_decision_slots": 10,
+      "protocol": "systemone-native",
+      "mode": "deterministic",
+      "slots_assume_mode": "throughput",
+      "effective_slots_per_instance": 1,
+      "effective_total_decision_slots": 10,
+      "best_placement": "cpu",
+      "placements": {
+        "gpu": {
+          "ram_mb": 2048,
+          "vram_mb": 2900
+        },
+        "cpu": {
+          "ram_mb": 5583,
+          "vram_mb": 2621
+        }
+      },
+      "tier_ok": true
+    },
+    "decide-kev-4b": {
+      "instances_gpu": 3,
+      "instances_cpu": 5,
+      "per_instance": {
+        "ram_mb": 4899,
+        "vram_mb": 7328,
+        "slots": 1
+      },
+      "total_decision_slots": 5,
+      "protocol": "systemone-native",
+      "mode": "deterministic",
+      "slots_assume_mode": "throughput",
+      "effective_slots_per_instance": 1,
+      "effective_total_decision_slots": 5,
+      "best_placement": "cpu",
+      "placements": {
+        "gpu": {
+          "ram_mb": 4899,
+          "vram_mb": 7328
+        },
+        "cpu": {
+          "ram_mb": 3916,
+          "vram_mb": 4906
+        }
+      },
+      "tier_ok": true
+    },
+    "decide-kev-9b": {
+      "instances_gpu": 2,
+      "instances_cpu": 6,
+      "per_instance": {
+        "ram_mb": 2048,
+        "vram_mb": 11104,
+        "slots": 1
+      },
+      "total_decision_slots": 6,
+      "protocol": "systemone-native",
+      "mode": "deterministic",
+      "slots_assume_mode": "throughput",
+      "effective_slots_per_instance": 1,
+      "effective_total_decision_slots": 6,
+      "best_placement": "cpu",
+      "placements": {
+        "gpu": {
+          "ram_mb": 2048,
+          "vram_mb": 11104
+        },
+        "cpu": {
+          "ram_mb": 7088,
+          "vram_mb": 4016
+        }
+      },
+      "tier_ok": true
+    },
+    "decide-laya": {
+      "instances_gpu": 47,
+      "instances_cpu": 106,
+      "per_instance": {
+        "ram_mb": 2048,
+        "vram_mb": 574,
+        "slots": 1
+      },
+      "total_decision_slots": 106,
+      "protocol": "systemone-native",
+      "mode": "deterministic",
+      "slots_assume_mode": "throughput",
+      "effective_slots_per_instance": 1,
+      "effective_total_decision_slots": 106,
+      "best_placement": "cpu",
+      "placements": {
+        "gpu": {
+          "ram_mb": 2048,
+          "vram_mb": 574
+        },
+        "cpu": {
+          "ram_mb": 1171,
+          "vram_mb": 256
+        }
+      },
+      "tier_ok": true
+    },
+    "decide-lev": {
+      "instances_gpu": 6,
+      "instances_cpu": 6,
+      "per_instance": {
+        "ram_mb": 3130,
+        "vram_mb": 3926,
+        "slots": 1
+      },
+      "total_decision_slots": 6,
+      "protocol": "systemone-native",
+      "mode": "deterministic",
+      "slots_assume_mode": "throughput",
+      "effective_slots_per_instance": 1,
+      "effective_total_decision_slots": 6,
+      "best_placement": "gpu",
+      "placements": {
+        "gpu": {
+          "ram_mb": 3130,
+          "vram_mb": 3926
+        },
+        "cpu": {
+          "ram_mb": 6994,
+          "vram_mb": 3926
+        }
+      },
+      "tier_ok": true
+    },
+    "decide-max": {
+      "instances_gpu": 2,
+      "instances_cpu": 15,
+      "per_instance": {
+        "ram_mb": 2048,
+        "vram_mb": 10174,
+        "slots": 2
+      },
+      "total_decision_slots": 30,
+      "protocol": "letter-logit",
+      "mode": "deterministic",
+      "slots_assume_mode": "throughput",
+      "effective_slots_per_instance": 1,
+      "effective_total_decision_slots": 15,
+      "best_placement": "cpu",
+      "placements": {
+        "gpu": {
+          "ram_mb": 2048,
+          "vram_mb": 10174
+        },
+        "cpu": {
+          "ram_mb": 10174,
+          "vram_mb": 0
+        }
+      },
+      "tier_ok": true
+    },
+    "decide-nli": {
+      "instances_gpu": 0,
+      "instances_cpu": 52,
+      "per_instance": {
+        "ram_mb": 3006,
+        "vram_mb": 0,
+        "slots": 1
+      },
+      "total_decision_slots": 52,
+      "protocol": "nli-onnx",
+      "mode": "deterministic",
+      "slots_assume_mode": "throughput",
+      "effective_slots_per_instance": 1,
+      "effective_total_decision_slots": 52,
+      "best_placement": "cpu",
+      "placements": {
+        "gpu": null,
+        "cpu": {
+          "ram_mb": 3006,
+          "vram_mb": 0
+        }
+      },
+      "tier_ok": true
+    },
+    "decide-pro": {
+      "instances_gpu": 5,
+      "instances_cpu": 29,
+      "per_instance": {
+        "ram_mb": 2048,
+        "vram_mb": 5260,
+        "slots": 2
+      },
+      "total_decision_slots": 58,
+      "protocol": "letter-logit",
+      "mode": "deterministic",
+      "slots_assume_mode": "throughput",
+      "effective_slots_per_instance": 1,
+      "effective_total_decision_slots": 29,
+      "best_placement": "cpu",
+      "placements": {
+        "gpu": {
+          "ram_mb": 2048,
+          "vram_mb": 5260
+        },
+        "cpu": {
+          "ram_mb": 5260,
+          "vram_mb": 0
+        }
+      },
+      "tier_ok": true
+    },
+    "decide-tiny": {
+      "instances_gpu": 17,
+      "instances_cpu": 98,
+      "per_instance": {
+        "ram_mb": 2048,
+        "vram_mb": 1592,
+        "slots": 4
+      },
+      "total_decision_slots": 392,
+      "protocol": "jev-verdict",
+      "mode": "deterministic",
+      "slots_assume_mode": "throughput",
+      "effective_slots_per_instance": 1,
+      "effective_total_decision_slots": 98,
+      "best_placement": "cpu",
+      "placements": {
+        "gpu": {
+          "ram_mb": 2048,
+          "vram_mb": 1592
+        },
+        "cpu": {
+          "ram_mb": 1592,
+          "vram_mb": 0
+        }
+      },
+      "tier_ok": true
+    }
+  },
+  "decision_mode": "deterministic",
+  "recommended": [
+    "fast",
+    "coder",
+    "vision",
+    "vision-pro",
+    "moe-fast",
+    "small",
+    "ws-dense-32b",
+    "ws-moe-30b",
+    "colibri-qwen36",
+    "decide-tiny",
+    "decide",
+    "decide-pro",
+    "decide-nli",
+    "decide-max",
+    "decide-2b",
+    "decide-julia",
+    "decide-kev-08b",
+    "decide-kev-4b",
+    "decide-kev-9b",
+    "decide-laya",
+    "decide-lev"
+  ],
+  "coresidency_groups": [
+    {
+      "profiles": [
+        "fast"
+      ],
+      "ram_mb": 2048,
+      "vram_mb": 5716,
+      "storage_mb": 4692
+    },
+    {
+      "profiles": [
+        "coder",
+        "vision"
+      ],
+      "ram_mb": 4096,
+      "vram_mb": 25823,
+      "storage_mb": 20883
+    },
+    {
+      "profiles": [
+        "vision-pro",
+        "moe-fast"
+      ],
+      "ram_mb": 4096,
+      "vram_mb": 25468,
+      "storage_mb": 19324
+    },
+    {
+      "profiles": [
+        "small",
+        "ws-dense-32b"
+      ],
+      "ram_mb": 4096,
+      "vram_mb": 26886,
+      "storage_mb": 20856
+    },
+    {
+      "profiles": [
+        "ws-moe-30b",
+        "colibri-qwen36"
+      ],
+      "ram_mb": 10240,
+      "vram_mb": 25889,
+      "storage_mb": 37861
+    },
+    {
+      "profiles": [
+        "decide-tiny",
+        "decide",
+        "decide-pro",
+        "decide-nli",
+        "decide-max",
+        "decide-2b",
+        "decide-julia",
+        "decide-kev-08b"
+      ],
+      "ram_mb": 17342,
+      "vram_mb": 26815,
+      "storage_mb": 20860
+    },
+    {
+      "profiles": [
+        "decide-kev-4b",
+        "decide-kev-9b",
+        "decide-laya",
+        "decide-lev"
+      ],
+      "ram_mb": 12125,
+      "vram_mb": 22932,
+      "storage_mb": 12256
+    }
+  ]
+}

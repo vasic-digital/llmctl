@@ -1,0 +1,121 @@
+{
+  "schema": "llmctl.admission/1",
+  "candidate": {
+    "name": "edgejev",
+    "repo": "-",
+    "pinned": "no",
+    "protocol_hint": "unsupported",
+    "known_issue": "",
+    "name_collision": "",
+    "kind": "harness"
+  },
+  "slug": "edgejev",
+  "mode": "paper-only",
+  "retrieved_at": "2026-10-09T14:24:56Z",
+  "existence": {
+    "verdict": "UNVERIFIED",
+    "evidence": "not probed: no Hugging Face repo is named for this candidate (GitHub/PyPI-only tool); see research/web-candidate-models.md for the recorded GitHub/PyPI evidence, not re-verified by this driver",
+    "http_status": 0
+  },
+  "api": {},
+  "pins": [],
+  "protocol": {
+    "class": "unsupported",
+    "source": "none"
+  },
+  "needs_engine_advance": false,
+  "tier": null,
+  "g10_subchecks": [
+    {
+      "check": "loadability",
+      "status": "SKIP",
+      "evidence": "not attempted: candidate does not exist or was not readable (existence UNVERIFIED)"
+    },
+    {
+      "check": "smoke_answer",
+      "status": "SKIP",
+      "evidence": "not attempted: candidate does not exist or was not readable (existence UNVERIFIED)"
+    },
+    {
+      "check": "determinism_repeats",
+      "status": "SKIP",
+      "evidence": "not attempted: candidate does not exist or was not readable (existence UNVERIFIED)"
+    },
+    {
+      "check": "option_order_sensitivity",
+      "status": "SKIP",
+      "evidence": "not attempted: candidate does not exist or was not readable (existence UNVERIFIED)"
+    },
+    {
+      "check": "memory_fit_measured",
+      "status": "SKIP",
+      "evidence": "not attempted: candidate does not exist or was not readable (existence UNVERIFIED)"
+    }
+  ],
+  "disposition": "REJECTED",
+  "reasons": [
+    "no weights artifact: harness / library, not a model (kind=harness)"
+  ],
+  "gates": [
+    {
+      "gate": "G1",
+      "name": "licence allow-list",
+      "status": "SKIP",
+      "evidence": "not attempted: candidate does not exist or was not readable (existence UNVERIFIED)"
+    },
+    {
+      "gate": "G2",
+      "name": "stable revision",
+      "status": "SKIP",
+      "evidence": "not attempted: candidate does not exist or was not readable (existence UNVERIFIED)"
+    },
+    {
+      "gate": "G3",
+      "name": "pinned size+sha256",
+      "status": "SKIP",
+      "evidence": "not attempted: candidate does not exist or was not readable (existence UNVERIFIED)"
+    },
+    {
+      "gate": "G4",
+      "name": "loadable by pinned engine",
+      "status": "SKIP",
+      "evidence": "not attempted: candidate does not exist or was not readable (existence UNVERIFIED)"
+    },
+    {
+      "gate": "G5",
+      "name": "fits budgets",
+      "status": "SKIP",
+      "evidence": "not attempted: candidate does not exist or was not readable (existence UNVERIFIED)"
+    },
+    {
+      "gate": "G6",
+      "name": "protocol classification",
+      "status": "SKIP",
+      "evidence": "not attempted: candidate does not exist or was not readable (existence UNVERIFIED)"
+    },
+    {
+      "gate": "G7",
+      "name": "supply chain",
+      "status": "SKIP",
+      "evidence": "not attempted: candidate does not exist or was not readable (existence UNVERIFIED)"
+    },
+    {
+      "gate": "G8",
+      "name": "provenance",
+      "status": "SKIP",
+      "evidence": "not attempted: candidate does not exist or was not readable (existence UNVERIFIED)"
+    },
+    {
+      "gate": "G9",
+      "name": "known-issue sweep",
+      "status": "SKIP",
+      "evidence": "not attempted: candidate does not exist or was not readable (existence UNVERIFIED)"
+    },
+    {
+      "gate": "G10",
+      "name": "real run",
+      "status": "SKIP",
+      "evidence": "not attempted: candidate does not exist or was not readable (existence UNVERIFIED)"
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+[
+ {
+  "request": "POST /v1/systemone auth=wrong",
+  "status": 401,
+  "headers": {
+   "content-type": "application/json; charset=utf-8",
+   "www-authenticate": "Bearer realm=\"llmctl\"",
+   "x-llmctl-request-id": "31b8526b97d1c818"
+  },
+  "body": "{\"message\":\"Authentication required.\",\"error_type\":\"unauthorized\"}",
+  "error": null,
+  "trust": null,
+  "note": null
+ }
+]

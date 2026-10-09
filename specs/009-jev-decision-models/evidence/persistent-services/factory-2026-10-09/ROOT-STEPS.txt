@@ -1,0 +1,22 @@
+ROOT STEPS REQUIRED on the-factory (ALT Linux, no sudo; run as root via `su`)
+Written 2026-10-09 by the install agent. Nothing below was executed by the agent.
+
+1. CUDA toolkit (nvcc) — WHY: the RTX 5090 (sm_120) needs nvcc >= 12.8 to build llama.cpp with GGML_CUDA=ON
+   (llmctl build llama auto-selects CUDA only if `nvcc` is on PATH or /usr/local/cuda/bin/nvcc exists).
+   Host has only the CUDA *runtime* libs (libcudart 12.8.90, libcublas 12.9.1.4); no nvcc, no headers.
+   Until this is done llama.cpp is a CPU-only build (clearly labelled fallback; all GPU placement is
+   impossible with it, the planner's gpu placements would be wrong).
+   Command (ALT apt-rpm, package versions seen in apt-cache: 12.9.1-alt2, ~25 MB download / ~108 MB installed):
+       su -c 'apt-get install -y nvidia-cuda-toolkit nvidia-cuda-devel'
+   Then verify as milos:   nvcc --version   (expect 12.9, supports sm_120)
+   (If nvcc lands outside PATH, e.g. /usr/libexec/cuda/bin, tell the agent/lead; llmctl also checks
+    /usr/local/cuda/bin/nvcc.)  Afterwards: `~/llmctl-3.1.0-factory/bin/llmctl build llama` is rebuilt with CUDA
+    (see README for the exact follow-up).
+
+FOLLOW-UP after the root step (as milos, no root), to move llama.cpp from the CPU fallback to CUDA (sm_120):
+   export XDG_RUNTIME_DIR=/run/user/$(id -u)
+   command -v nvcc || export PATH=/usr/libexec/cuda/bin:$PATH   # adjust to where ALT puts nvcc
+   cd ~/llmctl-3.1.0-factory && rm -rf submodules/llama.cpp/build && ./bin/llmctl build llama   # expect "CUDA toolkit detected -> GGML_CUDA=ON"
+   for u in $(systemctl --user list-units 'llmctl-llama@*' --plain --no-legend | awk '{print $1}'); do systemctl --user restart $u; done
+   # then re-run nvidia-smi VRAM measurements and ~/llmctl-factory-logs/golden2.sh (needs a key file, see the script)
+No other root step was needed (Linger=yes already, systemd --user works, all units are user units).

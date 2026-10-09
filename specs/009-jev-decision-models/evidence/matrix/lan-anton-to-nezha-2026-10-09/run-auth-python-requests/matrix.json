@@ -1,0 +1,155 @@
+{
+ "cells": [
+  {
+   "case_id": "EP-009",
+   "client": "python-requests",
+   "evidence_id": "EV-lan-auth-python-requests-0001",
+   "reason": null,
+   "reason_class": null,
+   "result": "pass",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-010",
+   "client": "python-requests",
+   "evidence_id": "EV-lan-auth-python-requests-0002",
+   "reason": null,
+   "reason_class": null,
+   "result": "pass",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-031",
+   "client": "python-requests",
+   "evidence_id": "EV-lan-auth-python-requests-0003",
+   "reason": null,
+   "reason_class": null,
+   "result": "pass",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-032",
+   "client": "python-requests",
+   "evidence_id": "EV-lan-auth-python-requests-0004",
+   "reason": null,
+   "reason_class": null,
+   "result": "pass",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-051",
+   "client": "python-requests",
+   "evidence_id": "EV-lan-auth-python-requests-0005",
+   "reason": null,
+   "reason_class": null,
+   "result": "pass",
+   "vantage": "host"
+  },
+  {
+   "case_id": "EP-061",
+   "client": "python-requests",
+   "evidence_id": "EV-lan-auth-python-requests-0006",
+   "reason": null,
+   "reason_class": null,
+   "result": "pass",
+   "vantage": "host"
+  }
+ ],
+ "clients": {
+  "python-requests": "available"
+ },
+ "completeness": {
+  "complete": false,
+  "problems": [
+   "case EP-001 exists in the harness but not in the inventory (inventory row removed?)",
+   "case EP-002 exists in the harness but not in the inventory (inventory row removed?)",
+   "case EP-003 exists in the harness but not in the inventory (inventory row removed?)",
+   "case EP-004 exists in the harness but not in the inventory (inventory row removed?)",
+   "case EP-005 exists in the harness but not in the inventory (inventory row removed?)",
+   "case EP-006 exists in the harness but not in the inventory (inventory row removed?)",
+   "case EP-007 exists in the harness but not in the inventory (inventory row removed?)",
+   "case EP-008 exists in the harness but not in the inventory (inventory row removed?)",
+   "case EP-008b exists in the harness but not in the inventory (inventory row removed?)",
+   "case EP-011 exists in the harness but not in the inventory (inventory row removed?)",
+   "case EP-012 exists in the harness but not in the inventory (inventory row removed?)",
+   "case EP-013 exists in the harness but not in the inventory (inventory row removed?)",
+   "case EP-014 exists in the harness but not in the inventory (inventory row removed?)",
+   "case EP-015 exists in the harness but not in the inventory (inventory row removed?)",
+   "case EP-015b exists in the harness but not in the inventory (inventory row removed?)",
+   "case EP-016 exists in the harness but not in the inventory (inventory row removed?)",
+   "case EP-016b exists in the harness but not in the inventory (inventory row removed?)",
+   "case EP-017 exists in the harness but not in the inventory (inventory row removed?)",
+   "case EP-018 exists in the harness but not in the inventory (inventory row removed?)",
+   "case EP-019 exists in the harness but not in the inventory (inventory row removed?)",
+   "case EP-020 exists in the harness but not in the inventory (inventory row removed?)",
+   "case EP-021 exists in the harness but not in the inventory (inventory row removed?)",
+   "case EP-022 exists in the harness but not in the inventory (inventory row removed?)",
+   "case EP-023 exists in the harness but not in the inventory (inventory row removed?)",
+   "case EP-024 exists in the harness but not in the inventory (inventory row removed?)",
+   "case EP-025 exists in the harness but not in the inventory (inventory row removed?)",
+   "case EP-026 exists in the harness but not in the inventory (inventory row removed?)",
+   "case EP-030 exists in the harness but not in the inventory (inventory row removed?)",
+   "case EP-033 exists in the harness but not in the inventory (inventory row removed?)",
+   "case EP-034 exists in the harness but not in the inventory (inventory row removed?)",
+   "case EP-040 exists in the harness but not in the inventory (inventory row removed?)",
+   "case EP-041 exists in the harness but not in the inventory (inventory row removed?)",
+   "case EP-045 exists in the harness but not in the inventory (inventory row removed?)",
+   "case EP-046 exists in the harness but not in the inventory (inventory row removed?)",
+   "case EP-050 exists in the harness but not in the inventory (inventory row removed?)",
+   "case EP-052 exists in the harness but not in the inventory (inventory row removed?)",
+   "case EP-060 exists in the harness but not in the inventory (inventory row removed?)",
+   "case EP-070 exists in the harness but not in the inventory (inventory row removed?)",
+   "case EP-071 exists in the harness but not in the inventory (inventory row removed?)"
+  ]
+ },
+ "evidence_class": "real-component",
+ "inventory": {
+  "case_ids": [
+   "EP-009",
+   "EP-010",
+   "EP-031",
+   "EP-032",
+   "EP-051",
+   "EP-061"
+  ],
+  "path": "/tmp/claude-1000/-home-milosvasic-Projects-llmctl/4cea4116-8339-d4a8-4d6c-db1d21cb18d4/scratchpad/lan/inventory-auth.tsv",
+  "rows": 6,
+  "sha256": "b71a6bbc33053b29ebd245b58a92f3c92e9f05a50d8288931a14bd4af17266dd"
+ },
+ "leak_scan": {
+  "control_needle_found": true,
+  "rc": 0,
+  "status": "clean"
+ },
+ "not_exercised_classes": {
+  "env": "env-gap",
+  "fr069": {
+   "agent-outside-subset": "agents outside their defined subset (FR-069)",
+   "browser-non-get": "browser client on non-GET cases (FR-069)",
+   "sdk-no-ca-trust": "hosted SDK where no CA-trust mechanism works (FR-069; recorded as a trust-configuration failure)"
+  },
+  "proposed_beyond_fr069": {
+   "sdk-outside-subset": "SDK exposes only POST /v1/systemone and GET /v1/models; other cases are outside its surface",
+   "transport-not-per-client": "transport-level behaviour (slow client, connection cap, engine port) is client-independent; executed once by the stdlib socket helper under python-urllib (and curl for the engine port)"
+  }
+ },
+ "pending_adapters": {
+  "agent:*": "the seven coding-agent adapters are wired later (defined subset: one authenticated success call + one unauthenticated call each)",
+  "llmctl-cli": "llmctl-decide ask adapter is wired later (T-runner follow-up)"
+ },
+ "pending_vantages": [
+  "second-machine"
+ ],
+ "run_id": "lan-auth-python-requests",
+ "summary": {
+  "cells": 6,
+  "classes_beyond_fr069": 0,
+  "pass": 6
+ },
+ "target": "https://192.168.1.90:8095",
+ "vantages": {
+  "host": "exercised",
+  "second-machine": "pending-vantage (vantage helper not wired yet)"
+ },
+ "verdict": "FAIL"
+}

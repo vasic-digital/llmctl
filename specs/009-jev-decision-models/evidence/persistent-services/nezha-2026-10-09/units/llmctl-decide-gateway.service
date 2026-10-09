@@ -1,0 +1,45 @@
+[Unit]
+Description=llmctl decision gateway (HTTPS, key-protected; engines stay loopback-only)
+After=network-online.target
+Wants=network-online.target
+# Restart bounds in [Unit] - the only section systemd honours them in.
+StartLimitBurst=5
+StartLimitIntervalSec=60
+
+[Service]
+Type=simple
+Environment="LLMCTL_ROOT=/home/milosvasic/llmctl-3.1.0"
+Environment="LLMCTL_STATE_DIR=/home/milosvasic/.local/state/llmctl"
+Environment="LLMCTL_LOG_DIR=/home/milosvasic/.local/state/llmctl/logs"
+Environment="LLMCTL_SERVICES_DIR=/home/milosvasic/.local/state/llmctl/services"
+Environment="LLMCTL_CONFIG_DIR=/home/milosvasic/.config/llmctl"
+Environment="LLMCTL_DATA_DIR=/home/milosvasic/.local/share/llmctl"
+Environment="LLMCTL_RUNTIME_DIR=/run/user/1000/llmctl"
+Environment="LLMCTL_DECIDE_BIN=/home/milosvasic/llmctl-3.1.0/build/llmctl-decide"
+# Operator overrides (LLMCTL_DECIDE_PORT, LLMCTL_DECIDE_BIND,
+# LLMCTL_PORT_STRATEGY=dynamic, LLMCTL_PORT_GATEWAY=auto, LLMCTL_DECIDE_MODE,
+# ...) go in this optional file; no secret belongs in it (the access key lives
+# in the installation .env, which the gateway reads itself, mode 0600).
+EnvironmentFile=-/home/milosvasic/.local/state/llmctl/decide/gateway.conf
+# The wrapper allocates the port (fixed 8095 by default, dynamic on request),
+# resolves decision backends from the registry, publishes the gateway
+# (kind=gateway) and finally EXECs: llmctl-decide serve --foreground
+ExecStart=/bin/bash "/home/milosvasic/llmctl-3.1.0/lib/svc_hook.sh" run-gateway
+ExecStopPost=-/bin/bash "/home/milosvasic/llmctl-3.1.0/lib/svc_hook.sh" unregister gateway
+Restart=always
+RestartSec=5
+MemoryHigh=64086M
+MemoryMax=64086M
+NoNewPrivileges=yes
+ProtectSystem=full
+UMask=0077
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictSUIDSGID=yes
+LockPersonality=yes
+RestrictRealtime=yes
+SystemCallArchitectures=native
+StandardOutput=append:/home/milosvasic/.local/state/llmctl/logs/decide-gateway.log
+StandardError=append:/home/milosvasic/.local/state/llmctl/logs/decide-gateway.log
+
+[Install]
+WantedBy=default.target

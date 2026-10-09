@@ -1,0 +1,8 @@
+llmctl decide gateway
+  bind:   127.0.0.1:18195
+  URL:    https://127.0.0.1:18195
+  key:    /home/milosvasic/.cache/llmctl-byo-demo/home/env (source: generated; show it with `llmctl key show --yes-print`)
+  CA:     SHA-256 7C:A2:C9:23:A4:1B:77:08:99:B0:78:3C:C0:A8:B9:14:84:0A:50:D1:4F:27:DD:A0:B9:F0:5B:F1:54:C6:F2:15, expires 2036-10-06
+  models: 13 decision profile(s), default byo-nli-xsmall
+  timeout: 8s per request (default; set LLMCTL_DECIDE_TIMEOUT to change)
+llmctl decide gateway: stopped

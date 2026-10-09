@@ -1,0 +1,113 @@
+# T058n negative TLS / transport evidence, anton -> https://192.168.1.90:8095 (2026-10-09T14:30:01Z)
+## server cert chain verification (positive control)
+Verification: OK
+Verified peername: nezha.local
+New, TLSv1.3, Cipher is TLS_AES_128_GCM_SHA256
+Protocol: TLSv1.3
+Verify return code: 0 (ok)
+Verification: OK
+Verify return code: 0 (ok)
+subject=CN=nezha
+issuer=CN=llmctl local CA (nezha)
+notBefore=Oct  9 13:39:51 2026 GMT
+notAfter=Nov 10 13:44:51 2027 GMT
+X509v3 Subject Alternative Name: 
+    DNS:nezha, DNS:localhost, DNS:nezha.local, IP Address:127.0.0.1, IP Address:0:0:0:0:0:0:0:1, IP Address:192.168.1.90, IP Address:10.152.21.129, IP Address:10.1.106.73, IP Address:FC00:BBBB:BBBB:BB01:D:0:18:1581
+## CA public cert (only public file copied): sha256
+sha256 Fingerprint=57:B2:5A:F6:11:31:29:29:0C:C4:4C:49:AC:E0:D4:07:21:4D:66:3E:29:74:42:47:1C:F6:FF:19:BD:B7:62:3C
+## N1 wrong CA (freshly generated unrelated CA)
+-- curl wrong CA:
+curl: (60) SSL certificate OpenSSL verify result: self-signed certificate in certificate chain (19)
+More details here: https://curl.se/docs/sslcerts.html
+
+curl failed to verify the legitimacy of the server and therefore could not
+establish a secure connection to it. To learn more about this situation and
+how to fix it, please visit the webpage mentioned above.
+http=000
+curl rc=60
+-- curl no --cacert (system trust store):
+curl: (60) SSL certificate OpenSSL verify result: self-signed certificate in certificate chain (19)
+More details here: https://curl.se/docs/sslcerts.html
+
+curl failed to verify the legitimacy of the server and therefore could not
+establish a secure connection to it. To learn more about this situation and
+how to fix it, please visit the webpage mentioned above.
+http=000
+-- curl right CA (control):
+{"status":"ok"} http=200
+-- python ssl wrong CA / right CA:
+wrongca REFUSED URLError <urlopen error [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: self-signed certificate in certificate chain (_ssl.c:1081)>
+rightca-ip OK 200
+rightca-nezha.local OK 200
+systemtrust REFUSED URLError <urlopen error [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: self-signed certificate in certificate chain (_ssl.c:1081)>
+-- node wrong CA / right CA:
+node:internal/tls/wrap:1860
+    throw new ERR_INVALID_ARG_VALUE(
+          ^
+
+TypeError [ERR_INVALID_ARG_VALUE]: The property 'options.servername' Setting the TLS ServerName to an IP address is not permitted.. Received '192.168.1.90'
+    at Object.connect (node:internal/tls/wrap:1860:11)
+    at Agent.createConnection (node:https:375:18)
+    at Agent.createSocket (node:_http_agent:480:26)
+    at Agent.addRequest (node:_http_agent:420:10)
+    at new ClientRequest (node:_http_client:577:16)
+    at request (node:https:684:10)
+    at Object.get (node:https:720:15)
+    at [eval]:3:60
+    at new Promise (<anonymous>)
+    at t ([eval]:3:30) {
+  code: 'ERR_INVALID_ARG_VALUE'
+}
+
+Node.js v26.8.1
+-- go wrong CA / right CA:
+wrongca REFUSED Get "https://192.168.1.90:8095/healthz": tls: failed to verify certificate: x509: certificate signed by unknown authorit
+rightca OK 200
+rightca-nezha.local OK 200
+## N2 host name not covered by SANs (right CA, SNI/verify name wrong.example resolved to the gateway)
+curl: (60) SSL: no alternative certificate subject name matches target hostname 'wrong.example'
+More details here: https://curl.se/docs/sslcerts.html
+
+curl failed to verify the legitimacy of the server and therefore could not
+establish a secure connection to it. To learn more about this situation and
+how to fix it, please visit the webpage mentioned above.
+http=000
+verify error:num=62:hostname mismatch
+C0610F55887B0000:error:0A000086:SSL routines:tls_post_process_server_certificate:certificate verify failed:../ssl/statem/statem_clnt.c:2124:
+Verification error: hostname mismatch
+## N3 no key / wrong key (right CA)
+no-key /v1/models http=401
+no-key /metrics http=401
+no-key /v1/does-not-exist http=401
+wrong-key /v1/models http=401
+HTTP/1.1 401 Unauthorized
+Www-Authenticate: Bearer realm="llmctl"
+## N4 plain HTTP to the TLS port
+curl: (56) Recv failure: Connection reset by peer
+http=000
+rc=56
+## N5 outdated protocol versions (openssl s_client)
+-tls1: C0F19369237D0000:error:0A0000BF:SSL routines:tls_setup_handshake:no protocols available:../ssl/statem/statem_lib.c:155: 
+-tls1_1: C031B08E25790000:error:0A0000BF:SSL routines:tls_setup_handshake:no protocols available:../ssl/statem/statem_lib.c:155: 
+-tls1_2:     Protocol  : TLSv1.2 
+-tls1_3: 
+## N6 engine / runtime ports of nezha from anton (non-loopback refusal) + loopback control on nezha
+curl: (7) Failed to connect to 192.168.1.90 port 8080 after 2 ms: Could not connect to server anton->192.168.1.90:8080 http=000  rc=0
+curl: (7) Failed to connect to 192.168.1.90 port 8081 after 1 ms: Could not connect to server anton->192.168.1.90:8081 http=000  rc=0
+curl: (7) Failed to connect to 192.168.1.90 port 8094 after 1 ms: Could not connect to server anton->192.168.1.90:8094 http=000  rc=0
+curl: (7) Failed to connect to 192.168.1.90 port 8096 after 2 ms: Could not connect to server anton->192.168.1.90:8096 http=000  rc=0
+curl: (7) Failed to connect to 192.168.1.90 port 8097 after 0 ms: Could not connect to server anton->192.168.1.90:8097 http=000  rc=0
+curl: (7) Failed to connect to 192.168.1.90 port 8098 after 0 ms: Could not connect to server anton->192.168.1.90:8098 http=000  rc=0
+nezha loopback control :8080 http=302
+nezha loopback control :8081 http=404
+nezha loopback control :8094 http=404
+nezha loopback control :8096 http=404
+nezha loopback control :8097 http=404
+nezha loopback control :8098 http=404
+## nezha firewall / listen state (read-only)
+*:3389 *:52080 *:52443 *:5900 *:8095 *:8443 *:9091 0.0.0.0:139 0.0.0.0:22 0.0.0.0:445 0.0.0.0:6379 127.0.0.1:11434 127.0.0.1:4222 127.0.0.1:5432 127.0.0.1:5939 127.0.0.1:631 127.0.0.1:8080 127.0.0.1:8081 127.0.0.1:8094 127.0.0.1:8096 127.0.0.1:8097 127.0.0.1:8098 127.0.0.1:8222 127.0.0.1:8432 [::1]:631 [::]:139 [::]:22 [::]:445 [::]:6379 [::ffff:127.0.0.1]:34319 [::ffff:127.0.0.1]:52829 
+sudo: a password is required
+table inet mullvad {
+	chain prerouting {
+		type filter hook prerouting priority -199; policy accept;
+
