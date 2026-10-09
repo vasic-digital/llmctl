@@ -1,0 +1,26 @@
+[
+ {
+  "id": "C-038",
+  "status": 422,
+  "request_id": "6ac8918882ee69ad",
+  "attempts": 1,
+  "latency_ms": 4,
+  "error": "http 422"
+ },
+ {
+  "id": "C-038~p",
+  "status": 422,
+  "request_id": "3779f31a1089ae46",
+  "attempts": 1,
+  "latency_ms": 3,
+  "error": "http 422"
+ },
+ {
+  "id": "C-039",
+  "status": 422,
+  "request_id": "591dea29e79ae9fa",
+  "attempts": 1,
+  "latency_ms": 3,
+  "error": "http 422"
+ }
+]

@@ -1,0 +1,12 @@
+== nezha-pinned-decide-2b-run0-watchdog-died-2026-10-09
+golden records 173 status {200: 165, 422: 8}
+  non200 by (status,option_count): {(422, 20): 8}
+  200 latency ms: n=165 median=2594 p95=3649 max=4410
+  non200 latency ms: min=2 median=3 max=5
+  http attempts (status,reason-header,error_type): {'(200, None, None)': 165, "(422, None, 'validation_failed')": 8}
+probes records 23 status {200: 23}
+  non200 by (status,option_count): {}
+  200 latency ms: n=23 median=2502 p95=3240 max=3428
+  http attempts (status,reason-header,error_type): {'(200, None, None)': 23}
+  mem: ['VmHWM:\t 7877152 kB']
+  PSI max full10=0.0 some10=0.0 min swap_free%=100.0 min MemAvailable MiB=59122 samples=4 abort=False

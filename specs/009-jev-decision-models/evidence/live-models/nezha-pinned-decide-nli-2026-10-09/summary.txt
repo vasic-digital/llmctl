@@ -1,0 +1,9 @@
+== nezha-pinned-decide-nli-2026-10-09
+golden records 173 status {200: 173}
+  non200 by (status,option_count): {}
+  200 latency ms: n=173 median=433 p95=1585 max=2837
+probes records 23 status {200: 23}
+  non200 by (status,option_count): {}
+  200 latency ms: n=23 median=406 p95=699 max=841
+  mem: []
+  PSI max full10=0.0 some10=0.0 min swap_free%=100.0 min MemAvailable MiB=56351 samples=17 abort=False

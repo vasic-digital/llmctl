@@ -224,9 +224,41 @@ def _redact(blob, key):
     return blob
 
 
+def classify_refusal(status, body, item, max_options):
+    """G-160. -> "max_options" when the gateway refused the item because it has more options than the
+    profile's catalog max_options, else None.
+
+    The gateway signals that refusal as HTTP 422 with error_type "validation_failed" (internal/contract/
+    request.go: len(options) > lim.MaxOptions -> errInvalid). That code is shared with every other
+    schema violation, so the body alone is not enough: the refusal is only attributed to the limit when
+    the caller states the profile's max_options AND the item is a choice item with more options than it.
+    A 422 "readout_failed" (the model gave no usable answer) is a model error and never a refusal."""
+    if status != 422 or not max_options or item.get("type") != "choice":
+        return None
+    try:
+        if json.loads(body).get("error_type") != "validation_failed":
+            return None
+        n = len(item["criteria"])
+    except (ValueError, AttributeError, KeyError, TypeError):
+        return None
+    return "max_options" if n > max_options else None
+
+
+def catalog_max_options(profile, path=None):
+    """decision.max_options of `profile` in models/catalog.json (resolved from this script's location,
+    not the cwd), or None when the catalog/profile/field is absent or unreadable."""
+    path = path or os.path.join(ROOT, "models", "catalog.json")
+    try:
+        with open(path) as f:
+            v = json.load(f)["profiles"][profile]["decision"]["max_options"]
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+    return v if isinstance(v, int) and not isinstance(v, bool) else None
+
+
 # ---------------------------------------------------------------- run
 def run_items(items, base_url, ctx, key, profile, permute, seed, timeout, retries, retry_sleep,
-              raw_path=None, out=None):
+              raw_path=None, out=None, max_options=None):
     out = out or sys.stdout
     url = base_url.rstrip("/") + "/v1/systemone"
     records = []
@@ -249,6 +281,9 @@ def run_items(items, base_url, ctx, key, profile, permute, seed, timeout, retrie
             wf, pred, p_pred, reason = (False, None, None, err or ("http %s" % status))
             parsed = None
             conf, conf_raw, cal = None, None, None
+            refusal = classify_refusal(status, body, it, max_options)
+            if refusal:
+                reason = "refused: " + refusal
             if status == 200:
                 try:
                     parsed = json.loads(body)
@@ -258,7 +293,7 @@ def run_items(items, base_url, ctx, key, profile, permute, seed, timeout, retrie
                     reason = "response is not JSON"
             rec = {"id": rid, "item": it["id"], "set": it["_set"], "type": it["type"], "family": it.get("class"),
                    "difficulty": it.get("difficulty"), "expected": it.get("expected"), "predicted": pred,
-                   "well_formed": wf, "variant": variant, "perm_group": it.get("perm_group"),
+                   "well_formed": wf, "refused": bool(refusal), "refusal_reason": refusal, "variant": variant, "perm_group": it.get("perm_group"),
                    "option_count": it.get("option_count"), "scale": it.get("scale"), "p_pred": p_pred,
                    "confidence": conf, "confidence_raw": conf_raw, "calibration": cal,
                    "status": status, "latency_ms": ms, "request_id": request_id, "attempts": attempts,
@@ -271,7 +306,7 @@ def run_items(items, base_url, ctx, key, profile, permute, seed, timeout, retrie
                                    "body": body.decode("utf-8", "replace")[:20000]}).encode()
                 rawf.write(_redact(line, key) + b"\n")
             print("%s %s %sms%s" % (rid, status if status is not None else "ERR", ms,
-                                    "" if wf else " MALFORMED(" + str(reason) + ")"), file=out)
+                                    "" if wf else (" REFUSED(%s)" % refusal if refusal else " MALFORMED(" + str(reason) + ")")), file=out)
     finally:
         if rawf:
             rawf.close()
@@ -285,15 +320,20 @@ def read_key(env_name, key_file):
     return os.environ.get(env_name, "").strip()
 
 
-def evidence(out_dir, run_id, key, key_env, rep, cls, vantage, argv_safe, wall_ms):
+def evidence(out_dir, run_id, key, key_env, rep, cls, vantage, argv_safe, wall_ms, max_options=None):
     w = writer.EvidenceWriter(out_dir, run_id, secrets=[key])
     summary = json.dumps({"report": rep}, sort_keys=True, default=str).encode()
     n_orig = rep["well_formed"]["n"]
     ok = rep["well_formed"]["ok"]
+    # Limit refusals (G-160) are excluded from n; the pass row says so, so a reader of the evidence
+    # alone can see the denominator shrank and why.
+    nref = rep.get("refused", {}).get("n", 0)
+    pass_reason = ("%d items refused by max_options=%s (excluded from the well-formed denominator)" % (nref, max_options)
+                   if nref else None)
     common = dict(command=argv_safe, cwd=os.getcwd(), env_names=[key_env], exit_code=0,
                   stdout=summary, stderr=b"", duration_ms=wall_ms, cls=cls, vantage=vantage, client="python-urllib")
     w.append(requirement=["SC-003"], result="pass" if (n_orig and ok == n_orig) else "fail",
-             reason=None if (n_orig and ok == n_orig) else "%d of %d original items returned a well-formed typed answer" % (ok, n_orig), **common)
+             reason=pass_reason if (n_orig and ok == n_orig) else "%d of %d original items returned a well-formed typed answer" % (ok, n_orig), **common)
     failing = [t for t, r in rep["by_type"].items() if not r["lower_bound_exceeds_baseline"]]
     w.append(requirement=["SC-003"], result="fail" if failing or not rep["by_type"] else "pass",
              reason=("Wilson lower bound does not exceed the baseline for: %s (profile must be labelled experimental)" % ", ".join(failing))
@@ -321,6 +361,8 @@ def main(argv=None):
     ap.add_argument("--permute-groups", action="store_true", help="re-ask each choice item with permuted options")
     ap.add_argument("--seed", default="20261007")
     ap.add_argument("--timeout", type=float, default=120.0)
+    ap.add_argument("--max-options", type=int, help="the profile's catalog max_options; a 422 validation_failed on a "
+                    "choice item with more options is then recorded as a limit refusal, not a malformed answer")
     ap.add_argument("--retries", type=int, default=2, help="bounded retries on 429/502/503/529/transport errors")
     ap.add_argument("--retry-sleep", type=float, default=1.0)
     ap.add_argument("--run-id", default=time.strftime("golden-%Y%m%dT%H%M%SZ", time.gmtime()))
@@ -356,10 +398,17 @@ def main(argv=None):
     ctx = make_context(a.cacert)
     t0 = time.monotonic()
     records = run_items(items, a.base_url, ctx, key, a.profile, a.permute_groups, a.seed, a.timeout,
-                        a.retries, a.retry_sleep, raw_path=os.path.join(out_dir, "raw", "responses.jsonl"))
+                        a.retries, a.retry_sleep, raw_path=os.path.join(out_dir, "raw", "responses.jsonl"),
+                        max_options=a.max_options)
     wall_ms = int((time.monotonic() - t0) * 1000)
     rep = stats.report(records)
+    cat_max = catalog_max_options(a.profile)
+    mismatch = a.max_options is not None and cat_max is not None and a.max_options != cat_max
+    if mismatch:
+        print("warning: --max-options %d differs from catalog decision.max_options %d for profile %s"
+              % (a.max_options, cat_max, a.profile), file=sys.stderr)
     meta = {"run_id": a.run_id, "profile": a.profile, "sets": sets, "seed": a.seed, "permute_groups": a.permute_groups,
+            "max_options": a.max_options, "max_options_catalog": cat_max, "max_options_mismatch": mismatch,
             "fixture_sha256": {n: hashlib.sha256(open(os.path.join(FIXTURES, n + ".jsonl"), "rb").read()).hexdigest()
                                for n in sets},
             "labeled_by": "agent-authored; human-review-pending"}
@@ -373,15 +422,19 @@ def main(argv=None):
     argv_safe = "run_golden.py --base-url %s --profile %s --set %s%s%s" % (
         a.base_url, a.profile, a.sets, " --permute-groups" if a.permute_groups else "",
         " --types " + a.types if a.types else "")
+    if a.max_options is not None:
+        argv_safe += " --max-options %d" % a.max_options
     try:
-        evidence(out_dir, a.run_id, key, a.key_env, rep, a.evidence_class, a.vantage, argv_safe, wall_ms)
+        evidence(out_dir, a.run_id, key, a.key_env, rep, a.evidence_class, a.vantage, argv_safe, wall_ms,
+                 max_options=a.max_options)
     except writer.EvidenceError as e:
         print("error: evidence refused: %s" % e, file=sys.stderr)
         return 3
     manifest.build(out_dir)
     print(stats.render(rep))
     print("results: %s" % result_path)
-    bad = sum(1 for r in records if not r["well_formed"])
+    # a limit refusal is the gateway working as specified, not a malformed answer: it does not fail the run
+    bad = sum(1 for r in records if not r["well_formed"] and not r.get("refused"))
     return 0 if bad == 0 else 1
 
 

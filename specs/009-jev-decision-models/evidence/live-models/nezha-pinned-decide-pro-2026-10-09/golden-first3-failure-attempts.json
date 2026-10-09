@@ -1,0 +1,11 @@
+[
+ {
+  "status": 422,
+  "ms": 9531,
+  "headers": {
+   "content-type": "application/json; charset=utf-8",
+   "x-llmctl-request-id": "e88a18968b6eeb45"
+  },
+  "body": "{\"message\":\"The model produced no usable answer for this question.\",\"error_type\":\"readout_failed\"}"
+ }
+]

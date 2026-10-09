@@ -1,0 +1,29 @@
+[
+ {
+  "status": 422,
+  "ms": 3424,
+  "headers": {
+   "content-type": "application/json; charset=utf-8",
+   "x-llmctl-request-id": "ee522b7af2b5ec53"
+  },
+  "body": "{\"message\":\"The model produced no usable answer for this question.\",\"error_type\":\"readout_failed\"}"
+ },
+ {
+  "status": 422,
+  "ms": 3636,
+  "headers": {
+   "content-type": "application/json; charset=utf-8",
+   "x-llmctl-request-id": "01d734f202389bb6"
+  },
+  "body": "{\"message\":\"The model produced no usable answer for this question.\",\"error_type\":\"readout_failed\"}"
+ },
+ {
+  "status": 422,
+  "ms": 3287,
+  "headers": {
+   "content-type": "application/json; charset=utf-8",
+   "x-llmctl-request-id": "b6b4d7965736f97f"
+  },
+  "body": "{\"message\":\"The model produced no usable answer for this question.\",\"error_type\":\"readout_failed\"}"
+ }
+]

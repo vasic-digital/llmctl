@@ -1,0 +1,26 @@
+[
+ {
+  "id": "N-001",
+  "status": 422,
+  "request_id": "ee522b7af2b5ec53",
+  "attempts": 1,
+  "latency_ms": 3425,
+  "error": "http 422"
+ },
+ {
+  "id": "N-002",
+  "status": 422,
+  "request_id": "01d734f202389bb6",
+  "attempts": 1,
+  "latency_ms": 3636,
+  "error": "http 422"
+ },
+ {
+  "id": "N-003",
+  "status": 422,
+  "request_id": "b6b4d7965736f97f",
+  "attempts": 1,
+  "latency_ms": 3287,
+  "error": "http 422"
+ }
+]

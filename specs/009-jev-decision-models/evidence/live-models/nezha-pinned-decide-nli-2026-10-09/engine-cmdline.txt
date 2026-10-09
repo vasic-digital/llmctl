@@ -1,0 +1,1 @@
+argv: /home/milosvasic/llmctl-work-0910/w/data/venv-onnx/bin/python lib/onnx_server.py --model-dir <data>/models/decide-nli --host 127.0.0.1 --port 8197 --profile decide-nli --max-tokens 512 --api-key-file <path> --tokenizer spm.model (pid 347615)

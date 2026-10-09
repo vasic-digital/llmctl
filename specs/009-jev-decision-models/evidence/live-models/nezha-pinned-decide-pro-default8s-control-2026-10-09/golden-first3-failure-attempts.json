@@ -1,0 +1,35 @@
+[
+ {
+  "status": 502,
+  "ms": 8005,
+  "headers": {
+   "content-type": "application/json; charset=utf-8",
+   "x-llmctl-decide-deadline-ms": "8000",
+   "x-llmctl-decide-reason": "deadline_exceeded",
+   "x-llmctl-request-id": "2593584ddae42b37"
+  },
+  "body": "{\"message\":\"The decision backend failed.\",\"error_type\":\"backend_failed\"}"
+ },
+ {
+  "status": 502,
+  "ms": 8005,
+  "headers": {
+   "content-type": "application/json; charset=utf-8",
+   "x-llmctl-decide-deadline-ms": "8000",
+   "x-llmctl-decide-reason": "deadline_exceeded",
+   "x-llmctl-request-id": "336812afb2a964c5"
+  },
+  "body": "{\"message\":\"The decision backend failed.\",\"error_type\":\"backend_failed\"}"
+ },
+ {
+  "status": 502,
+  "ms": 8005,
+  "headers": {
+   "content-type": "application/json; charset=utf-8",
+   "x-llmctl-decide-deadline-ms": "8000",
+   "x-llmctl-decide-reason": "deadline_exceeded",
+   "x-llmctl-request-id": "ea16c2eec1b1b00c"
+  },
+  "body": "{\"message\":\"The decision backend failed.\",\"error_type\":\"backend_failed\"}"
+ }
+]

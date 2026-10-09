@@ -1,0 +1,13 @@
+== nezha-pinned-decide-2026-10-09
+golden records 173 status {422: 151, 200: 22}
+  non200 by (status,option_count): {(422, None): 87, (422, 2): 9, (422, 3): 13, (422, 4): 14, (422, 5): 12, (422, 8): 11, (422, 12): 5}
+  200 latency ms: n=22 median=5985 p95=10513 max=11997
+  non200 latency ms: min=3128 median=4039 max=7022
+  http attempts (status,reason-header,error_type): {"(422, None, 'readout_failed')": 151, '(200, None, None)': 22}
+probes records 23 status {422: 22, 200: 1}
+  non200 by (status,option_count): {(422, 3): 4, (422, None): 15, (422, 4): 2, (422, 7): 1}
+  200 latency ms: n=1 median=4435 p95=4435 max=4435
+  non200 latency ms: min=2913 median=4000 max=5049
+  http attempts (status,reason-header,error_type): {"(422, None, 'readout_failed')": 22, '(200, None, None)': 1}
+  mem: ['VmHWM:\t13053648 kB']
+  PSI max full10=0.0 some10=0.0 min swap_free%=100.0 min MemAvailable MiB=49503 samples=89 abort=False

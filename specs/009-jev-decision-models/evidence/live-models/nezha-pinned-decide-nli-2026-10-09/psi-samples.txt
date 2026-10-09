@@ -1,0 +1,17 @@
+12:15:29 psi_full10=0.00 psi_some10=0.00 swap_free_pct=100.0 mem_avail_mib=59730
+12:15:39 psi_full10=0.00 psi_some10=0.00 swap_free_pct=100.0 mem_avail_mib=59681
+12:15:49 psi_full10=0.00 psi_some10=0.00 swap_free_pct=100.0 mem_avail_mib=56463
+12:15:59 psi_full10=0.00 psi_some10=0.00 swap_free_pct=100.0 mem_avail_mib=56474
+12:16:09 psi_full10=0.00 psi_some10=0.00 swap_free_pct=100.0 mem_avail_mib=56480
+12:16:19 psi_full10=0.00 psi_some10=0.00 swap_free_pct=100.0 mem_avail_mib=56453
+12:16:29 psi_full10=0.00 psi_some10=0.00 swap_free_pct=100.0 mem_avail_mib=56430
+12:16:39 psi_full10=0.00 psi_some10=0.00 swap_free_pct=100.0 mem_avail_mib=56418
+12:16:49 psi_full10=0.00 psi_some10=0.00 swap_free_pct=100.0 mem_avail_mib=56424
+12:16:59 psi_full10=0.00 psi_some10=0.00 swap_free_pct=100.0 mem_avail_mib=56388
+12:17:09 psi_full10=0.00 psi_some10=0.00 swap_free_pct=100.0 mem_avail_mib=56373
+12:17:19 psi_full10=0.00 psi_some10=0.00 swap_free_pct=100.0 mem_avail_mib=56367
+12:17:29 psi_full10=0.00 psi_some10=0.00 swap_free_pct=100.0 mem_avail_mib=56379
+12:17:39 psi_full10=0.00 psi_some10=0.00 swap_free_pct=100.0 mem_avail_mib=56368
+12:17:49 psi_full10=0.00 psi_some10=0.00 swap_free_pct=100.0 mem_avail_mib=56375
+12:17:59 psi_full10=0.00 psi_some10=0.00 swap_free_pct=100.0 mem_avail_mib=56351
+12:18:09 psi_full10=0.00 psi_some10=0.00 swap_free_pct=100.0 mem_avail_mib=59691

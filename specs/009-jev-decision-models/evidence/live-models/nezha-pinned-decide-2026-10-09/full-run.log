@@ -1,0 +1,9 @@
+Running as unit: live-pinned-decide-to300.scope; invocation ID: 5905a269607f40fa880d5ef4f6e4465d
+--- smoke:
+  ticket_type                n=2 acc=0.000 CI=[0.000,0.658] majority=0.500 lower>majority=False
+option-order flip rate: n/a (0 of 0 groups)
+accuracy by option count:
+    2 options n=3 acc=0.333 CI=[0.061,0.792]
+calibration: insufficient for calibration (n=1, need 200)
+results: /home/milosvasic/llmctl-work-0910/out/pinned-decide-to300/smoke/results.json
+scope rc=0

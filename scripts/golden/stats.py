@@ -132,8 +132,17 @@ def report(records):
     orig = [r for r in records if r.get("variant", "orig") == "orig"]
     perm = [r for r in records if r.get("variant") == "perm"]
     out = {"records": len(records), "orig_items": len(orig), "perm_items": len(perm)}
-    wf = sum(1 for r in orig if r.get("well_formed"))
-    out["well_formed"] = {"n": len(orig), "ok": wf, "rate": (wf / float(len(orig))) if orig else None}
+    # G-160: a gateway limit refusal (record["refused"] true; absent in old results = not refused) is
+    # not a model error; it leaves the well-formed ratio and is reported on its own, never dropped.
+    refused = [r for r in orig if r.get("refused")]
+    scored = [r for r in orig if not r.get("refused")]
+    wf = sum(1 for r in scored if r.get("well_formed"))
+    out["well_formed"] = {"n": len(scored), "ok": wf, "rate": (wf / float(len(scored))) if scored else None}
+    reasons = {}
+    for r in refused:
+        k = r.get("refusal_reason") or "unspecified"
+        reasons[k] = reasons.get(k, 0) + 1
+    out["refused"] = {"n": len(refused), "reasons": reasons}
 
     by_type = {}
     for t in ("noul", "choice", "score"):
@@ -178,8 +187,10 @@ def report(records):
     out["flip"] = flip_rate(records)
     by_count = {}
     for n in sorted({r["option_count"] for r in orig if r.get("type") == "choice" and r.get("option_count")}):
-        by_count[str(n)] = _acc_row([r for r in orig if r.get("type") == "choice" and r.get("option_count") == n
-                                     and r.get("expected") is not None])
+        rows = [r for r in orig if r.get("type") == "choice" and r.get("option_count") == n
+                and r.get("expected") is not None and not r.get("refused")]
+        if rows:   # refused items are reported under "refused" only (G-160)
+            by_count[str(n)] = _acc_row(rows)
     out["accuracy_by_option_count"] = by_count
     by_scale = {}
     for n in sorted({r["scale"] for r in orig if r.get("type") == "score" and r.get("scale")}):
@@ -207,6 +218,8 @@ def _f(x):
 def render(rep):
     lines = ["records=%d orig=%d perm=%d well_formed=%s/%s" % (
         rep["records"], rep["orig_items"], rep["perm_items"], rep["well_formed"]["ok"], rep["well_formed"]["n"])]
+    if rep.get("refused", {}).get("n"):
+        lines.append("refused (limit): %d %s" % (rep["refused"]["n"], sorted(rep["refused"]["reasons"].items())))
     for t, r in rep["by_type"].items():
         lines.append("%-6s n=%d acc=%s CI95=[%s,%s] baseline=%s (%s) lower>baseline=%s" % (
             t, r["n"], _f(r["accuracy"]), _f(r["wilson_low"]), _f(r["wilson_high"]), _f(r["baseline"]),

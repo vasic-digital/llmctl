@@ -1,0 +1,4 @@
+10:30:56 psi_full10=0.00 psi_some10=0.00 swap_free_pct=100.0 mem_avail_mib=59783
+10:31:06 psi_full10=0.00 psi_some10=0.00 swap_free_pct=100.0 mem_avail_mib=59468
+10:31:16 psi_full10=0.00 psi_some10=0.00 swap_free_pct=100.0 mem_avail_mib=59277
+10:31:26 psi_full10=0.00 psi_some10=0.00 swap_free_pct=100.0 mem_avail_mib=59122

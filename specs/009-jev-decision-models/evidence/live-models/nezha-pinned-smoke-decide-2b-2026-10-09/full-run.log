@@ -1,0 +1,9 @@
+Running as unit: live-smoke-2b.scope; invocation ID: 71207cb7ff6d48899ccf6a734592f8f2
+--- smoke:
+  ticket_type                n=2 acc=1.000 CI=[0.342,1.000] majority=0.500 lower>majority=False
+option-order flip rate: n/a (0 of 0 groups)
+accuracy by option count:
+    2 options n=3 acc=1.000 CI=[0.439,1.000]
+calibration: insufficient for calibration (n=3, need 200)
+results: /home/milosvasic/llmctl-work-0910/out/smoke-2b/smoke/results.json
+scope rc=0

@@ -1,0 +1,13 @@
+== nezha-pinned-decide-pro-default8s-control-2026-10-09
+golden records 173 status {200: 128, 502: 45}
+  non200 by (status,option_count): {(502, None): 21, (502, 2): 1, (502, 3): 5, (502, 12): 10, (502, 20): 8}
+  200 latency ms: n=128 median=7605 p95=16933 max=26929
+  non200 latency ms: min=27013 median=27020 max=27028
+  http attempts (status,reason-header,error_type): {'(200, None, None)': 128, "(502, 'deadline_exceeded', 'backend_failed')": 171}
+probes records 23 status {502: 5, 200: 18}
+  non200 by (status,option_count): {(502, 3): 3, (502, None): 1, (502, 4): 1}
+  200 latency ms: n=18 median=7114 p95=26817 max=26949
+  non200 latency ms: min=27014 median=27016 max=27024
+  http attempts (status,reason-header,error_type): {"(502, 'deadline_exceeded', 'backend_failed')": 26, '(200, None, None)': 18}
+  mem: ['VmHWM:\t 7110184 kB']
+  PSI max full10=0.0 some10=0.0 min swap_free%=100.0 min MemAvailable MiB=56929 samples=286 abort=False

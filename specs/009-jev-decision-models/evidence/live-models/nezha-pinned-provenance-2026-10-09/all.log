@@ -1,0 +1,49 @@
+[10:41:01] START pinned-decide-2b-to300
+== pre-start 10:41:01
+               total        used        free      shared  buff/cache   available
+Mem:              62           4          15           0          44          58
+Swap:             47           0          47
+some avg10=0.00 avg60=0.00 avg300=0.00 total=0
+full avg10=0.00 avg60=0.00 avg300=0.00 total=0
+[10:48:37] END pinned-decide-2b-to300 result=done
+[10:48:59] START pinned-decide-pro-to300
+== pre-start 10:48:59
+               total        used        free      shared  buff/cache   available
+Mem:              62           4          15           0          44          58
+Swap:             47           0          47
+some avg10=0.00 avg60=0.00 avg300=0.00 total=0
+full avg10=0.00 avg60=0.00 avg300=0.00 total=0
+[11:16:26] END pinned-decide-pro-to300 result=done
+[11:16:48] START pinned-decide-to300
+== pre-start 11:16:48
+               total        used        free      shared  buff/cache   available
+Mem:              62           4          14           0          45          58
+Swap:             47           0          47
+some avg10=0.00 avg60=0.00 avg300=0.00 total=0
+full avg10=0.00 avg60=0.00 avg300=0.00 total=0
+[11:31:39] END pinned-decide-to300 result=done
+[11:32:01] START pinned-decide-max-to300
+== pre-start 11:32:01
+               total        used        free      shared  buff/cache   available
+Mem:              62           4          14           0          45          58
+Swap:             47           0          47
+some avg10=0.00 avg60=0.00 avg300=0.00 total=0
+full avg10=0.00 avg60=0.00 avg300=0.00 total=0
+[12:15:07] END pinned-decide-max-to300 result=done
+[12:15:29] START pinned-decide-nli
+== pre-start 12:15:29
+               total        used        free      shared  buff/cache   available
+Mem:              62           4          13           0          46          58
+Swap:             47           0          47
+some avg10=0.00 avg60=0.00 avg300=0.00 total=0
+full avg10=0.00 avg60=0.00 avg300=0.00 total=0
+[12:18:10] END pinned-decide-nli result=COMPLETED
+ALL_DONE
+[12:19:32] START control
+== pre-start 12:19:32
+               total        used        free      shared  buff/cache   available
+Mem:              62           4          13           0          46          58
+Swap:             47           0          47
+some avg10=0.00 avg60=0.00 avg300=0.00 total=0
+full avg10=0.00 avg60=0.00 avg300=0.00 total=0
+[13:07:15] END control result=done

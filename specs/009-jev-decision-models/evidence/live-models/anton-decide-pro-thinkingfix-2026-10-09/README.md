@@ -18,7 +18,7 @@
 
 - Well-formed: golden **112/132** (173 records incl. 41 permutations: 143 x 200, 29 x 502, 1 x 422), probes **22/23**.
 - Option-order flip rate 0.034 (1 of 29 groups). Calibration: insufficient (n<200). HTTP 200 latency (golden): n=143, median 6.6 s.
-- Accuracy by option count (well-formed only): 2 -> 1.00, 3 -> 0.71, 4 -> 0.86, 5 -> 0.83, 8 -> 0.83, 12 -> 0.00 (n=5), 20 -> 0.00 (n=4).
+- Accuracy by option count (label is wrong, see Caveats: malformed counted as wrong): 2 -> 1.00, 3 -> 0.71, 4 -> 0.86, 5 -> 0.83, 8 -> 0.83, 12 -> 0.00 (n=5), 20 -> 0.00 (n=4).
 
 ## Failures (bodies of the first 3: `golden-first3-failure-bodies.json`, `probes-first3-failure-bodies.json`)
 
@@ -27,4 +27,4 @@
 - 1 x HTTP 422 `readout_failed` (letter mass below the 0.5 threshold; model-side).
 - 0 x 422 caused by max_options.
 
-Caveats: small n; the 20 malformed golden items are excluded from accuracy denominators by stats.py, so the 12/20-option accuracies describe only the few answers that finished in time. Nothing committed.
+Caveats: small n; the 20 malformed golden items are NOT excluded from the accuracy denominators: stats.py (`_acc_row`/`_correct`) counts a malformed answer as wrong, so the per-type accuracies above are lower bounds that include those 20 failures. The "(well-formed only)" label on the per-option-count line above is likewise wrong: those rows also count malformed answers as wrong, so the 12 -> 0.00 (n=5) and 20 -> 0.00 (n=4) rows mix wrong answers with answers that never finished; this README does not separate them (UNCONFIRMED which dominates). Nothing committed.

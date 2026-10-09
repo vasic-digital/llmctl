@@ -1,0 +1,7 @@
+[10:30:56] START pinned-decide-2b-to300
+== pre-start 10:30:56
+               total        used        free      shared  buff/cache   available
+Mem:              62           4          15           0          44          58
+Swap:             47           0          47
+some avg10=0.00 avg60=0.00 avg300=0.00 total=0
+full avg10=0.00 avg60=0.00 avg300=0.00 total=0

@@ -1,0 +1,1147 @@
+diff --git a/README.md b/README.md
+index cd00c9f..756a777 100644
+--- a/README.md
++++ b/README.md
+@@ -139,8 +139,7 @@ See `docs/hardware-tiers.md`. The baseline reference machine (Ryzen 7 2700X,
+ Threadripper, 32 GB VRAM) unlock the `ws-*` profiles and full co-residency;
+ `colibri-glm` (a 744B MoE that streams weights from ~380 GB of NVMe) is gated
+ to `datacenter`. The catalog also carries **decision profiles** (capability `decide`) for typed
+-noul/choice/score decisions, from `decide-nli`, `decide-2b` and the other servable profiles (`decide-tiny` is catalogued but not servable yet)
+-(DeBERTa-v3-large zero-shot NLI on the `onnx` engine, any tier) up to workstation-tier
++noul/choice/score decisions, from `decide-kev-08b` and the other native profiles (verified live; `decide-kev-9b` only on the unpinned nezha snapshot, not on a commit-pinned tree), `decide-nli` (encoder; use it for `choice` - its `noul` and `score` output does not beat the majority baselines), and the letter-logit profiles (**not yet reliable**: on the 2026-10-08 CPU run `decide` and `decide-2b` gave 0/132 well-formed answers, `decide-pro` 68/132, `decide-max` has no result; see `docs/decision-models.md`); `decide-tiny` is catalogued but not servable yet. `decide-nli` is a DeBERTa-v3-large zero-shot NLI encoder on the `onnx` engine (any tier). The catalogue runs up to workstation-tier
+ profiles. The authoritative, current profile table (tiers, sizes, ports, source-labelled
+ benchmarks) is `docs/decision-models.md`.
+ 
+@@ -284,6 +283,7 @@ fastest path to a running model.
+ | [`docs/research/README.md`](docs/research/README.md) | Index of the decision-models research briefs (Jev ecosystem survey, verified HF hashes, encoder-model hashes, implementation architecture map) |
+ | [`docs/qa/decision-models-validation/README.md`](docs/qa/decision-models-validation/README.md) | Captured evidence for the decision-models feature's validation runs (iteration 1: 34 PASS / 7 pre-existing environment FAIL; iteration 2: 36 PASS / 7 environment FAIL) |
+ | [`docs/validation.md`](docs/validation.md) | The project's V&V (validation & verification) contract |
++| [`docs/host-safety.md`](docs/host-safety.md) | Host-hang safeguards after the 2026-10-08 incident: cgroup limits, `bounded-run`, the memory-pressure guard, and the root-only steps |
+ | [`docs/validation_and_verification.md`](docs/validation_and_verification.md) | Why fully-deterministic V&V matters for CLI-agent-driven development |
+ | [`docs/CONTINUATION.md`](docs/CONTINUATION.md) | Live session-resumption state: current phase, next action, per-phase findings (Constitution §12.10) |
+ | [`docs/commit-fully-integration.md`](docs/commit-fully-integration.md) | The `commit-fully` tooling integration |
+diff --git a/docs/decide-gateway.md b/docs/decide-gateway.md
+index 6f19a82..73c1119 100644
+--- a/docs/decide-gateway.md
++++ b/docs/decide-gateway.md
+@@ -301,6 +301,12 @@ By default (`LLMCTL_DECIDE_RESOLVER=auto`) the gateway routes to the engines in
+ static `LLMCTL_DECIDE_ENDPOINT_<PROFILE>` / catalog ports. It publishes itself in the registry (`kind=gateway`) while serving.
+ See `docs/registry-discovery.md`.
+ 
++The static endpoint of a profile is, in order: `LLMCTL_DECIDE_ENDPOINT_<PROFILE>` (comma separated loopback URLs) >
++`http://127.0.0.1:$LLMCTL_PORT_<PROFILE>` > `http://127.0.0.1:<catalog port>`. `LLMCTL_PORT_<PROFILE>` is the same host-local port rebind the shell
++side honours (`<PROFILE>` upper-cased, `-` -> `_`, e.g. `LLMCTL_PORT_DECIDE_NLI=18096`), so a hand-started engine on an overridden port is found without
++also setting the endpoint variable. A value that is not an integer in 1-65535 (including `auto`) is ignored and the catalog port is used. In `auto` and
++`registry` mode a healthy registry entry for the profile is preferred over these static endpoints.
++
+ **`auto` decides per profile, on every request.** A gateway started in `auto` mode *before* any decision engine is registered (engines take up to
+ `LLMCTL_REGISTER_WAIT`, default 600 s, to load their model and register) serves the static endpoints, and a profile switches to the registry the moment
+ it has a healthy registry entry (and back to its static endpoint when that entry goes away or turns unhealthy) - no restart (C2-13, B3-09). A profile served only
+diff --git a/docs/decision-models.md b/docs/decision-models.md
+index e776006..e56c83b 100644
+--- a/docs/decision-models.md
++++ b/docs/decision-models.md
+@@ -161,8 +161,11 @@ that bounds it (1024 / 1024 / 2048 tokens, so a longer state is answered `422`);
+ `decide-kev-9b` and `decide-lev` carry **no measured overhead yet** - they could not be admitted on the
+ test host, so their reservation is weights + the flat KV rule only and is likely an under-estimate.
+ A "cpu mode" (`-ngl 0`) placement is not VRAM-free either: a CUDA build offloads large-batch ops to the GPU
+-(`--op-offload`), and the planner books no VRAM for it - measured 0.1-0.2 GiB for Julia-1/Laya and 2.3 GiB for
+-Kev-0.8B (`evidence/live/op-offload-vram-experiment.txt`; `--no-op-offload` removes it but is ~15x slower).
++(`--op-offload`). On a host with a GPU the planner books that VRAM (measured 0.1-0.2 GiB for Julia-1/Laya, 2.3 GiB for
++Kev-0.8B, 4.4 GiB for Kev-4B, which is one `nvidia-smi` sample taken 20 s after start with no request sent, not a peak under load: `evidence/live/op-offload-vram-experiment.txt`,
++`evidence/live/decide-kev-4b/cpu-mode-vram-live-2026-10-08.txt`; `--no-op-offload` removes it but is ~15x slower); a profile
++whose cpu-mode VRAM is unmeasured books its gpu-mode peak as a ceiling when that is known, else 0 and is reported UNKNOWN
++(see `docs/hardware-tiers.md`, G-138).
+ 
+ **Live results** (this host: Ryzen/RTX 3060 12 GB, ~5 GB RAM available, `evidence/live/NATIVE-REPORT.md`):
+ the scheduler admitted `decide-julia` and `decide-laya` (cpu mode); `decide-kev-08b` ran once under the
+@@ -345,6 +348,71 @@ the pin. The 2026-10-06 pins were captured from the HF API via
+ (`decide-nli`'s ONNX export + tokenizer, the JevK5 2B/9B GGUFs, and the
+ Laya BYO-ONNX verification).
+ 
++## Live results (nezha, CPU)
++
++Real-model runs on the LAN host `nezha` (i7-1165G7, 8 threads, 64 GB RAM, **CPU only**, `--n-gpu-layers 0`, ctx 8192, llama.cpp `0.5.0-dev` commit `1537a0a`, golden set of 132 originals + 41 option-order permutations, plus 23 probes). Run 2026-10-08. Evidence (copied verbatim, `SHA256SUMS` re-verified locally for every `golden/` and `probes/` directory):
++`specs/009-jev-decision-models/evidence/live-models/nezha-<profile>-2026-10-08/`.
++
++**These nezha numbers are PRE-FIX** (they predate the `enable_thinking=false` change in `internal/gateway/letter.go`); the letter-logit profiles' post-fix status is in [anton CPU thinking-fix runs (2026-10-09)](#anton-cpu-thinking-fix-runs-2026-10-09) below.
++
++Provenance caveat: the llmctl tree on nezha was an uncommitted snapshot (no `.git`; the exact source commit is **UNCONFIRMED** — an informal diff suggested it sits between commits `339cb6c` and `f1a22ea`, but no hash-comparison file was captured, so treat that as a lead, not a fact), so these results are **not** pinned to a repository commit and predate HEAD fixes (e.g. `9367d90`). Calibration is "insufficient (n=132, need 200)" on every run; no result below is a calibrated probability.
++
++| profile | model (sha256 prefix) | protocol seen | golden well-formed | noul acc [95% CI] (baseline) | choice acc [CI] (baseline) | score acc [CI] (baseline) | p50 latency |
++|---|---|---|---|---|---|---|---|
++| decide-lev | lev Q4_K_M (3f61b27c) | systemone-native | 132/132 | 0.967 [0.886,0.991] (0.667) | 0.976 [0.874,0.996] (0.235) | 0.516 [0.348,0.680] (0.290) | 8.2 s |
++| decide-kev-4b | Kev-4B Q4_K_M (33ae6b18) | systemone-native | 132/132 | 0.950 [0.863,0.983] (0.667) | 1.000 [0.914,1.000] (0.235) | 0.613 [0.438,0.763] (0.290) | 2.5 s |
++| decide-kev-9b | Kev-9B Q4_K_M (86a60849) | systemone-native | 132/132 | 0.967 [0.886,0.991] (0.667) | 1.000 [0.914,1.000] (0.235) | 0.710 [0.534,0.839] (0.290) | 4.6 s |
++| decide-pro | spark-x2.5-4b q8_0 (dbec3c89) | letter-logit | **68/132** | 0.567 [0.441,0.684] (0.667) | 0.488 [0.343,0.635] (0.235) | 0.290 [0.161,0.466] (0.290) | 7.2 s |
++| decide (decider-4b) | decider-4b-v2.1 Q4_K_M (c7083fcf) | letter-logit | **0/132** | 0.000 | 0.000 | 0.000 | n/a |
++| decide-2b | jevk5-2b-v0.2 Q8_0 (17222f27) | letter-logit | **0/132** | 0.000 | 0.000 | 0.000 | n/a |
++| decide-max | jevk5-9b-v0.3.3 Q8_0 (283de8fd) | n/a | **no result** | - | - | - | - |
++
++What the data shows (and what it does not):
++
++- **decide-lev, decide-kev-4b, decide-kev-9b** ran to completion with every golden request well-formed (0 malformed, 0 HTTP 503/not_ready lines in `golden.log`). For all three the lower CI bound of the `noul`, `choice` and `score` groups exceeds the stated baseline (`lower>baseline=True` in `golden-stats.txt`). The `score` group is the weak one (0.52-0.71). On the 23-request probe set only `noul` clears its baseline for lev/kev-4b/kev-9b; `choice` and `score` probes (n=6, n=4) are too small to separate from baseline. n is small throughout; per-family intervals are wide.
++- **decide-pro** (letter-logit) is **PARTIAL / unusable**: only 68 of 132 golden requests (and 11 of 23 probes) were well-formed; the rest returned HTTP 422 `readout_failed` and are counted MALFORMED by `run_golden.py`. Its accuracy over the 132 does not beat the majority baseline on `noul` or `score`. Its `latency.json` covers only the 84 successful golden calls. The 4-option `smoke` failed with `option_missing` (an option letter absent from the first-token alternatives); the 2-option smoke returned rc=0.
++- **decide-2b and decide (decider-4b)** produced **0/132 well-formed** (every request HTTP 422 `readout_failed`: "The model produced no usable answer"); their 0.000 accuracies are *malformed-rate artefacts, not model accuracy*. The saved `root-cause-first-tok.txt` probes (max_tokens 1, logprobs) show the engine returning the first token in `reasoning_content` with empty `content`; the thinking-template cause is now **CONFIRMED live for decide-2b**: after the `enable_thinking=false` fix the same profile went from 0/132 to 128/132 well-formed (anton run 2, below). Pre-fix observation: decide-2b opens with a reasoning preamble ("The"/"Thinking", p~0.78 / ~1.0, option letters absent from the top 8), which a one-token letter-logit readout cannot read. For **decide (decider-4b)** the top-1 first token *is* a letter ("A", logprob -2.301) yet every request was still rejected, so its pre-fix cause was left open here (letter probability mass ~0.12, versus ~0.75 for decide-pro); the post-fix anton diagnosis (below) identifies the rejection criterion as the catalog `mass_threshold` 0.5 against a combined letter mass of 0.44-0.47. decide-pro's first-token alternatives include "We"/"The"/"First" competing with the letters. This is observed on this snapshot only; HEAD later changed `max_options` for JevK5 profiles (`9367d90`) and these two profiles were not re-run on HEAD.
++- **No result was invalidated by 503/not_ready**: the only `503|not_ready` matches in the copied logs are a single false hit each in `decide` and `decide-pro` (the strings are `S-022 .. 5036ms` / `C-015~p ..` lines matched by an unrelated digit pattern, not HTTP 503); the failures are 422 readout failures, reported as MALFORMED.
++- **decide-max** (JevK5 9B Q8_0): **no result as of 2026-10-08** (`run_all.sh` on nezha, golden phase started 17:19Z, had not finished when the directory was copied); the copied directory is an in-progress snapshot (smoke failed with "no usable answer"; no `RESULT.txt`, no stats). It is **not** a result.
++- `RESULT.txt` says `COMPLETED` for every finished profile, including the ones with 0/132 well-formed: it means "the harness finished", not "the model worked". Use `well_formed` and the per-group CIs.
++- All numbers are CPU-only (no GPU), single run, uncalibrated; they say nothing about GPU behaviour or about any model not listed.
++
++### decide-2b after the thinking fix (anton, CPU) - INCOMPLETE run, not a result
++
++Run 2026-10-08 on host `anton` (CPU only) against `decide-2b` (letter-logit) with the then-uncommitted `chat_template_kwargs.enable_thinking=false` change in `internal/gateway/letter.go` (tree HEAD `c5301de` plus that change; `context.txt`). Evidence: `specs/009-jev-decision-models/evidence/live-models/anton-decide-2b-thinkingfix-2026-10-08/` (see its `README.md`). The run was interrupted by a host hang, so it is **incomplete**.
++
++- 58 of 132 golden requests were well-formed (before the fix: 0/132). In `golden.log` 88 requests are `MALFORMED(http 502)` (each after about 27 s), 8 are `MALFORMED(http 422)` and 3 are `MALFORMED(URLError)`.
++- Accuracy over the well-formed answers does not beat the baselines (per-group lines in `golden.log`; for example `ticket_type` n=2 and `weekday_gap` n=2 are far too small to say anything). Calibration reported "insufficient for calibration (n=58, need 200)".
++- The cause of the HTTP 502 responses in this run is **UNCONFIRMED**: the gateway returned 502 after about 27 s, but no engine-side evidence in this directory identifies why. The complete run 2 (below) had 0 x 502 for the same profile.
++- This is not evidence that the fix works or fails; it shows only that 0/132 became 58/132 on a single, interrupted, CPU-only run. `decide-2b` stays listed as not reliable above.
++
++### anton CPU thinking-fix runs (2026-10-09)
++
++Host `anton` (CPU engine, `-ngl 0`, GPU not used), tree HEAD `c5301de` plus the **uncommitted** `internal/gateway/letter.go` (`chat_template_kwargs.enable_thinking=false`) and uncommitted `resolver.go` changes; `build/llmctl-decide` sha256 `0c16f65a...a50f`. Single runs, uncalibrated (n<200), golden 132 originals + 41 permutations and 23 probes. Evidence: `specs/009-jev-decision-models/evidence/live-models/anton-decide-2b-thinkingfix-run2-2026-10-09/`, `anton-decide-pro-thinkingfix-2026-10-09/`, `anton-decide-thinkingfix-2026-10-09/`, `anton-decide-max-not-exercised-2026-10-09.md` (each README, `golden-stats.txt`, `probes-stats.txt`). Earlier run 1 of decide-2b (above, 58/132, interrupted) is superseded by run 2.
++
++| profile | golden well-formed | noul acc [95% CI] (baseline) | choice acc [CI] (baseline) | score acc [CI] (baseline) | probes well-formed | status |
++|---|---|---|---|---|---|---|
++| decide-2b | 128/132 (pre-fix 0/132) | 0.883 [0.778,0.942] (0.667) beats | 0.732 [0.581,0.843] (0.235) beats | 0.290 [0.161,0.466] (0.290) **does not** beat | 23/23 | works for noul and choice; score is not shown to be better than majority |
++| decide-pro | 112/132 (143 x 200, 29 x 502, 1 x 422 over 173 records) | 0.867 [0.758,0.931] (0.667) beats | 0.659 [0.505,0.784] (0.235) beats | 0.645 [0.469,0.789] (0.290) beats | 22/23 | works, but 502 `backend_failed` on long prompts on a CPU engine |
++| decide (decider-4b) | smoke 1/3, golden/probes NOT run | none | none | none | not run | not usable at the current `mass_threshold` |
++| decide-max (9B Q8_0) | NOT exercised | none | none | none | not run | no result |
++
++- **decide-2b:** option-order flip rate 0.081 (3 of 37 groups); HTTP 200 latency median 2.9 s, max 4.5 s. The 4 malformed golden originals are 8 x HTTP 422 records (C-038..C-041 and permutations), all with `option_count=20` while the catalog `max_options` for decide-2b is 16 (`9367d90`). That is consistent with a gateway max_options refusal, but the response body was not captured, so the reason code is **UNCONFIRMED**. They are not model errors.
++- **decide-pro:** 29 x HTTP 502 `backend_failed` on golden (+1 on probes), each about 27 s, `attempts: 3` (the client retries 502 up to `--retries 2`, so about 9 s per attempt). By option count: 12 -> 10, 20 -> 8, 3 -> 3, 8 -> 1, none (noul/score) -> 7. engine.log shows CPU prompt processing at about 21.6 tokens/s (a 168-token prompt took 7.8 s) and `srv stop: cancel task`. A candidate cause exists in the source: the gateway's end-to-end budget `LLMCTL_DECIDE_TIMEOUT` defaults to 8 s (`internal/server/limits.go`, `handlers.go`: a deadline error becomes a 502 with `x-llmctl-decide-reason: deadline_exceeded`). The runs did not override it, but the response headers were not captured, so the 8 s deadline as the cause of these 502s is **INFERRED, not observed**. Accuracy at 12/20 options (0.00, n=5 / n=4) covers only the few answers that finished in time. Option-order flip rate 0.034 (1 of 29 groups); HTTP 200 median 6.6 s.
++- **decide (decider-4b Q4_K_M):** smoke 1/3 well-formed; C-001 and C-002 returned HTTP 422 `readout_failed` at 2 options (not a max_options refusal). Diagnosis from captured first-token `top_logprobs`: with the fix the answer letter moves into `content` and its mass rises from 0.12 to 0.44-0.47, but the top-32 holds under half of the mass (diffuse first token), so the combined option-letter mass is below the catalog `mass_threshold` 0.5. The thinking fix works for this model; the model is a diffuse-first-token model for this prompt format. Options not applied: a lower `mass_threshold` with evidence, or a different prompt/readout.
++- **decide-max:** not run. The GGUF `jevk5-9b-v0.3.3-Q8_0.gguf` is 8.87 GiB; measured shape on this host is about model + 3 GB resident (expected peak 12-13 GB), above the 10G bounded-run cap. Needs a larger cap with a fresh host-safety review or a GPU with at least 12 GB free.
++- All numbers are CPU-only, single run, small n; the malformed items are excluded from accuracy denominators by `stats.py`. The fix is not committed.
++
++### decide-nli live result (anton, CPU, wired run)
++
++Run 2026-10-08 on host `anton` (CPU only), the real ONNX encoder `decide-nli` (DeBERTa-v3-large zeroshot, fp32) through the HTTPS gateway, tree HEAD `c5301de` plus the then-uncommitted fix to the live-run harness. Evidence: `specs/009-jev-decision-models/evidence/live-models/decide-nli-main-wiredfix/` (see its `README.md`; `golden/` and `probes/` `SHA256SUMS` re-verified). Single run, uncalibrated (n=132, need 200).
++
++- 132/132 golden and 23/23 probes well-formed; determinism true; option-order flip rate 0 of 41 groups; p50 latency 1543 ms (golden), p95 5552 ms.
++- `choice` accuracy 0.829, 95% CI [0.687, 0.915], n=41, **beats** its chance baseline 0.235.
++- `noul` 0.533 (majority baseline 0.667) and `score` 0.226 (majority baseline 0.290) do **not** beat their baselines: the NLI encoder is not shown to be good at `noul` or `score`. Use it for `choice`, and treat its `noul`/`score` output as unreliable.
++- An earlier anton run (`decide-nli-main-79268f5-INVALID-gateway-miswired`) is invalid and superseded: the harness had not told the gateway the engine address (173 requests got 503).
++- This closes the "no real-model evidence" gap for the encoder path only. The letter-logit profiles (`decide`, `decide-2b`, `decide-pro`) failed live in the nezha table above and remain separate open defects.
++
+ ## Honest limitations
+ 
+ * **Accuracy vs hosted Jev.** No shipped local profile matches hosted Jev
+diff --git a/docs/faq.md b/docs/faq.md
+index 6a699cd..b2b1b36 100644
+--- a/docs/faq.md
++++ b/docs/faq.md
+@@ -409,9 +409,9 @@ scripted-heredoc happy path, abort path).
+ **read-only capacity report**: it tells you how many instances *would* fit
+ in GPU mode or CPU mode (alternative placements, never additive;
+ `total_decision_slots = max(gpu, cpu) × parallel`), but it reserves and
+-launches nothing. `llmctl decide scale decide-2b 2` is what starts them:
++launches nothing. `llmctl decide scale decide-kev-08b 2` is what starts them:
+ 
+-* Instance keys are `decide-2b`, `decide-2b.2`, `decide-2b.3` … The primary keeps its documented port;
++* Instance keys are `decide-kev-08b`, `decide-kev-08b.2`, `decide-kev-08b.3` … The primary keeps its documented port;
+   every further instance gets a port from the registry allocator (so instances beyond the first need the
+   registry binary: `llmctl build decide`; without it the scale is refused before anything starts).
+ * Scale-up is **admission-bounded** by the same RAM/VRAM budget check `llmctl start` uses and is
+@@ -420,7 +420,7 @@ launches nothing. `llmctl decide scale decide-2b 2` is what starts them:
+ * Scale-down stops the **highest-numbered** instances first. Asking for the current count is a no-op.
+ * A runtime failure while scaling up rolls back every instance started in that call (exit 1).
+ * After a failed `llmctl switch`, the restore brings back the same **count** of instances of a scaled
+-  profile, not necessarily the same keys (if only `decide-2b.3` was running it comes back as `decide-2b`).
++  profile, not necessarily the same keys (if only `decide-kev-08b.3` was running it comes back as `decide-kev-08b`).
+ * `LLMCTL_DECIDE_MODE=deterministic` (default) serves a profile from its primary and overflows to the next
+   instance only when the primary is saturated; `throughput` spreads least-loaded and marks every response
+   `x-llmctl-decide-mode: throughput`.
+@@ -475,8 +475,8 @@ onnx` creates a hash-locked private venv (`--require-hashes`) with
+ DeBERTa-class `spm.model` tokenizer) and `tokenizers` (`tokenizer.json`
+ repos). `llmctl doctor` reports missing `onnxruntime`/`sentencepiece`
+ as **WARN, not FAIL**, because every `llama`-engine profile (including
+-`decide`/`decide-pro`/`decide-2b`/`decide-max`) is fully functional
+-without them, and the runner itself dies with a clear, actionable error at
++`decide`/`decide-pro`/`decide-2b`/`decide-max`) runs without them (whether
++each of those answers well is a separate matter: see `docs/decision-models.md`, live results), and the runner itself dies with a clear, actionable error at
+ launch when a package is missing. Install with
+ `llmctl build onnx`. Decisions are NLI
+ entailment: premise = state, one hypothesis per option, one encoder
+diff --git a/docs/hardware-tiers.md b/docs/hardware-tiers.md
+index 2ec05b7..6d03cae 100644
+--- a/docs/hardware-tiers.md
++++ b/docs/hardware-tiers.md
+@@ -156,7 +156,7 @@ otherwise the profile does not fit and `llmctl start` refuses with the exact num
+ above and below).
+ 
+ Known gap, stated plainly: that estimate **under-reserves the native `/v1/systemone` profiles** - their measured working set above weights and KV (compute buffers) is larger
+-than the flat rule sees, which is why `decide-julia`, `decide-laya`, `decide-kev-08b` and `decide-lev` carry a measured `overhead_mb` (derived from recorded evidence by `scripts/overhead_from_memory.py`) and the other decision profiles do not yet. For a profile without a measured half the planner books **0** for it, which is a floor and not a measurement: `llmctl plan --json` reports `memory_status` (`measured`, `partial` or `unmeasured`) and `unknown_overhead` (the unmeasured halves: `ram`, `vram`), and the human plan marks such a recommendation `overhead UNKNOWN`. In particular `decide-lev` is `partial` (its VRAM half was only measured on a CPU-only host) and the unmeasured profiles (e.g. `decide-kev-4b`, `decide-2b`) can be recommended on a RAM-constrained fixture such as `ram-contended-auto-eviction` while a smaller, measured profile such as `decide-kev-08b` is refused - that row is **not** evidence they fit. This page
++than the flat rule sees, which is why `decide-julia`, `decide-laya`, `decide-kev-08b` and `decide-lev` carry a measured `overhead_mb` (derived from recorded evidence by `scripts/overhead_from_memory.py`) and the other decision profiles do not yet. For a profile without a measured half the planner books **0** for it, which is a floor and not a measurement: `llmctl plan --json` reports `memory_status` (`measured`, `partial` or `unmeasured`) and `unknown_overhead` (the unmeasured halves: `ram`, `vram`), and the human plan marks such a recommendation `overhead UNKNOWN`. In particular `decide-lev` is `partial` (its VRAM half was only measured on a CPU-only host) and the unmeasured profiles (e.g. `decide-2b`) can be recommended on a RAM-constrained fixture such as `ram-contended-auto-eviction` while a smaller, measured profile such as `decide-kev-08b` is refused - that row is **not** evidence they fit. **cpu-mode VRAM on a CUDA host (G-138):** a placement at `-ngl 0` still holds VRAM (llama.cpp op-offload; `decide-kev-4b` held 4460 MiB while 0 was booked; that figure is a **single `nvidia-smi` sample taken 20 s after start with no request sent, not a peak under load** - `specs/009-jev-decision-models/evidence/live/decide-kev-4b/cpu-mode-vram-live-2026-10-08.txt`). On a host WITH a GPU the planner therefore books, in this order of authority, a *measured* cpu-mode sample (a post-load reading, not a peak under load; x1.10; `plan --json` `cpu_vram_provenance: measured`), else a recorded compute-buffer *floor* (`floor`), else - when only the gpu-mode peak is measured (`decide-lev`) - that gpu peak as a *ceiling* (`gpu-peak-ceiling`; the cpu-mode offload was below the gpu-mode peak in all 4 profiles measured in both modes, but a ceiling is not a measurement and the profile stays `partial`), else 0 (`unmeasured`, still reported UNKNOWN). A CPU-only host books 0 (`n/a`). A profile whose booked VRAM exceeds the budget is refused, never silently admitted at 0. This page
+ deliberately does **not** list reserved-memory figures for the native profiles: run `llmctl plan` on the host you care about. On the development host the scheduler refused to start `decide-kev-4b`,
+ `decide-kev-9b` and `decide-lev` for lack of free RAM (it printed the numbers); refusing with numbers is the intended behaviour on a RAM-constrained host
+ (`specs/009-jev-decision-models/evidence/live/NATIVE-REPORT.md`).
+@@ -226,11 +226,11 @@ A type missing from a profile's object counts as unmeasured. Values below are co
+ | `baseline` | `decide-tiny`, `decide`, `decide-nli`, `decide-2b`, `decide-julia`, `decide-kev-08b`, `decide-kev-4b`, `decide-laya`, `decide-lev` | `decide-nli` |
+ | `constrained` | `decide-tiny`, `decide`, `decide-nli`, `decide-2b`, `decide-julia`, `decide-kev-08b`, `decide-kev-4b`, `decide-laya`, `decide-lev` | `decide-nli` |
+ | `cpu-heavy` | `decide-tiny`, `decide`, `decide-pro`, `decide-nli`, `decide-max`, `decide-2b`, `decide-julia`, `decide-kev-08b`, `decide-kev-4b`, `decide-kev-9b`, `decide-laya`, `decide-lev` | `decide-nli` |
+-| `ram-contended-auto-eviction` | `decide-tiny`, `decide`, `decide-nli`, `decide-2b`, `decide-kev-4b`, `decide-lev` | `decide-nli` |
++| `ram-contended-auto-eviction` | `decide-tiny`, `decide`, `decide-nli`, `decide-2b` | `decide-nli` |
+ | `small-exact` | `decide-tiny`, `decide-nli`, `decide-julia`, `decide-kev-08b`, `decide-laya` | `decide-nli` |
+ | `tiny` | none | no fit |
+ | `vram-contended-coresident` | `decide-tiny`, `decide`, `decide-nli`, `decide-2b`, `decide-julia`, `decide-kev-08b`, `decide-kev-4b`, `decide-laya`, `decide-lev` | `decide-nli` |
+-| `vram-contended` | `decide-tiny`, `decide`, `decide-nli`, `decide-2b`, `decide-julia`, `decide-kev-4b`, `decide-laya`, `decide-lev` | `decide-nli` |
++| `vram-contended` | `decide-tiny`, `decide`, `decide-nli`, `decide-2b`, `decide-julia`, `decide-laya` | `decide-nli` |
+ | `workstation` | `decide-tiny`, `decide`, `decide-pro`, `decide-nli`, `decide-max`, `decide-2b`, `decide-julia`, `decide-kev-08b`, `decide-kev-4b`, `decide-kev-9b`, `decide-laya`, `decide-lev` | `decide-nli` |
+ 
+ **`auto decide` ranking** (`sched_rank_for_capability decide`, fixed): `decide-tiny`,
+diff --git a/internal/gateway/letter.go b/internal/gateway/letter.go
+index fce8156..247bd6e 100644
+--- a/internal/gateway/letter.go
++++ b/internal/gateway/letter.go
+@@ -90,6 +90,11 @@ func (b *LetterLogitBackend) Decide(ctx context.Context, ep Endpoint, spec Profi
+ 			"n_probs":      nprobs,
+ 			"cache_prompt": spec.Readout.CachePrompt && b.Mode == Throughput, // never in deterministic mode (B2-12)
+ 			"stream":       false,
++			// Thinking-mode templates (Qwen3/3.5 family) open with a reasoning token, delivered in
++			// reasoning_content, so no option letter is ever in the first-token alternatives
++			// (422 readout_failed / option_missing). llama-server honours this per-request kwarg; a
++			// template that does not use it ignores it.
++			"chat_template_kwargs": map[string]any{"enable_thinking": false},
+ 		}
+ 		if b.Mode != Throughput {
+ 			body["seed"] = ResolveSeed(b.Seed)
+diff --git a/internal/gateway/letter_test.go b/internal/gateway/letter_test.go
+index bcacd44..a4e7896 100644
+--- a/internal/gateway/letter_test.go
++++ b/internal/gateway/letter_test.go
+@@ -55,6 +55,28 @@ func TestLetterNoulProbabilityAndRequestShape(t *testing.T) {
+ 	}
+ }
+ 
++// Root cause (live, nezha 2026-10-08): thinking-mode chat templates (Qwen3/3.5 family: decide,
++// decide-2b, decide-max, decide-pro) make the engine open with a reasoning token (delivered in
++// reasoning_content, content empty), so no option letter is ever in the first-token alternatives
++// (HTTP 422 readout_failed / option_missing). llama-server honours a per-request
++// chat_template_kwargs {"enable_thinking": false}; the letter-logit request MUST send it, in both
++// modes, so the first generated token is the answer position.
++func TestLetterRequestDisablesThinking(t *testing.T) {
++	for _, mode := range []Mode{Deterministic, Throughput} {
++		srv, rec := fakeServer(t, func(_ *recorded, w http.ResponseWriter) {
++			_, _ = w.Write(llamaResponse(lpEntry{" A", -0.1}, lpEntry{" B", -2.3}))
++		})
++		be := &LetterLogitBackend{Mode: mode, Seed: 7}
++		if _, _, err := be.Decide(context.Background(), ep(srv.URL), specByID(t, "decide-tiny"), parseFor(t, noulBody)); err != nil {
++			t.Fatal(err)
++		}
++		kw, ok := rec.body["chat_template_kwargs"].(map[string]any)
++		if !ok || kw["enable_thinking"] != false {
++			t.Fatalf("mode %v: letter-logit request must carry chat_template_kwargs.enable_thinking=false, got %v", mode, rec.body["chat_template_kwargs"])
++		}
++	}
++}
++
+ func TestLetterChoiceAndScore(t *testing.T) {
+ 	srv, _ := fakeServer(t, func(_ *recorded, w http.ResponseWriter) {
+ 		_, _ = w.Write(llamaResponse(lpEntry{" B", -0.2}, lpEntry{" A", -2.0}, lpEntry{" C", -3.0}))
+diff --git a/internal/gateway/resolver.go b/internal/gateway/resolver.go
+index 97ce2fd..8e9a3bf 100644
+--- a/internal/gateway/resolver.go
++++ b/internal/gateway/resolver.go
+@@ -5,6 +5,7 @@ import (
+ 	"errors"
+ 	"net"
+ 	"net/url"
++	"strconv"
+ 	"strings"
+ 	"sync"
+ 	"time"
+@@ -61,8 +62,15 @@ func EndpointVar(profile string) string {
+ 	return "LLMCTL_DECIDE_ENDPOINT_" + strings.ToUpper(strings.ReplaceAll(profile, "-", "_"))
+ }
+ 
++// PortVar names the env var that rebinds a profile's port on this host (same rule as the bash side,
++// lib/catalog.sh catalog_port_override_env_name).
++func PortVar(profile string) string {
++	return "LLMCTL_PORT_" + strings.ToUpper(strings.ReplaceAll(profile, "-", "_"))
++}
++
+ // StaticResolverFromEnv builds a resolver from LLMCTL_DECIDE_ENDPOINT_<PROFILE> (loopback URLs);
+-// a profile without the variable is assumed at http://127.0.0.1:<catalog port> when it has a port.
++// a profile without the variable is assumed at http://127.0.0.1:<port> where <port> is LLMCTL_PORT_<PROFILE>
++// when that is a valid port (1-65535), else the catalog port (when it has one).
+ // Instances are presumed healthy: the real health comes from the registry adapter.
+ func StaticResolverFromEnv(specs []ProfileSpec, get func(string) string) *StaticResolver {
+ 	r := NewStaticResolver()
+@@ -73,8 +81,16 @@ func StaticResolverFromEnv(specs []ProfileSpec, get func(string) string) *Static
+ 				urls = append(urls, u)
+ 			}
+ 		}
+-		if len(urls) == 0 && s.Port > 0 {
+-			urls = []string{"http://127.0.0.1:" + itoa(s.Port)}
++		if len(urls) == 0 {
++			// LLMCTL_PORT_<PROFILE> (host-local rebind, honoured by the bash side) beats the catalog
++			// port; an invalid value (non-numeric, <1, >65535, "auto") is ignored.
++			port := s.Port
++			if p, err := strconv.Atoi(strings.TrimSpace(get(PortVar(s.ID)))); err == nil && p >= 1 && p <= 65535 {
++				port = p
++			}
++			if port > 0 {
++				urls = []string{"http://127.0.0.1:" + itoa(port)}
++			}
+ 		}
+ 		var eps []Endpoint
+ 		for i, u := range urls {
+diff --git a/internal/gateway/resolver_test.go b/internal/gateway/resolver_test.go
+index 9f0a4cd..b87c055 100644
+--- a/internal/gateway/resolver_test.go
++++ b/internal/gateway/resolver_test.go
+@@ -44,6 +44,65 @@ func TestStaticResolverFromEnv(t *testing.T) {
+ 	}
+ }
+ 
++func TestPortVarName(t *testing.T) {
++	if got := PortVar("decide-nli"); got != "LLMCTL_PORT_DECIDE_NLI" {
++		t.Fatal(got)
++	}
++}
++
++// LLMCTL_PORT_<PROFILE> (the bash side's host-local rebind) must move the static fallback; an explicit
++// LLMCTL_DECIDE_ENDPOINT_<PROFILE> still wins; invalid values are ignored (catalog port) and never panic.
++func TestStaticResolverFromEnvHonoursPortOverride(t *testing.T) {
++	specs := testSpecs() // decide-nli has catalog port 8096
++	url := func(env map[string]string) string {
++		r := StaticResolverFromEnv(specs, func(k string) string { return env[k] })
++		eps, _ := r.Resolve(KindDecide, "decide-nli")
++		if len(eps) != 1 {
++			t.Fatalf("%v: %+v", env, eps)
++		}
++		return eps[0].URL
++	}
++	if got := url(map[string]string{"LLMCTL_PORT_DECIDE_NLI": "18096"}); got != "http://127.0.0.1:18096" {
++		t.Errorf("port override ignored: %s", got)
++	}
++	if got := url(map[string]string{"LLMCTL_PORT_DECIDE_NLI": " 18096 "}); got != "http://127.0.0.1:18096" {
++		t.Errorf("padded override: %s", got)
++	}
++	if got := url(map[string]string{"LLMCTL_PORT_DECIDE_NLI": "18096", "LLMCTL_DECIDE_ENDPOINT_DECIDE_NLI": "http://127.0.0.1:9999"}); got != "http://127.0.0.1:9999" {
++		t.Errorf("endpoint var must win over port override: %s", got)
++	}
++	for _, bad := range []string{"abc", "0", "-5", "65536", "99999999999999999999", "80.5", "auto", ""} {
++		if got := url(map[string]string{"LLMCTL_PORT_DECIDE_NLI": bad}); got != "http://127.0.0.1:8096" {
++			t.Errorf("invalid override %q must fall back to the catalog port, got %s", bad, got)
++		}
++	}
++	if got := url(map[string]string{"LLMCTL_PORT_DECIDE_NLI": "65535"}); got != "http://127.0.0.1:65535" {
++		t.Errorf("upper bound: %s", got)
++	}
++	if got := url(map[string]string{"LLMCTL_PORT_DECIDE_NLI": "1"}); got != "http://127.0.0.1:1" {
++		t.Errorf("lower bound: %s", got)
++	}
++}
++
++// A profile with no catalog port (0) and no usable override must resolve to NO endpoint, never to
++// "http://127.0.0.1:0"; the `port > 0` guard in StaticResolverFromEnv is what guarantees it.
++func TestStaticResolverFromEnvPortlessProfileHasNoEndpoint(t *testing.T) {
++	specs := []ProfileSpec{{ID: "decide-portless", Port: 0}}
++	for _, env := range []map[string]string{nil, {"LLMCTL_PORT_DECIDE_PORTLESS": "auto"}, {"LLMCTL_PORT_DECIDE_PORTLESS": "0"}} {
++		r := StaticResolverFromEnv(specs, func(k string) string { return env[k] })
++		eps, err := r.Resolve(KindDecide, "decide-portless")
++		if err != nil || len(eps) != 0 {
++			t.Errorf("env %v: portless profile with no override must have no endpoint, got %+v (err %v)", env, eps, err)
++		}
++	}
++	// control: a valid override on the same portless profile does create one
++	r := StaticResolverFromEnv(specs, func(k string) string { return map[string]string{"LLMCTL_PORT_DECIDE_PORTLESS": "18100"}[k] })
++	eps, _ := r.Resolve(KindDecide, "decide-portless")
++	if len(eps) != 1 || eps[0].URL != "http://127.0.0.1:18100" {
++		t.Errorf("valid override on a portless profile: %+v", eps)
++	}
++}
++
+ func TestEnvVarName(t *testing.T) {
+ 	if got := EndpointVar("decide-tiny"); got != "LLMCTL_DECIDE_ENDPOINT_DECIDE_TINY" {
+ 		t.Fatal(got)
+diff --git a/lib/catalog.sh b/lib/catalog.sh
+index c866e92..939cdb8 100644
+--- a/lib/catalog.sh
++++ b/lib/catalog.sh
+@@ -509,6 +509,24 @@ def gpu_booking(name, p, size_mb, ctx, par, kv_type, kv_est):
+                 "prov": "lower-bound", "evidence": g.get("evidence"), "cbuf": cb}
+     return {"vram": size_mb + kv_est, "ram": 2048, "prov": "estimated", "evidence": None, "cbuf": None}
+ 
++def cpu_offload_vram(name, p, dfl, g, ovh_v):
++    """cpu mode (-ngl 0) VRAM booking on a host WITH a GPU -> (MiB, provenance).  A CUDA build offloads large-batch
++    ops even at -ngl 0 (G-138: kev-4b held 4460 MiB while 0 was booked).  Order of authority:
++      measured          memory.vram measured (defaults.overhead_vram_mb: 1.10 x the engine pid's peak in cpu mode);
++      floor             a recorded compute-buffer lower bound (kev-9b) - a floor, the true peak is UNKNOWN;
++      gpu-peak-ceiling  cpu-mode VRAM UNMEASURED but the gpu-mode peak at this ctx IS: booked as a CEILING, because
++                        the cpu-mode offload was below the gpu-mode peak in all 4 profiles measured in both modes
++                        (julia 176<212, laya 232<574, kev-08b 2382<2900, kev-4b 4460<7328).  Not a measurement;
++      unmeasured        nothing recorded: 0 is booked as before and the profile stays UNKNOWN (never a made-up number).
++    The same value feeds footprint() and the decision-capacity report."""
++    if (p.get("memory") or {}).get("vram", {}).get("status") == "measured" and ovh_v >= (g["cbuf"] or 0):
++        return ovh_v, "measured"
++    if g["cbuf"]:
++        return max(ovh_v, g["cbuf"]), "floor"
++    if g["prov"] == "measured":
++        return g["vram"], "gpu-peak-ceiling"
++    return ovh_v, "unmeasured"
++
+ def footprint(name, p):
+     """-> dict(mode, ram_mb, vram_mb, storage_mb, fits) or None when unfit."""
+     size_mb = sum((f.get("size") or 0) for f in p["files"]) // 1048576
+@@ -550,7 +568,9 @@ def footprint(name, p):
+     ovh_v = overhead_field(name, dfl, "overhead_vram_mb")
+     kv += ovh
+     g = gpu_booking(name, p, size_mb, ctx, par, kv_type, kv)
+-    gfields = {"gpu_vram_mb": g["vram"], "vram_provenance": g["prov"], "vram_evidence": g["evidence"]}
++    cpu_vram, cpu_prov = cpu_offload_vram(name, p, dfl, g, ovh_v) if vram_budget > 0 else (0, "n/a")
++    gfields = {"gpu_vram_mb": g["vram"], "vram_provenance": g["prov"], "vram_evidence": g["evidence"],
++               "cpu_vram_provenance": cpu_prov}
+     if vram_budget > 0 and g["vram"] <= vram_budget and g["ram"] <= ram_budget:
+         return dict({"mode": "gpu", "ram_mb": g["ram"], "vram_mb": g["vram"],
+                      "storage_mb": size_mb, "ctx": ctx,
+@@ -563,7 +583,6 @@ def footprint(name, p):
+     # (mode none) rather than silently booking 0.  When the offload is unmeasured but a compute-buffer lower bound is
+     # recorded (kev-9b), that floor is booked instead of 0 - conservative: kev-08b's measured cpu-mode offload
+     # (2382 MiB) exceeds its gpu-mode VRAM above weights (2900 - 774), i.e. the offload holds the compute buffer too.
+-    cpu_vram = max(ovh_v, g["cbuf"] or 0) if vram_budget > 0 else 0
+     if size_mb + kv <= ram_budget and cpu_vram <= vram_budget:
+         return dict({"mode": "cpu", "ram_mb": size_mb + kv, "vram_mb": cpu_vram,
+                      "storage_mb": size_mb, "ctx": ctx, "ngl": 0, "parallel": par,
+@@ -685,7 +704,7 @@ for name in sorted(catalog["profiles"].keys()):
+         gpu_ram_mb, gpu_vram_mb = dg["ram"], dg["vram"]
+         cpu_ram_mb = size_mb + dkv
+         # cpu placement on a host with a GPU also holds the measured offload VRAM (same rule as footprint())
+-        cpu_vram_mb = max(int(dfl.get("overhead_vram_mb", 0)), dg["cbuf"] or 0) if vram_budget > 0 else 0
++        cpu_vram_mb = cpu_offload_vram(name, p, dfl, dg, int(dfl.get("overhead_vram_mb", 0)))[0] if vram_budget > 0 else 0
+     inst_gpu = 0
+     inst_cpu = 0
+     reason = ""
+@@ -791,12 +810,16 @@ for name in sorted(plan["profiles"], key=lambda n: plan["profiles"][n]["port"]):
+         verdict, why = "FITS", "recommended"
+         if p.get("unknown_overhead"):
+             why += " (overhead UNKNOWN (%s): booked 0 until measured)" % ",".join(p["unknown_overhead"])
++        if p.get("mode") == "cpu" and p.get("cpu_vram_provenance") not in (None, "n/a"):
++            why += " (cpu-mode VRAM %s)" % p["cpu_vram_provenance"]
+         if "unknown_overhead" in p and p.get("mode") == "gpu" and p.get("vram_provenance") == "estimated":
+             why += " (VRAM estimated: engine compute buffer UNKNOWN, not measured on a GPU)"
+     elif not p["tier_ok"]:
+         verdict, why = "GATED", "needs min_tier=%s" % p["min_tier"]
+     else:
+         verdict, why = "NO-FIT", "footprint exceeds RAM and VRAM budgets"
++        if p.get("mode") == "none" and p.get("cpu_vram_provenance") not in (None, "n/a"):
++            why += " (cpu-mode VRAM %s)" % p["cpu_vram_provenance"]
+     print("%-16s %-6s %-9s %-8s %-8s %-6s %-5s %-4s %s" %
+           (name, p["port"], verdict, p["mode"], p["ram_mb"], p["vram_mb"],
+            p["ctx"], p["ngl"], why))
+diff --git a/models/catalog.json b/models/catalog.json
+index e5e2ce9..fa4a2a8 100644
+--- a/models/catalog.json
++++ b/models/catalog.json
+@@ -1555,11 +1555,11 @@
+       "memory": {
+         "ram": {
+           "status": "unmeasured",
+-          "reason": "the model is not downloaded on any host that has measured memory so far (G-137); measure it and re-run scripts/overhead_from_memory.py --write"
++          "reason": "nezha CPU memory-summary evidence exists at specs/009-jev-decision-models/evidence/live-models/nezha-decide-2026-10-08/memory-summary.json (uncommitted snapshot, commit UNCONFIRMED) but is NOT wired into the planner: booking a CPU-only RAM peak into the estimated GPU VRAM footprint (gpu_booking) is an undecided planner semantic; see specs/009-jev-decision-models/evidence/memory-wiring-proposal.md"
+         },
+         "vram": {
+           "status": "unmeasured",
+-          "reason": "the model is not downloaded on any host that has measured memory so far (G-137); measure it and re-run scripts/overhead_from_memory.py --write"
++          "reason": "VRAM half unmeasured: the only run of this profile on record is on nezha, a CPU-only host (i7-1165G7, no GPU); no GPU-host run of this profile exists yet"
+         }
+       }
+     },
+@@ -1630,11 +1630,11 @@
+       "memory": {
+         "ram": {
+           "status": "unmeasured",
+-          "reason": "the model is not downloaded on any host that has measured memory so far (G-137); measure it and re-run scripts/overhead_from_memory.py --write"
++          "reason": "nezha CPU memory-summary evidence exists at specs/009-jev-decision-models/evidence/live-models/nezha-decide-pro-2026-10-08/memory-summary.json (uncommitted snapshot, commit UNCONFIRMED) but is NOT wired into the planner: booking a CPU-only RAM peak into the estimated GPU VRAM footprint (gpu_booking) is an undecided planner semantic; see specs/009-jev-decision-models/evidence/memory-wiring-proposal.md"
+         },
+         "vram": {
+           "status": "unmeasured",
+-          "reason": "the model is not downloaded on any host that has measured memory so far (G-137); measure it and re-run scripts/overhead_from_memory.py --write"
++          "reason": "VRAM half unmeasured: the only run of this profile on record is on nezha, a CPU-only host (i7-1165G7, no GPU); no GPU-host run of this profile exists yet"
+         }
+       }
+     },
+@@ -1793,11 +1793,11 @@
+       "memory": {
+         "ram": {
+           "status": "unmeasured",
+-          "reason": "the model is not downloaded on any host that has measured memory so far (G-137); measure it and re-run scripts/overhead_from_memory.py --write"
++          "reason": "nezha CPU memory-summary evidence exists at specs/009-jev-decision-models/evidence/live-models/nezha-decide-2b-2026-10-08/memory-summary.json (uncommitted snapshot, commit UNCONFIRMED) but is NOT wired into the planner: booking a CPU-only RAM peak into the estimated GPU VRAM footprint (gpu_booking) is an undecided planner semantic; see specs/009-jev-decision-models/evidence/memory-wiring-proposal.md"
+         },
+         "vram": {
+           "status": "unmeasured",
+-          "reason": "the model is not downloaded on any host that has measured memory so far (G-137); measure it and re-run scripts/overhead_from_memory.py --write"
++          "reason": "VRAM half unmeasured: the only run of this profile on record is on nezha, a CPU-only host (i7-1165G7, no GPU); no GPU-host run of this profile exists yet"
+         }
+       }
+     },
+@@ -2078,6 +2078,7 @@
+         "ngl": 99,
+         "parallel": 1,
+         "flash_attn": "auto",
++        "overhead_vram_mb": 4906,
+         "gpu_vram_mb": 7328,
+         "gpu_ram_mb": 4899
+       },
+@@ -2135,11 +2136,14 @@
+       "memory": {
+         "ram": {
+           "status": "unmeasured",
+-          "reason": "NEZHA run pending"
++          "reason": "nezha CPU memory-summary evidence exists at specs/009-jev-decision-models/evidence/live-models/nezha-decide-kev-4b-2026-10-08/memory-summary.json (uncommitted snapshot, commit UNCONFIRMED) but is NOT wired into the planner: booking a CPU-only RAM peak into the estimated GPU VRAM footprint (gpu_booking) is an undecided planner semantic; see specs/009-jev-decision-models/evidence/memory-wiring-proposal.md"
+         },
+         "vram": {
+-          "status": "unmeasured",
+-          "reason": "measured only on a CPU-only host (no CUDA build, so no offload); a CUDA host with enough free RAM to load it was not available (the scheduler refused it, NATIVE-REPORT.md section 3)"
++          "status": "measured",
++          "format": "cpu-mode-apps-txt",
++          "evidence": "specs/009-jev-decision-models/evidence/live/decide-kev-4b/cpu-mode-vram-live-2026-10-08.txt",
++          "host": "anton",
++          "peak_mib": 4460
+         },
+         "gpu": {
+           "status": "measured",
+@@ -2210,11 +2214,11 @@
+       "memory": {
+         "ram": {
+           "status": "unmeasured",
+-          "reason": "NEZHA run pending"
++          "reason": "nezha CPU memory-summary evidence exists at specs/009-jev-decision-models/evidence/live-models/nezha-decide-kev-9b-2026-10-08/memory-summary.json (uncommitted snapshot, commit UNCONFIRMED) but is NOT wired into the planner: booking a CPU-only RAM peak into the estimated GPU VRAM footprint (gpu_booking) is an undecided planner semantic; see specs/009-jev-decision-models/evidence/memory-wiring-proposal.md"
+         },
+         "vram": {
+           "status": "unmeasured",
+-          "reason": "measured only on a CPU-only host (no CUDA build, so no offload); a CUDA host with enough free RAM to load it was not available (the scheduler refused it, NATIVE-REPORT.md section 3)"
++          "reason": "VRAM half unmeasured: nezha is CPU-only (i7-1165G7, no GPU) and the one GPU-host attempt on anton failed cudaMalloc of a 4016 MiB compute buffer at start (see memory.gpu lower-bound), so no engine-pid VRAM peak exists"
+         },
+         "gpu": {
+           "status": "lower-bound",
+diff --git a/scripts/overhead_from_memory.py b/scripts/overhead_from_memory.py
+index 8f965bb..2226ba5 100755
+--- a/scripts/overhead_from_memory.py
++++ b/scripts/overhead_from_memory.py
+@@ -27,6 +27,8 @@ Evidence formats:
+   memory-summary-json  nezha/<profile>/memory-summary.json  {"ctx", "model_bytes", "memory": [{"VmHWM_kB": ..}, ..]}
+   ctx-peak-txt         ctx-peak-memory-experiment.txt       "model=<file> ctx=<N> idleHWM_kB=.. peakHWM_kB=.."
+   pid-vram-txt         <profile>/memory.txt                 "vram(MiB) pid=<pid>: <MiB>" lines (max taken)
++  cpu-mode-apps-txt    <profile>/cpu-mode-vram-*.txt        nvidia-smi "<pid>, <MiB> MiB, <path>" rows + one "=> engine pid P holds N MiB" line
++                                                            (the named pid's row is the authority; a mismatch is refused)
+ 
+ Optional gpu-mode half (live run 2026-10-08; see derive_gpu): profiles.<name>.memory.gpu =
+   {"status": "measured", "format": "gpu-memory-txt", "evidence": "<live-models/<profile>/memory.txt>", "host", "ctx"}
+@@ -82,6 +84,27 @@ def parse_pid_vram(text):
+     return max(v)
+ 
+ 
++def parse_cpu_mode_apps(text):
++    """Peak VRAM of a cpu-mode (-ngl 0) engine from an nvidia-smi compute-apps transcript (G-138).
++
++    The transcript lists "<pid>, <N> MiB, <path>" rows (several processes may share the same binary path, so the
++    path cannot name the engine) and ONE conclusion line "=> engine pid <P> holds <N> MiB VRAM ...".  The row of the
++    pid the conclusion names is the authority; a conclusion that disagrees with its row, or names a pid with no row,
++    is refused rather than reconciled."""
++    m = re.search(r"^=>\s*engine pid\s+(\d+)\s+holds\s+(\d+)\s*MiB\b", text, re.M)
++    if not m:
++        raise ValueError("no '=> engine pid P holds N MiB' conclusion line in the evidence")
++    pid, claimed = m.group(1), int(m.group(2))
++    rows = {}
++    for rp, rmib in re.findall(r"^(\d+),\s*(\d+)\s*MiB,", text, re.M):
++        rows[rp] = max(rows.get(rp, 0), int(rmib))
++    if pid not in rows:
++        raise ValueError("the conclusion names pid %s but the listing has no row for it" % pid)
++    if rows[pid] != claimed:
++        raise ValueError("the conclusion claims %d MiB for pid %s but its listing row says %d MiB" % (claimed, pid, rows[pid]))
++    return rows[pid]
++
++
+ def is_decision(p):
+     return "decide" in (p.get("capability") or [])
+ 
+@@ -128,9 +151,13 @@ def derive(cat, root):
+             defaults["window_tokens"] = ctx
+             ram["peak_hwm_mib"], ram["weights_mib"] = _round1(peak), _round1(weights)
+         if vram.get("status") == "measured":
+-            if vram.get("format") != "pid-vram-txt":
+-                raise ValueError("%s: unknown vram evidence format %r" % (name, vram.get("format")))
+-            peak_v = parse_pid_vram(_read(root, vram["evidence"]))
++            vfmt = vram.get("format")
++            if vfmt == "pid-vram-txt":
++                peak_v = parse_pid_vram(_read(root, vram["evidence"]))
++            elif vfmt == "cpu-mode-apps-txt":
++                peak_v = parse_cpu_mode_apps(_read(root, vram["evidence"]))
++            else:
++                raise ValueError("%s: unknown vram evidence format %r" % (name, vfmt))
+             defaults["overhead_vram_mb"] = vram_overhead(peak_v)
+             vram["peak_mib"] = peak_v
+         if mem:
+diff --git a/specs/009-jev-decision-models/evidence/gaps-register.md b/specs/009-jev-decision-models/evidence/gaps-register.md
+index 7696a64..7aef03a 100644
+--- a/specs/009-jev-decision-models/evidence/gaps-register.md
++++ b/specs/009-jev-decision-models/evidence/gaps-register.md
+@@ -21,7 +21,7 @@ Operator rule (2026-10-07): "Any gaps, shortcomings, issues or inconsistencies M
+ | G-015 | baseline | `tests/test_gpu_throughput_ratio.sh` rewrites tracked docs/qa files every run; ratio varies with free VRAM (ngl 0 vs 99) | CLOSED | overwrite FIXED 2026-10-07 (evidence only with LLMCTL_QA_EVIDENCE=1; live host line added); VRAM-dependent ngl flake: test must record the planned ngl and refuse to compare when ngl=0 → follow-up T057c | GPU tests skip honestly (with live free-VRAM numbers) when the planner chose ngl=0 or CUDA allocation fails; forced-skip path proven with LLMCTL_CTX_SMALL=900000; overwrite fixed earlier |
+ | G-016 | HEAD a9ebefe | docs/qa/005 evidence files at HEAD were SKIPPED placeholders from another host (/home/milos path) | CLOSED | real evidence restored from b09a79a per operator decision | git diff b09a79a clean |
+ | G-017 | P1 | D-01 (long-state truncation) not reproduced: tokenizer files not present | OPEN | T013b: fetch pinned tokenizer from huggingface.co (small), reproduce | |
+-| G-018 | P1 | D-06, N-10, N-11 need real models | OPEN | T062/T064 | |
++| G-018 | P1 | D-06, N-10, N-11 need real models | OPEN (narrowed 2026-10-09) | T062/T064. D-06 real-model evidence now captured (decide-nli encoder run, and the failing letter-logit runs); the letter-logit live failures are tracked as G-155 and are NOT fixed. N-10 / N-11 still open (not exercised by the D-06 runs) | evidence/live-models/decide-nli-main-wiredfix/; evidence/live-models/nezha-decide-*-2026-10-08/ |
+ | G-019 | FR-063 | no repository-wide scan proving the key never appears in argv/logs/evidence/docs | OPEN | T121b `tests/test_no_key_leak_repo.sh` | |
+ | G-020 | review | second independent review not run; minor findings R-008..R-051 unaddressed; constitution amendment 2.1.0 unreviewed | OPEN | T029 + review pass | |
+ | G-021 | spec | spec/plan/data-model/contracts still mention Python gateway/`httpcore`/stdlib in places; counts drift | OPEN | gap-fix pass D (doc consistency sweep) | |
+@@ -78,7 +78,7 @@ Operator rule (2026-10-07): "Any gaps, shortcomings, issues or inconsistencies M
+ | G-072 | tests | tests/test_gateway_endpoints.sh EP-026 flaked (1 in 5): intended shed RST can arrive during connect() — same race class as G-037; script treated it as an error | CLOSED | script now treats RST on connect OR first read as shed; 12 consecutive runs green | this session |
+ | G-073 | G-068 | own-entry race: a gateway probes its own https entry; grace 0 can flap during startup (default grace 30 safe) | ACCEPTED | first-pass delay mitigates; documented | W reports |
+ | G-074 | G-068 | unknown rows (no CA) persist until CA appears; no GC when service gone but process alive | FIXED-PENDING-VERIFY | add `registry reconcile --prune-unknown-after D` (default off) + doctor WARN | FIX-C: registry reconcile --prune-unknown-after + doctor WARN |
+-| G-075 | retirement | D-06, D-27, N-10 and the real-engine byte-identity part of N-11 need a real model / a macOS host and are mapped N/A | OPEN | T062/T064 (real model evidence) — must be re-opened as live checks, not left N/A | |
++| G-075 | retirement | D-06, D-27, N-10 and the real-engine byte-identity part of N-11 need a real model / a macOS host and are mapped N/A | OPEN (narrowed 2026-10-09) | T062/T064 (real model evidence) — D-06 part now has live captures (decide-nli encoder ran: 132/132 well-formed; letter-logit profiles FAIL live, see G-155); D-27, N-10 and the real-engine byte-identity part of N-11 are still not live-checked | evidence/live-models/decide-nli-main-wiredfix/; evidence/live-models/nezha-decide-pro-2026-10-08/ |
+ | G-076 | retirement | CHANGELOG 3.1.0 is a DRAFT: admit, vantage, schema/MCP, agent installer and other items not re-run individually before writing | OPEN | T123 final changelog generated from git history + evidence after the last phase | |
+ | G-077 | retirement | agent accidentally started `llmctl build` (llama.cpp configure) while probing help; killed, no artifacts changed | CLOSED-ACCEPTED | `llmctl build` without argument must print usage, not build: bug → G-078 | |
+ | G-078 | bin/llmctl | `llmctl build` with no argument starts building everything (surprising default; destructive of time/CPU) | FIXED-PENDING-VERIFY | change: no-arg prints usage unless `all` given (breaking-change note) — decide with CHANGELOG | FIX-C: bare `llmctl build` prints usage exit 2; build all includes decide; breaking-change in CHANGELOG |
+@@ -155,7 +155,7 @@ Operator rule (2026-10-07): "Any gaps, shortcomings, issues or inconsistencies M
+ | G-139 | NATIVE finding 3 | after stopping vision, `llmctl start vision` was refused by the scheduler (fixed 2 GiB host-RAM reservation vs 1343 MiB budget: the host is RAM-constrained by other workloads); vision restored via systemctl --user start (same command line), health 200, real prompt answered | ACCEPTED-EVIDENCE | document in runbooks |
+ | G-140 | NATIVE live | accuracy vs authored labels (provisional, n: noul 60 / choice 41 / score 31): kev-08b noul 81.7% [70.1,89.4] cleared, choice 87.8% [74.5,94.7] cleared, score 29.0% not cleared; laya noul 71.7% [59.2,81.5] not cleared, choice 80.5% [66.0,89.8] cleared, score not cleared; julia clears nothing (noul 55.0, choice 34.1, score 22.6), does not reproduce card 73%, flip rate 41.5%; NO model clears the score baseline | RECORDED | SC-003: profiles not clearing the baseline must be labelled experimental or not shipped (decision pending, see below) |
+ | G-141 | AUDIT SC-004 | HIGH finding D-01 (premise-only truncation of long state in the NLI runtime) has NO observed RED: the real tokenizer (spm.model) was never fetched; only a stub-tokenizer guard exists. T041 un-ticked (lib/llmctl_decide/nli.py + test_nli.py never existed; the shipped runtime is lib/onnx_server.py) | OPEN | REALCHECK: fetch pinned spm.model, capture encode_pair truncating a 600-token state (RED), show the shipped runtime keeps the hypothesis (GREEN) | evidence/audit-REPORT.md, sc004-closure.md |
+-| G-142 | AUDIT SC-004 | HIGH finding D-06 (real ONNX encoder run) has no evidence: decide-nli not downloaded/run; also open MEDIUM N-10, N-11 (G-017/G-018/G-075 are the same items) | OPEN | REALCHECK: download decide-nli, run through the gateway, store under evidence/live/decide-nli/ | evidence/audit-REPORT.md |
++| G-142 | AUDIT SC-004 | HIGH finding D-06 (real ONNX encoder run) has no evidence: decide-nli not downloaded/run; also open MEDIUM N-10, N-11 (G-017/G-018/G-075 are the same items) | OPEN (evidence gap closed, defect not) | The missing D-06 evidence now exists under evidence/live-models/ (decide-nli run through the gateway on anton: 132/132 well-formed, 23/23 probes; letter-logit runs on nezha). Those runs show the letter-logit readout FAILING live: tracked as G-155 (OPEN, high). SC-004 audit treats D-06 as DEMOTED (evidence gap), which does NOT mean the profiles work. N-10, N-11 remain open | evidence/audit-REPORT.md; evidence/sc004-closure.md |
+ | G-143 | AUDIT | sc004 audit: 60 rows: high 9 (7 fixed, 2 open), medium 31 (28 fixed, 1 demoted, 2 open), low 20 (15 fixed, 4 demoted, 1 accepted); GREEN read from the recorded p7 full run; guard check is presence-only (no mutation check) | RECORDED | scripts/spec_closure_audit.py, evidence/sc004-closure.md |
+ | G-144 | lead | tests/test_no_retired_vars.sh failed after the docs pass quoted its header on docs/scripts/test_no_retired_vars.md; fixed by an exact count-pinned allow entry (4) + control; internal/gateway keyfile test exempted the same page by exact path | FIXED | tests/test_no_retired_vars.sh |
+ | R5-DOC2 | DOCS2 | second docs pass done: FAQ cluster entries audited against llmctld (wired / library-only / not built: partition drain, 429 quota enforcement on requests, OIDC, automatic checkpoint triggers, anchor-based audit check are LIBRARY ONLY), docs/ports.md, VERSION=3.1.0 + bin/llmctl version + tests/test_cli.sh pin, G-021 spec sweep, limitations/runbooks, README support table, CHANGELOG waiver wording; reachable=181 orphans=0 broken=0 | DONE | evidence/docs-pass2-REPORT.md |
+@@ -170,4 +170,9 @@ Operator rule (2026-10-07): "Any gaps, shortcomings, issues or inconsistencies M
+ | R5-COV | COVERAGE | T141 DONE (llmctld DDoS/stress tests write to t.TempDir unless LLMCTL_QA_EVIDENCE=1; docs/qa/008 restored to HEAD); T028 coverage report (measure+report, OD-15): Go 84.3% (root 89.9%, llmctld unit 65.4%), bash line 71.5% (22 files), python 65.8%; 21 suites not measured (GPU, podman, systemd, e2e, engine-build, go-mutation) with reasons; make_report.py has no unit test; llmctld integration not in the number | DONE | evidence/coverage/COVERAGE-REPORT.md |
+ | G-153 | lead (found via COVERAGE) | tests/test_bin_llmctl_symlink_invocation.sh failed: `echo "$out" | grep -q` under pipefail dies of SIGPIPE once the plan JSON exceeded one stdio chunk (6 new profiles => 18 KB); same pattern in tests/test_admit.sh:147 was a secrecy check that could MISS a leak (`printf | grep -qF needle && leak=1`). Fixed with here-strings; new guard tests/test_no_pipe_grep_q.sh (planted-needle control) | FIXED | tests/test_no_pipe_grep_q.sh |
+ | G-154 | COVERAGE | tests/test_onnx_server.sh fails under the coverage run only (scratch venv first on PATH changes its expected message) - measurement artifact; make_report.py untested | MINOR | |
+-
++| G-155 | AUDIT SC-004 review (D-06 follow-up) | **HIGH, letter-logit decision profiles failed live; state updated 2026-10-09.** Pre-fix (nezha, CPU, uncommitted snapshot): `decide` 0/132, `decide-2b` 0/132, `decide-pro` 68/132 well-formed. Root cause **CONFIRMED live**: the engine's thinking-mode chat template delivers the first token in `reasoning_content` (`nezha-decide-2026-10-08/root-cause-first-tok.txt`); the fix (`internal/gateway/letter.go` sends `chat_template_kwargs: {enable_thinking: false}`) is in the WORKING TREE, uncommitted, and live proof exists: `decide-2b` 0/132 -> **128/132** well-formed (noul 0.883 and choice 0.732 beat baselines, score 0.290 does not; probes 23/23) and `decide-pro` 112/132 (noul 0.867, choice 0.659, score 0.645 all beat baselines; probes 22/23), both on anton CPU (`anton-decide-2b-thinkingfix-run2-2026-10-09/`, `anton-decide-pro-thinkingfix-2026-10-09/`). `decide` (decider-4b) is NOT fixed by it: smoke 1/3, 422 readout_failed, see G-157. `decide-max` not exercised, see G-158. Per-profile truth today: decide-2b works for noul/choice; decide-pro works but hits CPU timeouts (G-156); decide not usable at the current mass_threshold (G-157); decide-max unknown. The fix is still uncommitted and `letter_test.go` failing-first is UNCONFIRMED, so SC-004's fixed-with-failing-first-test rule is NOT met; the Status stays OPEN | OPEN (severity high; root cause confirmed, fix uncommitted, partial live proof) | lead: commit letter.go + failing-first test; close G-156..G-160 sub-issues; re-run decide / decide-2b / decide-pro / decide-max on the release tree | evidence/live-models/nezha-decide-2026-10-08/, nezha-decide-2b-2026-10-08/, anton-decide-2b-thinkingfix-2026-10-08/ (interrupted run 1, superseded), anton-decide-2b-thinkingfix-run2-2026-10-09/, anton-decide-pro-thinkingfix-2026-10-09/, anton-decide-thinkingfix-2026-10-09/ |
++| G-156 | G-155 sub-issue (a) | decide-pro on a CPU engine: 29 x HTTP 502 `backend_failed` on golden (+1 on probes), each about 27 s with `attempts: 3` (the golden client retries 502, `--retries 2`, so about 9 s per attempt); by option count 12 -> 10, 20 -> 8, 3 -> 3, 8 -> 1, none -> 7. engine.log: prompt processing about 21.6 tokens/s on CPU (168-token prompt = 7.8 s) and `srv stop: cancel task` (the connection was closed mid-request). Cause location: a candidate is the gateway end-to-end budget `LLMCTL_DECIDE_TIMEOUT`, default 8 s (`internal/server/limits.go:41`, applied via `context.WithTimeout` at `internal/server/handlers.go:546`; a deadline error is answered 502 with header `x-llmctl-decide-reason: deadline_exceeded`). The anton runs did not set it, but the response HEADERS were not captured, so that this deadline caused the 502s is INFERRED, not observed (`grep` found no other per-attempt timeout in `internal/gateway/*.go`; the engine HTTP client `sharedClient` has no Timeout). Not re-run on GPU. Long CPU prompts are refused as 502, not 422 | OPEN | re-run with `LLMCTL_DECIDE_TIMEOUT` raised and the headers captured (`x-llmctl-decide-reason`); decide whether the default 8 s is right for CPU engines and whether `decide ask`/golden harness should record that header | evidence/live-models/anton-decide-pro-thinkingfix-2026-10-09/ (README, golden-first3-failure-bodies.json, engine.log); internal/server/limits.go, handlers.go |
++| G-157 | G-155 sub-issue (b) | `decide` (decider-4b Q4_K_M) after the thinking fix: smoke 1/3 well-formed (C-001, C-002 HTTP 422 `readout_failed` at 2 options; C-003 OK). Captured first-token top_logprobs: with the fix A -0.84 (0.43), B -0.79 (0.46), combined option-letter mass 0.44-0.47 (top-32 total 0.47-0.49) against catalog `mass_threshold` 0.5 -> refused; without the fix 0.12-0.13. Diffuse first token; golden/probes NOT run, so no accuracy figure exists. The mass_threshold value itself was not changed and its calibration is not measured | OPEN | decide whether to lower the profile's `mass_threshold` with evidence, or change prompt/readout; then run golden/probes | evidence/live-models/anton-decide-thinkingfix-2026-10-09/ (README, diag/top_logprobs.json) |
++| G-158 | G-155 sub-issue (c) | `decide-max` (JevK5 9B Q8_0, `jevk5-9b-v0.3.3-Q8_0.gguf`, 8.87 GiB) has NO live result: expected peak 12-13 GB (model + about 3 GB, measured on this host for decide-pro/decide-2b) exceeds the 10G bounded-run cap, so it was not downloaded or run; the nezha directory is only an in-progress snapshot with no stats | OPEN | needs a host with >= 14 GB headroom or a GPU with >= 12 GB free, or a larger cap with a fresh host-safety review | evidence/live-models/anton-decide-max-not-exercised-2026-10-09.md |
++| G-159 | G-155 sub-issue (d) | planner RAM-vs-VRAM overhead wiring decision pending: whether to declare `memory.ram` from the nezha CPU memory summaries (derived overhead_mb) in `models/catalog.json`; analysis only, nothing applied. Measured data points since: decide-pro VmHWM 7.36 GB (4.4 GB model), decide-2b VmHWM 7.8 GB on anton CPU | OPEN (decision) | decide per the proposal | evidence/memory-wiring-proposal.md, scripts/overhead_from_memory.py |
++| G-160 | G-155 sub-issue (e) | 20-option golden items vs `max_options` 16 (decide-2b; decide-max has the same cap): decide-2b run 2 got 8 x HTTP 422 on C-038..C-041 and their permutations, all `option_count=20`, response body not captured, reason code UNCONFIRMED (consistent with a gateway max_options refusal). Reading `scripts/golden/run_golden.py` (not edited): any status other than 200 sets `well_formed=False` with reason `http <status>`, so a refusal is counted exactly like a model error; `stats.py` then counts it in the `well_formed` ratio (128/132) and drops it from accuracy denominators. There is no 'refused' category, so a profile whose `max_options` is below the golden set's largest item (20) can never reach 132/132 by design. Report only; stats were not changed | OPEN | decide whether `run_golden.py`/`stats.py` should classify a gateway max_options 422 as 'refused' (separately reported) not 'malformed', and capture the 422 body; or make the golden set skip items above the profile's max_options | scripts/golden/run_golden.py (status != 200 branch), scripts/golden/stats.py; evidence/live-models/anton-decide-2b-thinkingfix-run2-2026-10-09/ |
+diff --git a/specs/009-jev-decision-models/evidence/realcheck/run_live_nli.sh b/specs/009-jev-decision-models/evidence/realcheck/run_live_nli.sh
+index d3164ff..309098d 100644
+--- a/specs/009-jev-decision-models/evidence/realcheck/run_live_nli.sh
++++ b/specs/009-jev-decision-models/evidence/realcheck/run_live_nli.sh
+@@ -15,13 +15,27 @@ acquire_access_key() {
+   [[ "${rc}" -eq 0 && -s "$1" ]]
+ }
+ RUNNER_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
++# wire_gateway_env <eng_port> <gw_port>: the Go gateway resolves a profile's engine address with precedence
++# LLMCTL_DECIDE_ENDPOINT_<PROFILE> > LLMCTL_PORT_<PROFILE> > catalog port (internal/gateway/resolver.go). The explicit
++# ENDPOINT is exported too (it wins, and is the unambiguous form); the CLI client finds a non-default gateway only via
++# LLMCTL_DECIDE_PORT (live 2026-10-08: unset => every request 503 not_ready).
++wire_gateway_env() {
++  export LLMCTL_PORT_DECIDE_NLI="$1" LLMCTL_DECIDE_ENDPOINT_DECIDE_NLI="http://127.0.0.1:$1" LLMCTL_DECIDE_PORT="$2"
++}
++# preflight_gateway <profile> <models-file> <result-file>: the gateway must report the profile ready before the
++# 173-request matrix; a miswired gateway then fails in seconds. rc 0 = ready, 1 = not (RESULT written).
++preflight_gateway() {
++  if awk -v p="$1" '$1==p && $2=="ready"{f=1} END{exit !f}' "$2" 2>/dev/null; then return 0; fi
++  echo "FAILED-PREFLIGHT: gateway does not report $1 ready" > "$3"; return 1
++}
+ # RUN_LIVE_NLI_LIB_ONLY=1: define the functions and stop (tests/test_run_live_nli.sh sources it).
+ if [[ "${RUN_LIVE_NLI_LIB_ONLY:-0}" == "1" ]]; then return 0 2>/dev/null || exit 0; fi
+ P=decide-nli
+ : "${REPO:?}" "${W:?}" "${OUT:?}" "${GW_PORT:?}" "${ENG_PORT:?}"
+ cd "${REPO}" || exit 1
+ export LLMCTL_DATA_DIR="${W}/data" LLMCTL_STATE_DIR="${W}/state" LLMCTL_HOME="${W}/home" LLMCTL_ENV_FILE="${W}/home/env"
+-export LLMCTL_DECIDE_BIN="${REPO}/build/llmctl-decide" LLMCTL_DECIDE_NATIVE=1 LLMCTL_PORT_DECIDE_NLI="${ENG_PORT}"
++export LLMCTL_DECIDE_BIN="${REPO}/build/llmctl-decide" LLMCTL_DECIDE_NATIVE=1
++wire_gateway_env "${ENG_PORT}" "${GW_PORT}"
+ GW="https://127.0.0.1:${GW_PORT}"; CA="${LLMCTL_HOME}/cert/ca/ca.crt"
+ IKEY="${LLMCTL_STATE_DIR}/keys/onnx-${P}.key"
+ VPY="${LLMCTL_DATA_DIR}/venv-onnx/bin/python"
+@@ -33,6 +47,8 @@ mem() { # <label>
+   { echo "## $1 $(date -u +%T)"; grep -E 'VmRSS|VmHWM|VmSwap' "/proc/${PID}/status"; } >> "${OUT}/memory.txt"
+ }
+ cleanup() {
++  bin/llmctl decide serve --stop > /dev/null 2>&1 || true
++  [[ -f "${OUT}/engine.log" ]] && sed -i -E 's#(Bearer )[A-Za-z0-9._~+/=-]+#\1<redacted>#g' "${OUT}/engine.log"
+   if [[ -n "${PID}" ]] && kill -0 "${PID}" 2>/dev/null && grep -q onnx_server.py "/proc/${PID}/cmdline" 2>/dev/null; then kill "${PID}"; fi
+ }
+ trap cleanup EXIT
+@@ -74,6 +90,7 @@ say "gateway"
+ bin/llmctl decide serve --port "${GW_PORT}" > "${OUT}/gateway-start.txt" 2>&1; echo "rc=$?" >> "${OUT}/gateway-start.txt"
+ for _ in $(seq 1 30); do bin/llmctl decide models 2>/dev/null | awk -v p="${P}" '$1==p && $2=="ready"{f=1} END{exit !f}' && break; sleep 1; done
+ bin/llmctl decide models > "${OUT}/gateway-models.txt" 2>&1
++preflight_gateway "${P}" "${OUT}/gateway-models.txt" "${OUT}/RESULT.txt" || exit 5
+ LIVE_KEYFILE="${W}/work/access.key"; mkdir -p "${W}/work"
+ acquire_access_key "${LIVE_KEYFILE}" || { echo "no access key could be exported" > "${OUT}/RESULT.txt"; exit 4; }
+ 
+diff --git a/specs/009-jev-decision-models/evidence/sc004-closure.md b/specs/009-jev-decision-models/evidence/sc004-closure.md
+index 4cecdcd..cc007b3 100644
+--- a/specs/009-jev-decision-models/evidence/sc004-closure.md
++++ b/specs/009-jev-decision-models/evidence/sc004-closure.md
+@@ -2,12 +2,12 @@
+ 
+ | Field | Value |
+ |---|---|
+-| Revision | 2 |
++| Revision | 4 |
+ | Created | 2026-10-08 |
+-| Last modified | 2026-10-08T13:50Z |
+-| Status | active: 1 high row OPEN (D-06) |
++| Last modified | 2026-10-09 |
++| Status | active: audit script shows 0 high D/N rows OPEN (D-06 DEMOTED as an evidence gap), but SC-004 is NOT met for release: the high letter-logit live defect [G-155](gaps-register.md) is OPEN (root cause confirmed, fix uncommitted, partial live proof per profile: decide-2b works for noul/choice, decide-pro works with CPU 502 timeouts, decide not usable at the current mass_threshold, decide-max not exercised) and is outside the script's scope |
+ | Supersedes | revision 1 (the script output; it now lives in [sc004-generated.md](sc004-generated.md)) |
+-| Tree verified | worktree at HEAD `f1a22ea` (the main checkout's staged, uncommitted changes were NOT under test) |
++| Tree verified | Two different trees, do not conflate. Rows D-01..D-05, D-29, D-30, N-01 (the Closure table): worktree at HEAD `f1a22ea` (the main checkout's staged, uncommitted changes were NOT under test). D-06 evidence: live runs on `c5301de` plus uncommitted changes (`run_live_nli.sh`; for the anton thinking-fix run also `internal/gateway/letter.go`) and, for the nezha letter-logit runs, an uncommitted pre-HEAD snapshot whose commit is UNCONFIRMED. HEAD today is `c5301de`. |
+ 
+ Scope: every row of severity H or C in [`../source-findings.md`](../source-findings.md) (D-xx) and
+ [`../research/jev-llmctl-new-files.md`](../research/jev-llmctl-new-files.md) (N-xx). There are 9 H rows and no C row
+@@ -18,12 +18,14 @@ table in [sc004-generated.md](sc004-generated.md); nothing here re-verifies them
+ 
+ | Severity | Rows | FIXED (RED->GREEN, run + mutation today) | DEMOTED | OPEN |
+ |---|---:|---:|---:|---:|
+-| H | 9 | 8 | 0 | **1** (D-06) |
++| H | 9 | 8 | 1 (D-06) | 0 |
+ | C | 0 | - | - | - |
+ 
+ `python3 scripts/spec_closure_audit.py --out evidence/sc004-generated.md --json evidence/sc004.json` agrees: H 9 / FIXED 8 /
+-OPEN 1, exit 1 (gate still closed by D-06). The D-01 change in the generated table comes from the new
+-[sc004-overrides.json](sc004-overrides.json) (every evidence path in it exists; the script refuses an override otherwise).
++DEMOTED 1 (D-06), OPEN 0, **exit 0** (re-run 2026-10-08 after the D-06 override; before it: OPEN 1, exit 1). The D-01 and D-06
++changes in the generated table (re-generated 2026-10-09, exit 0 again) come from [sc004-overrides.json](sc004-overrides.json) (every evidence path in it exists; the script
++refuses an override otherwise). The D-06 DEMOTED is the exit-0 reason: see the D-06 section below for exactly what it does and
++does not close. **The script only parses the D-xx / N-xx rows of the two finding files; it cannot see [G-155](gaps-register.md), so exit 0 is not a release-readiness signal.**
+ 
+ ## Method
+ 
+@@ -51,18 +53,46 @@ OPEN 1, exit 1 (gate still closed by D-06). The D-01 change in the generated tab
+ | D-03 | H | **FIXED** | `p1-red-original/d01_d15.jsonl:3` | `tests/test_scheduler.sh` "onnx arm: no --api-key <value> on argv", "key file mode is 0600" PASS; `tests/test_services.sh` "env file is mode 0600 under umask 022 (D-03)", "plist is mode 0600" PASS; `tests/test_regression_defects.sh` "serve --api-key is refused" PASS; `tests/test_onnx_runtime.sh` "key is NOT in /proc/<pid>/cmdline" PASS; `tests/test_decide_cli.sh` "no command line ever carries the key or the state" (control needle) PASS | `lib/scheduler.sh` onnx arm passes `--api-key "<value>"` instead of `--api-key-file` | FAIL: "onnx arm: --api-key-file under the state dir", "onnx arm: no --api-key <value> on argv" (`mut-D-03.log`). The 0600 env-file/plist leg was run GREEN but not mutated |
+ | D-04 | H | **FIXED** | `p1-red-original/d01_d15.jsonl:4` | `tests/test_onnx_server.sh` "--host {0.0.0.0, ::1, localhost, 192.168.1.5} refused" PASS | loopback check in `lib/onnx_server.py` disabled | FAIL: all four "--host ... refused" assertions (`mut-D-04.log`) |
+ | D-05 | H | **FIXED** | `p1-red-original/d01_d15.jsonl:5` | `go test ./cmd/llmctl-decide -run TestServeStopNeverSignalsUnrelatedProcess` PASS; `tests/test_gateway_endpoints.sh` "stop refuses a pidfile that names an unrelated process" / "the unrelated process was NOT signalled" PASS | `internal/gateway/proc.go` StopGateway skips `VerifyServeProcessInfo` (pid <= 1 guard kept) | FAIL: "stop rc=0 out=llmctl decide gateway: stopped" - the mutant signalled the unrelated process (`mut-D-05.log`) |
+-| D-06 | H | **OPEN** (live 2026-10-08: real runs now exist but FAIL, see live-models.jsonl; decide-nli gateway path refuses id2label entailment/not_entailment, decide-tiny letter-logit returns 422) | none: P1 was SKIP (`d01_d15.jsonl:6`, no onnxruntime/sentencepiece/model offline) | n/a - the finding is missing real-model evidence, not a code defect | n/a | n/a. See OPEN list |
++| D-06 | H | **DEMOTED** (revision 3, via [override](sc004-overrides.json)): the missing real-model evidence now exists; live letter-logit failures are separate open defects, see [D-06](#d-06-what-closed-and-what-did-not) | none: P1 was SKIP (`d01_d15.jsonl:6`, no onnxruntime/sentencepiece/model offline) | n/a - the finding is missing real-model evidence, not a code defect | n/a | n/a: evidence is the live captures listed in the override |
+ | D-29 | H | **FIXED** | `p1-red-original/d16_d32.jsonl:17` (files still reading the retired `LLMCTL_DECIDE_API_KEY`) | `go test ./cmd/llmctl-decide -run TestKeyIsReadFromTheEnvFileToo` PASS (runtime: env -> `.env` chain); `tests/test_onnx_runtime.sh` "auth: LLMCTL_DECIDE_API_KEY in the environment is NOT accepted as the key" PASS (runtime); `tests/test_regression_defects.sh` D-11/D-29 retired-variable scan PASS (source-class, which is the right class for a "migrate every reference" finding); `tests/test_no_retired_vars.sh` PASS | `internal/keyring/keyring.go` `KeyVar` back to `LLMCTL_DECIDE_API_KEY` | FAIL: `TestKeyIsReadFromTheEnvFileToo` rc=4 "no access key found" (`mut-D-29.log`) and the D-11/D-29 scan (`mut-D-29-regr.log`; its D-25 failure is the no-`.git` copy artifact, also present on GREEN) |
+ | D-30 | H | **FIXED** | `p1-red-original/d30.jsonl:1-2` (control needle found; `.env`, `cert/ca/ca.key`, `log.key` in tar.gz and zip) | `tests/test_release_no_secrets.sh` (worktree) PASS, incl. its built-in mutation "old unfiltered script leaks planted .env / cert/ca/ca.key" | (a) file list = filesystem walk instead of `git ls-files`; (b) same plus the post-build archive scan disabled | (a) the independent post-scan aborts the build ("SECRET PATH in tar.gz: .env ..."), the suite exits 1 at the fixture build (`mut-D-30.log`) - defence in depth works, but no named assertion fired; (b) FAIL: "planted untracked secret absent from both archives" x4 (`mut-D-30b.log`) |
+ | N-01 | H | **FIXED** | `p1-red-original/n01_n29.jsonl:1` (200 000-char state: rc 126 "Argument list too long") | `tests/test_decide_cli.sh` "5 MB state through the bash front end exits 0", 5 MB `--state-file`/`--stdin`, argv needle scan PASS; `go test ./cmd/llmctl-decide -run 'TestAskStateSources|TestAskUsageErrorsExit2AndNeverReachTheNetwork'` PASS | `lib/decide.sh` `decide_ask` rewrites `--state-file F` into `--state "<contents>"` (argv transport) | FAIL: the original symptom, "llmctl-decide: Argument list too long", "5 MB state through the bash front end exits 0 (was rc 126 ...)" (`mut-N-01.log`) |
+ 
+ Mutations applied: 8 rows (D-01, D-02, D-03, D-04, D-05, D-29, D-30, N-01), 9 mutants (D-30 twice). All were caught.
+ 
+-## OPEN
++## D-06: what closed and what did not
+ 
+-| ID | Missing evidence | Why it cannot be produced here | Cheapest way to close |
+-|---|---|---|---|
+-| D-06 | (1) a captured real-model run of the ONNX encoder path (`OnnxModel` with onnxruntime + the pinned 1.7 GB `decide-nli` model); (2) a captured live run of the logprob-letter readout on `llama-server` (the `decide`/`decide-tiny` profiles). Partly covered: the `systemone-native` llama profiles ran live through scheduler -> systemd -> HTTPS gateway ([live/NATIVE-REPORT.md](live/NATIVE-REPORT.md), 3 of 6 profiles). [realcheck/run_live_nli.sh](realcheck/run_live_nli.sh) says it ran on another host, but no output of it is in this tree, so it does not count (UNCONFIRMED). | model download and engines are out of scope for this pass (host-safety brief); no onnxruntime/sentencepiece installed | run `realcheck/run_live_nli.sh` on a host with the model and seal its OUT dir under `evidence/realcheck/`; add a live readout capture for one logprob-letter profile; then add a D-06 override citing both. This also feeds N-10 / N-11 (medium, OPEN in the generated table) |
++Revision 3 (2026-10-08). D-06 asked for (1) a captured real-model run of the ONNX encoder and (2) a captured live run of the logprob-letter
++readout on `llama-server`. Both now exist; the closure below is limited to "the evidence gap is closed". It does **not** say the models work.
++
++| D-06 ask | Evidence now in the tree | What it shows |
++|---|---|---|
++| (1) real ONNX encoder run | [live-models/decide-nli-main-wiredfix/](live-models/decide-nli-main-wiredfix/README.md): `decide-nli` on host `anton`, CPU, through the HTTPS gateway, tree HEAD `c5301de` plus the then-uncommitted `run_live_nli.sh` fix | 132/132 golden and 23/23 probes well-formed; `choice` 0.829 CI [0.687,0.915] beats its chance baseline 0.235; `noul` 0.533 (baseline 0.667) and `score` 0.226 (baseline 0.290) do **not** beat their majority baselines, so the NLI encoder is not good at noul/score; p50 1543 ms; determinism true; gateway edge statuses as expected (`live_checks.log`) |
++| (2) live letter-logit readout on llama-server | [live-models/nezha-decide-pro-2026-10-08/](live-models/nezha-decide-pro-2026-10-08/), [nezha-decide-2b-2026-10-08/](live-models/nezha-decide-2b-2026-10-08/), [nezha-decide-2026-10-08/](live-models/nezha-decide-2026-10-08/) (nezha, CPU, an uncommitted pre-HEAD snapshot, commit UNCONFIRMED) | the readout path was exercised live and **fails**: `decide-pro` 68/132 well-formed (HTTP 422 `readout_failed` on the rest), `decide` (decider-4b) 0/132, `decide-2b` 0/132. 0.000 accuracies there are malformed-rate artefacts, not model accuracy. These nezha numbers are PRE-FIX; the post-fix anton runs (2026-10-09) are summarised below |
++
++Superseded and not counted: [live-models/decide-nli-main-79268f5-INVALID-gateway-miswired/](live-models/decide-nli-main-79268f5-INVALID-gateway-miswired/)
++(the harness did not tell the gateway the engine address: 173x 503).
++
++**Still OPEN, not closed by this demotion:** the letter-logit profiles (`decide`, `decide-2b`, `decide-pro`) fail live as above. They are now tracked as
++[G-155](gaps-register.md) (severity high, OPEN); G-018, G-075 and G-142 (the older D-06 rows) were updated to point at it. Confirmed mechanism: the
++thinking-mode chat template puts the first token in `reasoning_content` (`nezha-decide-2026-10-08/root-cause-first-tok.txt`); the candidate fix
++(`chat_template_kwargs.enable_thinking=false` in `internal/gateway/letter.go`, with a test in `letter_test.go`) is in the working tree, uncommitted. The thinking-template cause is now CONFIRMED live. Live proof
++of the fix is PARTIAL, per profile (anton, CPU, tree `c5301de` plus the uncommitted letter.go/resolver.go, all single runs, n<200 uncalibrated):
++`decide-2b` 0/132 -> 128/132 well-formed (noul 0.883 and choice 0.732 beat their baselines, score 0.290 does not; 8 x HTTP 422 on 20-option items vs catalog max_options 16, reason code not captured: UNCONFIRMED) [anton-decide-2b-thinkingfix-run2-2026-10-09](live-models/anton-decide-2b-thinkingfix-run2-2026-10-09/);
++`decide-pro` 112/132 (noul 0.867, choice 0.659, score 0.645 all beat baselines; 29 x HTTP 502 `backend_failed` at about 27 s on a CPU engine, cause INFERRED, see [G-156](gaps-register.md)) [anton-decide-pro-thinkingfix-2026-10-09](live-models/anton-decide-pro-thinkingfix-2026-10-09/);
++`decide` smoke 1/3, HTTP 422 `readout_failed` because the combined option-letter mass 0.44-0.47 is below the catalog `mass_threshold` 0.5 ([G-157](gaps-register.md)), golden/probes not run [anton-decide-thinkingfix-2026-10-09](live-models/anton-decide-thinkingfix-2026-10-09/);
++`decide-max` not exercised ([G-158](gaps-register.md)) [anton-decide-max-not-exercised-2026-10-09.md](live-models/anton-decide-max-not-exercised-2026-10-09.md). Remaining sub-issues are G-156..G-160. N-10 / N-11 (medium, OPEN in the
++generated table) are not closed by this either.
++
++### Which rule applies to D-06 (SC-004 vs T129)
++
++- SC-004 ([spec.md](../spec.md)) requires high items to be "fixed, each with a test first observed failing and then passing". T129 allows "fixed with a
++  RED->GREEN pair **or demoted with captured evidence**". For a finding that is an evidence gap with no reproducible symptom (D-06), a failing-first test is
++  impossible, so the T129 demotion route is the applicable one and is what the override records. spec.md SC-004 now says so explicitly.
++- The code defect the new evidence exposed (G-155) is a different item: a high defect, so SC-004's fixed-with-failing-first-test rule applies to it in full.
++  It is OPEN, hence **SC-004 is not met for release** even though the audit script exits 0.
++- Release readiness: a release must not claim that all letter-logit profiles work. The per-profile truth today (live evidence, CPU, uncommitted fix): `decide-2b` works for noul/choice (score not shown better than majority); `decide-pro` works for noul/choice/score but returns 502 on long prompts on a CPU engine; `decide` is not usable at its current `mass_threshold`; `decide-max` is not exercised. Further, a release must not claim the profiles work, and must not treat audit exit 0 as closing SC-004, until G-155 is closed
++  by a committed fix with a failing-first test plus a live run of `decide`, `decide-2b` and `decide-pro` on the release tree.
+ 
+ No cheap RED test was possible for D-06: it is an evidence gap, not a defect with a reproducible symptom.
+ 
+@@ -71,8 +101,8 @@ No cheap RED test was possible for D-06: it is an evidence gap, not a defect wit
+ 1. `red-to-green-map.json` names weaker guards for D-03 (`serve --api-key` refused; the runtime cmdline check where the
+    test itself chooses the argv) than the guards that actually protect the production path (`tests/test_scheduler.sh` onnx arm,
+    `tests/test_services.sh` 0600, `tests/test_decide_cli.sh` needle scan). Suggest adding them to the map.
+-2. `../source-findings.md` row D-01 and the T129 reconciliation comment in `../tasks.md` still say D-01 is OPEN; with this
+-   revision only D-06 is open.
++2. `../source-findings.md` row D-01 and the T129 reconciliation comment in `../tasks.md` said D-01 was OPEN (the tasks.md comment and table row are fixed in revision 4; the source-findings.md row was not touched);
++   no high D/N row is open (D-06 is DEMOTED), with the live letter-logit defects tracked as G-155.
+ 3. Previously cited in `audit-REPORT.md`: `tests/test_no_retired_vars.sh` failing. On this tree (scratch copy of HEAD) it is
+    `RESULT: PASS` (`sc004-verify/green-test_no_retired_vars.log`).
+ 4. The worktree has no initialised submodules, so Go tests and the gateway suites cannot run in it directly; the scratch-copy
+diff --git a/specs/009-jev-decision-models/evidence/sc004-generated.md b/specs/009-jev-decision-models/evidence/sc004-generated.md
+index 686bf6d..5c8fc55 100644
+--- a/specs/009-jev-decision-models/evidence/sc004-generated.md
++++ b/specs/009-jev-decision-models/evidence/sc004-generated.md
+@@ -9,11 +9,11 @@
+ 
+ | Severity | Rows | FIXED | DEMOTED | ACCEPTED-LIMITATION | OPEN |
+ |---|---:|---:|---:|---:|---:|
+-| H | 9 | 8 | 0 | 0 | 1 |
++| H | 9 | 8 | 1 | 0 | 0 |
+ | M | 31 | 28 | 1 | 0 | 2 |
+ | L | 20 | 15 | 4 | 1 | 0 |
+ 
+-**Open high/critical rows (gate): 1** (D-06)
++**Open high/critical rows (gate): 0** 
+ 
+ ## Rows
+ 
+@@ -24,7 +24,7 @@
+ | D-03 | H | **FIXED** | D-03=RED | specs/009-jev-decision-models/evidence/p1-red-original/d01_d15.jsonl:3 | OK tests/test_regression_defects.sh::D-03: serve --api-key is refused (no key on argv, rc 2)<br>OK tests/test_onnx_runtime.sh::process-level key/bind checks | PASS (test_onnx_runtime.sh, test_regression_defects.sh) | RED observed, guard exists, GREEN recorded |
+ | D-04 | H | **FIXED** | D-04=RED | specs/009-jev-decision-models/evidence/p1-red-original/d01_d15.jsonl:4 | OK tests/test_onnx_server.sh::--host ${h} refused (loopback 127.0.0.1 only)<br>OK tests/test_onnx_runtime.sh::process-level key/bind checks<br>OK tests/fixtures/onnx_rt_contract.py::legacy /health (profile-leaking, backend-less) no long | PASS (test_no_retired_vars.sh, test_onnx_runtime.sh, test_onnx_server.sh) | RED observed, guard exists, GREEN recorded |
+ | D-05 | H | **FIXED** | D-05=RED | specs/009-jev-decision-models/evidence/p1-red-original/d01_d15.jsonl:5 | OK cmd/llmctl-decide/cmd_serve_test.go::TestServeStopNeverSignalsUnrelatedProcess<br>OK tests/test_gateway_endpoints.sh::stop refuses a pidfile that names an unrelated process | PASS (go:cmd/llmctl-decide, test_gateway_endpoints.sh) | RED observed, guard exists, GREEN recorded |
+-| D-06 | H | **OPEN** | D-06=SKIP | specs/009-jev-decision-models/evidence/p1-red-original/d01_d15.jsonl:6 | - | - | D-06: needs a live/real-model run: environment-gated, was SKIP: real-model inference needs onnxruntime + sentencepiece + the 1.7 GB model; not exercisable offline. Stays an OPEN live-va |
++| D-06 | H | **DEMOTED** | D-06=SKIP | specs/009-jev-decision-models/evidence/p1-red-original/d01_d15.jsonl:6 | - | - | override: The finding is 'no real-model evidence'. That gap is closed: (1) the real ONNX encoder decide-nli (MoritzLaurer/deberta-v3-large-zeroshot-v2.0, fp32 onnx 1741985401 B, checksum-verified) ran live on host anton  |
+ | D-07 | M | **FIXED** | D-07=RED | specs/009-jev-decision-models/evidence/p1-red-original/d01_d15.jsonl:7 | OK tests/fixtures/onnx_rt_contract.py::K2: logits count != id2label count -> 500 JSON (D-07,  | PASS (test_no_retired_vars.sh, test_onnx_runtime.sh) | RED observed, guard exists, GREEN recorded |
+ | D-08 | M | **FIXED** | D-08=RED | specs/009-jev-decision-models/evidence/p1-red-original/d01_d15.jsonl:8 | OK tests/fixtures/onnx_rt_contract.py::unsupported method -> 405 JSON (not an HTML page)<br>OK internal/contract/request_test.go::TestRejections400<br>OK tests/test_gateway_endpoints.sh::row EP-012 | PASS (go:internal/contract, test_gateway_endpoints.sh, test_no_retired_vars.sh) | RED observed, guard exists, GREEN recorded |
+ | D-09 | M | **FIXED** | D-09=RED | specs/009-jev-decision-models/evidence/p1-red-original/d01_d15.jsonl:9 | OK internal/server/server_test.go::TestBackendErrorMapping<br>OK tests/fixtures/onnx_rt_contract.py::half-sent headers: connection is closed by the socket <br>OK internal/gateway/driver.go (engine text never reaches a client: backendFailed) | PASS (go:internal/gateway, go:internal/server, test_no_retired_vars.sh) | RED observed, guard exists, GREEN recorded |
+@@ -91,5 +91,5 @@
+ 
+ ## Gap register cross-check
+ 
+-152 rows, 54 OPEN: G-001, G-002, G-003, G-004, G-010, G-011, G-013, G-014, G-017, G-018, G-019, G-020, G-021, G-022, G-023, G-032, G-034, G-035, G-043, G-050, G-055, G-060, G-061, G-062, G-063, G-065, G-075, G-076, G-079, G-090, G-091, G-093, G-097, G-098, G-101, G-104, G-107, G-111, G-113, G-114, G-117, G-118, G-124, G-126, G-130, G-131, G-132, G-137, G-138, G-141, G-142, G-145, G-148, G-151
++153 rows, 55 OPEN: G-001, G-002, G-003, G-004, G-010, G-011, G-013, G-014, G-017, G-018, G-019, G-020, G-021, G-022, G-023, G-032, G-034, G-035, G-043, G-050, G-055, G-060, G-061, G-062, G-063, G-065, G-075, G-076, G-079, G-090, G-091, G-093, G-097, G-098, G-101, G-104, G-107, G-111, G-113, G-114, G-117, G-118, G-124, G-126, G-130, G-131, G-132, G-137, G-138, G-141, G-142, G-145, G-148, G-151, G-155
+ 
+diff --git a/specs/009-jev-decision-models/evidence/sc004-overrides.json b/specs/009-jev-decision-models/evidence/sc004-overrides.json
+index f171003..97f1a26 100644
+--- a/specs/009-jev-decision-models/evidence/sc004-overrides.json
++++ b/specs/009-jev-decision-models/evidence/sc004-overrides.json
+@@ -10,5 +10,21 @@
+    "specs/009-jev-decision-models/evidence/sc004-verify/green-test_onnx_runtime.log",
+    "specs/009-jev-decision-models/evidence/sc004-verify/mut-D-01.log"
+   ]
++ },
++ "D-06": {
++  "closure": "DEMOTED",
++  "reason": "The finding is 'no real-model evidence'. That gap is closed: (1) the real ONNX encoder decide-nli (MoritzLaurer/deberta-v3-large-zeroshot-v2.0, fp32 onnx 1741985401 B, checksum-verified) ran live on host anton (CPU) through the HTTPS gateway at tree HEAD c5301de plus the then-uncommitted run_live_nli.sh fix: 132/132 golden and 23/23 probes well-formed, choice acc 0.829 CI[0.687,0.915] beats its chance baseline 0.235, determinism true, p50 1543 ms. NOT claimed: noul (0.533, baseline 0.667) and score (0.226, baseline 0.290) do NOT beat their majority baselines, so the NLI encoder is not shown to be good at noul/score; calibration insufficient (n=132, need 200). (2) captured live runs of the logprob-letter readout on llama-server exist (nezha, CPU, pre-HEAD snapshot, commit UNCONFIRMED): decide-pro PARTIAL 68/132 well-formed, decide 0/132, decide-2b 0/132. That is evidence of the readout path FAILING live; those letter-logit defects are separate OPEN defects, tracked as gaps-register G-155 (high, OPEN), not closed here and not hidden by this demotion. Rule applied: D-06 is an evidence-gap row, so T129's 'demoted with captured evidence' route is used for it; the code defect it exposed (G-155) falls under SC-004's 'fixed with a failing-first test' and keeps SC-004 unmet for release until closed. A first anton run (decide-nli-main-79268f5-INVALID-gateway-miswired) is superseded: the harness did not tell the gateway the engine address (173x 503).",
++  "evidence": [
++   "specs/009-jev-decision-models/evidence/live-models/decide-nli-main-wiredfix/README.md",
++   "specs/009-jev-decision-models/evidence/live-models/decide-nli-main-wiredfix/RESULT.txt",
++   "specs/009-jev-decision-models/evidence/live-models/decide-nli-main-wiredfix/golden-stats.txt",
++   "specs/009-jev-decision-models/evidence/live-models/decide-nli-main-wiredfix/probes-stats.txt",
++   "specs/009-jev-decision-models/evidence/live-models/decide-nli-main-wiredfix/latency.json",
++   "specs/009-jev-decision-models/evidence/live-models/decide-nli-main-wiredfix/live_checks.log",
++   "specs/009-jev-decision-models/evidence/live-models/decide-nli-main-wiredfix/golden/SHA256SUMS",
++   "specs/009-jev-decision-models/evidence/live-models/nezha-decide-pro-2026-10-08/golden-stats.txt",
++   "specs/009-jev-decision-models/evidence/live-models/nezha-decide-2b-2026-10-08/golden-stats.txt",
++   "specs/009-jev-decision-models/evidence/live-models/nezha-decide-2026-10-08/golden-stats.txt"
++  ]
+  }
+ }
+diff --git a/specs/009-jev-decision-models/evidence/sc004.json b/specs/009-jev-decision-models/evidence/sc004.json
+index 08262c1..4d7e5a6 100644
+--- a/specs/009-jev-decision-models/evidence/sc004.json
++++ b/specs/009-jev-decision-models/evidence/sc004.json
+@@ -4,7 +4,7 @@
+  "counts": {
+   "H": {
+    "FIXED": 8,
+-   "OPEN": 1
++   "DEMOTED": 1
+   },
+   "M": {
+    "FIXED": 28,
+@@ -17,9 +17,7 @@
+    "ACCEPTED-LIMITATION": 1
+   }
+  },
+- "open_high": [
+-  "D-06"
+- ],
++ "open_high": [],
+  "rows": [
+   {
+    "id": "D-01",
+@@ -124,8 +122,20 @@
+    "red": "specs/009-jev-decision-models/evidence/p1-red-original/d01_d15.jsonl:6",
+    "guards": [],
+    "green": "",
+-   "closure": "OPEN",
+-   "reason": "D-06: needs a live/real-model run: environment-gated, was SKIP: real-model inference needs onnxruntime + sentencepiece + the 1.7 GB model; not exercisable offline. Stays an OPEN live-va"
++   "closure": "DEMOTED",
++   "reason": "override: The finding is 'no real-model evidence'. That gap is closed: (1) the real ONNX encoder decide-nli (MoritzLaurer/deberta-v3-large-zeroshot-v2.0, fp32 onnx 1741985401 B, checksum-verified) ran live on host anton (CPU) through the HTTPS gateway at tree HEAD c5301de plus the then-uncommitted run_live_nli.sh fix: 132/132 golden and 23/23 probes well-formed, choice acc 0.829 CI[0.687,0.915] beats its chance baseline 0.235, determinism true, p50 1543 ms. NOT claimed: noul (0.533, baseline 0.667) and score (0.226, baseline 0.290) do NOT beat their majority baselines, so the NLI encoder is not shown to be good at noul/score; calibration insufficient (n=132, need 200). (2) captured live runs of the logprob-letter readout on llama-server exist (nezha, CPU, pre-HEAD snapshot, commit UNCONFIRMED): decide-pro PARTIAL 68/132 well-formed, decide 0/132, decide-2b 0/132. That is evidence of the readout path FAILING live; those letter-logit defects are separate OPEN defects, tracked as gaps-register G-155 (high, OPEN), not closed here and not hidden by this demotion. Rule applied: D-06 is an evidence-gap row, so T129's 'demoted with captured evidence' route is used for it; the code defect it exposed (G-155) falls under SC-004's 'fixed with a failing-first test' and keeps SC-004 unmet for release until closed. A first anton run (decide-nli-main-79268f5-INVALID-gateway-miswired) is superseded: the harness did not tell the gateway the engine address (173x 503).",
++   "override_evidence": [
++    "specs/009-jev-decision-models/evidence/live-models/decide-nli-main-wiredfix/README.md",
++    "specs/009-jev-decision-models/evidence/live-models/decide-nli-main-wiredfix/RESULT.txt",
++    "specs/009-jev-decision-models/evidence/live-models/decide-nli-main-wiredfix/golden-stats.txt",
++    "specs/009-jev-decision-models/evidence/live-models/decide-nli-main-wiredfix/probes-stats.txt",
++    "specs/009-jev-decision-models/evidence/live-models/decide-nli-main-wiredfix/latency.json",
++    "specs/009-jev-decision-models/evidence/live-models/decide-nli-main-wiredfix/live_checks.log",
++    "specs/009-jev-decision-models/evidence/live-models/decide-nli-main-wiredfix/golden/SHA256SUMS",
++    "specs/009-jev-decision-models/evidence/live-models/nezha-decide-pro-2026-10-08/golden-stats.txt",
++    "specs/009-jev-decision-models/evidence/live-models/nezha-decide-2b-2026-10-08/golden-stats.txt",
++    "specs/009-jev-decision-models/evidence/live-models/nezha-decide-2026-10-08/golden-stats.txt"
++   ]
+   },
+   {
+    "id": "D-07",
+diff --git a/specs/009-jev-decision-models/quickstart.md b/specs/009-jev-decision-models/quickstart.md
+index a7e7bbd..36c1309 100644
+--- a/specs/009-jev-decision-models/quickstart.md
++++ b/specs/009-jev-decision-models/quickstart.md
+@@ -53,11 +53,11 @@ Expected: owner-only modes; second start reuses key and certificate; env value w
+ 
+ ## Q3 First typed answers (real model)
+ 
+-Prereq: `llmctl models download decide-2b` verified; gateway running.
++Prereq: `llmctl models download decide-kev-08b` verified; llama.cpp >= b11379; gateway running with `LLMCTL_DECIDE_NATIVE=1` (decide-kev-08b is the smallest profile verified live end to end, `evidence/live/decide-kev-08b/`; decide-2b and decide answered 0/132 well-formed on the nezha run, see `docs/decision-models.md`).
+ ```
+-llmctl decide ask --profile decide-2b --type noul   --state "Disk usage is 97% and rising" --instructions "Is immediate action needed?" --json
+-llmctl decide ask --profile decide-2b --type choice --state-file tests/fixtures/ticket1.txt --criteria '{"billing":"…","bug":"…","other":"…"}' --json
+-llmctl decide ask --profile decide-2b --type score  --state-file tests/fixtures/review1.txt --criteria '["poor","ok","good"]' --json
++llmctl decide ask --profile decide-kev-08b --type noul   --state "Disk usage is 97% and rising" --instructions "Is immediate action needed?" --json
++llmctl decide ask --profile decide-kev-08b --type choice --state-file tests/fixtures/ticket1.txt --criteria '{"billing":"…","bug":"…","other":"…"}' --json
++llmctl decide ask --profile decide-kev-08b --type score  --state-file tests/fixtures/review1.txt --criteria '["poor","ok","good"]' --json
+ ```
+ Expected: valid JSON; `noul` ∈ [0,1] with no confidence field; choice probabilities sum to 1 (±1e-6), `confidence` ∈ [0,1]; score within [0, n−1]; `evidence` shows the profile and unquantised latency; exit 0. Evidence class `real-model`.
+ 
+@@ -124,8 +124,8 @@ Expected: valid requests keep being answered; no gateway exit or hang; no unboun
+ 
+ ```
+ llmctl plan --json | jq '.decision_instances'
+-llmctl decide scale decide-2b <N from the report>      # succeeds
+-llmctl decide scale decide-2b <N+1>                    # exit 3 with needed-vs-available numbers
++llmctl decide scale decide-kev-08b <N from the report>      # succeeds
++llmctl decide scale decide-kev-08b <N+1>                    # exit 3 with needed-vs-available numbers
+ ```
+ Expected: the reported `total_decision_slots` equals the number the scheduler really admitted; the refusal changes nothing on the host; the already-running vision server is untouched.
+ 
+@@ -180,7 +180,7 @@ Expected: identical assets/checksums/notes on both forges; archive's own suite p
+ ## Q17 Dynamic ports and discovery (FR-088..091, SC-015)
+ 
+ ```bash
+-LLMCTL_PORT_STRATEGY=dynamic llmctl start decide-2b            # port allocated from LLMCTL_PORT_RANGE, bind-tested
++LLMCTL_PORT_STRATEGY=dynamic llmctl start decide-kev-08b            # port allocated from LLMCTL_PORT_RANGE, bind-tested
+ llmctl discover --json                                            # registry rows == live processes
+ python3 - <<'PY'
+ # occupy a default port, start three instances, kill one, assert the registry and gateway routing follow within one health interval
+diff --git a/specs/009-jev-decision-models/spec.md b/specs/009-jev-decision-models/spec.md
+index 62995d9..ca1ec5b 100644
+--- a/specs/009-jev-decision-models/spec.md
++++ b/specs/009-jev-decision-models/spec.md
+@@ -382,7 +382,7 @@ The toolkit and constitution tooling that discover decision endpoints need a sta
+ - **SC-001**: Starting from a host with the default decision profile present, a scripted run of the documented first-start steps (using only the documentation, model download excluded) obtains a first valid typed answer for each of the three question types in under 5 minutes, and, in deterministic mode (FR-074, one instance and one device placement), repeating a question yields a byte-identical answer in 100% of 20 repeats.
+ - **SC-002**: 100% of shipped decision-profile files have a size and checksum confirmed against the real upstream artifact (or the pin corrected and the correction recorded); 0 pins remain unconfirmed at release.
+ - **SC-003**: For every shipped decision profile that fits this host, 100% of a fixed golden question set (at least 30 questions across the three types) produces a well-formed typed answer from the real model, and the measured accuracy is published with its sample size, a confidence interval and the trivial baseline computed by the same tool, and, for each profile, the lower bound of the accuracy interval exceeds that baseline (a profile that does not clear it is not shipped, or ships labelled experimental with its measured numbers); the golden set includes imbalanced items and reports per-class accuracy against a majority baseline; no calibration figure (such as ECE) is claimed from fewer than 200 labelled items; profiles that do not fit are listed as "not exercised" with the reason.
+-- **SC-004**: 100% of the defects in the findings register and in the file-review defect list (`research/jev-llmctl-new-files.md`, rows N-xx) that are rated high or critical are fixed, each with a test that was first observed failing and then passing; 0 high or critical items remain open at release, and every medium or low item is either fixed or recorded as an accepted limitation with a reason.
++- **SC-004**: 100% of the defects in the findings register and in the file-review defect list (`research/jev-llmctl-new-files.md`, rows N-xx) that are rated high or critical are fixed, each with a test that was first observed failing and then passing; 0 high or critical items remain open at release, and every medium or low item is either fixed or recorded as an accepted limitation with a reason. A finding that is a missing-evidence gap rather than a code defect (such as D-06) may be closed by demotion with captured evidence (T129), but any code defect that evidence exposes is a new high or critical item that this criterion binds in full (fixed with a failing-first test, tracked in the gap register).
+ - **SC-005**: 100% of requests to a decision endpoint without the correct access key are rejected on every bind configuration; 100% of first starts on a fresh installation end with a persisted owner-only key and an endpoint that needs it; and 0 key values are present in process listings, logs, evidence files, documentation or world-readable files across the whole test run (checked by an automated scan).
+ - **SC-006**: Under a defined hostile-traffic scenario (malformed, oversized and slow requests alongside normal requests), valid requests continue to be answered, and the service never exits or hangs.
+ - **SC-007**: Each of the seven supported agents has a recorded live result; for every agent reported as passed, the endpoint's independent request record contains the matching request; 0 agents are reported as passed on the agent's own claim alone; each agent's driving model, its provider and its credential source are recorded, and an agent that needs a paid or personal account is run only with the operator's consent (OD-13).
+diff --git a/specs/009-jev-decision-models/tasks.md b/specs/009-jev-decision-models/tasks.md
+index dc3b45e..58852f1 100644
+--- a/specs/009-jev-decision-models/tasks.md
++++ b/specs/009-jev-decision-models/tasks.md
+@@ -164,7 +164,7 @@ description: "Task list for 009-jev-decision-models (Jev-class decision models i
+ - [x] T125 [US8] Operator live manual QA hand-off: WAIVED by the operator 2026-10-08 (OD-25), recorded in CHANGELOG, release notes and the readiness verdict <!-- reconciled 2026-10-08: waived: evidence/od-decisions.md OD-25 -->
+ - [ ] T126 [US8] Release scripts: assets, tag verification, reproducible archive, SHA256SUMS, CycloneDX SBOM, licence notice, optional signature (OD-4) (FR-084) <!-- reconciled 2026-10-08: open: scripts/release has create_release.sh and scan_archive.py; no SBOM, SHA256SUMS or reproducible-archive step found | remaining: lead -->
+ - [ ] T127 [US8] Annotated tag on exact commit; fast-forward push to all five remotes; `gh release create` and `glab release create` with assets; re-download and verify from both forges and run the archive's own tests; merge to `main` ff-only after QA (FR-054, FR-055) <!-- reconciled 2026-10-08: open: no tag, push or release performed (operator instruction) | remaining: lead / operator -->
+-- [ ] T129 [US8] SC-004 closure: every high/critical row of `source-findings.md` and `research/jev-llmctl-new-files.md` fixed with a RED→GREEN pair or demoted with captured evidence; 0 open at release; generated table in `evidence/sc004.json` (SC-004) <!-- reconciled 2026-10-08: open: evidence/sc004-closure.md: 2 high rows OPEN (D-01, D-06; both need the real encoder model) | remaining: live-phase agent (see audit-REPORT.md) -->
++- [ ] T129 [US8] SC-004 closure: every high/critical row of `source-findings.md` and `research/jev-llmctl-new-files.md` fixed with a RED→GREEN pair or demoted with captured evidence; 0 open at release; generated table in `evidence/sc004.json` (SC-004) <!-- reconciled 2026-10-09: open: evidence/sc004-closure.md revision 4: 0 high D/N rows OPEN by the audit script (D-01 FIXED, D-06 DEMOTED as an evidence gap), BUT gaps-register G-155 (letter-logit profiles fail live; high; OPEN) is not covered by the script and keeps SC-004 unmet for release | remaining: lead (commit letter.go fix with failing-first test, re-run live on HEAD; see G-155) -->
+ - [ ] T128 [REVIEW] Final independent review <!-- reconciled 2026-10-08: open: final independent review not run; round-3 fixes (evidence/review-4/fix-H/I/J) await re-review | remaining: lead -->
+ 
+ ## Checkpoint gates (human approval required; execution pauses)
+@@ -306,7 +306,7 @@ Changes versus the previous ticks: T027, T040, T041, T050, T051, T056, T057, T06
+ | T125 | waived | evidence/od-decisions.md OD-25 | - |
+ | T126 | open | scripts/release has create_release.sh and scan_archive.py; no SBOM, SHA256SUMS or reproducible-archive step found | lead |
+ | T127 | open | no tag, push or release performed (operator instruction) | lead / operator |
+-| T129 | open | evidence/sc004-closure.md: 2 high rows OPEN (D-01, D-06; both need the real encoder model) | live-phase agent (see audit-REPORT.md) |
++| T129 | open | evidence/sc004-closure.md rev 4: audit script shows 0 high D/N rows open (D-01 FIXED, D-06 DEMOTED), but gaps-register G-155 (letter-logit live failures, high) is OPEN and outside the script | lead (G-155) |
+ | T128 | open | final independent review not run; round-3 fixes (evidence/review-4/fix-H/I/J) await re-review | lead |
+ | T130 | done | specs/009-jev-decision-models/evidence/portability-nezha/REPORT.md; findings G-081..G-089 fixed (FIX-D) | re-run on nezha after final tree optional |
+ | T131 | done | specs/009-jev-decision-models/evidence/cluster-REPORT.md; G-106 FIXED-VERIFIED | - |
+diff --git a/tests/py/test_overhead_from_memory.py b/tests/py/test_overhead_from_memory.py
+index e29bd8b..4fbf291 100644
+--- a/tests/py/test_overhead_from_memory.py
++++ b/tests/py/test_overhead_from_memory.py
+@@ -56,6 +56,24 @@ class Parsers(unittest.TestCase):
+         with self.assertRaises(ValueError):
+             ofm.parse_pid_vram("nothing here\n")
+ 
++    def test_cpu_mode_apps_txt_takes_the_pid_the_transcript_names(self):
++        # T139/G-138: a cpu-mode (-ngl 0) run recorded as an nvidia-smi compute-apps listing plus the operator's
++        # "=> engine pid P holds N MiB" line.  The vision pid at the SAME binary path must NOT be picked.
++        txt = ("cmd: llmctl start x (mode=cpu)\n"
++               "6608, 3069 MiB, /opt/other/llama-server\n"
++               "3160295, 3752 MiB, /repo/build/bin/llama-server\n"
++               "1842432, 4460 MiB, /repo/build/bin/llama-server\n"
++               "=> engine pid 1842432 holds 4460 MiB VRAM in cpu mode (-ngl 0); scheduler booked 0 MiB VRAM\n")
++        self.assertEqual(ofm.parse_cpu_mode_apps(txt), 4460)
++        # the named pid's row is the authority: a conclusion line that disagrees with the listing is refused
++        with self.assertRaises(ValueError):
++            ofm.parse_cpu_mode_apps(txt.replace("holds 4460 MiB", "holds 4000 MiB"))
++        # a named pid with no listing row, and a transcript with no conclusion line, are errors, never a guess
++        with self.assertRaises(ValueError):
++            ofm.parse_cpu_mode_apps(txt.replace("=> engine pid 1842432", "=> engine pid 999"))
++        with self.assertRaises(ValueError):
++            ofm.parse_cpu_mode_apps("1842432, 4460 MiB, /x/llama-server\n")
++
+ 
+ class Derive(unittest.TestCase):
+     def setUp(self):
+@@ -85,6 +103,16 @@ class Derive(unittest.TestCase):
+         self.assertEqual(d["decide-x"]["memory"]["ram"]["weights_mib"], 100.0)
+         self.assertEqual(d["decide-x"]["memory"]["vram"]["peak_mib"], 1200)
+ 
++    def test_cpu_mode_apps_format_derives_the_same_margin(self):
++        with open(os.path.join(self.root, "ev", "cpu.txt"), "w") as f:
++            f.write("1, 4460 MiB, /x/llama-server\n=> engine pid 1 holds 4460 MiB VRAM in cpu mode\n")
++        cat = copy.deepcopy(self.cat)
++        cat["profiles"]["decide-x"]["memory"]["vram"] = {"status": "measured", "format": "cpu-mode-apps-txt",
++                                                         "evidence": "ev/cpu.txt", "host": "t"}
++        d = ofm.derive(cat, self.root)
++        self.assertEqual(d["decide-x"]["defaults"]["overhead_vram_mb"], 4906)   # ceil(4460 x 1.10) = 4906
++        self.assertEqual(d["decide-x"]["memory"]["vram"]["peak_mib"], 4460)
++
+     def test_unmeasured_profile_declares_no_numbers(self):
+         d = ofm.derive(self.cat, self.root)
+         self.assertEqual(d["decide-y"]["defaults"], {})
+diff --git a/tests/test_gateway_mutation.sh b/tests/test_gateway_mutation.sh
+index e6ca07a..b0952b7 100755
+--- a/tests/test_gateway_mutation.sh
++++ b/tests/test_gateway_mutation.sh
+@@ -53,6 +53,8 @@ PY
+ echo "== mutations (each must turn the tests RED) =="
+ mutate "readout threshold ignored" internal/gateway/letter.go \
+   'readout.ComputeRaw(top, letters, thr, temp)' 'readout.ComputeRaw(top, letters, 0.0001, temp)' ./internal/gateway
++mutate "letter-logit request drops chat_template_kwargs.enable_thinking" internal/gateway/letter.go \
++  '			"chat_template_kwargs": map[string]any{"enable_thinking": false},' '			"chat_template_kwargs": map[string]any{},' ./internal/gateway
+ mutate "deterministic seed dropped" internal/gateway/letter.go \
+   '			body["seed"] = ResolveSeed(b.Seed)' '			_ = ResolveSeed(b.Seed)' ./internal/gateway
+ mutate "unverified pid is signalled" internal/gateway/proc.go \
+@@ -69,6 +71,10 @@ mutate "global bind host ignored" cmd/llmctl-decide/cmd_serve.go \
+   'env["LLMCTL_DECIDE_BIND"], env["LLMCTL_BIND_HOST"]}' 'env["LLMCTL_DECIDE_BIND"]}' ./cmd/llmctl-decide
+ mutate "loopback-only engine check removed" internal/gateway/resolver.go \
+   'if ip := net.ParseIP(h); ip != nil && ip.IsLoopback() {' 'if ip := net.ParseIP(h); ip != nil {' ./internal/gateway
++mutate "LLMCTL_PORT_<PROFILE> override ignored by the static resolver" internal/gateway/resolver.go \
++  'port = p' '_ = p' ./internal/gateway
++mutate "LLMCTL_PORT_<PROFILE> port range unchecked" internal/gateway/resolver.go \
++  'err == nil && p >= 1 && p <= 65535 {' 'err == nil {' ./internal/gateway
+ mutate "cache_prompt forced on" internal/gateway/letter.go \
+   '"cache_prompt": spec.Readout.CachePrompt && b.Mode == Throughput, // never in deterministic mode (B2-12)' '"cache_prompt": true,' ./internal/gateway
+ mutate "engine error text echoed" internal/gateway/driver.go \
+diff --git a/tests/test_planner.sh b/tests/test_planner.sh
+index 9370b69..9876d26 100644
+--- a/tests/test_planner.sh
++++ b/tests/test_planner.sh
+@@ -474,6 +474,68 @@ assert_eq "194" "$(printf '%s' "${pj}" | json_stdin 'd["decision_instances"]["de
+ assert_eq "0" "$(printf '%s' "${pj3}" | json_stdin 'd["decision_instances"]["decide-julia"]["placements"]["cpu"]["vram_mb"]')" "T139: capacity cpu placement on a CPU-only host books 0 VRAM"
+ assert_eq "1" "$(printf '%s' "${pj}" | json_stdin 'd["decision_instances"]["decide-julia"]["instances_cpu"]')" "T139: 204 // 194 = 1 cpu-mode instance (VRAM-bound), not 25904 // 1698 = 15"
+ 
++# --- G-138: cpu-mode (-ngl 0) VRAM of the native decision profiles on a CUDA host ---------------------------------
++# Live 2026-10-08 (specs/009-jev-decision-models/evidence/live/decide-kev-4b/cpu-mode-vram-live-2026-10-08.txt):
++# `llmctl start decide-kev-4b` -> "mode=cpu ... reserved 3916 MiB RAM + 0 MiB VRAM" while nvidia-smi showed the engine
++# pid holding 4460 MiB (llama.cpp op-offload).  Hand-computed booking: ceil(4460 x 1.10) = 4906 MiB.
++#   free VRAM 6000 -> budget int(6000 x 0.85) = 5100 : gpu need 7328 > 5100 -> cpu mode, VRAM 4906 <= 5100 -> fits
++#   free VRAM 5000 -> budget 4250 < 4906 -> refused (mode none), never "cpu, 0 MiB"
++# decide-lev has a measured gpu peak (3926 MiB) but NO cpu-mode VRAM measurement: UNMEASURED.  Its cpu-mode offload is
++# a subset of what the gpu placement holds in all 4 profiles measured in both modes (julia 176<212, laya 232<574,
++# kev-08b 2382<2900, kev-4b 4460<7328), so the measured gpu peak is booked as a CEILING, flagged not-measured.
++write_hw "${TEST_TMP}/hw-gpu-6000.json" 6000
++write_hw "${TEST_TMP}/hw-gpu-5000.json" 5000
++write_hw "${TEST_TMP}/hw-gpu-4000.json" 4000
++pk="$(plan_hw "${TEST_TMP}/hw-gpu-6000.json")"
++assert_eq "cpu 4906 True measured" "$(printf '%s' "${pk}" | json_stdin 'd["profiles"]["decide-kev-4b"]["mode"] + " " + str(d["profiles"]["decide-kev-4b"]["vram_mb"]) + " " + str(d["profiles"]["decide-kev-4b"]["fits"]) + " " + d["profiles"]["decide-kev-4b"]["cpu_vram_provenance"]')" \
++  "G-138: kev-4b in cpu mode on a CUDA host books its measured 4460 x 1.10 = 4906 MiB VRAM (was 0), provenance measured"
++assert_eq "4906" "$(printf '%s' "${pk}" | json_stdin 'd["decision_instances"]["decide-kev-4b"]["placements"]["cpu"]["vram_mb"]')" "G-138: the capacity report books the same 4906 MiB for the cpu placement"
++assert_eq "ram" "$(printf '%s' "${pk}" | json_stdin '"|".join(d["profiles"]["decide-kev-4b"]["unknown_overhead"])')" "G-138: kev-4b's VRAM half is now measured; only its RAM overhead stays UNKNOWN"
++pk2="$(plan_hw "${TEST_TMP}/hw-gpu-5000.json")"
++assert_eq "none False 4906" "$(printf '%s' "${pk2}" | json_stdin 'd["profiles"]["decide-kev-4b"]["mode"] + " " + str(d["profiles"]["decide-kev-4b"]["fits"]) + " " + str(d["profiles"]["decide-kev-4b"]["vram_mb"])')" \
++  "G-138: kev-4b is refused when the 4906 MiB offload exceeds the VRAM budget (4250), never booked as 0"
++pk3="$(plan_hw "${TEST_TMP}/hw-nogpu.json")"
++assert_eq "cpu 0 n/a" "$(printf '%s' "${pk3}" | json_stdin 'd["profiles"]["decide-kev-4b"]["mode"] + " " + str(d["profiles"]["decide-kev-4b"]["vram_mb"]) + " " + d["profiles"]["decide-kev-4b"]["cpu_vram_provenance"]')" \
++  "G-138 golden-false: a CPU-only host books 0 VRAM for kev-4b (no CUDA build, no offload), provenance n/a"
++# decide-lev: unmeasured cpu-mode VRAM -> ceiling = measured gpu peak 3926, flagged
++pl="$(plan_hw "${TEST_TMP}/hw-gpu-4000.json")"
++assert_eq "none 3926 gpu-peak-ceiling" "$(printf '%s' "${pl}" | json_stdin 'd["profiles"]["decide-lev"]["mode"] + " " + str(d["profiles"]["decide-lev"]["vram_mb"]) + " " + d["profiles"]["decide-lev"]["cpu_vram_provenance"]')" \
++  "G-138: lev (cpu-mode VRAM UNMEASURED) books its measured gpu peak 3926 MiB as a ceiling and is refused on a 3400 MiB budget"
++assert_eq "3926" "$(printf '%s' "${pl}" | json_stdin 'd["decision_instances"]["decide-lev"]["placements"]["cpu"]["vram_mb"]')" \
++  "G-138: the capacity report books lev's cpu placement at the same 3926 MiB ceiling (cpu_offload_vram, not plain overhead_vram_mb = 0)"
++# decide-kev-9b: no cpu-mode VRAM measurement -> provenance is the documented floor, never mislabelled measured
++assert_eq "floor" "$(printf '%s' "${pk}" | json_stdin 'd["profiles"]["decide-kev-9b"]["cpu_vram_provenance"]')" \
++  "G-138: kev-9b's cpu-mode VRAM is a floor (not a measurement) and is labelled so"
++assert_eq "partial vram" "$(printf '%s' "${pl}" | json_stdin 'd["profiles"]["decide-lev"]["memory_status"] + " " + "|".join(d["profiles"]["decide-lev"]["unknown_overhead"])')" \
++  "G-138: ...and stays reported partial/UNKNOWN(vram): a ceiling is not a measurement"
++# profiles with neither a cpu-mode measurement nor a gpu peak stay UNMEASURED and book the old 0, flagged
++assert_eq "0 unmeasured" "$(printf '%s' "${pk}" | json_stdin 'str(d["profiles"]["decide-tiny"]["overhead_vram_mb"]) + " " + d["profiles"]["decide-tiny"]["cpu_vram_provenance"]')" \
++  "G-138: an unmeasured profile with no gpu peak declares provenance unmeasured (booked 0, UNKNOWN)"
++# mutation 1 (data): remove the kev-4b cpu-mode measurement -> the planner books the pre-fix 0 MiB, so the 4906 assertion
++# above is genuinely load-bearing (and the profile is flagged unmeasured, not silently measured)
++MUT_CAT="${TEST_TMP}/catalog-no-cpu-vram.json"
++python3 - "${LLMCTL_CATALOG}" "${MUT_CAT}" <<'PYEOF'
++import json, sys
++d = json.load(open(sys.argv[1]))
++k = d["profiles"]["decide-kev-4b"]
++k["defaults"].pop("overhead_vram_mb")
++k["memory"]["vram"] = {"status": "unmeasured", "reason": "mutation: measurement removed"}
++k["memory"]["gpu"] = {"status": "unmeasured", "reason": "mutation: no gpu peak either, so no ceiling"}
++json.dump(d, open(sys.argv[2], "w"))
++PYEOF
++mut_plan="$(LLMCTL_CATALOG="${MUT_CAT}" plan_hw "${TEST_TMP}/hw-gpu-4000.json")"
++assert_eq "0 unmeasured" "$(printf '%s' "${mut_plan}" | json_stdin 'str(d["profiles"]["decide-kev-4b"]["vram_mb"]) + " " + d["profiles"]["decide-kev-4b"]["cpu_vram_provenance"]')" \
++  "G-138 mutation (data): without the cpu-mode measurement kev-4b is booked 0 and flagged unmeasured - the 4906 assertion is load-bearing"
++# mutation 2 (logic): a planner whose helper ignores the measurement (returns 0) must fail the same expectation
++MUT_DIR="${TEST_TMP}/mutroot"; mkdir -p "${MUT_DIR}"; cp -R "${LLMCTL_ROOT}/lib" "${MUT_DIR}/lib"
++MUT_LIB="${MUT_DIR}/lib/catalog.sh"
++sed -i 's/return ovh_v, "measured"/return 0, "measured"/' "${MUT_LIB}"
++assert_eq "1" "$(grep -c 'return 0, "measured"' "${MUT_LIB}")" "G-138 mutation (logic): the mutated planner differs from the real one in exactly the measured-return line"
++mut_v="$(LLMCTL_FAKE_HW="${TEST_TMP}/hw-gpu-4000.json" bash -c 'source "$1/lib/common.sh"; source "$1/lib/os_detect.sh"; source "$1/lib/hardware.sh"; source "$2"; hw_probe_json | catalog_plan_json' _ "${MUT_DIR}" "${MUT_LIB}" | json_stdin 'd["profiles"]["decide-kev-4b"]["vram_mb"]')"
++assert_eq "0" "${mut_v}" "G-138 mutation (logic): a helper that drops the measured offload books 0 MiB VRAM, which the 4906 assertion rejects"
++assert_contains "$(printf '%s' "${pk}" | catalog_plan_human | grep 'decide-kev-4b ')" "cpu-mode VRAM measured" "G-138: the human plan says how a cpu-mode VRAM booking was derived"
++assert_contains "$(printf '%s' "${pl}" | catalog_plan_human | grep 'decide-lev ')" "cpu-mode VRAM gpu-peak-ceiling" "G-138: ...and flags a ceiling that is not a measurement"
++
+ # --- Live run 2026-10-08 (primary host "anton", 12288 MiB GPU, another process holding 3219 MiB) ------------------
+ # Evidence: specs/009-jev-decision-models/evidence/live-models/<profile>/memory.txt (the engine pid's VRAM and the
+ # process VmHWM, sampled after start / golden questions / probes / window-filling edges) and live-models.jsonl.
+diff --git a/tests/test_run_live_nli.sh b/tests/test_run_live_nli.sh
+index d62b28a..881f4c0 100755
+--- a/tests/test_run_live_nli.sh
++++ b/tests/test_run_live_nli.sh
+@@ -49,4 +49,46 @@ lc_line="$(grep -E 'live_checks\.py' "${RUNNER}" | grep -v '^#' | head -1)"
+ assert_contains "${lc_line}" 'RUNNER_DIR}/live_checks.py' "runner resolves live_checks.py beside itself"
+ assert_file_exists "$(dirname "${RUNNER}")/live_checks.py" "live_checks.py exists beside the runner"
+ 
++# Wiring (live 2026-10-08 D-06 re-run): the gateway only learns a hand-started engine's address from
++# LLMCTL_DECIDE_ENDPOINT_<PROFILE> (which wins) or LLMCTL_PORT_<PROFILE> (precedence ENDPOINT > PORT > catalog,
++# internal/gateway/resolver.go) and the CLI client only finds a
++# non-default gateway through LLMCTL_DECIDE_PORT. Missing either made every golden request 503 not_ready
++# and `decide models` "connection refused" while the engine itself was healthy. Behavioural checks: the
++# real functions run, the effective environment / exit status / RESULT file are asserted.
++unset LLMCTL_DECIDE_ENDPOINT_DECIDE_NLI LLMCTL_DECIDE_PORT LLMCTL_PORT_DECIDE_NLI
++wire_gateway_env 8196 8195
++assert_eq "http://127.0.0.1:8196" "${LLMCTL_DECIDE_ENDPOINT_DECIDE_NLI:-}" "wire_gateway_env points the gateway at the hand-started engine"
++assert_eq "8195" "${LLMCTL_DECIDE_PORT:-}" "wire_gateway_env points the CLI client at its gateway port"
++assert_eq "8196" "${LLMCTL_PORT_DECIDE_NLI:-}" "wire_gateway_env also exports the engine port override"
++# the main flow must actually call wire_gateway_env and preflight_gateway (not merely define them)
++main_wire="$(grep -cE '^wire_gateway_env "\$\{ENG_PORT\}" "\$\{GW_PORT\}"$' "${RUNNER}" || true)"
++assert_eq 1 "${main_wire}" "the runner calls wire_gateway_env with the engine and gateway ports"
++main_pf="$(grep -cE '^preflight_gateway .*\|\| exit 5$' "${RUNNER}" || true)"
++assert_eq 1 "${main_pf}" "the runner aborts (exit 5) when the pre-flight fails"
++# preflight behaviour: ready row passes; not-ready / absent / unreadable all fail and write FAILED-PREFLIGHT
++printf 'decide-nli               ready    nli-onnx\n' > "${W}/work/m_ready.txt"
++printf 'decide-nli               degraded nli-onnx\n' > "${W}/work/m_degraded.txt"
++printf 'decide-2b                ready    letter-logit\n' > "${W}/work/m_other.txt"
++preflight_gateway decide-nli "${W}/work/m_ready.txt" "${W}/work/r1.txt" && prc=0 || prc=$?
++assert_eq 0 "${prc}" "pre-flight passes when the profile is ready"
++for f in m_degraded m_other m_missing; do
++  rm -f "${W}/work/r2.txt"
++  preflight_gateway decide-nli "${W}/work/${f}.txt" "${W}/work/r2.txt" && prc=0 || prc=$?
++  assert_eq 1 "${prc}" "pre-flight fails for ${f}"
++  assert_contains "$(cat "${W}/work/r2.txt")" "FAILED-PREFLIGHT" "pre-flight writes FAILED-PREFLIGHT for ${f}"
++done
++# cleanup must stop the gateway and redact the engine log even on early exits. Behavioural: the real cleanup()
++# body (extracted from the runner, which defines it after the lib-only return) runs in a subshell whose
++# bin/llmctl is a recording stub; the planted token must be gone and the stop command recorded.
++CLR="${W}/cl"; mkdir -p "${CLR}/bin" "${CLR}/out"
++printf '#!/usr/bin/env bash\necho "$*" >> "%s/calls.txt"\n' "${CLR}" > "${CLR}/bin/llmctl"; chmod +x "${CLR}/bin/llmctl"
++printf 'GET /x\nAuthorization: Bearer abc123\nkeep this line\n' > "${CLR}/out/engine.log"
++cl_body="$(sed -n '/^cleanup() {/,/^}/p' "${RUNNER}")"
++( cd "${CLR}"; OUT="${CLR}/out"; PID=""; eval "${cl_body}"; cleanup ) >/dev/null 2>&1 || true
++cl_log="$(cat "${CLR}/out/engine.log")"
++assert_contains "${cl_log}" "Bearer <redacted>" "cleanup redacts the bearer token in the engine log"
++assert_contains "${cl_log}" "keep this line" "cleanup leaves the rest of the engine log intact"
++if [[ "${cl_log}" == *abc123* ]]; then leak=yes; else leak=no; fi
++assert_eq no "${leak}" "the planted token no longer appears in the engine log"
++assert_contains "$(cat "${CLR}/calls.txt" 2>/dev/null)" "decide serve --stop" "cleanup actually invokes the gateway stop command"
+ test_finish

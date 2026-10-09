@@ -1,0 +1,7 @@
+llmctl decide gateway
+  bind:   0.0.0.0:8195 (all interfaces; use this host's name or address from other machines)
+  URL:    https://127.0.0.1:8195
+  key:    /home/milosvasic/llmctl-work-0910/w/home/env (source: file; show it with `llmctl key show --yes-print`)
+  CA:     SHA-256 43:B3:94:54:43:E2:D2:F5:58:3E:71:8A:5F:7C:31:DD:B3:87:8C:CC:67:D6:07:11:B2:E1:1E:47:9F:75:88:D8, expires 2036-10-06
+  models: 12 decision profile(s), default decide
+  pid:    352643 (log: /home/milosvasic/llmctl-work-0910/w/state/logs/decide-gateway.log)

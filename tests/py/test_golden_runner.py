@@ -39,8 +39,10 @@ class StandIn:
         self.seen = []            # (path, auth header, body dict)
         self.fail_first = 0       # answer 503 this many times before behaving
         self.always_status = None
+        self.always_body = {"error": "x"}   # JSON body of the always_status answer (dict, or raw bytes)
         self.always_headers = {}  # extra headers of the always_status answer
         self.bad_shape = False
+        self.refuse_over = None   # choice items with more options than this get the gateway's 422 validation_failed
         self.calibrated = False   # answer like a gateway applying a calibration profile (FR-080)
         self.lock = threading.Lock()
         outer = self
@@ -58,12 +60,14 @@ class StandIn:
                 if self.headers.get("Authorization") != "Bearer " + KEY:
                     return self._send(401, {"error": "unauthorized"})
                 if outer.always_status:
-                    return self._send(outer.always_status, {"error": "x"},
+                    return self._send(outer.always_status, outer.always_body,
                                       dict({"Retry-After": "0"}, **outer.always_headers))
                 if count <= outer.fail_first:
                     return self._send(503, {"error": "not ready"}, {"Retry-After": "0"})
                 q = body["questions"]["q"]
                 t = q["type"]
+                if outer.refuse_over and t == "choice" and len(q["criteria"]) > outer.refuse_over:
+                    return self._send(422, {"message": "Request failed validation.", "error_type": "validation_failed"})
                 if outer.bad_shape:
                     ans = {"type": t}
                 elif t == "noul":
@@ -88,7 +92,7 @@ class StandIn:
                            {"x-llmctl-request-id": "req-%04d" % count})
 
             def _send(self, code, obj, hdrs=None):
-                raw = json.dumps(obj).encode()
+                raw = obj if isinstance(obj, bytes) else json.dumps(obj).encode()
                 self.send_response(code)
                 self.send_header("Content-Type", "application/json")
                 self.send_header("Content-Length", str(len(raw)))
@@ -372,6 +376,75 @@ class RunnerE2ETests(unittest.TestCase):
         self.assertEqual(res["report"]["pair_consistency"]["pairs"], 3)
 
 
+    def test_refusal_recorded_when_over_profile_limit(self):
+        """G-160: 422 validation_failed on a choice item with more options than --max-options."""
+        self.srv.always_status = 422
+        self.srv.always_body = (b'{"message":"Request failed validation.","error_type":"validation_failed"}')
+        rc, out, _ = self.run_main(["--types", "choice", "--limit", "3", "--max-options", "1"])
+        res = _jload(os.path.join(self.out, "results.json"))
+        for r in res["records"]:
+            self.assertTrue(r["refused"])
+            self.assertEqual(r["refusal_reason"], "max_options")
+            self.assertFalse(r["well_formed"])
+        self.assertEqual(res["report"]["refused"]["n"], 3)
+        self.assertEqual(res["report"]["well_formed"]["n"], 0)
+        self.assertIn("REFUSED(max_options)", out)
+
+    def test_422_without_max_options_flag_stays_malformed(self):
+        self.srv.always_status = 422
+        self.srv.always_body = (b'{"message":"Request failed validation.","error_type":"validation_failed"}')
+        self.run_main(["--types", "choice", "--limit", "2"])
+        res = _jload(os.path.join(self.out, "results.json"))
+        self.assertFalse(any(r.get("refused") for r in res["records"]))
+        self.assertEqual(res["report"]["well_formed"]["n"], 2)
+
+    def test_readout_failed_422_stays_malformed_e2e(self):
+        self.srv.always_status = 422
+        self.srv.always_body = RefusalClassifyTests.RF
+        self.run_main(["--types", "choice", "--limit", "2", "--max-options", "1"])
+        res = _jload(os.path.join(self.out, "results.json"))
+        self.assertFalse(any(r.get("refused") for r in res["records"]))
+
+
+    def test_refused_items_do_not_fail_the_run_and_sc003_pass_row_explains(self):
+        """IMPORTANT-1: refused items shrink the denominator; run exits 0, SC-003 passes WITH a reason."""
+        self.srv.refuse_over = 8
+        rc, out, err = self.run_main(["--types", "choice", "--limit", "100", "--max-options", "8"])
+        self.assertEqual(rc, 0, err)
+        res = _jload(os.path.join(self.out, "results.json"))
+        nref = res["report"]["refused"]["n"]
+        self.assertEqual(nref, 9)           # 5 x 12 + 4 x 20 options -> 9 items over 8
+        self.assertEqual(res["report"]["well_formed"]["ok"], res["report"]["well_formed"]["n"])
+        rows = _jlines(os.path.join(self.out, "evidence.jsonl")) if os.path.exists(os.path.join(self.out, "evidence.jsonl")) else None
+        if rows is None:
+            rows = [json.loads(l) for root, _, fs in os.walk(self.out) for f in fs if f.endswith(".jsonl")
+                    and "responses" not in f for l in open(os.path.join(root, f)) if l.strip()]
+        sc3 = [r for r in rows if r.get("requirement") == ["SC-003"] and r.get("result") == "pass"][0]
+        self.assertIn("9 items refused by max_options=8", sc3["reason"])
+
+    def test_max_options_recorded_in_meta_and_argv(self):
+        self.run_main(["--types", "noul", "--limit", "1", "--max-options", "7"])
+        res = _jload(os.path.join(self.out, "results.json"))
+        self.assertEqual(res["meta"]["max_options"], 7)
+        self.assertIn("--max-options 7", b"\n".join(
+            open(os.path.join(r, f), "rb").read() for r, _, fs in os.walk(self.out) for f in fs
+            if f.endswith(".jsonl")).decode())
+
+    def test_catalog_mismatch_warns_on_stderr_and_meta(self):
+        # real profile name from models/catalog.json (decide-2b has max_options 16)
+        argv = ["--base-url", self.srv.url, "--cacert", self.crt, "--key-env", "GOLDEN_TEST_KEY",
+                "--profile", "decide-2b", "--out-dir", self.out, "--run-id", "t1", "--evidence-class", "stand-in",
+                "--retry-sleep", "0", "--types", "noul", "--limit", "1", "--max-options", "20"]
+        os.environ["GOLDEN_TEST_KEY"] = KEY
+        errs = io.StringIO()
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(errs):
+            run_golden.main(argv)
+        self.assertIn("differs from catalog", errs.getvalue())
+        res = _jload(os.path.join(self.out, "results.json"))
+        self.assertEqual(res["meta"]["max_options_catalog"], 16)
+        self.assertTrue(res["meta"]["max_options_mismatch"])
+
+
 class PureUnitTests(unittest.TestCase):
     def item(self, typ):
         return next(i for i in run_golden.load_items(["questions"]) if i["type"] == typ)
@@ -447,6 +520,51 @@ class PureUnitTests(unittest.TestCase):
         with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
             self.assertEqual(run_golden.main(["--base-url", "u", "--profile", "p", "--types", "bogus", "--dry-run"]), 2)
             self.assertEqual(run_golden.main(["--base-url", "u", "--profile", "p", "--set", "bogus", "--dry-run"]), 2)
+
+
+class RefusalClassifyTests(unittest.TestCase):
+    """G-160: the precise predicate. The gateway's over-limit refusal is HTTP 422 with error_type
+    validation_failed (internal/contract/request.go: len(options) > lim.MaxOptions -> errInvalid)."""
+    VF = b'{"message":"Request failed validation.","error_type":"validation_failed"}'
+    RF = b'{"message":"The model produced no usable answer for this question.","error_type":"readout_failed"}'
+
+    def choice(self, n):
+        return {"id": "C", "type": "choice", "criteria": {"k%d" % i: "d" for i in range(n)}}
+
+    def test_a_over_limit_422_is_refused(self):
+        self.assertEqual(run_golden.classify_refusal(422, self.VF, self.choice(20), 16), "max_options")
+
+    def test_b_readout_failed_is_still_malformed(self):
+        self.assertIsNone(run_golden.classify_refusal(422, self.RF, self.choice(20), 16))
+
+    def test_c_200_unchanged(self):
+        self.assertIsNone(run_golden.classify_refusal(200, b"{}", self.choice(20), 16))
+
+    def test_within_limit_validation_failure_is_not_a_refusal(self):
+        self.assertIsNone(run_golden.classify_refusal(422, self.VF, self.choice(16), 16))
+
+    def test_unknown_limit_never_refuses(self):
+        self.assertIsNone(run_golden.classify_refusal(422, self.VF, self.choice(20), None))
+
+    def test_non_choice_and_hostile_body(self):
+        self.assertIsNone(run_golden.classify_refusal(422, self.VF, {"type": "noul", "criteria": {"a": 1, "b": 2}}, 1))
+        self.assertIsNone(run_golden.classify_refusal(422, b"\xff not json", self.choice(20), 16))
+        self.assertIsNone(run_golden.classify_refusal(None, b"", self.choice(20), 16))
+
+    def test_other_statuses_with_validation_failed_body_are_not_refused(self):
+        for st in (400, 502, 500, 429):
+            self.assertIsNone(run_golden.classify_refusal(st, self.VF, self.choice(20), 16), st)
+
+
+class CatalogCheckTests(unittest.TestCase):
+    def test_known_profile_returns_catalog_value(self):
+        self.assertEqual(run_golden.catalog_max_options("decide-2b"), 16)
+        self.assertEqual(run_golden.catalog_max_options("decide-julia"), 255)
+
+    def test_unknown_profile_or_missing_catalog_is_none(self):
+        self.assertIsNone(run_golden.catalog_max_options("no-such-profile"))
+        self.assertIsNone(run_golden.catalog_max_options("decide-2b", "/nonexistent/catalog.json"))
+
 
 
 if __name__ == "__main__":

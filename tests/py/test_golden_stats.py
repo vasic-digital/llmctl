@@ -220,5 +220,54 @@ class CalibrationTests(unittest.TestCase):
         self.assertIn("insufficient for calibration", text)
 
 
+class RefusalTests(unittest.TestCase):
+    """G-160: a gateway limit refusal (422 validation_failed on a choice item with more options than the
+    profile's max_options) is reported separately and is not scored as a malformed answer."""
+
+    def test_well_formed_excludes_refused_and_reports_them(self):
+        recs = [rec("1", pred=True), rec("2", pred=None, refused=True, refusal_reason="max_options"),
+                rec("3", pred=None)]
+        rep = stats.report(recs)
+        self.assertEqual(rep["well_formed"]["n"], 2)       # 3 originals minus 1 refused
+        self.assertEqual(rep["well_formed"]["ok"], 1)
+        self.assertEqual(rep["refused"], {"n": 1, "reasons": {"max_options": 1}})
+        self.assertEqual(rep["by_type"]["noul"]["n"], 3)   # accuracy denominator unchanged
+        self.assertEqual(rep["by_type"]["noul"]["correct"], 1)
+        self.assertIn("refused (limit): 1", stats.render(rep))
+
+    def test_old_records_without_field_unchanged(self):
+        rep = stats.report([rec("1", pred=True), rec("2", pred=None)])
+        self.assertEqual(rep["well_formed"]["n"], 2)
+        self.assertEqual(rep["refused"], {"n": 0, "reasons": {}})
+        self.assertNotIn("refused (limit)", stats.render(rep))
+
+    def test_refused_false_is_not_refused(self):
+        rep = stats.report([rec("1", pred=None, refused=False)])
+        self.assertEqual(rep["well_formed"]["n"], 1)
+        self.assertEqual(rep["refused"]["n"], 0)
+
+    def test_refused_not_in_accuracy_by_option_count(self):
+        recs = [rec("1", typ="choice", exp="a", pred="a", option_count=20),
+                rec("2", typ="choice", exp="a", pred=None, option_count=20, refused=True, refusal_reason="max_options"),
+                rec("3", typ="choice", exp="a", pred="b", option_count=4)]
+        rep = stats.report(recs)
+        self.assertEqual(rep["accuracy_by_option_count"]["20"]["n"], 1)
+        self.assertEqual(rep["accuracy_by_option_count"]["20"]["correct"], 1)
+        self.assertEqual(rep["refused"]["n"], 1)
+
+    def test_old_results_render_identically(self):
+        import json, os
+        root = os.path.join(os.path.dirname(__file__), "..", "..", "specs", "009-jev-decision-models",
+                            "evidence", "live-models", "nezha-decide-2b-2026-10-08")
+        res = os.path.join(root, "golden", "results.json")
+        txt = os.path.join(root, "golden-stats.txt")
+        if not (os.path.exists(res) and os.path.exists(txt)):
+            self.skipTest("stored evidence not present")
+        old = json.load(open(res))
+        rendered = stats.render(stats.report(old["records"]))
+        self.assertEqual(rendered.strip(), open(txt).read().strip())
+
+
+
 if __name__ == "__main__":
     unittest.main()

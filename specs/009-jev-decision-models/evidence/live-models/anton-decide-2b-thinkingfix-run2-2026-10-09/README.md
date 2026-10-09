@@ -32,4 +32,4 @@
 - 0 x HTTP 502 in 196 requests. Run-1 502s took ~25-30 s each (87 of 88 in the 25-30 s bucket, near constant): consistent with an upstream/engine timeout while the host was thrashing,
   but ROOT CAUSE UNCONFIRMED. Not excluded: the run-1 binary differed from this one (resolver.go endpoint wiring), or an engine stall. Their absence here under no memory pressure is supporting evidence, not proof.
 
-Caveats: score accuracy does not beat its majority baseline; small n; the 4 malformed golden items are excluded from accuracy denominators by stats.py. Nothing committed.
+Caveats: score accuracy does not beat its majority baseline; small n; the 4 malformed golden items are NOT excluded from accuracy denominators: stats.py (`_acc_row`/`_correct`) counts a malformed answer as wrong (the 4 are the 20-option items the gateway refused for max_options 16; this run predates the G-160 refused-vs-malformed distinction). Nothing committed.

@@ -1,0 +1,20 @@
+llmctl tree snapshot for nezha live run 2026-10-09
+git HEAD: c5301defb73a949536fe741b597d3bd089df4109
+sha256(git diff HEAD) [tracked changes incl staged]: 4019682088fa21f9e77a6f8b60991eff3d05c8b71b7c08ada2149ac5b02724bb
+snapshot file count: 1082
+sha256 of sorted per-file sha256 manifest (LC_ALL=C, tree.manifest): f01d2d2aa9622d9039653a01508acfe5f0575fd14a3531fd9bad3acbc1156625
+snapshot excludes: .git submodules constitution specs/*/evidence .claude build model weights (models/catalog.json kept); built binary placed at build/llmctl-decide (not in manifest)
+untracked files included (git ls-files --others --exclude-standard), e.g. docs/host-safety.md scripts/hostsafety/
+snapshot taken: 2026-10-09T10:29:54Z (first snapshot wrongly dropped tests/evidence/; redone before any evidence run)
+llmctl-decide: local build go version go1.26.0 linux/amd64, CGO_ENABLED=0 GOOS=linux GOARCH=amd64 (nezha build impossible: submodules/containers replace dir not in snapshot); sha256 2da8d6399fff053ea1428b34b736a17fadbd4d70b9497081a8a278c882198922
+llama-server: ~/llmctl-work-live/llama.cpp/build/bin/llama-server version 0.5.0-dev (build 1, commit 1537a0a)
+2da8d6399fff053ea1428b34b736a17fadbd4d70b9497081a8a278c882198922  build/llmctl-decide
+               total        used        free      shared  buff/cache   available
+Mem:           64086        4599       13377         392       47788       59487
+Swap:          48426           0       48426
+VmRSS:	 4581220 kB
+version: 0.5.0-dev (build 1, commit 1537a0a)
+built with GNU 14.3.1 for Linux x86_64
+Fri Oct  9 12:19:34 PM UTC 2026
+VmHWM:	 7110184 kB
+VmRSS:	 7110184 kB

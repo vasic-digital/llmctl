@@ -1,0 +1,26 @@
+[
+ {
+  "id": "P-001",
+  "status": 502,
+  "request_id": "94739a1412e5686b",
+  "attempts": 3,
+  "latency_ms": 27024,
+  "error": "http 502"
+ },
+ {
+  "id": "P-003",
+  "status": 502,
+  "request_id": "b1bcefb138700f73",
+  "attempts": 3,
+  "latency_ms": 27020,
+  "error": "http 502"
+ },
+ {
+  "id": "P-005",
+  "status": 502,
+  "request_id": "79be833e94aaa080",
+  "attempts": 3,
+  "latency_ms": 27014,
+  "error": "http 502"
+ }
+]
