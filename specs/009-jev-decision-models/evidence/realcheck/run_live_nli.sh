@@ -15,13 +15,27 @@ acquire_access_key() {
   [[ "${rc}" -eq 0 && -s "$1" ]]
 }
 RUNNER_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# wire_gateway_env <eng_port> <gw_port>: the Go gateway resolves a profile's engine address with precedence
+# LLMCTL_DECIDE_ENDPOINT_<PROFILE> > LLMCTL_PORT_<PROFILE> > catalog port (internal/gateway/resolver.go). The explicit
+# ENDPOINT is exported too (it wins, and is the unambiguous form); the CLI client finds a non-default gateway only via
+# LLMCTL_DECIDE_PORT (live 2026-10-08: unset => every request 503 not_ready).
+wire_gateway_env() {
+  export LLMCTL_PORT_DECIDE_NLI="$1" LLMCTL_DECIDE_ENDPOINT_DECIDE_NLI="http://127.0.0.1:$1" LLMCTL_DECIDE_PORT="$2"
+}
+# preflight_gateway <profile> <models-file> <result-file>: the gateway must report the profile ready before the
+# 173-request matrix; a miswired gateway then fails in seconds. rc 0 = ready, 1 = not (RESULT written).
+preflight_gateway() {
+  if awk -v p="$1" '$1==p && $2=="ready"{f=1} END{exit !f}' "$2" 2>/dev/null; then return 0; fi
+  echo "FAILED-PREFLIGHT: gateway does not report $1 ready" > "$3"; return 1
+}
 # RUN_LIVE_NLI_LIB_ONLY=1: define the functions and stop (tests/test_run_live_nli.sh sources it).
 if [[ "${RUN_LIVE_NLI_LIB_ONLY:-0}" == "1" ]]; then return 0 2>/dev/null || exit 0; fi
 P=decide-nli
 : "${REPO:?}" "${W:?}" "${OUT:?}" "${GW_PORT:?}" "${ENG_PORT:?}"
 cd "${REPO}" || exit 1
 export LLMCTL_DATA_DIR="${W}/data" LLMCTL_STATE_DIR="${W}/state" LLMCTL_HOME="${W}/home" LLMCTL_ENV_FILE="${W}/home/env"
-export LLMCTL_DECIDE_BIN="${REPO}/build/llmctl-decide" LLMCTL_DECIDE_NATIVE=1 LLMCTL_PORT_DECIDE_NLI="${ENG_PORT}"
+export LLMCTL_DECIDE_BIN="${REPO}/build/llmctl-decide" LLMCTL_DECIDE_NATIVE=1
+wire_gateway_env "${ENG_PORT}" "${GW_PORT}"
 GW="https://127.0.0.1:${GW_PORT}"; CA="${LLMCTL_HOME}/cert/ca/ca.crt"
 IKEY="${LLMCTL_STATE_DIR}/keys/onnx-${P}.key"
 VPY="${LLMCTL_DATA_DIR}/venv-onnx/bin/python"
@@ -33,6 +47,8 @@ mem() { # <label>
   { echo "## $1 $(date -u +%T)"; grep -E 'VmRSS|VmHWM|VmSwap' "/proc/${PID}/status"; } >> "${OUT}/memory.txt"
 }
 cleanup() {
+  bin/llmctl decide serve --stop > /dev/null 2>&1 || true
+  [[ -f "${OUT}/engine.log" ]] && sed -i -E 's#(Bearer )[A-Za-z0-9._~+/=-]+#\1<redacted>#g' "${OUT}/engine.log"
   if [[ -n "${PID}" ]] && kill -0 "${PID}" 2>/dev/null && grep -q onnx_server.py "/proc/${PID}/cmdline" 2>/dev/null; then kill "${PID}"; fi
 }
 trap cleanup EXIT
@@ -74,6 +90,7 @@ say "gateway"
 bin/llmctl decide serve --port "${GW_PORT}" > "${OUT}/gateway-start.txt" 2>&1; echo "rc=$?" >> "${OUT}/gateway-start.txt"
 for _ in $(seq 1 30); do bin/llmctl decide models 2>/dev/null | awk -v p="${P}" '$1==p && $2=="ready"{f=1} END{exit !f}' && break; sleep 1; done
 bin/llmctl decide models > "${OUT}/gateway-models.txt" 2>&1
+preflight_gateway "${P}" "${OUT}/gateway-models.txt" "${OUT}/RESULT.txt" || exit 5
 LIVE_KEYFILE="${W}/work/access.key"; mkdir -p "${W}/work"
 acquire_access_key "${LIVE_KEYFILE}" || { echo "no access key could be exported" > "${OUT}/RESULT.txt"; exit 4; }
 
