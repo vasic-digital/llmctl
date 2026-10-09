@@ -72,3 +72,8 @@ svc_is_failed() { return 1; }
 svc_status() { if _sbd_alive "$1"; then echo "active (direct)"; else echo "inactive"; fi; }
 svc_logs() { tail -n "${2:-100}" "${LLMCTL_LOG_DIR}/$(_svc_instance_key "$1").log" 2>/dev/null || true; }
 svc_main_pid() { if _sbd_alive "$1"; then cat "$(_sbd_pidfile "$1")"; fi; }
+# This backend manages no gateway UNIT (tests start the gateway directly through lib/svc_hook.sh run-gateway).
+# The inherited production version asks `systemctl --user` for llmctl-decide-gateway.service, i.e. the developer's
+# real user manager: on a host that runs a persistent gateway its pid leaked into portreg_live_set and every
+# registry == live comparison reported "live service without a registry row: decide-gateway".
+decide_service_main_pid() { return 0; }

@@ -97,6 +97,28 @@ export LLMCTL_PORT_RANGE="${BASE}-$(( BASE + 59 ))"
 export LLMCTL_CTX_SMALL=8192 LLMCTL_KVTYPE_SMALL=f16
 LLMCTL="${LLMCTL_ROOT}/bin/llmctl"
 
+echo "== 0. the direct test backend never reads the developer's systemd user manager =="
+# A host that runs a persistent llmctl-decide-gateway.service (anton/nezha/factory do) must not leak its pid into
+# this test's live set: the leak made every registry==live comparison below report "live service without a
+# registry row: decide-gateway" (2026-10-09). The stub answers MainPID for the gateway unit like a running one, so
+# this check is deterministic whether or not the host runs a gateway.
+mkdir -p "${TEST_TMP}/hoststub"
+printf '#!/bin/sh\ncase "$*" in *MainPID*llmctl-decide-gateway.service*) echo "$PPID";; esac\nexit 0\n' > "${TEST_TMP}/hoststub/systemctl"
+chmod +x "${TEST_TMP}/hoststub/systemctl"
+leak="$(
+  export PATH="${TEST_TMP}/hoststub:${PATH}"
+  # control needle: the production backend DOES read the (stubbed) user manager, so the stub is seen
+  ( source "${LLMCTL_ROOT}/lib/service_linux.sh"; printf 'prod=%s\n' "$(decide_service_main_pid)" )
+  ( source "${LLMCTL_ROOT}/tests/fixtures/svc_backend_direct.sh"; source "${LLMCTL_ROOT}/lib/portreg.sh"
+    printf 'direct=%s\nlive=%s\n' "$(decide_service_main_pid)" "$(portreg_live_set)" )
+)"
+if grep -qE '^prod=[0-9]+$' <<<"${leak}"; then printf '  ok: control needle - the stubbed user manager reports a gateway pid to the production backend\n'
+else printf '  FAIL: control needle not seen (the check below would prove nothing): %s\n' "${leak}" >&2; TEST_FAILS=$((TEST_FAILS+1)); fi
+assert_contains "${leak}" "direct=" "the direct backend answered"
+if grep -qE '^direct=[0-9]' <<<"${leak}" || grep -q 'decide-gateway=' <<<"${leak}"; then
+  printf '  FAIL: the direct backend reported the user manager gateway pid: %s\n' "${leak}" >&2; TEST_FAILS=$((TEST_FAILS+1))
+else printf '  ok: the host gateway is not in the direct backend live set\n'; fi
+
 echo "== 1. a service is published when it becomes READY, never before =="
 ( export FAKE_ENGINE_DELAY=3; "${LLMCTL}" start small >/dev/null 2>&1 ) &
 START_PID=$!

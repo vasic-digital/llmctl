@@ -38,10 +38,20 @@ out="$(
   decide_service_enable 2>&1
 )"
 GU="${LLMCTL_UNIT_DIR}/llmctl-decide-gateway.service"
-assert_file_exists "${GU}" "gateway unit written"
+# since 51a6a8c (G-069) a dry run writes NO unit file (tests/test_decide_serve_enable.sh owns that contract and the
+# real, stubbed-systemctl enable); the unit content below comes from the same generator the real enable calls
+assert_file_absent "${GU}" "dry-run enable wrote no unit file"
+assert_contains "${out}" "[dry-run] write ${GU}" "dry-run enable says what it would write"
 assert_contains "${out}" "[dry-run] systemctl --user enable llmctl-decide-gateway.service" "enable goes through the service manager"
 assert_contains "${out}" "[dry-run] systemctl --user start llmctl-decide-gateway.service" "…and starts it"
 assert_contains "${out}" "[dry-run] systemctl --user daemon-reload" "…after a daemon-reload"
+wrote="$(
+  source "${LLMCTL_ROOT}/lib/common.sh"; source "${LLMCTL_ROOT}/lib/os_detect.sh"
+  source "${LLMCTL_ROOT}/lib/hardware.sh"; source "${LLMCTL_ROOT}/lib/service_linux.sh"
+  _decide_gateway_write_unit
+)"
+assert_eq "${GU}" "${wrote}" "the unit generator writes the gateway unit into the user unit dir"
+assert_file_exists "${GU}" "gateway unit written"
 assert_file_contains "${GU}" "Restart=always" "Restart=always"
 assert_file_contains "${GU}" "RestartSec=5" "RestartSec=5"
 assert_file_contains "${GU}" "WantedBy=default.target" "starts at login/boot (with linger)"
@@ -149,8 +159,15 @@ out="$(
   source "${LLMCTL_ROOT}/lib/common.sh"; source "${LLMCTL_ROOT}/lib/service_macos.sh"
   decide_service_enable 2>&1
 )"
-assert_file_exists "${PL}" "gateway agent written"
+assert_file_absent "${PL}" "dry-run enable wrote no plist"
+assert_contains "${out}" "[dry-run] write ${PL}" "dry-run enable says what it would write"
 assert_contains "${out}" "[dry-run] launchctl bootstrap" "bootstrap goes through launchctl (dry-run line)"
+wrote="$(
+  source "${LLMCTL_ROOT}/lib/common.sh"; source "${LLMCTL_ROOT}/lib/service_macos.sh"
+  _decide_gateway_write_plist
+)"
+assert_eq "${PL}" "${wrote}" "the plist generator writes the gateway agent into the LaunchAgents dir"
+assert_file_exists "${PL}" "gateway agent written"
 assert_eq "600" "$(stat -c %a "${PL}")" "gateway plist is mode 0600"
 python3 -I - "${PL}" "${LLMCTL_ROOT}" <<'PY' && printf '  ok: gateway plist structure (plistlib)\n' || { printf '  FAIL: gateway plist structure\n' >&2; TEST_FAILS=$((TEST_FAILS+1)); }
 import plistlib, re, sys

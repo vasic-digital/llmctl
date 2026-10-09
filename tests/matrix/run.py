@@ -29,6 +29,8 @@ import sys
 import tempfile
 import time
 
+# the repo-internal imports below must not leave __pycache__ in the work tree when run without -B (2026-10-09)
+sys.dont_write_bytecode = True
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
 sys.path.insert(0, ROOT)

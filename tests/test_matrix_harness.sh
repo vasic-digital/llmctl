@@ -199,6 +199,25 @@ PYEOF
   fi
 fi
 
+# the entry scripts never write bytecode themselves, even run WITHOUT -B / PYTHONDONTWRITEBYTECODE: they import
+# tests.evidence / tests.matrix, and a plain `python3 scripts/golden/run_golden.py` (the live evidence scripts run it
+# that way) left tests/evidence/__pycache__ behind, which then failed the check below in an unrelated `make test`
+# (2026-10-09). Probed only on a clean tree, so whatever appears was written by the probe itself.
+if find "${ROOT}/tests/matrix" "${ROOT}/tests/evidence" -name '__pycache__' | grep -q .; then
+  bad "bytecode-probe precondition: a __pycache__ already exists under tests/matrix or tests/evidence"
+else
+  for entry in scripts/golden/run_golden.py tests/matrix/run.py tests/matrix/negative_tls.py; do
+    ( cd "${ROOT}" && env -u PYTHONDONTWRITEBYTECODE python3 "${entry}" --help >/dev/null 2>&1 ) || bad "${entry} --help failed"
+    stray="$(find "${ROOT}/tests/matrix" "${ROOT}/tests/evidence" -name '__pycache__' 2>/dev/null)"
+    if [[ -n "${stray}" ]]; then
+      bad "plain python3 ${entry} wrote bytecode into the work tree: ${stray//$'\n'/ }"
+      while IFS= read -r d; do rm -rf -- "${d}"; done <<<"${stray}"   # created by this probe (clean precondition)
+    else
+      ok "plain python3 ${entry} (no -B) writes no bytecode under tests/matrix or tests/evidence"
+    fi
+  done
+fi
+
 # no stray bytecode in the tree
 if find "${ROOT}/tests/matrix" "${ROOT}/tests/evidence" -name '__pycache__' -o -name '*.pyc' | grep -q .; then bad "bytecode written into the work tree"; else ok "no __pycache__/.pyc written"; fi
 
