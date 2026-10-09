@@ -278,7 +278,7 @@ EOF
 PORT="$(python3 -c 'import socket;s=socket.socket();s.bind(("127.0.0.1",0));print(s.getsockname()[1])')"
 KEYHOME="${TEST_TMP}/someone-home"; mkdir -p "${KEYHOME}"; chmod 755 "${KEYHOME}"
 KEYFILE="${KEYHOME}/onnx.key"
-printf 'LLMCTL_PROFILE=eng\nLLMCTL_ENGINE=onnx\nLLMCTL_EXEC=python3\nLLMCTL_ARGS=\nLLMCTL_PORT=%s\nLLMCTL_REG_TOKEN=fake-engine.py\nLLMCTL_REG_KIND=decide\nLLMCTL_REG_PROTOCOL=http\nLLMCTL_REG_HEALTH=/health\nLLMCTL_REG_PROFILE=eng\nLLMCTL_REG_LOOPBACK=1\nLLMCTL_KEY_FILE=%s\n' \
+printf 'LLMCTL_PROFILE=eng\nLLMCTL_ENGINE=onnx\nLLMCTL_EXEC=python3\nLLMCTL_ARGS=\nLLMCTL_PORT=%s\nLLMCTL_REG_TOKEN=fake-engine.py\nLLMCTL_REG_KIND=decide\nLLMCTL_REG_PROTOCOL=http\nLLMCTL_REG_HEALTH=/readyz\nLLMCTL_REG_PROFILE=eng\nLLMCTL_REG_LOOPBACK=1\nLLMCTL_KEY_FILE=%s\n' \
   "${PORT}" "${KEYFILE}" > "${LLMCTL_SERVICES_DIR}/eng.env"
 export LLMCTL_PORTREG=1 LLMCTL_DECIDE_BIN="${BIN}" LLMCTL_REGISTER_POLL=0.2 LLMCTL_REGISTER_WAIT=30
 reg_pid() { "${BIN}" registry list --json | python3 -c 'import json,sys;print(next((s["pid"] for s in json.load(sys.stdin)["services"] if s["name"]=="eng"),""))'; }

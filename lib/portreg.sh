@@ -146,6 +146,20 @@ portreg_unregister() {
   "$(portreg_bin)" registry unregister "$1" >/dev/null 2>&1 || true
 }
 
+# portreg_health_path <engine> - the HTTP path the engine really answers when healthy (the single source for the
+# registry health path, the registration waiter and the scheduler readiness wait). llama-server: /health;
+# colibri: /v1/models; the onnx encoder runtime (lib/onnx_server.py): /readyz (200 only once the load-time smoke
+# passed, else 503 not_ready). Its /healthz is LIVENESS ONLY (200 even when the smoke failed and /v1/score answers
+# 503), so using it would register and keep a model that cannot score. Waiters use curl -f, so a 503 means "keep
+# waiting" during model load; nothing is registered before the first 200.
+portreg_health_path() {
+  case "${1:-}" in
+    colibri) printf '/v1/models\n' ;;
+    onnx)    printf '/readyz\n' ;;
+    *)       printf '/health\n' ;;
+  esac
+}
+
 # portreg_env_lines <profile> <engine> <exec> <args...>
 # Prints the registration metadata lines every backend appends to a service's
 # env record (read by lib/svc_hook.sh for boot-time / restart registration and
@@ -166,10 +180,7 @@ portreg_env_lines() {
   case "${token}" in
     python|python3|python3.*) token="$(basename "${argv[0]:-python}")" ;;
   esac
-  case "${engine}" in
-    colibri) health="/v1/models" ;;
-    *)       health="/health" ;;
-  esac
+  health="$(portreg_health_path "${engine}")"
   [[ -n "${kind}" ]] || kind="chat"
   if [[ -z "${loop}" ]]; then
     case "${host}" in 127.*|localhost|::1) loop=1 ;; *) loop=0 ;; esac

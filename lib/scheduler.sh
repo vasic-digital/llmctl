@@ -330,7 +330,7 @@ _sched_registry_publish() {
   engine="$(catalog_engine "${bp}")"
   token="$(basename "${SCHED_EXEC:-}")"
   case "${token}" in python|python3|python3.*) token="$(basename "${SCHED_ARGS[0]:-}")" ;; esac
-  [[ "${engine}" == "colibri" ]] && health="/v1/models"
+  health="$(portreg_health_path "${engine}")"
   if _sched_is_decision "${bp}"; then kind=decide; loop=1; fi
   local i
   for (( i=0; i<${#SCHED_ARGS[@]}; i++ )); do
@@ -810,8 +810,8 @@ _sched_decision_scale_impl() {
       if ! svc_start "${key}"; then
         err "failed to start '${key}': the service backend refused to start it (see: llmctl logs ${key})"
         ok=0
-      elif ! _sched_wait_ready "${port}" "/health"; then
-        err "started '${key}' but it never answered http://127.0.0.1:${port}/health within ${LLMCTL_READY_TIMEOUT:-60}s (see: llmctl logs ${key})"
+      elif ! _sched_wait_ready "${port}" "$(portreg_health_path "$(catalog_engine "${profile}")")"; then
+        err "started '${key}' but it never answered http://127.0.0.1:${port}$(portreg_health_path "$(catalog_engine "${profile}")") within ${LLMCTL_READY_TIMEOUT:-60}s (see: llmctl logs ${key})"
         svc_stop "${key}" || true
         ok=0
       fi
@@ -1083,7 +1083,7 @@ _sched_start_impl() {
     # already handles, so a switch whose target never becomes ready
     # correctly rolls back to the previously-running profile too.
     local ready_path="/v1/models"
-    _sched_is_decision "${p}" && ready_path="/health"
+    _sched_is_decision "${p}" && ready_path="$(portreg_health_path "$(catalog_engine "${p}")")"
     if ! _sched_wait_ready "${port}" "${ready_path}"; then
       local diag
       if diag="$(_sched_diagnose_bind_failure "${p}" "${port}")"; then
@@ -1200,7 +1200,7 @@ _enable_impl() {
   # publication: the unit's ExecStartPost waiter (lib/svc_hook.sh) registers
   # the service the moment it answers.
   local ready_path="/v1/models"
-  _sched_is_decision "${profile}" && ready_path="/health"
+  _sched_is_decision "${profile}" && ready_path="$(portreg_health_path "$(catalog_engine "${profile}")")"
   if ! portreg_active; then
     :   # no registry: enable returns as before (no readiness wait added)
   elif _sched_wait_ready "${port}" "${ready_path}"; then
