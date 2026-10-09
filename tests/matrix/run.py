@@ -174,6 +174,8 @@ class Env:
         self.engine_port = a.engine_port
         self.cls = "real-component"
         self.spki = None
+        self.sleep = time.sleep   # injectable for tests
+        self.model = getattr(a, "model", None)
 
     # ---- clients
     def prepare(self, wanted):
@@ -300,6 +302,10 @@ def check_step(st, r, sdk=False):
     if r.status != st["status"]:
         pr.append("status %s != expected %s" % (r.status, st["status"]))
         return pr
+    if r.error:
+        # an adapter that got a status but could not hand over the body (e.g. truncated/invalid base64): name it
+        # instead of letting it surface as an unexplained 'body is not JSON'
+        return ["adapter error with status %s: %s" % (r.status, r.error[:200])]
     h = r.headers
     # SDK success paths do not expose response headers to the caller: header checks apply to their error paths only
     for tok in ([] if (sdk and r.status == 200) else st["check"]):
@@ -396,10 +402,107 @@ def run_scenario_hook(env, action, scenario):
     return r.returncode == 0, "scenario hook %s %s rc=%d" % (action, scenario, r.returncode)
 
 
+AUTH_THROTTLED = "auth_throttled"
+
+
+def apply_model(st, model):
+    """Put `model` into a JSON /v1/systemone step that names none (run.py used to send none, so a gateway
+    without a default model answered 503/422). Explicit models, raw bodies and non-POST steps are left alone."""
+    if not model or st["method"] != "POST" or st["path"] != "/v1/systemone" or not st.get("request"):
+        return st
+    if "model" in st["request"]:
+        return st
+    st["request"] = dict(st["request"], model=model)
+    st["data"] = json.dumps(st["request"]).encode()
+    return st
+
+
+def profile_ids(models_body):
+    """Served profile ids of a GET /v1/models body (the llmctl `data` listing)."""
+    if not (isinstance(models_body, dict) and isinstance(models_body.get("data"), list)):
+        return []
+    return [m["id"] for m in models_body["data"] if isinstance(m, dict) and isinstance(m.get("id"), str)]
+
+
+def pick_default_model(models_body):
+    """The model to send when none is given: the served default `decide` if the listing offers it (id or alias),
+    else the first listed profile, else None."""
+    ids = profile_ids(models_body)
+    if not ids:
+        return None
+    for m in models_body["data"]:
+        if "decide" == m.get("id") or "decide" in (m.get("aliases") or []):
+            return "decide"
+    return ids[0]
+
+
+def fails_auth(st):
+    """A step that is SUPPOSED to be refused for authentication (counts towards the failed-auth limiter)."""
+    return st["auth"] in ("none", "wrong") and st["status"] == 401
+
+
+def order_phases(inv_ids, table):
+    """Three phases: ordinary cells; cells whose steps FAIL authentication on purpose (unauthenticated / wrong key:
+    each one counts towards the gateway's failed-auth burst limiter, so they run after everything that needs a
+    clean source); the deliberate burst case last."""
+    normal, neg, burst = [], [], []
+    for c in inv_ids:
+        if c not in table:
+            continue
+        t = table[c]
+        if t["special"] == "burst":
+            burst.append(c)
+        elif any(fails_auth(st) for st in t["steps"]):
+            neg.append(c)
+        else:
+            normal.append(c)
+    return [normal, neg, burst]
+
+
+def _retry_after_s(r):
+    v = r.headers.get("retry-after", "")
+    return int(v) if re.fullmatch(r"\d+", v) else None
+
+
+def invoke_step(env, client, st, hdrs, tmo, cell, notes):
+    """One step. A step that fails authentication on purpose is spaced (--auth-neg-gap) and, if the failed-auth
+    burst limiter (429 rate_limited + Retry-After) answered instead of the expected 401, re-probed ONCE after
+    Retry-After. The cell passes only if the re-probe gives the real expected answer; it is then recorded with
+    the documented class `auth_throttled`. A 429 that persists, has no usable Retry-After or asks for more than
+    --auth-throttle-max-wait is left as the (failing) answer. Authenticated steps are never retried."""
+    neg = fails_auth(st)
+    gap = getattr(env.a, "auth_neg_gap", 0) or 0
+    if neg and gap > 0:
+        env.sleep(gap)
+    r = env.invoke(client, st["method"], url_for(env, st["path"]), st["auth"], hdrs, st["data"], tmo)
+    cell.ms += r.ms
+    if neg and r.status == 429 and st["status"] != 429:
+        wait = _retry_after_s(r)
+        cap = getattr(env.a, "auth_throttle_max_wait", 120)
+        if wait is None or wait > cap:
+            notes.append("429 rate_limited without a usable Retry-After within %ss (got %r): not re-probed"
+                         % (cap, r.headers.get("retry-after")))
+            return r
+        env.sleep(wait + 1)
+        r2 = env.invoke(client, st["method"], url_for(env, st["path"]), st["auth"], hdrs, st["data"], tmo)
+        cell.ms += r2.ms
+        if not check_step(st, r2):
+            cell.reason_class = AUTH_THROTTLED
+            cell.reason = "class:%s: 429 rate_limited (Retry-After %ss) from the matrix's own failed-auth volume; " \
+                          "the same call re-probed after the wait gave the expected answer" % (AUTH_THROTTLED, wait)
+            notes.append("auth_throttled: 429 then, after %ss, the expected answer" % (wait + 1))
+        else:
+            notes.append("429 rate_limited, and the re-probe after %ss still did not match" % (wait + 1))
+        return r2
+    return r
+
+
 def exec_http(env, client, cid, case, cell):
     outs = []
     tmo = env.a.timeout
+    model = getattr(env, "model", None)
     for st in case["steps"]:
+        st = apply_model(dict(st), model)
         hdrs = dict(st["headers"])
         if st["data"] is not None and st["ctype"]:
             hdrs["Content-Type"] = st["ctype"]
@@ -414,12 +517,12 @@ def exec_http(env, client, cid, case, cell):
                     cell.fail(msg)
                     return
                 torn = True
+        notes = []
         try:
-            r = env.invoke(client, st["method"], url_for(env, st["path"]), st["auth"], hdrs, st["data"], tmo)
+            r = invoke_step(env, client, st, hdrs, tmo, cell, notes)
         finally:
             if torn:
                 run_scenario_hook(env, "teardown", sc)
-        cell.ms += r.ms
         cell.rc = r.rc
         problems = check_step(st, r, sdk=client in SDK_CLIENTS)
         if r.trust and any(t.startswith("none fail") for t in r.trust):
@@ -434,7 +537,7 @@ def exec_http(env, client, cid, case, cell):
             outs.append(summarize(st, r))
             cell.stdout = json.dumps(outs, indent=1).encode()
             return
-        outs.append(summarize(st, r, "; ".join(problems)))
+        outs.append(summarize(st, r, "; ".join(notes + problems)))
         for p in problems:
             cell.fail("%s %s: %s" % (st["method"], st["path"], p))
     cell.stdout = json.dumps(outs, indent=1).encode()
@@ -653,6 +756,59 @@ def spki_from_cert(path):
 
 # ------------------------------------------------------------------------- main run
 
+def resolve_model(env, a):
+    """Decide env.model. --model wins; against a gateway otherwise ask GET /v1/models; the reference server needs none."""
+    if a.model:
+        env.model = a.model
+        return "flag"
+    if not a.base_url:
+        env.model = None
+        return "none (reference server has a default)"
+    try:
+        r = env.invoke("python-urllib", "GET", url_for(env, "/v1/models"), "key", {}, None, a.timeout)
+        body, e = json_body(r)
+        m = None if e or r.status != 200 else pick_default_model(body)
+    except Exception as ex:  # noqa: BLE001
+        m, e = None, type(ex).__name__
+    env.model = m
+    return "GET /v1/models" if m else "none (could not list /v1/models: no model sent)"
+
+
+def fetch_profiles(a):
+    """Served profile ids of the target gateway (for --each-profile)."""
+    work = tempfile.mkdtemp(prefix="llmctl-matrix-list-")
+    try:
+        env = Env(a, work)
+        env.key = os.environ.get(a.key_env)
+        if not env.key:
+            raise SystemExit("API key not set: export %s" % a.key_env)
+        env.cacert, env.base = a.cacert, a.base_url
+        env.cmds["python-urllib"] = [sys.executable, "-B", os.path.join(env.client_dir, "python_urllib.py")]
+        r = env.invoke("python-urllib", "GET", url_for(env, "/v1/models"), "key", {}, None, a.timeout)
+        body, e = json_body(r)
+        if e or r.status != 200:
+            raise SystemExit("cannot list profiles: status %s %s" % (r.status, e or r.error))
+        return profile_ids(body)
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
+
+
+def do_each_profile(a, run=None, fetch=None):
+    ids = (fetch or fetch_profiles)(a)
+    if not ids:
+        print("no served profile found", file=sys.stderr)
+        return 1
+    base_dir = a.run_dir or os.path.join(ROOT, "docs", "qa", "009-jev-decision-models",
+                                         a.run_id or time.strftime("matrix-%Y%m%dT%H%M%SZ", time.gmtime()))
+    rc = 0
+    for pid in ids:
+        b = argparse.Namespace(**vars(a))
+        b.model, b.each_profile, b.run_dir = pid, False, os.path.join(base_dir, pid)
+        b.run_id = (a.run_id + "-" + pid) if a.run_id else None
+        rc = max(rc, (run or do_run)(b))
+    return rc
+
+
 def do_run(a):
     inv = load_inventory(a.inventory)
     inv_ids = [r["case_id"] for r in inv]
@@ -680,6 +836,7 @@ def do_run(a):
         if a.class_override:
             env.cls = a.class_override
         env.prepare(clients)
+        model_note = resolve_model(env, a)
         run_id = a.run_id or time.strftime("matrix-%Y%m%dT%H%M%SZ", time.gmtime())
         run_dir = a.run_dir or os.path.join(ROOT, "docs", "qa", "009-jev-decision-models", run_id)
         os.makedirs(run_dir, exist_ok=True)
@@ -689,17 +846,15 @@ def do_run(a):
                                                                       "unavailable: " + env.avail.get(c, (0, "n/a"))[1]) for c in clients},
                 "pending_adapters": PENDING_ADAPTERS,
                 "vantages": {"host": "exercised", "second-machine": "pending-vantage (vantage helper not wired yet)"},
-                "cases": len(inv_ids)}
+                "cases": len(inv_ids), "model": env.model, "model_source": model_note}
         print(json.dumps({"plan": plan}, indent=1))
         if a.plan:
             return 0
 
         # The failed-auth burst case leaves the source throttled for a while, so it runs in a final
         # phase after every other case of every client (otherwise later 401 cells would see 429).
-        normal = [c for c in inv_ids if c in table and table[c]["special"] != "burst"]
-        burst = [c for c in inv_ids if c in table and table[c]["special"] == "burst"]
         cells = []
-        for phase in (normal, burst):
+        for phase in order_phases(inv_ids, table):
             for client in clients:
                 for cid in phase:
                     for v in vantages:
@@ -725,14 +880,15 @@ def do_run(a):
         for c in cells:
             by[c["result"]] = by.get(c["result"], 0) + 1
         beyond = sum(1 for c in cells if c.get("reason_class") in NE_CLASSES_PROPOSED)
-        mj = {"run_id": run_id, "target": env.base, "evidence_class": env.cls,
+        mj = {"run_id": run_id, "target": env.base, "evidence_class": env.cls, "model": env.model,
               "inventory": {"path": os.path.relpath(a.inventory, ROOT) if a.inventory.startswith(ROOT) else a.inventory,
                             "sha256": hashlib.sha256(open(a.inventory, "rb").read()).hexdigest(), "rows": len(inv_ids), "case_ids": inv_ids},
               "clients": plan["clients"], "pending_adapters": PENDING_ADAPTERS,
               "vantages": plan["vantages"], "pending_vantages": pend,
               "not_exercised_classes": {"fr069": NE_CLASSES_FR069, "proposed_beyond_fr069": NE_CLASSES_PROPOSED, "env": NE_CLASS_ENV},
               "cells": cells,
-              "summary": {"cells": len(cells), **by, "classes_beyond_fr069": beyond},
+              "summary": {"cells": len(cells), **by, "classes_beyond_fr069": beyond,
+                          "auth_throttled": sum(1 for c in cells if c.get("reason_class") == AUTH_THROTTLED)},
               "completeness": {"problems": problems, "complete": not problems},
               "verdict": "PASS" if not problems and not fails else "FAIL"}
         with open(os.path.join(run_dir, "matrix.json"), "w") as f:
@@ -811,6 +967,14 @@ def parser():
     ap.add_argument("--slow-client-max-s", type=float, default=15.0)
     ap.add_argument("--burst-max", type=int, default=80)
     ap.add_argument("--timeout", type=int, default=20)
+    ap.add_argument("--model", help="`model` to send in POST /v1/systemone requests that name none (default against a gateway: "
+                                    "`decide` if /v1/models offers it, else its first profile; the reference server needs none)")
+    ap.add_argument("--each-profile", action="store_true",
+                    help="gateway mode: run the whole matrix once per served profile (each in RUNDIR/<profile>)")
+    ap.add_argument("--auth-neg-gap", type=float, default=0.0,
+                    help="seconds to wait before each deliberately failed-authentication step (spacing against the failed-auth limiter)")
+    ap.add_argument("--auth-throttle-max-wait", type=float, default=120.0,
+                    help="longest Retry-After (s) honoured when the failed-auth limiter answers 429 to such a step; it is re-probed once")
     ap.add_argument("--class-override", choices=["real-model", "real-component", "stand-in"])
     ap.add_argument("--plan", action="store_true", help="print the plan and exit")
     ap.add_argument("--check", metavar="RUNDIR", help="independently verify a finished run directory")
@@ -827,6 +991,11 @@ def main(argv=None):
     if a.base_url and not a.cacert:
         print("--cacert is required with --base-url", file=sys.stderr)
         return 2
+    if a.each_profile:
+        if not a.base_url:
+            print("--each-profile needs --base-url", file=sys.stderr)
+            return 2
+        return do_each_profile(a)
     return do_run(a)
 
 

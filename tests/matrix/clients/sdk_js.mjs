@@ -37,11 +37,12 @@ if (!attempt) {
       continue;
     }
     t.push('TRUST ' + (mech === 'env' ? 'env-NODE_EXTRA_CA_CERTS' : 'custom-fetch') + ' ok');
-    console.log([...t, ...outl].join('\n'));
-    process.exit(0);
+    // flush before exit: process.exit() right after console.log truncates a piped stdout at 8 KiB
+    process.stdout.write([...t, ...outl].join('\n') + '\n', () => process.exit(0));
+    await new Promise(() => {});
   }
-  console.log([...t, 'TRUST none fail: ' + last, 'ERROR trust-configuration failure: no CA-trust mechanism worked'].join('\n'));
-  process.exit(0);
+  process.stdout.write([...t, 'TRUST none fail: ' + last, 'ERROR trust-configuration failure: no CA-trust mechanism worked'].join('\n') + '\n', () => process.exit(0));
+  await new Promise(() => {});
 }
 
 const req = createRequire(path.join(dir, 'x.js'));

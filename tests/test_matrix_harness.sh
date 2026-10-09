@@ -170,6 +170,35 @@ refused='curl rc=7 curl: (7) Failed to connect to localhost port 1 after 0 ms: C
 assert all(not re.search(v[2],refused,re.I) for v in N.NEG.values())
 "; then ok "negative TLS regexes accept GnuTLS-curl and OpenSSL-curl wordings and reject an unrelated failure"; else bad "negative TLS regexes do not accept the recorded curl wordings"; fi
 
+# ------------------------------------------- 6. harness-defect regressions (LAN run 2026-10-09)
+python3 -B -m unittest tests.py.test_matrix_harness_fixes tests.py.test_matrix_harness_units tests.py.test_matrix_calibration_fields >"${TMP}/unit.out" 2>&1 \
+  && ok "matrix harness unit tests (node piped-stdout 100 KB, --model, additive keys, failed-auth throttle) pass" || { bad "matrix harness unit tests failed"; tail -n 25 "${TMP}/unit.out"; }
+# --model: every systemone request carries it (the stand-in serves the alias), the run still passes, matrix.json records it
+${RUN} --clients python-urllib --model jev-latest --run-dir "${TMP}/model" >"${TMP}/model.out" 2>&1 && rcm=0 || rcm=$?
+out="$(py "
+import json
+m=json.load(open('${TMP}/model/matrix.json'))
+assert m['model']=='jev-latest', m['model']
+assert m['verdict']=='PASS', m['verdict']
+print('model recorded, verdict PASS')")" && [[ ${rcm} -eq 0 ]] && ok "run.py --model jev-latest: ${out}" || { bad "run.py --model run (rc=${rcm}): ${out}"; tail -n 15 "${TMP}/model.out"; }
+# mutation M4: the node adapter reverted to exit-right-after-log must fail the 100 KB piped-stdout test
+if command -v node >/dev/null 2>&1 && command -v openssl >/dev/null 2>&1; then
+  cp -r "${ROOT}/tests/matrix/clients" "${TMP}/clients_m4"
+  python3 -B - "${TMP}/clients_m4/node_https.mjs" <<'PYEOF'
+import re, sys
+p = sys.argv[1]
+s = open(p).read()
+s2 = re.sub(r"const finish = \(lines\) => \{.*?\n\};", "const finish = (lines) => { if (!done) { done = true; console.log(lines.join('\\n')); process.exit(0); } };", s, flags=re.S)
+assert s2 != s
+open(p, "w").write(s2)
+PYEOF
+  if MATRIX_NODE_CLIENT="${TMP}/clients_m4/node_https.mjs" python3 -B -m unittest -q tests.py.test_matrix_harness_fixes.NodePipedStdoutTests >"${TMP}/m4.out" 2>&1; then
+    bad "M4 reverted node adapter was NOT detected by the 100 KB test"
+  else
+    ok "M4 reverted (exit-right-after-log) node adapter is rejected by the 100 KB piped-stdout test"
+  fi
+fi
+
 # no stray bytecode in the tree
 if find "${ROOT}/tests/matrix" "${ROOT}/tests/evidence" -name '__pycache__' -o -name '*.pyc' | grep -q .; then bad "bytecode written into the work tree"; else ok "no __pycache__/.pyc written"; fi
 

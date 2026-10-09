@@ -15,10 +15,17 @@ if (hdrf !== '-') {
 if (body !== null) headers['Content-Length'] = String(body.length);
 const u = new URL(url);
 const mod = u.protocol === 'https:' ? https : http;
-const opts = { method, headers, timeout: Number(tmo) * 1000, hostname: u.hostname, port: u.port, path: u.pathname + u.search };
+const opts = { agent: false, method, headers, timeout: Number(tmo) * 1000, hostname: u.hostname, port: u.port, path: u.pathname + u.search };
 if (u.protocol === 'https:' && cacert !== '-') opts.ca = fs.readFileSync(cacert);
 let done = false;
-const finish = (lines) => { if (!done) { done = true; console.log(lines.join('\n')); process.exit(0); } };
+// Flush before exiting: process.exit() right after console.log truncates a PIPED stdout at the pipe buffer
+// (8 KiB), corrupting the base64 of any body over ~6 KB (LAN matrix run 2026-10-09, defect 4).
+const finish = (lines) => {
+  if (done) return;
+  done = true;
+  process.exitCode = 0;
+  process.stdout.write(lines.join('\n') + '\n', () => process.exit(0));
+};
 const req = mod.request(opts, (res) => {
   const chunks = [];
   res.on('data', (c) => chunks.push(c));

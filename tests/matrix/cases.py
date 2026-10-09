@@ -200,6 +200,11 @@ def validate_systemone(resp, request):
     if request is not None and set(ans) != set(qs):
         out.append("answer keys %s != question keys %s" % (sorted(ans), sorted(qs)))
     for name, a in ans.items():
+        if isinstance(a, dict) and "maturity" in a:
+            # additive T138/OD-24 label on an answer of a type the profile has not measured above baseline
+            if a["maturity"] != "experimental":
+                out.append("%s: maturity %r is not 'experimental'" % (name, a["maturity"]))
+            a = {k: v for k, v in a.items() if k != "maturity"}
         t = a.get("type") if isinstance(a, dict) else None
         q = qs.get(name) or {}
         if request is not None and q.get("type") != t:
@@ -276,6 +281,31 @@ def _model_calibration_problems(c):
     return []
 
 
+MATURITY_TYPES = ("noul", "choice", "score")
+MATURITY_STATUS = ("measured", "experimental", "unmeasured")
+LIMIT_OPTIONAL_INT = ("max_state_chars", "max_context_tokens", "max_pairs")
+
+
+def _maturity_problems(mat):
+    """Per-type maturity map of a /v1/models entry (T138, OD-24): {type: {status, [lower_bound, baseline, n, reason]}}."""
+    if not (isinstance(mat, dict) and mat and set(mat) <= set(MATURITY_TYPES)):
+        return ["maturity is not a map over noul/choice/score"]
+    out = []
+    for t, e in mat.items():
+        if not (isinstance(e, dict) and e.get("status") in MATURITY_STATUS and
+                set(e) <= {"status", "lower_bound", "baseline", "n", "reason"}):
+            out.append("maturity.%s malformed" % t)
+            continue
+        for k in ("lower_bound", "baseline"):
+            if k in e and not (_is_num(e[k]) and 0 <= e[k] <= 1):
+                out.append("maturity.%s.%s not in [0,1]" % (t, k))
+        if "n" in e and not (isinstance(e["n"], int) and not isinstance(e["n"], bool) and e["n"] >= 0):
+            out.append("maturity.%s.n malformed" % t)
+        if "reason" in e and not isinstance(e["reason"], str):
+            out.append("maturity.%s.reason malformed" % t)
+    return out
+
+
 def validate_models(resp):
     """GET /v1/models. Raw clients see BOTH shapes in one body (G-038); the SDK adapters return only
     their own `models` listing, which is validated against the SDK's required shape."""
@@ -288,9 +318,17 @@ def validate_models(resp):
     out += _validate_sdk_models(resp["models"])
     for m in resp["data"]:
         need = {"id", "aliases", "protocol", "status", "limits"}
-        if not need <= set(m) or set(m) - need - {"notes", "template_hash", "calibration"}:
+        if not need <= set(m) or set(m) - need - {"notes", "template_hash", "calibration", "maturity", "experimental_types"}:
             out.append("model entry keys %s" % sorted(m))
             continue
+        if "notes" in m and not isinstance(m["notes"], str):
+            out.append("notes is not a string")
+        if "maturity" in m:
+            out += _maturity_problems(m["maturity"])
+        if "experimental_types" in m:
+            et = m["experimental_types"]
+            if not (isinstance(et, list) and all(x in MATURITY_TYPES for x in et)):
+                out.append("experimental_types malformed")
         if "template_hash" in m and not (isinstance(m["template_hash"], str) and _HEX64.match(m["template_hash"])):
             out.append("template_hash is not 64 lowercase hex")
         if "calibration" in m:
@@ -300,7 +338,10 @@ def validate_models(resp):
         if m["status"] not in ("ready", "starting", "degraded", "draining"):
             out.append("bad status")
         lim = m["limits"]
-        if not (isinstance(lim, dict) and set(lim) == {"max_options", "score_levels"} and
+        if not (isinstance(lim, dict) and {"max_options", "score_levels"} <= set(lim) and
+                set(lim) <= {"max_options", "score_levels", *LIMIT_OPTIONAL_INT} and
+                all(isinstance(lim[k], int) and not isinstance(lim[k], bool) and lim[k] >= 1
+                    for k in LIMIT_OPTIONAL_INT if k in lim) and
                 isinstance(lim["max_options"], int) and 2 <= lim["max_options"] <= 255 and
                 isinstance(lim["score_levels"], list) and len(lim["score_levels"]) == 2):
             out.append("limits malformed")
