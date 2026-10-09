@@ -25,7 +25,7 @@ info:
     | 422 | schema or limit violation, state over budget, unknown model, deterministic readout failure (readout_failed) | no | no |
     | 429 | failed-authentication throttle from a source; never applied to a request carrying the valid key | yes | yes |
     | 500 | deterministic server-side fault: a misconfigured readout setting or an engine that rejects the gateway's own request shape; retrying cannot help; NOTE the hosted SDKs retry every 5xx by default, see "SDK retry behaviour" below [LLMCTL] | no | no |
-    | 502 | transient backend failure (process died, connection refused, or an engine entry that answers 404/405 because the port now belongs to another program - a stale registry entry heals) [LLMCTL] | yes | no |
+    | 502 | transient backend failure (process died, connection refused, or an engine entry that answers 404/405 because the port now belongs to another program - a stale registry entry heals; or the gateway's own end-to-end deadline `LLMCTL_DECIDE_TIMEOUT` (default 8 s) expiring on a slow-but-valid prefill, signalled additively by the response headers `x-llmctl-decide-reason: deadline_exceeded` + `x-llmctl-decide-deadline-ms: <ms>`; any other 502 carries `x-llmctl-decide-reason: engine_error`; the error body is unchanged) [LLMCTL] | yes | no |
     | 503 | not ready, draining, or a known profile has no ready instance (no on-demand start) [LLMCTL] | yes | yes |
     | 529 | capacity saturated: all slots busy and the bounded queue full or its deadline passed [HOSTED: temporarily overloaded] | yes | yes |
 

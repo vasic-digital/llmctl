@@ -167,6 +167,22 @@ encoder runtime reports that it truncated a premise (opt-in; otherwise 422). Que
 handshake/read deadlines, the end-to-end `LLMCTL_DECIDE_TIMEOUT` and a graceful drain on stop are all in
 `specs/009-jev-decision-models/contracts/env-vars.md` and `docs/user-manual.md`.
 
+### The end-to-end budget and slow (CPU) engines
+
+`LLMCTL_DECIDE_TIMEOUT` (seconds, default `8`, kept below the hosted SDK's 10 s timeout) is the ONE deadline of a
+request: queue wait plus the engine call(s). There is no separate per-attempt deadline and the gateway itself never
+retries an engine call. When the budget expires the engine connection is closed (the engine logs `cancel task`) and the
+client gets `502 backend_failed` (the documented status; unchanged) with the additive headers
+`x-llmctl-decide-reason: deadline_exceeded` and `x-llmctl-decide-deadline-ms: <budget>`. Every other 502 carries
+`x-llmctl-decide-reason: engine_error`.
+
+A CPU-only engine reads its prompt slowly (measured: ~21.6 tokens/s for a 4B Q8_0 model, so 8 s covers only ~170 prompt
+tokens). Size the budget as `prompt_tokens / prefill_tokens_per_second + decode time + margin` and raise it for such an
+engine, e.g. `LLMCTL_DECIDE_TIMEOUT=60` for prompts of ~1000 tokens. **Do not retry a `deadline_exceeded` 502**: each
+retry cancels the engine task and restarts the whole prefill, so it is guaranteed waste (the golden runner
+`scripts/golden/run_golden.py` therefore records it after one attempt; an `engine_error` 502 is still retried). The
+default is deliberately unchanged; raising it above the hosted SDK's 10 s is an operator choice for CPU engines.
+
 ### Connection admission (FR-022, "without affecting others")
 
 Every connection starts **unauthenticated** and is promoted the first time a request on it carries the valid key.

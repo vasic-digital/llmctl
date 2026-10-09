@@ -613,6 +613,25 @@ func TestBackendTimeoutIs502(t *testing.T) {
 	if r.status != 502 || r.errType() != "backend_failed" {
 		t.Fatalf("%d %s", r.status, r.body)
 	}
+	// the documented additive signal: the end-to-end budget (not an engine fault) ended the request
+	if got := r.hdr.Get("x-llmctl-decide-reason"); got != "deadline_exceeded" {
+		t.Errorf("x-llmctl-decide-reason = %q, want deadline_exceeded", got)
+	}
+	if got := r.hdr.Get("x-llmctl-decide-deadline-ms"); got != "200" {
+		t.Errorf("x-llmctl-decide-deadline-ms = %q, want 200", got)
+	}
+}
+
+// A backend failure that is not the budget expiring is engine_error, with no deadline header.
+func TestBackendFailureIsEngineError(t *testing.T) {
+	h := startServer(t, withLimits(func(l *Limits) { l.Timeout = 5 * time.Second }))
+	h.be.setDecide(func(context.Context, *contract.ParsedRequest) ([]contract.NamedAnswer, contract.Usage, error) {
+		return nil, contract.Usage{}, errors.New("engine exploded")
+	})
+	r := h.do(h.client(), "POST", "/v1/systemone", sampleBody, nil)
+	if r.status != 502 || r.hdr.Get("x-llmctl-decide-reason") != "engine_error" || r.hdr.Get("x-llmctl-decide-deadline-ms") != "" {
+		t.Fatalf("%d reason=%q deadline=%q", r.status, r.hdr.Get("x-llmctl-decide-reason"), r.hdr.Get("x-llmctl-decide-deadline-ms"))
+	}
 }
 
 func TestMetricsBoundedAndClean(t *testing.T) {

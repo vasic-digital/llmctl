@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -276,6 +277,21 @@ func (s *Server) fail(c *gin.Context, ce *contract.ContractError) {
 		c.Writer.Header().Set(k, v)
 	}
 	c.AbortWithStatusJSON(ce.Status, ce.Body())
+}
+
+// markBackend502 adds the additive reason headers to a backend 502 (contracts/openapi.yaml): the
+// gateway's own end-to-end budget LLMCTL_DECIDE_TIMEOUT expiring on a slow-but-alive engine is
+// "deadline_exceeded" (+ the budget in ms) - a client must not retry it as if the engine had failed,
+// a retry cancels the engine task and redoes the whole prefill; anything else is "engine_error".
+// A caller that went away (parent context done) is not the gateway's deadline.
+func (s *Server) markBackend502(c *gin.Context, reqCtx, parent context.Context) {
+	h := c.Writer.Header()
+	if errors.Is(reqCtx.Err(), context.DeadlineExceeded) && parent.Err() == nil {
+		h.Set("x-llmctl-decide-reason", "deadline_exceeded")
+		h.Set("x-llmctl-decide-deadline-ms", strconv.FormatInt(s.lim.Timeout.Milliseconds(), 10))
+		return
+	}
+	h.Set("x-llmctl-decide-reason", "engine_error")
 }
 
 // failClose answers like fail and closes the connection (used when the request body was not
@@ -557,11 +573,14 @@ func (s *Server) handleSystemOne(c *gin.Context) {
 		c.Set(ckDecAns, answers)
 	}
 	if err != nil {
-		if ce := asContractError(err); ce != nil {
-			s.fail(c, ce)
-		} else {
-			s.fail(c, mustTransport(502, contract.TransportOptions{})) // generic: engine text never reaches the client
+		ce := asContractError(err)
+		if ce == nil {
+			ce = mustTransport(502, contract.TransportOptions{}) // generic: engine text never reaches the client
 		}
+		if ce.Status == http.StatusBadGateway {
+			s.markBackend502(c, ctx, r.Context())
+		}
+		s.fail(c, ce)
 		return
 	}
 	if mr, ok := s.cfg.Backend.(MaturityReporter); ok {

@@ -196,6 +196,11 @@ def ask(url, ctx, key, payload, timeout, retries, retry_sleep):
             last = (status, headers, body, None)
             if status not in RETRY_STATUSES:
                 break
+            if status == 502 and {k.lower(): v for k, v in headers.items()}.get(
+                    "x-llmctl-decide-reason") == "deadline_exceeded":
+                # the gateway's own end-to-end budget ended a slow-but-alive engine: a retry cancels the
+                # engine task and redoes the whole prefill, so it is recorded, never retried
+                break
             err = "http %d" % status
             wait = retry_sleep * attempts
             ra = {k.lower(): v for k, v in headers.items()}.get("retry-after")

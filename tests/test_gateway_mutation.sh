@@ -138,4 +138,11 @@ mutate "SIGHUP no longer reloads the calibration profiles" cmd/llmctl-decide/cmd
 mutate "decision log consent flag ignored" cmd/llmctl-decide/cmd_serve.go \
   'Decisions: p.decisionWriter(), DecisionState: p.decState,' 'Decisions: p.decisionWriter(), DecisionState: true,' ./cmd/llmctl-decide
 
+# 502 reason headers: a deadline expiry must stay distinguishable from an engine fault (a slow CPU
+# engine must not be retried as if it had failed)
+mutate "deadline expiry no longer reported as deadline_exceeded" internal/server/handlers.go \
+  'if errors.Is(reqCtx.Err(), context.DeadlineExceeded) && parent.Err() == nil {' 'if false {' ./internal/server
+mutate "engine fault reported as deadline_exceeded" internal/server/handlers.go \
+  '	h.Set("x-llmctl-decide-reason", "engine_error")' '	h.Set("x-llmctl-decide-reason", "deadline_exceeded")' ./internal/server
+
 test_finish
