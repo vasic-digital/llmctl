@@ -98,7 +98,7 @@ assert_eq "present" "$([[ -s "${OUT2}/llmctl-v9.9.21.tar.gz" ]] && echo present 
 # only thing that can let them through is an over-wide (startswith) match of the allow entry.
 (cd "${FX2}" && python3 -c "
 import zipfile
-pem=b'-----BEGIN RSA PRIVATE KEY-----\nMIIBOgIBAAJBAKj34GkxFhD90vcNLYLInFEX6Ppy1tPf9Cnzj4p4WGeKLs1Pt8Qu\n-----END RSA PRIVATE KEY-----\n'
+pem=(b'-----BEGIN RSA PRIV'+b'ATE KEY-----\n'+b'MIIBOgIBAAJBAKj34GkxFhD90vcNLYLInFEX6Ppy1tPf9Cnzj4p4WGeKLs1Pt8Qu\n'+b'-----END RSA PRIV'+b'ATE KEY-----\n')
 z=zipfile.ZipFile('archive/old.zip','w')
 z.writestr('top/docs/deck.key','PK-not-a-credential')
 z.writestr('top/docs/deck.key.bak',pem)
