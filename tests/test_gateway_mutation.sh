@@ -53,6 +53,8 @@ PY
 echo "== mutations (each must turn the tests RED) =="
 mutate "readout threshold ignored" internal/gateway/letter.go \
   'readout.ComputeRaw(top, letters, thr, temp)' 'readout.ComputeRaw(top, letters, 0.0001, temp)' ./internal/gateway
+mutate "letter-logit request drops chat_template_kwargs.enable_thinking" internal/gateway/letter.go \
+  '			"chat_template_kwargs": map[string]any{"enable_thinking": false},' '			"chat_template_kwargs": map[string]any{},' ./internal/gateway
 mutate "deterministic seed dropped" internal/gateway/letter.go \
   '			body["seed"] = ResolveSeed(b.Seed)' '			_ = ResolveSeed(b.Seed)' ./internal/gateway
 mutate "unverified pid is signalled" internal/gateway/proc.go \
@@ -69,6 +71,10 @@ mutate "global bind host ignored" cmd/llmctl-decide/cmd_serve.go \
   'env["LLMCTL_DECIDE_BIND"], env["LLMCTL_BIND_HOST"]}' 'env["LLMCTL_DECIDE_BIND"]}' ./cmd/llmctl-decide
 mutate "loopback-only engine check removed" internal/gateway/resolver.go \
   'if ip := net.ParseIP(h); ip != nil && ip.IsLoopback() {' 'if ip := net.ParseIP(h); ip != nil {' ./internal/gateway
+mutate "LLMCTL_PORT_<PROFILE> override ignored by the static resolver" internal/gateway/resolver.go \
+  'port = p' '_ = p' ./internal/gateway
+mutate "LLMCTL_PORT_<PROFILE> port range unchecked" internal/gateway/resolver.go \
+  'err == nil && p >= 1 && p <= 65535 {' 'err == nil {' ./internal/gateway
 mutate "cache_prompt forced on" internal/gateway/letter.go \
   '"cache_prompt": spec.Readout.CachePrompt && b.Mode == Throughput, // never in deterministic mode (B2-12)' '"cache_prompt": true,' ./internal/gateway
 mutate "engine error text echoed" internal/gateway/driver.go \
@@ -143,5 +149,12 @@ mutate "SIGHUP no longer reloads the calibration profiles" cmd/llmctl-decide/cmd
   '			p.reloadCalibration() // the same signal re-reads the calibration profiles' '			_ = p' ./cmd/llmctl-decide
 mutate "decision log consent flag ignored" cmd/llmctl-decide/cmd_serve.go \
   'Decisions: p.decisionWriter(), DecisionState: p.decState,' 'Decisions: p.decisionWriter(), DecisionState: true,' ./cmd/llmctl-decide
+
+# 502 reason headers: a deadline expiry must stay distinguishable from an engine fault (a slow CPU
+# engine must not be retried as if it had failed)
+mutate "deadline expiry no longer reported as deadline_exceeded" internal/server/handlers.go \
+  'if errors.Is(reqCtx.Err(), context.DeadlineExceeded) && parent.Err() == nil {' 'if false {' ./internal/server
+mutate "engine fault reported as deadline_exceeded" internal/server/handlers.go \
+  '	h.Set("x-llmctl-decide-reason", "engine_error")' '	h.Set("x-llmctl-decide-reason", "deadline_exceeded")' ./internal/server
 
 test_finish

@@ -196,6 +196,11 @@ def ask(url, ctx, key, payload, timeout, retries, retry_sleep):
             last = (status, headers, body, None)
             if status not in RETRY_STATUSES:
                 break
+            if status == 502 and {k.lower(): v for k, v in headers.items()}.get(
+                    "x-llmctl-decide-reason") == "deadline_exceeded":
+                # the gateway's own end-to-end budget ended a slow-but-alive engine: a retry cancels the
+                # engine task and redoes the whole prefill, so it is recorded, never retried
+                break
             err = "http %d" % status
             wait = retry_sleep * attempts
             ra = {k.lower(): v for k, v in headers.items()}.get("retry-after")
@@ -239,6 +244,8 @@ def run_items(items, base_url, ctx, key, profile, permute, seed, timeout, retrie
                 url, ctx, key, build_request(it, profile, order), timeout, retries, retry_sleep)
             ms = int((time.monotonic() - t0) * 1000)
             request_id = {k.lower(): v for k, v in headers.items()}.get("x-llmctl-request-id")
+            # the gateway's additive 502 reason (deadline_exceeded | engine_error); None when absent
+            gw_reason = {k.lower(): v for k, v in headers.items()}.get("x-llmctl-decide-reason") if status == 502 else None
             wf, pred, p_pred, reason = (False, None, None, err or ("http %s" % status))
             parsed = None
             conf, conf_raw, cal = None, None, None
@@ -255,12 +262,12 @@ def run_items(items, base_url, ctx, key, profile, permute, seed, timeout, retrie
                    "option_count": it.get("option_count"), "scale": it.get("scale"), "p_pred": p_pred,
                    "confidence": conf, "confidence_raw": conf_raw, "calibration": cal,
                    "status": status, "latency_ms": ms, "request_id": request_id, "attempts": attempts,
-                   "error": reason, "pair_id": it.get("pair_id"), "pair_variant": it.get("pair_variant"),
+                   "reason": gw_reason, "error": reason, "pair_id": it.get("pair_id"), "pair_variant": it.get("pair_variant"),
                    "option_order": order}
             records.append(rec)
             if rawf:
                 line = json.dumps({"id": rid, "status": status, "request_id": request_id, "attempts": attempts,
-                                   "latency_ms": ms, "error": err,
+                                   "latency_ms": ms, "error": err, "reason": gw_reason,
                                    "body": body.decode("utf-8", "replace")[:20000]}).encode()
                 rawf.write(_redact(line, key) + b"\n")
             print("%s %s %sms%s" % (rid, status if status is not None else "ERR", ms,

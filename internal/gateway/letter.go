@@ -90,6 +90,11 @@ func (b *LetterLogitBackend) Decide(ctx context.Context, ep Endpoint, spec Profi
 			"n_probs":      nprobs,
 			"cache_prompt": spec.Readout.CachePrompt && b.Mode == Throughput, // never in deterministic mode (B2-12)
 			"stream":       false,
+			// Thinking-mode templates (Qwen3/3.5 family) open with a reasoning token, delivered in
+			// reasoning_content, so no option letter is ever in the first-token alternatives
+			// (422 readout_failed / option_missing). llama-server honours this per-request kwarg; a
+			// template that does not use it ignores it.
+			"chat_template_kwargs": map[string]any{"enable_thinking": false},
 		}
 		if b.Mode != Throughput {
 			body["seed"] = ResolveSeed(b.Seed)

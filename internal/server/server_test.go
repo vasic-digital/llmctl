@@ -22,6 +22,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/vasic-digital/llmctl/internal/contract"
 	"github.com/vasic-digital/llmctl/internal/keyring"
 )
@@ -612,6 +613,25 @@ func TestBackendTimeoutIs502(t *testing.T) {
 	r := h.do(h.client(), "POST", "/v1/systemone", sampleBody, nil)
 	if r.status != 502 || r.errType() != "backend_failed" {
 		t.Fatalf("%d %s", r.status, r.body)
+	}
+	// the documented additive signal: the end-to-end budget (not an engine fault) ended the request
+	if got := r.hdr.Get("x-llmctl-decide-reason"); got != "deadline_exceeded" {
+		t.Errorf("x-llmctl-decide-reason = %q, want deadline_exceeded", got)
+	}
+	if got := r.hdr.Get("x-llmctl-decide-deadline-ms"); got != "200" {
+		t.Errorf("x-llmctl-decide-deadline-ms = %q, want 200", got)
+	}
+}
+
+// A backend failure that is not the budget expiring is engine_error, with no deadline header.
+func TestBackendFailureIsEngineError(t *testing.T) {
+	h := startServer(t, withLimits(func(l *Limits) { l.Timeout = 5 * time.Second }))
+	h.be.setDecide(func(context.Context, *contract.ParsedRequest) ([]contract.NamedAnswer, contract.Usage, error) {
+		return nil, contract.Usage{}, errors.New("engine exploded")
+	})
+	r := h.do(h.client(), "POST", "/v1/systemone", sampleBody, nil)
+	if r.status != 502 || r.hdr.Get("x-llmctl-decide-reason") != "engine_error" || r.hdr.Get("x-llmctl-decide-deadline-ms") != "" {
+		t.Fatalf("%d reason=%q deadline=%q", r.status, r.hdr.Get("x-llmctl-decide-reason"), r.hdr.Get("x-llmctl-decide-deadline-ms"))
 	}
 }
 
@@ -1402,5 +1422,43 @@ func TestEngineFailureIs502WithEngineErrorReason(t *testing.T) {
 	}
 	if r.hdr.Get("x-llmctl-decide-deadline-ms") != "" {
 		t.Errorf("deadline header must be absent for an engine failure")
+	}
+}
+
+// markBackend502 must not blame the gateway's own budget when the caller's context ended first: a
+// parent (request) context that is already done (cancelled, or past an EARLIER deadline) makes the
+// derived budget context report DeadlineExceeded too, but that is the caller going away, not
+// LLMCTL_DECIDE_TIMEOUT expiring. Pins the `parent.Err() == nil` conjunct; dropping it must fail here.
+func TestMarkBackend502CallerGoneIsNotDeadlineExceeded(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	s := &Server{lim: Limits{Timeout: 200 * time.Millisecond}}
+	mark := func(parent context.Context) http.Header {
+		reqCtx, cancel := context.WithTimeout(parent, 200*time.Millisecond)
+		defer cancel()
+		<-reqCtx.Done()
+		rec := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(rec)
+		s.markBackend502(c, reqCtx, parent)
+		return rec.Header()
+	}
+	// live parent, budget expired: the gateway's own deadline.
+	h := mark(context.Background())
+	if h.Get("x-llmctl-decide-reason") != "deadline_exceeded" || h.Get("x-llmctl-decide-deadline-ms") != "200" {
+		t.Fatalf("live parent: reason=%q deadline=%q", h.Get("x-llmctl-decide-reason"), h.Get("x-llmctl-decide-deadline-ms"))
+	}
+	// parent already past an earlier deadline: reqCtx.Err() is DeadlineExceeded as well, but the parent is done.
+	early, cancelEarly := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
+	defer cancelEarly()
+	h = mark(early)
+	if h.Get("x-llmctl-decide-reason") != "engine_error" || h.Get("x-llmctl-decide-deadline-ms") != "" {
+		t.Errorf("parent past an earlier deadline: reason=%q deadline=%q, want engine_error and no deadline header",
+			h.Get("x-llmctl-decide-reason"), h.Get("x-llmctl-decide-deadline-ms"))
+	}
+	// parent cancelled by the caller going away.
+	gone, cancelGone := context.WithCancel(context.Background())
+	cancelGone()
+	h = mark(gone)
+	if h.Get("x-llmctl-decide-reason") != "engine_error" {
+		t.Errorf("cancelled parent: reason=%q, want engine_error", h.Get("x-llmctl-decide-reason"))
 	}
 }

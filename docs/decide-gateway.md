@@ -166,7 +166,8 @@ encoder runtime reports that it truncated a premise (opt-in; otherwise 422). Que
 allows). An input that *fits* the context but whose prefill takes longer than the end-to-end deadline
 (`LLMCTL_DECIDE_TIMEOUT`, default 8 s - e.g. several thousand dense hex characters on a large-context profile) is answered
 `502 backend_failed` with the additive headers `x-llmctl-decide-reason: deadline_exceeded` and
-`x-llmctl-decide-deadline-ms: <deadline>`; any other 502 carries `x-llmctl-decide-reason: engine_error`. The error body
+`x-llmctl-decide-deadline-ms: <deadline>`; any other backend-call 502 carries `x-llmctl-decide-reason: engine_error` (the two gateway-internal 502 paths - an
+unclassifiable request-parse error and a response-marshalling failure - set no reason header). The error body
 is unchanged. The deadline is a limit, not a guarantee that an input within the context budget is accepted in time:
 send a smaller state, use a faster profile, or raise the deadline.
 
@@ -176,6 +177,32 @@ send a smaller state, use a faster profile, or raise the deadline.
 + `Retry-After`; per-instance slots keep deterministic mode single-slot per engine. Connection admission,
 handshake/read deadlines, the end-to-end `LLMCTL_DECIDE_TIMEOUT` and a graceful drain on stop are all in
 `specs/009-jev-decision-models/contracts/env-vars.md` and `docs/user-manual.md`.
+
+### The end-to-end budget and slow (CPU) engines
+
+`LLMCTL_DECIDE_TIMEOUT` (seconds, default `8`, kept below the hosted SDK's 10 s timeout) is the ONE deadline of a
+request: queue wait plus the engine call(s). There is no separate per-attempt deadline and the gateway does not
+retry an engine call, with one exception: after an engine answers `401` it re-reads the engine key file once and retries
+once with the new key (`internal/gateway/driver.go`; never with the same key, never a loop). When the budget expires the engine connection is closed (the engine logs `cancel task`) and the
+client gets `502 backend_failed` (the documented status; unchanged) with the additive headers
+`x-llmctl-decide-reason: deadline_exceeded` and `x-llmctl-decide-deadline-ms: <budget>`. Every other backend-call 502
+carries `x-llmctl-decide-reason: engine_error` (the gateway-internal parse/marshal 502 paths set no reason header).
+
+A CPU-only engine reads its prompt slowly (measured: ~21.6 tokens/s for a 4B Q8_0 model, so 8 s covers only ~170 prompt
+tokens). The budget is **per request, not per prompt**. Size it as
+
+`sum over the request's questions of (prompt_tokens_q / prefill_tokens_per_second + decode_q) + queue wait + margin`
+
+because the letter-logit readout makes one sequential `/v1/chat/completions` call per question
+(`internal/gateway/letter.go`), each prompt carries the full state again, and in deterministic mode no prompt cache is used
+(`cache_prompt` is off), so nothing is reused between the questions. Deterministic mode also keeps one slot per engine
+instance, so other requests queued on the same instance add their own engine time to the queue wait. Worked example at
+21.6 tokens/s: a request with three questions whose prompts are ~400 tokens each costs 3 x 400 / 21.6 = ~56 s of prefill
+before decode, queue wait and margin, so `LLMCTL_DECIDE_TIMEOUT=60` would only just cover it with an idle queue; one
+question with a ~1000-token prompt costs ~46 s. Raise the budget for such an engine accordingly. **Do not retry a `deadline_exceeded` 502**: each
+retry cancels the engine task and restarts the whole prefill, so it is guaranteed waste (the golden runner
+`scripts/golden/run_golden.py` therefore records it after one attempt; an `engine_error` 502 is still retried). The
+default is deliberately unchanged; raising it above the hosted SDK's 10 s is an operator choice for CPU engines.
 
 ### Connection admission (FR-022, "without affecting others")
 
@@ -300,6 +327,12 @@ unlisted spellings are not added), and an engine exposing more than three token 
 By default (`LLMCTL_DECIDE_RESOLVER=auto`) the gateway routes to the engines in the service registry when it lists any, else to the
 static `LLMCTL_DECIDE_ENDPOINT_<PROFILE>` / catalog ports. It publishes itself in the registry (`kind=gateway`) while serving.
 See `docs/registry-discovery.md`.
+
+The static endpoint of a profile is, in order: `LLMCTL_DECIDE_ENDPOINT_<PROFILE>` (comma separated loopback URLs) >
+`http://127.0.0.1:$LLMCTL_PORT_<PROFILE>` > `http://127.0.0.1:<catalog port>`. `LLMCTL_PORT_<PROFILE>` is the same host-local port rebind the shell
+side honours (`<PROFILE>` upper-cased, `-` -> `_`, e.g. `LLMCTL_PORT_DECIDE_NLI=18096`), so a hand-started engine on an overridden port is found without
+also setting the endpoint variable. A value that is not an integer in 1-65535 (including `auto`) is ignored and the catalog port is used. In `auto` and
+`registry` mode a healthy registry entry for the profile is preferred over these static endpoints.
 
 **`auto` decides per profile, on every request.** A gateway started in `auto` mode *before* any decision engine is registered (engines take up to
 `LLMCTL_REGISTER_WAIT`, default 600 s, to load their model and register) serves the static endpoints, and a profile switches to the registry the moment

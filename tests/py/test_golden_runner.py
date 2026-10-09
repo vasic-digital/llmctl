@@ -39,6 +39,7 @@ class StandIn:
         self.seen = []            # (path, auth header, body dict)
         self.fail_first = 0       # answer 503 this many times before behaving
         self.always_status = None
+        self.always_headers = {}  # extra headers of the always_status answer
         self.bad_shape = False
         self.calibrated = False   # answer like a gateway applying a calibration profile (FR-080)
         self.lock = threading.Lock()
@@ -57,7 +58,8 @@ class StandIn:
                 if self.headers.get("Authorization") != "Bearer " + KEY:
                     return self._send(401, {"error": "unauthorized"})
                 if outer.always_status:
-                    return self._send(outer.always_status, {"error": "x"}, {"Retry-After": "0"})
+                    return self._send(outer.always_status, {"error": "x"},
+                                      dict({"Retry-After": "0"}, **outer.always_headers))
                 if count <= outer.fail_first:
                     return self._send(503, {"error": "not ready"}, {"Retry-After": "0"})
                 q = body["questions"]["q"]
@@ -271,6 +273,64 @@ class RunnerE2ETests(unittest.TestCase):
         recs = _jlines(os.path.join(self.out, "evidence.jsonl"))
         self.assertEqual(recs[0]["result"], "fail")
         self.assertIn("0 of 1", recs[0]["reason"])
+
+    def test_gateway_deadline_502_is_not_retried(self):
+        # a 502 the gateway marks deadline_exceeded means a slow-but-alive engine: a retry would cancel
+        # the engine task and redo the whole prefill (guaranteed waste), so it is recorded, not retried
+        self.srv.always_status = 502
+        self.srv.always_headers = {"x-llmctl-decide-reason": "deadline_exceeded", "x-llmctl-decide-deadline-ms": "8000"}
+        rc, out, err = self.run_main(["--limit", "1", "--types", "noul", "--retries", "2"])
+        self.assertEqual(rc, 1)
+        self.assertEqual(len(self.srv.seen), 1)
+        res = _jload(os.path.join(self.out, "results.json"))
+        self.assertEqual(res["records"][0]["attempts"], 1)
+        self.assertEqual(res["records"][0]["status"], 502)
+
+    def test_gateway_deadline_502_header_name_is_case_insensitive(self):
+        # HTTP header names are case-insensitive: a canonical-case or mixed-case name must be recognised
+        for name in ("X-Llmctl-Decide-Reason", "X-LLMCTL-decide-REASON"):
+            with self.subTest(header=name):
+                self.srv.seen.clear()
+                self.srv.always_status = 502
+                self.srv.always_headers = {name: "deadline_exceeded"}
+                rc, out, err = self.run_main(["--limit", "1", "--types", "noul", "--retries", "2"])
+                self.assertEqual(rc, 1)
+                self.assertEqual(len(self.srv.seen), 1, "deadline_exceeded must not be retried (header %s)" % name)
+                res = _jload(os.path.join(self.out, "results.json"))
+                self.assertEqual(res["records"][0]["attempts"], 1)
+                self.assertEqual(res["records"][0]["reason"], "deadline_exceeded")
+
+    def test_gateway_502_without_reason_header_is_still_retried(self):
+        self.srv.always_status = 502
+        self.srv.always_headers = {}
+        rc, out, err = self.run_main(["--limit", "1", "--types", "noul", "--retries", "2"])
+        self.assertEqual(rc, 1)
+        self.assertEqual(len(self.srv.seen), 3)
+        res = _jload(os.path.join(self.out, "results.json"))
+        self.assertEqual(res["records"][0]["attempts"], 3)
+        self.assertIsNone(res["records"][0]["reason"])
+
+    def test_gateway_reason_is_persisted_in_record_and_raw_log(self):
+        self.srv.always_status = 502
+        self.srv.always_headers = {"x-llmctl-decide-reason": "engine_error"}
+        rc, out, err = self.run_main(["--limit", "1", "--types", "noul", "--retries", "0"])
+        self.assertEqual(rc, 1)
+        res = _jload(os.path.join(self.out, "results.json"))
+        rec = res["records"][0]
+        self.assertEqual((rec["status"], rec["reason"]), (502, "engine_error"))
+        self.assertIn("error", rec)  # existing consumers keep their field
+        # a 200 carries no reason
+        self.srv.always_status = None
+        rc, out, err = self.run_main(["--limit", "1", "--types", "noul"])
+        self.assertEqual(rc, 0, err)
+        self.assertIsNone(_jload(os.path.join(self.out, "results.json"))["records"][0]["reason"])
+
+    def test_gateway_engine_error_502_is_still_retried(self):
+        self.srv.always_status = 502
+        self.srv.always_headers = {"x-llmctl-decide-reason": "engine_error"}
+        rc, out, err = self.run_main(["--limit", "1", "--types", "noul", "--retries", "2"])
+        self.assertEqual(rc, 1)
+        self.assertEqual(len(self.srv.seen), 3)
 
     def test_wrong_key_is_recorded_not_leaked(self):
         rc, out, err = self.run_main(["--limit", "2", "--types", "noul"], key="gk-wrong-key-0000-not-real-2")

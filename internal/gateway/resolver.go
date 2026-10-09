@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -61,8 +62,15 @@ func EndpointVar(profile string) string {
 	return "LLMCTL_DECIDE_ENDPOINT_" + strings.ToUpper(strings.ReplaceAll(profile, "-", "_"))
 }
 
+// PortVar names the env var that rebinds a profile's port on this host (same rule as the bash side,
+// lib/catalog.sh catalog_port_override_env_name).
+func PortVar(profile string) string {
+	return "LLMCTL_PORT_" + strings.ToUpper(strings.ReplaceAll(profile, "-", "_"))
+}
+
 // StaticResolverFromEnv builds a resolver from LLMCTL_DECIDE_ENDPOINT_<PROFILE> (loopback URLs);
-// a profile without the variable is assumed at http://127.0.0.1:<catalog port> when it has a port.
+// a profile without the variable is assumed at http://127.0.0.1:<port> where <port> is LLMCTL_PORT_<PROFILE>
+// when that is a valid port (1-65535), else the catalog port (when it has one).
 // Instances are presumed healthy: the real health comes from the registry adapter.
 func StaticResolverFromEnv(specs []ProfileSpec, get func(string) string) *StaticResolver {
 	r := NewStaticResolver()
@@ -73,8 +81,16 @@ func StaticResolverFromEnv(specs []ProfileSpec, get func(string) string) *Static
 				urls = append(urls, u)
 			}
 		}
-		if len(urls) == 0 && s.Port > 0 {
-			urls = []string{"http://127.0.0.1:" + itoa(s.Port)}
+		if len(urls) == 0 {
+			// LLMCTL_PORT_<PROFILE> (host-local rebind, honoured by the bash side) beats the catalog
+			// port; an invalid value (non-numeric, <1, >65535, "auto") is ignored.
+			port := s.Port
+			if p, err := strconv.Atoi(strings.TrimSpace(get(PortVar(s.ID)))); err == nil && p >= 1 && p <= 65535 {
+				port = p
+			}
+			if port > 0 {
+				urls = []string{"http://127.0.0.1:" + itoa(port)}
+			}
 		}
 		var eps []Endpoint
 		for i, u := range urls {
