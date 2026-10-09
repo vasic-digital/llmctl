@@ -309,6 +309,10 @@ engine_build_decide() {
   local out="${LLMCTL_DECIDE_BUILD_OUT:-${LLMCTL_ROOT}/build/llmctl-decide}"
   ensure_dir "$(dirname "${out}")"
   info "building the Go decision binary -> ${out}"
+  # A CGO_ENABLED=0 build uses Go's pure resolver: *.local (mDNS / nss-mdns) names do not resolve.
+  if [[ "$(cd "${LLMCTL_ROOT}" && go env CGO_ENABLED 2>/dev/null)" != "1" ]]; then
+    warn "cgo is disabled for this build: the client cannot resolve *.local (mDNS) names - use the gateway IP or an /etc/hosts entry (docs/lan-exposure.md)"
+  fi
   ( cd "${LLMCTL_ROOT}" && GOFLAGS=-mod=readonly go mod verify >/dev/null && \
     GOFLAGS=-mod=readonly go build -trimpath -o "${out}" ./cmd/llmctl-decide ) \
     || die "go build of the decision binary failed (needs the Go toolchain >= 1.25 and a warm module cache or network access)"

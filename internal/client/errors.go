@@ -118,6 +118,10 @@ func classifyTransport(err error) *Error {
 	}
 	var op *net.OpError
 	if errors.As(err, &op) && op.Op == "dial" {
+		var dns *net.DNSError
+		if errors.As(op.Err, &dns) {
+			return errf(KindUnreachable, dnsFailureMessage(dns))
+		}
 		return errf(KindUnreachable, "cannot connect to the gateway ("+dialReason(op)+"); is `llmctl decide serve` running?")
 	}
 	var ue *url.Error
@@ -139,4 +143,18 @@ func dialReason(op *net.OpError) string {
 		return "connection refused"
 	}
 	return "unreachable"
+}
+
+// dnsFailureMessage explains a name-resolution failure. A *.local name is mDNS, which only
+// glibc's nss-mdns can answer: a CGO_ENABLED=0 (static / cross-built) binary uses Go's pure
+// resolver and never consults it, so the same URL works in curl yet fails here.
+func dnsFailureMessage(d *net.DNSError) string {
+	msg := "cannot connect to the gateway (the host name did not resolve)"
+	if strings.HasSuffix(strings.TrimSuffix(strings.ToLower(d.Name), "."), ".local") {
+		msg += ": .local names need mDNS, which a CGO_ENABLED=0 (static) build of llmctl-decide cannot use; " +
+			"use the gateway's IP address, add the name to /etc/hosts, or rebuild natively with cgo (`llmctl build decide`)"
+	} else {
+		msg += "; check the spelling, use the gateway's IP address, or add the name to /etc/hosts"
+	}
+	return msg
 }
