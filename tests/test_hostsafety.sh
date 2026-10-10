@@ -317,36 +317,84 @@ import ctypes, sys, time
 name, adj, pidfile = sys.argv[1], sys.argv[2], sys.argv[3]
 ctypes.CDLL(None).prctl(15, name.encode(), 0, 0, 0)           # PR_SET_NAME: the kernel comm earlyoom matches on
 open("/proc/self/oom_score_adj", "w").write(adj)               # raising is unprivileged: make it the top candidate unless ignored
+ballast = b"\x01" * (int(sys.argv[4]) << 20) if len(sys.argv) > 4 else b""   # touched pages = real RSS (not calloc zero pages)
 open(pidfile, "a").write("%s\t%d\n" % (name, __import__("os").getpid()))
 time.sleep(14)
 PY
+  # Decoy RSS ladder, all at oom_score_adj 1000 (earlyoom breaks an oom_score tie by RSS):
+  #   protected comms 40 MiB  >  bash 20 MiB  >  needle + git 0 MiB.
+  # So a protected decoy is the biggest candidate and is skipped ONLY because of --ignore; bash beats git ONLY until the
+  # --prefer +300 bonus is applied.  Each property has a paired mutation run below (regex stripped => verdict flips).
+  # eo_run.sh <envfile> <out> <pidfile>
   cat >"${TEST_TMP}/eo_run.sh" <<EOS
-T="${TEST_TMP}"
-: >"\${T}/decoy.pids"
-python3 -I "\${T}/decoy.py" gnome-terminal- 1000 "\${T}/decoy.pids" & sleep 0.3        # control needle: NOT protected, must be a candidate
+T="${TEST_TMP}"; ENVF="\$1"; OUT="\$2"; PIDS="\$3"
+: >"\${PIDS}"
+python3 -I "\${T}/decoy.py" gnome-terminal- 1000 "\${PIDS}" & sleep 0.3        # control needle: NOT protected, must be a candidate
 for n in "tmux: server" sshd-session gnome-shell gnome-session-c claude conmon Xwayland systemd "(sd-pam)" dbus-daemon pipewire; do
-  python3 -I "\${T}/decoy.py" "\$n" 1000 "\${T}/decoy.pids" &
+  python3 -I "\${T}/decoy.py" "\$n" 1000 "\${PIDS}" 40 &
 done
-python3 -I "\${T}/decoy.py" bash 1000 "\${T}/decoy.pids" &
-python3 -I "\${T}/decoy.py" git 1000 "\${T}/decoy.pids" &
+python3 -I "\${T}/decoy.py" bash 1000 "\${PIDS}" 20 &
+python3 -I "\${T}/decoy.py" git 1000 "\${PIDS}" &
 sleep 1.5
-systemd-run --user --pipe --wait -q -p EnvironmentFile="\${T}/eo.env" -p TasksMax=50 -p MemoryMax=512M \
-  timeout 3 /usr/bin/earlyoom '\$EARLYOOM_ARGS' --dryrun -d -r 0 -m 99 -s 99 >"\${T}/eo.out" 2>&1
+systemd-run --user --pipe --wait -q -p EnvironmentFile="\${ENVF}" -p TasksMax=50 -p MemoryMax=512M \
+  timeout 3 /usr/bin/earlyoom '\$EARLYOOM_ARGS' --dryrun -d -r 0 -m 99 -s 99 >"\${OUT}" 2>&1
 wait
 EOS
-  timeout 60 systemd-run --user --scope -q -p TasksMax=100 -p MemoryMax=1G bash "${TEST_TMP}/eo_run.sh" >/dev/null 2>&1 || true
-  vict="$(awk '/<--- new victim/ {print $1}' "${TEST_TMP}/eo.out" | sort -u)"
-  pid_of() { awk -F'\t' -v n="$1" '$1==n {print $2}' "${TEST_TMP}/decoy.pids"; }
+  eo_run() { timeout 60 systemd-run --user --scope -q -p TasksMax=100 -p MemoryMax=1G bash "${TEST_TMP}/eo_run.sh" "$@" >/dev/null 2>&1 || true; }
+  # earlyoom's VERDICT is its "sending <sig> to process <pid>" line, printed once per COMPLETED scan.  The "<--- new victim"
+  # lines are only the running maximum DURING a scan (ascending pid order); `timeout 3` kills earlyoom mid-scan, so the
+  # LAST of them can belong to a truncated scan that never reached the high-pid decoys (the 2026-10-09 make-validate
+  # flake: "actual" was an unrelated adj-200 host process).  Victims are therefore read only from verdict lines.
+  verdicts() { awk '/^sending .* to process [0-9]+ /{for(i=1;i<=NF;i++) if($i=="process"){print $(i+1); break}}' "$1" | sort -u; }
+  pid_of() { awk -F'\t' -v n="$1" '$1==n {print $2}' "${2:-${TEST_TMP}/decoy.pids}"; }
+  # earlyoom sees EVERY host process.  The verdict is only about the decoys if every non-decoy process scored below the
+  # weakest decoy (the needle) in earlyoom's own table of a COMPLETED scan; otherwise the run cannot tell prefer/ignore
+  # apart from host load, and the dependent assertions SKIP with the intruding rows as evidence (never a false PASS/FAIL).
+  intruders() { # <eo.out> <pidfile>: table rows of the last completed scan from NON-decoy pids scoring >= the needle
+    awk -v needle="$(pid_of gnome-terminal- "$2")" 'FNR==NR {split($0, a, "\t"); mine[a[2]] = 1; next}
+      /^ *PID +OOM_SCORE/ {n = 0; next}
+      /^selecting victim took/ {m = n; for (i = 1; i <= n; i++) keep[i] = buf[i]; next}
+      /^ *[0-9]+ +-?[0-9]+ / {buf[++n] = $0}
+      END {for (i = 1; i <= m; i++) {split(keep[i], f, " "); if (f[1] == needle) floor = f[2] + 0}
+           if (floor == "") {print "NO-NEEDLE-ROW (needle not scored in a completed scan)"; exit}
+           for (i = 1; i <= m; i++) {split(keep[i], f, " "); if (!(f[1] in mine) && f[2] + 0 >= floor) print keep[i]}}' "$2" "$1"; }
+  eo_case() { # <label> <envfile> <out> <pidfile>: run; rc 0 = decoys dominate the host (assertions apply), rc 1 = SKIP logged
+    eo_run "$2" "$3" "$4"
+    local intr; intr="$(intruders "$3" "$4")"
+    if [[ -n "${intr}" ]]; then assert_skip "host process(es) outrank the decoys: $(head -3 <<<"${intr}" | tr -s ' ' | tr '\n' ';')" "$1"; return 1; fi
+    assert_eq "yes" "$([[ -n "$(verdicts "$3")" ]] && echo yes || echo no)" "$1: earlyoom completed a scan and printed a verdict (the verdict instrument can see)"
+  }
+  eo_case "earlyoom real config" "${TEST_TMP}/eo.env" "${TEST_TMP}/eo.out" "${TEST_TMP}/decoy.pids" && dominated=1 || dominated=0
   assert_eq "yes" "$([[ -n "$(pid_of git)" && -n "$(pid_of gnome-terminal-)" ]] && echo yes || echo no)" "earlyoom test: decoys started"
   assert_contains "$(cat "${TEST_TMP}/eo.out")" "Will ignore process names that match regex '^(systemd" "earlyoom parsed the --ignore regex through systemd's EnvironmentFile"
   assert_contains "$(cat "${TEST_TMP}/eo.out")" "Preferring to kill process names that match regex '^(git" "earlyoom parsed the --prefer regex"
-  leaked=""
-  for n in "tmux: server" sshd-session gnome-shell gnome-session-c claude conmon Xwayland systemd "(sd-pam)" dbus-daemon pipewire; do
-    pp="$(pid_of "${n}")"; [[ -n "${pp}" ]] && grep -qx "${pp}" <<<"${vict}" && leaked="${leaked} ${n}"
-  done
-  assert_eq "" "${leaked}" "no protected comm (tmux: server, sshd-session, gnome-shell, gnome-session-c, claude, conmon, Xwayland, systemd, (sd-pam), dbus, pipewire) is ever an earlyoom victim, even at oom_score_adj 1000"
-  assert_eq "yes" "$(grep -qx "$(pid_of gnome-terminal-)" <<<"${vict}" && echo yes || echo no)" "control needle: an UNPROTECTED comm (gnome-terminal-) with the same score IS a candidate (the instrument can see)"
-  assert_eq "$(pid_of git)" "$(awk '/<--- new victim/ {p=$1} END {print p}' "${TEST_TMP}/eo.out")" "--prefer: git beats bash at equal oom_score_adj (final victim)"
+  if [[ ${dominated} -eq 1 ]]; then
+    vict="$(awk '/<--- new victim/ {print $1}' "${TEST_TMP}/eo.out" | sort -u)"
+    leaked=""
+    for n in "tmux: server" sshd-session gnome-shell gnome-session-c claude conmon Xwayland systemd "(sd-pam)" dbus-daemon pipewire; do
+      pp="$(pid_of "${n}")"; [[ -n "${pp}" ]] && grep -qx "${pp}" <<<"${vict}" && leaked="${leaked} ${n}"
+    done
+    assert_eq "" "${leaked}" "no protected comm (tmux: server, sshd-session, gnome-shell, gnome-session-c, claude, conmon, Xwayland, systemd, (sd-pam), dbus, pipewire) is ever an earlyoom victim, even at oom_score_adj 1000 and the largest RSS"
+    assert_eq "yes" "$(grep -qx "$(pid_of gnome-terminal-)" <<<"${vict}" && echo yes || echo no)" "control needle: an UNPROTECTED comm (gnome-terminal-) with the same score IS a candidate (the instrument can see)"
+    assert_eq "$(pid_of git)" "$(verdicts "${TEST_TMP}/eo.out")" "--prefer: git beats a BIGGER bash at equal oom_score_adj (verdict of every completed scan)"
+  fi
+  # paired mutation 1: --prefer stripped => bash (bigger RSS) must be the verdict, not git
+  sed 's/ --prefer [^"]*//' "${TEST_TMP}/eo.env" >"${TEST_TMP}/eo_noprefer.env"
+  assert_eq "0" "$(grep -c -- '--prefer' "${TEST_TMP}/eo_noprefer.env" || true)" "mutation [no --prefer]: the env file really lost its --prefer regex"
+  if eo_case "mutation [no --prefer]" "${TEST_TMP}/eo_noprefer.env" "${TEST_TMP}/eo_np.out" "${TEST_TMP}/decoy_np.pids"; then
+    assert_eq "$(pid_of bash "${TEST_TMP}/decoy_np.pids")" "$(verdicts "${TEST_TMP}/eo_np.out")" "mutation [no --prefer] is CAUGHT: without the regex the bigger bash decoy is the verdict, not git"
+  fi
+  # paired mutation 2: --ignore AND --prefer stripped => a protected decoy (largest RSS) must be the verdict and must show
+  # up as a "new victim" - proves the protected comms above lose ONLY because of --ignore (and the leak check can see).
+  sed -e 's/ --ignore ^[^ "]*//' -e 's/ --prefer [^"]*//' "${TEST_TMP}/eo.env" >"${TEST_TMP}/eo_noignore.env"
+  assert_eq "0" "$(grep -c -e '--ignore ^' -e '--prefer' "${TEST_TMP}/eo_noignore.env" || true)" "mutation [no --ignore]: the env file really lost its --ignore (and --prefer) regex"
+  if eo_case "mutation [no --ignore]" "${TEST_TMP}/eo_noignore.env" "${TEST_TMP}/eo_ni.out" "${TEST_TMP}/decoy_ni.pids"; then
+    vni="$(verdicts "${TEST_TMP}/eo_ni.out")"
+    prot="$(awk -F'\t' '$1!="gnome-terminal-" && $1!="bash" && $1!="git" {print $2}' "${TEST_TMP}/decoy_ni.pids")"
+    assert_eq "yes" "$([[ -n "${vni}" ]] && ! grep -vxF -f <(printf '%s\n' "${prot}") <<<"${vni}" >/dev/null && echo yes || echo no)" "mutation [no --ignore] is CAUGHT: without the regex a protected decoy is the verdict (verdict=${vni//$'\n'/,})"
+    vni_new="$(awk '/<--- new victim/ {print $1}' "${TEST_TMP}/eo_ni.out")"
+    assert_eq "yes" "$(grep -qxF -f <(printf '%s\n' "${prot}") <<<"${vni_new}" && echo yes || echo no)" "mutation [no --ignore]: the leak instrument (new-victim lines) sees a protected decoy"
+  fi
 else
   assert_skip "earlyoom or a systemd --user manager is not available" "earlyoom ignore/prefer list against the real binary"
 fi
