@@ -1,6 +1,6 @@
 # Fields a calibration tool may rely on
 
-**Revision:** 1 - 2026-10-08. Source of truth: `specs/009-jev-decision-models/contracts/openapi.yaml` (contract version `3.1.0-draft`) and the
+**Revision:** 1 - 2026-10-08. Source of truth: `specs/009-jev-decision-models/contracts/openapi.yaml` (contract version `3.1.0`) and the
 gateway/calibrate code it describes. This page lists which response fields an external calibration or evaluation tool can read, what each one
 means, and what is **not** promised. Related: [decide-gateway](decide-gateway.md), [decision-models](decision-models.md), [limitations](limitations.md),
 [golden-set](golden-set.md).
@@ -41,7 +41,7 @@ and both hashes match. Fewer than 200 labelled pairs supports no ECE claim (SC-0
   the listed names and types for the contract version it was written against.
 * Fields marked `[HOSTED]` mirror the hosted API's documented shape; fields marked `[LLMCTL]` (`confidence_raw`, `calibration`, `flags`,
   `upper_bounds`, `template_hash`, the `x-llmctl-*` headers) are llmctl additions and are additive.
-* The contract is versioned `3.1.0-draft`. **No deprecation policy or semantic-versioning guarantee for these fields has been published**:
+* The contract is versioned `3.1.0`. **No deprecation policy or semantic-versioning guarantee for these fields has been published**:
   UNKNOWN beyond that. Pin the llmctl version you calibrate against and re-check `template_hash` and `calibration.applied` after an upgrade
   ([runbooks](runbooks.md#upgrade-and-rollback)).
 * Calibration recalibrates confidence only; it never changes which option wins, and it is not a safety guardrail ([limitations](limitations.md)).
