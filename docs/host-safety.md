@@ -287,6 +287,8 @@ out the 900 s window) once the host is healthy. Interactive `start`/`enable`/`sw
 
 **Start is bounded and verified.** The scheduler holds its lock across `systemctl start`; `LLMCTL_START_WAIT` (default 20 s) bounds that call (the unit's gate may wait up to 120 s - past the bound the unit counts as "still starting" and the readiness poll decides, stopping the unit if the model never answers). After a successful start the unit must be active/activating, otherwise `start`/`enable` fail with "unit not active after start" (an ExecCondition port-in-use skip) instead of trusting a foreign listener on the port.
 
+**Rollback caveat**: a failed `switch` restores the previous set without the scheduler-side gate, but the unit's own `ExecStartPre` gate still applies: under persistent pressure the restore waits up to `LLMCTL_GATE_WAIT` and then fails 75, so a rollback can leave nothing running (the switch then exits 75 and says so).
+
 **Exit codes**: 75 = refused by the pressure gate; 98 = `prestart` found the profile's port already listening (it does
 not rotate the key and does not load the model).
 

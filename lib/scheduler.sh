@@ -85,6 +85,9 @@ sched_rank_for_capability() {
 # interactive user) never interleave their read-budgets-then-write-reservation
 # sequence. A second invocation BLOCKS until the first releases the lock,
 # then runs against fresh state - it never proceeds on a stale read (FR-043).
+# An environment variable of this name would be imported as a shell variable and bypass the gate: drop it at load time.
+unset _sched_rollback_nogate LLMCTL_SCHED_NO_GATE
+
 scheduler::with_lock() {
   ensure_dir "${LLMCTL_RUNTIME_DIR}"
   local lock_file="${LLMCTL_RUNTIME_DIR}/.scheduler.lock"
@@ -1009,8 +1012,10 @@ _sched_start_impl() {
     ram="$(json_query "${plan_file}" "d[\"profiles\"][argv[0]][\"ram_mb\"]" "${p}")"
     vram="$(json_query "${plan_file}" "d[\"profiles\"][argv[0]][\"vram_mb\"]" "${p}")"
     # Pressure gate (shared with svc_hook.sh gate / the unit's ExecStartPre): a refusal here touches nothing.
-    # (skipped on the rollback path of a failed switch: LLMCTL_SCHED_NO_GATE=1, see _sched_restore_set)
-    if [[ "${LLMCTL_SCHED_NO_GATE:-0}" != 1 ]]; then
+    # Skipped ONLY on the rollback path of a failed switch: _sched_rollback_nogate is a non-exported local of
+    # _sched_restore_set (dynamic scope), never an environment knob. The unit's own ExecStartPre gate still applies there
+    # and can wait up to 120 s and then fail 75: a rollback under persistent pressure can leave nothing running.
+    if [[ "${_sched_rollback_nogate:-0}" != 1 ]]; then
       hw_pressure_gate "${ram}" "${p}" || { local _grc=$?; rm -f "${plan_file}"; return "${_grc}"; }
     fi
     if [[ "${fits}" != "True" ]] || \
@@ -1288,7 +1293,8 @@ _sched_restore_set() {
   done
   local rc=0
   # Rollback must not be refused by the start gate: a failed switch may never leave nothing running.
-  [[ ${#plain[@]} -eq 0 ]] || LLMCTL_SCHED_NO_GATE=1 _sched_start_impl "${plain[@]}" || rc=$?
+  local _sched_rollback_nogate=1   # dynamic scope: visible to _sched_start_impl below, never exported
+  [[ ${#plain[@]} -eq 0 ]] || _sched_start_impl "${plain[@]}" || rc=$?
   for (( i=0; i<${#bases[@]}; i++ )); do
     if (( counts[i] > 1 )) || [[ " $* " == *" ${bases[i]}."[0-9]* ]]; then
       SCHED_SCALE_BESTEFFORT=1 _sched_decision_scale_impl "${bases[i]}" "${counts[i]}" || rc=$?

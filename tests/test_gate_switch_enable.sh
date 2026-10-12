@@ -45,4 +45,11 @@ rc=0; out="$( export LLMCTL_PSI_FILE="${TEST_TMP}/psi.high"
   sched_load_backend; _sched_restore_set fast 2>&1 )" || rc=$?
 assert_eq "0" "${rc}" "(d) _sched_restore_set fast under PSI pressure succeeds"
 assert_file_exists "${LLMCTL_RUNTIME_DIR}/fast.run" "(d) fast is running again after the restore"
+echo "== N6: an exported flag must NOT disable the scheduler gate =="
+"${LLMCTL}" stop all >/dev/null 2>&1 || true
+for v in LLMCTL_SCHED_NO_GATE _sched_rollback_nogate; do
+  "${LLMCTL}" stop all >/dev/null 2>&1 || true
+  out="$(env "${v}=1" LLMCTL_PSI_FILE="${TEST_TMP}/psi.high" "${LLMCTL}" start small 2>&1)" && rc=0 || rc=$?
+  assert_eq "75" "${rc}" "N6: exported ${v}=1 does not bypass the start gate (rc)"
+done
 test_finish
