@@ -226,17 +226,36 @@ _svc_profile_caps() {
   echo "${h} ${m}"
 }
 
+# _svc_rm_mem_dropin <instance> <engine> - removes llmctl's OWN 05-memory.conf (never any other drop-in) and the
+# directory when that leaves it empty.
+_svc_rm_mem_dropin() {
+  local d; d="$(svc_unit_dir)/llmctl-$2@$1.service.d"
+  rm -f "${d}/05-memory.conf"
+  rmdir "${d}" 2>/dev/null || true
+}
+
 # _svc_write_mem_dropin <profile> <engine> - per-profile MemoryHigh/MemoryMax drop-in sized from the plan footprint.
 # Plain file I/O (also under LLMCTL_DRY_RUN=1, like svc_install). Silently skipped when the planner is not loaded
 # (the template backstop then applies) - never fatal.
 _svc_write_mem_dropin() {
   local profile="$1" engine="$2" instance dir fp total caps
-  declare -F catalog_plan_json >/dev/null 2>&1 || return 0
   valid_id "${profile}" || return 0      # security: allow-listed BEFORE any use; the name is data below, never code
+  if ! declare -F catalog_plan_json >/dev/null 2>&1; then
+    warn "no per-profile memory cap written for ${profile} (planner not loaded here); the template backstop applies - run: llmctl install"
+    return 0
+  fi
   instance="$(_svc_instance_key "${profile}")"
-  fp="$(hw_probe_json | catalog_plan_json 2>/dev/null | json_stdin 'd["profiles"][argv[0]]["ram_mb"]' "${profile}" 2>/dev/null)" || return 0
-  [[ "${fp}" =~ ^[0-9]+$ ]] || return 0
-  total="$(hw_probe_json | json_stdin 'd["memory"]["total_mb"]' 2>/dev/null)" || return 0
+  fp="$(hw_probe_json | catalog_plan_json 2>/dev/null | json_stdin 'd["profiles"][argv[0]]["ram_mb"]' "${profile}" 2>/dev/null)" || fp=""
+  total="$(hw_probe_json | json_stdin 'd["memory"]["total_mb"]' 2>/dev/null)" || total=""
+  if [[ ! "${fp}" =~ ^[0-9]+$ || ! "${total}" =~ ^[0-9]+$ ]]; then
+    warn "no per-profile memory cap written for ${profile} (footprint or total RAM unknown); the template backstop applies"
+    return 0
+  fi
+  # an engine change must not leave the other engines' drop-in behind (only llmctl's own 05-memory.conf is ever removed)
+  local other
+  for other in llama colibri onnx; do
+    [[ "${other}" == "${engine}" ]] || _svc_rm_mem_dropin "${instance}" "${other}"
+  done
   caps="$(_svc_profile_caps "${fp}" "${total}")"
   dir="$(svc_unit_dir)/llmctl-${engine}@${instance}.service.d"
   ensure_dir "${dir}"
@@ -367,6 +386,15 @@ svc_stale_units() {
       printf '%s: lacks directive(s) the current generator writes (%s); regenerate with: llmctl install\n' "${base}" "${missing}"
     fi
   done
+  # Enabled engine instances with no per-profile cap file run on the template backstop only.
+  local w inst
+  for w in "$(svc_unit_dir)"/default.target.wants/llmctl-*@*.service; do
+    [[ -L "${w}" ]] || continue
+    inst="$(basename "${w}")"
+    [[ -f "$(svc_unit_dir)/${inst%.service}.service.d/05-memory.conf" ]] && continue
+    compgen -G "$(svc_unit_dir)/${inst%.service}.service.d/*.conf" >/dev/null && grep -qs '^MemoryMax=' "$(svc_unit_dir)/${inst%.service}.service.d/"*.conf && continue
+    printf '%s: no per-profile memory cap (only the template backstop applies); regenerate with: llmctl install\n' "${inst}"
+  done
   return 0
 }
 
@@ -403,6 +431,16 @@ svc_install() {
       warn "${DECIDE_GATEWAY_UNIT} is installed but the llmctl-decide binary is missing: it was NOT regenerated (llmctl build decide, then llmctl install)"
     fi
   fi
+
+  # Per-profile caps for profiles that already have a service record (enabled/started before this version): without
+  # this their units would keep only the template backstop and `install` would claim success.
+  local _envf _p _e
+  for _envf in "${LLMCTL_SERVICES_DIR}"/*.env; do
+    [[ -f "${_envf}" ]] || continue
+    _p="$(sed -n 's/^LLMCTL_PROFILE=//p' "${_envf}" | head -1 | tr -d "'")"
+    _e="$(sed -n 's/^LLMCTL_ENGINE=//p' "${_envf}" | head -1 | tr -d "'")"
+    [[ -n "${_p}" && -n "${_e}" ]] && _svc_write_mem_dropin "${_p}" "${_e}"
+  done
 
   _svc_sys daemon-reload
 
@@ -558,6 +596,8 @@ svc_enable() {
 svc_disable() {
   local unit; unit="$(_svc_unit_for "$1")"
   _svc_disable_siblings "$1" ""
+  local _e _inst; _inst="$(_svc_instance_key "$1")"
+  for _e in llama colibri onnx; do _svc_rm_mem_dropin "${_inst}" "${_e}"; done
   _svc_sys stop "${unit}" || true
   _svc_sys disable "${unit}" || true
   [[ "${LLMCTL_DRY_RUN}" == "1" ]] || rm -f "${LLMCTL_SERVICES_DIR}/$(_svc_instance_key "$1").env"
