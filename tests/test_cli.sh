@@ -13,7 +13,7 @@ assert_eq 0 "${rc}" "help exit code"
 assert_contains "${captured}" "USAGE" "help shows usage"
 captured="$("${LLMCTL}" version)" && rc=0 || rc=$?
 assert_eq 0 "${rc}" "version exit code"
-assert_contains "${captured}" "llmctl 3.1.0" "version string"
+assert_contains "${captured}" "llmctl $(tr -d "[:space:]" < "${LLMCTL_ROOT}/VERSION")" "version string (derived from VERSION, not pinned)"
 # the printed version must equal the VERSION file (single source of truth)
 assert_eq "llmctl $(tr -d '[:space:]' < "${LLMCTL_ROOT}/VERSION")" "${captured}" "version equals VERSION file"
 
