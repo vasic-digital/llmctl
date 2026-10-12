@@ -258,7 +258,7 @@ class NoAnswer(Exception):
 
 
 class Rejected(Exception):
-    """The endpoint answered but refused the request (4xx): a real FAIL of the served model."""
+    """The endpoint refused the request SHAPE (HTTP 400/422 only): a real FAIL of the served model."""
 
 
 def redact_url(url):
@@ -389,7 +389,7 @@ def http_json(url, body=None, timeout=60):
                 return parsed
         except urllib.error.HTTPError as e:
             detail = e.read(401).decode("utf-8", "replace")[:400]
-            if 400 <= e.code < 500:
+            if e.code in (400, 422):   # only an answer-SHAPE refusal is a verdict on the model; 401/403/404/408/413/429 are operational
                 raise Rejected("HTTP %d: %s" % (e.code, detail))
             raise NoAnswer("HTTP %d: %s" % (e.code, detail))
         except _Deadline:
