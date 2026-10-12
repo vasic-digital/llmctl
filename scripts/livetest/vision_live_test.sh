@@ -426,7 +426,7 @@ elif [ "$VALIDATE_RC" != 0 ]; then RESULT=2; VERDICT_REASON="validate rc=$VALIDA
 elif [ "$JSON_VERDICT" != OK ]; then RESULT=2; VERDICT_REASON="$JSON_VERDICT"
 elif [ "$MH" = MISSING ] || [ "$PH" = MISSING ]; then RESULT=2; VERDICT_REASON="hash of the model/mmproj the unit loaded not capturable"
 elif [ "$FINAL_STOP_RC" != 0 ]; then RESULT=2; VERDICT_REASON="final stop was not a clean llmctl stop (rc=$FINAL_STOP_RC; 10 = only the systemd fallback worked, 11 = failed)"
-elif [ "$UNIT_STATE" = active ] || [ "$UNIT_STATE" = activating ]; then RESULT=2; VERDICT_REASON="unit $UNIT still active after stop (state=$UNIT_STATE)"
+elif [ "$UNIT_STATE" != inactive ] && [ "$UNIT_STATE" != failed ]; then RESULT=2; VERDICT_REASON="unit $UNIT state '${UNIT_STATE:-<empty/timeout>}' is not inactive/failed after stop"
 elif [ "$PORT_SERVING" = yes ]; then RESULT=2; VERDICT_REASON="port $PORT still answering /health after stop"
 elif [ "$CLEAN_OK" != YES ]; then RESULT=2; VERDICT_REASON="cleanup not confirmed (vram base=$GPU_BASE final=$GPU_FINAL still_running=$STILL)"
 else RESULT=0; VERDICT_REASON="all known-answer probes matched; evidence captured; VRAM back to baseline"; fi

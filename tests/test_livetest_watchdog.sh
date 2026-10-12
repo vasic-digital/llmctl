@@ -67,7 +67,8 @@ case "$*" in
   *"--user stop "*) echo "systemctl stop ${*: -1}" >>"$FAKE/calls"; rm -f "$FAKE/running"
      [ -f "$FAKE/sysstop_fail" ] && exit 1
      [ -f "$FAKE/leak" ] || cp "$FAKE/gpu_base" "$FAKE/gpu"; exit 0 ;;
-  *"--user is-active"*) if [ -f "$FAKE/running" ] || [ -f "$FAKE/unit_stuck_active" ]; then echo active; exit 0; else echo inactive; exit 3; fi ;;
+  *"--user is-active"*) if [ -f "$FAKE/unit_state" ]; then cat "$FAKE/unit_state"; [ "$(cat "$FAKE/unit_state")" = active ] && exit 0; exit 3; fi
+     if [ -f "$FAKE/running" ] || [ -f "$FAKE/unit_stuck_active" ]; then echo active; exit 0; else echo inactive; exit 3; fi ;;
   *"list-units"*) [ -f "$FAKE/units" ] || exit 0
      for a in "$@"; do case "$a" in *@*) pat="@${a##*@}"; pat="${pat%%.service}"; pat="${pat%\*}";; esac; done
      grep -F -- "${pat:-}" "$FAKE/units"; exit 0 ;;
@@ -508,7 +509,7 @@ E="$(mkenv)"; touch "$E/fake/stop_rc1" "$E/fake/sysstop_fail"; run_main "$E"
 check "both stops failing -> not PASS (exit 2)" "$RC" "2"
 E="$(mkenv)"; touch "$E/fake/unit_stuck_active"; run_main "$E"
 check "unit still active after stop -> not PASS (exit 2)" "$RC" "2"
-has "  reason names the unit" "$E/out.txt" 'unit .* (still )?active'
+has "  reason names the unit" "$E/out.txt" 'unit .* state'
 E="$(mkenv)"; touch "$E/fake/stop_leaves_port"; run_main "$E"
 check "port still answering after stop -> not PASS (exit 2)" "$RC" "2"
 has "  reason names the port" "$E/out.txt" 'port .* still'
@@ -617,6 +618,17 @@ check "  watchdog log: stop attempted at least twice" "$([ "$(grep -c 'systemd s
 # NEG-CONTROL: rc 10 (only systemd worked) is a handled stop: no cleanup retry
 E="$(mkenv)"; touch "$E/fake/stop_rc1"; run_main "$E"
 check "NEG-CONTROL rc 10: exactly one systemd stop (no needless retry)" "$(grep -c '^systemctl stop' "$E/fake/calls")" "1"
+fi
+
+if want n4; then
+echo "== N4. unit state must be exactly inactive or failed =="
+for st in deactivating reloading unknown maintenance; do
+  E="$(mkenv)"; echo "$st" >"$E/fake/unit_state"; run_main "$E"
+  check "unit state '$st' -> not PASS (exit 2)" "$RC" "2"
+done
+E="$(mkenv)"; : >"$E/fake/unit_state"; run_main "$E"; check "empty unit state (systemctl printed nothing) -> not PASS" "$RC" "2"
+has "  reason names the unit state" "$E/out.txt" 'unit .* state'
+for st in inactive failed; do E="$(mkenv)"; echo "$st" >"$E/fake/unit_state"; run_main "$E"; check "NEG-CONTROL unit state '$st' passes" "$RC" "0"; done
 fi
 
 if want always; then
