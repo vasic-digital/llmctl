@@ -17,11 +17,13 @@ set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROFILE="${1:-vision}"
-LLMCTL="${LLMCTL_BIN:-llmctl}"
-NVSMI="${NVIDIA_SMI_BIN:-nvidia-smi}"
-SYSCTL="${SYSTEMCTL_BIN:-systemctl}"
-MEMINFO="${LT_MEMINFO:-/proc/meminfo}"
-PSI="${LT_PSI:-/proc/pressure/memory}"
+# Sensor/binary redirections exist for the hermetic tests ONLY: honoured exclusively when LT_HERMETIC=1.
+LLMCTL=llmctl; NVSMI=nvidia-smi; SYSCTL=systemctl; MEMINFO=/proc/meminfo; PSI=/proc/pressure/memory
+OVERRIDE_NAMES="LT_MEMINFO LT_PSI LT_IOPSI NVIDIA_SMI_BIN LLMCTL_BIN SYSTEMCTL_BIN LT_SUITE_DIR"
+if [ "${LT_HERMETIC:-0}" = "1" ]; then
+  LLMCTL="${LLMCTL_BIN:-llmctl}"; NVSMI="${NVIDIA_SMI_BIN:-nvidia-smi}"; SYSCTL="${SYSTEMCTL_BIN:-systemctl}"
+  MEMINFO="${LT_MEMINFO:-/proc/meminfo}"; PSI="${LT_PSI:-/proc/pressure/memory}"
+fi
 
 GATE_MIN_MEM_MB=12000; GATE_MAX_PSI_SOME=5; GATE_MAX_PSI_FULL=1; GATE_MAX_GPU_MB=6000
 LARGE_RAM_MB=4000; LARGE_VRAM_MB=2000          # another running profile at/above either = "large model"
@@ -39,9 +41,17 @@ if [ "$PROFILE" != "vision" ]; then
   exit 3
 fi
 
+umask 077   # evidence (status, logs, outputs) is private: dirs 0700, files 0600
 TS="$(date -u +%Y%m%dT%H%M%SZ)"
 EV="${LT_EVIDENCE_ROOT:-$HOME/.cache/llmctl-livetest}/$TS"
 mkdir -p "$EV" || { echo "cannot create evidence dir $EV" >&2; exit 2; }
+for _n in $OVERRIDE_NAMES; do
+  if [ -n "${!_n:-}" ]; then
+    if [ "${LT_HERMETIC:-0}" = 1 ]; then echo "HONOURED $_n=${!_n} (LT_HERMETIC=1: TEST RUN, NOT LIVE EVIDENCE)" >>"$EV/overrides.log"
+    else echo "IGNORED $_n=${!_n} (LT_HERMETIC!=1)" >>"$EV/overrides.log"; fi
+  fi
+done
+[ "${LT_HERMETIC:-0}" = 1 ] && echo "HONOURED LT_HERMETIC=1: thresholds/timeouts may be overridden; this is NOT a live run" >>"$EV/overrides.log"
 CMDLOG="$EV/commands.log"; SIGLOG="$EV/signals.log"
 log() { printf '%s %s\n' "$(date -u +%FT%TZ)" "$*" | tee -a "$EV/run.log" >&2; }
 
@@ -152,7 +162,8 @@ if ctl: print("validate output has non-PASS controls: %s"%[x.get("key") for x in
 print("OK")
 PY
 }
-SUITE_DIR="${LT_SUITE_DIR:-$HERE/../../validation/suites/vision-golden-v1}"
+SUITE_DIR="$HERE/../../validation/suites/vision-golden-v1"
+[ "${LT_HERMETIC:-0}" = 1 ] && SUITE_DIR="${LT_SUITE_DIR:-$SUITE_DIR}"
 
 # ------------------------------------------------------------------ (a) pre-gate
 gate() {

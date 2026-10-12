@@ -9,17 +9,18 @@
 #   MemAvailable < 5000 MiB | PSI some avg10 > 20 | GPU used > 11500 MiB
 #   | wall clock > 600 s | parent gone | 3 consecutive unreadable sensors
 # It NEVER signals any process, never touches process groups, never reboots.
-# Thresholds are fixed; they are only overridable when LT_HERMETIC=1 (tests).
-#
-# Env overrides (always honoured, they only redirect sensors/commands):
-#   LT_MEMINFO  LT_PSI  NVIDIA_SMI_BIN  LLMCTL_BIN
+# Thresholds are fixed. Thresholds, timings AND every sensor/binary redirection
+# (LT_MEMINFO LT_PSI NVIDIA_SMI_BIN LLMCTL_BIN) are honoured ONLY when LT_HERMETIC=1
+# (hermetic tests); otherwise they are ignored.
 set -uo pipefail
 
 PROFILE="${1:?profile}"; EV="${2:?evidence dir}"; PARENT="${3:?parent pid}"
-LLMCTL="${LLMCTL_BIN:-llmctl}"
-NVSMI="${NVIDIA_SMI_BIN:-nvidia-smi}"
-MEMINFO="${LT_MEMINFO:-/proc/meminfo}"
-PSI="${LT_PSI:-/proc/pressure/memory}"
+LLMCTL=llmctl; NVSMI=nvidia-smi; MEMINFO=/proc/meminfo; PSI=/proc/pressure/memory
+if [ "${LT_HERMETIC:-0}" = "1" ]; then
+  LLMCTL="${LLMCTL_BIN:-llmctl}"; NVSMI="${NVIDIA_SMI_BIN:-nvidia-smi}"
+  MEMINFO="${LT_MEMINFO:-/proc/meminfo}"; PSI="${LT_PSI:-/proc/pressure/memory}"
+fi
+umask 077
 
 MIN_MEM_MB=5000; MAX_PSI=20; MAX_GPU_MB=11500; MAX_WALL=600; INTERVAL=2
 if [ "${LT_HERMETIC:-0}" = "1" ]; then

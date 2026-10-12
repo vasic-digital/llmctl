@@ -342,6 +342,36 @@ E="$(mkenv)"; rm -f "$E/services/vision.env"; run_main "$E"
 check "no unit env file -> loaded model unknown -> not PASS (exit 2)" "$RC" "2"
 fi
 
+if want d7; then
+echo "== D7/L5. overrides only under LT_HERMETIC=1; evidence perms 0700/0600 =="
+# non-hermetic run: stale exported LT_* / *_BIN must be ignored
+E="$(mkenv)"; setpsi "$E" 50.00 50.00; setmem "$E" 1
+echo '[{"profile":"coder","port":8081,"mode":"x","ram_mb":9000,"vram_mb":7000,"enabled":true,"state":"running","last_log_line":null}]' >"$E/fake/others.json"
+RC=0; FAKE="$E/fake" PATH="$E/bin:$PATH" LT_PSI="$E/psi" LT_MEMINFO="$E/meminfo" LLMCTL_BIN=/nonexistent/llmctl NVIDIA_SMI_BIN=/nonexistent/nv SYSTEMCTL_BIN=/nonexistent/sc \
+  LT_EVIDENCE_ROOT="$E/ev" HOME="$E/home" timeout 30 bash "$MAIN" >"$E/out.txt" 2>"$E/err.txt" || RC=$?
+EVD="$(find "$E/ev" -mindepth 1 -maxdepth 1 -type d | head -1)"
+check "non-hermetic: still exits 3 via the real gate path (llmctl from PATH, *_BIN ignored)" "$RC" "3"
+hasnt "non-hermetic: exported LT_PSI/LT_MEMINFO not used (no psi_some=50.00)" "$EVD/gate.log" 'psi_some=50\.00'
+hasnt "non-hermetic: exported LT_MEMINFO not used (no MemAvailable_MiB=1 )" "$EVD/gate.log" 'MemAvailable_MiB=1 '
+has "non-hermetic: ignored overrides are logged in evidence" "$EVD/overrides.log" 'IGNORED.*LT_PSI'
+# negative control: same env WITH LT_HERMETIC=1 honours them
+RC=0; FAKE="$E/fake" PATH="$E/bin:$PATH" LT_HERMETIC=1 LT_PSI="$E/psi" LT_MEMINFO="$E/meminfo" LT_EVIDENCE_ROOT="$E/ev2" HOME="$E/home" timeout 30 bash "$MAIN" >"$E/out2.txt" 2>&1 || RC=$?
+EVD2="$(find "$E/ev2" -mindepth 1 -maxdepth 1 -type d | head -1)"
+has "NEG-CONTROL hermetic: LT_PSI honoured (psi_some=50.00)" "$EVD2/gate.log" 'psi_some=50\.00'
+has "hermetic overrides are logged loudly in evidence" "$EVD2/overrides.log" 'HONOURED.*LT_PSI'
+# watchdog standalone, non-hermetic: LT_MEMINFO ignored
+E="$(mkenv)"; setmem "$E" 1; mkdir -p "$E/wdev"
+FAKE="$E/fake" PATH="$E/bin:$PATH" LT_MEMINFO="$E/meminfo" LT_PSI="$E/psi" bash "$WD" vision "$E/wdev" $$ >/dev/null 2>&1 &
+W=$!; sleep 3.5; kill -TERM "$W" 2>/dev/null; wait "$W" 2>/dev/null
+[ ! -s "$E/wdev/trigger" ] && ok "watchdog non-hermetic ignores LT_MEMINFO=1MiB (no trigger)" || bad "watchdog honoured LT_MEMINFO outside hermetic: $(cat "$E/wdev/trigger")"
+# permissions with a permissive outer umask
+E="$(mkenv)"; ( umask 000; run_main "$E" ) ; EVD="$(find "$E/ev" -mindepth 1 -maxdepth 1 -type d | head -1)"
+badd=$(find "$E/ev" -mindepth 1 -type d ! -perm 700 | wc -l); badf=$(find "$E/ev" -type f ! -perm 600 | wc -l)
+check "evidence dirs all 0700" "$badd" "0"
+check "evidence files all 0600" "$badf" "0"
+[ "$(find "$E/ev" -type f | wc -l)" -gt 10 ] && ok "NEG-CONTROL: many files were checked" || bad "too few files"
+fi
+
 if want always; then
 echo "== 7. whole-suite sanity: nothing real was touched =="
 [ -z "$(pgrep -f 'llama-server.*--port' || true)" ] && ok "no real llama-server process spawned by tests" || bad "llama-server present (may be pre-existing)"
