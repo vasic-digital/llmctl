@@ -5,6 +5,7 @@
 #
 #   svc_hook.sh gate [<instance>]        ExecStartPre (first): refuse with exit 75 under memory pressure
 #                                        (PSI / MemAvailable) - see hw_pressure_gate in lib/hardware.sh.
+#   svc_hook.sh portcheck <instance>     ExecCondition: exit 98 (unit skipped, not retried) if the port is taken.
 #   svc_hook.sh prestart <instance>      ExecStartPre: (re)create the engine's
 #                                        internal key file - true per-start
 #                                        rotation (gap G-028). No-op for
@@ -116,6 +117,23 @@ _hk_wait_register() {
 }
 
 _hk_envfile() { printf '%s/%s.env' "${LLMCTL_SERVICES_DIR}" "$1"; }
+
+# hk_portcheck <instance> - ExecCondition= of every engine unit: exit 98 when the profile's port is already listening.
+# systemd tests RestartPreventExitStatus= only against the MAIN process, so a failing ExecStartPre (even exit 98) is
+# retried (proved in tests/test_portguard_condition.sh); an ExecCondition exit of 1-254 instead skips the unit cleanly
+# - not failed, not restarted. Never touches the key file.
+hk_portcheck() {
+  local inst="$1" f port
+  f="$(_hk_envfile "${inst}")"
+  [[ -f "${f}" ]] || return 0
+  port="$(_hk_get "${f}" LLMCTL_PORT)"
+  if [[ "${port}" =~ ^[0-9]+$ ]] && timeout 1 bash -c "exec 3<>/dev/tcp/127.0.0.1/${port}" 2>/dev/null; then
+    _hk_log "${inst}: port ${port} is already in use; not starting (ExecCondition exit 98)"
+    printf 'llmctl: port %s is already in use on 127.0.0.1 (profile %s is probably running under another unit); not starting\n' "${port}" "${inst}" >&2
+    return 98
+  fi
+  return 0
+}
 
 hk_prestart() {
   local inst="$1" f keyf port
@@ -277,6 +295,7 @@ hk_run_gateway() {
 
 case "${1:-}" in
   gate)          hk_gate "${2:-}" ;;
+  portcheck)     hk_portcheck "${2:?instance required}" ;;
   prestart)      hk_prestart "${2:?instance required}" ;;
   register)      hk_register "${2:?instance required}" "${3:-}" ;;
   _wait_register) hk__wait_register "${2:?instance required}" "${3:?pid required}" ;;
@@ -284,5 +303,5 @@ case "${1:-}" in
   run-gateway)   hk_run_gateway ;;
   run-engine)    shift; hk_run_engine "${1:?instance required}" "${@:2}" ;;
   "")            : ;;   # sourced for testing
-  *)             echo "usage: svc_hook.sh gate|prestart|register|unregister <instance> | run-engine <instance> -- <cmd...> | run-gateway" >&2; exit 2 ;;
+  *)             echo "usage: svc_hook.sh gate|portcheck|prestart|register|unregister <instance> | run-engine <instance> -- <cmd...> | run-gateway" >&2; exit 2 ;;
 esac

@@ -313,6 +313,7 @@ EnvironmentFile=$(_svc_pct "${LLMCTL_SERVICES_DIR}")/%i.env
 # publishes the service in the registry once it answers its health endpoint;
 # ExecStopPost removes the row (the port hold stays so a restart reuses the
 # port, FR-088). Registration failures never fail the unit (the "-" prefix).
+ExecCondition=$(_svc_hook_cmd portcheck %i)
 ExecStartPre=$(_svc_hook_cmd gate %i)
 ExecStartPre=$(_svc_hook_cmd prestart %i)
 ExecStart=/bin/bash -c 'set -f; exec "\$LLMCTL_EXEC" \$LLMCTL_ARGS'
@@ -322,8 +323,8 @@ Restart=on-failure
 RestartSec=5
 RestartSteps=4
 RestartMaxDelaySec=120
-# No restart after an OOM kill (SIGKILL), a deliberate stop (SIGTERM) or 98 = "port already in use" (svc_hook.sh prestart,
-# EADDRINUSE): each of those only repeats itself. Real cycles are > 60 s (model load), so the window is 900 s / 3 starts.
+# No restart after an OOM kill (SIGKILL), a deliberate stop (SIGTERM) or 98 = "port already in use" (EADDRINUSE; the
+# ExecCondition portcheck skips such a start cleanly - systemd only tests RestartPreventExitStatus against the MAIN process): each only repeats itself. Real cycles are > 60 s (model load), so the window is 900 s / 3 starts.
 RestartPreventExitStatus=SIGKILL SIGTERM 98
 MemoryHigh=${memhigh}M
 MemoryMax=${memmax}M
@@ -668,6 +669,26 @@ svc_is_failed() {
   systemctl --user is-failed --quiet "$(_svc_unit_for "${profile}")"
 }
 
+# svc_enabled_down - one "<unit>\t<state>" line per ENABLED engine unit (default.target.wants symlink) that is not
+# active. After a SIGKILL (oomd, MemoryMax) a unit is deliberately not restarted (RestartPreventExitStatus=SIGKILL), so
+# without this nothing shows that an enabled model is down. Dry-run: <profile>.run = active, <profile>.failed = failed.
+svc_enabled_down() {
+  local w unit inst state
+  for w in "$(svc_unit_dir)"/default.target.wants/llmctl-*@*.service; do
+    [[ -L "${w}" ]] || continue
+    unit="$(basename "${w}")"; inst="${unit#*@}"; inst="${inst%.service}"
+    if [[ "${LLMCTL_DRY_RUN:-0}" == "1" ]]; then
+      if [[ -f "${LLMCTL_RUNTIME_DIR}/${inst}.failed" ]]; then state=failed
+      elif [[ -f "${LLMCTL_RUNTIME_DIR}/${inst}.run" ]]; then state=active
+      else state=inactive; fi
+    else
+      state="$(systemctl --user is-active "${unit}" 2>/dev/null || true)"; state="${state:-inactive}"
+    fi
+    [[ "${state}" == active || "${state}" == activating || "${state}" == reloading ]] || printf '%s\t%s\n' "${unit}" "${state}"
+  done
+  return 0
+}
+
 # Profiles with an env file (i.e. known to llmctl). The env files are named by the INSTANCE key
 # (<tenant>--<profile> under LLMCTL_TENANT_ID); this returns PROFILE names - every other function
 # (svc_is_active, svc_main_pid, _svc_unit_for ...) re-applies the tenant prefix itself, so
@@ -748,8 +769,8 @@ Restart=on-failure
 RestartSec=5
 RestartSteps=4
 RestartMaxDelaySec=120
-# No restart after an OOM kill (SIGKILL), a deliberate stop (SIGTERM) or 98 = "port already in use" (svc_hook.sh prestart,
-# EADDRINUSE): each of those only repeats itself. Real cycles are > 60 s (model load), so the window is 900 s / 3 starts.
+# No restart after an OOM kill (SIGKILL), a deliberate stop (SIGTERM) or 98 = "port already in use" (EADDRINUSE; the
+# ExecCondition portcheck skips such a start cleanly - systemd only tests RestartPreventExitStatus against the MAIN process): each only repeats itself. Real cycles are > 60 s (model load), so the window is 900 s / 3 starts.
 RestartPreventExitStatus=SIGKILL SIGTERM 98
 MemoryHigh=${memhigh}M
 MemoryMax=${memmax}M

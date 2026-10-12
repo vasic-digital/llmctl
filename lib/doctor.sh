@@ -263,6 +263,15 @@ doctor_run() {
     fi
   fi
 
+  # An enabled engine unit that is failed/inactive: after a SIGKILL (oomd, MemoryMax) it is not restarted by design.
+  if declare -F svc_enabled_down >/dev/null 2>&1 || { declare -F sched_load_backend >/dev/null 2>&1 && sched_load_backend 2>/dev/null && declare -F svc_enabled_down >/dev/null 2>&1; }; then
+    local _doc_u _doc_st
+    while IFS=$'\t' read -r _doc_u _doc_st; do
+      [[ -n "${_doc_u}" ]] || continue
+      _doc_warn "${_doc_u} is enabled but ${_doc_st} (an OOM-killed unit is not restarted by design; start it with: llmctl start <profile>)"
+    done < <(svc_enabled_down)
+  fi
+
   # A LIVE engine process with no registry row is invisible to the gateway and to every registry-based check, yet the
   # "registry == live set" line above would still say PASS (it compares against units llmctl knows, not processes).
   if declare -F portreg_active >/dev/null 2>&1 && portreg_active 2>/dev/null && [[ -d /proc ]]; then

@@ -1582,10 +1582,24 @@ _sched_status_rows() {
   done
 }
 
+# _sched_status_enabled_down - WARN lines for enabled engine units that are failed/inactive (not restarted after a
+# SIGKILL by design; see docs/persistent-services.md).
+_sched_status_enabled_down() {
+  sched_load_backend
+  declare -F svc_enabled_down >/dev/null 2>&1 || return 0
+  local u st
+  while IFS=$'\t' read -r u st; do
+    [[ -n "${u}" ]] || continue
+    printf 'WARN: %s is enabled but %s (an OOM-killed unit is not restarted by design: llmctl start <profile>)\n' "${u}" "${st}"
+  done < <(svc_enabled_down)
+  return 0
+}
+
 sched_status() {
   local running; running="$(sched_running)"
   if [[ -z "${running}" ]]; then
     echo "no llmctl services running"
+    _sched_status_enabled_down
     return 0
   fi
   printf '%-16s %-6s %-8s %-10s %-10s %-8s %s\n' "profile" "port" "mode" "RAM MiB" "VRAM MiB" "enabled" "state"
@@ -1596,6 +1610,7 @@ sched_status() {
     printf '%-16s %-6s %-8s %-10s %-10s %-8s %s\n' "${label}" "${port}" "${mode}" "${ram}" "${vram}" "${en}" "${state}"
     [[ "${state}" == "failed (crash-loop)" ]] && printf '  last log line: %s\n' "${last_log}"
   done < <(_sched_status_rows)
+  _sched_status_enabled_down
   # Explicit, since a `while read ... <(proc-sub)` loop's own exit status
   # is `read`'s final EOF-signaling failure (1), not the body's last
   # successful printf - without this, sched_status() silently returned 1
