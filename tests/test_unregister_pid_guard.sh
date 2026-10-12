@@ -10,7 +10,12 @@ test_setup_env
 HOOK="${LLMCTL_ROOT}/lib/svc_hook.sh"
 LIVE=""; trap '[[ -z "${LIVE}" ]] || kill "${LIVE}" 2>/dev/null || true; test_teardown_env' EXIT
 export LLMCTL_PORTREG=1 LLMCTL_LOG_DIR="${TEST_TMP}/logs"; mkdir -p "${LLMCTL_LOG_DIR}"
-sleep 120 & LIVE=$!
+# LIVE = a process that looks like one of our engines (a script named llama-server); RECYCLED = an unrelated live pid
+printf '#!/bin/sh\nsleep 120\n' > "${TEST_TMP}/llama-server"; chmod +x "${TEST_TMP}/llama-server"
+"${TEST_TMP}/llama-server" --port 1 & LIVE=$!
+sleep 120 & RECYCLED=$!
+trap '[[ -z "${LIVE}" ]] || kill "${LIVE}" 2>/dev/null || true; kill "${RECYCLED}" 2>/dev/null || true; test_teardown_env' EXIT
+sleep 0.3
 sleep 0.1 & DEAD=$!; wait "${DEAD}" 2>/dev/null || true       # a pid that has exited
 CALLS="${TEST_TMP}/calls"
 mkfake() { # mkfake <row-pid>
@@ -27,6 +32,8 @@ run_unreg() { MAINPID="$1" LLMCTL_DECIDE_BIN="${TEST_TMP}/fake-decide" timeout 2
 
 mkfake "${LIVE}"; run_unreg "${DEAD}"
 assert_eq "0" "$(unreg_calls)" "row pid ${LIVE} is ALIVE and != stopping pid ${DEAD}: the row is kept (no 'registry unregister')"
+mkfake "${RECYCLED}"; run_unreg "${DEAD}"
+assert_eq "1" "$(unreg_calls)" "LOW-2: row pid ${RECYCLED} is alive but NOT an engine (recycled pid): the row IS dropped"
 mkfake "${DEAD}"; run_unreg "${DEAD}"
 assert_eq "1" "$(unreg_calls)" "control: row pid == stopping pid: the row IS dropped"
 mkfake "${DEAD}"; run_unreg "$(( DEAD + 100000 ))"

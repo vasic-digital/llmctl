@@ -270,8 +270,8 @@ is harmless when ignored).
 Existing installed units are reported stale (`llmctl doctor`, `svc_stale_units`) and `start`/`enable` refuse a unit whose
 bound is weaker than 3 starts / 900 s: regenerate with `llmctl install`.
 
-**Start gate** (`hw_pressure_gate`, exit code **75** = EX_TEMPFAIL): a start, restart, `enable`, `switch` (before anything
-is stopped) and the `llmctl validate` path (hook point `_sched_pressure_gate`) are refused when memory PSI `full avg10 > 2`,
+**Start gate** (`hw_pressure_gate`, exit code **75** = EX_TEMPFAIL): a start, restart, `enable`, `switch` (a PSI-only check
+before anything is stopped; the memory check runs after the stop) are refused when memory PSI `full avg10 > 2`,
 `some avg10 > 10`, or `MemAvailable < footprint + 4 GiB`. It also runs as the unit's first `ExecStartPre`
 (`svc_hook.sh gate <instance>`) so systemd restarts are gated. Overrides for tests: `LLMCTL_PSI_FILE`,
 `LLMCTL_MEMINFO_FILE`; tuning: `LLMCTL_GATE_FULL_MAX`, `LLMCTL_GATE_SOME_MAX`, `LLMCTL_GATE_RESERVE_MB`.
@@ -282,6 +282,8 @@ is stopped) and the `llmctl validate` path (hook point `_sched_pressure_gate`) a
 pressure lasting through three consecutive waits (about 3 x (120 + 5) s, inside the 900 s window) still ends in
 `start-limit-hit` - the deliberate fail-closed end state; clear it with `systemctl --user reset-failed <unit>` (or wait
 out the 900 s window) once the host is healthy. Interactive `start`/`enable`/`switch` do not wait: they refuse at once.
+
+**Not wired from this branch**: `llmctl validate` (lib/validate.sh, owned by another change set and absent here) does **not** call the gate yet. The hook point is `_sched_pressure_gate <profile>` in `lib/scheduler.sh`; the validate path must call it before `sched_start`. Until then a validate run is gated only by `sched_start` / the unit's `ExecStartPre`, if it goes through them.
 
 **Exit codes**: 75 = refused by the pressure gate; 98 = `prestart` found the profile's port already listening (it does
 not rotate the key and does not load the model).

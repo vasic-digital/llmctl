@@ -143,6 +143,20 @@ portreg_register() {
 }
 
 # portreg_unregister <name> - remove the registry row (idempotent, quiet).
+# _portreg_pid_is_engine <pid> - does /proc/<pid>/cmdline look like one of our engines/gateway (one of its first three
+# words is llama-server, onnx_server.py, coli/colibri or llmctl-decide)? A recycled pid of an unrelated process is not.
+# No /proc (macOS): cannot tell, assume yes (keep the row).
+_portreg_pid_is_engine() {
+  [[ -r "/proc/$1/cmdline" ]] || { [[ ! -d /proc/self ]]; return; }
+  local w n=0 base
+  while IFS= read -r -d '' w; do
+    base="${w##*/}"
+    case "${base}" in llama-server|onnx_server.py|coli|colibri|llmctl-decide) return 0 ;; esac
+    n=$(( n + 1 )); (( n >= 3 )) && break
+  done < "/proc/$1/cmdline"
+  return 1
+}
+
 portreg_unregister() {
   portreg_active || return 0
   local name="$1" stop_pid="${2:-}" row_pid=""
@@ -166,7 +180,8 @@ for r in rows:
         print(r.get("pid") or "")
         break' < "${listf}" 2>/dev/null || true)"
   rm -f "${listf}"
-  if [[ "${row_pid}" =~ ^[0-9]+$ && "${row_pid}" -gt 1 && "${row_pid}" != "${stop_pid}" ]] && kill -0 "${row_pid}" 2>/dev/null; then
+  if [[ "${row_pid}" =~ ^[0-9]+$ && "${row_pid}" -gt 1 && "${row_pid}" != "${stop_pid}" ]] && kill -0 "${row_pid}" 2>/dev/null \
+     && _portreg_pid_is_engine "${row_pid}"; then
     return 0
   fi
   # Bounded (ExecStopPost must never exceed TimeoutStopSec): under memory pressure this call once hung past 90 s.
