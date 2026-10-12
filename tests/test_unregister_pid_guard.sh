@@ -18,11 +18,11 @@ trap '[[ -z "${LIVE}" ]] || kill "${LIVE}" 2>/dev/null || true; kill "${RECYCLED
 sleep 0.3
 sleep 0.1 & DEAD=$!; wait "${DEAD}" 2>/dev/null || true       # a pid that has exited
 CALLS="${TEST_TMP}/calls"
-mkfake() { # mkfake <row-pid>
+mkfake() { # mkfake <row-pid> [cmd_token]
   cat > "${TEST_TMP}/fake-decide" <<F
 #!/bin/sh
 echo "\$*" >> "${CALLS}"
-if [ "\$1 \$2" = "registry list" ]; then printf '{"services":[{"name":"decide-nli","pid":$1,"port":8096}]}\n'; fi
+if [ "\$1 \$2" = "registry list" ]; then printf '{"services":[{"name":"decide-nli","pid":$1,"port":8096,"cmd_token":"${2:-llama-server}"}]}\n'; fi
 exit 0
 F
   chmod +x "${TEST_TMP}/fake-decide"; : > "${CALLS}"
@@ -38,4 +38,19 @@ mkfake "${DEAD}"; run_unreg "${DEAD}"
 assert_eq "1" "$(unreg_calls)" "control: row pid == stopping pid: the row IS dropped"
 mkfake "${DEAD}"; run_unreg "$(( DEAD + 100000 ))"
 assert_eq "1" "$(unreg_calls)" "control: row pid is dead (stale row): the row IS dropped"
+# --- LOW-2 (re-review): wrapper forms and custom engine names must not look like a recycled pid
+printf '#!/bin/sh\nsleep 120\n' > "${TEST_TMP}/my-engine-bin"; chmod +x "${TEST_TMP}/my-engine-bin"
+W1=""; W2=""; W3=""; W4=""
+nice -n 19 "${TEST_TMP}/llama-server" --port 2 & W1=$!                 # nice -n 19 llama-server
+"${TEST_TMP}/my-engine-bin" --port 3 & W2=$!                           # custom LLMCTL_LLAMA_SERVER name (registry cmd_token)
+taskset -c 0 "${TEST_TMP}/llama-server" --port 4 & W3=$!               # taskset wrapper
+printf '#!/bin/sh\nsleep 120\n' > "${TEST_TMP}/onnx_server.py"; chmod +x "${TEST_TMP}/onnx_server.py"
+env FOO=1 "${TEST_TMP}/onnx_server.py" --port 5 & W4=$!                # env wrapper + onnx_server.py
+sleep 0.4
+trap 'kill "${LIVE}" "${RECYCLED}" "${W1}" "${W2}" "${W3}" "${W4}" 2>/dev/null || true; test_teardown_env' EXIT
+mkfake "${W1}"; run_unreg "${DEAD}"; assert_eq "0" "$(unreg_calls)" "LOW-2: 'nice -n 19 llama-server' (pid ${W1}) keeps its row"
+mkfake "${W2}" my-engine-bin; run_unreg "${DEAD}"; assert_eq "0" "$(unreg_calls)" "LOW-2: custom-named engine matched by the row's cmd_token keeps its row"
+mkfake "${W3}"; run_unreg "${DEAD}"; assert_eq "0" "$(unreg_calls)" "LOW-2: 'taskset ... llama-server' keeps its row"
+mkfake "${W4}" onnx_server.py; run_unreg "${DEAD}"; assert_eq "0" "$(unreg_calls)" "LOW-2: 'env FOO=1 onnx_server.py' keeps its row"
+mkfake "${RECYCLED}" my-engine-bin; run_unreg "${DEAD}"; assert_eq "1" "$(unreg_calls)" "control: an unrelated live pid is still dropped even with a custom cmd_token"
 test_finish

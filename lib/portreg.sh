@@ -143,16 +143,17 @@ portreg_register() {
 }
 
 # portreg_unregister <name> - remove the registry row (idempotent, quiet).
-# _portreg_pid_is_engine <pid> - does /proc/<pid>/cmdline look like one of our engines/gateway (one of its first three
-# words is llama-server, onnx_server.py, coli/colibri or llmctl-decide)? A recycled pid of an unrelated process is not.
-# No /proc (macOS): cannot tell, assume yes (keep the row).
+# _portreg_pid_is_engine <pid> [<cmd_token>] - does /proc/<pid>/cmdline look like one of our engines? ANY argv word whose
+# basename is a known engine (llama-server, onnx_server[.py], coli, colibri, llmctl-decide) or equals the row's recorded
+# cmd_token (basename of the exec binary, so a custom LLMCTL_LLAMA_SERVER name and `python -m onnx_server` work). A recycled
+# pid of an unrelated process matches neither. No /proc (macOS): cannot tell, assume yes (keep the row).
 _portreg_pid_is_engine() {
   [[ -r "/proc/$1/cmdline" ]] || { [[ ! -d /proc/self ]]; return; }
-  local w n=0 base
+  local w base tok="${2:-}"
   while IFS= read -r -d '' w; do
     base="${w##*/}"
-    case "${base}" in llama-server|onnx_server.py|coli|colibri|llmctl-decide) return 0 ;; esac
-    n=$(( n + 1 )); (( n >= 3 )) && break
+    case "${base}" in llama-server|onnx_server|onnx_server.py|coli|colibri|llmctl-decide) return 0 ;; esac
+    [[ -n "${tok}" && "${base}" == "${tok}" ]] && return 0
   done < "/proc/$1/cmdline"
   return 1
 }
@@ -177,11 +178,12 @@ except Exception:
     rows = []
 for r in rows:
     if r.get("name") == os.environ["NAME"]:
-        print(r.get("pid") or "")
+        print("%s %s" % (r.get("pid") or "", r.get("cmd_token") or ""))
         break' < "${listf}" 2>/dev/null || true)"
+  local row_tok="${row_pid#* }"; row_pid="${row_pid%% *}"
   rm -f "${listf}"
   if [[ "${row_pid}" =~ ^[0-9]+$ && "${row_pid}" -gt 1 && "${row_pid}" != "${stop_pid}" ]] && kill -0 "${row_pid}" 2>/dev/null \
-     && _portreg_pid_is_engine "${row_pid}"; then
+     && _portreg_pid_is_engine "${row_pid}" "${row_tok}"; then
     return 0
   fi
   # Bounded (ExecStopPost must never exceed TimeoutStopSec): under memory pressure this call once hung past 90 s.
