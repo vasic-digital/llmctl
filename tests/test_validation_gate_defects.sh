@@ -329,4 +329,12 @@ assert_eq 2 "$(run_rc python3 -I "${JUDGE}" run --suite "${CSUITE}" --endpoint "
 U="$(fake_start "$(answers_with arith 41)" --mode reasoning-budget --model-id "${CHATM}")"
 assert_eq 2 "$(run_rc python3 -I "${JUDGE}" run --suite "${CSUITE}" --endpoint "${U}")" "truncated with reasoning content -> exit 2 (unchanged)"
 
+echo "== 15. a malformed completion (non-dict message/choice) is UNDETERMINED, not a traceback"
+for m in malformed-message malformed-choice; do
+  U="$(fake_start "${FIX}/answers_good.json" --mode "${m}" --model-id "${CHATM}")"
+  assert_eq 2 "$(run_rc python3 -I "${JUDGE}" run --suite "${CSUITE}" --endpoint "${U}")" "${m} -> exit 2"
+  if grep -q Traceback "${TEST_TMP}/last.out"; then printf '  FAIL: %s: traceback in output\n' "${m}" >&2; TEST_FAILS=$((TEST_FAILS+1)); else printf '  ok: %s: no traceback\n' "${m}"; fi
+  assert_contains "$(cat "${TEST_TMP}/last.out")" "VERDICT: UNDETERMINED" "${m}: verdict line present"
+done
+
 test_finish

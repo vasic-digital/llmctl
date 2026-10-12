@@ -11,7 +11,7 @@ image's own probe with that prompt first, else any probe with that prompt). The 
 "<image fixture id>/<probe id>" (vision) or "<case id>" (chat/coder). Unknown key -> HTTP 500.
 
 Usage: fake_openai.py --suite DIR [--suite DIR2 ...] --answers FILE --port-file FILE [--model-id ID]
-                      [--mode normal|reject-images|error500|nondeterministic|slow|redirect|truncate|reasoning-budget|reasoning-empty-stop]
+                      [--mode normal|reject-images|error500|nondeterministic|slow|redirect|malformed-message|malformed-choice|truncate|reasoning-budget|reasoning-empty-stop]
 """
 import argparse
 import base64
@@ -125,6 +125,10 @@ def main():
                 ans = ans + " (second call differs)"
             finish = "length" if a.mode == "truncate" else "stop"
             msg = {"role": "assistant", "content": ans}
+            if a.mode == "malformed-message":
+                return self.send(200, {"choices": [{"message": "not-a-dict", "finish_reason": "stop"}]})
+            if a.mode == "malformed-choice":
+                return self.send(200, {"choices": ["not-a-dict"]})
             if a.mode == "reasoning-budget":
                 # a reasoning model that spent the whole max_tokens budget in the reasoning channel
                 msg, finish = {"role": "assistant", "content": "", "reasoning_content": "Let me think step by step ..."}, "length"

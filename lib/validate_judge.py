@@ -308,7 +308,10 @@ def http_json(url, body=None, timeout=60):
                   "LLMCTL_VALIDATE_API_KEY_HOSTS to allow)" % h, file=sys.stderr)
     try:
         with _OPENER.open(req, timeout=timeout) as resp:
-            return json.loads(resp.read().decode("utf-8", "replace"))
+            parsed = json.loads(resp.read().decode("utf-8", "replace"))
+            if not isinstance(parsed, dict):
+                raise NoAnswer("response is not a JSON object: %.200s" % json.dumps(parsed))
+            return parsed
     except urllib.error.HTTPError as e:
         detail = e.read().decode("utf-8", "replace")[:400]
         if 400 <= e.code < 500:
@@ -320,7 +323,10 @@ def http_json(url, body=None, timeout=60):
 
 def served_model_ids(endpoint, timeout):
     d = http_json(endpoint.rstrip("/") + "/v1/models", timeout=timeout)
-    return [m.get("id", "") for m in d.get("data", [])] + [m.get("name", "") for m in d.get("models", [])]
+    try:
+        return [m.get("id", "") for m in d.get("data", [])] + [m.get("name", "") for m in d.get("models", [])]
+    except (AttributeError, TypeError):
+        raise NoAnswer("malformed /v1/models response: %.200s" % json.dumps(d))
 
 
 def ask(endpoint, suite, prompt, image_path=None, timeout=180):
@@ -343,7 +349,7 @@ def ask(endpoint, suite, prompt, image_path=None, timeout=180):
         return {"content": msg.get("content") or "", "finish_reason": ch.get("finish_reason"),
                 "reasoning_chars": len(reasoning) if isinstance(reasoning, str) else 0,
                 "max_tokens": req.get("max_tokens"), "seconds": round(dt, 3), "usage": d.get("usage", {})}
-    except (KeyError, IndexError, TypeError):
+    except (KeyError, IndexError, TypeError, AttributeError):
         raise NoAnswer("malformed completion response: %s" % json.dumps(d)[:300])
 
 
@@ -376,7 +382,7 @@ def embed(endpoint, text, timeout):
     d = http_json(endpoint.rstrip("/") + "/v1/embeddings", {"input": text}, timeout=timeout)
     try:
         return [float(x) for x in d["data"][0]["embedding"]]
-    except (KeyError, IndexError, TypeError, ValueError):
+    except (KeyError, IndexError, TypeError, ValueError, AttributeError):
         raise NoAnswer("malformed embeddings response: %s" % json.dumps(d)[:300])
 
 
