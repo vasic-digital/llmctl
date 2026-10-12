@@ -641,6 +641,32 @@ has "  profile stopped" "$E/fake/calls" '^stop vision'
 E="$(mkenv)"; run_main "$E"; check "NEG-CONTROL help with --host proceeds" "$RC" "0"
 fi
 
+if want n6; then
+echo "== N6. LLAMA_SERVER_BIN / LT_BOUND_DEFAULT / LT_EVIDENCE_ROOT only under LT_HERMETIC=1; watchdog in its own process group =="
+E="$(mkenv)"; echo '[{"profile":"coder","port":8081,"mode":"x","ram_mb":9000,"vram_mb":7000,"enabled":true,"state":"running","last_log_line":null}]' >"$E/fake/others.json"
+RC=0; FAKE="$E/fake" PATH="$E/bin:$PATH" LLAMA_SERVER_BIN=/nonexistent/ls LT_BOUND_DEFAULT=1 LT_EVIDENCE_ROOT="$E/evX" HOME="$E/home" timeout 60 bash "$MAIN" >"$E/out.txt" 2>&1 || RC=$?
+check "non-hermetic refusal flow ran (exit 3)" "$RC" "3"
+[ ! -e "$E/evX" ] && ok "LT_EVIDENCE_ROOT ignored outside hermetic (default root used)" || bad "evidence written to the override root"
+EVD="$(find "$E/home/.cache/llmctl-livetest" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | head -1)"
+has "default evidence root under \$HOME/.cache/llmctl-livetest" "$EVD/overrides.log" 'IGNORED LT_EVIDENCE_ROOT'
+has "  LLAMA_SERVER_BIN ignore logged" "$EVD/overrides.log" 'IGNORED LLAMA_SERVER_BIN'
+has "  LT_BOUND_DEFAULT ignore logged" "$EVD/overrides.log" 'IGNORED LT_BOUND_DEFAULT'
+# NEG-CONTROL: hermetic honours LT_EVIDENCE_ROOT (every other test relies on it)
+E="$(mkenv)"; run_main "$E"; [ -n "$EVD" ] && [ -d "$E/ev" ] && ok "NEG-CONTROL hermetic honours LT_EVIDENCE_ROOT" || bad "hermetic root not honoured"
+# process group: a group signal aimed at the driver must not also hit the watchdog
+E="$(mkenv)"; touch "$E/fake/validate_wait"
+( FAKE="$E/fake" PATH="$E/bin:$PATH" LT_HERMETIC=1 LT_WD_INTERVAL=0.2 LT_READY_INTERVAL=0.2 LT_STOP_BOUND=2 LT_BOUND=2 LT_POST_SAMPLE=1 \
+  LT_MEMINFO="$E/meminfo" LT_PSI="$E/psi" LT_IOPSI="$E/iopsi" LT_EVIDENCE_ROOT="$E/ev" HOME="$E/home" LLMCTL_SERVICES_DIR="$E/services" LT_SUITE_DIR="$E/suite" \
+  exec bash "$MAIN" >"$E/out.txt" 2>"$E/err.txt" ) &
+M=$!
+for _ in $(seq 1 50); do grep -q '^validate ' "$E/fake/calls" 2>/dev/null && break; sleep 0.2; done
+EVD="$(find "$E/ev" -mindepth 1 -maxdepth 1 -type d | head -1)"
+wdp=$(sed -n 's/.*started watchdog pid \([0-9]*\)/\1/p' "$EVD/signals.log")
+pg_main=$(ps -o pgid= -p "$M" | tr -d ' '); pg_wd=$(ps -o pgid= -p "$wdp" | tr -d ' ')
+[ -n "$pg_main" ] && [ -n "$pg_wd" ] && [ "$pg_main" != "$pg_wd" ] && ok "watchdog (pgid $pg_wd) is in a different process group than the driver ($pg_main)" || bad "same process group ($pg_main/$pg_wd)"
+rm -f "$E/fake/validate_wait"; wait "$M" 2>/dev/null
+fi
+
 if want always; then
 echo "== 7. whole-suite sanity: nothing real was touched =="
 [ -z "$(pgrep -x llama-server || true)" ] && ok "no real llama-server process spawned by tests" || bad "llama-server present (may be pre-existing)"

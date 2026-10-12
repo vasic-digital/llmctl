@@ -19,9 +19,11 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROFILE="${1:-vision}"
 # Sensor/binary redirections exist for the hermetic tests ONLY: honoured exclusively when LT_HERMETIC=1.
 LLMCTL=llmctl; NVSMI=nvidia-smi; SYSCTL=systemctl; MEMINFO=/proc/meminfo; PSI=/proc/pressure/memory; IOPSI=/proc/pressure/io
-OVERRIDE_NAMES="LT_MEMINFO LT_PSI LT_IOPSI NVIDIA_SMI_BIN LLMCTL_BIN SYSTEMCTL_BIN LT_SUITE_DIR"
+OVERRIDE_NAMES="LT_MEMINFO LT_PSI LT_IOPSI NVIDIA_SMI_BIN LLMCTL_BIN SYSTEMCTL_BIN LT_SUITE_DIR LLAMA_SERVER_BIN LT_BOUND_DEFAULT LT_EVIDENCE_ROOT"
+LLAMA_BIN=llama-server; EVROOT="$HOME/.cache/llmctl-livetest"
 if [ "${LT_HERMETIC:-0}" = "1" ]; then
   LLMCTL="${LLMCTL_BIN:-llmctl}"; NVSMI="${NVIDIA_SMI_BIN:-nvidia-smi}"; SYSCTL="${SYSTEMCTL_BIN:-systemctl}"
+  LLAMA_BIN="${LLAMA_SERVER_BIN:-llama-server}"; EVROOT="${LT_EVIDENCE_ROOT:-$EVROOT}"
   MEMINFO="${LT_MEMINFO:-/proc/meminfo}"; PSI="${LT_PSI:-/proc/pressure/memory}"; IOPSI="${LT_IOPSI:-/proc/pressure/io}"
 fi
 
@@ -43,7 +45,7 @@ fi
 
 umask 077   # evidence (status, logs, outputs) is private: dirs 0700, files 0600
 TS="$(date -u +%Y%m%dT%H%M%SZ)"
-EV="${LT_EVIDENCE_ROOT:-$HOME/.cache/llmctl-livetest}/$TS"
+EV="$EVROOT/$TS"
 mkdir -p "$EV" || { echo "cannot create evidence dir $EV" >&2; exit 2; }
 for _n in $OVERRIDE_NAMES; do
   if [ -n "${!_n:-}" ]; then
@@ -140,7 +142,7 @@ gpu_used() {
 }
 
 # bounded <secs> <outfile> cmd... : detached with a deadline, never signalled; rc 124 = still running at the deadline.
-BOUND="${LT_BOUND_DEFAULT:-10}"; [ "${LT_HERMETIC:-0}" = 1 ] && BOUND="${LT_BOUND:-$BOUND}"
+BOUND=10; [ "${LT_HERMETIC:-0}" = 1 ] && BOUND="${LT_BOUND:-$BOUND}"
 bounded() {
   local secs="$1" out="$2" i=0; shift 2
   rm -f "$out.rc"
@@ -293,7 +295,10 @@ harness_info
 gate
 
 # ------------------------------------------------------------------ (b) watchdog BEFORE the model
-"$HERE/watchdog.sh" "$PROFILE" "$EV" "$$" >>"$EV/watchdog.out" 2>&1 &
+# own session/process group (setsid execs in place for a background job, so $! is still the watchdog PID): a
+# group-directed signal aimed at the driver (e.g. Ctrl-C / kill -- -PGID) does not also take out the guard.
+if command -v setsid >/dev/null 2>&1; then setsid "$HERE/watchdog.sh" "$PROFILE" "$EV" "$$" >>"$EV/watchdog.out" 2>&1 &
+else "$HERE/watchdog.sh" "$PROFILE" "$EV" "$$" >>"$EV/watchdog.out" 2>&1 & echo "setsid unavailable: watchdog shares the driver process group" >>"$EV/overrides.log"; fi
 WD_PID=$!
 echo "$(date -u +%FT%TZ) started watchdog pid $WD_PID" >>"$SIGLOG"
 for _ in $(seq 1 20); do [ "$(wc -l <"$EV/samples.csv" 2>/dev/null || echo 0)" -ge 2 ] && break; sleep 0.5; done
@@ -418,7 +423,7 @@ hash_of() { if [ -n "$1" ] && [ -f "$1" ]; then nice -n 19 ionice -c 3 sha256sum
 MH="$(hash_of "${LOADED_MODEL:-}")"
 PH="$(hash_of "${LOADED_MMPROJ:-}")"
 JSON_VERDICT="$(check_validate_json "$EV/validate.out" "$SUITE_DIR")"; echo "$JSON_VERDICT" >"$EV/validate_check.txt"
-LSV="$("${LLAMA_SERVER_BIN:-llama-server}" --version 2>&1 | tr '\n' ' ' | cut -c1-300)"; [ -n "$LSV" ] || LSV="UNKNOWN"
+bounded "$BOUND" "$EV/.lsv" "$LLAMA_BIN" --version; LSV="$(tr '\n' ' ' <"$EV/.lsv" 2>/dev/null | cut -c1-300)"; [ -n "$LSV" ] || LSV="UNKNOWN"
 { echo "model_sha256=$MH"; echo "mmproj_sha256=$PH"; echo "llama_server_version=$LSV"; echo "gpu_baseline_mb=$GPU_BASE gpu_final_mb=$GPU_FINAL"; } >"$EV/identity.txt"
 
 if [ "$VALIDATE_RC" = 1 ]; then RESULT=1; VERDICT_REASON="wrong answer(s): validate rc=1"
