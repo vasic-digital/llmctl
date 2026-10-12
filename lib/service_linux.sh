@@ -239,6 +239,8 @@ _svc_write_mem_dropin() {
   caps="$(_svc_profile_caps "${fp}" "${total}")"
   dir="$(svc_unit_dir)/llmctl-${engine}@${instance}.service.d"
   ensure_dir "${dir}"
+  # the start gate (svc_hook.sh gate) needs the footprint at restart time: record it in the env record
+  { sed -i '/^LLMCTL_FOOTPRINT_MB=/d' "${LLMCTL_SERVICES_DIR}/${instance}.env" 2>/dev/null && printf 'LLMCTL_FOOTPRINT_MB=%s\n' "${fp}" >> "${LLMCTL_SERVICES_DIR}/${instance}.env"; } || true
   printf '# written by llmctl (profile %s): plan footprint %s MiB -> High 1.25x, Max 1.5x (floor 1 GiB, < 90%% of RAM)\n[Service]\nMemoryHigh=%sM\nMemoryMax=%sM\n' \
     "${profile}" "${fp}" "${caps%% *}" "${caps##* }" > "${dir}/10-memory.conf"
 }
@@ -291,6 +293,7 @@ EnvironmentFile=$(_svc_pct "${LLMCTL_SERVICES_DIR}")/%i.env
 # publishes the service in the registry once it answers its health endpoint;
 # ExecStopPost removes the row (the port hold stays so a restart reuses the
 # port, FR-088). Registration failures never fail the unit (the "-" prefix).
+ExecStartPre=$(_svc_hook_cmd gate %i)
 ExecStartPre=$(_svc_hook_cmd prestart %i)
 ExecStart=/bin/bash -c 'set -f; exec "\$LLMCTL_EXEC" \$LLMCTL_ARGS'
 ExecStartPost=-$(_svc_hook_cmd register %i)

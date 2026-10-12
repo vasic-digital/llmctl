@@ -3,6 +3,8 @@
 #
 # Invoked BY the generated systemd units / launchd agents (never by users):
 #
+#   svc_hook.sh gate [<instance>]        ExecStartPre (first): refuse with exit 75 under memory pressure
+#                                        (PSI / MemAvailable) - see hw_pressure_gate in lib/hardware.sh.
 #   svc_hook.sh prestart <instance>      ExecStartPre: (re)create the engine's
 #                                        internal key file - true per-start
 #                                        rotation (gap G-028). No-op for
@@ -42,6 +44,8 @@ source "${_sh_dir}/common.sh"
 source "${_sh_dir}/portreg.sh"
 # shellcheck source=decide_timeout.sh
 source "${_sh_dir}/decide_timeout.sh"
+# shellcheck source=hardware.sh
+source "${_sh_dir}/hardware.sh"
 
 # _hk_get <env-file> <KEY> -> value of KEY (shell-unquoted for the simple
 # escapes printf %q produces), empty when absent.
@@ -121,6 +125,18 @@ hk_prestart() {
   [[ -n "${keyf}" ]] || return 0
   _hk_new_key "${keyf}" || { _hk_log "${inst}: cannot rotate key file ${keyf}"; return 1; }
   _hk_log "${inst}: internal key rotated"
+}
+
+# hk_gate <instance> - ExecStartPre of every engine unit, BEFORE prestart (so a refused start never rotates a key and a
+# systemd RESTART is gated exactly like a first start). Exit 75 = EX_TEMPFAIL: not a defect, retried later by the
+# operator (RestartPreventExitStatus does not list it, so Restart=on-failure + the StartLimit bound apply).
+hk_gate() {
+  local inst="${1:-}" f fp=0
+  if [[ -n "${inst}" ]]; then
+    f="$(_hk_envfile "${inst}")"
+    [[ -f "${f}" ]] && fp="$(_hk_get "${f}" LLMCTL_FOOTPRINT_MB)"
+  fi
+  hw_pressure_gate "${fp:-0}" "${inst:-service}"
 }
 
 hk_register() {
@@ -219,6 +235,7 @@ hk_run_gateway() {
 }
 
 case "${1:-}" in
+  gate)          hk_gate "${2:-}" ;;
   prestart)      hk_prestart "${2:?instance required}" ;;
   register)      hk_register "${2:?instance required}" "${3:-}" ;;
   _wait_register) hk__wait_register "${2:?instance required}" "${3:?pid required}" ;;
@@ -226,5 +243,5 @@ case "${1:-}" in
   run-gateway)   hk_run_gateway ;;
   run-engine)    shift; hk_run_engine "${1:?instance required}" "${@:2}" ;;
   "")            : ;;   # sourced for testing
-  *)             echo "usage: svc_hook.sh prestart|register|unregister <instance> | run-engine <instance> -- <cmd...> | run-gateway" >&2; exit 2 ;;
+  *)             echo "usage: svc_hook.sh gate|prestart|register|unregister <instance> | run-engine <instance> -- <cmd...> | run-gateway" >&2; exit 2 ;;
 esac

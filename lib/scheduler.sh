@@ -963,6 +963,14 @@ _sched_wait_ready() {
   return 1
 }
 
+# _sched_pressure_gate <profile> - hw_pressure_gate with the profile's plan footprint (rc 75 on refusal).
+# Hook point for `llmctl validate` (lib/validate.sh, owned by another writer): call this before sched_start.
+_sched_pressure_gate() {
+  local p="$1" fp=0
+  fp="$(hw_probe_json | catalog_plan_json 2>/dev/null | json_stdin 'd["profiles"][argv[0]]["ram_mb"]' "${p}" 2>/dev/null || echo 0)"
+  hw_pressure_gate "${fp}" "${p}"
+}
+
 # _sched_start_impl <profile...> - returns non-zero (with a clear message)
 # when the combined footprint does not fit. Call sched_start (above) from
 # outside this file; this unlocked form exists so sched_auto can compose it
@@ -993,6 +1001,8 @@ _sched_start_impl() {
     fits="$(json_query "${plan_file}" "d[\"profiles\"][argv[0]][\"fits\"]" "${p}")"
     ram="$(json_query "${plan_file}" "d[\"profiles\"][argv[0]][\"ram_mb\"]" "${p}")"
     vram="$(json_query "${plan_file}" "d[\"profiles\"][argv[0]][\"vram_mb\"]" "${p}")"
+    # Pressure gate (shared with svc_hook.sh gate / the unit's ExecStartPre): a refusal here touches nothing.
+    hw_pressure_gate "${ram}" "${p}" || { local _grc=$?; rm -f "${plan_file}"; return "${_grc}"; }
     if [[ "${fits}" != "True" ]] || \
        ! _sched_admission_fits "${ram}" "${vram}" "${used_ram}" "${used_vram}" "${ram_budget}" "${vram_budget}"; then
       local suggestion=""
@@ -1122,6 +1132,7 @@ _sched_start_impl() {
 _enable_impl() {
   local profile="$1"
   catalog_exists "${profile}" || die "unknown profile: ${profile} (see: llmctl models list)"
+  _sched_pressure_gate "${profile}" || return $?
   sched_load_backend
   # Reconcile any post-reboot state desync BEFORE the overcommit check below
   # reads sched_reserved_field - otherwise a genuinely-running-but-
@@ -1303,6 +1314,8 @@ _sched_switch_impl() {
     info "${target} is already the only running profile - nothing to switch"
     return 0
   fi
+  # Gate BEFORE anything is stopped: a refused switch must leave the running set untouched.
+  _sched_pressure_gate "${target}" || return $?
 
   _sched_stop_impl all
 
