@@ -258,11 +258,21 @@ _svc_write_mem_dropin() {
   done
   caps="$(_svc_profile_caps "${fp}" "${total}")"
   dir="$(svc_unit_dir)/llmctl-${engine}@${instance}.service.d"
-  ensure_dir "${dir}"
-  # the start gate (svc_hook.sh gate) needs the footprint at restart time: record it in the env record
-  { sed -i '/^LLMCTL_FOOTPRINT_MB=/d' "${LLMCTL_SERVICES_DIR}/${instance}.env" 2>/dev/null && printf 'LLMCTL_FOOTPRINT_MB=%s\n' "${fp}" >> "${LLMCTL_SERVICES_DIR}/${instance}.env"; } || true
-  printf '# written by llmctl (profile %s): plan footprint %s MiB -> High 1.25x, Max 1.5x (floor 1 GiB, < 90%% of RAM)\n[Service]\nMemoryHigh=%sM\nMemoryMax=%sM\n' \
-    "${profile}" "${fp}" "${caps%% *}" "${caps##* }" > "${dir}/05-memory.conf"
+  # Everything below runs under umask 077: the env record holds key-file paths and LLMCTL_REG_TOKEN (never wider than
+  # 0600, also for the temp file of the rewrite - no `sed -i`), and the drop-in follows the same rule.
+  (
+    umask 077
+    ensure_dir "${dir}"
+    # the start gate (svc_hook.sh gate) needs the footprint at restart time: record it in the env record
+    local envf="${LLMCTL_SERVICES_DIR}/${instance}.env" tmp
+    if [[ -f "${envf}" ]]; then
+      tmp="$(mktemp "${envf}.XXXXXX")" || exit 0
+      { grep -v '^LLMCTL_FOOTPRINT_MB=' "${envf}" || true; printf 'LLMCTL_FOOTPRINT_MB=%s\n' "${fp}"; } > "${tmp}"
+      chmod 600 "${tmp}"; mv -f "${tmp}" "${envf}"
+    fi
+    printf '# written by llmctl (profile %s): plan footprint %s MiB -> High 1.25x, Max 1.5x (floor 1 GiB, < 90%% of RAM)\n[Service]\nMemoryHigh=%sM\nMemoryMax=%sM\n' \
+      "${profile}" "${fp}" "${caps%% *}" "${caps##* }" > "${dir}/05-memory.conf"
+  )
 }
 
 # _svc_engine_unit_body <description> <basic|strict> <memhigh-MiB> <memmax-MiB>
