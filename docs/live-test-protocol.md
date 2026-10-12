@@ -7,6 +7,18 @@ Background: the host was force-powered-off after a memory/IO stall. This protoco
 never repeat that: it refuses to start on a stressed host, and a watchdog stops the profile the moment any limit is
 crossed.
 
+## Preconditions (checked by the gate, exit 3 before anything starts)
+
+1. Sensors as listed below.
+2. `validation/suites/vision-golden-v1/expectations.json` exists in this script's repo tree (run from the integrated tree).
+3. The `llmctl` on PATH resolves (`readlink -f`) INSIDE this script's tree, so it is the llmctl that has `vision validate --host`
+   (an installed copy elsewhere is refused). Explicit override: `LT_LLMCTL_TREE=<dir>`; it is honoured and logged in `overrides.log`.
+4. The scheduler lock `<runtime dir>/.scheduler.lock` (`LLMCTL_RUNTIME_DIR`, else `$XDG_RUNTIME_DIR/llmctl`, else
+   `<state>/run`) is not held by another process (non-blocking shared probe, never held past the check). Reason:
+   `scheduler::with_lock` takes `flock -x` with NO timeout, so a holder makes both our start and our stops queue behind it.
+   The refusal names the holder when `fuser` can.
+5. `llmctl vision help` shows `--host` (checked again after the start).
+
 ## Where to run it
 
 Run it from the INTEGRATED main tree, never from an old branch. The installed `llmctl` must have `vision validate`
@@ -82,6 +94,15 @@ bounded.log (timeouts) identity.txt verdict.txt run.log
 Thresholds, timings and every sensor/binary redirection (`LT_*`, `LLMCTL_BIN`, `NVIDIA_SMI_BIN`, `SYSTEMCTL_BIN`) are
 honoured ONLY when `LT_HERMETIC=1` (the tests). Outside it they are ignored and the ignore is recorded in
 `overrides.log`; under it the evidence says loudly it is not a live run.
+
+## If the start is still pending at cleanup (scheduler lock contention)
+
+If the backgrounded `llmctl start` has not returned after START_WAIT (60 s) when cleanup runs (it is queued behind a lock holder),
+the driver does NOT reap the watchdog. The watchdog (own session, outlives the driver) keeps re-checking the unit for
+at least 240 s after it fires, and as long as the start process is alive, and stops the unit again if it comes up late; if the driver
+is gone its parent-gone path does the same. The verdict then says `start still pending, watchdog left running (pid N) - CHECK
+llmctl status / systemctl --user is-active <unit>` and `WATCHDOG_LEFT_RUNNING.txt` is written. Always check that unit by hand afterwards.
+Cleanup ignores further Ctrl-C / TERM / HUP while it runs, so a second Ctrl-C cannot cut the stops short.
 
 ## llmctl bookkeeping caveats (read from lib/scheduler.sh)
 

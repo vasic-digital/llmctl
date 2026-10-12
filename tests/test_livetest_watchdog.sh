@@ -43,7 +43,7 @@ trap cleanup_t EXIT
 mkenv() {
   rm -f "$T"/env.*/fake/running "$T"/env.*/fake/serving   # previous scenarios must not keep the shared fake health server "up"
   local E; E="$(mktemp -d "$T/env.XXXXXX")"
-  mkdir -p "$E/bin" "$E/fake" "$E/ev" "$E/models"
+  mkdir -p "$E/bin" "$E/fake" "$E/ev" "$E/models" "$E/run"
   printf 'MemTotal: 32000000 kB\nMemAvailable:   %d kB\n' $((20000*1024)) >"$E/meminfo"
   printf 'some avg10=0.00 avg60=0.00 avg300=0.00 total=1\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=1\n' >"$E/psi"
   echo 1200 >"$E/fake/gpu"; echo 1200 >"$E/fake/gpu_base"
@@ -107,6 +107,7 @@ PY
   "stop vision")
     n=0; while [ -f "$FAKE/lock_held" ] && [ "$n" -lt 300 ]; do sleep 0.1; n=$((n+1)); done   # blocked on the lock
     echo "stop vision" >>"$FAKE/calls"
+    [ -f "$FAKE/stop_slow" ] && sleep "$(cat "$FAKE/stop_slow")"
     [ -f "$FAKE/stop_rc1" ] && { rm -f "$FAKE/running_keep"; rm -f "$FAKE/running"; echo "stop failed" >&2; exit 1; }
     rm -f "$FAKE/running"
     [ -f "$FAKE/leak" ] || cp "$FAKE/gpu_base" "$FAKE/gpu"
@@ -119,6 +120,7 @@ PY
   "version "*|"version") echo "llmctl fake-1.0"; exit 0 ;;
   "vision validate")
     echo "validate $*" >>"$FAKE/calls"
+    echo "validate_nice=$(awk '{print $19}' /proc/$$/stat) $(ionice -p $$ 2>&1)" >>"$FAKE/calls"
     [ -f "$FAKE/mutate.sh" ] && bash "$FAKE/mutate.sh"
     n=0; while [ -f "$FAKE/running" ] && [ -f "$FAKE/validate_wait" ] && [ "$n" -lt 100 ]; do sleep 0.1; n=$((n+1)); done
     if [ ! -f "$FAKE/running" ]; then
@@ -143,7 +145,7 @@ run_main() {
   FAKE="$E/fake" PATH="$E/bin:$PATH" LT_HERMETIC=1 LT_WD_INTERVAL=0.2 LT_WD_MAX_WALL="${WALL:-600}" \
     LT_READY_INTERVAL=0.2 LT_READY_MAX="${READY_MAX:-4}" LT_VRAM_SETTLE_MAX=2 LT_VALIDATE_GRACE=3 \
     LT_MEMINFO="$E/meminfo" LT_PSI="$E/psi" LT_IOPSI="$E/iopsi" LT_EVIDENCE_ROOT="$E/ev" HOME="$E/home" \
-    LLMCTL_SERVICES_DIR="$E/services" LT_SUITE_DIR="$E/suite" LT_STOP_BOUND=2 LT_BOUND=2 LT_START_MAX="${START_MAX:-20}" LT_START_WAIT=15 LT_POST_SAMPLE=2 \
+    LLMCTL_SERVICES_DIR="$E/services" LLMCTL_RUNTIME_DIR="$E/run" LT_SUITE_DIR="$E/suite" LT_STOP_BOUND=2 LT_BOUND=2 LT_START_MAX="${START_MAX:-20}" LT_START_WAIT="${LT_START_WAIT_T:-15}" LT_POST_SAMPLE=2 \
     timeout 60 bash "$MAIN" "$@" >"$E/out.txt" 2>"$E/err.txt" || RC=$?
   EVD="$(find "$E/ev" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | head -1)"
 }
@@ -679,6 +681,73 @@ has "  retry recorded in the evidence" "$EVD/watchdog.log" 'post-fallback llmctl
 E="$(mkenv)"; run_main "$E"
 check "NEG-CONTROL clean stop: no systemctl stop" "$(grep -c '^systemctl stop' "$E/fake/calls")" "0"
 check "  exactly one llmctl stop" "$(grep -c '^stop vision' "$E/fake/calls")" "1"
+fi
+
+if want s1; then
+echo "== S1. scheduler lock: gate refuses when held; a still-pending start never lets the watchdog be reaped =="
+# (a) gate: another process holds the scheduler flock
+E="$(mkenv)"; flock -x "$E/run/.scheduler.lock" sleep 25 & LK=$!
+sleep 0.5; run_main "$E"
+check "gate refuses while the scheduler lock is held by someone else (exit 3)" "$RC" "3"
+has "  reason names the scheduler lock" "$EVD/gate.log" 'REFUSED: scheduler lock'
+hasnt "  nothing was started" "$E/fake/calls" '^start '
+kill "$LK" 2>/dev/null; wait "$LK" 2>/dev/null
+E="$(mkenv)"; : >"$E/run/.scheduler.lock"; run_main "$E"
+check "NEG-CONTROL lock file present but free -> run passes" "$RC" "0"
+# (b)/(c) start still pending after START_WAIT while holding the lock; breach early
+E="$(mkenv)"; echo 9 >"$E/fake/start_delay"; echo 6 >"$E/fake/start_sleep"
+( sleep 1; printf 'MemAvailable: %d kB\n' $((3000*1024)) >"$E/meminfo" ) & MP=$!
+START_MAX=30 LT_START_WAIT_T=3 run_main "$E"; wait "$MP"
+wdp=$(sed -n 's/.*started watchdog pid \([0-9]*\)/\1/p' "$EVD/signals.log")
+check "breach with a start that stays pending -> exit 4" "$RC" "4"
+[ -d "/proc/$wdp" ] && ok "watchdog NOT reaped while the start is still pending (pid $wdp alive)" || bad "watchdog was reaped early"
+hasnt "  no SIGTERM was sent to it" "$EVD/signals.log" 'SIGTERM'
+has "  verdict says start still pending / watchdog left running" "$E/out.txt" 'start still pending, watchdog left running'
+sleep 16   # the fake start reaches svc_start at t=9s; the watchdog's re-check must stop it
+[ ! -e "$E/fake/running" ] && ok "late unit was stopped by the watchdog's post-fire re-check" || bad "model left running"
+for _ in $(seq 1 60); do [ -d "/proc/$wdp" ] || break; sleep 1; done
+[ ! -d "/proc/$wdp" ] && ok "  watchdog eventually exited by itself" || bad "  watchdog still alive after 60s"
+fi
+
+if want s2; then
+echo "== S2. two quick SIGINTs: cleanup is non-reentrant but completes =="
+E="$(mkenv)"; touch "$E/fake/validate_wait"; echo 1.5 >"$E/fake/stop_slow"
+( FAKE="$E/fake" PATH="$E/bin:$PATH" LT_HERMETIC=1 LT_WD_INTERVAL=0.2 LT_READY_INTERVAL=0.2 LT_STOP_BOUND=2 LT_BOUND=2 LT_POST_SAMPLE=1 \
+  LT_MEMINFO="$E/meminfo" LT_PSI="$E/psi" LT_IOPSI="$E/iopsi" LT_EVIDENCE_ROOT="$E/ev" HOME="$E/home" LLMCTL_SERVICES_DIR="$E/services" LLMCTL_RUNTIME_DIR="$E/run" LT_SUITE_DIR="$E/suite" \
+  exec bash "$MAIN" >"$E/out.txt" 2>"$E/err.txt" ) &
+M=$!
+for _ in $(seq 1 50); do grep -q '^validate ' "$E/fake/calls" 2>/dev/null && break; sleep 0.2; done
+EVD="$(find "$E/ev" -mindepth 1 -maxdepth 1 -type d | head -1)"
+wdp=$(sed -n 's/.*started watchdog pid \([0-9]*\)/\1/p' "$EVD/signals.log")
+kill -INT "$M"; sleep 0.8; kill -INT "$M"; sleep 0.5; kill -TERM "$M" 2>/dev/null; sleep 0.5; kill -HUP "$M" 2>/dev/null
+RC=0; wait "$M" || RC=$?
+check "double SIGINT (+TERM) -> exit 2" "$RC" "2"
+[ ! -d "/proc/$wdp" ] && ok "watchdog reaped despite the second signal" || bad "watchdog $wdp leaked"
+[ ! -e "$E/fake/running" ] && ok "profile stopped" || bad "profile still running"
+[ -s "$EVD/verdict.txt" ] && ok "verdict finalized" || bad "no verdict.txt"
+has "cleanup completed (cleanup stop logged)" "$EVD/stop.out" 'cleanup stop rc='
+fi
+
+if want p2; then
+echo "== P2. preconditions fail early; validate runs niced =="
+E="$(mkenv)"; rm -f "$E/suite/expectations.json"; run_main "$E"
+check "missing golden suite -> refused BEFORE any model start (exit 3)" "$RC" "3"
+has "  reason names the suite" "$EVD/gate.log" 'REFUSED: golden suite'
+hasnt "  no start" "$E/fake/calls" '^start '
+E="$(mkenv)"; run_main "$E"
+has "validate runs at nice 19" "$E/fake/calls" '^validate_nice=19 '
+has "  validate runs at ionice idle" "$E/fake/calls" 'validate_nice=19 idle'
+# llmctl must resolve into the driver's own tree (non-hermetic); override is explicit and logged
+E="$(mkenv)"; echo '[{"profile":"coder","port":8081,"mode":"x","ram_mb":9000,"vram_mb":7000,"enabled":true,"state":"running","last_log_line":null}]' >"$E/fake/others.json"
+RC=0; FAKE="$E/fake" PATH="$E/bin:$PATH" LLMCTL_RUNTIME_DIR="$E/run" HOME="$E/home" timeout 60 bash "$MAIN" >"$E/out.txt" 2>&1 || RC=$?
+EVD="$(find "$E/home/.cache/llmctl-livetest" -mindepth 1 -maxdepth 1 -type d | head -1)"
+check "llmctl outside the driver's tree -> refused (exit 3)" "$RC" "3"
+has "  reason names the tree" "$EVD/gate.log" 'REFUSED: llmctl .* not inside'
+rm -rf "${E:?}/home"
+RC=0; FAKE="$E/fake" PATH="$E/bin:$PATH" LLMCTL_RUNTIME_DIR="$E/run" HOME="$E/home" LT_LLMCTL_TREE="$E/bin" timeout 60 bash "$MAIN" >"$E/out.txt" 2>&1 || RC=$?
+EVD="$(find "$E/home/.cache/llmctl-livetest" -mindepth 1 -maxdepth 1 -type d | head -1)"
+has "NEG-CONTROL explicit LT_LLMCTL_TREE override is honoured and logged" "$EVD/overrides.log" 'HONOURED LT_LLMCTL_TREE'
+hasnt "  tree check no longer the refusal reason" "$EVD/gate.log" 'REFUSED: llmctl .* not inside'
 fi
 
 if want always; then

@@ -53,12 +53,13 @@ for _n in $OVERRIDE_NAMES; do
     else echo "IGNORED $_n=${!_n} (LT_HERMETIC!=1)" >>"$EV/overrides.log"; fi
   fi
 done
+[ -n "${LT_LLMCTL_TREE:-}" ] && echo "HONOURED LT_LLMCTL_TREE=$LT_LLMCTL_TREE (explicit operator override of the llmctl-tree check)" >>"$EV/overrides.log"
 [ "${LT_HERMETIC:-0}" = 1 ] && echo "HONOURED LT_HERMETIC=1: thresholds/timeouts may be overridden; this is NOT a live run" >>"$EV/overrides.log"
 env | cut -d= -f1 | sort >"$EV/env_names.txt"   # NAMES only, never values (secrets)
 CMDLOG="$EV/commands.log"; SIGLOG="$EV/signals.log"
 log() { printf '%s %s\n' "$(date -u +%FT%TZ)" "$*" | tee -a "$EV/run.log" >&2; }
 
-WD_PID=""; START_SUB=""; STOP_NEEDED=0; CLEANED=0; RESULT=2; VERDICT_REASON="not finished"
+WD_PID=""; START_SUB=""; START_PENDING=0; STOP_NEEDED=0; CLEANED=0; RESULT=2; VERDICT_REASON="not finished"
 GATE_RES="NOT RUN"; READY=0; VRAM_NOTE=""; UNIT_STATE=""; PORT_SERVING=""; UNIT=""; FINAL_STOP_RC="NA"; GPU_BASE=""; GPU_FINAL=""; VALIDATE_RC="NA"; CLEAN_OK="NO"; MH="UNKNOWN"; PH="UNKNOWN"; LSV="UNKNOWN"
 
 print_table() {
@@ -103,6 +104,7 @@ run_logged() { echo "$(date -u +%FT%TZ) \$ $*" >>"$CMDLOG"; "$@"; }
 
 # shellcheck disable=SC2329  # invoked via trap
 cleanup() {   # always: stop our profile via llmctl, then reap our own watchdog
+  trap '' INT TERM HUP   # non-reentrant: further Ctrl-C/TERM while cleaning must not cut the remaining stops short
   [ "$CLEANED" = 1 ] && return; CLEANED=1
   if [ "$STOP_NEEDED" = 1 ]; then
     log "cleanup: llmctl stop $PROFILE"
@@ -115,14 +117,24 @@ cleanup() {   # always: stop our profile via llmctl, then reap our own watchdog
       while [ -d "/proc/$START_SUB" ] && [ ! -s "$EV/start.rc" ] && [ "$w" -lt "$START_WAIT" ]; do sleep 1; w=$((w+1)); done
       "$HERE/watchdog.sh" --stop "$PROFILE" "$EV" >>"$EV/stop.out" 2>&1
       echo "second cleanup stop (after start ended) rc=$?" >>"$EV/stop.out"
+      if [ -d "/proc/$START_SUB" ] && [ ! -s "$EV/start.rc" ]; then START_PENDING=1; fi
     fi
+  fi
+  if [ "$START_PENDING" = 1 ]; then
+    # The backgrounded `llmctl start` (queued behind the scheduler flock, which has no timeout) may still reach svc_start.
+    # Do NOT reap the watchdog: it outlives us (own session), its parent-gone path stops a late unit and it keeps
+    # re-checking while the start process is alive.
+    VERDICT_REASON="$VERDICT_REASON | start still pending, watchdog left running (pid $WD_PID) - CHECK llmctl status / systemctl --user is-active $(unit_name)"
+    log "$VERDICT_REASON"; echo "$VERDICT_REASON" >"$EV/WATCHDOG_LEFT_RUNNING.txt"
+    WD_PID=""
+    return 0
   fi
   safe_kill
   [ -n "$WD_PID" ] && wait "$WD_PID" 2>/dev/null
   return 0
 }
 # shellcheck disable=SC2329
-on_exit() { local rc=$?; cleanup; collect_evidence; RESULT="$rc"; print_table | tee "$EV/verdict.txt"; exit "$rc"; }
+on_exit() { local rc=$?; trap '' INT TERM HUP; cleanup; collect_evidence; RESULT="$rc"; print_table | tee "$EV/verdict.txt"; exit "$rc"; }
 # shellcheck disable=SC2329
 on_sig()  { log "interrupted by signal"; RESULT=2; VERDICT_REASON="interrupted"; exit 2; }
 trap on_exit EXIT
@@ -265,6 +277,28 @@ gate() {
   [ "$gpu" -lt "$GATE_MAX_GPU_MB" ] || refuse "GPU used ${gpu} MiB not < ${GATE_MAX_GPU_MB}"
   GPU_BASE="$gpu"
 
+  # --- preconditions that must fail BEFORE any model is started ---
+  local tree real
+  tree="${LT_LLMCTL_TREE:-}"; [ -n "$tree" ] || { [ "${LT_HERMETIC:-0}" = 1 ] || tree="$(readlink -f "$HERE/../..")"; }
+  if [ -n "$tree" ]; then
+    real="$(readlink -f "$(command -v "$LLMCTL")" 2>/dev/null)"
+    case "$real" in "$(readlink -f "$tree")"/*) ;; *) refuse "llmctl ($real) not inside this tree ($tree): the installed llmctl may lack vision validate/--host (set LT_LLMCTL_TREE to override explicitly)" ;; esac
+    echo "llmctl tree check: $real inside $tree" >>"$EV/gate.log"
+  fi
+  [ -s "$SUITE_DIR/expectations.json" ] || refuse "golden suite missing: $SUITE_DIR/expectations.json (run from the integrated tree that has validation/suites/vision-golden-v1)"
+  # The scheduler flock (lib/scheduler.sh scheduler::with_lock) has NO timeout: if someone holds it, our start and our
+  # stops would queue behind it. Non-blocking shared probe, released immediately; never held past the check.
+  local rt lock holder
+  if [ -n "${LLMCTL_RUNTIME_DIR:-}" ]; then rt="$LLMCTL_RUNTIME_DIR"
+  elif [ -n "${XDG_RUNTIME_DIR:-}" ] && [ -d "$XDG_RUNTIME_DIR" ]; then rt="$XDG_RUNTIME_DIR/llmctl"
+  else rt="${LLMCTL_STATE_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/llmctl}/run"; fi
+  lock="$rt/.scheduler.lock"
+  if [ -e "$lock" ] && command -v flock >/dev/null 2>&1 && ! flock -n -s "$lock" true; then
+    holder="$(fuser "$lock" 2>&1 | tr '\n' ' ')"; [ -n "$holder" ] || holder="holder unknown (fuser unavailable)"
+    refuse "scheduler lock $lock is held by someone else ($holder): another llmctl operation is running; wait for it"
+  fi
+  echo "scheduler lock $lock: free" >>"$EV/gate.log"
+
   st="$(status_json)" || refuse "llmctl status --json failed"
   printf '%s\n' "$st" >"$EV/status_before.json"
   local verdict
@@ -328,7 +362,7 @@ echo "$(date -u +%FT%TZ) \$ LLMCTL_VALIDATE_ON_START=0 LLMCTL_READY_TIMEOUT=0 ni
 # watchdog checks, under our own deadline. The start runs in the background so a breach during it is seen at once.
 rm -f "$EV/start.rc"
 ( LLMCTL_VALIDATE_ON_START=0 LLMCTL_READY_TIMEOUT=0 nice -n 19 ionice -c 3 "$LLMCTL" start "$PROFILE" >"$EV/start.out" 2>&1; echo $? >"$EV/start.rc" ) &
-START_SUB=$!
+START_SUB=$!; echo "$START_SUB" >"$EV/start.pid"
 t0=$(date +%s)
 while [ ! -s "$EV/start.rc" ]; do
   guard
@@ -371,7 +405,7 @@ if bounded "$BOUND" "$EV/.vhelp" "$LLMCTL" vision help && grep -q 'vision valida
 # evidence only and is not recorded as local validation state (fine: our evidence is the captured output).
 guard
 curl -fsS --max-time 3 "$URL/health" >/dev/null 2>&1 || { RESULT=2; VERDICT_REASON="profile not up immediately before validate"; exit 2; }
-VCMD=("$LLMCTL" vision validate --profile "$PROFILE" --host "$URL" --json --keep)
+VCMD=(nice -n 19 ionice -c 3 "$LLMCTL" vision validate --profile "$PROFILE" --host "$URL" --json --keep)
 echo "$(date -u +%FT%TZ) \$ ${VCMD[*]}" >>"$CMDLOG"
 "${VCMD[@]}" >"$EV/validate.out" 2>"$EV/validate.err" &
 VPID=$!
