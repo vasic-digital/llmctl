@@ -1231,13 +1231,24 @@ _enable_impl() {
   fi
   if ! _sched_unit_started_ok "${profile}"; then
     err "failed to start '${profile}': unit not active after start (skipped by the port check or exited); see: llmctl logs ${profile}"
+    # undo the enable: no half-enabled unit (symlink) and no .enabled marker may outlive a failed enable
+    svc_disable "${profile}" >/dev/null 2>&1 || true
+    rm -f "${LLMCTL_SERVICES_DIR}/${profile}.enabled"
     [[ "${allocated}" == 1 ]] && portreg_release "${reg_name}"
     return 1
   fi
   # Record the reservation so the scheduler budgets correctly (enable
-  # implies start).
+  # implies start) - but only for a unit that is ACTIVE now. A unit still
+  # "activating" (the bounded start timed out; the pressure gate may yet
+  # refuse it with rc 75) gets no reservation: _sched_reconcile_reservations
+  # writes it once the unit is enabled + active, so a unit that later fails
+  # never leaves a reservation behind.
   ensure_dir "${LLMCTL_RUNTIME_DIR}"
-  _sched_write_reservation "${profile}" "${mode}" "${port}" "${ram}" "${vram}"
+  if svc_is_active "${profile}" 2>/dev/null; then
+    _sched_write_reservation "${profile}" "${mode}" "${port}" "${ram}" "${vram}"
+  else
+    warn "'${profile}' is still starting (activating): no reservation is recorded until it is active"
+  fi
   # Publish once ready. A slow model load must not make `enable` fail (the
   # unit stays enabled and restarts on its own), so a timeout only defers the
   # publication: the unit's ExecStartPost waiter (lib/svc_hook.sh) registers
