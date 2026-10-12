@@ -300,20 +300,68 @@ stateDiagram-v2
 
 ### State machine: engine service (systemd --user)
 
+The unit lifecycle as installed by this release; the restart policy itself is drawn in the next section.
+
 ```mermaid
 stateDiagram-v2
     [*] --> Installed: llmctl install
-    Installed --> Starting: llmctl start / enable
+    Installed --> Gating: llmctl start / restart / enable
+    Gating --> Refused75: pressure gate refuses (exit 75)
+    Refused75 --> Installed: retry when the host is quiet
+    Gating --> Starting: gate passes (ExecStartPre gate, prestart)
+    Starting --> Failed98: port already listening (exit 98)
     Starting --> Loading: ExecStart (svc_hook run-engine)
     Loading --> Running: engine listens, ExecStartPost registers it
     Loading --> Failed: exit before ready
     Running --> Failed: crash
-    Failed --> Starting: Restart=always (max 5 in 60 s)
-    Failed --> CrashLoop: StartLimit reached
-    CrashLoop --> Installed: reset-failed and fix
+    Running --> Killed: SIGKILL (oom-kill, systemd-oomd)
     Running --> Stopped: llmctl stop / disable (unregister)
-    Stopped --> Starting: start
+    Failed --> Gating: Restart=on-failure after RestartSec
+    Failed --> StartLimited: 3 starts in 900 s
+    Killed --> Dead: no automatic restart
+    Failed98 --> Dead: no automatic restart
+    StartLimited --> Installed: reset-failed and fix
+    Dead --> Installed: operator investigates, llmctl start
+    Stopped --> Gating: start
 ```
+
+### Start path (gate, admission, start, readiness, validation)
+
+What `llmctl start`, `switch` and `auto` do, in order, in this release. A refusal at any step starts nothing; a `switch` refuses before it stops anything. The validation step is advisory (see [validation](validation.md#model-validation-gate)).
+
+```mermaid
+flowchart TD
+    A[llmctl start / switch / auto] --> G{pressure gate<br/>PSI full avg10 > 2, some avg10 > 10,<br/>MemAvailable < footprint + 4 GiB}
+    G -- refused --> R75[exit 75, nothing started or stopped]
+    G -- passes --> AD{admission control<br/>RAM and VRAM budget, eviction rules}
+    AD -- does not fit --> R3[refused with the numbers, exit 3]
+    AD -- fits --> ST[start unit<br/>caps, no swap, ExecStartPre gate, prestart port check]
+    ST -- port already listening --> R98[exit 98, no restart]
+    ST --> RD{readiness<br/>model answers its readiness probe}
+    RD -- timeout --> RF[start fails, reported]
+    RD -- ready --> V{validation gate<br/>validate_after_start, unless LLMCTL_VALIDATE_ON_START=0}
+    V -- exit 0 --> OK[serving, record written]
+    V -- exit 1 wrong answer --> BAD[still serving, exit 1 reported, require-validated refuses]
+    V -- exit 2 undetermined --> UND[still serving, no pass recorded]
+```
+
+Units started by systemd (boot, `enable`, `restart`) pass the pressure gate as the unit's first `ExecStartPre` but not the validation step.
+
+### State machine: restart policy of an engine unit
+
+```mermaid
+stateDiagram-v2
+    [*] --> Active: unit started
+    Active --> NoRestart: exit by SIGKILL, SIGTERM or status 98
+    Active --> Waiting: other failure (Restart=on-failure)
+    Waiting --> Active: after RestartSec=5, steps up to 120 s
+    Waiting --> StartLimitHit: StartLimitBurst=3 within 900 s
+    NoRestart --> [*]: unit stays failed until the operator starts it
+    StartLimitHit --> [*]: unit stays failed until reset-failed and a manual start
+    Active --> [*]: llmctl stop
+```
+
+The previous template restarted always, up to 5 times per 60 s, a limit that a model load of more than 60 s could never reach. UNKNOWN: whether `RestartPreventExitStatus` is applied to a failing `ExecStartPre` on every systemd version; the start limit applies either way.
 
 ### Sequence: `ask` over HTTPS
 
