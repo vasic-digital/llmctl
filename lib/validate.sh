@@ -244,7 +244,10 @@ validate_profile() {
     local status=undetermined
     case "${rc}" in 0) status=pass ;; 1) status=fail ;; esac
     if [[ "${covered}" == "1" || "${status}" == "fail" ]]; then
-      _val_judge record --key "${key_file}" --status "${status}" --evidence "${evidence}" --out "$(_val_state_file "${p}")"
+      if ! _val_judge record --key "${key_file}" --status "${status}" --evidence "${evidence}" --out "$(_val_state_file "${p}")"; then
+        err "could not record the validation state of '${p}' ($(_val_state_file "${p}")) - NOT validated"
+        (( rc == 0 )) && rc=2
+      fi
       [[ "${json}" == "1" ]] || log "validation state for '${p}': ${status} -> $(_val_state_file "${p}")"
     else
       [[ "${json}" == "1" ]] || log "only the '${kind}' suites ran; '${p}' also has $(tr '\n' ' ' <<<"${all_suites}")- run 'llmctl validate ${p}' to record its validation state"

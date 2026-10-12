@@ -412,4 +412,22 @@ print(m.redact_url("http://u:p@host:9/x?tok=1#f"))
 PY
 )" "redact_url keeps scheme/host/port/path only"
 
+echo "== 22. no mktemp key file survives a failing 'judge record' / an aborted run"
+mkdir -p "${LLMCTL_MODELS_DIR}/vision"; : > "${LLMCTL_MODELS_DIR}/vision/gemma-3-4b-it-Q4_K_M.gguf"
+U="$(fake_start "${FIX}/answers_good.json" --model-id "${LLMCTL_MODELS_DIR}/vision/gemma-3-4b-it-Q4_K_M.gguf")"
+write_run vision "${U##*:}"
+rm -rf "${TEST_TMP}/tmpk"; mkdir -p "${TEST_TMP}/tmpk" "${LLMCTL_STATE_DIR}/validation"
+chmod 500 "${LLMCTL_STATE_DIR}/validation"           # `judge record` cannot create its state file
+rc="$(run_rc env TMPDIR="${TEST_TMP}/tmpk" "${LLMCTL}" vision validate)"
+chmod 700 "${LLMCTL_STATE_DIR}/validation"
+assert_eq 2 "${rc}" "a state write failure is exit 2 (could not determine / not recorded), never 0"
+if [[ "${rc}" != "0" ]]; then printf '  ok: a state write failure is not a PASS (exit %s)\n' "${rc}"; else printf '  FAIL: exit 0 although the state could not be recorded\n' >&2; TEST_FAILS=$((TEST_FAILS+1)); fi
+assert_eq "" "$(ls -A "${TEST_TMP}/tmpk")" "validate_profile left no temp key file"
+rm -f "${LLMCTL_STATE_DIR}/validation/vision.json"; rm -rf "${TEST_TMP}/tmpk"/*
+chmod 500 "${LLMCTL_STATE_DIR}/validation"
+rc="$(run_rc env TMPDIR="${TEST_TMP}/tmpk" LLMCTL_VALIDATE_ON_START=1 "${LLMCTL}" validate-after-start vision)"
+chmod 700 "${LLMCTL_STATE_DIR}/validation"
+assert_eq "" "$(ls -A "${TEST_TMP}/tmpk")" "validate_after_start left no temp key file"
+rm -f "${LLMCTL_RUNTIME_DIR}/vision.run"
+
 test_finish
