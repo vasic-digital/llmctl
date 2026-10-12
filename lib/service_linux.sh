@@ -231,8 +231,9 @@ _svc_profile_caps() {
 _svc_write_mem_dropin() {
   local profile="$1" engine="$2" instance dir fp total caps
   declare -F catalog_plan_json >/dev/null 2>&1 || return 0
+  valid_id "${profile}" || return 0      # security: allow-listed BEFORE any use; the name is data below, never code
   instance="$(_svc_instance_key "${profile}")"
-  fp="$(hw_probe_json | catalog_plan_json 2>/dev/null | json_stdin "d['profiles']['${profile}']['ram_mb']" 2>/dev/null)" || return 0
+  fp="$(hw_probe_json | catalog_plan_json 2>/dev/null | json_stdin 'd["profiles"][argv[0]]["ram_mb"]' "${profile}" 2>/dev/null)" || return 0
   [[ "${fp}" =~ ^[0-9]+$ ]] || return 0
   total="$(hw_probe_json | json_stdin 'd["memory"]["total_mb"]' 2>/dev/null)" || return 0
   caps="$(_svc_profile_caps "${fp}" "${total}")"

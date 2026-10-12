@@ -250,10 +250,10 @@ _sched_reconcile_reservations() {
       hw_probe_json | catalog_plan_json > "${plan_file}"
     fi
     local mode port ram vram
-    mode="$(json_query "${plan_file}" "d[\"profiles\"][\"${profile}\"][\"mode\"]")"
-    port="$(json_query "${plan_file}" "d[\"profiles\"][\"${profile}\"][\"port\"]")"
-    ram="$(json_query "${plan_file}" "d[\"profiles\"][\"${profile}\"][\"ram_mb\"]")"
-    vram="$(json_query "${plan_file}" "d[\"profiles\"][\"${profile}\"][\"vram_mb\"]")"
+    mode="$(json_query "${plan_file}" "d[\"profiles\"][argv[0]][\"mode\"]" "${profile}")"
+    port="$(json_query "${plan_file}" "d[\"profiles\"][argv[0]][\"port\"]" "${profile}")"
+    ram="$(json_query "${plan_file}" "d[\"profiles\"][argv[0]][\"ram_mb\"]" "${profile}")"
+    vram="$(json_query "${plan_file}" "d[\"profiles\"][argv[0]][\"vram_mb\"]" "${profile}")"
     # The port the unit really runs on is the one in its env record (a dynamic
     # assignment differs from the plan's documented port) - FR-088.
     local rec_port
@@ -612,10 +612,11 @@ sched_decision_probe() {
     plan_file="$(mktemp)"; own_plan=1
     hw_probe_json | catalog_plan_json > "${plan_file}"
   fi
-  local di="d['decision_instances']['${profile}']" pl="d['decision_instances']['${profile}']['placements']['${placement}']"
+  valid_id "${profile}" && valid_id "${placement}" || die "invalid profile/placement name"
+  local di="d['decision_instances'][argv[0]]" pl="d['decision_instances'][argv[0]]['placements'][argv[1]]"
   local ram vram ram_budget vram_budget tier_ok host_tier min_tier used_ram used_vram
   read -r ram vram ram_budget vram_budget tier_ok host_tier min_tier < <(json_query "${plan_file}" \
-    "' '.join(str(x) for x in ((${pl} or {}).get('ram_mb', -1), (${pl} or {}).get('vram_mb', -1), d['budgets']['ram_mb'], d['budgets']['vram_mb'], int(bool(${di}['tier_ok'])), d['tier'], d['profiles']['${profile}']['min_tier']))")
+    "' '.join(str(x) for x in ((${pl} or {}).get('ram_mb', -1), (${pl} or {}).get('vram_mb', -1), d['budgets']['ram_mb'], d['budgets']['vram_mb'], int(bool(${di}['tier_ok'])), d['tier'], d['profiles'][argv[0]]['min_tier']))" "${profile}" "${placement}")
   read -r used_ram used_vram < <(_sched_initial_used "${plan_file}")
   [[ "${own_plan}" == 1 ]] && rm -f "${plan_file}"
   if (( ram < 0 )); then
@@ -739,12 +740,12 @@ _sched_decision_scale_impl() {
   local plan_file; plan_file="$(mktemp)"
   hw_probe_json | catalog_plan_json > "${plan_file}"
   local fits ram vram ram_budget vram_budget used_ram used_vram nofit_reason
-  fits="$(json_query "${plan_file}" "str(d['profiles']['${profile}']['fits'])")"
-  ram="$(json_query "${plan_file}" "d['profiles']['${profile}']['ram_mb']")"
-  vram="$(json_query "${plan_file}" "d['profiles']['${profile}']['vram_mb']")"
+  fits="$(json_query "${plan_file}" "str(d['profiles'][argv[0]]['fits'])" "${profile}")"
+  ram="$(json_query "${plan_file}" "d['profiles'][argv[0]]['ram_mb']" "${profile}")"
+  vram="$(json_query "${plan_file}" "d['profiles'][argv[0]]['vram_mb']" "${profile}")"
   ram_budget="$(json_query "${plan_file}" 'd["budgets"]["ram_mb"]')"
   vram_budget="$(json_query "${plan_file}" 'd["budgets"]["vram_mb"]')"
-  nofit_reason="$(json_query "${plan_file}" "d['decision_instances']['${profile}'].get('reason') or 'footprint exceeds the RAM/VRAM budgets'")"
+  nofit_reason="$(json_query "${plan_file}" "d['decision_instances'][argv[0]].get('reason') or 'footprint exceeds the RAM/VRAM budgets'" "${profile}")"
   read -r used_ram used_vram < <(_sched_initial_used "${plan_file}")
 
   local f accepted=0
@@ -778,13 +779,13 @@ _sched_decision_scale_impl() {
 
   local mode doc_port port ctx ngl parallel fa kv_type reg_name started=0
   local -a started_keys=()
-  mode="$(json_query "${plan_file}" "d['profiles']['${profile}']['mode']")"
-  doc_port="$(json_query "${plan_file}" "d['profiles']['${profile}']['port']")"
-  ctx="$(json_query "${plan_file}" "d['profiles']['${profile}']['ctx']")"
-  ngl="$(json_query "${plan_file}" "d['profiles']['${profile}']['ngl']")"
-  parallel="$(json_query "${plan_file}" "d['profiles']['${profile}']['parallel']")"
-  fa="$(json_query "${plan_file}" "d['profiles']['${profile}']['flash_attn']")"
-  kv_type="$(json_query "${plan_file}" "d['profiles']['${profile}'].get('kv_cache_type', 'f16')")"
+  mode="$(json_query "${plan_file}" "d['profiles'][argv[0]]['mode']" "${profile}")"
+  doc_port="$(json_query "${plan_file}" "d['profiles'][argv[0]]['port']" "${profile}")"
+  ctx="$(json_query "${plan_file}" "d['profiles'][argv[0]]['ctx']" "${profile}")"
+  ngl="$(json_query "${plan_file}" "d['profiles'][argv[0]]['ngl']" "${profile}")"
+  parallel="$(json_query "${plan_file}" "d['profiles'][argv[0]]['parallel']" "${profile}")"
+  fa="$(json_query "${plan_file}" "d['profiles'][argv[0]]['flash_attn']" "${profile}")"
+  kv_type="$(json_query "${plan_file}" "d['profiles'][argv[0]].get('kv_cache_type', 'f16')" "${profile}")"
   rm -f "${plan_file}"
 
   # Failure policy: by default a runtime failure rolls back every instance started in THIS call
@@ -989,9 +990,9 @@ _sched_start_impl() {
   for p in "$@"; do
     catalog_exists "${p}" || { rm -f "${plan_file}"; die "unknown profile: ${p} (see: llmctl models list)"; }
     sched_is_running "${p}" && { log "${p} is already running"; continue; }
-    fits="$(json_query "${plan_file}" "d[\"profiles\"][\"${p}\"][\"fits\"]")"
-    ram="$(json_query "${plan_file}" "d[\"profiles\"][\"${p}\"][\"ram_mb\"]")"
-    vram="$(json_query "${plan_file}" "d[\"profiles\"][\"${p}\"][\"vram_mb\"]")"
+    fits="$(json_query "${plan_file}" "d[\"profiles\"][argv[0]][\"fits\"]" "${p}")"
+    ram="$(json_query "${plan_file}" "d[\"profiles\"][argv[0]][\"ram_mb\"]" "${p}")"
+    vram="$(json_query "${plan_file}" "d[\"profiles\"][argv[0]][\"vram_mb\"]" "${p}")"
     if [[ "${fits}" != "True" ]] || \
        ! _sched_admission_fits "${ram}" "${vram}" "${used_ram}" "${used_vram}" "${ram_budget}" "${vram_budget}"; then
       local suggestion=""
@@ -999,8 +1000,8 @@ _sched_start_impl() {
       for alt in $(json_query "${plan_file}" 'd["recommended"]'); do
         sched_is_running "${alt}" && continue
         local a_ram a_vram
-        a_ram="$(json_query "${plan_file}" "d[\"profiles\"][\"${alt}\"][\"ram_mb\"]")"
-        a_vram="$(json_query "${plan_file}" "d[\"profiles\"][\"${alt}\"][\"vram_mb\"]")"
+        a_ram="$(json_query "${plan_file}" "d[\"profiles\"][argv[0]][\"ram_mb\"]" "${alt}")"
+        a_vram="$(json_query "${plan_file}" "d[\"profiles\"][argv[0]][\"vram_mb\"]" "${alt}")"
         if (( used_ram + a_ram <= ram_budget && used_vram + a_vram <= vram_budget )); then
           suggestion="${alt}"; break
         fi
@@ -1029,15 +1030,15 @@ _sched_start_impl() {
   done
 
   for p in ${selected[@]+"${selected[@]}"}; do
-    mode="$(json_query "${plan_file}" "d[\"profiles\"][\"${p}\"][\"mode\"]")"
-    port="$(json_query "${plan_file}" "d[\"profiles\"][\"${p}\"][\"port\"]")"
-    ram="$(json_query "${plan_file}" "d[\"profiles\"][\"${p}\"][\"ram_mb\"]")"
-    vram="$(json_query "${plan_file}" "d[\"profiles\"][\"${p}\"][\"vram_mb\"]")"
-    ctx="$(json_query "${plan_file}" "d[\"profiles\"][\"${p}\"][\"ctx\"]")"
-    ngl="$(json_query "${plan_file}" "d[\"profiles\"][\"${p}\"][\"ngl\"]")"
-    parallel="$(json_query "${plan_file}" "d[\"profiles\"][\"${p}\"][\"parallel\"]")"
-    fa="$(json_query "${plan_file}" "d[\"profiles\"][\"${p}\"][\"flash_attn\"]")"
-    kv_type="$(json_query "${plan_file}" "d[\"profiles\"][\"${p}\"].get(\"kv_cache_type\", \"f16\")")"
+    mode="$(json_query "${plan_file}" "d[\"profiles\"][argv[0]][\"mode\"]" "${p}")"
+    port="$(json_query "${plan_file}" "d[\"profiles\"][argv[0]][\"port\"]" "${p}")"
+    ram="$(json_query "${plan_file}" "d[\"profiles\"][argv[0]][\"ram_mb\"]" "${p}")"
+    vram="$(json_query "${plan_file}" "d[\"profiles\"][argv[0]][\"vram_mb\"]" "${p}")"
+    ctx="$(json_query "${plan_file}" "d[\"profiles\"][argv[0]][\"ctx\"]" "${p}")"
+    ngl="$(json_query "${plan_file}" "d[\"profiles\"][argv[0]][\"ngl\"]" "${p}")"
+    parallel="$(json_query "${plan_file}" "d[\"profiles\"][argv[0]][\"parallel\"]" "${p}")"
+    fa="$(json_query "${plan_file}" "d[\"profiles\"][argv[0]][\"flash_attn\"]" "${p}")"
+    kv_type="$(json_query "${plan_file}" "d[\"profiles\"][argv[0]].get(\"kv_cache_type\", \"f16\")" "${p}")"
     # FR-088: the port is resolved through the registry allocator (fixed =
     # the documented port, dynamic = a bind-tested free port of
     # LLMCTL_PORT_RANGE; an explicit LLMCTL_PORT_<PROFILE> always wins). A
@@ -1132,15 +1133,15 @@ _enable_impl() {
   local plan_file; plan_file="$(mktemp)"
   hw_probe_json | catalog_plan_json > "${plan_file}"
   local mode port ctx ngl parallel fa kv_type ram vram
-  mode="$(json_query "${plan_file}" "d[\"profiles\"][\"${profile}\"][\"mode\"]")"
-  port="$(json_query "${plan_file}" "d[\"profiles\"][\"${profile}\"][\"port\"]")"
-  ctx="$(json_query "${plan_file}" "d[\"profiles\"][\"${profile}\"][\"ctx\"]")"
-  ngl="$(json_query "${plan_file}" "d[\"profiles\"][\"${profile}\"][\"ngl\"]")"
-  parallel="$(json_query "${plan_file}" "d[\"profiles\"][\"${profile}\"][\"parallel\"]")"
-  fa="$(json_query "${plan_file}" "d[\"profiles\"][\"${profile}\"][\"flash_attn\"]")"
-  kv_type="$(json_query "${plan_file}" "d[\"profiles\"][\"${profile}\"].get(\"kv_cache_type\", \"f16\")")"
-  ram="$(json_query "${plan_file}" "d[\"profiles\"][\"${profile}\"][\"ram_mb\"]")"
-  vram="$(json_query "${plan_file}" "d[\"profiles\"][\"${profile}\"][\"vram_mb\"]")"
+  mode="$(json_query "${plan_file}" "d[\"profiles\"][argv[0]][\"mode\"]" "${profile}")"
+  port="$(json_query "${plan_file}" "d[\"profiles\"][argv[0]][\"port\"]" "${profile}")"
+  ctx="$(json_query "${plan_file}" "d[\"profiles\"][argv[0]][\"ctx\"]" "${profile}")"
+  ngl="$(json_query "${plan_file}" "d[\"profiles\"][argv[0]][\"ngl\"]" "${profile}")"
+  parallel="$(json_query "${plan_file}" "d[\"profiles\"][argv[0]][\"parallel\"]" "${profile}")"
+  fa="$(json_query "${plan_file}" "d[\"profiles\"][argv[0]][\"flash_attn\"]" "${profile}")"
+  kv_type="$(json_query "${plan_file}" "d[\"profiles\"][argv[0]].get(\"kv_cache_type\", \"f16\")" "${profile}")"
+  ram="$(json_query "${plan_file}" "d[\"profiles\"][argv[0]][\"ram_mb\"]" "${profile}")"
+  vram="$(json_query "${plan_file}" "d[\"profiles\"][argv[0]][\"vram_mb\"]" "${profile}")"
   # Root-caused 2026-09-17 (real repro, not guessed): unlike `llmctl start`,
   # which checks the combined RAM/VRAM footprint of every currently-reserved
   # profile against the host's own computed budget (_sched_start_impl above)
@@ -1337,9 +1338,9 @@ _sched_switch_impl() {
 # (tier gate / footprint) for a profile the plan does not recommend.
 _sched_why_not_recommended() {
   local pf="$1" p="$2"
-  if [[ "$(json_query "${pf}" "str(d[\"profiles\"][\"${p}\"][\"tier_ok\"])")" != "True" ]]; then
+  if [[ "$(json_query "${pf}" "str(d[\"profiles\"][argv[0]][\"tier_ok\"])" "${p}")" != "True" ]]; then
     printf 'tier gate: host tier %s below min_tier %s' "$(json_query "${pf}" 'd["tier"]')" \
-      "$(json_query "${pf}" "d[\"profiles\"][\"${p}\"][\"min_tier\"]")"
+      "$(json_query "${pf}" "d[\"profiles\"][argv[0]][\"min_tier\"]" "${p}")"
   else
     printf 'footprint exceeds the RAM and VRAM budgets'
   fi
@@ -1374,7 +1375,7 @@ _sched_auto_impl() {
     for p in ${ranked}; do
       catalog_exists "${p}" || continue
       [[ " $(catalog_capability "${p}") " == *" ${cap} "* ]] || continue
-      if [[ "$(json_query "${plan_file}" "d[\"profiles\"][\"${p}\"][\"recommended\"]")" != "True" ]]; then
+      if [[ "$(json_query "${plan_file}" "d[\"profiles\"][argv[0]][\"recommended\"]" "${p}")" != "True" ]]; then
         skipped_why+="${p} (not recommended on this host: $(_sched_why_not_recommended "${plan_file}" "${p}")); "
         continue
       fi
@@ -1424,8 +1425,8 @@ _sched_auto_impl() {
     for p in "${want[@]}"; do
       sched_is_running "${p}" && continue
       local need_ram need_vram
-      need_ram="$(json_query "${plan_file}" "d[\"profiles\"][\"${p}\"][\"ram_mb\"]")"
-      need_vram="$(json_query "${plan_file}" "d[\"profiles\"][\"${p}\"][\"vram_mb\"]")"
+      need_ram="$(json_query "${plan_file}" "d[\"profiles\"][argv[0]][\"ram_mb\"]" "${p}")"
+      need_vram="$(json_query "${plan_file}" "d[\"profiles\"][argv[0]][\"vram_mb\"]" "${p}")"
       (( used_ram + need_ram <= ram_budget )) || { ok=0; break; }
       (( used_vram + need_vram <= vram_budget )) || { ok=0; break; }
       used_ram=$(( used_ram + need_ram ))

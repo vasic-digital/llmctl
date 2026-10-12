@@ -73,7 +73,8 @@ catalog_profiles() {
 
 catalog_exists() {
   catalog_check
-  json_query "${LLMCTL_CATALOG}" "'$1' in d[\"profiles\"]" >/dev/null 2>&1
+  valid_id "$1" || return 1
+  json_query "${LLMCTL_CATALOG}" 'argv[0] in d["profiles"]' "$1" >/dev/null 2>&1
 }
 
 catalog_field() {
@@ -82,7 +83,8 @@ catalog_field() {
   catalog_check
   catalog_exists "$p" || die "unknown profile: $p (see: llmctl models list)"
   local out
-  out="$(json_query "${LLMCTL_CATALOG}" "d[\"profiles\"][\"$p\"].get(\"$f\")")" || {
+  valid_id "$f" || die "invalid catalog field name: $f"
+  out="$(json_query "${LLMCTL_CATALOG}" 'd["profiles"][argv[0]].get(argv[1])' "$p" "$f")" || {
     [[ -n "${def}" ]] && { echo "${def}"; return 0; }
     die "catalog profile '$p' has no field '$f'"
   }
@@ -170,17 +172,20 @@ catalog_hf_repo()    { catalog_field "$1" hf_repo; }
 # catalog_decision_protocol <profile> -> letter-logit | systemone-native | nli-onnx | jev-verdict ("" for a non-decision profile).
 catalog_decision_protocol() {
   catalog_check
-  json_query "${LLMCTL_CATALOG}" "d[\"profiles\"][\"$1\"].get(\"decision\",{}).get(\"protocol\") or \"\"" 2>/dev/null || true
+  valid_id "$1" || return 0
+  json_query "${LLMCTL_CATALOG}" 'd["profiles"][argv[0]].get("decision",{}).get("protocol") or ""' "$1" 2>/dev/null || true
 }
 
-catalog_capability() { catalog_check; json_query "${LLMCTL_CATALOG}" "' '.join(d[\"profiles\"][\"$1\"][\"capability\"])"; }
+catalog_capability() { catalog_check; valid_id "$1" || return 1; json_query "${LLMCTL_CATALOG}" "' '.join(d[\"profiles\"][argv[0]][\"capability\"])" "$1"; }
 
 catalog_default() {
   # catalog_default <profile> <key> <fallback>
   local p="$1" k="$2" fb="$3"
   catalog_check
   local out
-  out="$(json_query "${LLMCTL_CATALOG}" "d[\"profiles\"][\"$p\"].get(\"defaults\",{}).get(\"$k\")" 2>/dev/null || true)"
+  if valid_id "$p" && valid_id "$k"; then
+    out="$(json_query "${LLMCTL_CATALOG}" 'd["profiles"][argv[0]].get("defaults",{}).get(argv[1])' "$p" "$k" 2>/dev/null || true)"
+  else out=""; fi
   echo "${out:-${fb}}"
 }
 
@@ -190,13 +195,14 @@ catalog_files() {
   catalog_check
   catalog_exists "$p" || die "unknown profile: $p"
   json_query "${LLMCTL_CATALOG}" \
-    "[\"%s|%s|%s|%s\" % (f[\"name\"], f.get(\"size\") or 0, f.get(\"sha256\") or \"\", f.get(\"role\") or \"model\") for f in d[\"profiles\"][\"$p\"][\"files\"]]"
+    "[\"%s|%s|%s|%s\" % (f[\"name\"], f.get(\"size\") or 0, f.get(\"sha256\") or \"\", f.get(\"role\") or \"model\") for f in d[\"profiles\"][argv[0]][\"files\"]]" "$p"
 }
 
 catalog_total_size_mb() {
   local p="$1"
   catalog_check
-  json_query "${LLMCTL_CATALOG}" "sum((f.get(\"size\") or 0) for f in d[\"profiles\"][\"$p\"][\"files\"]) // 1048576"
+  valid_id "$p" || die "invalid profile name: $p"
+  json_query "${LLMCTL_CATALOG}" 'sum((f.get("size") or 0) for f in d["profiles"][argv[0]]["files"]) // 1048576' "$p"
 }
 
 # --- Tier classification ----------------------------------------------------
@@ -867,5 +873,6 @@ PYEOF
 # Usage: plan_get <plan-json-file-or-stdin... keep simple: reads plan JSON on stdin> <profile> <field>
 catalog_plan_get() {
   local profile="$1" field="$2"
-  json_stdin "d[\"profiles\"][\"$profile\"][\"$field\"]"
+  valid_id "${profile}" && valid_id "${field}" || { echo "catalog_plan_get: invalid profile/field name" >&2; return 1; }
+  json_stdin 'd["profiles"][argv[0]][argv[1]]' "${profile}" "${field}"
 }
