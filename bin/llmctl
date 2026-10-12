@@ -244,9 +244,7 @@ main() {
       sched_load_backend; svc_restart "$1"
       ;;
     switch)   [[ "$#" -eq 1 ]] || die "usage: llmctl switch <profile>"; sched_switch "$1"; validate_after_start "$1" ;;
-    auto)     sched_auto "$@"
-              # shellcheck disable=SC2046
-              validate_after_start $(for f in "${LLMCTL_RUNTIME_DIR}"/*.run; do [[ -e "${f}" ]] && basename "${f}" .run; done) ;;
+    auto)     validate_auto "$@" ;;
     validate) validate_profile "$@" ;;
     vision)   cmd_vision "$@" ;;
     validate-all) validate_all "$@" ;;

@@ -313,6 +313,33 @@ validate_after_start() {
   return "${rc}"
 }
 
+# _val_run_snapshot - "<key> <started_epoch>" per reservation file in LLMCTL_RUNTIME_DIR (sorted).
+_val_run_snapshot() {
+  local f k e
+  for f in "${LLMCTL_RUNTIME_DIR}"/*.run; do
+    [[ -e "${f}" ]] || continue
+    k="$(basename "${f}" .run)"
+    e="$(sed -n 's/^started_epoch=//p' "${f}" | head -1)"
+    printf '%s %s\n' "${k}" "${e:-0}"
+  done | sort
+}
+
+# validate_auto <auto args...> - `llmctl auto` followed by the validation hook for ONLY the profiles that
+# auto started (a key that was absent before, or whose started_epoch changed = restarted). Profiles that
+# were already running and untouched (e.g. the decision/colibri services) are not its business.
+validate_auto() {
+  local before after
+  before="$(_val_run_snapshot)"
+  sched_auto "$@"
+  after="$(_val_run_snapshot)"
+  local -a started=()
+  local line
+  while IFS= read -r line; do
+    [[ -n "${line}" ]] && started+=("${line%% *}")
+  done < <(comm -13 <(printf '%s\n' "${before}") <(printf '%s\n' "${after}"))
+  validate_after_start ${started[@]+"${started[@]}"}
+}
+
 # models_verify_gate <profile> [--live] - the `llmctl models verify` hook: the profile should name an
 # existing validation suite (schema gate); with --live (or when it is running) the suite is also run.
 # A profile that names NO suite: without --live it warns (loudly: "NOT validated") and returns 0 - the exit

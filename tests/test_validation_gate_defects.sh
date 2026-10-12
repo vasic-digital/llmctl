@@ -74,4 +74,36 @@ help_txt="$("${LLMCTL}" help 2>&1 || true)"
 assert_contains "${help_txt}" "warns and exits 0 when" "usage text documents the no-suite behaviour"
 assert_contains "$(cat "${LLMCTL_ROOT}/docs/user-manual.md")" "names no validation suite" "user manual documents the no-suite behaviour"
 
+echo "== 6. the auto hook validates only the profiles auto STARTED, not every running one"
+rm -f "${LLMCTL_RUNTIME_DIR}"/*.run
+write_run colibri-qwen36 9; write_run decide 9; write_run decide.2 9     # already running before `auto`
+auto_probe() {
+  bash -c '
+    source "$1/lib/common.sh"; source "$1/lib/catalog.sh"; source "$1/lib/validate.sh"
+    sched_auto() { printf "profile=vision\nmode=gpu\nport=9\nram_mb=1\nvram_mb=1\nstarted_epoch=%s\n" "$(date +%s)" > "${LLMCTL_RUNTIME_DIR}/vision.run"; }
+    validate_after_start() { echo "HOOK-ARGS: $*"; }
+    validate_auto vision
+  ' _ "${LLMCTL_ROOT}"
+}
+out="$(auto_probe 2>&1 || true)"
+assert_eq "HOOK-ARGS: vision" "${out}" "only the newly started profile reaches the validation hook"
+# an unchanged `auto` (nothing new started) validates nothing
+out="$(bash -c '
+    source "$1/lib/common.sh"; source "$1/lib/catalog.sh"; source "$1/lib/validate.sh"
+    sched_auto() { :; }
+    validate_after_start() { echo "HOOK-ARGS: $*"; }
+    validate_auto
+  ' _ "${LLMCTL_ROOT}" 2>&1 || true)"
+assert_eq "HOOK-ARGS: " "${out}" "auto that started nothing hands the hook no profile"
+# a profile that was restarted by auto (same key, new started_epoch) IS handed over
+out="$(bash -c '
+    source "$1/lib/common.sh"; source "$1/lib/catalog.sh"; source "$1/lib/validate.sh"
+    sched_auto() { sed -i "s/^started_epoch=.*/started_epoch=1/" "${LLMCTL_RUNTIME_DIR}/decide.run"; }
+    validate_after_start() { echo "HOOK-ARGS: $*"; }
+    validate_auto
+  ' _ "${LLMCTL_ROOT}" 2>&1 || true)"
+assert_eq "HOOK-ARGS: decide" "${out}" "a profile auto restarted (new started_epoch) is validated again"
+assert_contains "$(grep -n 'auto)' "${LLMCTL_ROOT}/bin/llmctl")" "validate_auto" "bin/llmctl routes auto through validate_auto"
+rm -f "${LLMCTL_RUNTIME_DIR}"/*.run
+
 test_finish
