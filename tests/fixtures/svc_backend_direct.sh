@@ -68,6 +68,7 @@ svc_restart() { svc_stop "$1"; svc_start "$1"; }
 svc_enable()  { svc_start "$1"; }
 svc_disable() { svc_stop "$1"; rm -f "${LLMCTL_SERVICES_DIR}/$(_svc_instance_key "$1").env"; }
 svc_is_active() { _sbd_alive "$1"; }
+svc_started_ok() { _sbd_alive "$1"; }   # the stand-in manager has no ExecCondition: "started" means its tracked pid is alive
 svc_is_failed() { return 1; }
 svc_status() { if _sbd_alive "$1"; then echo "active (direct)"; else echo "inactive"; fi; }
 svc_logs() { tail -n "${2:-100}" "${LLMCTL_LOG_DIR}/$(_svc_instance_key "$1").log" 2>/dev/null || true; }

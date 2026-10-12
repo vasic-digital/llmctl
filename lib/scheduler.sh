@@ -814,7 +814,7 @@ _sched_decision_scale_impl() {
       if ! svc_start "${key}"; then
         err "failed to start '${key}': the service backend refused to start it (see: llmctl logs ${key})"
         ok=0
-      elif ! svc_started_ok "${key}"; then
+      elif ! _sched_unit_started_ok "${key}"; then
         err "failed to start '${key}': unit not active after start (skipped by the port check or exited); see: llmctl logs ${key}"
         ok=0
       elif ! _sched_wait_ready "${port}" "$(portreg_health_path "$(catalog_engine "${profile}")")"; then
@@ -969,6 +969,10 @@ _sched_wait_ready() {
   return 1
 }
 
+# _sched_unit_started_ok <key> - svc_started_ok when the backend has it (a custom LLMCTL_SERVICE_BACKEND_FILE may not): then
+# there is nothing to verify and the start is trusted as before.
+_sched_unit_started_ok() { declare -F svc_started_ok >/dev/null 2>&1 || return 0; svc_started_ok "$1"; }
+
 # _sched_pressure_gate <profile> [psi] - hw_pressure_gate with the profile's plan footprint (rc 75 on refusal).
 # "psi": PSI test only (footprint 0, reserve 0) - used BEFORE a switch stops the running set, because MemAvailable still
 # counts the memory of the models about to be stopped; the full memory test runs after the stop (_sched_start_impl) and
@@ -1100,7 +1104,7 @@ _sched_start_impl() {
       rm -f "${plan_file}"
       return 1
     fi
-    if ! svc_started_ok "${p}"; then
+    if ! _sched_unit_started_ok "${p}"; then
       err "failed to start '${p}': unit not active after start (skipped by the port check or exited); see: llmctl logs ${p}"
       portreg_release "${reg_name}"
       rm -f "${plan_file}"
@@ -1225,7 +1229,7 @@ _enable_impl() {
     [[ "${allocated}" == 1 ]] && portreg_release "${reg_name}"
     return 1
   fi
-  if ! svc_started_ok "${profile}"; then
+  if ! _sched_unit_started_ok "${profile}"; then
     err "failed to start '${profile}': unit not active after start (skipped by the port check or exited); see: llmctl logs ${profile}"
     [[ "${allocated}" == 1 ]] && portreg_release "${reg_name}"
     return 1
