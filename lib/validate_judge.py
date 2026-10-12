@@ -66,7 +66,9 @@ def has_token(answer_norm, needle):
     return n.strip() != "" and n in answer_norm
 
 
-_NUM_RE = r"-?\d+(?:[.,]\d+)?"
+# A number is digits with an optional '.' fraction. A ',' directly followed by a digit (a thousands separator:
+# '10,000') or a '.'/',' directly before the digits ('.42') is NOT part of a number, so '10,000' never equals 10.
+_NUM_RE = r"(?<![\d.,])-?\d+(?:\.\d+)?(?!\d)(?!,\d)"
 _WORD_RE = re.compile(r"(?<![\w-])(" + "|".join(NUMBER_WORDS) + r")(?![\w-])", re.I)   # not inside 'twenty-two'
 
 

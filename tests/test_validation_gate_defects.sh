@@ -294,4 +294,28 @@ U="$(fake_start "${FIX}/answers_good.json" --model-id /m/fast/Llama-3.1-8B-Instr
 assert_eq 0 "$(run_rc env http_proxy="http://127.0.0.1:${PPORT}" HTTP_PROXY="http://127.0.0.1:${PPORT}" no_proxy= NO_PROXY= LLMCTL_VALIDATE_API_KEY="${TOKEN}" python3 -I "${JUDGE}" run --suite "${CSUITE}" --endpoint "${U}")" "validation passes straight to the loopback endpoint with http_proxy set"
 assert_eq 0 "$(wc -c < "${PLOG}")" "the recording proxy received nothing (no prompts, no bearer token)"
 
+echo "== 13. number_equals: a thousands separator or a leading dot is not a decimal point"
+assert_eq False "$(jt '42,000')" "'42,000' is not 42"
+assert_eq False "$(jt '.42')" "'.42' is not 42"
+assert_eq False "$(jt '1,042')" "'1,042' is not 42"
+jt10() { python3 -I - "${JUDGE}" "$1" <<'PY'
+import importlib.util, sys
+sp = importlib.util.spec_from_file_location("vj", sys.argv[1]); m = importlib.util.module_from_spec(sp); sp.loader.exec_module(m)
+print(m.judge({"number_equals": 10}, sys.argv[2])[0])
+PY
+}
+assert_eq False "$(jt10 '10,000')" "'10,000' is not 10 (coder-v1 py_output)"
+assert_eq True  "$(jt10 '10')" "'10' passes"
+assert_eq True  "$(jt10 '10.')" "'10.' (sentence period) passes"
+assert_eq True  "$(jt10 '10, then more')" "'10,' followed by a space passes"
+assert_eq True  "$(jt '42.0')" "'42.0' equals 42"
+assert_eq False "$(jt '41.5')" "'41.5' is not 42"
+jt15() { python3 -I - "${JUDGE}" "$1" <<'PY'
+import importlib.util, sys
+sp = importlib.util.spec_from_file_location("vj", sys.argv[1]); m = importlib.util.module_from_spec(sp); sp.loader.exec_module(m)
+print(m.judge({"number_equals": 1.5}, sys.argv[2])[0])
+PY
+}
+assert_eq True  "$(jt15 '1.5')" "'1.5' still passes for 1.5"
+
 test_finish
