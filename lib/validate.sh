@@ -92,6 +92,20 @@ print("\n".join(out))
 PY
 }
 
+# _val_instance_base <key> - for a scaled decision instance key (<profile>.<N>, N >= 2; lib/scheduler.sh
+# _sched_scale_key) prints its base catalog profile, rc 0. Any other key (including every real catalog
+# profile) -> rc 1. Instance keys have no catalog entry of their own, so they can never have a validation
+# key or record; the base profile is the thing that is validated.
+_val_instance_base() {
+  local k="$1" base n
+  [[ "${k}" =~ ^(.+)\.([0-9]+)$ ]] || return 1
+  base="${BASH_REMATCH[1]}"; n="${BASH_REMATCH[2]}"
+  (( 10#${n} >= 2 )) || return 1
+  catalog_exists "${k}" && return 1
+  catalog_exists "${base}" || return 1
+  printf '%s\n' "${base}"
+}
+
 # _val_expect_model <profile> - the catalog model file name the endpoint must report.
 _val_expect_model() {
   local name role
@@ -232,6 +246,10 @@ validate_all() {
   local -a verdicts=()
   ensure_dir "${LLMCTL_RUNTIME_DIR}"
   for p in $(for f in "${LLMCTL_RUNTIME_DIR}"/*.run; do [[ -e "${f}" ]] && basename "${f}" .run; done); do
+    if _val_instance_base "${p}" >/dev/null; then
+      info "validate-all: '${p}' is a scaled instance of '$(_val_instance_base "${p}")' - covered by its base profile"
+      continue
+    fi
     n=$((n+1))
     one=0
     validate_profile "${p}" "$@" || one=$?
@@ -264,11 +282,19 @@ validate_after_start() {
     warn "validation on start disabled (LLMCTL_VALIDATE_ON_START=0): $* NOT validated - 'llmctl require-validated' will refuse until 'llmctl validate' passes"
     return 0
   fi
-  local p rc=0 one key_file
+  local p rc=0 one key_file base
   for p in "$@"; do
     [[ -f "${LLMCTL_RUNTIME_DIR}/${p}.run" ]] || continue
+    if base="$(_val_instance_base "${p}")"; then
+      info "validation: '${p}' is a scaled instance of '${base}' (no catalog entry of its own) - skipped; its validation state is that of '${base}' (llmctl require-validated ${base})"
+      continue
+    fi
     key_file="$(mktemp)"
-    _val_key "${p}" "${key_file}"
+    if ! _val_key "${p}" "${key_file}"; then
+      rm -f "${key_file}"
+      warn "validation: '${p}' has no computable validation key (not a catalog profile?) - UNDETERMINED; llmctl require-validated ${p} refuses"
+      continue
+    fi
     if _val_judge check --state "$(_val_state_file "${p}")" --key "${key_file}" --max-age "${LLMCTL_VALIDATION_MAX_AGE}" >/dev/null 2>&1; then
       info "validation: '${p}' already has a fresh passing record for this model, engine, launch and suite"
       rm -f "${key_file}"

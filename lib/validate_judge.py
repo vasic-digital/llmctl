@@ -599,7 +599,12 @@ def main(argv=None):
     h.add_argument("--suite", required=True)
     a = ap.parse_args(argv)
     if a.cmd == "key":
-        print(json.dumps(compute_key(a), sort_keys=True))
+        try:
+            print(json.dumps(compute_key(a), sort_keys=True))
+        except (KeyError, OSError, ValueError) as e:
+            # an unknown profile key (e.g. a scaled instance "decide.2") is "cannot determine", never a traceback
+            print("[UNDETERMINED] cannot compute a validation key for %r: %s" % (a.profile, e), file=sys.stderr)
+            return 2
         return 0
     if a.cmd == "record":
         with open(a.key) as fh:
