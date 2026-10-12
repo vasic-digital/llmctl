@@ -245,10 +245,12 @@ _hk_validate_after_ready() {
     return 0
   fi
   _hk_log "${inst}: validation: running the validation suite(s) against the started unit (port ${port})"
-  LLMCTL_VALIDATE_ATTACH_PORT="${port}" "${llmctl}" validate "${prof}" >> "${LLMCTL_LOG_DIR}/svc_hook.log" 2>&1 || rc=$?
+  # LLMCTL_VALIDATE_FAIL_RC: the explicit-verdict code (64). A bare exit 1 (llmctl crashed / die() / set -e) is NOT a wrong
+  # answer and never stops the unit.
+  LLMCTL_VALIDATE_FAIL_RC=64 LLMCTL_VALIDATE_ATTACH_PORT="${port}" "${llmctl}" validate "${prof}" >> "${LLMCTL_LOG_DIR}/svc_hook.log" 2>&1 || rc=$?
   case "${rc}" in
     0) _hk_log "${inst}: validation PASSED"; return 0 ;;
-    1) _hk_log "${inst}: validation FAILED (wrong answers) - stopping the unit through the normal stop path" ;;
+    64) _hk_log "${inst}: validation FAILED (wrong answers) - stopping the unit through the normal stop path" ;;
     *) if [[ "${LLMCTL_VALIDATE_STRICT:-0}" == "1" ]]; then
          _hk_log "${inst}: validation UNDETERMINED and LLMCTL_VALIDATE_STRICT=1 - stopping the unit"
        else

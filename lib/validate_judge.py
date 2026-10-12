@@ -502,6 +502,10 @@ def run(args):
                                                               counts["undetermined"]))
         if args.json:
             print(json.dumps(report, indent=1))
+        if args.verdict_file:
+            # the explicit verdict for the caller: a bare exit code 1 is NOT trusted as a FAIL (a crash also exits 1)
+            with open_private(args.verdict_file, "w") as fh:
+                fh.write(verdict + "\n")
         if args.evidence:
             with open_private(args.evidence, "a") as fh:
                 fh.write("\n".join(lines) + "\n")
@@ -801,6 +805,7 @@ def main(argv=None):
     r.add_argument("--expect-model", default="")
     r.add_argument("--json", action="store_true")
     r.add_argument("--evidence", default="")
+    r.add_argument("--verdict-file", default="", help="write the final verdict word (PASS/FAIL/UNDETERMINED) here")
     s = sub.add_parser("selftest")
     s.add_argument("--suite", required=True)
     rd = sub.add_parser("redact")
@@ -870,8 +875,8 @@ def main(argv=None):
         return 1 if bad or not res else 0
     try:
         return run(a)
-    except (FileNotFoundError, KeyError, ValueError) as e:
-        print("[UNDETERMINED] cannot load suite: %s" % e)
+    except Exception as e:     # noqa: BLE001 - exit 1 is reserved for an explicit "VERDICT: FAIL"; anything else is UNDETERMINED
+        print("[UNDETERMINED] validation could not complete: %s: %s" % (type(e).__name__, e))
         print("VERDICT: UNDETERMINED pass=0 fail=0 undetermined=1")
         return 2
 

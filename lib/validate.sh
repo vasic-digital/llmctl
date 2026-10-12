@@ -205,6 +205,7 @@ validate_profile() {
     trap - INT TERM HUP
     [[ -n "${jpid}" ]] && kill "${jpid}" 2>/dev/null || true
     [[ -n "${key_file}" ]] && rm -f "${key_file}"
+    [[ -n "${vfile:-}" ]] && rm -f "${vfile}"
     if [[ "${started}" == "1" || "${starting}" == "1" ]] && [[ "${keep}" != "1" ]]; then
       warn "interrupted: stopping '${p}' (it was started only for validation)"
       sched_stop "${p}" >/dev/null 2>&1 || true
@@ -265,12 +266,13 @@ validate_profile() {
   printf '\n==== %s llmctl validate %s endpoint=%s kind=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${p}" "$(_val_judge redact "${endpoint}")" "${kind:-all}" >> "${evidence}"
   printf 'KEY %s\n' "$(cat "${key_file}")" >> "${evidence}"
 
-  local s rc=0 one worst=0 saw_undet=0
+  local s rc=0 one worst=0 saw_undet=0 vfile=""
   for s in ${suites}; do
     one=0
     local -a jargs=(run --suite "${LLMCTL_VALIDATION_SUITES_DIR}/${s}" --endpoint "${endpoint}"
                     --expect-model "$(_val_expect_model "${p}")" --evidence "${evidence}")
     [[ "${json}" == "1" ]] && jargs+=(--json)
+    vfile="$(mktemp)"; jargs+=(--verdict-file "${vfile}")
     # background + wait: bash runs a pending trap as soon as `wait` is interrupted (a foreground child would
     # delay the handler until it exits); the judge is killed by the handler by PID.
     # (the interpreter itself is the background job - a shell function would fork a subshell whose python
@@ -278,6 +280,13 @@ validate_profile() {
     python3 -I "${LLMCTL_ROOT}/lib/validate_judge.py" "${jargs[@]}" & jpid=$!
     wait "${jpid}" || one=$?
     jpid=""
+    # exit 1 counts as a FAIL ONLY together with the judge's explicit verdict: a crash (traceback, import error,
+    # killed interpreter) also exits 1 and must be UNDETERMINED - a FAIL stops the model (docs/validation.md).
+    if [[ "${one}" == "1" && "$(cat "${vfile}" 2>/dev/null)" != "FAIL" ]]; then
+      warn "the judge exited 1 without an explicit 'VERDICT: FAIL' (crash?) - treated as UNDETERMINED, not as a wrong answer"
+      one=2
+    fi
+    rm -f "${vfile}"; vfile=""
     case "${one}" in
       0) ;;
       1) worst=1 ;;
@@ -309,6 +318,23 @@ validate_profile() {
     sched_stop "${p}" >/dev/null || warn "could not stop '${p}' after validation"
   fi
   _val_restore_traps "${saved_traps}"
+  return "${rc}"
+}
+
+# _validate_cli <validate args...> - the `llmctl validate` entry. Exit 1 means exactly "the judge gave a wrong answer":
+# validate_profile returns 1 only from an explicit verdict, and an abnormal exit of the shell (die(), set -e, a failed
+# source) is mapped to 2 (UNDETERMINED) by an EXIT trap - callers (the systemd waiter) stop a model on exit 1.
+_val_cli_done=0
+_validate_cli() {
+  local rc=0
+  _val_cli_done=0
+  trap '[[ "${_val_cli_done}" == "1" ]] || { trap - EXIT; exit 2; }' EXIT
+  validate_profile "$@" || rc=$?
+  _val_cli_done=1
+  trap - EXIT
+  # a caller that STOPS a model on a wrong answer (the systemd waiter) asks for a private FAIL code: a plain exit 1 of
+  # the llmctl process (startup crash, set -e) is then not mistaken for a verdict
+  if [[ "${rc}" == "1" && "${LLMCTL_VALIDATE_FAIL_RC:-}" =~ ^[0-9]+$ ]]; then rc="${LLMCTL_VALIDATE_FAIL_RC}"; fi
   return "${rc}"
 }
 

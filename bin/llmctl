@@ -248,7 +248,7 @@ main() {
       ;;
     switch)   [[ "$#" -eq 1 ]] || die "usage: llmctl switch <profile>"; sched_switch "$1"; validate_after_start "$1" ;;
     auto)     validate_auto "$@" ;;
-    validate) validate_profile "$@" ;;
+    validate) _validate_cli "$@" ;;
     vision)   cmd_vision "$@" ;;
     validate-all) validate_all "$@" ;;
     require-validated) require_validated "$@" ;;
