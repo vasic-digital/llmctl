@@ -337,4 +337,17 @@ for m in malformed-message malformed-choice; do
   assert_contains "$(cat "${TEST_TMP}/last.out")" "VERDICT: UNDETERMINED" "${m}: verdict line present"
 done
 
+echo "== 16. require-validated: a key that cannot be computed returns 2 with a message and leaves no temp file"
+BADCAT="${TEST_TMP}/badcat.json"
+python3 -I - "${LLMCTL_ROOT}/models/catalog.json" "${BADCAT}" <<'PY'
+import json, sys
+d = json.load(open(sys.argv[1]))
+del d["profiles"]["vision"]["files"][0]["name"]      # compute_key raises KeyError on this
+json.dump(d, open(sys.argv[2], "w"))
+PY
+rm -rf "${TEST_TMP}/tmpr"; mkdir -p "${TEST_TMP}/tmpr"
+assert_eq 2 "$(run_rc env TMPDIR="${TEST_TMP}/tmpr" LLMCTL_CATALOG="${BADCAT}" "${LLMCTL}" require-validated vision)" "uncomputable key -> exit 2"
+assert_contains "$(cat "${TEST_TMP}/last.out")" "cannot compute the validation key" "an error message names the cause"
+assert_eq "" "$(ls -A "${TEST_TMP}/tmpr")" "no mktemp key file left behind"
+
 test_finish

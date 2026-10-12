@@ -264,7 +264,11 @@ require_validated() {
   local p="$1" key_file rc=0 why
   catalog_exists "${p}" || { err "unknown profile: ${p}"; return 2; }
   key_file="$(mktemp)"
-  _val_key "${p}" "${key_file}"
+  if ! _val_key "${p}" "${key_file}"; then
+    rm -f "${key_file}"
+    err "cannot compute the validation key of '${p}' - not validated (could not determine)"
+    return 2
+  fi
   why="$(_val_judge check --state "$(_val_state_file "${p}")" --key "${key_file}" --max-age "${LLMCTL_VALIDATION_MAX_AGE}")" || rc=$?
   rm -f "${key_file}"
   if [[ "${rc}" == "0" ]]; then
