@@ -3,6 +3,9 @@
 #
 # Invoked BY the generated systemd units / launchd agents (never by users):
 #
+#   svc_hook.sh gate [<instance>]        ExecStartPre (first): refuse with exit 75 under memory pressure
+#                                        (PSI / MemAvailable) - see hw_pressure_gate in lib/hardware.sh.
+#   svc_hook.sh portcheck <instance>     ExecCondition: exit 98 (unit skipped, not retried) if the port is taken.
 #   svc_hook.sh prestart <instance>      ExecStartPre: (re)create the engine's
 #                                        internal key file - true per-start
 #                                        rotation (gap G-028). No-op for
@@ -42,6 +45,8 @@ source "${_sh_dir}/common.sh"
 source "${_sh_dir}/portreg.sh"
 # shellcheck source=decide_timeout.sh
 source "${_sh_dir}/decide_timeout.sh"
+# shellcheck source=hardware.sh
+source "${_sh_dir}/hardware.sh"
 
 # _hk_get <env-file> <KEY> -> value of KEY (shell-unquoted for the simple
 # escapes printf %q produces), empty when absent.
@@ -113,14 +118,81 @@ _hk_wait_register() {
 
 _hk_envfile() { printf '%s/%s.env' "${LLMCTL_SERVICES_DIR}" "$1"; }
 
-hk_prestart() {
-  local inst="$1" f keyf
+# hk_portcheck <instance> - ExecCondition= of every engine unit: exit 98 when the profile's port is already listening.
+# systemd tests RestartPreventExitStatus= only against the MAIN process, so a failing ExecStartPre (even exit 98) is
+# retried (proved in tests/test_portguard_condition.sh); an ExecCondition exit of 1-254 instead skips the unit cleanly
+# - not failed, not restarted. Never touches the key file.
+hk_portcheck() {
+  local inst="$1" f port
   f="$(_hk_envfile "${inst}")"
   [[ -f "${f}" ]] || return 0
+  port="$(_hk_get "${f}" LLMCTL_PORT)"
+  if [[ "${port}" =~ ^[0-9]+$ ]] && timeout 1 bash -c "exec 3<>/dev/tcp/127.0.0.1/${port}" 2>/dev/null; then
+    _hk_log "${inst}: port ${port} is already in use; not starting (ExecCondition exit 98)"
+    printf 'llmctl: port %s is already in use on 127.0.0.1 (profile %s is probably running under another unit); not starting\n' "${port}" "${inst}" >&2
+    return 98
+  fi
+  return 0
+}
+
+hk_prestart() {
+  local inst="$1" f keyf port
+  f="$(_hk_envfile "${inst}")"
+  [[ -f "${f}" ]] || return 0
+  # Port-in-use guard (second unit for the same profile, or a stray engine): fail FAST with the distinct code 98
+  # (EADDRINUSE; every engine unit lists it in RestartPreventExitStatus) BEFORE the model is loaded and BEFORE the
+  # key file is rotated under the live server. UNKNOWN: whether this systemd applies RestartPreventExitStatus to a
+  # failed ExecStartPre; the StartLimit bound applies either way.
+  port="$(_hk_get "${f}" LLMCTL_PORT)"
+  if [[ "${port}" =~ ^[0-9]+$ ]] && timeout 1 bash -c "exec 3<>/dev/tcp/127.0.0.1/${port}" 2>/dev/null; then
+    _hk_log "${inst}: port ${port} is already in use; refusing to start (exit 98), key file untouched"
+    printf 'llmctl: port %s is already in use on 127.0.0.1 (profile %s is probably running under another unit); not starting\n' "${port}" "${inst}" >&2
+    return 98
+  fi
   keyf="$(_hk_get "${f}" LLMCTL_KEY_FILE)"
   [[ -n "${keyf}" ]] || return 0
   _hk_new_key "${keyf}" || { _hk_log "${inst}: cannot rotate key file ${keyf}"; return 1; }
   _hk_log "${inst}: internal key rotated"
+}
+
+# hk_gate <instance> - ExecStartPre of every engine unit, BEFORE prestart (so a refused start never rotates a key and a
+# systemd RESTART is gated exactly like a first start). It WAITS for the pressure to clear (LLMCTL_GATE_WAIT s, default
+# 120; LLMCTL_GATE_POLL s, default 5) and fails closed with 75 (EX_TEMPFAIL) only if it persists: an immediate 75 was
+# retried by Restart=on-failure and every retry burns StartLimitBurst, so a short spike ended in a 900 s lockout.
+# TimeoutStartSec (600) covers wait + model load. A pressure that lasts through ~3 waits still ends in start-limit-hit:
+# the deliberate fail-closed end state (docs/host-safety.md).
+hk_gate() {
+  local inst="${1:-}" f fp=0 wait="${LLMCTL_GATE_WAIT:-120}" poll="${LLMCTL_GATE_POLL:-5}" waited=0 rc=0
+  [[ "${wait}" =~ ^[0-9]+$ ]] || wait=120
+  [[ "${poll}" =~ ^[1-9][0-9]*$ ]] || poll=5
+  if [[ -n "${inst}" ]]; then
+    f="$(_hk_envfile "${inst}")"
+    [[ -f "${f}" ]] && fp="$(_hk_get "${f}" LLMCTL_FOOTPRINT_MB)"
+  fi
+  local msg=""
+  while :; do
+    rc=0; msg="$(hw_pressure_gate "${fp:-0}" "${inst:-service}" 2>&1 >/dev/null)" || rc=$?
+    if [[ "${rc}" -eq 0 ]]; then (( waited == 0 )) || _hk_log "${inst}: pressure cleared after ${waited}s"; return 0; fi
+    if [[ "${rc}" -ne 75 || "${waited}" -ge "${wait}" ]]; then printf '%s\n' "${msg}" >&2; return "${rc}"; fi
+    sleep "${poll}"; waited=$(( waited + poll ))
+  done
+}
+
+
+# Registration waiters are tracked by pid file so a stop can end them (they otherwise poll /health for up to 600 s,
+# inside the unit's cgroup, after the engine is gone).
+_hk_waiter_file() { printf '%s/waiters/%s.pid' "${LLMCTL_RUNTIME_DIR:-${LLMCTL_STATE_DIR}/run}" "$1"; }
+_hk_track_waiter() { ( umask 077; mkdir -p "$(dirname "$(_hk_waiter_file "$1")")" && printf '%s\n' "$2" > "$(_hk_waiter_file "$1")" ) 2>/dev/null || true; }
+# _hk_kill_waiter <inst> - kills the tracked waiter ONLY when /proc says it is our `_wait_register <inst>` process.
+_hk_kill_waiter() {
+  local f pid cmd
+  f="$(_hk_waiter_file "$1")"
+  [[ -f "${f}" ]] || return 0
+  pid="$(head -1 "${f}" 2>/dev/null || true)"
+  rm -f "${f}"
+  [[ "${pid}" =~ ^[0-9]+$ && "${pid}" -gt 1 ]] || return 0
+  cmd="$(tr '\0' ' ' < "/proc/${pid}/cmdline" 2>/dev/null || true)"
+  case "${cmd}" in *"_wait_register ${1} "*) kill "${pid}" 2>/dev/null || true ;; esac
 }
 
 hk_register() {
@@ -136,9 +208,11 @@ hk_register() {
   if command -v setsid >/dev/null 2>&1; then
     setsid bash "${BASH_SOURCE[0]}" _wait_register "${inst}" "${pid}" \
       >> "${LLMCTL_LOG_DIR}/svc_hook.log" 2>&1 < /dev/null &
+    _hk_track_waiter "${inst}" "$!"
   else
     nohup bash "${BASH_SOURCE[0]}" _wait_register "${inst}" "${pid}" \
       >> "${LLMCTL_LOG_DIR}/svc_hook.log" 2>&1 < /dev/null &
+    _hk_track_waiter "${inst}" "$!"
   fi
   disown 2>/dev/null || true
   return 0
@@ -159,8 +233,9 @@ hk__wait_register() {
 # The gateway publishes itself as "decide-gateway" (Go side); "gateway" is its
 # port-hold name, so both rows are cleared when asked to unregister "gateway".
 hk_unregister() {
-  portreg_unregister "$1"
-  [[ "$1" == "gateway" ]] && portreg_unregister decide-gateway
+  _hk_kill_waiter "$1"
+  portreg_unregister "$1" "${MAINPID:-}"
+  [[ "$1" == "gateway" ]] && portreg_unregister decide-gateway "${MAINPID:-}"
   return 0
 }
 
@@ -219,6 +294,8 @@ hk_run_gateway() {
 }
 
 case "${1:-}" in
+  gate)          hk_gate "${2:-}" ;;
+  portcheck)     hk_portcheck "${2:?instance required}" ;;
   prestart)      hk_prestart "${2:?instance required}" ;;
   register)      hk_register "${2:?instance required}" "${3:-}" ;;
   _wait_register) hk__wait_register "${2:?instance required}" "${3:?pid required}" ;;
@@ -226,5 +303,5 @@ case "${1:-}" in
   run-gateway)   hk_run_gateway ;;
   run-engine)    shift; hk_run_engine "${1:?instance required}" "${@:2}" ;;
   "")            : ;;   # sourced for testing
-  *)             echo "usage: svc_hook.sh prestart|register|unregister <instance> | run-engine <instance> -- <cmd...> | run-gateway" >&2; exit 2 ;;
+  *)             echo "usage: svc_hook.sh gate|portcheck|prestart|register|unregister <instance> | run-engine <instance> -- <cmd...> | run-gateway" >&2; exit 2 ;;
 esac

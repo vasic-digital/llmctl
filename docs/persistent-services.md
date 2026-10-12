@@ -28,7 +28,7 @@ stateDiagram-v2
     EnabledRunning --> EnabledStopped: llmctl stop P (autostart kept)
     EnabledStopped --> EnabledRunning: llmctl start P or next boot/login
     EnabledRunning --> Stopped: llmctl disable P (stop + remove marker)
-    EnabledRunning --> EnabledRunning: crash, systemd restarts (Restart=always, 5 starts per 60 s then failed)
+    EnabledRunning --> EnabledRunning: crash (non-zero exit), systemd restarts (Restart=on-failure, 3 starts per 900 s then failed); a SIGKILL (oomd, MemoryMax) is NOT restarted
 ```
 
 The same states apply to the gateway unit, where `serve --enable` is `enable P` and `serve --disable` is `disable P`.
@@ -46,7 +46,7 @@ llmctl status                       # a crash-looping unit shows failed (crash-l
 * An enabled profile that you `llmctl stop` comes back at the next login/boot unless you `llmctl disable` it.
 * Instance records (`$LLMCTL_SERVICES_DIR/<profile>.env`) survive reboots; the tmpfs reservations in `$LLMCTL_RUNTIME_DIR` do not and are reconciled on the next scheduler call.
 * More than one instance of a decision profile: `llmctl decide scale <profile> <N>`; the instance keys are `<profile>`, `<profile>.2`, ... and each has its own unit instance, port and key file ([user manual](user-manual.md#decide-scale)).
-* The unit templates carry `MemoryHigh`/`MemoryMax` at the host's probed RAM, `Restart=always`, `RestartSec=5`, `StartLimitBurst=5` (per 60 s) and strict hardening. Tighter per-unit limits are a drop-in (below).
+* The unit templates carry `MemoryHigh`/`MemoryMax` below the probed RAM (per-profile drop-in, see host-safety.md), `Restart=on-failure`, `RestartSec=5`, `StartLimitBurst=3` (per 900 s) and strict hardening. Tighter per-unit limits are a drop-in (below).
 
 ## Make the gateway persistent
 
@@ -78,8 +78,8 @@ Rules (from `lib/decide.sh` and `lib/service_linux.sh`, and `tests/test_decide_s
 Description=llmctl decision gateway (HTTPS, key-protected; engines stay loopback-only)
 After=network-online.target
 Wants=network-online.target
-StartLimitBurst=5
-StartLimitIntervalSec=60
+StartLimitBurst=3
+StartLimitIntervalSec=900
 
 [Service]
 Type=simple
@@ -88,10 +88,14 @@ Environment="LLMCTL_CONFIG_DIR=..."  "LLMCTL_DATA_DIR=..."  "LLMCTL_RUNTIME_DIR=
 EnvironmentFile=-<state dir>/decide/gateway.conf
 ExecStart=/bin/bash ".../lib/svc_hook.sh" run-gateway
 ExecStopPost=-/bin/bash ".../lib/svc_hook.sh" unregister gateway
-Restart=always
+Restart=on-failure
 RestartSec=5
-MemoryHigh=<RAM>M
-MemoryMax=<RAM>M
+RestartSteps=4  RestartMaxDelaySec=120
+RestartPreventExitStatus=SIGKILL SIGTERM 98
+MemoryHigh=<20% of RAM, max 3 GiB>M
+MemoryMax=<25% of RAM, max 4 GiB>M
+MemorySwapMax=0  Nice=10  IOWeight=50  CPUWeight=50  OOMScoreAdjust=500
+TimeoutStopSec=20  TimeoutStartSec=600  KillMode=control-group
 NoNewPrivileges=yes  ProtectSystem=full  UMask=0077  RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
 RestrictSUIDSGID=yes  LockPersonality=yes  RestrictRealtime=yes  SystemCallArchitectures=native
 StandardOutput=append:<log dir>/decide-gateway.log
@@ -222,3 +226,13 @@ A client built with `CGO_ENABLED=0` (static or cross-built) cannot resolve `*.lo
 * Verified live (anton, nezha; evidence under `specs/009-jev-decision-models/evidence/persistent-services/`): gateway and engine units enabled and active, `Linger=yes`, drop-in limits effective, `decide serve --enable` round trip, CPU-adaptive banner values.
 * Verified in this documentation pass, on scratch directories only: the dry-run command list above, the generated unit text (rendered by `_decide_gateway_unit_body` with a scratch state directory), `decide scale` argument errors and its dry-run, `serve --status/--stop`.
 * UNCONFIRMED: macOS launchd behaviour; a real reboot; the extended stop configuration above; behaviour with a firewall active (G-091).
+
+## Restart policy trade-off (read this before relying on "persistent")
+
+A unit is restarted only after a **non-zero exit** (`Restart=on-failure`), at most 3 times per 900 s. A process killed by
+**SIGKILL** - `systemd-oomd`, the unit's own `MemoryMax`, the kernel OOM killer - is deliberately **not** restarted
+(`RestartPreventExitStatus=SIGKILL`): the old `Restart=always` retried OOM kills forever and was part of the 2026-10-12
+host stall. The consequence is that an enabled model can be **down** after memory pressure until you start it again.
+`llmctl status` and `llmctl doctor` print a WARN for every enabled engine unit that is failed or inactive; restart it with
+`llmctl start <profile>` once the host is healthy. A start refused by the pressure gate (exit 75) waits up to
+`LLMCTL_GATE_WAIT` seconds first; see [host-safety](host-safety.md).

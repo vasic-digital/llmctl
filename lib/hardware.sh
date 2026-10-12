@@ -408,3 +408,40 @@ s = d["storage"]
 print("Storage:   %d MiB free at %s (type: %s)" % (s["free_mb"], s["path"], s["type"]))
 PYEOF
 }
+
+# --- start admission: memory pressure gate (root cause 5, docs/host-safety.md) ------------------------------------------
+# hw_pressure_gate <footprint-MiB> [label]
+# Refuses (rc 75 = EX_TEMPFAIL, message on stderr) to START or RESTART a model while the host is already under memory
+# pressure, or when MemAvailable cannot hold the footprint plus a 4 GiB reserve. Shared by `svc_hook.sh gate`
+# (the unit's ExecStartPre, so restarts are gated), sched_start / enable / switch and (hook point) `llmctl validate`.
+# Inputs (overridable for tests): LLMCTL_PSI_FILE (default /proc/pressure/memory), LLMCTL_MEMINFO_FILE (default
+# /proc/meminfo); thresholds LLMCTL_GATE_FULL_MAX (2), LLMCTL_GATE_SOME_MAX (10), LLMCTL_GATE_RESERVE_MB (4096).
+# A missing PSI file (macOS, old kernel) skips the PSI test only; a missing meminfo skips the memory test.
+hw_pressure_gate() {
+  local fp="${1:-0}" label="${2:-service}"
+  local psi="${LLMCTL_PSI_FILE:-/proc/pressure/memory}" mi="${LLMCTL_MEMINFO_FILE:-/proc/meminfo}"
+  local fmax="${LLMCTL_GATE_FULL_MAX:-2}" smax="${LLMCTL_GATE_SOME_MAX:-10}" reserve="${LLMCTL_GATE_RESERVE_MB:-4096}"
+  [[ "${fp}" =~ ^[0-9]+$ ]] || fp=0
+  local some="" full="" avail_kb=""
+  if [[ -r "${psi}" ]]; then
+    some="$(awk '$1=="some"{for(i=2;i<=NF;i++) if($i ~ /^avg10=/){sub(/avg10=/,"",$i); print $i; exit}}' "${psi}" 2>/dev/null || true)"
+    full="$(awk '$1=="full"{for(i=2;i<=NF;i++) if($i ~ /^avg10=/){sub(/avg10=/,"",$i); print $i; exit}}' "${psi}" 2>/dev/null || true)"
+  fi
+  if [[ "${full}" =~ ^[0-9.]+$ ]] && awk -v v="${full}" -v m="${fmax}" 'BEGIN{exit !(v>m)}'; then
+    printf 'refusing to start %s: memory pressure is too high (PSI full avg10=%s > %s). Wait for it to drop, or free memory; this gate protects the host from a stall.\n' "${label}" "${full}" "${fmax}" >&2
+    return 75
+  fi
+  if [[ "${some}" =~ ^[0-9.]+$ ]] && awk -v v="${some}" -v m="${smax}" 'BEGIN{exit !(v>m)}'; then
+    printf 'refusing to start %s: memory pressure is too high (PSI some avg10=%s > %s). Wait for it to drop, or free memory; this gate protects the host from a stall.\n' "${label}" "${some}" "${smax}" >&2
+    return 75
+  fi
+  if [[ -r "${mi}" ]]; then
+    avail_kb="$(awk '/^MemAvailable:/{print $2; exit}' "${mi}" 2>/dev/null || true)"
+    if [[ "${avail_kb}" =~ ^[0-9]+$ ]] && (( avail_kb / 1024 < fp + reserve )); then
+      printf 'refusing to start %s: only %s MiB memory available, need %s MiB footprint + %s MiB reserve (memory pressure gate)\n' \
+        "${label}" "$(( avail_kb / 1024 ))" "${fp}" "${reserve}" >&2
+      return 75
+    fi
+  fi
+  return 0
+}

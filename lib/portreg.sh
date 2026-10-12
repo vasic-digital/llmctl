@@ -53,6 +53,7 @@ portreg_active() {
 
 # portreg_profile_var <name> -> LLMCTL_PORT_<NAME> (same rule as the Go side).
 portreg_profile_var() {
+  valid_id "${1:-}" || { echo "portreg_profile_var: invalid profile name" >&2; return 1; }
   printf 'LLMCTL_PORT_%s' "$(printf '%s' "$1" | tr '[:lower:]-.' '[:upper:]__')"
 }
 
@@ -60,7 +61,8 @@ portreg_profile_var() {
 # dynamic port for this profile (global strategy or per-profile =auto) and
 # no explicit numeric port overrides it.
 portreg_dynamic_requested() {
-  local v; v="$(portreg_profile_var "$1")"
+  local v; valid_id "${1:-}" || return 1      # allow-list before ${!v} (array-subscript evaluation)
+  v="$(portreg_profile_var "$1")" || return 1
   case "${!v:-}" in
     auto) return 0 ;;
     "")   [[ "${LLMCTL_PORT_STRATEGY:-fixed}" == "dynamic" ]] ;;
@@ -141,9 +143,55 @@ portreg_register() {
 }
 
 # portreg_unregister <name> - remove the registry row (idempotent, quiet).
+# _portreg_pid_is_engine <pid> [<cmd_token>] - does /proc/<pid>/cmdline look like one of our engines? ANY argv word whose
+# basename is a known engine (llama-server, onnx_server[.py], coli, colibri, llmctl-decide) or equals the row's recorded
+# cmd_token (basename of the exec binary, so a custom LLMCTL_LLAMA_SERVER name and `python -m onnx_server` work). A recycled
+# pid of an unrelated process matches neither. No /proc (macOS): cannot tell, assume yes (keep the row).
+_portreg_pid_is_engine() {
+  [[ -r "/proc/$1/cmdline" ]] || { [[ ! -d /proc/self ]]; return; }
+  local w base tok="${2:-}"
+  while IFS= read -r -d '' w; do
+    base="${w##*/}"
+    case "${base}" in llama-server|onnx_server|onnx_server.py|coli|colibri|llmctl-decide) return 0 ;; esac
+    [[ -n "${tok}" && "${base}" == "${tok}" ]] && return 0
+  done < "/proc/$1/cmdline"
+  return 1
+}
+
 portreg_unregister() {
   portreg_active || return 0
-  "$(portreg_bin)" registry unregister "$1" >/dev/null 2>&1 || true
+  local name="$1" stop_pid="${2:-}" row_pid=""
+  # Ownership guard: a row whose pid is ALIVE and is not the stopping unit's pid belongs to another process (two units
+  # once ran one profile; the loser's ExecStopPost dropped the live winner's row). During ExecStopPost the stopping
+  # unit's own main process is already gone, so a live row pid is never ours. Unknown/unlistable -> old behaviour.
+  local listf; listf="$(mktemp)"
+  if command -v timeout >/dev/null 2>&1; then
+    timeout -s KILL 1 "$(portreg_bin)" registry list --json > "${listf}" 2>/dev/null || true   # bounded; file, not a pipe
+  else
+    "$(portreg_bin)" registry list --json > "${listf}" 2>/dev/null || true
+  fi
+  row_pid="$(NAME="${name}" python3 -c '
+import json, os, sys
+try:
+    rows = json.load(sys.stdin).get("services", [])
+except Exception:
+    rows = []
+for r in rows:
+    if r.get("name") == os.environ["NAME"]:
+        print("%s %s" % (r.get("pid") or "", r.get("cmd_token") or ""))
+        break' < "${listf}" 2>/dev/null || true)"
+  local row_tok="${row_pid#* }"; row_pid="${row_pid%% *}"
+  rm -f "${listf}"
+  if [[ "${row_pid}" =~ ^[0-9]+$ && "${row_pid}" -gt 1 && "${row_pid}" != "${stop_pid}" ]] && kill -0 "${row_pid}" 2>/dev/null \
+     && _portreg_pid_is_engine "${row_pid}" "${row_tok}"; then
+    return 0
+  fi
+  # Bounded (ExecStopPost must never exceed TimeoutStopSec): under memory pressure this call once hung past 90 s.
+  if command -v timeout >/dev/null 2>&1; then
+    timeout -s KILL "${LLMCTL_UNREGISTER_TIMEOUT:-2}" "$(portreg_bin)" registry unregister "${name}" >/dev/null 2>&1 || true
+  else
+    "$(portreg_bin)" registry unregister "${name}" >/dev/null 2>&1 || true
+  fi
 }
 
 # portreg_health_path <engine> - the HTTP path the engine really answers when healthy (the single source for the

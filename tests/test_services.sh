@@ -17,17 +17,15 @@ export LLMCTL_FAKE_HW="${LLMCTL_ROOT}/tests/fixtures/hw-baseline.json"
 )
 
 UNIT="${LLMCTL_UNIT_DIR}/llmctl-llama@.service"
-assert_file_contains "${UNIT}" "Restart=always" "llama unit: Restart=always"
+assert_file_contains "${UNIT}" "Restart=on-failure" "llama unit: Restart=on-failure (OOM kills are not retried forever)"
 assert_file_contains "${UNIT}" "RestartSec=5" "llama unit: RestartSec=5"
-assert_file_contains "${UNIT}" "StartLimitBurst=5" "llama unit: StartLimitBurst=5 (bounded restarts, FR-044)"
-assert_file_contains "${UNIT}" "StartLimitIntervalSec=60" "llama unit: StartLimitIntervalSec=60 (bounded restarts, FR-044)"
-# Operator decision (Phase 6 T035, 2026-09-15): served-model resource limits
-# carry NO artificial ceiling - a served profile gets maximal performance and
-# the full probed hardware, not a percentage/headroom-reduced cap. baseline
-# fixture: total 32768 MiB -> MemoryMax=MemoryHigh=32768M (the full probed
-# total, no subtraction, no throttle zone below the max).
-assert_file_contains "${UNIT}" "MemoryMax=32768M" "llama unit: MemoryMax = full probed RAM, no artificial ceiling"
-assert_file_contains "${UNIT}" "MemoryHigh=32768M" "llama unit: MemoryHigh = MemoryMax (no soft-throttle zone below the max, for maximal performance)"
+assert_file_contains "${UNIT}" "StartLimitBurst=3" "llama unit: StartLimitBurst=3 (bounded restarts, FR-044)"
+assert_file_contains "${UNIT}" "StartLimitIntervalSec=900" "llama unit: StartLimitIntervalSec=900 (bounded restarts, FR-044)"
+# Memory policy (supersedes the 2026-09-15 "full RAM" decision, which let one runaway profile take the host; see
+# docs/host-safety.md and tests/test_unit_memory_caps.sh for the per-profile drop-in contract). baseline fixture: total
+# 32768 MiB -> template backstop MemoryHigh=70% (22937M), MemoryMax=85% (27852M): strictly below total, High < Max.
+assert_file_contains "${UNIT}" "MemoryMax=27852M" "llama unit: template MemoryMax = 85% of probed RAM (backstop below total)"
+assert_file_contains "${UNIT}" "MemoryHigh=22937M" "llama unit: template MemoryHigh = 70% of probed RAM (throttle zone below the max)"
 assert_file_contains "${UNIT}" "EnvironmentFile=${LLMCTL_SERVICES_DIR}/%i.env" "llama unit: per-profile EnvironmentFile"
 assert_file_contains "${UNIT}" 'ExecStart=${LLMCTL_EXEC} ${LLMCTL_ARGS}' "llama unit: ExecStart from env file (documented in the template comment)"
 assert_file_contains "${UNIT}" "ExecStart=/bin/bash -c 'set -f; exec \"\$LLMCTL_EXEC\" \$LLMCTL_ARGS'" "llama unit: the real ExecStart execs LLMCTL_EXEC through a shell, globbing off"

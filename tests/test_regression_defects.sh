@@ -77,7 +77,7 @@ source "${LLMCTL_ROOT}/lib/os_detect.sh"
 source "${LLMCTL_ROOT}/lib/service_linux.sh"
 unit="$(_decide_gateway_unit_body /bin/true 1024 1024)"
 assert_contains "${unit}" "llmctl decision gateway" "D-19b: a decision-gateway systemd unit body exists"
-assert_contains "${unit}" "Restart=always" "D-19b: the unit restarts the gateway"
+assert_contains "${unit}" "Restart=on-failure" "D-19b: the unit restarts the gateway"
 
 # --- N-05 / N-16: malformed numeric configuration -> clean rc 2, one line, no traceback ----------------
 for v in LLMCTL_SEED LLMCTL_DECIDE_MAX_OPTIONS LLMCTL_DECIDE_PORT; do

@@ -26,7 +26,7 @@ Gaps found afterwards, and what answers each (user-level here; root-level in `ro
 | Gap | Answer |
 |---|---|
 | `user-1000.slice` / `user@1000.service` `MemoryMax=infinity`, user `TasksMax` 81641 | slice drop-ins (`app`, `background`, `user`) - installed |
-| `systemd-oomd` active but no `ManagedOOMMemoryPressure` | deliberately not enabled, see *Limits* |
+| `systemd-oomd` active; the *vendor* rule on `user@.service` sets `ManagedOOMMemoryPressure=kill` (50% for 20 s) | **not** disabled here (operator decision, no `/etc` change); it killed 259 units on 2026-10-12 including `llmctl-llama@vision` - see *systemd-oomd vendor rule* and *llmctl service limits* |
 | `earlyoom` absent | in `root-steps.sh` (root) - **the live host still runs the package default `-r 3600` (no protection list at all) until the operator runs `sudo bash scripts/hostsafety/root-steps.sh --apply`** |
 | 22 of 63 podman containers had no memory limit; limited ones sum to ~50 GiB | `hostsafety-podman-audit` (report-only) |
 | GNOME `localsearch-3` indexed `~/go/pkg/mod`, 2.3M journal messages | `hostsafety-tracker-exclude`; journald rate limit in `root-steps.sh` |
@@ -232,8 +232,10 @@ under a cap too small to hold it).
 - **Page cache counts against `MemoryHigh`.** `app.slice` showed ~16 GiB file cache vs ~2.7 GiB
   anon; reclaim of cache is normal and harmless, but a large mmap'd model (llama.cpp) working set
   near the limit will be throttled. If that bites, raise `app` limits via a later drop-in (`20-*.conf`).
-- **`systemd-oomd` is not enabled for these slices on purpose**: it kills a whole cgroup, and the
-  fleet shares one scope with claude.
+- **`systemd-oomd` IS active for the user manager (vendor rule)**: the distribution ships a drop-in on
+  `user@.service` with `ManagedOOMMemoryPressure=kill` and a 50% / 20 s limit; no hostsafety drop-in overrides it.
+  It kills a whole cgroup, and the agent fleet shares one scope with claude - see the next section. (This section
+  used to say oomd was "not enabled for these slices"; that was wrong.)
 - **The guard is conservative**: a storm spawned directly under claude's process group cannot be stopped as a
   group; it is thinned one eligible process per tick (and only while pressure persists). `bounded-run`
   guarantees a separate scope and group, which is the real protection.
@@ -242,3 +244,58 @@ under a cap too small to hold it).
 - Memory PSI is host-wide, not per cgroup; the victim choice is per cgroup/group.
 - The guard does not act inside `session.slice`; a runaway inside the desktop session is out of scope.
 - Dry-run is the default: until armed the guard only observes.
+
+## systemd-oomd vendor rule (user@.service)
+
+Measured 2026-10-12 from the journal: the vendor drop-in on `user@.service` (`ManagedOOMMemoryPressure=kill`, pressure
+limit 50% for 20 s) made `systemd-oomd` kill 259 units in one event, among them `llmctl-llama@vision.service` and the
+podman healthcheck units. llmctl does **not** change `/etc`, the oomd configuration, the `app.slice`/user-slice drop-ins
+or the guard's arming (operator decisions). It reduces its own exposure instead (next section) and asks oomd to prefer
+other victims (`ManagedOOMPreference=avoid`; UNKNOWN whether the user manager honours it for an unprivileged unit - it
+is harmless when ignored).
+
+## llmctl service limits and gates (fix/bounded-restart-and-pressure-gates)
+
+| Layer | Setting | Why |
+|---|---|---|
+| Memory (per profile drop-in `llmctl-<engine>@<profile>.service.d/05-memory.conf`) | `MemoryHigh` = 1.25x, `MemoryMax` = 1.5x of the plan footprint (code floors: 1024 / 1280 MiB; always < 90% of RAM). A GPU-mode profile whose provenance is not `measured` (the plan's 2048 MiB RAM is a placeholder; CUDA context and pinned/compute buffers are host-side) gets at least 5120 / 6144 MiB, because a cgroup OOM kill of a healthy model is final. **Measure VmHWM on the first live run** and record it (memory.gpu `measured`) to tighten the cap | a runaway profile dies alone, early; previously `MemoryHigh=MemoryMax=total RAM` contained nothing |
+| Memory (template backstop) | `MemoryHigh` 70% / `MemoryMax` 85% of RAM; gateway 20% / 25% (cap 3 / 4 GiB) | for a unit with no drop-in |
+| Swap / priority | `MemorySwapMax=0`, `Nice=10`, `IOWeight=50`, `CPUWeight=50`, `OOMScoreAdjust=500` | a swapping or hot model must not stall the desktop and agent fleet |
+| Stop / start | `TimeoutStopSec=20`, `TimeoutStartSec=300`, `KillMode=control-group` | the stop path was seen to exceed 90 s under pressure |
+| Restart | `Restart=on-failure`, `RestartSec=5`, `RestartSteps=4`, `RestartMaxDelaySec=120`; `[Unit]` `StartLimitBurst=3` per `StartLimitIntervalSec=900` | the old 5 / 60 s could never trip because a real cycle (model load) exceeds 60 s |
+| No restart after | `RestartPreventExitStatus=SIGKILL SIGTERM 98` | an OOM kill, a deliberate stop, or "port already in use" only repeat themselves |
+
+**Precedence**: llmctl writes `05-memory.conf`, which sorts before the operator's `10-hostsafety.conf`; systemd applies drop-ins in lexical order, so an existing `10-hostsafety.conf` (live: `llmctl-llama@decide-kev-08b`, `llmctl-onnx@decide-nli`, `llmctl-decide-gateway`) stays authoritative and llmctl never edits or removes it.
+
+Existing installed units are reported stale (`llmctl doctor`, `svc_stale_units`) and `start`/`enable` refuse a unit whose
+bound is weaker than 3 starts / 900 s: regenerate with `llmctl install`.
+
+**Start gate** (`hw_pressure_gate`, exit code **75** = EX_TEMPFAIL): a start, restart, `enable`, `switch` (a PSI-only check
+before anything is stopped; the memory check runs after the stop) are refused when memory PSI `full avg10 > 2`,
+`some avg10 > 10`, or `MemAvailable < footprint + 4 GiB`. It also runs as the unit's first `ExecStartPre`
+(`svc_hook.sh gate <instance>`) so systemd restarts are gated. Overrides for tests: `LLMCTL_PSI_FILE`,
+`LLMCTL_MEMINFO_FILE`; tuning: `LLMCTL_GATE_FULL_MAX`, `LLMCTL_GATE_SOME_MAX`, `LLMCTL_GATE_RESERVE_MB`.
+
+**The unit gate waits.** `svc_hook.sh gate` (ExecStartPre) polls every `LLMCTL_GATE_POLL` s (default 5) for up to
+`LLMCTL_GATE_WAIT` s (default 120) and exits 75 only if the pressure persists; an immediate 75 would be retried by
+`Restart=on-failure` and burn `StartLimitBurst`. `TimeoutStartSec=600` covers wait + model load. **Lockout trade-off**:
+pressure lasting through three consecutive waits (about 3 x (120 + 5) s, inside the 900 s window) still ends in
+`start-limit-hit` - the deliberate fail-closed end state; clear it with `systemctl --user reset-failed <unit>` (or wait
+out the 900 s window) once the host is healthy. Interactive `start`/`enable`/`switch` do not wait: they refuse at once.
+
+**Not wired from this branch**: `llmctl validate` (lib/validate.sh, owned by another change set and absent here) does **not** call the gate yet. The hook point is `_sched_pressure_gate <profile>` in `lib/scheduler.sh`; the validate path must call it before `sched_start`. Until then a validate run is gated only by `sched_start` / the unit's `ExecStartPre`, if it goes through them.
+
+**Start is bounded and verified.** The scheduler holds its lock across `systemctl start`; `LLMCTL_START_WAIT` (default 20 s) bounds that call (the unit's gate may wait up to 120 s - past the bound the unit counts as "still starting" and the readiness poll decides, stopping the unit if the model never answers). After a successful start the unit must be active/activating, otherwise `start`/`enable` fail with "unit not active after start" (an ExecCondition port-in-use skip) instead of trusting a foreign listener on the port.
+
+**Rollback caveat**: a failed `switch` restores the previous set without the scheduler-side gate, but the unit's own `ExecStartPre` gate still applies: under persistent pressure the restore waits up to `LLMCTL_GATE_WAIT` and then fails 75, so a rollback can leave nothing running (the switch then exits 75 and says so).
+
+**Exit codes**: 75 = refused by the pressure gate; 98 = `prestart` found the profile's port already listening (it does
+not rotate the key and does not load the model).
+
+**One engine unit per profile**: `enable`/`disable` disable and stop any other engine's unit for the same profile;
+`llmctl doctor` FAILs when a profile has two enabled engine units, or a live llama-server/onnx_server process of this
+install has no registry row. Registry rows are only dropped by `unregister` when the row's pid is dead or is the
+stopping unit's own pid; `unregister` is bounded (2 s) and the registration waiter is killed on stop.
+
+UNKNOWN: whether this systemd applies `RestartPreventExitStatus` to a failing `ExecStartPre` (the StartLimit bound
+applies either way).

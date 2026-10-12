@@ -19,12 +19,12 @@ export LLMCTL_FAKE_HW="${LLMCTL_ROOT}/tests/fixtures/hw-baseline.json"
   svc_install
 )
 UNIT="${LLMCTL_UNIT_DIR}/llmctl-llama@.service"
-assert_file_contains "${UNIT}" "StartLimitBurst=5" "llama unit: bounded restart burst (5 attempts)"
-assert_file_contains "${UNIT}" "StartLimitIntervalSec=60" "llama unit: bounded restart interval (60s window)"
+assert_file_contains "${UNIT}" "StartLimitBurst=3" "llama unit: bounded restart burst (3 attempts)"
+assert_file_contains "${UNIT}" "StartLimitIntervalSec=900" "llama unit: bounded restart interval (900s window)"
 
 CUNIT="${LLMCTL_UNIT_DIR}/llmctl-colibri@.service"
-assert_file_contains "${CUNIT}" "StartLimitBurst=5" "colibri unit: bounded restart burst (5 attempts)"
-assert_file_contains "${CUNIT}" "StartLimitIntervalSec=60" "colibri unit: bounded restart interval (60s window)"
+assert_file_contains "${CUNIT}" "StartLimitBurst=3" "colibri unit: bounded restart burst (3 attempts)"
+assert_file_contains "${CUNIT}" "StartLimitIntervalSec=900" "colibri unit: bounded restart interval (900s window)"
 
 # --- 2. launchd plist widens its restart throttle (honest partial parity) ----
 (

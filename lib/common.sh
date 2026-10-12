@@ -125,8 +125,21 @@ json_query() {
   need_cmd python3 "install python3 via your package manager"
   python3 - "$file" "$@" <<'PYEOF'
 import json, sys
+
+def _guard(expr):
+    # Defence in depth (security: profile names were once interpolated into eval'd expressions). No legitimate llmctl
+    # expression needs a dunder name, and the builtins below carry no import/open/getattr/exec.
+    if "__" in expr:
+        sys.stderr.write("json eval: refusing an expression containing a dunder name\n")
+        sys.exit(4)
+SAFE = {n: getattr(__builtins__, n) if not isinstance(__builtins__, dict) else __builtins__[n]
+        for n in ("len", "sorted", "str", "int", "float", "bool", "sum", "min", "max", "any", "all", "list", "dict",
+                  "set", "tuple", "range", "enumerate", "zip", "map", "filter", "abs", "round", "repr", "isinstance",
+                  "reversed", "bytes")}
 path = sys.argv[1]
 expr = sys.argv[2]
+argv = sys.argv[3:]       # data for the expression 
+_guard(expr)
 try:
     with open(path, "r", encoding="utf-8") as fh:
         d = json.load(fh)
@@ -134,7 +147,7 @@ except Exception as exc:  # noqa: BLE001 - report any parse/io failure
     sys.stderr.write("json_query: cannot parse %s: %s\n" % (path, exc))
     sys.exit(2)
 try:
-    result = eval(expr, {"__builtins__": __builtins__}, {"d": d})  # noqa: S307 - trusted local expr
+    result = eval(expr, {"__builtins__": SAFE}, {"d": d, "argv": argv})  # noqa: S307 - guarded, see _guard
 except Exception as exc:  # noqa: BLE001
     sys.stderr.write("json_query: expression failed on %s: %s\n" % (path, exc))
     sys.exit(3)
@@ -198,18 +211,35 @@ print(json.dumps(out))
 PYEOF
 }
 
-# json_stdin <python-expression>  -- read JSON document from stdin as `d`.
+# valid_id <string> - the repo-wide id allow-list (same as the tenant id pattern): profile names, instance keys.
+valid_id() { [[ "${1:-}" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$ ]]; }
+
+# json_stdin <python-expression> [data...] -- read JSON document from stdin as `d`; extra args are the list `argv`.
+# SECURITY: never splice shell data (a profile name) into the expression: pass it as data and index with argv[0].
 json_stdin() {
   need_cmd python3 "install python3 via your package manager"
   python3 -c '
 import json, sys
+
+def _guard(expr):
+    # Defence in depth (security: profile names were once interpolated into evaluated expressions). No legitimate llmctl
+    # expression needs a dunder name, and the builtins below carry no import/open/getattr/exec.
+    if "__" in expr:
+        sys.stderr.write("json eval: refusing an expression containing a dunder name\n")
+        sys.exit(4)
+SAFE = {n: getattr(__builtins__, n) if not isinstance(__builtins__, dict) else __builtins__[n]
+        for n in ("len", "sorted", "str", "int", "float", "bool", "sum", "min", "max", "any", "all", "list", "dict",
+                  "set", "tuple", "range", "enumerate", "zip", "map", "filter", "abs", "round", "repr", "isinstance",
+                  "reversed", "bytes")}
 expr = sys.argv[1]
+argv = sys.argv[2:]       # data for the expression 
+_guard(expr)
 try:
     d = json.load(sys.stdin)
 except Exception as exc:
     sys.stderr.write("json_stdin: cannot parse stdin JSON: %s\n" % exc)
     sys.exit(2)
-result = eval(expr, {"__builtins__": __builtins__}, {"d": d})
+result = eval(expr, {"__builtins__": SAFE}, {"d": d, "argv": argv})
 if isinstance(result, bool):
     print("True" if result else "False")
     sys.exit(0 if result else 1)
@@ -220,7 +250,7 @@ if isinstance(result, (list, tuple)):
         print(item)
 else:
     print(result)
-' "$1"
+' "$@"
 }
 
 # mib <bytes> -> whole MiB

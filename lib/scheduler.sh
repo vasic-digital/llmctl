@@ -85,6 +85,9 @@ sched_rank_for_capability() {
 # interactive user) never interleave their read-budgets-then-write-reservation
 # sequence. A second invocation BLOCKS until the first releases the lock,
 # then runs against fresh state - it never proceeds on a stale read (FR-043).
+# An environment variable of this name would be imported as a shell variable and bypass the gate: drop it at load time.
+unset _sched_rollback_nogate LLMCTL_SCHED_NO_GATE
+
 scheduler::with_lock() {
   ensure_dir "${LLMCTL_RUNTIME_DIR}"
   local lock_file="${LLMCTL_RUNTIME_DIR}/.scheduler.lock"
@@ -250,10 +253,10 @@ _sched_reconcile_reservations() {
       hw_probe_json | catalog_plan_json > "${plan_file}"
     fi
     local mode port ram vram
-    mode="$(json_query "${plan_file}" "d[\"profiles\"][\"${profile}\"][\"mode\"]")"
-    port="$(json_query "${plan_file}" "d[\"profiles\"][\"${profile}\"][\"port\"]")"
-    ram="$(json_query "${plan_file}" "d[\"profiles\"][\"${profile}\"][\"ram_mb\"]")"
-    vram="$(json_query "${plan_file}" "d[\"profiles\"][\"${profile}\"][\"vram_mb\"]")"
+    mode="$(json_query "${plan_file}" "d[\"profiles\"][argv[0]][\"mode\"]" "${profile}")"
+    port="$(json_query "${plan_file}" "d[\"profiles\"][argv[0]][\"port\"]" "${profile}")"
+    ram="$(json_query "${plan_file}" "d[\"profiles\"][argv[0]][\"ram_mb\"]" "${profile}")"
+    vram="$(json_query "${plan_file}" "d[\"profiles\"][argv[0]][\"vram_mb\"]" "${profile}")"
     # The port the unit really runs on is the one in its env record (a dynamic
     # assignment differs from the plan's documented port) - FR-088.
     local rec_port
@@ -612,10 +615,11 @@ sched_decision_probe() {
     plan_file="$(mktemp)"; own_plan=1
     hw_probe_json | catalog_plan_json > "${plan_file}"
   fi
-  local di="d['decision_instances']['${profile}']" pl="d['decision_instances']['${profile}']['placements']['${placement}']"
+  valid_id "${profile}" && valid_id "${placement}" || die "invalid profile/placement name"
+  local di="d['decision_instances'][argv[0]]" pl="d['decision_instances'][argv[0]]['placements'][argv[1]]"
   local ram vram ram_budget vram_budget tier_ok host_tier min_tier used_ram used_vram
   read -r ram vram ram_budget vram_budget tier_ok host_tier min_tier < <(json_query "${plan_file}" \
-    "' '.join(str(x) for x in ((${pl} or {}).get('ram_mb', -1), (${pl} or {}).get('vram_mb', -1), d['budgets']['ram_mb'], d['budgets']['vram_mb'], int(bool(${di}['tier_ok'])), d['tier'], d['profiles']['${profile}']['min_tier']))")
+    "' '.join(str(x) for x in ((${pl} or {}).get('ram_mb', -1), (${pl} or {}).get('vram_mb', -1), d['budgets']['ram_mb'], d['budgets']['vram_mb'], int(bool(${di}['tier_ok'])), d['tier'], d['profiles'][argv[0]]['min_tier']))" "${profile}" "${placement}")
   read -r used_ram used_vram < <(_sched_initial_used "${plan_file}")
   [[ "${own_plan}" == 1 ]] && rm -f "${plan_file}"
   if (( ram < 0 )); then
@@ -739,12 +743,12 @@ _sched_decision_scale_impl() {
   local plan_file; plan_file="$(mktemp)"
   hw_probe_json | catalog_plan_json > "${plan_file}"
   local fits ram vram ram_budget vram_budget used_ram used_vram nofit_reason
-  fits="$(json_query "${plan_file}" "str(d['profiles']['${profile}']['fits'])")"
-  ram="$(json_query "${plan_file}" "d['profiles']['${profile}']['ram_mb']")"
-  vram="$(json_query "${plan_file}" "d['profiles']['${profile}']['vram_mb']")"
+  fits="$(json_query "${plan_file}" "str(d['profiles'][argv[0]]['fits'])" "${profile}")"
+  ram="$(json_query "${plan_file}" "d['profiles'][argv[0]]['ram_mb']" "${profile}")"
+  vram="$(json_query "${plan_file}" "d['profiles'][argv[0]]['vram_mb']" "${profile}")"
   ram_budget="$(json_query "${plan_file}" 'd["budgets"]["ram_mb"]')"
   vram_budget="$(json_query "${plan_file}" 'd["budgets"]["vram_mb"]')"
-  nofit_reason="$(json_query "${plan_file}" "d['decision_instances']['${profile}'].get('reason') or 'footprint exceeds the RAM/VRAM budgets'")"
+  nofit_reason="$(json_query "${plan_file}" "d['decision_instances'][argv[0]].get('reason') or 'footprint exceeds the RAM/VRAM budgets'" "${profile}")"
   read -r used_ram used_vram < <(_sched_initial_used "${plan_file}")
 
   local f accepted=0
@@ -778,13 +782,13 @@ _sched_decision_scale_impl() {
 
   local mode doc_port port ctx ngl parallel fa kv_type reg_name started=0
   local -a started_keys=()
-  mode="$(json_query "${plan_file}" "d['profiles']['${profile}']['mode']")"
-  doc_port="$(json_query "${plan_file}" "d['profiles']['${profile}']['port']")"
-  ctx="$(json_query "${plan_file}" "d['profiles']['${profile}']['ctx']")"
-  ngl="$(json_query "${plan_file}" "d['profiles']['${profile}']['ngl']")"
-  parallel="$(json_query "${plan_file}" "d['profiles']['${profile}']['parallel']")"
-  fa="$(json_query "${plan_file}" "d['profiles']['${profile}']['flash_attn']")"
-  kv_type="$(json_query "${plan_file}" "d['profiles']['${profile}'].get('kv_cache_type', 'f16')")"
+  mode="$(json_query "${plan_file}" "d['profiles'][argv[0]]['mode']" "${profile}")"
+  doc_port="$(json_query "${plan_file}" "d['profiles'][argv[0]]['port']" "${profile}")"
+  ctx="$(json_query "${plan_file}" "d['profiles'][argv[0]]['ctx']" "${profile}")"
+  ngl="$(json_query "${plan_file}" "d['profiles'][argv[0]]['ngl']" "${profile}")"
+  parallel="$(json_query "${plan_file}" "d['profiles'][argv[0]]['parallel']" "${profile}")"
+  fa="$(json_query "${plan_file}" "d['profiles'][argv[0]]['flash_attn']" "${profile}")"
+  kv_type="$(json_query "${plan_file}" "d['profiles'][argv[0]].get('kv_cache_type', 'f16')" "${profile}")"
   rm -f "${plan_file}"
 
   # Failure policy: by default a runtime failure rolls back every instance started in THIS call
@@ -809,6 +813,9 @@ _sched_decision_scale_impl() {
       _sched_svc_write_env "${key}" "${profile}"
       if ! svc_start "${key}"; then
         err "failed to start '${key}': the service backend refused to start it (see: llmctl logs ${key})"
+        ok=0
+      elif ! _sched_unit_started_ok "${key}"; then
+        err "failed to start '${key}': unit not active after start (skipped by the port check or exited); see: llmctl logs ${key}"
         ok=0
       elif ! _sched_wait_ready "${port}" "$(portreg_health_path "$(catalog_engine "${profile}")")"; then
         err "started '${key}' but it never answered http://127.0.0.1:${port}$(portreg_health_path "$(catalog_engine "${profile}")") within ${LLMCTL_READY_TIMEOUT:-60}s (see: llmctl logs ${key})"
@@ -962,6 +969,22 @@ _sched_wait_ready() {
   return 1
 }
 
+# _sched_unit_started_ok <key> - svc_started_ok when the backend has it (a custom LLMCTL_SERVICE_BACKEND_FILE may not): then
+# there is nothing to verify and the start is trusted as before.
+_sched_unit_started_ok() { declare -F svc_started_ok >/dev/null 2>&1 || return 0; svc_started_ok "$1"; }
+
+# _sched_pressure_gate <profile> [psi] - hw_pressure_gate with the profile's plan footprint (rc 75 on refusal).
+# "psi": PSI test only (footprint 0, reserve 0) - used BEFORE a switch stops the running set, because MemAvailable still
+# counts the memory of the models about to be stopped; the full memory test runs after the stop (_sched_start_impl) and
+# in the unit's ExecStartPre. Hook point for `llmctl validate` (lib/validate.sh is owned by another writer and is NOT
+# wired from this branch): call this before sched_start.
+_sched_pressure_gate() {
+  local p="$1" fp=0
+  if [[ "${2:-}" == psi ]]; then LLMCTL_GATE_RESERVE_MB=0 hw_pressure_gate 0 "${p}"; return $?; fi
+  fp="$(hw_probe_json | catalog_plan_json 2>/dev/null | json_stdin 'd["profiles"][argv[0]]["ram_mb"]' "${p}" 2>/dev/null || echo 0)"
+  hw_pressure_gate "${fp}" "${p}"
+}
+
 # _sched_start_impl <profile...> - returns non-zero (with a clear message)
 # when the combined footprint does not fit. Call sched_start (above) from
 # outside this file; this unlocked form exists so sched_auto can compose it
@@ -989,9 +1012,16 @@ _sched_start_impl() {
   for p in "$@"; do
     catalog_exists "${p}" || { rm -f "${plan_file}"; die "unknown profile: ${p} (see: llmctl models list)"; }
     sched_is_running "${p}" && { log "${p} is already running"; continue; }
-    fits="$(json_query "${plan_file}" "d[\"profiles\"][\"${p}\"][\"fits\"]")"
-    ram="$(json_query "${plan_file}" "d[\"profiles\"][\"${p}\"][\"ram_mb\"]")"
-    vram="$(json_query "${plan_file}" "d[\"profiles\"][\"${p}\"][\"vram_mb\"]")"
+    fits="$(json_query "${plan_file}" "d[\"profiles\"][argv[0]][\"fits\"]" "${p}")"
+    ram="$(json_query "${plan_file}" "d[\"profiles\"][argv[0]][\"ram_mb\"]" "${p}")"
+    vram="$(json_query "${plan_file}" "d[\"profiles\"][argv[0]][\"vram_mb\"]" "${p}")"
+    # Pressure gate (shared with svc_hook.sh gate / the unit's ExecStartPre): a refusal here touches nothing.
+    # Skipped ONLY on the rollback path of a failed switch: _sched_rollback_nogate is a non-exported local of
+    # _sched_restore_set (dynamic scope), never an environment knob. The unit's own ExecStartPre gate still applies there
+    # and can wait up to 120 s and then fail 75: a rollback under persistent pressure can leave nothing running.
+    if [[ "${_sched_rollback_nogate:-0}" != 1 ]]; then
+      hw_pressure_gate "${ram}" "${p}" || { local _grc=$?; rm -f "${plan_file}"; return "${_grc}"; }
+    fi
     if [[ "${fits}" != "True" ]] || \
        ! _sched_admission_fits "${ram}" "${vram}" "${used_ram}" "${used_vram}" "${ram_budget}" "${vram_budget}"; then
       local suggestion=""
@@ -999,8 +1029,8 @@ _sched_start_impl() {
       for alt in $(json_query "${plan_file}" 'd["recommended"]'); do
         sched_is_running "${alt}" && continue
         local a_ram a_vram
-        a_ram="$(json_query "${plan_file}" "d[\"profiles\"][\"${alt}\"][\"ram_mb\"]")"
-        a_vram="$(json_query "${plan_file}" "d[\"profiles\"][\"${alt}\"][\"vram_mb\"]")"
+        a_ram="$(json_query "${plan_file}" "d[\"profiles\"][argv[0]][\"ram_mb\"]" "${alt}")"
+        a_vram="$(json_query "${plan_file}" "d[\"profiles\"][argv[0]][\"vram_mb\"]" "${alt}")"
         if (( used_ram + a_ram <= ram_budget && used_vram + a_vram <= vram_budget )); then
           suggestion="${alt}"; break
         fi
@@ -1029,15 +1059,15 @@ _sched_start_impl() {
   done
 
   for p in ${selected[@]+"${selected[@]}"}; do
-    mode="$(json_query "${plan_file}" "d[\"profiles\"][\"${p}\"][\"mode\"]")"
-    port="$(json_query "${plan_file}" "d[\"profiles\"][\"${p}\"][\"port\"]")"
-    ram="$(json_query "${plan_file}" "d[\"profiles\"][\"${p}\"][\"ram_mb\"]")"
-    vram="$(json_query "${plan_file}" "d[\"profiles\"][\"${p}\"][\"vram_mb\"]")"
-    ctx="$(json_query "${plan_file}" "d[\"profiles\"][\"${p}\"][\"ctx\"]")"
-    ngl="$(json_query "${plan_file}" "d[\"profiles\"][\"${p}\"][\"ngl\"]")"
-    parallel="$(json_query "${plan_file}" "d[\"profiles\"][\"${p}\"][\"parallel\"]")"
-    fa="$(json_query "${plan_file}" "d[\"profiles\"][\"${p}\"][\"flash_attn\"]")"
-    kv_type="$(json_query "${plan_file}" "d[\"profiles\"][\"${p}\"].get(\"kv_cache_type\", \"f16\")")"
+    mode="$(json_query "${plan_file}" "d[\"profiles\"][argv[0]][\"mode\"]" "${p}")"
+    port="$(json_query "${plan_file}" "d[\"profiles\"][argv[0]][\"port\"]" "${p}")"
+    ram="$(json_query "${plan_file}" "d[\"profiles\"][argv[0]][\"ram_mb\"]" "${p}")"
+    vram="$(json_query "${plan_file}" "d[\"profiles\"][argv[0]][\"vram_mb\"]" "${p}")"
+    ctx="$(json_query "${plan_file}" "d[\"profiles\"][argv[0]][\"ctx\"]" "${p}")"
+    ngl="$(json_query "${plan_file}" "d[\"profiles\"][argv[0]][\"ngl\"]" "${p}")"
+    parallel="$(json_query "${plan_file}" "d[\"profiles\"][argv[0]][\"parallel\"]" "${p}")"
+    fa="$(json_query "${plan_file}" "d[\"profiles\"][argv[0]][\"flash_attn\"]" "${p}")"
+    kv_type="$(json_query "${plan_file}" "d[\"profiles\"][argv[0]].get(\"kv_cache_type\", \"f16\")" "${p}")"
     # FR-088: the port is resolved through the registry allocator (fixed =
     # the documented port, dynamic = a bind-tested free port of
     # LLMCTL_PORT_RANGE; an explicit LLMCTL_PORT_<PROFILE> always wins). A
@@ -1070,6 +1100,12 @@ _sched_start_impl() {
     # reported honestly and NEVER reserved as running.
     if ! svc_start "${p}"; then
       err "failed to start '${p}': the service backend refused to start it (see: llmctl logs ${p}; on Linux, check 'llmctl install' has been run and 'systemctl --user status llmctl-$(catalog_engine "${p}")@${p}.service')"
+      portreg_release "${reg_name}"
+      rm -f "${plan_file}"
+      return 1
+    fi
+    if ! _sched_unit_started_ok "${p}"; then
+      err "failed to start '${p}': unit not active after start (skipped by the port check or exited); see: llmctl logs ${p}"
       portreg_release "${reg_name}"
       rm -f "${plan_file}"
       return 1
@@ -1122,6 +1158,8 @@ _enable_impl() {
   local profile="$1"
   catalog_exists "${profile}" || die "unknown profile: ${profile} (see: llmctl models list)"
   sched_load_backend
+  # Gate only when enabling starts something: re-running `enable` on a running profile must not return 75.
+  sched_is_running "${profile}" || _sched_pressure_gate "${profile}" || return $?
   # Reconcile any post-reboot state desync BEFORE the overcommit check below
   # reads sched_reserved_field - otherwise a genuinely-running-but-
   # unreconciled enabled profile (see _sched_reconcile_reservations) would
@@ -1132,15 +1170,15 @@ _enable_impl() {
   local plan_file; plan_file="$(mktemp)"
   hw_probe_json | catalog_plan_json > "${plan_file}"
   local mode port ctx ngl parallel fa kv_type ram vram
-  mode="$(json_query "${plan_file}" "d[\"profiles\"][\"${profile}\"][\"mode\"]")"
-  port="$(json_query "${plan_file}" "d[\"profiles\"][\"${profile}\"][\"port\"]")"
-  ctx="$(json_query "${plan_file}" "d[\"profiles\"][\"${profile}\"][\"ctx\"]")"
-  ngl="$(json_query "${plan_file}" "d[\"profiles\"][\"${profile}\"][\"ngl\"]")"
-  parallel="$(json_query "${plan_file}" "d[\"profiles\"][\"${profile}\"][\"parallel\"]")"
-  fa="$(json_query "${plan_file}" "d[\"profiles\"][\"${profile}\"][\"flash_attn\"]")"
-  kv_type="$(json_query "${plan_file}" "d[\"profiles\"][\"${profile}\"].get(\"kv_cache_type\", \"f16\")")"
-  ram="$(json_query "${plan_file}" "d[\"profiles\"][\"${profile}\"][\"ram_mb\"]")"
-  vram="$(json_query "${plan_file}" "d[\"profiles\"][\"${profile}\"][\"vram_mb\"]")"
+  mode="$(json_query "${plan_file}" "d[\"profiles\"][argv[0]][\"mode\"]" "${profile}")"
+  port="$(json_query "${plan_file}" "d[\"profiles\"][argv[0]][\"port\"]" "${profile}")"
+  ctx="$(json_query "${plan_file}" "d[\"profiles\"][argv[0]][\"ctx\"]" "${profile}")"
+  ngl="$(json_query "${plan_file}" "d[\"profiles\"][argv[0]][\"ngl\"]" "${profile}")"
+  parallel="$(json_query "${plan_file}" "d[\"profiles\"][argv[0]][\"parallel\"]" "${profile}")"
+  fa="$(json_query "${plan_file}" "d[\"profiles\"][argv[0]][\"flash_attn\"]" "${profile}")"
+  kv_type="$(json_query "${plan_file}" "d[\"profiles\"][argv[0]].get(\"kv_cache_type\", \"f16\")" "${profile}")"
+  ram="$(json_query "${plan_file}" "d[\"profiles\"][argv[0]][\"ram_mb\"]" "${profile}")"
+  vram="$(json_query "${plan_file}" "d[\"profiles\"][argv[0]][\"vram_mb\"]" "${profile}")"
   # Root-caused 2026-09-17 (real repro, not guessed): unlike `llmctl start`,
   # which checks the combined RAM/VRAM footprint of every currently-reserved
   # profile against the host's own computed budget (_sched_start_impl above)
@@ -1188,6 +1226,11 @@ _enable_impl() {
   touch "${LLMCTL_SERVICES_DIR}/${profile}.enabled"
   if ! svc_enable "${profile}"; then
     err "failed to enable '${profile}': the service backend refused to enable/start it (see: llmctl logs ${profile})"
+    [[ "${allocated}" == 1 ]] && portreg_release "${reg_name}"
+    return 1
+  fi
+  if ! _sched_unit_started_ok "${profile}"; then
+    err "failed to start '${profile}': unit not active after start (skipped by the port check or exited); see: llmctl logs ${profile}"
     [[ "${allocated}" == 1 ]] && portreg_release "${reg_name}"
     return 1
   fi
@@ -1253,6 +1296,8 @@ _sched_restore_set() {
     if (( counts[i] > 1 )) || [[ " $* " == *" ${bases[i]}."[0-9]* ]]; then :; else plain+=("${bases[i]}"); fi
   done
   local rc=0
+  # Rollback must not be refused by the start gate: a failed switch may never leave nothing running.
+  local _sched_rollback_nogate=1   # dynamic scope: visible to _sched_start_impl below, never exported
   [[ ${#plain[@]} -eq 0 ]] || _sched_start_impl "${plain[@]}" || rc=$?
   for (( i=0; i<${#bases[@]}; i++ )); do
     if (( counts[i] > 1 )) || [[ " $* " == *" ${bases[i]}."[0-9]* ]]; then
@@ -1302,6 +1347,8 @@ _sched_switch_impl() {
     info "${target} is already the only running profile - nothing to switch"
     return 0
   fi
+  # Gate BEFORE anything is stopped: a refused switch must leave the running set untouched.
+  _sched_pressure_gate "${target}" psi || return $?
 
   _sched_stop_impl all
 
@@ -1337,9 +1384,9 @@ _sched_switch_impl() {
 # (tier gate / footprint) for a profile the plan does not recommend.
 _sched_why_not_recommended() {
   local pf="$1" p="$2"
-  if [[ "$(json_query "${pf}" "str(d[\"profiles\"][\"${p}\"][\"tier_ok\"])")" != "True" ]]; then
+  if [[ "$(json_query "${pf}" "str(d[\"profiles\"][argv[0]][\"tier_ok\"])" "${p}")" != "True" ]]; then
     printf 'tier gate: host tier %s below min_tier %s' "$(json_query "${pf}" 'd["tier"]')" \
-      "$(json_query "${pf}" "d[\"profiles\"][\"${p}\"][\"min_tier\"]")"
+      "$(json_query "${pf}" "d[\"profiles\"][argv[0]][\"min_tier\"]" "${p}")"
   else
     printf 'footprint exceeds the RAM and VRAM budgets'
   fi
@@ -1374,7 +1421,7 @@ _sched_auto_impl() {
     for p in ${ranked}; do
       catalog_exists "${p}" || continue
       [[ " $(catalog_capability "${p}") " == *" ${cap} "* ]] || continue
-      if [[ "$(json_query "${plan_file}" "d[\"profiles\"][\"${p}\"][\"recommended\"]")" != "True" ]]; then
+      if [[ "$(json_query "${plan_file}" "d[\"profiles\"][argv[0]][\"recommended\"]" "${p}")" != "True" ]]; then
         skipped_why+="${p} (not recommended on this host: $(_sched_why_not_recommended "${plan_file}" "${p}")); "
         continue
       fi
@@ -1424,8 +1471,8 @@ _sched_auto_impl() {
     for p in "${want[@]}"; do
       sched_is_running "${p}" && continue
       local need_ram need_vram
-      need_ram="$(json_query "${plan_file}" "d[\"profiles\"][\"${p}\"][\"ram_mb\"]")"
-      need_vram="$(json_query "${plan_file}" "d[\"profiles\"][\"${p}\"][\"vram_mb\"]")"
+      need_ram="$(json_query "${plan_file}" "d[\"profiles\"][argv[0]][\"ram_mb\"]" "${p}")"
+      need_vram="$(json_query "${plan_file}" "d[\"profiles\"][argv[0]][\"vram_mb\"]" "${p}")"
       (( used_ram + need_ram <= ram_budget )) || { ok=0; break; }
       (( used_vram + need_vram <= vram_budget )) || { ok=0; break; }
       used_ram=$(( used_ram + need_ram ))
@@ -1559,10 +1606,24 @@ _sched_status_rows() {
   done
 }
 
+# _sched_status_enabled_down - WARN lines for enabled engine units that are failed/inactive (not restarted after a
+# SIGKILL by design; see docs/persistent-services.md).
+_sched_status_enabled_down() {
+  sched_load_backend
+  declare -F svc_enabled_down >/dev/null 2>&1 || return 0
+  local u st
+  while IFS=$'\t' read -r u st; do
+    [[ -n "${u}" ]] || continue
+    printf 'WARN: %s is enabled but %s (it is down; a SIGKILLed unit is not restarted by design. Cause: journalctl --user -u %s; start it with: llmctl start <profile>)\n' "${u}" "${st}" "${u}"
+  done < <(svc_enabled_down)
+  return 0
+}
+
 sched_status() {
   local running; running="$(sched_running)"
   if [[ -z "${running}" ]]; then
     echo "no llmctl services running"
+    _sched_status_enabled_down
     return 0
   fi
   printf '%-16s %-6s %-8s %-10s %-10s %-8s %s\n' "profile" "port" "mode" "RAM MiB" "VRAM MiB" "enabled" "state"
@@ -1573,6 +1634,7 @@ sched_status() {
     printf '%-16s %-6s %-8s %-10s %-10s %-8s %s\n' "${label}" "${port}" "${mode}" "${ram}" "${vram}" "${en}" "${state}"
     [[ "${state}" == "failed (crash-loop)" ]] && printf '  last log line: %s\n' "${last_log}"
   done < <(_sched_status_rows)
+  _sched_status_enabled_down
   # Explicit, since a `while read ... <(proc-sub)` loop's own exit status
   # is `read`'s final EOF-signaling failure (1), not the body's last
   # successful printf - without this, sched_status() silently returned 1

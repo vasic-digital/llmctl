@@ -100,6 +100,12 @@ test_setup_env() {
   # is routinely taken by sibling projects) and change unrelated results.
   export LLMCTL_PORTREG=0
   unset LLMCTL_DECIDE_BIN LLMCTL_PORT_STRATEGY LLMCTL_PORT_RANGE LLMCTL_SERVICE_BACKEND_FILE
+  # Hermetic start gate (hw_pressure_gate): the REAL /proc/pressure/memory and /proc/meminfo of the machine running the
+  # tests must not decide whether a dry-run start is admitted. Default fixtures: no pressure, ample memory.
+  printf 'some avg10=0.00 avg60=0.00 avg300=0.00 total=0\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0\n' > "${TEST_TMP}/psi.fixture"
+  printf 'MemTotal:       33554432 kB\nMemFree:        31457280 kB\nMemAvailable:   31457280 kB\n' > "${TEST_TMP}/meminfo.fixture"
+  export LLMCTL_PSI_FILE="${TEST_TMP}/psi.fixture" LLMCTL_MEMINFO_FILE="${TEST_TMP}/meminfo.fixture"
+  export LLMCTL_GATE_WAIT=0   # the unit-level gate waits in production (default 120 s); hermetic tests refuse at once
   mkdir -p "${LLMCTL_STATE_DIR}" "${LLMCTL_RUNTIME_DIR}"
 }
 

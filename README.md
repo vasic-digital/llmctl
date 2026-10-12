@@ -309,6 +309,7 @@ fastest path to a running model.
 | [`docs/validation.md`](docs/validation.md) | The project's V&V (validation & verification) contract |
 | [`docs/host-safety.md`](docs/host-safety.md) | Host-hang safeguards after the 2026-10-08 incident: cgroup limits, `bounded-run`, the memory-pressure guard, and the root-only steps |
 | [`docs/live-test-protocol.md`](docs/live-test-protocol.md) | The guarded live test of the `vision` profile: pre-gate, watchdog, exit codes 0-4, evidence directory (never run live yet) |
+| [`docs/hardening-2026-10-changelog.md`](docs/hardening-2026-10-changelog.md) | Changelog-ready summary: per-profile memory caps, bounded restarts, the pressure start gate, one engine per profile |
 | [`docs/validation_and_verification.md`](docs/validation_and_verification.md) | Why fully-deterministic V&V matters for CLI-agent-driven development |
 | [`docs/CONTINUATION.md`](docs/CONTINUATION.md) | Live session-resumption state: current phase, next action, per-phase findings (Constitution §12.10) |
 | [`docs/commit-fully-integration.md`](docs/commit-fully-integration.md) | The `commit-fully` tooling integration |

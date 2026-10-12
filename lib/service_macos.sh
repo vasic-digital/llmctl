@@ -173,6 +173,7 @@ svc_start() {
   _svc_launchctl kickstart -k "$(_svc_domain)/$(_svc_label "$1")"
 }
 svc_stop()    { _svc_launchctl kill SIGTERM "$(_svc_domain)/$(_svc_label "$1")"; }
+svc_started_ok() { return 0; }   # launchd: no ExecCondition equivalent
 svc_restart() { svc_start "$1"; }
 
 svc_status() {
