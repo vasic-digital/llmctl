@@ -72,6 +72,13 @@ bounded_stop() {
 }
 if [ "$MODE" = stop ]; then bounded_stop; exit $?; fi
 
+parent_gone() {   # missing, or a zombie (state Z): a killed-but-unreaped driver still has a /proc entry
+  local st
+  [ -r "/proc/$PARENT/stat" ] || return 0
+  st="$(sed 's/^.*) //' "/proc/$PARENT/stat" 2>/dev/null | cut -c1)"
+  [ -z "$st" ] || [ "$st" = Z ] || [ "$st" = X ]
+}
+
 GPU_PID=""; GPU_OUT="$EV/.gpu.$$"
 # nvidia-smi can hang under a driver stall: run it detached, wait <= 4 s, never signal it.
 read_gpu() {
@@ -116,6 +123,6 @@ while :; do
   [ -n "$ps_some" ] && awk -v p="$ps_some" -v m="$MAX_PSI" 'BEGIN{exit !(p>m)}' && fire "memory PSI some avg10 ${ps_some} > ${MAX_PSI}"
   [ -n "$gpu" ] && [ "$gpu" -gt "$MAX_GPU_MB" ] && fire "GPU used ${gpu} MiB > ${MAX_GPU_MB}"
   [ "$el" -gt "$MAX_WALL" ] && fire "wall clock ${el}s > ${MAX_WALL}"
-  [ -d "/proc/$PARENT" ] || fire "parent pid $PARENT vanished"
+  parent_gone && fire "parent pid $PARENT vanished (missing or zombie)"
   sleep "$INTERVAL"
 done

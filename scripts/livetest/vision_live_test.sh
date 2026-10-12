@@ -3,7 +3,7 @@
 #
 # Usage: vision_live_test.sh [vision]        (anything else, incl. vision-pro, is refused)
 #
-# Exit: 0 PASS | 1 wrong answer (FAIL) | 2 undetermined | 3 pre-gate refusal | 4 aborted by watchdog
+# Exit: 0 PASS | 1 wrong answer (FAIL) | 2 undetermined | 3 pre-gate refusal | 4 aborted by watchdog | 5 watchdog died (model stopped)
 #
 # Safety contract (see docs/live-test-protocol.md):
 #  * pre-gate refuses unless MemAvailable>=12000 MiB, PSI some<5 & full<1, GPU used<6000 MiB,
@@ -72,15 +72,28 @@ print_table() {
   printf '%-28s %s\n' "llama-server" "$LSV"
   printf '%-28s %s\n' "evidence" "$EV"
   local word=UNDETERMINED
-  case "$RESULT" in 0) word=PASS ;; 1) word=FAIL ;; 3) word=REFUSED ;; 4) word=ABORTED ;; *) ;; esac
+  case "$RESULT" in 0) word=PASS ;; 1) word=FAIL ;; 3) word=REFUSED ;; 4) word=ABORTED ;; 5) word=ABORTED-WATCHDOG-DEAD ;; *) ;; esac
   printf '%-28s %s (exit %s) - %s\n' "VERDICT" "$word" "$RESULT" "$VERDICT_REASON"
 }
 
 # The ONLY place a signal is sent: to the watchdog PID this script started. Logged first.
 safe_kill() {
   [ -n "$WD_PID" ] || return 0
-  echo "$(date -u +%FT%TZ) SIGTERM -> watchdog pid $WD_PID" >>"$SIGLOG"
-  kill -TERM "$WD_PID" 2>/dev/null
+  # identity check: only ever signal a live process whose cmdline is our watchdog (PID-reuse safe)
+  if [ -r "/proc/$WD_PID/cmdline" ] && tr '\0' ' ' <"/proc/$WD_PID/cmdline" | grep -q 'livetest/watchdog\.sh\|watchdog\.sh .*'"$PROFILE"; then
+    echo "$(date -u +%FT%TZ) SIGTERM -> watchdog pid $WD_PID" >>"$SIGLOG"
+    kill -TERM "$WD_PID" 2>/dev/null
+  else
+    echo "$(date -u +%FT%TZ) NOT signalling pid $WD_PID: not (or no longer) our watchdog" >>"$SIGLOG"
+  fi
+}
+
+wd_alive() {   # alive = exists, is our watchdog, and is not a zombie
+  local st
+  [ -n "$WD_PID" ] && [ -r "/proc/$WD_PID/cmdline" ] || return 1
+  tr '\0' ' ' <"/proc/$WD_PID/cmdline" | grep -q 'watchdog\.sh' || return 1
+  st="$(sed 's/^.*) //' "/proc/$WD_PID/stat" 2>/dev/null | cut -c1)"
+  [ -n "$st" ] && [ "$st" != Z ] && [ "$st" != X ]
 }
 
 run_logged() { echo "$(date -u +%FT%TZ) \$ $*" >>"$CMDLOG"; "$@"; }
@@ -219,6 +232,14 @@ for _ in $(seq 1 20); do [ "$(wc -l <"$EV/samples.csv" 2>/dev/null || echo 0)" -
 log "watchdog running (pid $WD_PID)"
 
 triggered() { [ -s "$EV/trigger" ]; }
+guard() {   # watchdog fired -> 4; watchdog dead without a trigger -> 5 (model must never run unguarded)
+  abort_if_triggered
+  if ! wd_alive; then
+    sleep 0.5; abort_if_triggered   # it may have just fired and exited
+    RESULT=5; VERDICT_REASON="watchdog died/is not alive: model would run unguarded -> aborted and stopped"
+    log "$VERDICT_REASON"; exit 5
+  fi
+}
 abort_if_triggered() {
   if triggered; then RESULT=4; VERDICT_REASON="watchdog: $(cat "$EV/trigger")"; log "ABORTED by watchdog: $(cat "$EV/trigger")"; exit 4; fi
 }
@@ -235,7 +256,7 @@ rm -f "$EV/start.rc"
 ( LLMCTL_VALIDATE_ON_START=0 LLMCTL_READY_TIMEOUT=0 nice -n 19 ionice -c 3 "$LLMCTL" start "$PROFILE" >"$EV/start.out" 2>&1; echo $? >"$EV/start.rc" ) &
 t0=$(date +%s)
 while [ ! -s "$EV/start.rc" ]; do
-  abort_if_triggered
+  guard
   [ $(( $(date +%s) - t0 )) -lt "$START_MAX" ] || { RESULT=2; VERDICT_REASON="llmctl start did not return within ${START_MAX}s"; exit 2; }
   sleep 0.3
 done
@@ -255,7 +276,7 @@ URL="http://127.0.0.1:${PORT}"
 log "waiting for $URL/health (every ${READY_INTERVAL}s, max ${READY_MAX}s)"
 READY=0; t0=$(date +%s)
 while [ $(( $(date +%s) - t0 )) -lt "$READY_MAX" ]; do
-  abort_if_triggered
+  guard
   if curl -fsS --max-time 3 "$URL/health" >"$EV/health.out" 2>>"$EV/health.err"; then READY=1; break; fi
   sleep "$READY_INTERVAL"
 done
@@ -274,8 +295,8 @@ echo "$(date -u +%FT%TZ) \$ ${VCMD[*]}" >>"$CMDLOG"
 "${VCMD[@]}" >"$EV/validate.out" 2>"$EV/validate.err" &
 VPID=$!
 while [ -d "/proc/$VPID" ]; do
-  if triggered; then
-    log "watchdog fired during validation; giving the client ${VALIDATE_GRACE}s to fail by itself (never signalled)"
+  if triggered || ! wd_alive; then
+    log "watchdog fired/died during validation; giving the client ${VALIDATE_GRACE}s to fail by itself (never signalled)"
     g=0; while [ -d "/proc/$VPID" ] && [ "$g" -lt "$VALIDATE_GRACE" ]; do sleep 1; g=$((g+1)); done
     break
   fi
@@ -283,7 +304,7 @@ while [ -d "/proc/$VPID" ]; do
 done
 if [ -d "/proc/$VPID" ]; then VALIDATE_RC="HUNG"; else wait "$VPID"; VALIDATE_RC=$?; fi
 echo "$VALIDATE_RC" >"$EV/validate.rc"
-abort_if_triggered
+guard
 
 # ------------------------------------------------------------------ (e) finalize: stop, confirm, identity
 log "final: llmctl stop $PROFILE"

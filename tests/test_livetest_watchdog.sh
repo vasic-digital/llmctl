@@ -405,6 +405,48 @@ check "start exceeding its own deadline -> exit 2" "$RC" "2"
 has "  profile stop attempted" "$E/fake/calls" '^systemctl stop|^stop vision'
 fi
 
+if want d2; then
+echo "== D2/D9. watchdog liveness; zombie/killed parent; safe_kill identity =="
+# watchdog SIGKILLed mid-run -> driver aborts, stops the profile, exits 5
+E="$(mkenv)"; touch "$E/fake/validate_wait"
+( FAKE="$E/fake" PATH="$E/bin:$PATH" LT_HERMETIC=1 LT_WD_INTERVAL=0.2 LT_READY_INTERVAL=0.2 LT_STOP_BOUND=2 LT_BOUND=2 LT_POST_SAMPLE=1 \
+  LT_MEMINFO="$E/meminfo" LT_PSI="$E/psi" LT_IOPSI="$E/iopsi" LT_EVIDENCE_ROOT="$E/ev" HOME="$E/home" LLMCTL_SERVICES_DIR="$E/services" LT_SUITE_DIR="$E/suite" \
+  exec bash "$MAIN" >"$E/out.txt" 2>"$E/err.txt" ) &
+M=$!
+for _ in $(seq 1 50); do grep -q '^validate ' "$E/fake/calls" 2>/dev/null && break; sleep 0.2; done
+EVD="$(find "$E/ev" -mindepth 1 -maxdepth 1 -type d | head -1)"
+wdp=$(sed -n 's/.*started watchdog pid \([0-9]*\)/\1/p' "$EVD/signals.log")
+kill -KILL "$wdp"
+RC=0; wait "$M" || RC=$?
+check "watchdog died -> driver exits 5 (distinct code)" "$RC" "5"
+has "  profile stopped on watchdog death" "$E/fake/calls" '^stop vision'
+has "  verdict says watchdog died" "$E/out.txt" 'watchdog (died|is not alive)'
+# NEG-CONTROL: a healthy watchdog is never mistaken for dead (full normal run passes)
+E="$(mkenv)"; run_main "$E"; check "NEG-CONTROL healthy run still exits 0" "$RC" "0"
+# SIGKILL of the driver: the real watchdog sees the parent gone. The driver's own parent here is a python
+# process that never reaps, so the killed driver stays a ZOMBIE (state Z) - /proc/<pid> still exists.
+E="$(mkenv)"; touch "$E/fake/validate_wait"
+FAKE="$E/fake" PATH="$E/bin:$PATH" LT_HERMETIC=1 LT_WD_INTERVAL=0.2 LT_READY_INTERVAL=0.2 LT_STOP_BOUND=2 LT_BOUND=2 \
+  LT_MEMINFO="$E/meminfo" LT_PSI="$E/psi" LT_IOPSI="$E/iopsi" LT_EVIDENCE_ROOT="$E/ev" HOME="$E/home" LLMCTL_SERVICES_DIR="$E/services" LT_SUITE_DIR="$E/suite" \
+  python3 -I -c 'import subprocess,sys,time; p=subprocess.Popen(["bash",sys.argv[1]],stdout=open(sys.argv[2],"w"),stderr=subprocess.STDOUT); time.sleep(25)' "$MAIN" "$E/out.txt" &
+PYP=$!
+for _ in $(seq 1 50); do grep -q '^validate ' "$E/fake/calls" 2>/dev/null && break; sleep 0.2; done
+EVD="$(find "$E/ev" -mindepth 1 -maxdepth 1 -type d | head -1)"
+M=$(sed -n 's/.*parent=\([0-9]*\) .*/\1/p' "$EVD/watchdog.log" | head -1)
+kill -KILL "$M"
+sleep 0.5
+zst=$(awk '{print $3}' "/proc/$M/stat" 2>/dev/null | head -1)
+for _ in $(seq 1 50); do [ -s "$EVD/trigger" ] && break; sleep 0.2; done
+check "the killed driver is a ZOMBIE (unreaped) during detection" "$zst" "Z"
+has "watchdog noticed the zombie/killed driver" "$EVD/trigger" 'vanished'
+has "  watchdog stopped the profile" "$E/fake/calls" '^stop vision'
+kill "$PYP" 2>/dev/null; wait "$PYP" 2>/dev/null
+# D9: safe_kill must check the target's identity first (static + negative control)
+grep -vE '^\s*#' "$MAIN" | grep -A6 '^safe_kill()' | grep -q 'cmdline' && ok "safe_kill verifies /proc/\$WD_PID/cmdline before signalling" || bad "safe_kill does not verify cmdline"
+printf 'safe_kill() {\n  kill -TERM "$WD_PID"\n}\n' >"$T/nocheck.sh"
+grep -A6 '^safe_kill()' "$T/nocheck.sh" | grep -q 'cmdline' && bad "NEG-CONTROL detector blind" || ok "NEG-CONTROL detector flags an unchecked safe_kill"
+fi
+
 if want always; then
 echo "== 7. whole-suite sanity: nothing real was touched =="
 [ -z "$(pgrep -f 'llama-server.*--port' || true)" ] && ok "no real llama-server process spawned by tests" || bad "llama-server present (may be pre-existing)"
