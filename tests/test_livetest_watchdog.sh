@@ -40,6 +40,7 @@ trap cleanup_t EXIT
 
 # ---- build one fake environment: $E/{bin,fake,ev,...}; echo its path ----
 mkenv() {
+  rm -f "$T"/env.*/fake/running "$T"/env.*/fake/serving   # previous scenarios must not keep the shared fake health server "up"
   local E; E="$(mktemp -d "$T/env.XXXXXX")"
   mkdir -p "$E/bin" "$E/fake" "$E/ev" "$E/models"
   printf 'MemTotal: 32000000 kB\nMemAvailable:   %d kB\n' $((20000*1024)) >"$E/meminfo"
@@ -73,6 +74,7 @@ case "$*" in
 esac
 X
   for n in pkill killall; do printf '#!/usr/bin/env bash\necho "%s $*" >>"$FAKE/forbidden"\n' "$n" >"$E/bin/$n"; done
+  printf '#!/usr/bin/env bash\necho "fake journal line for $*"\n' >"$E/bin/journalctl"
   printf '#!/usr/bin/env bash\necho "llama-server fake version: 1 (testbuild)"\n' >"$E/bin/llama-server"
   cat >"$E/bin/llmctl" <<'X'
 #!/usr/bin/env bash
@@ -542,6 +544,24 @@ n5 "mem PSI full 10.00" "printf 'some avg10=0 avg60=0 avg300=0 total=1\nfull avg
 n5 "IO some 60.00" "printf 'some avg10=60.00 avg60=0 avg300=0 total=1\nfull avg10=0 avg60=0 avg300=0 total=1\n' >\"\${FAKE%/fake}/iopsi\""
 n5 "IO full 30.00" "printf 'some avg10=0 avg60=0 avg300=0 total=1\nfull avg10=30.00 avg60=0 avg300=0 total=1\n' >\"\${FAKE%/fake}/iopsi\""
 has "samples.csv carries IO + mem-full columns" "$EVD/samples.csv" 'io_some_avg10,io_full_avg10'
+fi
+
+if want d10; then
+echo "== D10. richer evidence =="
+E="$(mkenv)"; run_main "$E"
+has "harness.txt records the harness git HEAD" "$EVD/harness.txt" '^git_head=[0-9a-f]{40}'
+has "harness.txt records llmctl version" "$EVD/harness.txt" '^llmctl_version=llmctl fake-1.0'
+has "logs.txt holds llmctl logs vision output" "$EVD/logs.txt" 'fake log line'
+has "journal.txt holds the unit journal since start" "$EVD/journal.txt" 'fake journal line'
+has "env_names.txt lists variable NAMES (LT_HERMETIC)" "$EVD/env_names.txt" '^LT_HERMETIC$'
+hasnt "env_names.txt never contains a value (no '=')" "$EVD/env_names.txt" '='
+[ "$(wc -l <"$EVD/post_stop_samples.csv")" -ge 3 ] && ok "post-stop VRAM sampling recorded (>=2 samples)" || bad "post_stop_samples.csv too short"
+# abort path also collects logs
+E="$(mkenv)"; touch "$E/fake/validate_wait"; echo "printf 'MemAvailable: %d kB\\n' 3000000 >\"\${FAKE%/fake}/meminfo\"" >"$E/fake/mutate.sh"; run_main "$E"
+has "abort path (exit 4) still collects logs" "$EVD/logs.txt" 'fake log line'
+# NEG-CONTROL: a refusal (nothing started) does not run logs/journal collection
+E="$(mkenv)"; setmem "$E" 100; run_main "$E"
+[ ! -e "$EVD/logs.txt" ] && ok "NEG-CONTROL gate refusal collects no model logs" || bad "logs collected on refusal"
 fi
 
 if want always; then

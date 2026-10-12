@@ -27,12 +27,12 @@ fi
 
 GATE_MIN_MEM_MB=12000; GATE_MAX_PSI_SOME=5; GATE_MAX_PSI_FULL=1; GATE_MAX_GPU_MB=6000; GATE_MAX_IO_SOME=10; GATE_MAX_IO_FULL=2
 LARGE_RAM_MB=4000; LARGE_VRAM_MB=2000          # another running profile at/above either = "large model"
-READY_INTERVAL=3; READY_MAX=180; PORT_DEFAULT=8082; VRAM_SLACK_MB=500; VRAM_SETTLE_MAX=30
-VALIDATE_GRACE=30; START_MAX=120
+READY_INTERVAL=3; READY_MAX=180; PORT_DEFAULT=8082; VRAM_SLACK_MB=500
+VALIDATE_GRACE=30; START_MAX=120; POST_SAMPLE=20
 if [ "${LT_HERMETIC:-0}" = "1" ]; then
   READY_INTERVAL="${LT_READY_INTERVAL:-$READY_INTERVAL}"; READY_MAX="${LT_READY_MAX:-$READY_MAX}"
-  PORT_DEFAULT="${LT_PORT_DEFAULT:-$PORT_DEFAULT}"; VRAM_SETTLE_MAX="${LT_VRAM_SETTLE_MAX:-$VRAM_SETTLE_MAX}"
-  VALIDATE_GRACE="${LT_VALIDATE_GRACE:-$VALIDATE_GRACE}"; START_MAX="${LT_START_MAX:-$START_MAX}"
+  PORT_DEFAULT="${LT_PORT_DEFAULT:-$PORT_DEFAULT}"
+  VALIDATE_GRACE="${LT_VALIDATE_GRACE:-$VALIDATE_GRACE}"; START_MAX="${LT_START_MAX:-$START_MAX}"; POST_SAMPLE="${LT_POST_SAMPLE:-$POST_SAMPLE}"
 fi
 
 # ---- profile allow-list: vision-pro (and anything not exactly `vision`) is refused unconditionally ----
@@ -52,6 +52,7 @@ for _n in $OVERRIDE_NAMES; do
   fi
 done
 [ "${LT_HERMETIC:-0}" = 1 ] && echo "HONOURED LT_HERMETIC=1: thresholds/timeouts may be overridden; this is NOT a live run" >>"$EV/overrides.log"
+env | cut -d= -f1 | sort >"$EV/env_names.txt"   # NAMES only, never values (secrets)
 CMDLOG="$EV/commands.log"; SIGLOG="$EV/signals.log"
 log() { printf '%s %s\n' "$(date -u +%FT%TZ)" "$*" | tee -a "$EV/run.log" >&2; }
 
@@ -111,7 +112,7 @@ cleanup() {   # always: stop our profile via llmctl, then reap our own watchdog
   return 0
 }
 # shellcheck disable=SC2329
-on_exit() { local rc=$?; cleanup; RESULT="$rc"; print_table | tee "$EV/verdict.txt"; exit "$rc"; }
+on_exit() { local rc=$?; cleanup; collect_evidence; RESULT="$rc"; print_table | tee "$EV/verdict.txt"; exit "$rc"; }
 # shellcheck disable=SC2329
 on_sig()  { log "interrupted by signal"; RESULT=2; VERDICT_REASON="interrupted"; exit 2; }
 trap on_exit EXIT
@@ -203,6 +204,23 @@ PY
 SUITE_DIR="$HERE/../../validation/suites/vision-golden-v1"
 [ "${LT_HERMETIC:-0}" = 1 ] && SUITE_DIR="${LT_SUITE_DIR:-$SUITE_DIR}"
 
+
+harness_info() {
+  { echo "git_head=$(git -C "$HERE" rev-parse HEAD 2>/dev/null || echo UNKNOWN)"
+    echo "git_dirty_files=$(git -C "$HERE" status --porcelain 2>/dev/null | wc -l)"
+    bounded "$BOUND" "$EV/.ver" "$LLMCTL" version; echo "llmctl_version=$(head -1 "$EV/.ver" 2>/dev/null)"
+    echo "llmctl_path=$(command -v "$LLMCTL")"
+    echo "harness_utc=$(date -u +%FT%TZ)"; } >"$EV/harness.txt"
+}
+START_EPOCH=""
+collect_evidence() {   # after the model ran: engine log + unit journal since start (bounded; never fails the run)
+  [ -n "$START_EPOCH" ] || return 0
+  bounded "$BOUND" "$EV/logs.txt" "$LLMCTL" logs "$PROFILE" 200
+  if command -v journalctl >/dev/null 2>&1; then
+    bounded "$BOUND" "$EV/journal.txt" journalctl --user -u "$(unit_name)" --since "@${START_EPOCH}" --no-pager -n 400
+  else echo "journalctl not available" >"$EV/journal.txt"; fi
+}
+
 # ------------------------------------------------------------------ (a) pre-gate
 gate() {
   local mem psi_s psi_f io_s io_f gpu st
@@ -251,6 +269,7 @@ print("OK")' "$PROFILE" "$LARGE_RAM_MB" "$LARGE_VRAM_MB")"
   fi
   GATE_RES="PASS"; echo "gate: PASS" >>"$EV/gate.log"; log "gate PASS (mem=${mem}MiB psi=${psi_s}/${psi_f} gpu=${gpu}MiB)"
 }
+harness_info
 gate
 
 # ------------------------------------------------------------------ (b) watchdog BEFORE the model
@@ -275,7 +294,7 @@ abort_if_triggered() {
 }
 
 # ------------------------------------------------------------------ (c) start + readiness
-STOP_NEEDED=1
+STOP_NEEDED=1; START_EPOCH=$(date +%s)
 log "starting: LLMCTL_VALIDATE_ON_START=0 nice -n 19 ionice -c 3 $LLMCTL start $PROFILE"
 echo "$(date -u +%FT%TZ) \$ LLMCTL_VALIDATE_ON_START=0 LLMCTL_READY_TIMEOUT=0 nice -n 19 ionice -c 3 $LLMCTL start $PROFILE (background)" >>"$CMDLOG"
 # `llmctl start` holds the scheduler flock across svc_start (+ its own readiness wait). LLMCTL_READY_TIMEOUT=0
@@ -349,12 +368,10 @@ STOP_NEEDED=0
 safe_kill; wait "$WD_PID" 2>/dev/null; WD_PID=""
 abort_if_triggered   # a trigger recorded just before we reaped the watchdog still counts
 
-g=0
-while :; do
-  GPU_FINAL="$(gpu_used)"
-  [ -n "$GPU_FINAL" ] && [ -n "$GPU_BASE" ] && [ "$GPU_FINAL" -le $((GPU_BASE + VRAM_SLACK_MB)) ] && break
-  [ "$g" -ge "$VRAM_SETTLE_MAX" ] && break
-  sleep 1; g=$((g+1))
+# keep sampling VRAM after the stop so recovery (or a leak) is on record; last sample is the final value
+echo "utc,gpu_used_mb" >"$EV/post_stop_samples.csv"
+for _ in $(seq 1 "$POST_SAMPLE"); do
+  GPU_FINAL="$(gpu_used)"; echo "$(date -u +%FT%TZ),${GPU_FINAL:-NA}" >>"$EV/post_stop_samples.csv"; sleep 1
 done
 status_json >"$EV/status_after.json" 2>&1
 STILL="$(python3 -I -c '
