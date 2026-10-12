@@ -359,10 +359,18 @@ validate_all() {
   return "${rc}"
 }
 
-# validate_after_start <profile...> - post-start hook for start/auto/switch. Runs each running profile's
-# suites unless a fresh passing record already covers it. Returns 1 when any profile gave a WRONG answer
-# (the service stays running for inspection; consumers gate on `llmctl require-validated`). An
-# UNDETERMINED result (no suite, no answer) is reported loudly and recorded, but does not fail the start.
+# _val_stop_after_verdict <profile> - the stop half of the gate: sched_stop (-> svc_stop, reservation removed).
+# Callers run OUTSIDE the scheduler lock (sched_stop takes it itself).
+_val_stop_after_verdict() {
+  sched_stop "$1" || warn "validation: could not stop '$1' - stop it by hand: llmctl stop $1"
+}
+
+# validate_after_start <profile...> - post-start hook for start/switch/auto/enable/restart. Runs each running
+# profile's suites unless a fresh passing record already covers it (OUTSIDE the scheduler lock).
+#   PASS (0)         -> keeps running.
+#   FAIL (1)         -> STOPPED through sched_stop, the hook returns 1 (non-zero exit of the command).
+#   UNDETERMINED (2) -> never stopped, never a PASS, reported loudly - unless LLMCTL_VALIDATE_STRICT=1, which stops
+#                       it and returns 1 (no suite / no answer / refused under pressure is then not good enough).
 validate_after_start() {
   if [[ "${LLMCTL_DRY_RUN:-0}" == "1" ]]; then
     log "validation not run (LLMCTL_DRY_RUN=1): nothing was started, so there is nothing to validate"
@@ -396,8 +404,16 @@ validate_after_start() {
     validate_profile "${p}" || one=$?
     case "${one}" in
       0) info "validation: '${p}' PASSED" ;;
-      1) err "validation: '${p}' gave WRONG answers - it is running but NOT validated; investigate before any use (llmctl require-validated ${p} refuses)"; rc=1 ;;
-      *) warn "validation: '${p}' could not be validated (UNDETERMINED) - llmctl require-validated ${p} refuses until it passes" ;;
+      1) err "validation: '${p}' gave WRONG answers (validation FAILED) - stopping it through the normal stop path; it is NOT left running (evidence: ${LLMCTL_VERIFY_DIR}/validate-${p}.log)"
+         _val_stop_after_verdict "${p}"
+         rc=1 ;;
+      *) if [[ "${LLMCTL_VALIDATE_STRICT:-0}" == "1" ]]; then
+           err "validation: '${p}' could not be validated (UNDETERMINED) and LLMCTL_VALIDATE_STRICT=1 - stopping it (no validation suite / no answer / refused is not good enough in strict mode)"
+           _val_stop_after_verdict "${p}"
+           rc=1
+         else
+           warn "validation: '${p}' could not be validated (UNDETERMINED) - it keeps running, NOT validated; llmctl require-validated ${p} refuses until it passes (LLMCTL_VALIDATE_STRICT=1 would stop it)"
+         fi ;;
     esac
   done
   return "${rc}"

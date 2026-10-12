@@ -230,6 +230,7 @@ main() {
       # a genuine TOCTOU race on the exact read-budget-then-write-
       # reservation sequence scheduler::with_lock exists to serialize).
       sched_enable "$1"
+      validate_after_start "$1"
       ;;
     disable)
       [[ "$#" -eq 1 ]] || die "usage: llmctl disable <profile>"
@@ -242,6 +243,7 @@ main() {
     restart)
       [[ "$#" -eq 1 ]] || die "usage: llmctl restart <profile>"
       sched_load_backend; svc_restart "$1"
+      validate_after_start "$1"
       ;;
     switch)   [[ "$#" -eq 1 ]] || die "usage: llmctl switch <profile>"; sched_switch "$1"; validate_after_start "$1" ;;
     auto)     validate_auto "$@" ;;
