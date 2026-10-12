@@ -202,6 +202,7 @@ CPUWeight=50
 OOMScoreAdjust=500
 ManagedOOMPreference=avoid
 TimeoutStopSec=20
+KillMode=control-group
 TimeoutStartSec=300
 EOF
 }

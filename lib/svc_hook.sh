@@ -149,6 +149,22 @@ hk_gate() {
   hw_pressure_gate "${fp:-0}" "${inst:-service}"
 }
 
+# Registration waiters are tracked by pid file so a stop can end them (they otherwise poll /health for up to 600 s,
+# inside the unit's cgroup, after the engine is gone).
+_hk_waiter_file() { printf '%s/waiters/%s.pid' "${LLMCTL_RUNTIME_DIR:-${LLMCTL_STATE_DIR}/run}" "$1"; }
+_hk_track_waiter() { ( umask 077; mkdir -p "$(dirname "$(_hk_waiter_file "$1")")" && printf '%s\n' "$2" > "$(_hk_waiter_file "$1")" ) 2>/dev/null || true; }
+# _hk_kill_waiter <inst> - kills the tracked waiter ONLY when /proc says it is our `_wait_register <inst>` process.
+_hk_kill_waiter() {
+  local f pid cmd
+  f="$(_hk_waiter_file "$1")"
+  [[ -f "${f}" ]] || return 0
+  pid="$(head -1 "${f}" 2>/dev/null || true)"
+  rm -f "${f}"
+  [[ "${pid}" =~ ^[0-9]+$ && "${pid}" -gt 1 ]] || return 0
+  cmd="$(tr '\0' ' ' < "/proc/${pid}/cmdline" 2>/dev/null || true)"
+  case "${cmd}" in *"_wait_register ${1} "*) kill "${pid}" 2>/dev/null || true ;; esac
+}
+
 hk_register() {
   local inst="$1" pid="${MAINPID:-${2:-}}"
   [[ -n "${pid}" && "${pid}" -gt 1 ]] 2>/dev/null || { _hk_log "${inst}: no MAINPID; not registered"; return 0; }
@@ -162,9 +178,11 @@ hk_register() {
   if command -v setsid >/dev/null 2>&1; then
     setsid bash "${BASH_SOURCE[0]}" _wait_register "${inst}" "${pid}" \
       >> "${LLMCTL_LOG_DIR}/svc_hook.log" 2>&1 < /dev/null &
+    _hk_track_waiter "${inst}" "$!"
   else
     nohup bash "${BASH_SOURCE[0]}" _wait_register "${inst}" "${pid}" \
       >> "${LLMCTL_LOG_DIR}/svc_hook.log" 2>&1 < /dev/null &
+    _hk_track_waiter "${inst}" "$!"
   fi
   disown 2>/dev/null || true
   return 0
@@ -185,6 +203,7 @@ hk__wait_register() {
 # The gateway publishes itself as "decide-gateway" (Go side); "gateway" is its
 # port-hold name, so both rows are cleared when asked to unregister "gateway".
 hk_unregister() {
+  _hk_kill_waiter "$1"
   portreg_unregister "$1"
   [[ "$1" == "gateway" ]] && portreg_unregister decide-gateway
   return 0

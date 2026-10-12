@@ -143,7 +143,12 @@ portreg_register() {
 # portreg_unregister <name> - remove the registry row (idempotent, quiet).
 portreg_unregister() {
   portreg_active || return 0
-  "$(portreg_bin)" registry unregister "$1" >/dev/null 2>&1 || true
+  # Bounded (ExecStopPost must never exceed TimeoutStopSec): under memory pressure this call once hung past 90 s.
+  if command -v timeout >/dev/null 2>&1; then
+    timeout -k 1 "${LLMCTL_UNREGISTER_TIMEOUT:-3}" "$(portreg_bin)" registry unregister "$1" >/dev/null 2>&1 || true
+  else
+    "$(portreg_bin)" registry unregister "$1" >/dev/null 2>&1 || true
+  fi
 }
 
 # portreg_health_path <engine> - the HTTP path the engine really answers when healthy (the single source for the
