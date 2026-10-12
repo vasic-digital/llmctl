@@ -36,7 +36,7 @@ PY
   local w=$!; rm -f "${WATCH_OUT}.stop"
   for _ in $(seq 1 100); do [[ -e "${WATCH_OUT}.ready" ]] && break; sleep 0.05; done
   ( umask "${um}"
-    for i in $(seq 1 15); do svc_write_env vision llama /bin/true --port 18990 >/dev/null 2>&1; done )
+    for _ in $(seq 1 15); do svc_write_env vision llama /bin/true --port 18990 >/dev/null 2>&1; done )
   touch "${WATCH_OUT}.stop"; wait "${w}" 2>/dev/null || true; rm -f "${WATCH_OUT}.ready"
   local wide; wide="$(cat "${WATCH_OUT}" 2>/dev/null || true)"
   if [[ -z "${wide}" ]]; then echo "  ok: umask ${um}: no regular file under the service/unit dirs was ever wider than 0600"

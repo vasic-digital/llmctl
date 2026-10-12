@@ -7,7 +7,8 @@ set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/helpers.sh"
 test_setup_env
 PIDS=()
-trap 'for p in ${PIDS[@]+"${PIDS[@]}"}; do kill "${p}" 2>/dev/null || true; done; test_teardown_env' EXIT
+cleanup() { local p; for p in ${PIDS[@]+"${PIDS[@]}"}; do kill "${p}" 2>/dev/null || true; done; test_teardown_env; }
+trap cleanup EXIT
 export LLMCTL_FAKE_HW="${LLMCTL_ROOT}/tests/fixtures/hw-baseline.json" LLMCTL_PORTREG=1
 export HOME="${TEST_TMP}/home"; mkdir -p "${HOME}"
 FD="${TEST_TMP}/fake-decide"

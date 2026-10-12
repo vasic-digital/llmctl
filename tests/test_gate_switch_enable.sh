@@ -12,7 +12,6 @@ source "$(dirname "${BASH_SOURCE[0]}")/helpers.sh"
 test_setup_env
 export LLMCTL_DRY_RUN=1 LLMCTL_FAKE_HW="${LLMCTL_ROOT}/tests/fixtures/hw-baseline.json"
 LLMCTL="${LLMCTL_ROOT}/bin/llmctl"
-OKPSI="${LLMCTL_PSI_FILE}"; OKMEM="${LLMCTL_MEMINFO_FILE}"
 printf 'some avg10=0.00 avg60=0.00 avg300=0.00 total=1\nfull avg10=9.00 avg60=0.00 avg300=0.00 total=1\n' > "${TEST_TMP}/psi.high"
 printf 'MemTotal:       33554432 kB\nMemFree:  3000000 kB\nMemAvailable:   3000000 kB\n' > "${TEST_TMP}/mem.low"   # ~2.9 GiB: below footprint+4 GiB
 
