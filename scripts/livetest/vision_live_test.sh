@@ -28,11 +28,11 @@ fi
 GATE_MIN_MEM_MB=12000; GATE_MAX_PSI_SOME=5; GATE_MAX_PSI_FULL=1; GATE_MAX_GPU_MB=6000; GATE_MAX_IO_SOME=10; GATE_MAX_IO_FULL=2
 LARGE_RAM_MB=4000; LARGE_VRAM_MB=2000          # another running profile at/above either = "large model"
 READY_INTERVAL=3; READY_MAX=180; PORT_DEFAULT=8082; VRAM_SLACK_MB=500
-VALIDATE_GRACE=30; START_MAX=120; POST_SAMPLE=20
+VALIDATE_GRACE=30; START_MAX=120; START_WAIT=60; POST_SAMPLE=20
 if [ "${LT_HERMETIC:-0}" = "1" ]; then
   READY_INTERVAL="${LT_READY_INTERVAL:-$READY_INTERVAL}"; READY_MAX="${LT_READY_MAX:-$READY_MAX}"
   PORT_DEFAULT="${LT_PORT_DEFAULT:-$PORT_DEFAULT}"
-  VALIDATE_GRACE="${LT_VALIDATE_GRACE:-$VALIDATE_GRACE}"; START_MAX="${LT_START_MAX:-$START_MAX}"; POST_SAMPLE="${LT_POST_SAMPLE:-$POST_SAMPLE}"
+  VALIDATE_GRACE="${LT_VALIDATE_GRACE:-$VALIDATE_GRACE}"; START_MAX="${LT_START_MAX:-$START_MAX}"; START_WAIT="${LT_START_WAIT:-$START_WAIT}"; POST_SAMPLE="${LT_POST_SAMPLE:-$POST_SAMPLE}"
 fi
 
 # ---- profile allow-list: vision-pro (and anything not exactly `vision`) is refused unconditionally ----
@@ -56,7 +56,7 @@ env | cut -d= -f1 | sort >"$EV/env_names.txt"   # NAMES only, never values (secr
 CMDLOG="$EV/commands.log"; SIGLOG="$EV/signals.log"
 log() { printf '%s %s\n' "$(date -u +%FT%TZ)" "$*" | tee -a "$EV/run.log" >&2; }
 
-WD_PID=""; STOP_NEEDED=0; CLEANED=0; RESULT=2; VERDICT_REASON="not finished"
+WD_PID=""; START_SUB=""; STOP_NEEDED=0; CLEANED=0; RESULT=2; VERDICT_REASON="not finished"
 GATE_RES="NOT RUN"; READY=0; VRAM_NOTE=""; UNIT_STATE=""; PORT_SERVING=""; UNIT=""; FINAL_STOP_RC="NA"; GPU_BASE=""; GPU_FINAL=""; VALIDATE_RC="NA"; CLEAN_OK="NO"; MH="UNKNOWN"; PH="UNKNOWN"; LSV="UNKNOWN"
 
 print_table() {
@@ -106,6 +106,14 @@ cleanup() {   # always: stop our profile via llmctl, then reap our own watchdog
     log "cleanup: llmctl stop $PROFILE"
     "$HERE/watchdog.sh" --stop "$PROFILE" "$EV" >>"$EV/stop.out" 2>&1
     echo "cleanup stop rc=$? (0 llmctl ok | 10 systemd fallback | 11 failed)" >>"$EV/stop.out"
+    # a still-running background `llmctl start` may reach svc_start AFTER that stop: wait for it (never signalled), then stop again
+    if [ -n "$START_SUB" ] && [ -d "/proc/$START_SUB" ] && [ ! -s "$EV/start.rc" ]; then
+      local w=0
+      log "cleanup: background start still running; waiting up to ${START_WAIT}s before a second stop"
+      while [ -d "/proc/$START_SUB" ] && [ ! -s "$EV/start.rc" ] && [ "$w" -lt "$START_WAIT" ]; do sleep 1; w=$((w+1)); done
+      "$HERE/watchdog.sh" --stop "$PROFILE" "$EV" >>"$EV/stop.out" 2>&1
+      echo "second cleanup stop (after start ended) rc=$?" >>"$EV/stop.out"
+    fi
   fi
   safe_kill
   [ -n "$WD_PID" ] && wait "$WD_PID" 2>/dev/null
@@ -315,6 +323,7 @@ echo "$(date -u +%FT%TZ) \$ LLMCTL_VALIDATE_ON_START=0 LLMCTL_READY_TIMEOUT=0 ni
 # watchdog checks, under our own deadline. The start runs in the background so a breach during it is seen at once.
 rm -f "$EV/start.rc"
 ( LLMCTL_VALIDATE_ON_START=0 LLMCTL_READY_TIMEOUT=0 nice -n 19 ionice -c 3 "$LLMCTL" start "$PROFILE" >"$EV/start.out" 2>&1; echo $? >"$EV/start.rc" ) &
+START_SUB=$!
 t0=$(date +%s)
 while [ ! -s "$EV/start.rc" ]; do
   guard

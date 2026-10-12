@@ -32,9 +32,9 @@ if [ "${LT_HERMETIC:-0}" = "1" ]; then
 fi
 umask 077
 
-MIN_MEM_MB=5000; MAX_PSI=20; MAX_PSI_FULL=10; MAX_IO_SOME=60; MAX_IO_FULL=30; MAX_GPU_MB=11500; MAX_WALL=600; INTERVAL=2; STOP_BOUND=20
+MIN_MEM_MB=5000; MAX_PSI=20; MAX_PSI_FULL=10; MAX_IO_SOME=60; MAX_IO_FULL=30; MAX_GPU_MB=11500; MAX_WALL=600; INTERVAL=2; STOP_BOUND=20; POSTFIRE=60
 if [ "${LT_HERMETIC:-0}" = "1" ]; then
-  STOP_BOUND="${LT_STOP_BOUND:-$STOP_BOUND}"; MAX_WALL="${LT_WD_MAX_WALL:-$MAX_WALL}"; INTERVAL="${LT_WD_INTERVAL:-$INTERVAL}"
+  STOP_BOUND="${LT_STOP_BOUND:-$STOP_BOUND}"; POSTFIRE="${LT_POSTFIRE:-$POSTFIRE}"; MAX_WALL="${LT_WD_MAX_WALL:-$MAX_WALL}"; INTERVAL="${LT_WD_INTERVAL:-$INTERVAL}"
 fi
 
 mkdir -p "$EV"
@@ -102,6 +102,15 @@ fire() {   # fire <reason>
   echo "$reason" >"$TRIG"
   log "TRIGGER: $reason -> bounded stop of $PROFILE"
   bounded_stop
+  # A background `llmctl start` may reach svc_start only AFTER this stop (the stop then hit a not-yet-started unit):
+  # keep watching the unit for POSTFIRE seconds and stop it again if it comes up.
+  local i st unit; unit="$(unit_name)"
+  for i in $(seq 1 "$POSTFIRE"); do
+    run_bounded 5 "$EV/postfire.$$.out" "$SYSTEMCTL" --user is-active "$unit"
+    st="$(head -1 "$EV/postfire.$$.out" 2>/dev/null)"
+    if [ "$st" = active ] || [ "$st" = activating ]; then log "post-fire: $unit is $st -> stopping again"; bounded_stop; fi
+    sleep 1
+  done
   rm -f "$GPU_OUT"
   exit 0
 }

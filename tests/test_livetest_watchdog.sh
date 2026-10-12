@@ -94,6 +94,7 @@ PY
     ;;
   "start vision")
     echo "start env=${LLMCTL_VALIDATE_ON_START:-unset} ready_timeout=${LLMCTL_READY_TIMEOUT:-unset} nice=$(awk '{print $19}' /proc/$$/stat) ionice=$(ionice -p $$ 2>&1)" >>"$FAKE/calls"
+    [ -f "$FAKE/start_delay" ] && sleep "$(cat "$FAKE/start_delay")"   # before svc_start: nothing exists yet
     rc=$(cat "$FAKE/start_rc"); [ "$rc" = 0 ] && touch "$FAKE/running"
     [ -f "$FAKE/gpu_after_start" ] && cp "$FAKE/gpu_after_start" "$FAKE/gpu"
     [ -f "$FAKE/start_mutate.sh" ] && bash "$FAKE/start_mutate.sh"
@@ -140,7 +141,7 @@ run_main() {
   FAKE="$E/fake" PATH="$E/bin:$PATH" LT_HERMETIC=1 LT_WD_INTERVAL=0.2 LT_WD_MAX_WALL="${WALL:-600}" \
     LT_READY_INTERVAL=0.2 LT_READY_MAX="${READY_MAX:-4}" LT_VRAM_SETTLE_MAX=2 LT_VALIDATE_GRACE=3 \
     LT_MEMINFO="$E/meminfo" LT_PSI="$E/psi" LT_IOPSI="$E/iopsi" LT_EVIDENCE_ROOT="$E/ev" HOME="$E/home" \
-    LLMCTL_SERVICES_DIR="$E/services" LT_SUITE_DIR="$E/suite" LT_STOP_BOUND=2 LT_BOUND=2 LT_START_MAX="${START_MAX:-20}" LT_POST_SAMPLE=2 \
+    LLMCTL_SERVICES_DIR="$E/services" LT_SUITE_DIR="$E/suite" LT_STOP_BOUND=2 LT_BOUND=2 LT_START_MAX="${START_MAX:-20}" LT_START_WAIT=15 LT_POST_SAMPLE=2 \
     timeout 60 bash "$MAIN" "$@" >"$E/out.txt" 2>"$E/err.txt" || RC=$?
   EVD="$(find "$E/ev" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | head -1)"
 }
@@ -580,6 +581,30 @@ has "abort path (exit 4) still collects logs" "$EVD/logs.txt" 'fake log line'
 # NEG-CONTROL: a refusal (nothing started) does not run logs/journal collection
 E="$(mkenv)"; setmem "$E" 100; run_main "$E"
 [ ! -e "$EVD/logs.txt" ] && ok "NEG-CONTROL gate refusal collects no model logs" || bad "logs collected on refusal"
+fi
+
+if want n2; then
+echo "== N2. a start that reaches svc_start AFTER the stop must not leave the model running =="
+for scen in driver_abort; do
+  E="$(mkenv)"; echo 3 >"$E/fake/start_delay"; echo 8 >"$E/fake/start_sleep"
+  ( sleep 1; printf 'MemAvailable: %d kB\n' $((3000*1024)) >"$E/meminfo" ) &
+  MP=$!
+  START_MAX=30 run_main "$E"; wait "$MP"
+  sleep 5   # let the orphaned fake start reach its svc_start (t=3s) - the dangerous late moment
+  check "breach before svc_start -> exit 4" "$RC" "4"
+  [ ! -e "$E/fake/running" ] && ok "profile ends STOPPED although start reached svc_start after the first stop" || bad "profile left running"
+  [ "$(grep -c '^stop vision' "$E/fake/calls")" -ge 2 ] && ok "a second stop ran after the start finished" || bad "only $(grep -c '^stop vision' "$E/fake/calls") stop call(s)"
+done
+# NEG-CONTROL: no breach, delayed start -> normal PASS, single clean flow
+E="$(mkenv)"; echo 2 >"$E/fake/start_delay"; run_main "$E"; check "NEG-CONTROL delayed start without breach passes" "$RC" "0"; [ "$RC" = 0 ] || tail -5 "$E/out.txt"
+# watchdog alone (driver gone): after it fires, a late-appearing unit is stopped again
+E="$(mkenv)"; mkdir -p "$E/wdev"
+( sleep 2; touch "$E/fake/running" ) &
+MP=$!
+FAKE="$E/fake" PATH="$E/bin:$PATH" LT_HERMETIC=1 LT_WD_INTERVAL=0.2 LT_STOP_BOUND=2 LT_POSTFIRE=6 LT_MEMINFO="$E/meminfo" LT_PSI="$E/psi" LT_IOPSI="$E/iopsi" \
+  timeout 30 bash "$WD" vision "$E/wdev" 999999 >/dev/null 2>&1; wait "$MP"
+[ ! -e "$E/fake/running" ] && ok "watchdog re-stopped the unit that appeared after it fired" || bad "late unit left running"
+[ "$(grep -c '^stop vision' "$E/fake/calls")" -ge 2 ] && ok "  watchdog issued a second stop" || bad "  no second stop"
 fi
 
 if want always; then
