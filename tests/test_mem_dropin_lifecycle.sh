@@ -48,4 +48,22 @@ out="$( _svc_write_mem_dropin decide-tiny.2 llama 2>&1 )" || true
 case "${out}" in *"no per-profile memory cap"*) printf '  FAIL: N3: warned for a scaled instance whose base profile is known: %s\n' "${out}" >&2; TEST_FAILS=$((TEST_FAILS+1));; *) echo "  ok: N3: no warning";; esac
 assert_file_exists "${U}/llmctl-llama@decide-tiny.2.service.d/05-memory.conf" "N3: the scaled instance got a per-profile cap file"
 assert_file_contains "${LLMCTL_SERVICES_DIR}/decide-tiny.2.env" "LLMCTL_FOOTPRINT_MB=" "N3: footprint recorded for the scaled instance"
+echo "== stale layout and mktemp failure =="
+# an earlier, unreleased layout wrote 10-memory.conf (it sorts AFTER the operator's 10-hostsafety.conf and would override it)
+V="${U}/llmctl-llama@vision.service.d"; mkdir -p "${V}"
+printf '# written by llmctl (profile vision): old layout\n[Service]\nMemoryMax=99999M\n' > "${V}/10-memory.conf"
+printf '[Service]\nMemoryMax=1G\n' > "${V}/10-hostsafety.conf"
+printf 'LLMCTL_PROFILE=vision\nLLMCTL_ENGINE=llama\nLLMCTL_PORT=8082\n' > "${LLMCTL_SERVICES_DIR}/vision.env"
+( _svc_write_mem_dropin vision llama ) >/dev/null 2>&1 || true
+assert_file_absent "${V}/10-memory.conf" "the stale llmctl-written 10-memory.conf is removed"
+assert_file_exists "${V}/10-hostsafety.conf" "...the operator's 10-hostsafety.conf is not"
+# an operator-owned 10-memory.conf (no llmctl header) is left alone
+printf '[Service]\nMemoryMax=2G\n' > "${V}/10-memory.conf"
+( _svc_write_mem_dropin vision llama ) >/dev/null 2>&1 || true
+assert_file_exists "${V}/10-memory.conf" "an operator-owned 10-memory.conf (no llmctl header) is left alone"
+rm -f "${V}/10-memory.conf"
+# mktemp failing must warn, not silently skip the footprint record
+mkdir -p "${TEST_TMP}/shim"; printf '#!/bin/sh\nexit 1\n' > "${TEST_TMP}/shim/mktemp"; chmod +x "${TEST_TMP}/shim/mktemp"
+out="$( PATH="${TEST_TMP}/shim:${PATH}" _svc_write_mem_dropin vision llama 2>&1 )" || true
+assert_contains "${out}" "cannot record the footprint" "a failing mktemp warns instead of silently skipping"
 test_finish

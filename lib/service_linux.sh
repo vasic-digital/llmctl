@@ -236,11 +236,20 @@ _svc_profile_caps() {
   echo "${h} ${m}"
 }
 
+# _svc_rm_stale_layout <dropin-dir> - an earlier (never released) layout wrote 10-memory.conf, which sorts AFTER the operator's
+# 10-hostsafety.conf and would override it. Removed only when it carries llmctl's own header.
+_svc_rm_stale_layout() {
+  local f="$1/10-memory.conf"
+  [[ -f "${f}" ]] && head -1 "${f}" | grep -q '^# written by llmctl' && rm -f "${f}"
+  return 0
+}
+
 # _svc_rm_mem_dropin <instance> <engine> - removes llmctl's OWN 05-memory.conf (never any other drop-in) and the
 # directory when that leaves it empty.
 _svc_rm_mem_dropin() {
   local d; d="$(svc_unit_dir)/llmctl-$2@$1.service.d"
   rm -f "${d}/05-memory.conf"
+  _svc_rm_stale_layout "${d}"
   rmdir "${d}" 2>/dev/null || true
 }
 
@@ -275,6 +284,7 @@ _svc_write_mem_dropin() {
   done
   caps="$(_svc_profile_caps "${fp}" "${total}" "${mode}" "${prov}")"
   dir="$(svc_unit_dir)/llmctl-${engine}@${instance}.service.d"
+  _svc_rm_stale_layout "${dir}"
   # Everything below runs under umask 077: the env record holds key-file paths and LLMCTL_REG_TOKEN (never wider than
   # 0600, also for the temp file of the rewrite - no `sed -i`), and the drop-in follows the same rule.
   (
@@ -283,9 +293,12 @@ _svc_write_mem_dropin() {
     # the start gate (svc_hook.sh gate) needs the footprint at restart time: record it in the env record
     local envf="${LLMCTL_SERVICES_DIR}/${instance}.env" tmp
     if [[ -f "${envf}" ]]; then
-      tmp="$(mktemp "${envf}.XXXXXX")" || exit 0
+      if ! tmp="$(mktemp "${envf}.XXXXXX")"; then
+        warn "cannot record the footprint for ${profile} (mktemp failed in $(dirname "${envf}")): the start gate falls back to the 4 GiB reserve only"
+      else
       { grep -v '^LLMCTL_FOOTPRINT_MB=' "${envf}" || true; printf 'LLMCTL_FOOTPRINT_MB=%s\n' "${fp}"; } > "${tmp}"
       chmod 600 "${tmp}"; mv -f "${tmp}" "${envf}"
+      fi
     fi
     printf '# written by llmctl (profile %s): plan footprint %s MiB, mode %s, provenance %s -> High 1.25x, Max 1.5x (floors High 1024 / Max 1280 MiB; gpu mode not measured: High >= 5120 / Max >= 6144; always < 90%% of RAM)\n[Service]\nMemoryHigh=%sM\nMemoryMax=%sM\n' \
       "${profile}" "${fp}" "${mode}" "${prov}" "${caps%% *}" "${caps##* }" > "${dir}/05-memory.conf"
