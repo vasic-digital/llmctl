@@ -144,6 +144,7 @@ MISC
 
 ENVIRONMENT
   LLMCTL_DRY_RUN=1            print service actions instead of executing them
+  LLMCTL_VALIDATE_STRICT=1    stop a profile whose validation is UNDETERMINED (default: only FAIL stops it)
   LLMCTL_VALIDATE_ON_START=0  do not run the validation suite after start/auto/
                               switch (require-validated then refuses)
   LLMCTL_VALIDATION_MAX_AGE=<s>  freshness window of a passing validation

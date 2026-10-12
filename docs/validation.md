@@ -148,21 +148,34 @@ only the profiles it started or restarted (`validate_auto`), not every running s
   logged URL (the full URL still appears in the process arguments of the running judge).
 * A validation of an idle profile starts a real model server. Nothing in the tests does that; the tests use the fixture server only.
 
-### Known gaps - hook points for the restart / pressure hardening branch (NOT implemented here)
+### Enforcement of the gate (wired; settled decisions)
 
-1. **The gate is advisory.** After `start`/`switch`/`auto` a WRONG answer (exit 1) leaves the service running; only `require-validated` refuses. Services
-   started by systemd (boot, `llmctl enable`, `llmctl restart`) never pass through the hook at all. The hardening branch must call, **after the service is
-   ready** (`_sched_wait_ready` returns in `_sched_start_impl`, `_sched_switch_impl`, `_sched_auto_impl` in `lib/scheduler.sh`; after `svc_restart` in the
-   `restart` branch of `bin/llmctl`; and for units started by systemd, from the unit's post-start hook generated in `lib/service_linux.sh` /
-   `lib/svc_hook.sh`): `validate_after_start <key...>` (or `require_validated <key>`), and on a non-zero result `sched_stop <key>` so a model that failed
-   validation is not left serving. `validate_after_start` already skips instance keys, so the call can be unconditional for every key the scheduler
-   started.
-2. **No host-pressure check.** `validate_profile` can start a model (`sched_start`) and then hammer it with probes without looking at host pressure.
-   The hardening branch must add a PSI predicate to `lib/hardware.sh` (read `/proc/pressure/memory` and `/proc/pressure/io`; refuse when the `some`
-   `avg10` of either exceeds 5) and call it (a) in `validate_profile` immediately before `sched_start "${p}"` and again before the probe loop,
-   returning 2 (`could not determine: host under memory/IO pressure`) and (b) from `validate_after_start` before it begins a validation. The refusal
-   must be loud and must not be recorded as a FAIL.
-3. **Judge-control coverage of the vision suite is partial** (13 probes lack a canned PASS and/or FAIL control; every probe is still proven to
+The gate is no longer advisory. Every path that brings a profile up runs the validation hook **once, after the profile is ready and outside the
+scheduler lock** (`validate_profile` may itself call `sched_start`, whose flock is not re-entrant): `start`, `switch`, `auto`, `enable` and
+`restart` (`bin/llmctl` -> `validate_after_start`), and units started by systemd (boot, `Restart=`, `systemctl start`) through the detached
+registration waiter of `lib/svc_hook.sh` (`_hk_validate_after_ready`, after the health endpoint answered and the engine is registered and alive).
+
+| Verdict | Effect |
+|---|---|
+| PASS (0) | the profile keeps running; the record is written |
+| FAIL (1) | stopped through the **normal stop path** (`sched_stop` -> `svc_stop`; systemd path: `systemctl --user stop <unit>`), the reservation is removed, the command exits non-zero with a message naming the profile and saying it was stopped |
+| UNDETERMINED (2) | **never stops** a running profile and **never counts as a PASS** (no record, `require-validated` refuses); reported loudly. With `LLMCTL_VALIDATE_STRICT=1` it is stopped and exits non-zero instead (no suite, no answer, refused under pressure are then not good enough) |
+
+Decisions taken conservatively:
+
+* **UNDETERMINED is not FAIL.** Stopping a model because the validator could not decide would turn every transient hiccup into an outage; strict mode is opt-in.
+* **Systemd path never makes the engine exit non-zero.** A FAIL stops the unit with `systemctl --user stop`; `Restart=on-failure` therefore cannot loop on a model that gives wrong answers. The waiter skips profiles that already have a fresh passing record, and `LLMCTL_VALIDATE_ON_START=0` disables the hook everywhere (loudly).
+* **Systemd path probes the started unit**: `llmctl validate` is run with `LLMCTL_VALIDATE_ATTACH_PORT=<port>`, so a unit without a reservation is probed, never started a second time.
+* **No reservation for an activating unit** (`enable` whose bounded start timed out): the validation hook skips it (no `.run`), the waiter validates it when it answers, and reconcile writes the reservation once the unit is active.
+* **Host-pressure gate** (`hw_pressure_gate`, lib/hardware.sh): `validate_profile` calls it before its own `sched_start` (profile footprint included) and again before the probe loop (PSI only). The thresholds are the hardening branch's, not new ones: PSI memory `full avg10 > 2`, `some avg10 > 10`, `MemAvailable < footprint + 4096 MiB` (tunable `LLMCTL_GATE_FULL_MAX`, `LLMCTL_GATE_SOME_MAX`, `LLMCTL_GATE_RESERVE_MB`). A refusal (rc 75) prints "refused under memory pressure", exits **2**, records nothing (never a FAIL), starts nothing, probes nothing, and stops again a model that this very call had started. It covers `validate`, `validate-all`, `vision validate`, `models verify --live` and the start hook, since all go through `validate_profile`. IO pressure is not part of the hardening gate and is deliberately not checked here (UNKNOWN whether it is needed; adding it would be a separate threshold decision). `--host` (external endpoint) is not gated: it does not load this host.
+* **Restart revalidation** follows the freshness key (model, engine, launch, suite): an unchanged restart with a fresh PASS record is not re-probed.
+
+Known limits: the portreg stray-process check (`cmd_token`) matches any argv word whose basename equals the recorded token (L4, documented, not changed);
+the systemd-path waiter validates only catalog LLM profiles (kind `llm`, profile equals instance), never scaled instances or non-LLM services.
+
+### Known gaps
+
+1. **Judge-control coverage of the vision suite is partial** (13 probes lack a canned PASS and/or FAIL control; every probe is still proven to
    discriminate by `tests/test_validation_suites.sh`).
 
 ### Tests of the gate
@@ -173,6 +186,7 @@ only the profiles it started or restarted (`validate_auto`), not every running s
 | golden fixture images and the expectation file | `test_vision_golden_fixtures.sh` |
 | catalog `validation` schema | `test_catalog_json.sh` |
 | every suite: structure, determinism, controls, per-probe discrimination, embedding ordering | `test_validation_suites.sh` |
+| the wiring of the gate (start/switch/auto, restart/enable, systemd waiter, pressure) | `test_gate_wiring_start_paths.sh`, `test_gate_wiring_restart_enable.sh`, `test_gate_wiring_systemd_waiter.sh`, `test_gate_wiring_pressure.sh` |
 | the defect register of the independent review (instance keys, auto scope, budget/reasoning, number rule, future epoch, PASS overwrite, interrupt, API-key scope, models verify wording) | `test_validation_gate_defects.sh` |
 
 ## Model download verification
