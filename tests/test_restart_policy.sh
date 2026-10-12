@@ -10,6 +10,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/helpers.sh"
 test_setup_env
 export LLMCTL_DRY_RUN=1
 export LLMCTL_FAKE_HW="${LLMCTL_ROOT}/tests/fixtures/hw-baseline.json"
+# shellcheck disable=SC1090
 for l in common os_detect hardware service_linux; do source "${LLMCTL_ROOT}/lib/${l}.sh"; done
 ( svc_install ) >/dev/null 2>&1
 sect_val() { awk -v s="$2" -v k="$3" '/^\[/{cur=$0} cur==s && index($0,k"=")==1{sub(/^[^=]*=/,""); print; exit}' "$1"; }

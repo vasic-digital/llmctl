@@ -422,7 +422,7 @@ hw_pressure_gate() {
   local psi="${LLMCTL_PSI_FILE:-/proc/pressure/memory}" mi="${LLMCTL_MEMINFO_FILE:-/proc/meminfo}"
   local fmax="${LLMCTL_GATE_FULL_MAX:-2}" smax="${LLMCTL_GATE_SOME_MAX:-10}" reserve="${LLMCTL_GATE_RESERVE_MB:-4096}"
   [[ "${fp}" =~ ^[0-9]+$ ]] || fp=0
-  local some="" full="" avail_kb="" line
+  local some="" full="" avail_kb=""
   if [[ -r "${psi}" ]]; then
     some="$(awk '$1=="some"{for(i=2;i<=NF;i++) if($i ~ /^avg10=/){sub(/avg10=/,"",$i); print $i; exit}}' "${psi}" 2>/dev/null || true)"
     full="$(awk '$1=="full"{for(i=2;i<=NF;i++) if($i ~ /^avg10=/){sub(/avg10=/,"",$i); print $i; exit}}' "${psi}" 2>/dev/null || true)"

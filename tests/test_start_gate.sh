@@ -55,6 +55,7 @@ else
 fi
 
 echo "== generated unit gates RESTARTS =="
+# shellcheck disable=SC1090
 for l in common os_detect hardware service_linux; do source "${LLMCTL_ROOT}/lib/${l}.sh"; done
 ( svc_install ) >/dev/null 2>&1
 for eng in llama colibri onnx; do

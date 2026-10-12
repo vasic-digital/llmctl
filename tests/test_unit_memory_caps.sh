@@ -12,6 +12,7 @@ export LLMCTL_DRY_RUN=1
 export LLMCTL_FAKE_HW="${LLMCTL_ROOT}/tests/fixtures/hw-baseline.json"
 TOTAL=32768
 
+# shellcheck disable=SC1090
 for l in common os_detect hardware catalog service_linux; do source "${LLMCTL_ROOT}/lib/${l}.sh"; done
 
 FAKE_DECIDE="${TEST_TMP}/fake-decide"; printf '#!/bin/sh\nexit 0\n' > "${FAKE_DECIDE}"; chmod +x "${FAKE_DECIDE}"

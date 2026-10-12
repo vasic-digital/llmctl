@@ -9,6 +9,7 @@ set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/helpers.sh"
 test_setup_env
 export LLMCTL_DRY_RUN=1 LLMCTL_FAKE_HW="${LLMCTL_ROOT}/tests/fixtures/hw-baseline.json"
+# shellcheck disable=SC1090
 for l in common os_detect hardware service_linux; do source "${LLMCTL_ROOT}/lib/${l}.sh"; done
 W="${LLMCTL_UNIT_DIR:?}/default.target.wants"; mkdir -p "${W}" "${LLMCTL_SERVICES_DIR}"
 ( svc_install ) >/dev/null 2>&1

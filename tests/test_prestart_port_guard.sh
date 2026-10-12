@@ -39,6 +39,7 @@ timeout 10 bash "${HOOK}" prestart "${INST}" >/dev/null 2>&1 || true
 
 echo "== generated units prevent restart on that code =="
 export LLMCTL_DRY_RUN=1 LLMCTL_FAKE_HW="${LLMCTL_ROOT}/tests/fixtures/hw-baseline.json"
+# shellcheck disable=SC1090
 for l in common os_detect hardware service_linux; do source "${LLMCTL_ROOT}/lib/${l}.sh"; done
 ( svc_install ) >/dev/null 2>&1
 for eng in llama colibri onnx; do

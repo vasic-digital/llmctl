@@ -11,6 +11,7 @@ set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/helpers.sh"
 test_setup_env
 export LLMCTL_DRY_RUN=1 LLMCTL_FAKE_HW="${LLMCTL_ROOT}/tests/fixtures/hw-baseline.json"
+# shellcheck disable=SC1090
 for l in common os_detect hardware catalog service_linux; do source "${LLMCTL_ROOT}/lib/${l}.sh"; done
 MARK="${TEST_TMP}/llmctl-inject-$$"
 # Valid-expression payloads (eval() takes an expression, not statements): each keeps the surrounding expression valid and
