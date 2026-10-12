@@ -313,14 +313,17 @@ validate_after_start() {
   return "${rc}"
 }
 
-# models_verify_gate <profile> [--live] - the `llmctl models verify` hook: the profile must name an
+# models_verify_gate <profile> [--live] - the `llmctl models verify` hook: the profile should name an
 # existing validation suite (schema gate); with --live (or when it is running) the suite is also run.
+# A profile that names NO suite: without --live it warns (loudly: "NOT validated") and returns 0 - the exit
+# code of `models verify` stays the checksum verdict; with --live it returns 2 (cannot validate).
 models_verify_gate() {
   local p="$1" live="${2:-}"
   local suites
   if ! suites="$(_val_suites "${p}" 2>&1)"; then
     if [[ "${live}" == "--live" ]]; then err "${suites}"; return 2; fi
     warn "${suites}"
+    warn "'${p}' checksums were verified above, but it is NOT validated: it names no validation suite (exit 0 = checksums only; llmctl require-validated ${p} refuses)"
     return 0
   fi
   info "validation suites for '${p}': $(tr '\n' ' ' <<<"${suites}")"

@@ -213,6 +213,15 @@ re-running the smoke test. Fails with `die "profile <p> not downloaded (no
 <dir>)"` if the profile's model directory does not exist, and fails on the
 first file whose size or sha256 no longer matches the catalog.
 
+After the checksums it also runs the validation-suite gate
+(`models_verify_gate` in `lib/validate.sh`): the profile must name an existing
+validation suite. A profile that names no validation suite (the typed-decision
+profiles) prints a warning that it is **NOT validated** and the command still
+exits 0, because the exit code is the checksum verdict; with `--live` the same
+profile exits 2 (cannot validate). When the profile is running (or with
+`--live`) its suite is also run against the live endpoint. See
+[validation](validation.md#model-validation-gate).
+
 ## build [all|llama|colibri|onnx]
 
 ```

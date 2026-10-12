@@ -67,8 +67,9 @@ MODELS
   models download <profile>   verified download (resume, sha256, smoke test)
   models verify <profile> [--live]
                               re-verify checksums of a downloaded profile, check
-                              it names a validation suite, and (when running or
-                              with --live) run that suite
+                              it names a validation suite (warns and exits 0 when
+                              it names none - NOT validated; with --live exits 2)
+                              and (when running or with --live) run that suite
 
 ENGINES
   build <llama|colibri|onnx|decide|all>   build engines (a target is required; decide = Go decision binary)

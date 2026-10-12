@@ -65,4 +65,13 @@ assert_eq 0 "$(run_rc env LLMCTL_VALIDATE_ON_START=1 "${LLMCTL}" validate-after-
   "an instance key amongst other keys does not stop the loop"
 rm -f "${LLMCTL_RUNTIME_DIR}"/decide*.run
 
+echo "== 5. models verify: a profile with no suite is reported as NOT validated and the usage text says exactly that"
+gate() { bash -c 'source "$1/lib/common.sh"; source "$1/lib/catalog.sh"; source "$1/lib/validate.sh"; shift; models_verify_gate "$@"' _ "${LLMCTL_ROOT}" "$@"; }
+assert_eq 0 "$(run_rc gate decide)" "no-suite profile: exit 0 (checksum verification is the exit-code contract)"
+assert_contains "$(cat "${TEST_TMP}/last.out")" "NOT validated" "...but the output states in words that the profile is NOT validated"
+assert_eq 2 "$(run_rc gate decide --live)" "no-suite profile with --live: exit 2"
+help_txt="$("${LLMCTL}" help 2>&1 || true)"
+assert_contains "${help_txt}" "warns and exits 0 when" "usage text documents the no-suite behaviour"
+assert_contains "$(cat "${LLMCTL_ROOT}/docs/user-manual.md")" "names no validation suite" "user manual documents the no-suite behaviour"
+
 test_finish
