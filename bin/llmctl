@@ -43,6 +43,8 @@ source "${LLMCTL_ROOT}/lib/scheduler.sh"
 source "${LLMCTL_ROOT}/lib/doctor.sh"
 # shellcheck source=../lib/cluster.sh
 source "${LLMCTL_ROOT}/lib/cluster.sh"
+# shellcheck source=../lib/validate.sh
+source "${LLMCTL_ROOT}/lib/validate.sh"
 
 usage() {
   cat <<'EOF'
@@ -63,7 +65,10 @@ PLANNING
 MODELS
   models list                 list catalog profiles (port, engine, size, tier)
   models download <profile>   verified download (resume, sha256, smoke test)
-  models verify <profile>     re-verify checksums of a downloaded profile
+  models verify <profile> [--live]
+                              re-verify checksums of a downloaded profile, check
+                              it names a validation suite, and (when running or
+                              with --live) run that suite
 
 ENGINES
   build <llama|colibri|onnx|decide|all>   build engines (a target is required; decide = Go decision binary)
@@ -76,6 +81,24 @@ RUNTIME (multi-model co-residency)
   auto <chat|coder|vision>..  best set that fits now; LRU-evicts non-enabled
                               services when room is needed
   status                      show running services and reservations
+
+VALIDATION (deterministic known-answer gate - run BEFORE any use)
+  validate <profile> [--host URL] [--json] [--keep]
+                              run the profile's validation suite(s) against its
+                              llama-server (starts it if downloaded + idle);
+                              exit 0 pass / 1 wrong answer / 2 undetermined
+  vision validate [--profile vision|vision-pro] [--host URL] [--json] [--keep]
+                              golden screenshots with KNOWN content through the
+                              vision model; deterministic judge, golden-bad
+                              controls, determinism repeat
+  validate-all [--json]       validate every running profile
+  require-validated <profile> exit 0 only if the profile has a FRESH passing
+                              record (same model sha, engine build, launch
+                              flags, suite hash; younger than
+                              LLMCTL_VALIDATION_MAX_AGE) - for consumers
+                              start/auto/switch run the suite after a start
+                              (LLMCTL_VALIDATE_ON_START=0 disables; then
+                              require-validated refuses)
   logs <profile> [lines]      tail a service log
 
 DECISION MODELS (typed noul/choice/score decisions)
@@ -120,6 +143,11 @@ MISC
 
 ENVIRONMENT
   LLMCTL_DRY_RUN=1            print service actions instead of executing them
+  LLMCTL_VALIDATE_ON_START=0  do not run the validation suite after start/auto/
+                              switch (require-validated then refuses)
+  LLMCTL_VALIDATION_MAX_AGE=<s>  freshness window of a passing validation
+                              record (default 604800 = 7 days)
+  LLMCTL_VALIDATE_TIMEOUT=<s> per-request timeout of the validator (default 180)
   LLMCTL_FAKE_HW=<file.json>  use a hardware fixture (testing)
   LLMCTL_MODELS_DIR=<dir>     override the model storage directory
   LLMCTL_PORT_<PROFILE>=<port>   rebind ONE catalog profile to a free port
@@ -177,8 +205,10 @@ main() {
         list)     cmd_models_list ;;
         download) [[ "$#" -eq 1 ]] || die "usage: llmctl models download <profile>"
                   download_profile "$1" ;;
-        verify)   [[ "$#" -eq 1 ]] || die "usage: llmctl models verify <profile>"
-                  verify_profile "$1" ;;
+        verify)   [[ "$#" -ge 1 && "$#" -le 2 ]] || die "usage: llmctl models verify <profile> [--live]"
+                  [[ "$#" -eq 1 || "$2" == "--live" ]] || die "usage: llmctl models verify <profile> [--live]"
+                  verify_profile "$1"
+                  models_verify_gate "$1" "${2:-}" ;;
         *)        die "unknown models subcommand: ${sub} (list|download|verify)" ;;
       esac
       ;;
@@ -206,14 +236,21 @@ main() {
       sched_registry_withdraw "$1"
       rm -f "${LLMCTL_SERVICES_DIR}/$1.enabled" "${LLMCTL_RUNTIME_DIR}/$1.run"
       ;;
-    start)    sched_start "$@" ;;
+    start)    sched_start "$@"; validate_after_start "$@" ;;
     stop)     sched_stop "$@" ;;
     restart)
       [[ "$#" -eq 1 ]] || die "usage: llmctl restart <profile>"
       sched_load_backend; svc_restart "$1"
       ;;
-    switch)   [[ "$#" -eq 1 ]] || die "usage: llmctl switch <profile>"; sched_switch "$1" ;;
-    auto)     sched_auto "$@" ;;
+    switch)   [[ "$#" -eq 1 ]] || die "usage: llmctl switch <profile>"; sched_switch "$1"; validate_after_start "$1" ;;
+    auto)     sched_auto "$@"
+              # shellcheck disable=SC2046
+              validate_after_start $(for f in "${LLMCTL_RUNTIME_DIR}"/*.run; do [[ -e "${f}" ]] && basename "${f}" .run; done) ;;
+    validate) validate_profile "$@" ;;
+    vision)   cmd_vision "$@" ;;
+    validate-all) validate_all "$@" ;;
+    require-validated) require_validated "$@" ;;
+    validate-after-start) validate_after_start "$@" ;;
     decide)   cmd_decide "$@" ;;
     admit)    cmd_admit "$@" ;;
     status)

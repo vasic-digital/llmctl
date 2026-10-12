@@ -1,0 +1,27 @@
+{
+ "suite": "chat-v1",
+ "kind": "chat",
+ "schema": 1,
+ "notes": "Known-answer prompts for general chat profiles. Every expected answer is a fact or a computation with exactly one correct value; the judge is deterministic (normalised substring / first-number / JSON-subset). max_tokens leaves room for reasoning-channel models, whose reasoning_content is never judged - only message.content.",
+ "request": {"temperature": 0, "seed": 42, "top_k": 1, "top_p": 1.0, "max_tokens": 512, "cache_prompt": false},
+ "determinism_repeat": ["arith"],
+ "cases": [
+  {"id": "arith", "prompt": "What is 17 + 25? Answer with only the number.", "checks": {"number_equals": 42}},
+  {"id": "compare", "prompt": "Which number is larger, 9 or 4? Answer with only the number.", "checks": {"number_equals": 9}},
+  {"id": "capital", "prompt": "What is the capital city of France? Answer with one word.", "checks": {"contains_all": ["PARIS"], "forbidden": ["LONDON", "BERLIN", "MADRID"]}},
+  {"id": "echo", "prompt": "Repeat exactly this code and nothing else: ZX-4417", "checks": {"contains_all": ["ZX 4417"]}},
+  {"id": "json", "prompt": "Return a JSON object with exactly one key \"color\" whose value is the string \"blue\". Output only the JSON.", "checks": {"json_subset": {"color": "blue"}}}
+ ],
+ "judge_controls": [
+  {"probe": "arith", "answer": "42", "expect": "pass"},
+  {"probe": "arith", "answer": "The answer is 41.", "expect": "fail"},
+  {"probe": "arith", "answer": "", "expect": "fail"},
+  {"probe": "capital", "answer": "Paris.", "expect": "pass"},
+  {"probe": "capital", "answer": "London", "expect": "fail"},
+  {"probe": "echo", "answer": "ZX-4417", "expect": "pass"},
+  {"probe": "echo", "answer": "ZX-4471", "expect": "fail"},
+  {"probe": "json", "answer": "```json\n{\"color\": \"blue\"}\n```", "expect": "pass"},
+  {"probe": "json", "answer": "{\"color\": \"red\"}", "expect": "fail"},
+  {"probe": "json", "answer": "color: blue", "expect": "fail"}
+ ]
+}

@@ -1,0 +1,10 @@
+{
+ "suite": "embedding-v1",
+ "kind": "embedding",
+ "schema": 1,
+ "notes": "Known-ordering checks for embedding profiles via POST /v1/embeddings (llama-server must run with --embeddings). PASS requires cos(anchor, positive) > cos(anchor, negative) + margin AND a byte-stable (|delta| <= 1e-5) repeated embedding of the anchor. No catalog profile serves embeddings as of 3.1.0; this suite is exercised by tests/test_validation_suites.sh against a fixture server only.",
+ "cases": [
+  {"id": "animals", "anchor": "a cat is sleeping on the sofa", "positive": "a kitten naps on the couch", "negative": "the quarterly tax filing deadline", "margin": 0.0},
+  {"id": "code", "anchor": "python function that sorts a list", "positive": "def sort_items(xs): return sorted(xs)", "negative": "recipe for chocolate cake with butter", "margin": 0.0}
+ ]
+}

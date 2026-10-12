@@ -89,6 +89,10 @@ test_setup_env() {
   # (test_scheduler_wait_ready.sh) exercises the real wait against a real,
   # deliberately-delayed HTTP fixture and sets its own non-zero timeout.
   export LLMCTL_READY_TIMEOUT=0
+  # Same reasoning for the post-start validation hook (lib/validate.sh validate_after_start): fixture
+  # "starts" bind no real model server, so the hook is OFF for hermetic tests; tests/test_vision_validate.sh
+  # exercises it explicitly.
+  export LLMCTL_VALIDATE_ON_START=0
   # Hermetic by default: the port allocator / registry adapter (lib/portreg.sh)
   # is OFF for every test unless the test opts in (LLMCTL_PORTREG=1 plus an
   # LLMCTL_DECIDE_BIN it built itself). Otherwise a host that happens to hold

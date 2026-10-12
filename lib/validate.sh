@@ -1,0 +1,339 @@
+#!/usr/bin/env bash
+# validate.sh - deterministic model validation gate (`llmctl validate`, `llmctl vision validate`,
+# `llmctl validate-all`, `llmctl require-validated`, and the post-start hook of start/auto/switch).
+#
+# Contract (operator mandate 2026-10-12): every model llmctl runs must pass a deterministic validation
+# suite BEFORE any project or service uses it. A suite is a set of known-answer prompts (validation/
+# suites/<name>/) judged by lib/validate_judge.py with normalised substring / ordered / forbidden /
+# first-number / regex / JSON checks - never an LLM judging an LLM. The catalog names each profile's
+# suites (`validation.suites`); a profile without one is never reported as validated.
+#
+# Exit codes of validate / vision validate / validate-all: 0 every check passed; 1 any wrong result
+# (never excused, never loosened); 2 could not determine (not downloaded, not served, endpoint down,
+# insufficient resources, no suite). 1 outranks 2.
+#
+# State: $LLMCTL_STATE_DIR/validation/<profile>.json records status + model sha256 (catalog) + model file
+# size/mtime + engine tag + launch fingerprint + per-suite content hash + timestamp. `require-validated`
+# exits 0 only when that record is a PASS that still matches all of them and is younger than
+# LLMCTL_VALIDATION_MAX_AGE seconds (default 604800 = 7 days).
+set -euo pipefail
+
+_val_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=common.sh
+source "${_val_dir}/common.sh"
+# shellcheck source=catalog.sh
+source "${_val_dir}/catalog.sh"
+
+LLMCTL_VALIDATION_SUITES_DIR="${LLMCTL_VALIDATION_SUITES_DIR:-${LLMCTL_ROOT}/validation/suites}"
+LLMCTL_VALIDATION_MAX_AGE="${LLMCTL_VALIDATION_MAX_AGE:-604800}"
+
+_val_judge() { python3 -I "${LLMCTL_ROOT}/lib/validate_judge.py" "$@"; }
+_val_state_dir() { echo "${LLMCTL_STATE_DIR}/validation"; }
+_val_state_file() { echo "$(_val_state_dir)/$1.json"; }
+
+# _val_engine_tag <profile> - identity of the inference engine build that serves the profile.
+_val_engine_tag() {
+  local engine bin dir v
+  engine="$(catalog_engine "$1")"
+  case "${engine}" in
+    llama)
+      bin="${LLMCTL_LLAMA_SERVER:-${LLMCTL_ROOT}/submodules/llama.cpp/build/bin/llama-server}"
+      if [[ -x "${bin}" ]]; then
+        dir="$(cd "$(dirname "${bin}")" && pwd)"
+        v="$(LD_LIBRARY_PATH="${dir}${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}" "${bin}" --version 2>&1 \
+              | grep -oE 'build [0-9]+, commit [0-9a-f]+' | head -1 || true)"
+        echo "${v:-llama-server:unknown-version}"
+      else
+        echo "llama-server:not-built"
+      fi ;;
+    colibri) echo "colibri:$(git -C "${LLMCTL_ROOT}/submodules/colibri" rev-parse --short=12 HEAD 2>/dev/null || echo unknown)" ;;
+    onnx)    echo "onnx:$(sha256sum "${LLMCTL_ROOT}/lib/onnx_server.py" 2>/dev/null | cut -c1-12 || echo unknown)" ;;
+    *)       echo "${engine}:unknown" ;;
+  esac
+}
+
+# _val_key <profile> <out-file> [only-kind] - current validation key (JSON) of the profile.
+_val_key() {
+  local p="$1" out="$2" kind="${3:-}"
+  local env_file="${LLMCTL_SERVICES_DIR}/${p}.env"
+  _val_judge key --catalog "${LLMCTL_CATALOG}" --profile "${p}" --models-dir "${LLMCTL_MODELS_DIR}" \
+    --suites-dir "${LLMCTL_VALIDATION_SUITES_DIR}" --engine-tag "$(_val_engine_tag "${p}")" \
+    --env-file "${env_file}" ${kind:+--only-kind "${kind}"} > "${out}"
+}
+
+# _val_suites <profile> [kind] - suites of the profile (one per line); none -> rc 1 + reason on stderr.
+_val_suites() {
+  local p="$1" kind="${2:-}"
+  python3 -I - "${LLMCTL_CATALOG}" "${p}" "${LLMCTL_VALIDATION_SUITES_DIR}" "${kind}" <<'PY'
+import json, os, sys
+cat, p, sdir, kind = sys.argv[1:5]
+prof = json.load(open(cat))["profiles"][p]
+v = prof.get("validation") if isinstance(prof.get("validation"), dict) else {}
+suites = v.get("suites") or []
+if not suites:
+    sys.stderr.write("no llmctl validation suite for profile '%s': %s\n" % (p, v.get("reason") or "catalog has no validation.suites"))
+    sys.exit(1)
+out = []
+for s in suites:
+    d = os.path.join(sdir, s)
+    k = None
+    for n in ("expectations.json", "suite.json"):
+        if os.path.isfile(os.path.join(d, n)):
+            k = json.load(open(os.path.join(d, n))).get("kind")
+    if k is None:
+        sys.stderr.write("validation suite '%s' named by profile '%s' does not exist in %s\n" % (s, p, sdir))
+        sys.exit(1)
+    if not kind or k == kind:
+        out.append(s)
+if not out:
+    sys.stderr.write("profile '%s' has no '%s' validation suite (its suites: %s)\n" % (p, kind, ", ".join(suites)))
+    sys.exit(1)
+print("\n".join(out))
+PY
+}
+
+# _val_expect_model <profile> - the catalog model file name the endpoint must report.
+_val_expect_model() {
+  local name role
+  while IFS='|' read -r name _ _ role; do
+    [[ "${role}" != "mmproj" ]] && { echo "${name}"; return 0; }
+  done < <(catalog_files "$1")
+}
+
+# _val_downloaded <profile> - every catalog file of the profile is present.
+_val_downloaded() {
+  local name
+  while IFS='|' read -r name _ _ _; do
+    [[ -f "${LLMCTL_MODELS_DIR}/$1/${name}" ]] || return 1
+  done < <(catalog_files "$1")
+}
+
+# _val_port <profile> - port of a RUNNING profile (from its reservation), rc 1 when not running.
+_val_port() {
+  local f="${LLMCTL_RUNTIME_DIR}/$1.run" port
+  [[ -f "${f}" ]] || return 1
+  port="$(sed -n 's/^port=//p' "${f}" | head -1)"
+  [[ "${port}" =~ ^[0-9]+$ ]] || return 1
+  echo "${port}"
+}
+
+# validate_profile <profile> [--kind vision] [--host URL] [--json] [--keep]
+# Runs every (or every <kind>) suite of the profile against its endpoint; prints per-probe verdicts with
+# the model's raw answers; returns 0/1/2 (see header). With --host the endpoint is external: the result
+# is printed and logged as evidence but never recorded as the local profile's validation state.
+validate_profile() {
+  local p="" kind="" host="" json=0 keep=0
+  while [[ "$#" -gt 0 ]]; do
+    case "$1" in
+      --kind)    kind="${2:?}"; shift 2 ;;
+      --host)    [[ "$#" -ge 2 ]] || { err "--host needs a base URL (e.g. http://127.0.0.1:8082)"; return 2; }; host="$2"; shift 2 ;;
+      --json)    json=1; shift ;;
+      --keep)    keep=1; shift ;;
+      --profile) p="${2:?}"; shift 2 ;;
+      -*)        err "unknown validate option: $1"; return 2 ;;
+      *)         [[ -z "${p}" ]] || { err "only one profile per validate call (got '${p}' and '$1')"; return 2; }; p="$1"; shift ;;
+    esac
+  done
+  [[ -n "${p}" ]] || { err "usage: llmctl validate <profile> [--host URL] [--json]"; return 2; }
+  catalog_exists "${p}" || { err "unknown profile: ${p} (see: llmctl models list)"; return 2; }
+  ensure_state_dirs
+  ensure_dir "$(_val_state_dir)"
+
+  local suites
+  suites="$(_val_suites "${p}" "${kind}")" || return 2
+
+  local endpoint started=0
+  if [[ -n "${host}" ]]; then
+    endpoint="${host%/}"
+    [[ "${json}" == "1" ]] || log "--host: external endpoint ${endpoint} - the result is evidence only, it is NOT recorded as '${p}' validation state"
+  else
+    local port
+    if ! port="$(_val_port "${p}")"; then
+      if ! _val_downloaded "${p}"; then
+        err "profile '${p}' is not downloaded (run: llmctl models download ${p}) - cannot validate: could not determine"
+        return 2
+      fi
+      log "profile '${p}' is not running - starting it through the scheduler (budget-checked) to validate it"
+      if ! sched_start "${p}"; then
+        err "could not start '${p}' (see above: insufficient RAM/VRAM or a start failure) - cannot validate: could not determine"
+        return 2
+      fi
+      started=1
+      port="$(_val_port "${p}")" || { err "'${p}' started but has no port reservation"; return 2; }
+    fi
+    endpoint="http://127.0.0.1:${port}"
+  fi
+
+  local evidence; evidence="${LLMCTL_VERIFY_DIR}/validate-${p}.log"
+  local key_file; key_file="$(mktemp)"
+  _val_key "${p}" "${key_file}" "${kind}"
+  printf '\n==== %s llmctl validate %s endpoint=%s kind=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${p}" "${endpoint}" "${kind:-all}" >> "${evidence}"
+  printf 'KEY %s\n' "$(cat "${key_file}")" >> "${evidence}"
+
+  local s rc=0 one worst=0 saw_undet=0
+  for s in ${suites}; do
+    one=0
+    local -a jargs=(run --suite "${LLMCTL_VALIDATION_SUITES_DIR}/${s}" --endpoint "${endpoint}"
+                    --expect-model "$(_val_expect_model "${p}")" --evidence "${evidence}")
+    [[ "${json}" == "1" ]] && jargs+=(--json)
+    _val_judge "${jargs[@]}" || one=$?
+    case "${one}" in
+      0) ;;
+      1) worst=1 ;;
+      *) saw_undet=1 ;;
+    esac
+  done
+  if [[ "${worst}" == "1" ]]; then rc=1; elif [[ "${saw_undet}" == "1" ]]; then rc=2; else rc=0; fi
+
+  if [[ -z "${host}" ]]; then
+    local all_suites covered=1
+    all_suites="$(_val_suites "${p}" 2>/dev/null || true)"
+    [[ "${all_suites}" == "${suites}" ]] || covered=0
+    local status=undetermined
+    case "${rc}" in 0) status=pass ;; 1) status=fail ;; esac
+    if [[ "${covered}" == "1" || "${status}" == "fail" ]]; then
+      _val_judge record --key "${key_file}" --status "${status}" --evidence "${evidence}" --out "$(_val_state_file "${p}")"
+      [[ "${json}" == "1" ]] || log "validation state for '${p}': ${status} -> $(_val_state_file "${p}")"
+    else
+      [[ "${json}" == "1" ]] || log "only the '${kind}' suites ran; '${p}' also has $(tr '\n' ' ' <<<"${all_suites}")- run 'llmctl validate ${p}' to record its validation state"
+    fi
+  fi
+  rm -f "${key_file}"
+  [[ "${json}" == "1" ]] || log "evidence: ${evidence}"
+  if [[ "${started}" == "1" && "${keep}" != "1" ]]; then
+    log "stopping '${p}' again (it was started only for validation; pass --keep to leave it running)"
+    sched_stop "${p}" >/dev/null || warn "could not stop '${p}' after validation"
+  fi
+  return "${rc}"
+}
+
+# require_validated <profile> - 0 only when the profile has a FRESH passing validation record.
+require_validated() {
+  [[ "$#" -eq 1 ]] || { err "usage: llmctl require-validated <profile>"; return 2; }
+  local p="$1" key_file rc=0 why
+  catalog_exists "${p}" || { err "unknown profile: ${p}"; return 2; }
+  key_file="$(mktemp)"
+  _val_key "${p}" "${key_file}"
+  why="$(_val_judge check --state "$(_val_state_file "${p}")" --key "${key_file}" --max-age "${LLMCTL_VALIDATION_MAX_AGE}")" || rc=$?
+  rm -f "${key_file}"
+  if [[ "${rc}" == "0" ]]; then
+    info "${p}: ${why}"
+    return 0
+  fi
+  err "profile '${p}' is NOT validated for use:"
+  printf '  - %s\n' "${why//$'\n'/$'\n'  - }" >&2
+  err "run: llmctl validate ${p}"
+  return 1
+}
+
+# validate_all - validate every RUNNING profile; aggregate exit code (1 > 2 > 0); nothing running -> 2.
+validate_all() {
+  local p rc=0 one worst=0 undet=0 n=0
+  local -a verdicts=()
+  ensure_dir "${LLMCTL_RUNTIME_DIR}"
+  for p in $(for f in "${LLMCTL_RUNTIME_DIR}"/*.run; do [[ -e "${f}" ]] && basename "${f}" .run; done); do
+    n=$((n+1))
+    one=0
+    validate_profile "${p}" "$@" || one=$?
+    case "${one}" in
+      0) verdicts+=("${p}: PASS") ;;
+      1) verdicts+=("${p}: FAIL"); worst=1 ;;
+      *) verdicts+=("${p}: UNDETERMINED"); undet=1 ;;
+    esac
+  done
+  if [[ "${n}" == "0" ]]; then
+    err "validate-all: no running profile to validate (start one first) - could not determine"
+    return 2
+  fi
+  bold "validate-all summary"
+  printf '  %s\n' "${verdicts[@]}"
+  if [[ "${worst}" == "1" ]]; then rc=1; elif [[ "${undet}" == "1" ]]; then rc=2; fi
+  return "${rc}"
+}
+
+# validate_after_start <profile...> - post-start hook for start/auto/switch. Runs each running profile's
+# suites unless a fresh passing record already covers it. Returns 1 when any profile gave a WRONG answer
+# (the service stays running for inspection; consumers gate on `llmctl require-validated`). An
+# UNDETERMINED result (no suite, no answer) is reported loudly and recorded, but does not fail the start.
+validate_after_start() {
+  if [[ "${LLMCTL_DRY_RUN:-0}" == "1" ]]; then
+    log "validation not run (LLMCTL_DRY_RUN=1): nothing was started, so there is nothing to validate"
+    return 0
+  fi
+  if [[ "${LLMCTL_VALIDATE_ON_START:-1}" == "0" ]]; then
+    warn "validation on start disabled (LLMCTL_VALIDATE_ON_START=0): $* NOT validated - 'llmctl require-validated' will refuse until 'llmctl validate' passes"
+    return 0
+  fi
+  local p rc=0 one key_file
+  for p in "$@"; do
+    [[ -f "${LLMCTL_RUNTIME_DIR}/${p}.run" ]] || continue
+    key_file="$(mktemp)"
+    _val_key "${p}" "${key_file}"
+    if _val_judge check --state "$(_val_state_file "${p}")" --key "${key_file}" --max-age "${LLMCTL_VALIDATION_MAX_AGE}" >/dev/null 2>&1; then
+      info "validation: '${p}' already has a fresh passing record for this model, engine, launch and suite"
+      rm -f "${key_file}"
+      continue
+    fi
+    rm -f "${key_file}"
+    log "validation: running the deterministic validation suite(s) of '${p}' before it is used"
+    one=0
+    validate_profile "${p}" || one=$?
+    case "${one}" in
+      0) info "validation: '${p}' PASSED" ;;
+      1) err "validation: '${p}' gave WRONG answers - it is running but NOT validated; investigate before any use (llmctl require-validated ${p} refuses)"; rc=1 ;;
+      *) warn "validation: '${p}' could not be validated (UNDETERMINED) - llmctl require-validated ${p} refuses until it passes" ;;
+    esac
+  done
+  return "${rc}"
+}
+
+# models_verify_gate <profile> [--live] - the `llmctl models verify` hook: the profile must name an
+# existing validation suite (schema gate); with --live (or when it is running) the suite is also run.
+models_verify_gate() {
+  local p="$1" live="${2:-}"
+  local suites
+  if ! suites="$(_val_suites "${p}" 2>&1)"; then
+    if [[ "${live}" == "--live" ]]; then err "${suites}"; return 2; fi
+    warn "${suites}"
+    return 0
+  fi
+  info "validation suites for '${p}': $(tr '\n' ' ' <<<"${suites}")"
+  if [[ "${live}" == "--live" || -f "${LLMCTL_RUNTIME_DIR}/${p}.run" ]]; then
+    validate_profile "${p}"
+    return
+  fi
+  log "live validation NOT run ('${p}' is not running; run 'llmctl validate ${p}' or 'llmctl models verify ${p} --live')"
+}
+
+# cmd_vision <sub> ... - `llmctl vision validate [--profile vision|vision-pro] [--host URL] [--json] [--keep]`
+cmd_vision() {
+  local sub="${1:-help}"
+  [[ "$#" -gt 0 ]] && shift
+  case "${sub}" in
+    validate)
+      local p="vision" a
+      local -a rest=()
+      while [[ "$#" -gt 0 ]]; do
+        a="$1"
+        case "${a}" in
+          --profile) [[ "$#" -ge 2 ]] || { err "--profile needs a value"; return 2; }; p="$2"; shift 2 ;;
+          --host)    [[ "$#" -ge 2 ]] || { err "--host needs a base URL"; return 2; }; rest+=(--host "$2"); shift 2 ;;
+          --json|--keep) rest+=("${a}"); shift ;;
+          *) err "unknown 'vision validate' option: ${a}"; err "usage: llmctl vision validate [--profile vision|vision-pro] [--host URL] [--json] [--keep]"; return 2 ;;
+        esac
+      done
+      validate_profile "${p}" --kind vision ${rest[@]+"${rest[@]}"}
+      ;;
+    help|-h|--help)
+      cat <<'EOF'
+llmctl vision validate [--profile vision|vision-pro] [--host URL] [--json] [--keep]
+  Runs the golden screenshots of validation/suites/vision-golden-v1 through the profile's llama-server
+  (temperature 0, seed 42, top_k 1) and judges every answer deterministically against the expectation
+  file. Starts the profile first when it is downloaded but not running (and stops it afterwards unless
+  --keep). --host validates an explicit endpoint (evidence only, never recorded as local state).
+  Exit: 0 all pass, 1 any wrong result, 2 could not determine.
+EOF
+      ;;
+    *) err "unknown vision subcommand: ${sub} (validate)"; return 2 ;;
+  esac
+}

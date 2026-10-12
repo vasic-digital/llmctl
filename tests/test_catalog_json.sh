@@ -59,6 +59,52 @@ PYEOF
 printf '%s\n' "${out}"
 assert_eq 0 "${rc}" "catalog cross-check (fields, unique ports, known profiles)"
 
+# 2b. Validation schema extension (docs/validation.md "Model validation gate"): EVERY profile carries a
+# `validation` object; it either names suites that exist under validation/suites/ and whose kind fits the
+# profile's capability, or names none and carries a non-empty `reason` (never silently absent).
+val_check() {
+  python3 -I - "$1" "${LLMCTL_ROOT}/validation/suites" <<'PYEOF'
+import json, os, sys
+d = json.load(open(sys.argv[1])); sdir = sys.argv[2]; errors = []
+for name, p in d["profiles"].items():
+    v = p.get("validation")
+    if not isinstance(v, dict):
+        errors.append("%s: no validation object" % name); continue
+    suites = v.get("suites")
+    if not isinstance(suites, list):
+        errors.append("%s: validation.suites is not a list" % name); continue
+    if not suites and not str(v.get("reason", "")).strip():
+        errors.append("%s: no suites and no reason" % name)
+    for s in suites:
+        kinds = [json.load(open(os.path.join(sdir, s, f))).get("kind") for f in ("expectations.json", "suite.json")
+                 if os.path.isfile(os.path.join(sdir, s, f))]
+        if not kinds:
+            errors.append("%s: suite %s does not exist" % (name, s)); continue
+        if kinds[0] not in p["capability"]:
+            errors.append("%s: suite %s kind %s not among capabilities %s" % (name, s, kinds[0], p["capability"]))
+    if "vision" in p["capability"] and "vision-golden-v1" not in suites:
+        errors.append("%s: vision profile without the vision golden suite" % name)
+for e in errors:
+    print("ERROR:", e)
+sys.exit(1 if errors else 0)
+PYEOF
+}
+rc=0; val_check "${CATALOG}" || rc=$?
+assert_eq 0 "${rc}" "every profile has a validation entry (existing suites of a fitting kind, or a reason)"
+VMUT="${TEST_TMP}/catalog_vmut.json"
+python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); del d["profiles"]["vision"]["validation"]; json.dump(d,open(sys.argv[2],"w"))' "${CATALOG}" "${VMUT}"
+rc=0; val_check "${VMUT}" >/dev/null || rc=$?
+assert_eq 1 "${rc}" "mutation: validation entry removed -> schema check RED"
+python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); d["profiles"]["fast"]["validation"]={"suites":["no-such-suite"]}; json.dump(d,open(sys.argv[2],"w"))' "${CATALOG}" "${VMUT}"
+rc=0; val_check "${VMUT}" >/dev/null || rc=$?
+assert_eq 1 "${rc}" "mutation: nonexistent suite -> schema check RED"
+python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); d["profiles"]["decide"]["validation"]={"suites":[]}; json.dump(d,open(sys.argv[2],"w"))' "${CATALOG}" "${VMUT}"
+rc=0; val_check "${VMUT}" >/dev/null || rc=$?
+assert_eq 1 "${rc}" "mutation: no suite and no reason -> schema check RED"
+python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); d["profiles"]["fast"]["validation"]={"suites":["vision-golden-v1"]}; json.dump(d,open(sys.argv[2],"w"))' "${CATALOG}" "${VMUT}"
+rc=0; val_check "${VMUT}" >/dev/null || rc=$?
+assert_eq 1 "${rc}" "mutation: vision suite on a chat-only profile -> schema check RED"
+
 # 3. Every GGUF model file has a real (non-null) sha256 - this is the
 #    project's verified-download contract.
 out="$(python3 - "${CATALOG}" <<'PYEOF'
