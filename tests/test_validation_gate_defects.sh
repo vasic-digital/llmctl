@@ -451,4 +451,11 @@ out="$(bash -c '
 ' _ "${LLMCTL_ROOT}" "${U}" 2>&1)"
 assert_eq "rc=0" "${out}" "with no caller traps none remain"
 
+echo "== 24. LLMCTL_VALIDATION_SUITES_DIR is ignored unless LLMCTL_VALIDATE_HERMETIC=1 (suite regexes are code-adjacent input)"
+EMPTYS="${TEST_TMP}/empty_suites"; mkdir -p "${EMPTYS}"
+U="$(fake_start "${FIX}/answers_good.json" --model-id "${CHATM}")"
+assert_eq 0 "$(run_rc env LLMCTL_VALIDATION_SUITES_DIR="${EMPTYS}" "${LLMCTL}" validate fast --host "${U}")" "override without the hermetic switch is ignored (shipped suites used)"
+assert_contains "$(cat "${TEST_TMP}/last.out")" "LLMCTL_VALIDATION_SUITES_DIR ignored" "the ignore is announced"
+assert_eq 2 "$(run_rc env LLMCTL_VALIDATE_HERMETIC=1 LLMCTL_VALIDATION_SUITES_DIR="${EMPTYS}" "${LLMCTL}" validate fast --host "${U}")" "with LLMCTL_VALIDATE_HERMETIC=1 the override is honoured"
+
 test_finish

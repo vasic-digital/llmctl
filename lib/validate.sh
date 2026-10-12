@@ -28,6 +28,12 @@ source "${_val_dir}/common.sh"
 # shellcheck source=catalog.sh
 source "${_val_dir}/catalog.sh"
 
+# Suite files carry regexes (regex_all / regex_none) that the judge compiles, so the suites directory is trusted
+# input: the environment override is honoured ONLY when LLMCTL_VALIDATE_HERMETIC=1 (the test harness sets it).
+if [[ -n "${LLMCTL_VALIDATION_SUITES_DIR:-}" && "${LLMCTL_VALIDATE_HERMETIC:-0}" != "1" ]]; then
+  warn "LLMCTL_VALIDATION_SUITES_DIR ignored (set LLMCTL_VALIDATE_HERMETIC=1 to use a suites directory other than ${LLMCTL_ROOT}/validation/suites)"
+  LLMCTL_VALIDATION_SUITES_DIR="${LLMCTL_ROOT}/validation/suites"
+fi
 LLMCTL_VALIDATION_SUITES_DIR="${LLMCTL_VALIDATION_SUITES_DIR:-${LLMCTL_ROOT}/validation/suites}"
 LLMCTL_VALIDATION_MAX_AGE="${LLMCTL_VALIDATION_MAX_AGE:-604800}"
 

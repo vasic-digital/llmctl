@@ -140,6 +140,12 @@ only the profiles it started or restarted (`validate_auto`), not every running s
   listed exactly in `LLMCTL_VALIDATE_API_KEY_HOSTS` (comma separated); any other `--host` URL gets no token (a note is printed). Redirects are never
   followed and `http_proxy`/`HTTPS_PROXY` are ignored (the validation traffic - prompts and token - always goes
   directly to the endpoint, never through a proxy).
+* **Suites directory.** Suite files carry regexes the judge compiles, so `LLMCTL_VALIDATION_SUITES_DIR` is ignored (with a warning) unless
+  `LLMCTL_VALIDATE_HERMETIC=1`; the shipped `validation/suites/` is the only suite source otherwise. Choice: ignore the override rather than budget
+  regex time, because the shipped suites are the contract and an override has no production use.
+* **Endpoints and files.** Only `http`/`https` endpoints are accepted (no `file:`, `ftp:`, `data:`), a response body is limited to 8 MiB, every
+  request has a wall-clock deadline, and the evidence log and state records are mode 0600 with userinfo, query and fragment removed from every
+  logged URL (the full URL still appears in the process arguments of the running judge).
 * A validation of an idle profile starts a real model server. Nothing in the tests does that; the tests use the fixture server only.
 
 ### Known gaps - hook points for the restart / pressure hardening branch (NOT implemented here)
