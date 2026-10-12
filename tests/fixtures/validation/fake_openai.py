@@ -11,7 +11,7 @@ image's own probe with that prompt first, else any probe with that prompt). The 
 "<image fixture id>/<probe id>" (vision) or "<case id>" (chat/coder). Unknown key -> HTTP 500.
 
 Usage: fake_openai.py --suite DIR [--suite DIR2 ...] --answers FILE --port-file FILE [--model-id ID]
-                      [--mode normal|reject-images|error500|nondeterministic|slow|trickle|redirect|malformed-message|malformed-choice|truncate|reasoning-budget|reasoning-empty-stop]
+                      [--mode normal|reject-images|error500|nondeterministic|slow|trickle|endless|redirect|malformed-message|malformed-choice|truncate|reasoning-budget|reasoning-empty-stop]
 """
 import argparse
 import base64
@@ -81,8 +81,24 @@ def main():
                     return
                 time.sleep(1)
 
+        def endless(self):
+            # 32 MiB of body with no Content-Length (bounded so a missing client limit cannot hurt the test host)
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Connection", "close")
+            self.end_headers()
+            chunk = b" " * 65536
+            try:
+                for _ in range(512):
+                    self.wfile.write(chunk)
+            except OSError:
+                pass
+            self.close_connection = True
+
         def do_GET(self):
             self.note_auth()
+            if a.mode == "endless":
+                return self.endless()
             if a.mode == "trickle":
                 return self.trickle()
             if self.path == "/v1/models":

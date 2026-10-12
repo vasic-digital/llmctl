@@ -380,4 +380,9 @@ import importlib.util
 sp = importlib.util.spec_from_file_location('vj', '${JUDGE}'); m = importlib.util.module_from_spec(sp); sp.loader.exec_module(m)
 print([type(h).__name__ for h in m._OPENER.handlers if type(h).__name__ in ('FileHandler','FTPHandler','DataHandler')])" | sed 's/^\[\]$//')" "the opener has no File/FTP/Data handler"
 
+echo "== 20. an oversized response body is bounded (8 MiB) -> UNDETERMINED"
+U="$(fake_start "${FIX}/answers_good.json" --mode endless --model-id "${CHATM}")"
+assert_eq 2 "$(run_rc env LLMCTL_VALIDATE_TIMEOUT=20 timeout 60 python3 -I "${JUDGE}" run --suite "${CSUITE}" --endpoint "${U}")" "a 32 MiB body -> exit 2"
+assert_contains "$(cat "${TEST_TMP}/last.out")" "response too large" "the output says the response was too large"
+
 test_finish

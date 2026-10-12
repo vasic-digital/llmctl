@@ -48,6 +48,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+MAX_RESPONSE_BYTES = 8 * 1024 * 1024   # a model reply is a few KB; anything larger is not one
 CLOCK_SKEW_SECONDS = 60   # a validation record stamped further ahead than this is rejected
 
 NUMBER_WORDS = {
@@ -358,12 +359,15 @@ def http_json(url, body=None, timeout=60):
     with _deadline(timeout):
         try:
             with _OPENER.open(req, timeout=timeout) as resp:
-                parsed = json.loads(resp.read().decode("utf-8", "replace"))
+                raw = resp.read(MAX_RESPONSE_BYTES + 1)
+                if len(raw) > MAX_RESPONSE_BYTES:
+                    raise NoAnswer("response too large (> %d bytes)" % MAX_RESPONSE_BYTES)
+                parsed = json.loads(raw.decode("utf-8", "replace"))
                 if not isinstance(parsed, dict):
                     raise NoAnswer("response is not a JSON object: %.200s" % json.dumps(parsed))
                 return parsed
         except urllib.error.HTTPError as e:
-            detail = e.read().decode("utf-8", "replace")[:400]
+            detail = e.read(401).decode("utf-8", "replace")[:400]
             if 400 <= e.code < 500:
                 raise Rejected("HTTP %d: %s" % (e.code, detail))
             raise NoAnswer("HTTP %d: %s" % (e.code, detail))
