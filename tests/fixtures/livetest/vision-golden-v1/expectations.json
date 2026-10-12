@@ -1,0 +1,432 @@
+{
+ "suite": "vision-golden-v1",
+ "kind": "vision",
+ "schema": 1,
+ "generator": "scripts/vision/make_golden.py (stdlib-only, embedded 5x7 bitmap font, own fixed-Huffman DEFLATE; byte-reproducible)",
+ "notes": "Every expectation is derived from what make_golden.py draws (content known by construction). Checks are deterministic: normalised (upper-case, non-alphanumerics collapsed to one space) boundary-aware substring matching, ordered substrings, forbidden substrings, first-number equality, regex. No LLM-as-judge.",
+ "request": {
+  "temperature": 0,
+  "seed": 42,
+  "top_k": 1,
+  "top_p": 1.0,
+  "max_tokens": 200,
+  "cache_prompt": false
+ },
+ "determinism_repeat": [
+  "01_text_large/read"
+ ],
+ "fixtures": [
+  {
+   "id": "01_text_large",
+   "image": "01_text_large.png",
+   "sha256": "fcf9c8b0bfd973a1b1f68b9f58a819e3b2002d524f18a0466371bc59307109c2",
+   "role": "golden",
+   "content": "white canvas; 'ORANGE TIGER' (scale 10) above '42' (scale 14), black",
+   "probes": [
+    {
+     "id": "read",
+     "prompt": "Read all the text in this image exactly as written. Reply with only the text, nothing else. If the image contains no text at all, reply exactly: NO TEXT",
+     "checks": {
+      "contains_all": [
+       "ORANGE",
+       "TIGER",
+       "42"
+      ],
+      "forbidden": [
+       "NO TEXT",
+       "PURPLE",
+       "HORSE",
+       "17"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "02_shapes_count",
+   "image": "02_shapes_count.png",
+   "sha256": "9bd09de3f2d9f3f8e6432fbd98dd38781cabc747b80b430ecce109275417f67e",
+   "role": "golden",
+   "content": "white canvas; 3 red filled circles (r=80) in a row; 2 blue filled squares (150x150) below",
+   "probes": [
+    {
+     "id": "red_circles",
+     "prompt": "How many red circles are in this image? Answer with a single number.",
+     "checks": {
+      "number_equals": 3
+     }
+    },
+    {
+     "id": "blue_squares",
+     "prompt": "How many blue squares are in this image? Answer with a single number.",
+     "checks": {
+      "number_equals": 2
+     }
+    }
+   ]
+  },
+  {
+   "id": "03_login_form",
+   "image": "03_login_form.png",
+   "sha256": "f170106ff9e46f15d9b8ae5c439b4bfe511d9139a2971ccc1238f8ac3e1fdb88",
+   "role": "golden",
+   "content": "light-gray page; white panel: title 'SIGN IN', label 'USERNAME' + empty input, label 'PASSWORD' + empty input, blue button 'LOGIN'",
+   "probes": [
+    {
+     "id": "transcribe",
+     "prompt": "This is a screenshot of a software user interface. Transcribe every piece of text you can read in it, one item per line. Output only the text.",
+     "checks": {
+      "contains_all": [
+       "SIGN IN",
+       "USERNAME",
+       "PASSWORD",
+       "LOGIN"
+      ]
+     }
+    },
+    {
+     "id": "screen_type",
+     "prompt": "What kind of screen is shown in this screenshot? Answer in one short sentence.",
+     "checks": {
+      "contains_any": [
+       "LOGIN",
+       "LOG IN",
+       "SIGN IN",
+       "SIGN-IN",
+       "SIGNIN"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "04_list_view",
+   "image": "04_list_view.png",
+   "sha256": "5c7291e86e98c8ceba94106d226f67db2328b4cfef027cae60b75daa7d81afa3",
+   "role": "golden",
+   "content": "blue header 'FRUITS'; list rows APPLE, BANANA, CHERRY, GRAPE separated by gray lines",
+   "probes": [
+    {
+     "id": "items",
+     "prompt": "Read the items of the list below the FRUITS header from top to bottom, one per line. Output only the items.",
+     "checks": {
+      "ordered": [
+       "APPLE",
+       "BANANA",
+       "CHERRY",
+       "GRAPE"
+      ]
+     }
+    },
+    {
+     "id": "count",
+     "prompt": "How many items are in the list below the FRUITS header? Answer with a single number.",
+     "checks": {
+      "number_equals": 4
+     }
+    }
+   ]
+  },
+  {
+   "id": "05_table",
+   "image": "05_table.png",
+   "sha256": "a0a6cb353abd8d69f1be24739fdb2e0d06657ede9dfae54a1cc883f9f396913c",
+   "role": "golden",
+   "content": "4x3 grid table; header NAME AGE CITY (gray); rows ANNA 31 PARIS / BORIS 45 OSLO / CLARA 27 ROME",
+   "probes": [
+    {
+     "id": "transcribe",
+     "prompt": "Transcribe this table row by row, separating the cells of a row with spaces. Output only the table text.",
+     "checks": {
+      "ordered": [
+       "NAME",
+       "AGE",
+       "CITY",
+       "ANNA",
+       "31",
+       "PARIS",
+       "BORIS",
+       "45",
+       "OSLO",
+       "CLARA",
+       "27",
+       "ROME"
+      ]
+     }
+    },
+    {
+     "id": "lookup",
+     "prompt": "In this table, what is the CITY of BORIS? Answer with one word.",
+     "checks": {
+      "contains_all": [
+       "OSLO"
+      ],
+      "forbidden": [
+       "PARIS",
+       "ROME"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "06_dialog",
+   "image": "06_dialog.png",
+   "sha256": "4931391e323138af3a0eaf4737b3874ae509783914a1eb1b4eb9c71862b05cbb",
+   "role": "golden",
+   "content": "gray backdrop; modal dialog: red title bar 'WARNING', message 'DELETE FILE?', outlined button 'CANCEL', red button 'DELETE'",
+   "probes": [
+    {
+     "id": "transcribe",
+     "prompt": "This is a screenshot of a dialog box. Transcribe every piece of text in it. Output only the text.",
+     "checks": {
+      "contains_all": [
+       "WARNING",
+       "DELETE FILE",
+       "CANCEL"
+      ]
+     }
+    },
+    {
+     "id": "buttons",
+     "prompt": "What are the labels of the two buttons in this dialog? Answer with the two labels only.",
+     "checks": {
+      "contains_all": [
+       "CANCEL",
+       "DELETE"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "07_dark_theme",
+   "image": "07_dark_theme.png",
+   "sha256": "c29ac6b7a0ebc458288387479d4c5f17feb0ae6ad9c93f8d62ff20f99046ea81",
+   "role": "golden",
+   "content": "near-black page; title 'SETTINGS'; dark row 'DARK MODE' with green 'ON' toggle; dark row 'VOLUME 75'; light text",
+   "probes": [
+    {
+     "id": "transcribe",
+     "prompt": "Transcribe every piece of text in this screenshot, one item per line. Output only the text.",
+     "checks": {
+      "contains_all": [
+       "SETTINGS",
+       "DARK MODE",
+       "VOLUME",
+       "75"
+      ]
+     }
+    },
+    {
+     "id": "theme",
+     "prompt": "Is the background of this interface dark or light? Answer with one word.",
+     "checks": {
+      "contains_any": [
+       "DARK",
+       "BLACK"
+      ],
+      "forbidden": [
+       "LIGHT",
+       "WHITE"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "08_small_text",
+   "image": "08_small_text.png",
+   "sha256": "54fd0dccbb36fa06d9eeff6316ef4025fbfbbcb4e6293e8f916eb9c76cf2b8f9",
+   "role": "golden",
+   "content": "white page; title 'RECEIPT' (scale 9); small lines (scale 4 = 20x28 px glyphs): 'INVOICE NO 7731', 'TOTAL 58.40', 'STATUS PAID'",
+   "probes": [
+    {
+     "id": "invoice",
+     "prompt": "What is the invoice number shown in this receipt? Answer with the number only.",
+     "checks": {
+      "number_equals": 7731
+     }
+    },
+    {
+     "id": "total",
+     "prompt": "What is the TOTAL amount shown in this receipt? Answer with the number only.",
+     "checks": {
+      "number_equals": 58.4
+     }
+    }
+   ]
+  },
+  {
+   "id": "09_color_blocks",
+   "image": "09_color_blocks.png",
+   "sha256": "7d7d442b584aba0bd83d17b40c82b06e4d0da7d1659375e2001463120cf6ea9c",
+   "role": "golden",
+   "content": "white canvas; three 240x240 squares left to right: red (220,30,30), green (30,160,60), blue (30,70,210); no text",
+   "probes": [
+    {
+     "id": "colors",
+     "prompt": "Name the colors of the three squares from left to right, one word per color.",
+     "checks": {
+      "ordered": [
+       "RED",
+       "GREEN",
+       "BLUE"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "90_bad_blank",
+   "image": "90_bad_blank.png",
+   "sha256": "e8683dacefab4fe5ed145402a17fec871489edabd2578caffbbef2e1ca602876",
+   "role": "control-bad",
+   "content": "GOLDEN-BAD CONTROL: entirely white canvas, nothing drawn",
+   "discriminates": [
+    "01_text_large/read"
+   ],
+   "probes": [
+    {
+     "id": "read",
+     "prompt": "Read all the text in this image exactly as written. Reply with only the text, nothing else. If the image contains no text at all, reply exactly: NO TEXT",
+     "checks": {
+      "contains_all": [
+       "NO TEXT"
+      ],
+      "forbidden": [
+       "ORANGE",
+       "TIGER",
+       "42"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "91_bad_wrong_content",
+   "image": "91_bad_wrong_content.png",
+   "sha256": "d92993cf53f24c2157aa76ba37c7f6fd97395a21bda7a66770e4ad964d55487a",
+   "role": "control-bad",
+   "content": "GOLDEN-BAD CONTROL: same layout as 01_text_large but the WRONG content 'PURPLE HORSE' / '17'",
+   "discriminates": [
+    "01_text_large/read"
+   ],
+   "probes": [
+    {
+     "id": "read",
+     "prompt": "Read all the text in this image exactly as written. Reply with only the text, nothing else. If the image contains no text at all, reply exactly: NO TEXT",
+     "checks": {
+      "contains_all": [
+       "PURPLE",
+       "HORSE",
+       "17"
+      ],
+      "forbidden": [
+       "ORANGE",
+       "TIGER",
+       "42"
+      ]
+     }
+    }
+   ]
+  }
+ ],
+ "judge_controls": [
+  {
+   "probe": "01_text_large/read",
+   "answer": "ORANGE TIGER\n42",
+   "expect": "pass"
+  },
+  {
+   "probe": "01_text_large/read",
+   "answer": "orange tiger 42",
+   "expect": "pass"
+  },
+  {
+   "probe": "01_text_large/read",
+   "answer": "PURPLE HORSE 17",
+   "expect": "fail"
+  },
+  {
+   "probe": "01_text_large/read",
+   "answer": "ORANGE TIGER 420",
+   "expect": "fail"
+  },
+  {
+   "probe": "01_text_large/read",
+   "answer": "",
+   "expect": "fail"
+  },
+  {
+   "probe": "01_text_large/read",
+   "answer": "NO TEXT",
+   "expect": "fail"
+  },
+  {
+   "probe": "02_shapes_count/red_circles",
+   "answer": "3",
+   "expect": "pass"
+  },
+  {
+   "probe": "02_shapes_count/red_circles",
+   "answer": "There are three red circles.",
+   "expect": "pass"
+  },
+  {
+   "probe": "02_shapes_count/red_circles",
+   "answer": "4",
+   "expect": "fail"
+  },
+  {
+   "probe": "02_shapes_count/red_circles",
+   "answer": "I cannot count them.",
+   "expect": "fail"
+  },
+  {
+   "probe": "04_list_view/items",
+   "answer": "APPLE\nBANANA\nCHERRY\nGRAPE",
+   "expect": "pass"
+  },
+  {
+   "probe": "04_list_view/items",
+   "answer": "BANANA\nAPPLE\nCHERRY\nGRAPE",
+   "expect": "fail"
+  },
+  {
+   "probe": "05_table/lookup",
+   "answer": "PARIS",
+   "expect": "fail"
+  },
+  {
+   "probe": "07_dark_theme/theme",
+   "answer": "Light",
+   "expect": "fail"
+  },
+  {
+   "probe": "08_small_text/total",
+   "answer": "58.40",
+   "expect": "pass"
+  },
+  {
+   "probe": "08_small_text/total",
+   "answer": "58.04",
+   "expect": "fail"
+  },
+  {
+   "probe": "09_color_blocks/colors",
+   "answer": "Blue, green, red",
+   "expect": "fail"
+  },
+  {
+   "probe": "90_bad_blank/read",
+   "answer": "NO TEXT",
+   "expect": "pass"
+  },
+  {
+   "probe": "90_bad_blank/read",
+   "answer": "ORANGE TIGER 42",
+   "expect": "fail"
+  }
+ ]
+}
