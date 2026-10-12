@@ -320,8 +320,8 @@ has "verdict names cleanup" "$E/out.txt" 'cleanup not confirmed'
 
 # signal: SIGTERM to the script while the model is "running"
 E="$(mkenv)"; touch "$E/fake/validate_wait"
-( FAKE="$E/fake" PATH="$E/bin:$PATH" LT_HERMETIC=1 LT_WD_INTERVAL=0.2 LT_READY_INTERVAL=0.2 LT_VRAM_SETTLE_MAX=1 \
-  LT_MEMINFO="$E/meminfo" LT_PSI="$E/psi" LT_EVIDENCE_ROOT="$E/ev" HOME="$E/home" exec bash "$MAIN" >"$E/out.txt" 2>"$E/err.txt" ) &
+( FAKE="$E/fake" PATH="$E/bin:$PATH" LT_HERMETIC=1 LT_WD_INTERVAL=0.2 LT_READY_INTERVAL=0.2 LT_POST_SAMPLE=1 LT_STOP_BOUND=2 LT_BOUND=2 \
+  LT_MEMINFO="$E/meminfo" LT_PSI="$E/psi" LT_IOPSI="$E/iopsi" LT_EVIDENCE_ROOT="$E/ev" HOME="$E/home" LLMCTL_SERVICES_DIR="$E/services" LLMCTL_RUNTIME_DIR="$E/run" LT_SUITE_DIR="$E/suite" exec bash "$MAIN" >"$E/out.txt" 2>"$E/err.txt" ) &
 M=$!
 for _ in $(seq 1 40); do grep -q '^validate ' "$E/fake/calls" 2>/dev/null && break; sleep 0.2; done
 EVD="$(find "$E/ev" -mindepth 1 -maxdepth 1 -type d | head -1)"
