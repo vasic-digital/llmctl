@@ -11,7 +11,7 @@ image's own probe with that prompt first, else any probe with that prompt). The 
 "<image fixture id>/<probe id>" (vision) or "<case id>" (chat/coder). Unknown key -> HTTP 500.
 
 Usage: fake_openai.py --suite DIR [--suite DIR2 ...] --answers FILE --port-file FILE [--model-id ID]
-                      [--mode normal|reject-images|error500|nondeterministic|truncate|reasoning-budget|reasoning-empty-stop]
+                      [--mode normal|reject-images|error500|nondeterministic|slow|truncate|reasoning-budget|reasoning-empty-stop]
 """
 import argparse
 import base64
@@ -29,6 +29,7 @@ def main():
     ap.add_argument("--port-file", required=True)
     ap.add_argument("--model-id", default="/models/vision/gemma-3-4b-it-Q4_K_M.gguf")
     ap.add_argument("--mode", default="normal")
+    ap.add_argument("--max-seconds", type=int, default=900, help="self-terminate (a leaked fixture must not outlive its test)")
     a = ap.parse_args()
     answers = json.load(open(a.answers))
     by_sha, prompts = {}, []          # image sha -> fixture id ; [(fixture_id or None, probe_id, prompt)]
@@ -68,6 +69,9 @@ def main():
 
         def do_POST(self):
             req = json.loads(self.rfile.read(int(self.headers.get("Content-Length", "0"))) or b"{}")
+            if a.mode == "slow":
+                import time
+                time.sleep(25)       # a hung endpoint: lets a test interrupt validate_profile mid-probe
             if a.mode == "error500":
                 return self.send(500, {"error": "fixture: internal error"})
             if self.path == "/v1/embeddings":
@@ -115,6 +119,8 @@ def main():
                             "usage": {"prompt_tokens": 1, "completion_tokens": 1}})
 
     srv = ThreadingHTTPServer(("127.0.0.1", 0), H)
+    import threading
+    threading.Timer(a.max_seconds, lambda: os._exit(0)).start()
     with open(a.port_file + ".tmp", "w") as fh:
         fh.write(str(srv.server_address[1]))
     os.replace(a.port_file + ".tmp", a.port_file)

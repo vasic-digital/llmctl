@@ -156,7 +156,24 @@ validate_profile() {
   local suites
   suites="$(_val_suites "${p}" "${kind}")" || return 2
 
-  local endpoint started=0
+  local endpoint started=0 starting=0 jpid="" key_file=""
+  # Interrupt safety: SIGINT/SIGTERM/SIGHUP removes the temp key file, kills the judge child (by PID, never by
+  # process group) and stops a profile THIS call started (unless --keep). The handler reads this function's
+  # locals, so it is only ever armed while validate_profile is on the stack.
+  _val_on_signal() {
+    local code="$1"
+    trap - INT TERM HUP
+    [[ -n "${jpid}" ]] && kill "${jpid}" 2>/dev/null || true
+    [[ -n "${key_file}" ]] && rm -f "${key_file}"
+    if [[ "${started}" == "1" || "${starting}" == "1" ]] && [[ "${keep}" != "1" ]]; then
+      warn "interrupted: stopping '${p}' (it was started only for validation)"
+      sched_stop "${p}" >/dev/null 2>&1 || true
+    fi
+    exit "${code}"
+  }
+  trap '_val_on_signal 130' INT
+  trap '_val_on_signal 143' TERM
+  trap '_val_on_signal 129' HUP
   if [[ -n "${host}" ]]; then
     endpoint="${host%/}"
     [[ "${json}" == "1" ]] || log "--host: external endpoint ${endpoint} - the result is evidence only, it is NOT recorded as '${p}' validation state"
@@ -165,22 +182,31 @@ validate_profile() {
     if ! port="$(_val_port "${p}")"; then
       if ! _val_downloaded "${p}"; then
         err "profile '${p}' is not downloaded (run: llmctl models download ${p}) - cannot validate: could not determine"
+        trap - INT TERM HUP
         return 2
       fi
       log "profile '${p}' is not running - starting it through the scheduler (budget-checked) to validate it"
+      starting=1
       if ! sched_start "${p}"; then
+        starting=0
         err "could not start '${p}' (see above: insufficient RAM/VRAM or a start failure) - cannot validate: could not determine"
+        trap - INT TERM HUP
         return 2
       fi
       started=1
-      port="$(_val_port "${p}")" || { err "'${p}' started but has no port reservation"; return 2; }
+      port="$(_val_port "${p}")" || { err "'${p}' started but has no port reservation"; trap - INT TERM HUP; return 2; }
     fi
     endpoint="http://127.0.0.1:${port}"
   fi
 
   local evidence; evidence="${LLMCTL_VERIFY_DIR}/validate-${p}.log"
-  local key_file; key_file="$(mktemp)"
-  _val_key "${p}" "${key_file}" "${kind}"
+  key_file="$(mktemp)"
+  if ! _val_key "${p}" "${key_file}" "${kind}"; then
+    err "cannot compute the validation key of '${p}' - cannot validate: could not determine"
+    rm -f "${key_file}"; key_file=""
+    trap - INT TERM HUP
+    return 2
+  fi
   printf '\n==== %s llmctl validate %s endpoint=%s kind=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${p}" "${endpoint}" "${kind:-all}" >> "${evidence}"
   printf 'KEY %s\n' "$(cat "${key_file}")" >> "${evidence}"
 
@@ -190,7 +216,13 @@ validate_profile() {
     local -a jargs=(run --suite "${LLMCTL_VALIDATION_SUITES_DIR}/${s}" --endpoint "${endpoint}"
                     --expect-model "$(_val_expect_model "${p}")" --evidence "${evidence}")
     [[ "${json}" == "1" ]] && jargs+=(--json)
-    _val_judge "${jargs[@]}" || one=$?
+    # background + wait: bash runs a pending trap as soon as `wait` is interrupted (a foreground child would
+    # delay the handler until it exits); the judge is killed by the handler by PID.
+    # (the interpreter itself is the background job - a shell function would fork a subshell whose python
+    # child the handler could not reach by PID)
+    python3 -I "${LLMCTL_ROOT}/lib/validate_judge.py" "${jargs[@]}" & jpid=$!
+    wait "${jpid}" || one=$?
+    jpid=""
     case "${one}" in
       0) ;;
       1) worst=1 ;;
@@ -212,12 +244,13 @@ validate_profile() {
       [[ "${json}" == "1" ]] || log "only the '${kind}' suites ran; '${p}' also has $(tr '\n' ' ' <<<"${all_suites}")- run 'llmctl validate ${p}' to record its validation state"
     fi
   fi
-  rm -f "${key_file}"
+  rm -f "${key_file}"; key_file=""
   [[ "${json}" == "1" ]] || log "evidence: ${evidence}"
   if [[ "${started}" == "1" && "${keep}" != "1" ]]; then
     log "stopping '${p}' again (it was started only for validation; pass --keep to leave it running)"
     sched_stop "${p}" >/dev/null || warn "could not stop '${p}' after validation"
   fi
+  trap - INT TERM HUP
   return "${rc}"
 }
 

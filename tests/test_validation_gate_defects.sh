@@ -15,10 +15,13 @@ KSUITE="${LLMCTL_ROOT}/validation/suites/coder-v1"
 JUDGE="${LLMCTL_ROOT}/lib/validate_judge.py"
 export LLMCTL_VALIDATE_TIMEOUT=20
 
-FAKE_PIDS=()
+# fake_start runs inside $(...), so its PIDs are recorded in a FILE (an array append would die with the subshell);
+# the file lives OUTSIDE TEST_TMP because test_finish removes TEST_TMP before the EXIT trap runs.
+FAKE_PIDS_FILE="$(mktemp)"
 cleanup() {
   local p
-  for p in ${FAKE_PIDS[@]+"${FAKE_PIDS[@]}"}; do kill "${p}" 2>/dev/null || true; wait "${p}" 2>/dev/null || true; done
+  while read -r p; do [[ -n "${p}" ]] && kill "${p}" 2>/dev/null || true; done < "${FAKE_PIDS_FILE}"
+  rm -f "${FAKE_PIDS_FILE}"
   test_teardown_env
 }
 trap cleanup EXIT
@@ -28,7 +31,7 @@ fake_start() {
   local pf; pf="$(mktemp -u "${TEST_TMP}/port.XXXXXX")"
   python3 -I "${FIX}/fake_openai.py" --suite "${VSUITE}" --suite "${CSUITE}" --suite "${KSUITE}" \
     --answers "${answers}" --port-file "${pf}" "$@" >/dev/null 2>&1 &
-  FAKE_PIDS+=("$!")
+  echo "$!" >> "${FAKE_PIDS_FILE}"
   local i
   for (( i=0; i<100; i++ )); do [[ -s "${pf}" ]] && break; sleep 0.1; done
   printf 'http://127.0.0.1:%s\n' "$(cat "${pf}")"
@@ -200,5 +203,43 @@ sed -i "s/^port=.*/port=9/" "${LLMCTL_RUNTIME_DIR}/vision.run"
 assert_eq 2 "$(run_rc "${LLMCTL}" vision validate)" "endpoint down -> exit 2"
 assert_eq pass "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["status"])' "${LLMCTL_STATE_DIR}/validation/vision.json")" "state still pass after the undetermined run"
 rm -f "${LLMCTL_RUNTIME_DIR}/vision.run"
+
+echo "== 10. an interrupt (SIGTERM/SIGINT) mid-validation removes the temp key file and stops a profile it started"
+mkdir -p "${LLMCTL_MODELS_DIR}/vision" "${TEST_TMP}/tmpd"
+U="$(fake_start "${FIX}/answers_good.json" --mode slow --model-id "${LLMCTL_MODELS_DIR}/vision/gemma-3-4b-it-Q4_K_M.gguf")"
+SPORT="${U##*:}"
+SLOG="${TEST_TMP}/sig.log"
+cat > "${TEST_TMP}/sig_driver.sh" <<'DRV'
+#!/usr/bin/env bash
+# args: llmctl-root port log ; stubs sched_start/sched_stop (no real service, no systemd)
+source "$1/lib/common.sh"; source "$1/lib/catalog.sh"; source "$1/lib/validate.sh"
+SIG_PORT="$2"; SIG_LOG="$3"
+sched_start() {
+  echo "START $1" >> "${SIG_LOG}"
+  printf 'profile=%s\nmode=gpu\nport=%s\nram_mb=1\nvram_mb=1\nstarted_epoch=%s\n' "$1" "${SIG_PORT}" "$(date +%s)" > "${LLMCTL_RUNTIME_DIR}/$1.run"
+}
+sched_stop() { echo "STOP $1" >> "${SIG_LOG}"; rm -f "${LLMCTL_RUNTIME_DIR}/$1.run"; }
+validate_profile vision
+DRV
+run_interrupted() {   # $1 = signal name -> prints the driver's exit status
+  : > "${SLOG}"; rm -f "${TEST_TMP}/tmpd"/* "${LLMCTL_RUNTIME_DIR}/vision.run"
+  TMPDIR="${TEST_TMP}/tmpd" timeout -k 5 40 bash "${TEST_TMP}/sig_driver.sh" "${LLMCTL_ROOT}" "${SPORT}" "${SLOG}" >"${TEST_TMP}/sig.out" 2>&1 &
+  local tpid=$! i dpid=""
+  for (( i=0; i<100; i++ )); do grep -q "START vision" "${SLOG}" 2>/dev/null && break; sleep 0.1; done
+  sleep 1.5                                  # let the judge reach the hung probe
+  dpid="$(pgrep -P "${tpid}" -f sig_driver.sh | head -1 || true)"
+  kill -"$1" "${dpid:-${tpid}}" 2>/dev/null || true
+  local rc=0; wait "${tpid}" || rc=$?
+  echo "${rc}"
+}
+for sig in TERM INT; do
+  rc="$(run_interrupted "${sig}")"
+  if [[ "${rc}" == "143" || "${rc}" == "130" ]]; then printf '  ok: SIG%s ends validate with a signal exit status (%s)\n' "${sig}" "${rc}"
+  else printf '  FAIL: SIG%s exit status %s (124/137 = it hung until the timeout)\n' "${sig}" "${rc}" >&2; TEST_FAILS=$((TEST_FAILS+1)); fi
+  assert_contains "$(cat "${SLOG}")" "STOP vision" "SIG${sig}: the profile validate started is stopped"
+  assert_eq "" "$(ls -A "${TEST_TMP}/tmpd")" "SIG${sig}: no temp key file left behind"
+  assert_eq "" "$(pgrep -f "validate_judge.py run .*--endpoint http://127.0.0.1:${SPORT}" || true)" "SIG${sig}: the judge child is gone"
+  pkill -f "validate_judge.py run .*--endpoint http://127.0.0.1:${SPORT}" 2>/dev/null || true
+done
 
 test_finish

@@ -18,10 +18,13 @@ ESUITE="${LLMCTL_ROOT}/validation/suites/embedding-v1"
 JUDGE="${LLMCTL_ROOT}/lib/validate_judge.py"
 export LLMCTL_VALIDATE_TIMEOUT=20
 
-FAKE_PIDS=()
+# fake_start runs inside $(...), so its PIDs are recorded in a FILE (an array append would die with the subshell);
+# the file lives OUTSIDE TEST_TMP because test_finish removes TEST_TMP before the EXIT trap runs.
+FAKE_PIDS_FILE="$(mktemp)"
 cleanup() {
   local p
-  for p in ${FAKE_PIDS[@]+"${FAKE_PIDS[@]}"}; do kill "${p}" 2>/dev/null || true; wait "${p}" 2>/dev/null || true; done
+  while read -r p; do [[ -n "${p}" ]] && kill "${p}" 2>/dev/null || true; done < "${FAKE_PIDS_FILE}"
+  rm -f "${FAKE_PIDS_FILE}"
   test_teardown_env
 }
 trap cleanup EXIT
@@ -32,7 +35,7 @@ fake_start() {
   local pf; pf="$(mktemp -u "${TEST_TMP}/port.XXXXXX")"
   python3 -I "${FIX}/fake_openai.py" --suite "${VSUITE}" --suite "${CSUITE}" --suite "${KSUITE}" \
     --answers "${answers}" --port-file "${pf}" "$@" >/dev/null 2>&1 &
-  FAKE_PIDS+=("$!")
+  echo "$!" >> "${FAKE_PIDS_FILE}"
   local i
   for (( i=0; i<100; i++ )); do [[ -s "${pf}" ]] && break; sleep 0.1; done
   printf 'http://127.0.0.1:%s\n' "$(cat "${pf}")"
