@@ -4,6 +4,7 @@
 # Everything external is faked: /proc/meminfo, /proc/pressure/memory (via LT_MEMINFO/LT_PSI), nvidia-smi,
 # systemctl, llmctl, pkill/killall, llama-server and the model health endpoint (a local python http server).
 # No real model, container, unit or llmctl is ever started. Each behaviour has a NEGATIVE CONTROL.
+# STRICT-EXEMPT: this suite runs failing commands on purpose and counts failures itself (ok/bad), so it uses -u/pipefail but not -e
 set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 MAIN="$ROOT/scripts/livetest/vision_live_test.sh"
@@ -756,4 +757,6 @@ echo "== 7. whole-suite sanity: nothing real was touched =="
 
 fi
 printf '\nRESULT: %d passed, %d failed\n' "$PASS" "$FAIL"
+# run_tests.sh counts a suite as having asserted only when it prints an '  ok:' line (it reads the PASS/FAIL lines above for the verdict)
+[ "$FAIL" -ne 0 ] || printf '  ok: all %d livetest assertions passed\n' "$PASS"
 [ "$FAIL" = 0 ]

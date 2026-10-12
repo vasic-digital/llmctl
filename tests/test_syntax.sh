@@ -18,9 +18,12 @@ for s in "${scripts[@]}"; do
   head -1 "${s}" | grep -q '^#!/usr/bin/env bash' \
     && assert_eq 0 0 "shebang: ${s#"${LLMCTL_ROOT}/"}" \
     || { assert_eq 0 1 "shebang: ${s#"${LLMCTL_ROOT}/"}"; }
-  grep -q 'set -euo pipefail' "${s}" \
-    && assert_eq 0 0 "strict mode: ${s#"${LLMCTL_ROOT}/"}" \
-    || assert_eq 0 1 "strict mode: ${s#"${LLMCTL_ROOT}/"}"
+  # a script may be exempt from -e only with an in-file "# STRICT-EXEMPT: <reason>" line AND still set -u/pipefail
+  if grep -q 'set -euo pipefail' "${s}" || { grep -q '^# STRICT-EXEMPT: .\+' "${s}" && grep -q '^set -uo pipefail' "${s}"; }; then
+    assert_eq 0 0 "strict mode: ${s#"${LLMCTL_ROOT}/"}"
+  else
+    assert_eq 0 1 "strict mode: ${s#"${LLMCTL_ROOT}/"}"
+  fi
 done
 
 test_finish

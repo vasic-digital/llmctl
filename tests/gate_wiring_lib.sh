@@ -16,6 +16,7 @@
 # The overlay lives in a throw-away TREE (symlinks to the real checkout, copies of bin/llmctl, lib/validate.sh and
 # lib/hardware.sh with the overlays appended). Nothing in the repository is modified.
 
+set -euo pipefail
 GW_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # gw_port_in_use <port> -> rc 0 when something accepts TCP on 127.0.0.1:<port>

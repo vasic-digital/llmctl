@@ -29,8 +29,8 @@ run() { # run <psi> <cmd...> -> "rc|output"
   printf '%s|%s' "${r}" "${o}"
 }
 expect_refused() { # <label> <result>
-  local rc="${2%%|*}" out="${2#*|}"
-  assert_eq "75" "${rc}" "$1: refused with exit 75"
+  local rc="${2%%|*}" out="${2#*|}" want="${3:-75}"
+  assert_eq "${want}" "${rc}" "$1: refused with exit ${want}"
   case "${out,,}" in *pressure*|*available*) echo "  ok: $1: message names the cause";; *) printf '  FAIL: %s: no clear pressure/memory message: %.200s\n' "$1" "${out}" >&2; TEST_FAILS=$((TEST_FAILS+1));; esac
 }
 
@@ -49,7 +49,8 @@ done
 r="$(run "${TEST_TMP}/psi_ok" "${LLMCTL}" start vision)"
 assert_eq "0" "${r%%|*}" "llmctl start vision with avg10=0 still succeeds (dry-run)"
 if grep -qE '^[[:space:]]*validate\)' "${LLMCTL}"; then
-  expect_refused "llmctl validate" "$(run "${TEST_TMP}/psi_full" "${LLMCTL}" validate vision)"
+  # validate maps the gate's rc 75 to exit 2 (UNDETERMINED, "refused under memory pressure"): a refusal is not a verdict
+  expect_refused "llmctl validate" "$(run "${TEST_TMP}/psi_full" "${LLMCTL}" validate vision)" 2
 else
   assert_skip "this branch's bin/llmctl has no validate command (it lives uncommitted in the main tree); revisit when merged" "llmctl validate refuses under pressure"
 fi
