@@ -147,6 +147,24 @@ _val_restore_traps() {
   if [[ -n "${1:-}" ]]; then eval "$1"; fi
 }
 
+# _val_pressure_gate <profile> [psi] - the host-pressure gate of the validation layer (hw_pressure_gate, rc 75 =
+# refused). Without "psi" the footprint of the profile is included (a start is about to happen); with "psi" only the
+# pressure test runs (the profile is already up; the probe loop is about to send requests). Prints ONE distinct
+# message and returns 75 on refusal. A refusal is NOT a verdict: callers map it to exit 2 (UNDETERMINED) and never
+# record it as a FAIL. Hosts/builds without the gate function are treated as "no gate" (rc 0).
+_val_pressure_gate() {
+  local p="$1" mode="${2:-}" rc=0
+  declare -F hw_pressure_gate >/dev/null 2>&1 || return 0
+  if declare -F _sched_pressure_gate >/dev/null 2>&1; then
+    _sched_pressure_gate "${p}" ${mode:+"${mode}"} >/dev/null || rc=$?
+  else
+    hw_pressure_gate 0 "${p}" >/dev/null || rc=$?
+  fi
+  [[ "${rc}" -eq 0 ]] && return 0
+  err "validation of '${p}' refused under memory pressure (hw_pressure_gate rc ${rc}): nothing was started or probed, nothing is recorded - UNDETERMINED (exit 2); retry when 'head -2 /proc/pressure/memory' is quiet"
+  return 75
+}
+
 # validate_profile <profile> [--kind vision] [--host URL] [--json] [--keep]
 # Runs every (or every <kind>) suite of the profile against its endpoint; prints per-probe verdicts with
 # the model's raw answers; returns 0/1/2 (see header). With --host the endpoint is external: the result
@@ -202,6 +220,10 @@ validate_profile() {
         _val_restore_traps "${saved_traps}"
         return 2
       fi
+      if ! _val_pressure_gate "${p}"; then
+        _val_restore_traps "${saved_traps}"
+        return 2
+      fi
       log "profile '${p}' is not running - starting it through the scheduler (budget-checked) to validate it"
       starting=1
       if ! sched_start "${p}"; then
@@ -214,6 +236,15 @@ validate_profile() {
       port="$(_val_port "${p}")" || { err "'${p}' started but has no port reservation"; _val_restore_traps "${saved_traps}"; return 2; }
     fi
     endpoint="http://127.0.0.1:${port}"
+    # second gate: pressure may have risen while the model loaded; never hammer a model on a stalling host.
+    if ! _val_pressure_gate "${p}" psi; then
+      if [[ "${started}" == "1" && "${keep}" != "1" ]]; then
+        warn "stopping '${p}' again (it was started only for validation)"
+        sched_stop "${p}" >/dev/null 2>&1 || warn "could not stop '${p}'"
+      fi
+      _val_restore_traps "${saved_traps}"
+      return 2
+    fi
   fi
 
   local evidence; evidence="${LLMCTL_VERIFY_DIR}/validate-${p}.log"
