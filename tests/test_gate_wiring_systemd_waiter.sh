@@ -90,7 +90,9 @@ write_env "${READY_PORT}"
 
 echo "== CONTROL 3 (negative): a waiter whose main pid died validates NOTHING"
 reset_world
-kill "${ENGINE_PID}" 2>/dev/null || true; sleep 0.5
+# kill the "engine": a TERM sent right after the fork can be lost (the child shell has not exec'ed `sleep` yet), so make the
+# death certain - the control is only meaningful for a pid that really is dead
+kill "${ENGINE_PID}" 2>/dev/null || true; sleep 0.5; kill -9 "${ENGINE_PID}" 2>/dev/null || true; sleep 0.3
 rc="$(run_waiter GW_VALIDATE_RC=1)"
 assert_eq 0 "$(gw_count '^validate_profile ')" "control: dead pid -> no validation"
 assert_eq 0 "$(gw_count '^systemctl --user stop')" "control: dead pid -> no stop"
