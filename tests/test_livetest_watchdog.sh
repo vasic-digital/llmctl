@@ -35,7 +35,7 @@ python3 -I "$T/srv.py" "$PORT" "$T" >/dev/null 2>&1 &
 HS_PID=$!
 sleep 1
 BYSTANDER_PID=""
-(sleep 600) & BYSTANDER_PID=$!
+(sleep 7200) & BYSTANDER_PID=$!
 cleanup_t() { kill "$HS_PID" "$BYSTANDER_PID" 2>/dev/null; rm -rf "$T"; }   # test's own children only
 trap cleanup_t EXIT
 
