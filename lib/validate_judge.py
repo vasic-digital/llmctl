@@ -44,6 +44,8 @@ import time
 import urllib.error
 import urllib.request
 
+CLOCK_SKEW_SECONDS = 60   # a validation record stamped further ahead than this is rejected
+
 NUMBER_WORDS = {
     "zero": 0, "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8,
     "nine": 9, "ten": 10, "eleven": 11, "twelve": 12, "thirteen": 13, "fourteen": 14, "fifteen": 15,
@@ -621,9 +623,20 @@ def check_state(state, key, max_age):
     for s, h in key.get("suites", {}).items():
         if state.get("suites", {}).get(s) != h:
             why.append("suite %s not validated with its current content (hash %s)" % (s, h[:12]))
-    age = time.time() - float(state.get("epoch", 0))
-    if age > max_age:
-        why.append("record is %ds old (max %ds, LLMCTL_VALIDATION_MAX_AGE)" % (age, max_age))
+    now = time.time()
+    try:
+        epoch = float(state.get("epoch"))
+    except (TypeError, ValueError):
+        epoch = None
+    if epoch is None or isinstance(state.get("epoch"), bool) or not math.isfinite(epoch):
+        why.append("record has no usable epoch (%s)" % json.dumps(state.get("epoch")))
+    elif epoch > now + CLOCK_SKEW_SECONDS:
+        # a record stamped in the future would stay "fresh" for max_age beyond its real age; never trust it
+        why.append("record epoch %d is in the future (now %d): clock skew or a forged record" % (epoch, now))
+    else:
+        age = now - epoch
+        if age > max_age:
+            why.append("record is %ds old (max %ds, LLMCTL_VALIDATION_MAX_AGE)" % (age, max_age))
     return why
 
 

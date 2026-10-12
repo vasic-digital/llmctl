@@ -154,4 +154,25 @@ assert_eq False "$(jt '17 + 25 = 42 = 41')" "the LAST '=' decides: 41 fails"
 assert_eq False "$(jt '17 + 25')" "operands only: first number 17 fails"
 assert_eq False "$(jt 'The answer is 41.')" "wrong number fails"
 
+echo "== 8. a record from the future (or with a garbage epoch) is never fresh"
+CAT="${LLMCTL_ROOT}/models/catalog.json"
+python3 -I "${JUDGE}" key --catalog "${CAT}" --profile vision --models-dir "${LLMCTL_MODELS_DIR}" \
+  --suites-dir "${LLMCTL_ROOT}/validation/suites" --engine-tag t > "${TEST_TMP}/key.json"
+python3 -I "${JUDGE}" record --key "${TEST_TMP}/key.json" --status pass --out "${TEST_TMP}/state.json"
+chk() { run_rc python3 -I "${JUDGE}" check --state "${TEST_TMP}/state.json" --key "${TEST_TMP}/key.json" --max-age 604800; }
+assert_eq 0 "$(chk)" "a just-recorded pass is fresh"
+set_epoch() { python3 -I - "${TEST_TMP}/state.json" "$1" <<'PY'
+import json, sys
+d = json.load(open(sys.argv[1])); d["epoch"] = json.loads(sys.argv[2]); json.dump(d, open(sys.argv[1], "w"))
+PY
+}
+set_epoch "$(( $(date +%s) + 86400 ))"
+assert_eq 1 "$(chk)" "epoch one day in the future -> not fresh"
+assert_contains "$(cat "${TEST_TMP}/last.out")" "future" "the reason says the record is from the future"
+set_epoch '"banana"'
+assert_eq 1 "$(chk)" "non-numeric epoch -> not fresh (no traceback)"
+if grep -q Traceback "${TEST_TMP}/last.out"; then printf '  FAIL: traceback on a garbage epoch\n' >&2; TEST_FAILS=$((TEST_FAILS+1)); else printf '  ok: no traceback\n'; fi
+set_epoch 'null'
+assert_eq 1 "$(chk)" "null epoch -> not fresh"
+
 test_finish
