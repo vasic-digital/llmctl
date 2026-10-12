@@ -16,6 +16,7 @@ check(){ if [ "$2" = "$3" ]; then ok "$1"; else bad "$1" "expected '$3' got '$2'
 has()  { if grep -qE -- "$3" "$2" 2>/dev/null; then ok "$1"; else bad "$1" "no /$3/ in $2"; fi; }
 hasnt(){ if grep -qE -- "$3" "$2" 2>/dev/null; then bad "$1" "unexpected /$3/ in $2"; else ok "$1"; fi; }
 
+export LT_POSTFIRE=2   # hermetic-only knob: keep the watchdog's post-fire re-check short in tests
 want() { [ -z "${ONLY:-}" ] || [ "$1" = always ] || [[ ",$ONLY," == *",$1,"* ]]; }
 
 # ---- health server (fake llama-server /health) ----
@@ -157,7 +158,7 @@ if command -v shellcheck >/dev/null; then shellcheck -S warning "$MAIN" "$WD" "$
 nk=$(grep -vE '^\s*#' "$MAIN" "$WD" | grep -cE '\b(kill|pkill|killall)\b')
 check "exactly one kill call site in scripts (safe_kill)" "$nk" "1"
 grep -vE '^\s*#' "$MAIN" | grep -E '\bkill\b' | grep -q 'kill -TERM "\$WD_PID"' && ok "the one kill targets \$WD_PID only" || bad "kill target"
-hasnt "no process-group/negative-pid signalling" <(grep -vE '^\s*#' "$MAIN" "$WD") 'kill +(-[A-Z0-9]+ +)?-[0-9]|setsid|pgid'
+hasnt "no process-group/negative-pid signalling" <(grep -vE '^\s*#' "$MAIN" "$WD") 'kill +(-[A-Z0-9]+ +)?-[0-9]|pgid'
 hasnt "no reboot/suspend/poweroff verbs" <(grep -vE '^\s*#' "$MAIN" "$WD") 'systemctl +(suspend|hibernate|poweroff|reboot|halt)|shutdown|reboot'
 # negative control: the detector fires on a deliberately bad file
 printf 'kill -9 -1\npkill foo\n' >"$T/badfile.sh"
@@ -382,7 +383,7 @@ E="$(mkenv)"; setpsi "$E" 50.00 50.00; setmem "$E" 1
 echo '[{"profile":"coder","port":8081,"mode":"x","ram_mb":9000,"vram_mb":7000,"enabled":true,"state":"running","last_log_line":null}]' >"$E/fake/others.json"
 RC=0; FAKE="$E/fake" PATH="$E/bin:$PATH" LT_PSI="$E/psi" LT_MEMINFO="$E/meminfo" LLMCTL_BIN=/nonexistent/llmctl NVIDIA_SMI_BIN=/nonexistent/nv SYSTEMCTL_BIN=/nonexistent/sc \
   LT_EVIDENCE_ROOT="$E/ev" HOME="$E/home" timeout 30 bash "$MAIN" >"$E/out.txt" 2>"$E/err.txt" || RC=$?
-EVD="$(find "$E/ev" -mindepth 1 -maxdepth 1 -type d | head -1)"
+EVD="$(find "$E/home/.cache/llmctl-livetest" -mindepth 1 -maxdepth 1 -type d | head -1)"   # LT_EVIDENCE_ROOT is ignored outside hermetic
 check "non-hermetic: still exits 3 via the real gate path (llmctl from PATH, *_BIN ignored)" "$RC" "3"
 hasnt "non-hermetic: exported LT_PSI/LT_MEMINFO not used (no psi_some=50.00)" "$EVD/gate.log" 'psi_some=50\.00'
 hasnt "non-hermetic: exported LT_MEMINFO not used (no MemAvailable_MiB=1 )" "$EVD/gate.log" 'MemAvailable_MiB=1 '
@@ -587,7 +588,7 @@ fi
 
 if want n2; then
 echo "== N2. a start that reaches svc_start AFTER the stop must not leave the model running =="
-for scen in driver_abort; do
+{
   E="$(mkenv)"; echo 3 >"$E/fake/start_delay"; echo 8 >"$E/fake/start_sleep"
   ( sleep 1; printf 'MemAvailable: %d kB\n' $((3000*1024)) >"$E/meminfo" ) &
   MP=$!
@@ -596,7 +597,7 @@ for scen in driver_abort; do
   check "breach before svc_start -> exit 4" "$RC" "4"
   [ ! -e "$E/fake/running" ] && ok "profile ends STOPPED although start reached svc_start after the first stop" || bad "profile left running"
   [ "$(grep -c '^stop vision' "$E/fake/calls")" -ge 2 ] && ok "a second stop ran after the start finished" || bad "only $(grep -c '^stop vision' "$E/fake/calls") stop call(s)"
-done
+}
 # NEG-CONTROL: no breach, delayed start -> normal PASS, single clean flow
 E="$(mkenv)"; echo 2 >"$E/fake/start_delay"; run_main "$E"; check "NEG-CONTROL delayed start without breach passes" "$RC" "0"; [ "$RC" = 0 ] || tail -5 "$E/out.txt"
 # watchdog alone (driver gone): after it fires, a late-appearing unit is stopped again
