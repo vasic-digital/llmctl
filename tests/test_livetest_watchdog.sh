@@ -19,9 +19,18 @@ hasnt(){ if grep -qE -- "$3" "$2" 2>/dev/null; then bad "$1" "unexpected /$3/ in
 want() { [ -z "${ONLY:-}" ] || [ "$1" = always ] || [[ ",$ONLY," == *",$1,"* ]]; }
 
 # ---- health server (fake llama-server /health) ----
-mkdir -p "$T/www"; echo '{"status":"ok"}' >"$T/www/health"
+cat >"$T/srv.py" <<'PY'
+import glob, http.server, sys
+T = sys.argv[2]
+class H(http.server.BaseHTTPRequestHandler):
+    def do_GET(self):
+        up = bool(glob.glob(T + "/env.*/fake/running"))
+        self.send_response(200 if up else 503); self.end_headers(); self.wfile.write(b'{"status":"ok"}' if up else b"down")
+    def log_message(self, *a): pass
+http.server.HTTPServer(("127.0.0.1", int(sys.argv[1])), H).serve_forever()
+PY
 PORT="$(python3 -I -c 'import socket;s=socket.socket();s.bind(("127.0.0.1",0));print(s.getsockname()[1])')"
-(cd "$T/www" && exec python3 -I -m http.server "$PORT" --bind 127.0.0.1 >/dev/null 2>&1) &
+python3 -I "$T/srv.py" "$PORT" "$T" >/dev/null 2>&1 &
 HS_PID=$!
 sleep 1
 BYSTANDER_PID=""
@@ -161,7 +170,7 @@ has "verdict table says PASS" "$E/out.txt" 'VERDICT +PASS \(exit 0\)'
 has "start called with LLMCTL_VALIDATE_ON_START=0" "$E/fake/calls" '^start env=0 '
 has "start ran at nice 19" "$E/fake/calls" 'nice=19 '
 has "start ran at ionice idle" "$E/fake/calls" 'ionice=idle'
-has "validate invoked with --profile vision --json" "$E/fake/calls" '^validate vision validate --profile vision --json'
+has "validate invoked with --profile vision --json" "$E/fake/calls" '^validate vision validate --profile vision .*--json'
 has "final llmctl stop vision happened" "$E/fake/calls" '^stop vision'
 hasnt "no watchdog trigger recorded" <(cat "$EVD/trigger" 2>/dev/null; echo) '.'
 for f in gate.log samples.csv watchdog.log commands.log validate.out validate.rc identity.txt verdict.txt status_before.json status_after.json signals.log; do
@@ -445,6 +454,26 @@ kill "$PYP" 2>/dev/null; wait "$PYP" 2>/dev/null
 grep -vE '^\s*#' "$MAIN" | grep -A6 '^safe_kill()' | grep -q 'cmdline' && ok "safe_kill verifies /proc/\$WD_PID/cmdline before signalling" || bad "safe_kill does not verify cmdline"
 printf 'safe_kill() {\n  kill -TERM "$WD_PID"\n}\n' >"$T/nocheck.sh"
 grep -A6 '^safe_kill()' "$T/nocheck.sh" | grep -q 'cmdline' && bad "NEG-CONTROL detector blind" || ok "NEG-CONTROL detector flags an unchecked safe_kill"
+fi
+
+if want d3; then
+echo "== D3. validate must not be able to (re)start the model =="
+E="$(mkenv)"; run_main "$E"
+has "validate is pointed at the explicit endpoint (--host http://127.0.0.1:PORT)" "$E/fake/calls" "^validate vision validate .*--host http://127\\.0\\.0\\.1:$PORT"
+# breach during validate -> stop; a validate that would restart the profile when .run is absent must not be able to
+E="$(mkenv)"; touch "$E/fake/validate_wait"
+printf "printf 'MemAvailable: %%d kB\\n' %d >\"\${FAKE%%/fake}/meminfo\"\n" $((3000*1024)) >"$E/fake/mutate.sh"
+run_main "$E"
+check "breach during validate -> exit 4" "$RC" "4"
+hasnt "validate never restarted the profile" "$E/fake/calls" 'RESTARTED'
+[ ! -e "$E/fake/running" ] && ok "profile is not running at the end" || bad "profile was restarted by validate"
+# NEG-CONTROL for the fake itself: without --host the fake validate DOES restart (proves the test can see it)
+E="$(mkenv)"; FAKE="$E/fake" PATH="$E/bin:$PATH" llmctl vision validate --profile vision >/dev/null 2>&1
+has "NEG-CONTROL fake validate without --host restarts the profile" "$E/fake/calls" 'RESTARTED'
+# profile must be up immediately before validate
+E="$(mkenv)"; echo "touch \"\$FAKE/vanish\"; rm -f \"\$FAKE/running\"" >"$E/fake/start_mutate.sh"
+run_main "$E"
+hasnt "validate not launched when the profile is not up" "$E/fake/calls" '^validate '
 fi
 
 if want always; then

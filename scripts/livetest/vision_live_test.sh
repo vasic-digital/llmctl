@@ -290,7 +290,13 @@ echo "unit_env=$(services_env_file) model=${LOADED_MODEL:-UNKNOWN} mmproj=${LOAD
 HAVE_VV=0
 if "$LLMCTL" vision help 2>/dev/null | grep -q 'vision validate'; then HAVE_VV=1; fi
 [ "$HAVE_VV" = 1 ] || { RESULT=2; VERDICT_REASON="installed llmctl has no 'vision validate' (UNKNOWN: scratch harness not used live)"; exit 2; }
-VCMD=("$LLMCTL" vision validate --profile "$PROFILE" --json --keep)
+# Immediately before validate: the profile must be up (health answers). validate gets --host so it validates an
+# explicit endpoint and can NEVER start the profile itself (without --host, lib/validate.sh calls sched_start when
+# there is no .run file, which a stop removes - an un-niced, un-gated restart). --host also means the verdict is
+# evidence only and is not recorded as local validation state (fine: our evidence is the captured output).
+guard
+curl -fsS --max-time 3 "$URL/health" >/dev/null 2>&1 || { RESULT=2; VERDICT_REASON="profile not up immediately before validate"; exit 2; }
+VCMD=("$LLMCTL" vision validate --profile "$PROFILE" --host "$URL" --json --keep)
 echo "$(date -u +%FT%TZ) \$ ${VCMD[*]}" >>"$CMDLOG"
 "${VCMD[@]}" >"$EV/validate.out" 2>"$EV/validate.err" &
 VPID=$!
