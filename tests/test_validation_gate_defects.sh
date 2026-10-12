@@ -274,4 +274,24 @@ assert_eq 2 "$(run_rc env LLMCTL_VALIDATE_API_KEY="${TOKEN}" python3 -I "${JUDGE
 assert_eq 0 "$(grep -c . "${TARGETLOG}" || true)" "the redirect target received NO request at all (redirect not followed, token not forwarded)"
 assert_eq 0 "$(grep -c "${TOKEN}" "${TEST_TMP}/last.out" || true)" "the token is never echoed into the output"
 
+echo "== 12. an http_proxy in the environment never carries loopback validation traffic"
+PLOG="${TEST_TMP}/proxy.log"; : > "${PLOG}"; PPF="${TEST_TMP}/proxy.port"
+python3 -I - "${PPF}" "${PLOG}" <<'PY' &
+import socket, sys, threading, os
+srv = socket.socket(); srv.bind(("127.0.0.1", 0)); srv.listen(5)
+open(sys.argv[1] + ".tmp", "w").write(str(srv.getsockname()[1])); os.replace(sys.argv[1] + ".tmp", sys.argv[1])
+threading.Timer(120, lambda: os._exit(0)).start()
+while True:
+    c, _ = srv.accept()
+    data = c.recv(65536)
+    open(sys.argv[2], "ab").write(data[:200] + b"\n")
+    c.close()
+PY
+echo "$!" >> "${FAKE_PIDS_FILE}"
+for (( i=0; i<50; i++ )); do [[ -s "${PPF}" ]] && break; sleep 0.1; done
+PPORT="$(cat "${PPF}")"
+U="$(fake_start "${FIX}/answers_good.json" --model-id /m/fast/Llama-3.1-8B-Instruct-Q4_K_M.gguf)"
+assert_eq 0 "$(run_rc env http_proxy="http://127.0.0.1:${PPORT}" HTTP_PROXY="http://127.0.0.1:${PPORT}" no_proxy= NO_PROXY= LLMCTL_VALIDATE_API_KEY="${TOKEN}" python3 -I "${JUDGE}" run --suite "${CSUITE}" --endpoint "${U}")" "validation passes straight to the loopback endpoint with http_proxy set"
+assert_eq 0 "$(wc -c < "${PLOG}")" "the recording proxy received nothing (no prompts, no bearer token)"
+
 test_finish

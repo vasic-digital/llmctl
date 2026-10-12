@@ -287,7 +287,7 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
         return None
 
 
-_OPENER = urllib.request.build_opener(_NoRedirect)
+_OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}), _NoRedirect)   # no env proxies: prompts + token go direct
 _warned_hosts = set()
 
 

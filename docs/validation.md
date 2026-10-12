@@ -130,7 +130,8 @@ only the profiles it started or restarted (`validate_auto`), not every running s
   that call started is stopped (unless `--keep`); exit status 130/143/129.
 * `LLMCTL_VALIDATE_API_KEY` (bearer token for a protected llama-server) is sent only to loopback hosts (`localhost`, `127.0.0.0/8`, `::1`) or to hosts
   listed exactly in `LLMCTL_VALIDATE_API_KEY_HOSTS` (comma separated); any other `--host` URL gets no token (a note is printed). Redirects are never
-  followed.
+  followed and `http_proxy`/`HTTPS_PROXY` are ignored (the validation traffic - prompts and token - always goes
+  directly to the endpoint, never through a proxy).
 * A validation of an idle profile starts a real model server. Nothing in the tests does that; the tests use the fixture server only.
 
 ### Known gaps - hook points for the restart / pressure hardening branch (NOT implemented here)
