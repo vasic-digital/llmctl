@@ -317,7 +317,7 @@ for d in os.listdir("/proc"):
     except Exception:
         continue
     args = [a.decode("utf-8", "replace") for a in args if a]
-    if not any(os.path.basename(a) in ("llama-server", "onnx_server.py") for a in args[:3]):
+    if not any(os.path.basename(a) in ("llama-server", "onnx_server.py") for a in args):
         continue
     def inside(a, r):      # path-boundary match: /x/proj matches /x/proj and /x/proj/..., never /x/proj2
         r = r.rstrip("/")

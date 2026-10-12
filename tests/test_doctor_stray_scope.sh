@@ -61,4 +61,10 @@ if stray_fail "${out}"; then printf '  FAIL: (v) a process under proj2 was judge
 P4="$(free_port)"; "${TEST_TMP}/proj/llama-server" --port "${P4}" & PIDS+=("$!"); sleep 1
 out="$(LLMCTL_REGISTER_WAIT=0 LLMCTL_DOCTOR_PROC_ROOTS="${TEST_TMP}/proj" doc)"
 if stray_fail "${out}"; then echo "  ok: (v) control: a process under proj IS judged"; else printf '  FAIL: (v) control: a process under proj was not judged\n' >&2; TEST_FAILS=$((TEST_FAILS+1)); fi
+
+echo "== (vi) review L5: the engine name anywhere in argv counts (not only the first three words) =="
+kill "${PIDS[@]}" 2>/dev/null || true; PIDS=()
+P5="$(free_port)"; python3 -u -X dev -W ignore "${TEST_TMP}/llama-server" --port "${P5}" & PIDS+=("$!"); sleep 1
+out="$(LLMCTL_REGISTER_WAIT=0 doc)"
+if stray_fail "${out}"; then echo "  ok: (vi) 'python3 -u -X dev -W ignore .../llama-server' (engine at argv[5]) IS judged"; else printf '  FAIL: (vi) an engine whose name is beyond argv[:3] is invisible to the stray check\n' >&2; TEST_FAILS=$((TEST_FAILS+1)); fi
 test_finish
