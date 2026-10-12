@@ -113,7 +113,7 @@ PY
     [ -f "$FAKE/stop_leaves_port" ] && touch "$FAKE/serving"
     exit 0 ;;
   "stop "*) echo "stop OTHER: $*" >>"$FAKE/calls"; exit 0 ;;
-  "vision help") echo "llmctl vision validate [--profile vision|vision-pro] [--json] [--keep]"; exit 0 ;;
+  "vision help") if [ -f "$FAKE/help_nohost" ]; then echo "llmctl vision validate [--profile vision|vision-pro] [--json] [--keep]"; else echo "llmctl vision validate [--profile vision|vision-pro] [--host URL] [--json] [--keep]"; fi; exit 0 ;;
   "logs vision") echo "fake log line"; exit 0 ;;
   "version "*|"version") echo "llmctl fake-1.0"; exit 0 ;;
   "vision validate")
@@ -629,6 +629,16 @@ done
 E="$(mkenv)"; : >"$E/fake/unit_state"; run_main "$E"; check "empty unit state (systemctl printed nothing) -> not PASS" "$RC" "2"
 has "  reason names the unit state" "$E/out.txt" 'unit .* state'
 for st in inactive failed; do E="$(mkenv)"; echo "$st" >"$E/fake/unit_state"; run_main "$E"; check "NEG-CONTROL unit state '$st' passes" "$RC" "0"; done
+fi
+
+if want n5; then
+echo "== N5. installed llmctl must support 'vision validate --host' =="
+E="$(mkenv)"; touch "$E/fake/help_nohost"; run_main "$E"
+check "help without --host -> exit 2 (validate could restart the model)" "$RC" "2"
+has "  reason names --host" "$E/out.txt" '\-\-host'
+hasnt "  validate never launched" "$E/fake/calls" '^validate '
+has "  profile stopped" "$E/fake/calls" '^stop vision'
+E="$(mkenv)"; run_main "$E"; check "NEG-CONTROL help with --host proceeds" "$RC" "0"
 fi
 
 if want always; then

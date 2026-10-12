@@ -358,8 +358,8 @@ echo "unit_env=$(services_env_file) model=${LOADED_MODEL:-UNKNOWN} mmproj=${LOAD
 
 # ------------------------------------------------------------------ (d) known-answer probes
 HAVE_VV=0
-if bounded "$BOUND" "$EV/.vhelp" "$LLMCTL" vision help && grep -q 'vision validate' "$EV/.vhelp"; then HAVE_VV=1; fi
-[ "$HAVE_VV" = 1 ] || { RESULT=2; VERDICT_REASON="installed llmctl has no 'vision validate' (UNKNOWN: scratch harness not used live)"; exit 2; }
+if bounded "$BOUND" "$EV/.vhelp" "$LLMCTL" vision help && grep -q 'vision validate' "$EV/.vhelp" && grep -q -- '--host' "$EV/.vhelp"; then HAVE_VV=1; fi
+[ "$HAVE_VV" = 1 ] || { RESULT=2; VERDICT_REASON="installed llmctl has no 'vision validate --host' (without --host validate could restart the model); scratch harness not used live"; exit 2; }
 # Immediately before validate: the profile must be up (health answers). validate gets --host so it validates an
 # explicit endpoint and can NEVER start the profile itself (without --host, lib/validate.sh calls sched_start when
 # there is no .run file, which a stop removes - an un-niced, un-gated restart). --host also means the verdict is
