@@ -143,6 +143,10 @@ TasksMax=512
 Check the effective values: `systemctl --user show llmctl-decide-gateway.service -p MemoryHigh -p MemoryMax -p TasksMax`. Rationale and the host-level slice limits: [host-safety](host-safety.md).
 With `LLMCTL_TENANT_ID` set the tenant slice is also applied as a drop-in `tenant-slice.conf` (`_svc_ensure_tenant_slice_dropin`), which is the only drop-in llmctl writes itself.
 
+**Generated engine drop-ins (release 3.2.0).** `llmctl install` / `enable` also write `llmctl-<engine>@<profile>.service.d/05-memory.conf` (per-profile `MemoryHigh` 1.25x and `MemoryMax` 1.5x of the plan footprint). Drop-ins are applied in file-name order and the last assignment wins, so your own `10-hostsafety.conf` overrides it.
+`llmctl install` regenerates the templates and these files but never touches a drop-in you wrote. A running unit keeps its old limits until restarted. Restart behaviour of these units (no restart after `SIGKILL`, `SIGTERM` or exit 98; 3 starts per 900 s) and the exit-75 start gate: [host-safety](host-safety.md#llmctl-service-limits-and-gates-fixbounded-restart-and-pressure-gates), diagrams in [architecture](architecture.md#state-machine-restart-policy-of-an-engine-unit).
+Not exercised against a real systemd user manager under memory pressure.
+
 ## The CPU-adaptive timeout
 
 The Go gateway's per-request deadline is 8 s. When the launcher sees a **running or enabled** decision instance placed on CPU for a llama.cpp profile (`--n-gpu-layers 0`), and `LLMCTL_DECIDE_TIMEOUT` is **not** set anywhere

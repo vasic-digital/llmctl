@@ -1,7 +1,7 @@
 # FAQ
 
-**Revision:** 2
-**Last modified:** 2026-10-08T00:00:00Z
+**Revision:** 3
+**Last modified:** 2026-10-12T00:00:00Z
 
 This FAQ answers the Edge Cases enumerated in
 [`specs/001-llmctl-completion/spec.md`](../specs/001-llmctl-completion/spec.md#edge-cases),
@@ -576,3 +576,51 @@ Clients keep working as long as the CA is the same. The exercised procedure and 
 
 The llama.cpp pin is the submodule commit recorded by the release tag (`b10969` in 3.0.2, `b11379` in 3.1.0). Moving to another tag with `git checkout` plus `git submodule update --init --recursive`, then `llmctl build all` and `llmctl install`, moves the engine with it.
 Certificates, keys and models are untouched. See [runbooks](runbooks.md#upgrade-and-rollback).
+
+## Host safety and the model validation gate (release 3.2.0)
+
+None of the entries below has been exercised against a real model or a real systemd user manager under real memory pressure; they describe what the code and the hermetic tests do. No real-model validation run has been performed yet (live test result: PENDING).
+
+### Why was my `start` / `enable` / `switch` refused with exit 75?
+
+The memory-pressure start gate (`hw_pressure_gate`) refused it. Exit 75 is `EX_TEMPFAIL`: nothing was started (a `switch` is refused before anything is stopped, so what was running still runs). The gate refuses when memory PSI `full avg10 > 2`, `some avg10 > 10`, or
+`MemAvailable` is below the profile's footprint plus 4 GiB. Look at the numbers it printed, check `head -2 /proc/pressure/memory` and `grep MemAvailable /proc/meminfo`, free memory or wait, then retry once. A systemd-initiated restart is gated the same way (first `ExecStartPre` of the unit), so a refused restart
+leaves the unit failed and the start limit applies. Tuning exists (`LLMCTL_GATE_FULL_MAX`, `LLMCTL_GATE_SOME_MAX`, `LLMCTL_GATE_RESERVE_MB`) but raising it on a host that is really short of memory defeats the purpose. Details: [host-safety](host-safety.md#llmctl-service-limits-and-gates-fixbounded-restart-and-pressure-gates), [architecture](architecture.md#start-path-gate-admission-start-readiness-validation).
+
+### Why did my service not restart after it was killed?
+
+By design. The unit uses `Restart=on-failure` with `RestartPreventExitStatus=SIGKILL SIGTERM 98`: a process ended by `SIGKILL` (the kernel OOM killer, `systemd-oomd`, `kill -9`), a deliberate `SIGTERM` stop, or exit 98 (port already in use) is not restarted, because a restart would repeat the same outcome and, for a model load, repeat the memory spike.
+Other failures restart after a growing delay and stop for good after 3 starts in 900 s (`StartLimitBurst=3`, `StartLimitIntervalSec=900`). Find the cause (`journalctl --user -u 'llmctl-*@<profile>' -b`, `llmctl logs <profile>`), then `llmctl start <profile>`. State diagram: [architecture](architecture.md#state-machine-restart-policy-of-an-engine-unit).
+Whether this systemd applies `RestartPreventExitStatus` to a failing `ExecStartPre` is UNKNOWN; the start limit applies either way.
+
+### How do I validate a model?
+
+`llmctl validate <profile>` runs every known-answer suite the catalog names for the profile (`validation.suites`) against the running endpoint; if the profile is downloaded but idle it starts it (through the scheduler, so budget and pressure gate apply) and stops it again unless you pass `--keep`.
+`llmctl vision validate [--profile vision|vision-pro]` runs the golden-screenshot suite only, `llmctl validate-all` covers every running profile, and `llmctl require-validated <profile>` is the check a consumer script uses (exit 0 only for a fresh passing record).
+Exit codes: **0** every check passed, **1** a wrong result, **2** could not determine. A model that was never run through this is **not validated**, and `llmctl models verify <profile>` says so. Reference: [validation](validation.md#model-validation-gate). The gate is advisory: after `start` a failing model keeps serving unless you act on the result.
+
+### What does UNDETERMINED mean?
+
+Exit 2: the run could not decide, so it is neither a pass nor a fail and is never recorded as a pass. Typical causes: the profile is not downloaded or not served, the endpoint is down, the wrong model answers (identity check against `/v1/models`), the host is under pressure, the token budget ran out, the completion was cut off with reasoning content,
+the message content was empty, the reply had a malformed shape, or the overall deadline (`LLMCTL_VALIDATE_TIMEOUT`, default 180 s) passed. A truncated answer that would have passed is still UNDETERMINED (a cut-off pass is not trusted); a truncated answer that is already wrong is a FAIL.
+An UNDETERMINED run never replaces an earlier PASS record. Remedy: fix the cause, raise `request.max_tokens` for a reasoning model, retry. Never loosen a check.
+
+### How do I run the safe live test?
+
+Only with the operator's explicit go-ahead, on a quiet host, and once: `scripts/livetest/vision_live_test.sh` (profile `vision` only). It refuses with exit 3 when memory, PSI, VRAM or the running set is not quiet, starts a watchdog that stops the profile through `llmctl stop vision` when a limit is crossed (exit 4), runs `llmctl vision validate`, always stops the profile and checks the VRAM baseline.
+Evidence goes to `~/.cache/llmctl-livetest/<UTC timestamp>/`. Do not wrap it in retries and do not set `LT_HERMETIC` for a live run. Protocol and exit codes: [live-test-protocol](live-test-protocol.md). It has not been run live yet.
+
+### Where is the systemd-oomd 50% rule?
+
+It is not an llmctl setting. It is the distribution's vendor drop-in on `user@.service` (`ManagedOOMMemoryPressure=kill`, pressure limit 50% for 20 s), inspect it with `systemctl --user cat user@.service` or `systemctl cat user@.service`. On 2026-10-12 it made `systemd-oomd` kill 259 units in one event, among them `llmctl-llama@vision.service`.
+llmctl does not change it (that is an operator decision); it reduces its own exposure (per-profile caps, no swap, higher OOM score, `ManagedOOMPreference=avoid`, which may be ignored for an unprivileged unit) and, because `SIGKILL` is not restarted, a unit killed this way stays down. Details: [host-safety](host-safety.md#systemd-oomd-vendor-rule-userservice).
+
+### Why did `llmctl doctor` FAIL for two units?
+
+A profile has two enabled engine units (for example `llmctl-llama@decide-nli` and `llmctl-onnx@decide-nli`), or a live engine process of this install has no registry row. Two units for one profile fight over one port and one footprint. `enable` and `disable` now keep exactly one, and `doctor` reports the existing state.
+llmctl does not remove an existing duplicate for you: list them with `systemctl --user list-unit-files 'llmctl-*@<profile>*'`, run `llmctl disable <profile>` and `llmctl enable <profile>`, and re-run `llmctl doctor`. Do not delete unit files by hand while the unit runs.
+
+### Why does the unit have a memory cap I did not set, and how do I change it?
+
+`llmctl install` writes a drop-in `llmctl-<engine>@<profile>.service.d/05-memory.conf` with `MemoryHigh` = 1.25x and `MemoryMax` = 1.5x of the plan footprint, and the template sets `MemorySwapMax=0`. To override, write your own later drop-in (for example `10-hostsafety.conf`) with the values you want,
+run `systemctl --user daemon-reload` and restart the unit; later files win. A running unit keeps its old limits until it is restarted. See [persistent-services](persistent-services.md#drop-ins-resource-limits-and-overrides).

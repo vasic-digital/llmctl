@@ -1,4 +1,4 @@
-# llmctl 3.1.0 release checklist
+# llmctl v3.1.0 release checklist
 
 | Field | Value |
 |---|---|
@@ -109,9 +109,9 @@ Versions carried in the tree, measured 2026-10-09:
 | Place | Value | State |
 |---|---|---|
 | `VERSION` | `3.1.0` | final |
-| `bin/llmctl` `LLMCTL_VERSION`; `llmctl version` prints `llmctl 3.1.0` | `3.1.0` | final (asserted equal to `VERSION` by `tests/test_cli.sh` and `tests/test_version_consistency.sh`) |
+| `bin/llmctl` `LLMCTL_VERSION`; `llmctl version` prints `llmctl v3.1.0` | `3.1.0` | final (asserted equal to `VERSION` by `tests/test_cli.sh` and `tests/test_version_consistency.sh`) |
 | `README.md` banner `**Release 3.1.0**` | `3.1.0` | final |
-| `docs/architecture.md:234`, `faq.md:25`, `limitations.md:1`, `ports.md:3`, `user-manual.md:705,707` ("llmctl 3.1.0") | `3.1.0` | final (test fails on any other `llmctl X.Y.Z` in `docs/*.md`) |
+| `docs/architecture.md:234`, `faq.md:25`, `limitations.md:1`, `ports.md:3`, `user-manual.md:705,707` ("llmctl v3.1.0") | `3.1.0` | final (test fails on any other `llmctl X.Y.Z` in `docs/*.md`) |
 | `CHANGELOG.md` heading `## 3.1.0 (YYYY-MM-DD (set at tag time))` | `3.1.0` | **date placeholder** until step 2 |
 | `specs/009-jev-decision-models/contracts/openapi.yaml:4` `info.version` | `3.1.0-draft` | **DRAFT** (not flipped; the test accepts either) |
 | `docs/calibration-tool-fields.md:3,44` ("contract version `3.1.0-draft`", "is versioned `3.1.0-draft`") | `3.1.0-draft` | **DRAFT**, follows the contract |
@@ -165,7 +165,7 @@ for r in codeberg gitflic github gitlab gitverse; do
   m="$(git ls-remote "$r" refs/heads/main | cut -f1)"
   if [ -n "$m" ] && git merge-base --is-ancestor "$m" HEAD; then echo "$r ff-ok"; else echo "$r NOT-FF-OR-UNREADABLE ($m)"; fi
 done                                                 # every line must say ff-ok; otherwise STOP and merge (below)
-git tag -a v3.1.0 -m "llmctl 3.1.0" HEAD             # ANNOTATED, on the exact release commit
+git tag -a v3.1.0 -m "llmctl v3.1.0" HEAD             # ANNOTATED, on the exact release commit
 git cat-file -t refs/tags/v3.1.0                     # expect: tag
 git rev-parse 'v3.1.0^{commit}'                      # expect: the HEAD printed above
 ```

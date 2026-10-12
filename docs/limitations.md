@@ -89,6 +89,16 @@ These run the engine's own `/v1/systemone` endpoint and are served by the gatewa
 * `decide-julia` does not reproduce its model card's 73% on the agent-authored set (a different quantisation and a different set: the two are not comparable); no claim is made either way beyond the measured intervals.
 * `LD_LIBRARY_PATH` shadowing of the engine's libraries is fixed for services llmctl starts (see below).
 
+## Host safety and model validation (release 3.2.0)
+
+* **No real-model validation run has been performed.** Every claim about `llmctl validate`, `vision validate`, `validate-all` and the suites is proven against a fixture OpenAI-compatible server (an answer table, not a model). Whether a real model passes a suite is UNKNOWN. Live test result: PENDING. A model that was never validated is **not validated**, whatever the catalog says.
+* **The validation gate is advisory.** After `start`, `switch` or `auto` a wrong answer (exit 1) leaves the service running; only `require-validated` refuses. Units started by systemd (boot, `enable`, `restart`) never run the hook. UNDETERMINED (exit 2) is neither a pass nor a fail. The `number_equals` rule is deliberately strict and can accept `41 because 17+25=42` and reject `42 = 17+25` ([validation](validation.md#model-validation-gate)).
+* **Restart policy.** A service ended by `SIGKILL` (including an oom-kill by the kernel or `systemd-oomd`), `SIGTERM` or exit 98 is **not** restarted; other failures stop after 3 starts in 900 s. This is by design and means an OOM-killed model stays down until an operator starts it. UNKNOWN: whether `RestartPreventExitStatus` applies to a failing `ExecStartPre` on this systemd.
+* **Pressure gate.** It reads host-wide memory PSI and `MemAvailable` at one instant (exit 75 when refused); it does not look at IO pressure and cannot see what another process allocates afterwards. `systemd-oomd` (its vendor rule on `user@.service`: 50% for 20 s) can still kill a whole cgroup, llmctl services included; llmctl does not change it ([host-safety](host-safety.md#systemd-oomd-vendor-rule-userservice)). Whether `ManagedOOMPreference=avoid` is honoured for an unprivileged unit is UNKNOWN.
+* **Caps** (`05-memory.conf`) are sized from the planner's footprint; for the many profiles whose `overhead_mb` is unmeasured that footprint is a floor, so a cap can be tighter than real use and kill a model that the planner thought would fit. Measured `overhead_mb` values are listed in [hardware-tiers](hardware-tiers.md).
+* **The guarded live test** (`scripts/livetest/vision_live_test.sh`, [live-test-protocol](live-test-protocol.md)) has never been run live; it does not parse the JSON shape of `llmctl vision validate --json` beyond the exit code and a non-empty capture, and covers the `vision` profile only.
+* **Duplicate engine units** that exist before the upgrade (the known case is `decide-nli`) are reported by `llmctl doctor` but not removed; that is an operator action ([CHANGELOG](../CHANGELOG.md), migration notes).
+
 ## Security boundaries (also in `docs/tls-and-keys.md`)
 
 * One access key, one trust level: no per-user keys, quotas or audit identity. Rotation is per installation. A key set in the gateway's *own* environment is not changed by rotating the key file.

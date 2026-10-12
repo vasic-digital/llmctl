@@ -70,13 +70,20 @@ Forgot `--recursive`? `git submodule update --init` or just run
 > Building the decision binary needs Go >= 1.25; everything else still needs only bash, python3 and curl.
 > Manual QA was waived by the operator on 2026-10-08 (the constitution gate is operator-waived, not satisfied); see [`docs/validation.md`](docs/validation.md).
 
+> **3.2.0 (host safety and model validation), status stated plainly.** Services now run under per-profile memory caps with no swap, a bounded restart policy
+> (a `SIGKILL`/oom-kill is **not** restarted automatically) and a memory-pressure start gate (`start`, `restart`, `enable`, `switch` can exit 75). A deterministic
+> model validation gate was added (`llmctl validate`, `vision validate`, `validate-all`, `require-validated`). **No real-model validation run has been performed yet**;
+> the gate is proven against a fixture server only, and the restart/cap/gate behaviour against hermetic tests, not a real systemd under real pressure. Live test result: PENDING.
+> Details and upgrade steps: [`CHANGELOG.md`](CHANGELOG.md); boundaries: [`docs/limitations.md`](docs/limitations.md); gates and limits: [`docs/host-safety.md`](docs/host-safety.md).
+
 ### Supported platforms
 
-| Platform | Status in 3.1.0 |
+| Platform | Status in 3.2.0 |
 |---|---|
 | Linux (systemd `--user`) | **Live-verified**: the development host, plus a second Linux machine (ALT Linux, CPU only) for portability runs |
 | macOS (launchd) | Shipped, **verified statically only** (code read and fixture-tested; never run on a Mac) |
 | Windows | **Unsupported** (no code path) |
+| Host-safety limits, start gate, restart policy, validation gate (all platforms) | **Hermetic tests only** (fixture PSI and meminfo, fixture OpenAI server, `LLMCTL_DRY_RUN=1`); not run against a real model or a real systemd under memory pressure |
 
 What the verification did and did not cover: [`docs/limitations.md`](docs/limitations.md).
 
@@ -90,7 +97,9 @@ What the verification did and did not cover: [`docs/limitations.md`](docs/limita
 | `llmctl plan [--json]` | which profiles fit, launch flags, co-residency groups |
 | `llmctl models list` | catalog overview (port, engine, size, min-tier) |
 | `llmctl models download <p>` | resumable download + sha256 verify + smoke test |
-| `llmctl models verify <p>` | re-verify checksums of a downloaded profile |
+| `llmctl models verify <p> [--live]` | re-verify checksums of a downloaded profile, then the validation gate; a profile with no suite prints **NOT validated** |
+| `llmctl validate <p>` / `vision validate` / `validate-all` | deterministic known-answer suites against a served model (exit 0 pass, 1 wrong answer, 2 undetermined); `docs/validation.md` |
+| `llmctl require-validated <p>` | exit 0 only for a fresh passing validation record (the check for consumer scripts) |
 | `llmctl build <llama\|colibri\|onnx\|decide\|all>` | build engines (a target is required: a bare `llmctl build` prints usage; backend auto-detected; `onnx` creates the hash-locked private venv, `decide` builds the Go decision binary, `all` = all four) |
 | `llmctl start <p> [more...]` | start profiles iff the combined footprint fits |
 | `llmctl stop <p\|all>` | stop services |
@@ -163,14 +172,25 @@ benchmarks) is `docs/decision-models.md`.
   and the download is NOT reported as fully verified.
 * **Budget refusals**: the scheduler never overcommits; it refuses with exact
   numbers and a suggested alternative.
-* **OS-level protection**: systemd units carry `MemoryHigh`/`MemoryMax`
-  computed from probed RAM, `Restart=always`, and a bounded restart budget
-  (`StartLimitBurst=5` within `StartLimitIntervalSec=60`) so a permanently
-  broken model fails visibly instead of crash-looping forever — `llmctl
-  status` reports it as `failed (crash-loop)` with its last log line;
-  launchd agents use `KeepAlive` + a widened `ThrottleInterval=60` (launchd
-  has no native give-up-after-N-restarts primitive, so this bounds the
-  restart *rate*, not the total attempts).
+* **OS-level protection**: systemd units carry a per-profile `MemoryHigh`/`MemoryMax`
+  (1.25x / 1.5x of the plan footprint, from the `05-memory.conf` drop-in; your own
+  later drop-in wins), `MemorySwapMax=0`, lower `Nice`/IO/CPU weight and a higher OOM
+  score, a bounded stop (`TimeoutStopSec=20`) and a bounded restart policy
+  (`Restart=on-failure`, 3 starts per 900 s) that does **not** restart after `SIGKILL`
+  (oom-kill), `SIGTERM` or "port already in use" (exit 98). A permanently broken model
+  fails visibly instead of crash-looping — `llmctl status` reports it as
+  `failed (crash-loop)` with its last log line. launchd agents use `KeepAlive` + a
+  widened `ThrottleInterval=60` (launchd has no native give-up-after-N-restarts
+  primitive, so this bounds the restart *rate*, not the total attempts; the Linux
+  caps and the pressure gate's unit hook are systemd-only).
+* **Memory-pressure start gate**: `start`, `restart`, `enable` and `switch` are refused
+  with exit **75** when memory PSI or `MemAvailable` says the host cannot take the
+  model; `switch` refuses before it stops anything. `llmctl doctor` FAILs on two
+  enabled engine units for one profile. See [`docs/host-safety.md`](docs/host-safety.md).
+* **Model validation gate**: `llmctl validate <profile>` runs deterministic known-answer
+  suites judged by plain code; UNDETERMINED (exit 2) is never a pass; the API token goes
+  only to loopback hosts and no proxy is used. No real-model run has been performed yet
+  ([`docs/validation.md`](docs/validation.md)).
 * **LAN-accessible by default, with an explicit trade-off**: every engine
   server binds to `0.0.0.0` by default, so any device on the local network
   can reach it (not just the host itself). **This has no built-in
@@ -259,6 +279,8 @@ fastest path to a running model.
 | [`docs/cluster-architecture.md`](docs/cluster-architecture.md) | `llmctld`'s Raft/mTLS/JWT/WAL design, with an explicit ✅ implemented / 📋 open boundary per diagram |
 | [`docs/api-reference.md`](docs/api-reference.md) | The real llama.cpp/colibri HTTP API every profile serves, plus `llmctld`'s implemented HTTP/3 control-plane API |
 | [`docs/release-process.md`](docs/release-process.md) | The full GitHub+GitLab release procedure: dry-run, submodule preflight, archive build, idempotent per-forge retry |
+| [`docs/release-3.2.0-checklist.md`](docs/release-3.2.0-checklist.md) | The 3.2.0 release checklist: gates, merge order, version bump, tag and publication steps |
+| [`docs/scripts/bump_version.md`](docs/scripts/bump_version.md) | `scripts/release/bump_version.sh`: what it rewrites for a version bump and what stays manual |
 | [`docs/ports.md`](docs/ports.md) | Every port llmctl uses (generated from the catalog), the `LLMCTL_PORT_<PROFILE>` override named in the port-conflict message, fixed versus dynamic assignment, collisions seen on a real host |
 | [`docs/hardware-tiers.md`](docs/hardware-tiers.md) | The `below-minimum`/`baseline`/`workstation`/`datacenter` tier classification rules, plus decision-profile tiers and multi-instance capacity semantics |
 | [`docs/decision-models.md`](docs/decision-models.md) | Decision models: concept, profile table (source-labeled benchmarks), the prompt/logprob mechanism, calibration, sha256 pinning, honest limitations |
@@ -286,6 +308,7 @@ fastest path to a running model.
 | [`docs/qa/decision-models-validation/README.md`](docs/qa/decision-models-validation/README.md) | Captured evidence for the decision-models feature's validation runs (iteration 1: 34 PASS / 7 pre-existing environment FAIL; iteration 2: 36 PASS / 7 environment FAIL) |
 | [`docs/validation.md`](docs/validation.md) | The project's V&V (validation & verification) contract |
 | [`docs/host-safety.md`](docs/host-safety.md) | Host-hang safeguards after the 2026-10-08 incident: cgroup limits, `bounded-run`, the memory-pressure guard, and the root-only steps |
+| [`docs/live-test-protocol.md`](docs/live-test-protocol.md) | The guarded live test of the `vision` profile: pre-gate, watchdog, exit codes 0-4, evidence directory (never run live yet) |
 | [`docs/validation_and_verification.md`](docs/validation_and_verification.md) | Why fully-deterministic V&V matters for CLI-agent-driven development |
 | [`docs/CONTINUATION.md`](docs/CONTINUATION.md) | Live session-resumption state: current phase, next action, per-phase findings (Constitution §12.10) |
 | [`docs/commit-fully-integration.md`](docs/commit-fully-integration.md) | The `commit-fully` tooling integration |

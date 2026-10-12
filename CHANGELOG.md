@@ -23,6 +23,84 @@ where `scripts/release/preflight_submodules.sh` reports a fully clean
 35-file test suite is green. Both `v3.0.0` and `v3.0.1` tags remain in the
 repository as an honest record of that process.
 
+## 3.2.0 (2026-10-12)
+
+A host-safety and model-validation release. It bounds what an llmctl service may do to the machine (memory caps, no swap, bounded stop, bounded restart, a memory-pressure start gate), adds a
+deterministic **model validation gate**, and adds a guarded live-test driver with a watchdog. Source branches and the commits this section was written from (re-read when the tag is cut; the
+branches were still moving): `fix/bounded-restart-and-pressure-gates` (`84c23ca`), `fix/validation-gate-complete` (`5286032`), `feat/live-test-watchdog` (`a05cb76`), all on top of `8097ecc`.
+The wording is final only when the tag is cut.
+
+**Release status (read first).**
+
+- **No real-model validation run has been performed.** Every statement about `llmctl validate` and the suites is proven against a fixture server (`tests/fixtures/validation/fake_openai.py`, an answer table, not a model). Whether a real model passes any suite is UNKNOWN until a live run is recorded.
+- live test result: PENDING (placeholder line: the release lead replaces it with the captured verdict, or leaves it PENDING).
+- **The restart, memory-cap and pressure-gate behaviour was tested hermetically** (unit text assertions, fixture PSI and meminfo files, `LLMCTL_DRY_RUN=1`). It was not exercised against a real systemd user manager under real memory pressure. UNKNOWN: whether this systemd applies `RestartPreventExitStatus` to a failing `ExecStartPre`.
+- **The standing 3.1.0 caveats are unchanged:** manual QA was operator-waived for 3.1.0 and is not satisfied; macOS is verified statically only; Windows is unsupported; accuracy figures are provisional (agent-authored labels). See [`docs/limitations.md`](docs/limitations.md).
+
+### Added
+
+- **Model validation gate** (`lib/validate.sh`, `lib/validate_judge.py`, `validation/suites/`; reference: [`docs/validation.md`](docs/validation.md)). `llmctl validate <profile> [--host URL] [--json] [--keep]`, `llmctl vision validate [--profile vision|vision-pro]`, `llmctl validate-all`, `llmctl require-validated <profile>` and `llmctl models verify <profile> [--live]`. Deterministic known-answer suites (`chat-v1`, `coder-v1`, `vision-golden-v1`, `embedding-v1`) judged by plain code (never an LLM); the catalog names each profile's suites in `validation.suites` (a profile with none carries a `validation.reason` and is never reported validated). Exit codes: **0** every check passed, **1** any wrong result, **2** could not determine (UNDETERMINED is never PASS; 1 outranks 2). State lives in `$LLMCTL_STATE_DIR/validation/<profile>.json`; `require-validated` accepts a record only while the model hash, file size and mtime, engine tag, launch fingerprint and suite hashes still match and the record is younger than `LLMCTL_VALIDATION_MAX_AGE` (default 604800 s). `start`, `switch` and `auto` run the suites after the service is ready (`LLMCTL_VALIDATE_ON_START=0` disables the hook loudly). The hook is advisory: a wrong answer leaves the service running (see Known limitations).
+- **Validation environment variables:** `LLMCTL_VALIDATE_ON_START`, `LLMCTL_VALIDATION_MAX_AGE`, `LLMCTL_VALIDATE_TIMEOUT` (overall wall-clock deadline per request, default 180 s), `LLMCTL_VALIDATE_API_KEY` and `LLMCTL_VALIDATE_API_KEY_HOSTS` (see Security).
+- **The `number_equals` rule** (decided 2026-10-12): the number after the last `=` when the answer restates an equation, otherwise the first number; a thousands separator or leading dot is not a number. Its documented trade-offs (it accepts `41 because 17+25=42`, rejects `42 = 17+25`) are deliberate and stated in `docs/validation.md`.
+- **Memory-pressure start gate** (`hw_pressure_gate`, `lib/hardware.sh`): `llmctl start`, `restart` (as the unit's first `ExecStartPre`, `svc_hook.sh gate`), `enable`, `switch` (before anything is stopped) and the validate path are refused with **exit 75** (EX_TEMPFAIL) when memory PSI `full avg10 > 2`, `some avg10 > 10`, or `MemAvailable < footprint + 4 GiB`. Tuning: `LLMCTL_GATE_FULL_MAX`, `LLMCTL_GATE_SOME_MAX`, `LLMCTL_GATE_RESERVE_MB`. Test seams: `LLMCTL_PSI_FILE`, `LLMCTL_MEMINFO_FILE`.
+- **Per-profile service limits:** a drop-in `llmctl-<engine>@<profile>.service.d/05-memory.conf` sets `MemoryHigh` = 1.25x and `MemoryMax` = 1.5x of the plan footprint (floor 1 GiB, always under 90% of RAM); the unit template adds `MemorySwapMax=0`, `Nice=10`, `IOWeight=50`, `CPUWeight=50`, `OOMScoreAdjust=500`, `TimeoutStopSec=20`, `TimeoutStartSec=300`, `KillMode=control-group`.
+- **Bounded restart policy:** `Restart=on-failure`, `RestartSec=5`, `RestartSteps=4`, `RestartMaxDelaySec=120`, `StartLimitBurst=3` per `StartLimitIntervalSec=900`, and `RestartPreventExitStatus=SIGKILL SIGTERM 98`.
+- **Port-in-use refusal:** the `prestart` hook refuses fast with exit **98** when the profile's port is already listening, never loads the model and never rotates the key under a live server.
+- **Guarded live-test driver** (`scripts/livetest/vision_live_test.sh`, `scripts/livetest/watchdog.sh`, hermetic suite `tests/test_livetest_watchdog.sh`; protocol: [`docs/live-test-protocol.md`](docs/live-test-protocol.md)): a pre-gate that refuses on a stressed host (exit 3), a watchdog that stops the profile through `llmctl stop vision` when a limit is crossed (exit 4), evidence under `~/.cache/llmctl-livetest/`. Exit codes 0 PASS, 1 FAIL, 2 undetermined, 3 refused, 4 aborted by the watchdog. It has not been run live.
+- **`llmctl doctor` checks** for the new service model: FAIL for a profile with two enabled engine units and for a live engine process of this install with no registry row; stale installed units (weaker restart bound than 3 starts / 900 s) are reported.
+- **Documentation:** Mermaid diagrams of the start path (pressure gate, admission, start, readiness, validation gate) and of the restart policy in [`docs/architecture.md`](docs/architecture.md); new FAQ entries; the systemd-oomd vendor-rule section in [`docs/host-safety.md`](docs/host-safety.md).
+
+### Changed
+
+- **BREAKING (by design): a service killed by `SIGKILL` (including an `oom-kill` by the kernel or by `systemd-oomd`), stopped by `SIGTERM`, or refused with exit 98 is no longer restarted automatically.** The 3.1.0 template used `Restart=always` with 5 starts per 60 s, a bound that a real model load (more than 60 s) could never trip. Other failures restart with a growing delay and stop after 3 starts in 900 s. Restart it yourself (`llmctl start <profile>`) after finding out why it was killed.
+- **BREAKING: `llmctl start`, `restart`, `enable` and `switch` can now exit 75** (refused: host under memory pressure or too little available memory). Scripts that treated any non-zero exit as a hard failure should retry later, not loop. `switch` is refused before anything is stopped, so the running set is untouched.
+- **BREAKING: `llmctl doctor` now FAILs on a duplicate enabled engine unit for one profile** (for example `llmctl-llama@decide-nli` plus `llmctl-onnx@decide-nli`). A host in this state now fails `llmctl doctor` until the duplicate is removed (whether 3.1.0 doctor flagged it is UNKNOWN) (Migration notes). `enable` and `disable` now keep exactly one enabled engine unit per profile.
+- Unit memory limits: `MemoryHigh=MemoryMax=total RAM` (which contained nothing) is replaced by per-profile caps plus a template backstop (70% / 85% of RAM; gateway 20% / 25%, capped at 3 / 4 GiB).
+- `llmctl-decide registry` rows are dropped by `unregister` only when the row's pid is dead or is the stopping unit's own pid; `unregister` is bounded (3 s plus 1 s) and the registration waiter is killed on stop.
+- `llmctl models verify <profile>` states plainly when a profile names no validation suite (**NOT validated**, exit 0 for the checksum verdict; with `--live` exit 2).
+- Unchanged and still documented here because the release test reads them: the `llmctl-decide` gateway and its `decide scale`, `decide calibrate`, `probe-order` and `completions` commands, per-type maturity labels, `llmctl status --json`, the planner's `overhead_mb` term, the `LLMCTL_CTX_<PROFILE>` overrides and the scheduler's eviction rules behave as in 3.1.0 except that every start they perform now passes the pressure gate.
+- New environment variables, all optional: `LLMCTL_GATE_FULL_MAX`, `LLMCTL_GATE_SOME_MAX`, `LLMCTL_GATE_RESERVE_MB`, `LLMCTL_PSI_FILE`, `LLMCTL_MEMINFO_FILE` (test seams), `LLMCTL_VALIDATE_ON_START`, `LLMCTL_VALIDATION_MAX_AGE`, `LLMCTL_VALIDATE_TIMEOUT`, `LLMCTL_VALIDATE_API_KEY`, `LLMCTL_VALIDATE_API_KEY_HOSTS`.
+
+### Fixed
+
+- **Stop path exceeded 90 s under pressure** (observed): `TimeoutStopSec=20`, `KillMode=control-group`, bounded `unregister` (`6d717fc`).
+- **Restart loop that could never trip its own limit** (`16e723c`), **unbounded memory limits** (`8a28066`), **a second unit's `ExecStopPost` dropping a live service's registry row** (`2934148`), **two enabled engine units for one profile** (`0d33bf0`, `73ec5cb`), **prestart rotating the key and loading a model when the port was already served** (`b2423d1`).
+- **Validation gate defects found by independent review** (`b80b77c` through `5286032`): scaled instance keys (`profile.N`) aborting `validate_after_start`; `auto` validating every running profile instead of the ones it started; budget exhaustion reported as FAIL instead of UNDETERMINED; a future or unusable record epoch accepted as fresh; an UNDETERMINED run overwriting a prior PASS; an interrupt leaking the temp key file and the judge child; a thousands separator read as a decimal; a truncated WRONG answer excused as UNDETERMINED; malformed completion shapes ending in a traceback; `require-validated` leaking a temp file; a server that trickles bytes stalling the run (overall deadline).
+
+### Security
+
+- **Eval-injection fix (`320ebac`):** profile names were interpolated into JSON expressions that were evaluated; they are now allow-listed with `valid_id` and passed as data (`argv[i]`) to a restricted evaluator.
+- **Validation traffic never goes through a proxy** (`000b4a5`): `http_proxy`/`HTTPS_PROXY` are ignored and redirects are never followed, so prompts and the bearer token go directly to the endpoint.
+- **`LLMCTL_VALIDATE_API_KEY` is sent only to loopback hosts** (`localhost`, `127.0.0.0/8`, `::1`) or to hosts listed exactly in `LLMCTL_VALIDATE_API_KEY_HOSTS`; the host is judged the way the HTTP client connects, and a URL with a backslash or control characters is refused (`0e353b7`, `55481eb`). Any other `--host` gets no token and a printed note.
+- Hardening, not a new guarantee: services now run with `MemorySwapMax=0`, lower CPU and IO weight and a higher OOM score, so a runaway model dies alone and early. `systemd-oomd` on this class of host still acts on whole cgroups (see `docs/host-safety.md`).
+
+### Removed
+
+- The 3.1.0 unit template's `Restart=always` with its 5-starts-per-60-s limit, and the `MemoryHigh=MemoryMax=total RAM` unit limits. No command, flag or environment variable of 3.1.0 is removed.
+
+### Migration notes
+
+- **`llmctl install` regenerates the unit templates but not the drop-ins that you or hostsafety wrote.** After upgrading run `llmctl install`; installed units with the old restart bound are reported stale by `llmctl doctor` and `start`/`enable` refuse them until regenerated.
+- **Restarts are needed for the caps to apply to running units.** Regenerated limits take effect on the next start: `llmctl restart <profile>` (it passes the pressure gate) or stop and start.
+- **Per-profile caps come from `05-memory.conf`; your own `10-hostsafety.conf` (for example the gateway unit's `llmctl-decide-gateway.service.d/10-hostsafety.conf`) is read later and wins.** Drop-ins apply in file-name order, the last assignment wins. Remove or raise a cap by writing your own later drop-in, never by editing the generated file.
+- **Duplicate enabled engine units are an operator action.** The known case is `decide-nli` enabled under both the `llama` and `onnx` engine templates. 3.2.0 `doctor` FAILs on it and prevents new ones, but does not remove an existing one. Inspect with `systemctl --user list-unit-files 'llmctl-*@decide-nli*'`, then `llmctl disable decide-nli` and `llmctl enable decide-nli` so only the right engine unit remains.
+- **Expect exit 75 under memory pressure** from `start`, `restart`, `enable` and `switch`; retry once `/proc/pressure/memory` is quiet. Do not lower `LLMCTL_GATE_*` to get past it on a host that is actually stressed.
+- **Do not rely on automatic recovery after an OOM kill.** Monitor for a unit in the `failed` state (`llmctl status`, `llmctl doctor`) and restart deliberately.
+- **Run the validation suites yourself** (`llmctl validate <profile>`) before trusting a profile; no model has been validated on your behalf.
+- `systemd-oomd` is not changed by llmctl. Its vendor rule on `user@.service` (kill at 50% pressure for 20 s) can still kill a whole cgroup; see `docs/host-safety.md`.
+
+### Known limitations
+
+Reconciled with [`docs/limitations.md`](docs/limitations.md), which is the full list and the authority.
+
+- **No real-model validation run exists.** The gate is proven against a fixture server only. Live test result: PENDING.
+- **The validation gate is advisory.** A wrong answer after `start`/`switch`/`auto` (exit 1) leaves the service running; only `require-validated` refuses. Units started by systemd (boot, `enable`, `restart`) never pass through the hook. The vision suite has 13 probes without a canned PASS and/or FAIL control (each is still shown to discriminate by `tests/test_validation_suites.sh`).
+- **The pressure gate reads host-wide memory PSI and `MemAvailable`** at one instant; it cannot know what another process will allocate a second later, and it does not look at IO pressure.
+- **Restart policy: UNKNOWN** whether this systemd applies `RestartPreventExitStatus` to a failing `ExecStartPre`; the `StartLimit` bound applies either way. `ManagedOOMPreference=avoid` is asked for, and UNKNOWN whether the user manager honours it for an unprivileged unit.
+- **`systemd-oomd` can still kill llmctl services** (259 units in one measured event on 2026-10-12, including `llmctl-llama@vision.service`); the operator owns that configuration.
+- **The live-test driver has never run live**, and its `llmctl vision validate --json` output is not parsed beyond exit code and non-empty capture.
+- Everything in the 3.1.0 limitations list still applies (decision answers are not a safety guardrail, confidence is not calibrated, macOS statically verified only, Windows unsupported, manual QA operator-waived for 3.1.0).
+
 ## 3.1.0 (2026-10-10)
 
 The local **typed-decision** feature (Jev-class `noul` / `choice` / `score` answers from small
