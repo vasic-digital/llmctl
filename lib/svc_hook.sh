@@ -240,14 +240,20 @@ _hk_validate_after_ready() {
   [[ "${kind}" == "llm" && -n "${prof}" && "${prof}" == "${inst}" ]] || return 0
   llmctl="${LLMCTL_ROOT}/bin/llmctl"
   [[ -x "${llmctl}" ]] || { _hk_log "${inst}: ${llmctl} not executable - NOT validated"; return 0; }
-  if "${llmctl}" require-validated "${prof}" >/dev/null 2>&1; then
-    _hk_log "${inst}: validation: a fresh passing record exists - not re-run"
-    return 0
-  fi
-  _hk_log "${inst}: validation: running the validation suite(s) against the started unit (port ${port})"
-  # LLMCTL_VALIDATE_FAIL_RC: the explicit-verdict code (64). A bare exit 1 (llmctl crashed / die() / set -e) is NOT a wrong
-  # answer and never stops the unit.
-  LLMCTL_VALIDATE_FAIL_RC=64 LLMCTL_VALIDATE_ATTACH_PORT="${port}" "${llmctl}" validate "${prof}" >> "${LLMCTL_LOG_DIR}/svc_hook.log" 2>&1 || rc=$?
+  # per-profile validation lock (the same file validate_after_start of lib/validate.sh uses): `enable`/`restart` are also
+  # validated by the CLI hook; the second validator waits, then finds the first one's fresh record. Not the scheduler lock.
+  mkdir -p "${LLMCTL_RUNTIME_DIR}" 2>/dev/null || true
+  _hk_log "${inst}: validation: waiting for / running the validation suite(s) against the started unit (port ${port})"
+  (
+    flock -w "${LLMCTL_VALIDATE_LOCK_WAIT:-900}" 9 || exit 98
+    if "${llmctl}" require-validated "${prof}" >/dev/null 2>&1; then exit 97; fi
+    # LLMCTL_VALIDATE_FAIL_RC: the explicit-verdict code (64). A bare exit 1 (llmctl crashed / die() / set -e) is NOT a wrong
+    # answer and never stops the unit.
+    LLMCTL_VALIDATE_FAIL_RC=64 LLMCTL_VALIDATE_ATTACH_PROFILE="${prof}" LLMCTL_VALIDATE_ATTACH_PORT="${port}" \
+      "${llmctl}" validate "${prof}" >> "${LLMCTL_LOG_DIR}/svc_hook.log" 2>&1
+  ) 9>"${LLMCTL_RUNTIME_DIR}/.validate-${prof}.lock" || rc=$?
+  if [[ "${rc}" == "97" ]]; then _hk_log "${inst}: validation: a fresh passing record exists - not re-run"; return 0; fi
+  if [[ "${rc}" == "98" ]]; then _hk_log "${inst}: validation UNDETERMINED: another validator held the lock too long - nothing stopped"; return 0; fi
   case "${rc}" in
     0) _hk_log "${inst}: validation PASSED"; return 0 ;;
     64) _hk_log "${inst}: validation FAILED (wrong answers) - stopping the unit through the normal stop path" ;;

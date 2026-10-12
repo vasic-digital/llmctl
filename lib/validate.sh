@@ -390,6 +390,47 @@ validate_all() {
   return "${rc}"
 }
 
+# _val_after_start_one <profile> - one profile of validate_after_start (called under the per-profile validation lock):
+# freshness check, validation, and the verdict policy (FAIL -> stop; UNDETERMINED -> keep, or stop in strict mode).
+# Returns 1 when the profile failed validation / was stopped, else 0.
+_val_after_start_one() {
+  local p="$1" rc=0 one key_file base
+  [[ -f "${LLMCTL_RUNTIME_DIR}/${p}.run" ]] || return 0
+  if base="$(_val_instance_base "${p}")"; then
+    info "validation: '${p}' is a scaled instance of '${base}' (no catalog entry of its own) - skipped; its validation state is that of '${base}' (llmctl require-validated ${base})"
+    return 0
+  fi
+  key_file="$(mktemp)"
+  if ! _val_key "${p}" "${key_file}"; then
+    rm -f "${key_file}"
+    warn "validation: '${p}' has no computable validation key (not a catalog profile?) - UNDETERMINED; llmctl require-validated ${p} refuses"
+    return 0
+  fi
+  if _val_judge check --state "$(_val_state_file "${p}")" --key "${key_file}" --max-age "${LLMCTL_VALIDATION_MAX_AGE}" >/dev/null 2>&1; then
+    info "validation: '${p}' already has a fresh passing record for this model, engine, launch and suite"
+    rm -f "${key_file}"
+    return 0
+  fi
+  rm -f "${key_file}"
+  log "validation: running the deterministic validation suite(s) of '${p}' before it is used"
+  one=0
+  validate_profile "${p}" || one=$?
+  case "${one}" in
+    0) info "validation: '${p}' PASSED" ;;
+    1) err "validation: '${p}' gave WRONG answers (validation FAILED) - stopping it through the normal stop path; it is NOT left running (evidence: ${LLMCTL_VERIFY_DIR}/validate-${p}.log)"
+       _val_stop_after_verdict "${p}"
+       rc=1 ;;
+    *) if [[ "${LLMCTL_VALIDATE_STRICT:-0}" == "1" ]]; then
+         err "validation: '${p}' could not be validated (UNDETERMINED) and LLMCTL_VALIDATE_STRICT=1 - stopping it (no validation suite / no answer / refused is not good enough in strict mode)"
+         _val_stop_after_verdict "${p}"
+         rc=1
+       else
+         warn "validation: '${p}' could not be validated (UNDETERMINED) - it keeps running, NOT validated; llmctl require-validated ${p} refuses until it passes (LLMCTL_VALIDATE_STRICT=1 would stop it)"
+       fi ;;
+  esac
+  return "${rc}"
+}
+
 # _val_stop_after_verdict <profile> - the stop half of the gate: sched_stop (-> svc_stop, reservation removed).
 # Callers run OUTSIDE the scheduler lock (sched_stop takes it itself).
 _val_stop_after_verdict() {
@@ -411,41 +452,22 @@ validate_after_start() {
     warn "validation on start disabled (LLMCTL_VALIDATE_ON_START=0): $* NOT validated - 'llmctl require-validated' will refuse until 'llmctl validate' passes"
     return 0
   fi
-  local p rc=0 one key_file base
+  local p rc=0 one lockfd lf
   for p in "$@"; do
     [[ -f "${LLMCTL_RUNTIME_DIR}/${p}.run" ]] || continue
-    if base="$(_val_instance_base "${p}")"; then
-      info "validation: '${p}' is a scaled instance of '${base}' (no catalog entry of its own) - skipped; its validation state is that of '${base}' (llmctl require-validated ${base})"
+    # per-profile validation lock (NOT the scheduler lock): `enable`/`restart` are also validated by the systemd waiter
+    # (lib/svc_hook.sh) - the second validator waits for the first and then finds its fresh record (docs/validation.md)
+    lf="${LLMCTL_RUNTIME_DIR}/.validate-${p}.lock"
+    exec {lockfd}>"${lf}"
+    if ! flock -w "${LLMCTL_VALIDATE_LOCK_WAIT:-900}" "${lockfd}"; then
+      exec {lockfd}>&-
+      warn "validation: '${p}' is being validated by another process and did not finish within ${LLMCTL_VALIDATE_LOCK_WAIT:-900}s - UNDETERMINED here (nothing stopped)"
       continue
     fi
-    key_file="$(mktemp)"
-    if ! _val_key "${p}" "${key_file}"; then
-      rm -f "${key_file}"
-      warn "validation: '${p}' has no computable validation key (not a catalog profile?) - UNDETERMINED; llmctl require-validated ${p} refuses"
-      continue
-    fi
-    if _val_judge check --state "$(_val_state_file "${p}")" --key "${key_file}" --max-age "${LLMCTL_VALIDATION_MAX_AGE}" >/dev/null 2>&1; then
-      info "validation: '${p}' already has a fresh passing record for this model, engine, launch and suite"
-      rm -f "${key_file}"
-      continue
-    fi
-    rm -f "${key_file}"
-    log "validation: running the deterministic validation suite(s) of '${p}' before it is used"
     one=0
-    validate_profile "${p}" || one=$?
-    case "${one}" in
-      0) info "validation: '${p}' PASSED" ;;
-      1) err "validation: '${p}' gave WRONG answers (validation FAILED) - stopping it through the normal stop path; it is NOT left running (evidence: ${LLMCTL_VERIFY_DIR}/validate-${p}.log)"
-         _val_stop_after_verdict "${p}"
-         rc=1 ;;
-      *) if [[ "${LLMCTL_VALIDATE_STRICT:-0}" == "1" ]]; then
-           err "validation: '${p}' could not be validated (UNDETERMINED) and LLMCTL_VALIDATE_STRICT=1 - stopping it (no validation suite / no answer / refused is not good enough in strict mode)"
-           _val_stop_after_verdict "${p}"
-           rc=1
-         else
-           warn "validation: '${p}' could not be validated (UNDETERMINED) - it keeps running, NOT validated; llmctl require-validated ${p} refuses until it passes (LLMCTL_VALIDATE_STRICT=1 would stop it)"
-         fi ;;
-    esac
+    _val_after_start_one "${p}" || one=$?
+    flock -u "${lockfd}"; exec {lockfd}>&-
+    [[ "${one}" == "0" ]] || rc=1
   done
   return "${rc}"
 }
