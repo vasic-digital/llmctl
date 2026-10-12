@@ -385,6 +385,12 @@ guard
 # ------------------------------------------------------------------ (e) finalize: stop, confirm, identity
 log "final: llmctl stop $PROFILE"
 "$HERE/watchdog.sh" --stop "$PROFILE" "$EV" >>"$EV/stop.out" 2>&1; FINAL_STOP_RC=$?; echo "final stop rc=$FINAL_STOP_RC (0 llmctl ok | 10 systemd fallback | 11 failed)" >>"$EV/stop.out"
+if [ "$FINAL_STOP_RC" != 0 ] && [ "$FINAL_STOP_RC" != 10 ]; then
+  # neither llmctl nor systemd stopped it: the model may still be running. Keep STOP_NEEDED and the watchdog;
+  # the EXIT trap retries the stop (and only then reaps the watchdog).
+  RESULT=2; VERDICT_REASON="stop failed (rc=$FINAL_STOP_RC: llmctl stop and systemd stop both failed); retrying in cleanup, MODEL MAY STILL BE RUNNING - check manually"
+  log "$VERDICT_REASON"; exit 2
+fi
 STOP_NEEDED=0
 safe_kill; wait "$WD_PID" 2>/dev/null; WD_PID=""
 abort_if_triggered   # a trigger recorded just before we reaped the watchdog still counts

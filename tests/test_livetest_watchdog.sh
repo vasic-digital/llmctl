@@ -607,6 +607,18 @@ FAKE="$E/fake" PATH="$E/bin:$PATH" LT_HERMETIC=1 LT_WD_INTERVAL=0.2 LT_STOP_BOUN
 [ "$(grep -c '^stop vision' "$E/fake/calls")" -ge 2 ] && ok "  watchdog issued a second stop" || bad "  no second stop"
 fi
 
+if want n3; then
+echo "== N3. failed final stop (rc 11) keeps STOP_NEEDED and the watchdog; cleanup retries =="
+E="$(mkenv)"; touch "$E/fake/stop_rc1" "$E/fake/sysstop_fail"; run_main "$E"
+check "rc 11 -> exit 2" "$RC" "2"
+has "  reason says stop failed" "$E/out.txt" 'stop failed'
+n=$(grep -c '^systemctl stop' "$E/fake/calls"); [ "$n" -ge 2 ] && ok "  cleanup retried the stop (systemctl stop x$n)" || bad "  no retry (systemctl stop x$n)"
+check "  watchdog log: stop attempted at least twice" "$([ "$(grep -c 'systemd stop rc=1' "$EVD/watchdog.log")" -ge 2 ] && echo yes || echo no)" "yes"
+# NEG-CONTROL: rc 10 (only systemd worked) is a handled stop: no cleanup retry
+E="$(mkenv)"; touch "$E/fake/stop_rc1"; run_main "$E"
+check "NEG-CONTROL rc 10: exactly one systemd stop (no needless retry)" "$(grep -c '^systemctl stop' "$E/fake/calls")" "1"
+fi
+
 if want always; then
 echo "== 7. whole-suite sanity: nothing real was touched =="
 [ -z "$(pgrep -x llama-server || true)" ] && ok "no real llama-server process spawned by tests" || bad "llama-server present (may be pre-existing)"
