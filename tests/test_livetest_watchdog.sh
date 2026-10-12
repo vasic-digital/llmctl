@@ -24,7 +24,7 @@ import glob, http.server, sys
 T = sys.argv[2]
 class H(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
-        up = bool(glob.glob(T + "/env.*/fake/running"))
+        up = bool(glob.glob(T + "/env.*/fake/running") or glob.glob(T + "/env.*/fake/serving"))
         self.send_response(200 if up else 503); self.end_headers(); self.wfile.write(b'{"status":"ok"}' if up else b"down")
     def log_message(self, *a): pass
 http.server.HTTPServer(("127.0.0.1", int(sys.argv[1])), H).serve_forever()
@@ -104,6 +104,7 @@ PY
     rm -f "$FAKE/running"
     [ -f "$FAKE/leak" ] || cp "$FAKE/gpu_base" "$FAKE/gpu"
     [ -f "$FAKE/hang_after_stop" ] && touch "$FAKE/gpu_hang"
+    [ -f "$FAKE/stop_leaves_port" ] && touch "$FAKE/serving"
     exit 0 ;;
   "stop "*) echo "stop OTHER: $*" >>"$FAKE/calls"; exit 0 ;;
   "vision help") echo "llmctl vision validate [--profile vision|vision-pro] [--json] [--keep]"; exit 0 ;;
@@ -474,6 +475,26 @@ has "NEG-CONTROL fake validate without --host restarts the profile" "$E/fake/cal
 E="$(mkenv)"; echo "touch \"\$FAKE/vanish\"; rm -f \"\$FAKE/running\"" >"$E/fake/start_mutate.sh"
 run_main "$E"
 hasnt "validate not launched when the profile is not up" "$E/fake/calls" '^validate '
+fi
+
+if want d4; then
+echo "== D4. stop verification: final stop rc 0, unit inactive, port closed (VRAM alone is not proof) =="
+E="$(mkenv)"; touch "$E/fake/stop_rc1"; run_main "$E"
+check "llmctl stop rc 1 (even though .run vanished; systemd fallback worked) -> not PASS (exit 2)" "$RC" "2"
+has "  reason names the final stop" "$E/out.txt" 'final stop'
+E="$(mkenv)"; touch "$E/fake/stop_rc1" "$E/fake/sysstop_fail"; run_main "$E"
+check "both stops failing -> not PASS (exit 2)" "$RC" "2"
+E="$(mkenv)"; touch "$E/fake/unit_stuck_active"; run_main "$E"
+check "unit still active after stop -> not PASS (exit 2)" "$RC" "2"
+has "  reason names the unit" "$E/out.txt" 'unit .* (still )?active'
+E="$(mkenv)"; touch "$E/fake/stop_leaves_port"; run_main "$E"
+check "port still answering after stop -> not PASS (exit 2)" "$RC" "2"
+has "  reason names the port" "$E/out.txt" 'port .* still'
+rm -f "$E/fake/serving"   # the shared fake health server must go quiet again
+# CPU-only model: VRAM never moves; VRAM-return is vacuous, PASS rests on unit inactive + port closed + stop rc 0
+E="$(mkenv)"; run_main "$E"
+check "NEG-CONTROL CPU-only run (VRAM flat) with clean stop passes" "$RC" "0"
+has "  table says VRAM check is informational (no GPU use observed)" "$E/out.txt" 'no GPU use observed'
 fi
 
 if want always; then

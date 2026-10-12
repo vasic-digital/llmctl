@@ -56,7 +56,7 @@ CMDLOG="$EV/commands.log"; SIGLOG="$EV/signals.log"
 log() { printf '%s %s\n' "$(date -u +%FT%TZ)" "$*" | tee -a "$EV/run.log" >&2; }
 
 WD_PID=""; STOP_NEEDED=0; CLEANED=0; RESULT=2; VERDICT_REASON="not finished"
-GATE_RES="NOT RUN"; READY=0; FINAL_STOP_RC="NA"; GPU_BASE=""; GPU_FINAL=""; VALIDATE_RC="NA"; CLEAN_OK="NO"; MH="UNKNOWN"; PH="UNKNOWN"; LSV="UNKNOWN"
+GATE_RES="NOT RUN"; READY=0; VRAM_NOTE=""; UNIT_STATE=""; PORT_SERVING=""; UNIT=""; FINAL_STOP_RC="NA"; GPU_BASE=""; GPU_FINAL=""; VALIDATE_RC="NA"; CLEAN_OK="NO"; MH="UNKNOWN"; PH="UNKNOWN"; LSV="UNKNOWN"
 
 print_table() {
   printf '\n%-28s %s\n' "CHECK" "RESULT"
@@ -66,7 +66,7 @@ print_table() {
   printf '%-28s %s\n' "readiness" "$READY_TXT"
   printf '%-28s %s\n' "validate rc" "$VALIDATE_RC"
   printf '%-28s %s\n' "vram base/final MiB" "$GPU_BASE/$GPU_FINAL"
-  printf '%-28s %s\n' "profile stopped+vram ok" "$CLEAN_OK"
+  printf '%-28s %s\n' "profile stopped+vram ok" "$CLEAN_OK${VRAM_NOTE:-}"
   printf '%-28s %s\n' "model sha256" "$MH"
   printf '%-28s %s\n' "mmproj sha256" "$PH"
   printf '%-28s %s\n' "llama-server" "$LSV"
@@ -125,6 +125,16 @@ need python3; need curl; need awk; need "$LLMCTL"; need "$NVSMI"; need nice; nee
 gpu_used() { "$NVSMI" --query-gpu=memory.used --format=csv,noheader,nounits 2>/dev/null \
   | awk 'BEGIN{m=-1} /^[ \t]*[0-9]+[ \t]*$/{if($1+0>m)m=$1+0} END{if(m>=0)print m}'; }
 
+# bounded <secs> <outfile> cmd... : detached with a deadline, never signalled; rc 124 = still running at the deadline.
+BOUND="${LT_BOUND_DEFAULT:-10}"; [ "${LT_HERMETIC:-0}" = 1 ] && BOUND="${LT_BOUND:-$BOUND}"
+bounded() {
+  local secs="$1" out="$2" i=0; shift 2
+  rm -f "$out.rc"
+  ( "$@" >"$out" 2>&1; echo $? >"$out.rc" ) &
+  while [ ! -s "$out.rc" ] && [ "$i" -lt $((secs * 10)) ]; do sleep 0.1; i=$((i + 1)); done
+  [ -s "$out.rc" ] || { echo "$(date -u +%FT%TZ) TIMEOUT ${secs}s: $*" >>"$EV/bounded.log"; return 124; }
+  return "$(cat "$out.rc")"
+}
 status_json() { "$LLMCTL" status --json 2>/dev/null; }
 
 
@@ -133,6 +143,12 @@ services_env_file() {
   local inst="$PROFILE"
   [ -n "${LLMCTL_TENANT_ID:-}" ] && inst="${LLMCTL_TENANT_ID}--${PROFILE}"
   echo "${LLMCTL_SERVICES_DIR:-${LLMCTL_STATE_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/llmctl}/services}/${inst}.env"
+}
+unit_name() {
+  local inst="$PROFILE" engine
+  [ -n "${LLMCTL_TENANT_ID:-}" ] && inst="${LLMCTL_TENANT_ID}--${PROFILE}"
+  engine="$(sed -n 's/^LLMCTL_ENGINE=//p' "$(services_env_file)" 2>/dev/null | tr -d "'")"
+  echo "llmctl-${engine:-llama}@${inst}.service"
 }
 loaded_files() {   # prints two lines: model path, mmproj path (empty when unknown)
   python3 -I -c '
@@ -331,6 +347,13 @@ STILL="$(python3 -I -c '
 import json,sys
 try: print("yes" if any(r.get("profile","").split(".")[0]==sys.argv[1] for r in json.load(open(sys.argv[2]))) else "no")
 except Exception: print("unknown")' "$PROFILE" "$EV/status_after.json")"
+UNIT="$(unit_name)"
+bounded "$BOUND" "$EV/.unit_active" "$SYSCTL" --user is-active "$UNIT"; echo "unit=$UNIT is-active: $(tr '\n' ' ' <"$EV/.unit_active" 2>/dev/null)" >"$EV/post_stop_state.txt"
+UNIT_STATE="$(head -1 "$EV/.unit_active" 2>/dev/null)"
+PORT_SERVING=no; curl -fsS --max-time 3 "$URL/health" >/dev/null 2>&1 && PORT_SERVING=yes
+echo "port $PORT health still answering: $PORT_SERVING" >>"$EV/post_stop_state.txt"
+GPU_PEAK="$(awk -F, 'NR>1 && $6 ~ /^[0-9]+$/ {if($6+0>m)m=$6+0} END{print m+0}' "$EV/samples.csv" 2>/dev/null)"
+VRAM_NOTE=""; [ $(( ${GPU_PEAK:-0} - ${GPU_BASE:-0} )) -lt 200 ] && VRAM_NOTE=" (VRAM check informational: no GPU use observed, peak ${GPU_PEAK}MiB)"
 if [ "$STILL" = "no" ] && [ -n "$GPU_FINAL" ] && [ "$GPU_FINAL" -le $((GPU_BASE + VRAM_SLACK_MB)) ]; then CLEAN_OK="YES"; fi
 
 hash_of() { if [ -n "$1" ] && [ -f "$1" ]; then nice -n 19 ionice -c 3 sha256sum "$1" | awk '{print $1}'; else echo "MISSING"; fi; }
@@ -344,6 +367,9 @@ if [ "$VALIDATE_RC" = 1 ]; then RESULT=1; VERDICT_REASON="wrong answer(s): valid
 elif [ "$VALIDATE_RC" != 0 ]; then RESULT=2; VERDICT_REASON="validate rc=$VALIDATE_RC (could not determine)"
 elif [ "$JSON_VERDICT" != OK ]; then RESULT=2; VERDICT_REASON="$JSON_VERDICT"
 elif [ "$MH" = MISSING ] || [ "$PH" = MISSING ]; then RESULT=2; VERDICT_REASON="hash of the model/mmproj the unit loaded not capturable"
+elif [ "$FINAL_STOP_RC" != 0 ]; then RESULT=2; VERDICT_REASON="final stop was not a clean llmctl stop (rc=$FINAL_STOP_RC; 10 = only the systemd fallback worked, 11 = failed)"
+elif [ "$UNIT_STATE" = active ] || [ "$UNIT_STATE" = activating ]; then RESULT=2; VERDICT_REASON="unit $UNIT still active after stop (state=$UNIT_STATE)"
+elif [ "$PORT_SERVING" = yes ]; then RESULT=2; VERDICT_REASON="port $PORT still answering /health after stop"
 elif [ "$CLEAN_OK" != YES ]; then RESULT=2; VERDICT_REASON="cleanup not confirmed (vram base=$GPU_BASE final=$GPU_FINAL still_running=$STILL)"
 else RESULT=0; VERDICT_REASON="all known-answer probes matched; evidence captured; VRAM back to baseline"; fi
 
