@@ -104,6 +104,56 @@ gpu_used() { "$NVSMI" --query-gpu=memory.used --format=csv,noheader,nounits 2>/d
 
 status_json() { "$LLMCTL" status --json 2>/dev/null; }
 
+
+# --- identity of what the unit ACTUALLY loaded: its env file's LLMCTL_ARGS (-m / --mmproj), never a default filename
+services_env_file() {
+  local inst="$PROFILE"
+  [ -n "${LLMCTL_TENANT_ID:-}" ] && inst="${LLMCTL_TENANT_ID}--${PROFILE}"
+  echo "${LLMCTL_SERVICES_DIR:-${LLMCTL_STATE_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/llmctl}/services}/${inst}.env"
+}
+loaded_files() {   # prints two lines: model path, mmproj path (empty when unknown)
+  python3 -I -c '
+import shlex,sys
+model=mm=""
+try:
+    for line in open(sys.argv[1]):
+        if line.startswith("LLMCTL_ARGS="):
+            t=shlex.split(line.split("=",1)[1].strip())
+            for i,a in enumerate(t[:-1]):
+                if a in ("-m","--model"): model=t[i+1]
+                if a=="--mmproj": mm=t[i+1]
+except Exception: pass
+print(model); print(mm)' "$(services_env_file)"
+}
+
+# PASS evidence: parsed JSON, verdict PASS, every probe PASS, probe count == the golden suite's probe count
+check_validate_json() {   # check_validate_json <validate.out> <suite-dir> -> prints OK or the reason
+  python3 -I - "$1" "$2" <<'PY'
+import json,sys
+raw=open(sys.argv[1],errors="replace").read()
+try:
+    i=raw.index("{"); rep,_=json.JSONDecoder().raw_decode(raw[i:])
+except Exception as e:
+    print("validate output is not parseable JSON (%s)"%e); sys.exit(0)
+try:
+    suite=json.load(open(sys.argv[2]+"/expectations.json"))
+    expected=sum(len(f.get("probes",[])) for f in suite["fixtures"])
+except Exception as e:
+    print("validate output cannot be checked: golden suite unreadable (%s)"%e); sys.exit(0)
+res=rep.get("results"); c=rep.get("counts") or {}
+if not isinstance(res,list) or not res: print("validate output has no probe results"); sys.exit(0)
+if rep.get("verdict")!="PASS" or rep.get("exit_code")!=0: print("validate output verdict=%r exit_code=%r"%(rep.get("verdict"),rep.get("exit_code"))); sys.exit(0)
+if c.get("fail") or c.get("undetermined"): print("validate output counts fail/undetermined non-zero: %r"%c); sys.exit(0)
+bad=[r.get("key") for r in res if r.get("verdict")!="PASS"]
+if bad: print("validate output has non-PASS probes: %s"%bad); sys.exit(0)
+if len(res)!=expected or c.get("pass")!=len(res): print("validate output probe count %d (counts.pass=%r) != golden suite %d"%(len(res),c.get("pass"),expected)); sys.exit(0)
+ctl=[x for x in rep.get("controls",[]) if x.get("verdict")!="PASS"]
+if ctl: print("validate output has non-PASS controls: %s"%[x.get("key") for x in ctl]); sys.exit(0)
+print("OK")
+PY
+}
+SUITE_DIR="${LT_SUITE_DIR:-$HERE/../../validation/suites/vision-golden-v1}"
+
 # ------------------------------------------------------------------ (a) pre-gate
 gate() {
   local mem psi_s psi_f gpu st
@@ -190,6 +240,8 @@ done
 abort_if_triggered
 [ "$READY" = 1 ] || { RESULT=2; VERDICT_REASON="not ready within ${READY_MAX}s"; exit 2; }
 log "ready: $(head -c 200 "$EV/health.out")"
+{ read -r LOADED_MODEL; read -r LOADED_MMPROJ; } < <(loaded_files)
+echo "unit_env=$(services_env_file) model=${LOADED_MODEL:-UNKNOWN} mmproj=${LOADED_MMPROJ:-UNKNOWN}" >"$EV/loaded_files.txt"
 
 # ------------------------------------------------------------------ (d) known-answer probes
 HAVE_VV=0
@@ -232,17 +284,17 @@ try: print("yes" if any(r.get("profile","").split(".")[0]==sys.argv[1] for r in 
 except Exception: print("unknown")' "$PROFILE" "$EV/status_after.json")"
 if [ "$STILL" = "no" ] && [ -n "$GPU_FINAL" ] && [ "$GPU_FINAL" -le $((GPU_BASE + VRAM_SLACK_MB)) ]; then CLEAN_OK="YES"; fi
 
-MDIR="${VISION_MODEL_DIR:-$HOME/.local/share/llmctl/models/vision}"
-hash_of() { [ -f "$1" ] && nice -n 19 ionice -c 3 sha256sum "$1" | awk '{print $1}' || echo "MISSING"; }
-MH="$(hash_of "${VISION_MODEL_FILE:-$MDIR/gemma-3-4b-it-Q4_K_M.gguf}")"
-PH="$(hash_of "${VISION_MMPROJ_FILE:-$MDIR/mmproj-model-f16.gguf}")"
+hash_of() { if [ -n "$1" ] && [ -f "$1" ]; then nice -n 19 ionice -c 3 sha256sum "$1" | awk '{print $1}'; else echo "MISSING"; fi; }
+MH="$(hash_of "${LOADED_MODEL:-}")"
+PH="$(hash_of "${LOADED_MMPROJ:-}")"
+JSON_VERDICT="$(check_validate_json "$EV/validate.out" "$SUITE_DIR")"; echo "$JSON_VERDICT" >"$EV/validate_check.txt"
 LSV="$("${LLAMA_SERVER_BIN:-llama-server}" --version 2>&1 | tr '\n' ' ' | cut -c1-300)"; [ -n "$LSV" ] || LSV="UNKNOWN"
 { echo "model_sha256=$MH"; echo "mmproj_sha256=$PH"; echo "llama_server_version=$LSV"; echo "gpu_baseline_mb=$GPU_BASE gpu_final_mb=$GPU_FINAL"; } >"$EV/identity.txt"
 
 if [ "$VALIDATE_RC" = 1 ]; then RESULT=1; VERDICT_REASON="wrong answer(s): validate rc=1"
 elif [ "$VALIDATE_RC" != 0 ]; then RESULT=2; VERDICT_REASON="validate rc=$VALIDATE_RC (could not determine)"
-elif [ ! -s "$EV/validate.out" ]; then RESULT=2; VERDICT_REASON="validate rc=0 but no captured output"
-elif [ "$MH" = MISSING ] || [ "$PH" = MISSING ]; then RESULT=2; VERDICT_REASON="model/mmproj sha256 not capturable"
+elif [ "$JSON_VERDICT" != OK ]; then RESULT=2; VERDICT_REASON="$JSON_VERDICT"
+elif [ "$MH" = MISSING ] || [ "$PH" = MISSING ]; then RESULT=2; VERDICT_REASON="hash of the model/mmproj the unit loaded not capturable"
 elif [ "$CLEAN_OK" != YES ]; then RESULT=2; VERDICT_REASON="cleanup not confirmed (vram base=$GPU_BASE final=$GPU_FINAL still_running=$STILL)"
 else RESULT=0; VERDICT_REASON="all known-answer probes matched; evidence captured; VRAM back to baseline"; fi
 
