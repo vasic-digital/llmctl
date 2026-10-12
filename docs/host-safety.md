@@ -274,6 +274,13 @@ is stopped) and the `llmctl validate` path (hook point `_sched_pressure_gate`) a
 (`svc_hook.sh gate <instance>`) so systemd restarts are gated. Overrides for tests: `LLMCTL_PSI_FILE`,
 `LLMCTL_MEMINFO_FILE`; tuning: `LLMCTL_GATE_FULL_MAX`, `LLMCTL_GATE_SOME_MAX`, `LLMCTL_GATE_RESERVE_MB`.
 
+**The unit gate waits.** `svc_hook.sh gate` (ExecStartPre) polls every `LLMCTL_GATE_POLL` s (default 5) for up to
+`LLMCTL_GATE_WAIT` s (default 120) and exits 75 only if the pressure persists; an immediate 75 would be retried by
+`Restart=on-failure` and burn `StartLimitBurst`. `TimeoutStartSec=600` covers wait + model load. **Lockout trade-off**:
+pressure lasting through three consecutive waits (about 3 x (120 + 5) s, inside the 900 s window) still ends in
+`start-limit-hit` - the deliberate fail-closed end state; clear it with `systemctl --user reset-failed <unit>` (or wait
+out the 900 s window) once the host is healthy. Interactive `start`/`enable`/`switch` do not wait: they refuse at once.
+
 **Exit codes**: 75 = refused by the pressure gate; 98 = `prestart` found the profile's port already listening (it does
 not rotate the key and does not load the model).
 

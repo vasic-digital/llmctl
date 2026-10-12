@@ -138,16 +138,28 @@ hk_prestart() {
 }
 
 # hk_gate <instance> - ExecStartPre of every engine unit, BEFORE prestart (so a refused start never rotates a key and a
-# systemd RESTART is gated exactly like a first start). Exit 75 = EX_TEMPFAIL: not a defect, retried later by the
-# operator (RestartPreventExitStatus does not list it, so Restart=on-failure + the StartLimit bound apply).
+# systemd RESTART is gated exactly like a first start). It WAITS for the pressure to clear (LLMCTL_GATE_WAIT s, default
+# 120; LLMCTL_GATE_POLL s, default 5) and fails closed with 75 (EX_TEMPFAIL) only if it persists: an immediate 75 was
+# retried by Restart=on-failure and every retry burns StartLimitBurst, so a short spike ended in a 900 s lockout.
+# TimeoutStartSec (600) covers wait + model load. A pressure that lasts through ~3 waits still ends in start-limit-hit:
+# the deliberate fail-closed end state (docs/host-safety.md).
 hk_gate() {
-  local inst="${1:-}" f fp=0
+  local inst="${1:-}" f fp=0 wait="${LLMCTL_GATE_WAIT:-120}" poll="${LLMCTL_GATE_POLL:-5}" waited=0 rc=0
+  [[ "${wait}" =~ ^[0-9]+$ ]] || wait=120
+  [[ "${poll}" =~ ^[1-9][0-9]*$ ]] || poll=5
   if [[ -n "${inst}" ]]; then
     f="$(_hk_envfile "${inst}")"
     [[ -f "${f}" ]] && fp="$(_hk_get "${f}" LLMCTL_FOOTPRINT_MB)"
   fi
-  hw_pressure_gate "${fp:-0}" "${inst:-service}"
+  local msg=""
+  while :; do
+    rc=0; msg="$(hw_pressure_gate "${fp:-0}" "${inst:-service}" 2>&1 >/dev/null)" || rc=$?
+    if [[ "${rc}" -eq 0 ]]; then (( waited == 0 )) || _hk_log "${inst}: pressure cleared after ${waited}s"; return 0; fi
+    if [[ "${rc}" -ne 75 || "${waited}" -ge "${wait}" ]]; then printf '%s\n' "${msg}" >&2; return "${rc}"; fi
+    sleep "${poll}"; waited=$(( waited + poll ))
+  done
 }
+
 
 # Registration waiters are tracked by pid file so a stop can end them (they otherwise poll /health for up to 600 s,
 # inside the unit's cgroup, after the engine is gone).

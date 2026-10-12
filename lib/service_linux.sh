@@ -189,7 +189,7 @@ _svc_hook_cmd() { printf '/bin/bash %s %s' "$(_svc_qx "${_svl_dir}/svc_hook.sh")
 #   * the TEMPLATE keeps a backstop below total (High 70%, Max 85%) for units whose drop-in is missing;
 #   * MemorySwapMax=0 (a model that swaps is a stalled host, not a slow model), Nice/IOWeight/CPUWeight so the engine
 #     yields to the desktop and the agent fleet, OOMScoreAdjust=500 (kernel picks the engine first), a bounded stop
-#     (TimeoutStopSec=20) and start (TimeoutStartSec=300 covers ExecStartPre only for Type=simple).
+#     (TimeoutStopSec=20) and start (TimeoutStartSec=600 covers the ExecStartPre gate wait (120 s)).
 #   * ManagedOOMPreference=avoid: the engine is already bounded by its own MemoryMax, so systemd-oomd (which acts per
 #     cgroup on PSI, see docs/host-safety.md) should pick other victims first. UNKNOWN: whether the user manager
 #     honours the xattr for an unprivileged unit; the directive is harmless when ignored.
@@ -203,7 +203,7 @@ OOMScoreAdjust=500
 ManagedOOMPreference=avoid
 TimeoutStopSec=20
 KillMode=control-group
-TimeoutStartSec=300
+TimeoutStartSec=600
 EOF
 }
 

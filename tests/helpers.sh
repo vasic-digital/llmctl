@@ -101,6 +101,7 @@ test_setup_env() {
   printf 'some avg10=0.00 avg60=0.00 avg300=0.00 total=0\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0\n' > "${TEST_TMP}/psi.fixture"
   printf 'MemTotal:       33554432 kB\nMemFree:        31457280 kB\nMemAvailable:   31457280 kB\n' > "${TEST_TMP}/meminfo.fixture"
   export LLMCTL_PSI_FILE="${TEST_TMP}/psi.fixture" LLMCTL_MEMINFO_FILE="${TEST_TMP}/meminfo.fixture"
+  export LLMCTL_GATE_WAIT=0   # the unit-level gate waits in production (default 120 s); hermetic tests refuse at once
   mkdir -p "${LLMCTL_STATE_DIR}" "${LLMCTL_RUNTIME_DIR}"
 }
 
