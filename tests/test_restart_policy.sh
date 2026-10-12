@@ -44,26 +44,34 @@ else
   bbu="$(sect_val "${GU}" '[Unit]' StartLimitBurst)"; bbu="${bbu:-5}"
   sciv=$(( biv / 20 )); [[ "${sciv}" -ge 1 ]] || sciv=1     # time scaled 1/20: 60s -> 3s, 600s -> 30s
   # (a) a unit whose real cycle (2s run + 1s RestartSec = 3s+) is longer than the scaled 3s interval: only a long
-  #     interval + small burst bounds it. Wait up to 40 s for failed/start-limit-hit.
+  #     interval + small burst bounds it. Wait up to ~40 s for it to give up.
   U1="${PREFIX}-loop"; STARTED+=("${U1}")
   systemd-run --user --quiet --unit="${U1}" -p "Restart=${restart}" -p RestartSec=1 -p "StartLimitIntervalSec=${sciv}" \
     -p "StartLimitBurst=${bbu}" bash -c 'sleep 2; exit 1' >/dev/null 2>&1 || true
-  st=""; res=""
+  st=""; res=""; nr=""; tripped=0
+  # Tripped = the unit sits in `failed` and stays there with an unchanged NRestarts for longer than a whole cycle
+  # (3 s). (On systemd 259 a limit hit during an auto-restart leaves Result=exit-code, journal: "Start request repeated
+  # too quickly"; state=failed alone is also transient inside the RestartSec window, so it is not enough.)
   for _ in $(seq 1 40); do
     st="$(systemctl --user show -p ActiveState --value "${U1}.service" 2>/dev/null || true)"
-    res="$(systemctl --user show -p Result --value "${U1}.service" 2>/dev/null || true)"
-    [[ "${st}" == failed ]] && break; sleep 1
+    if [[ "${st}" == failed ]]; then
+      nr="$(systemctl --user show -p NRestarts --value "${U1}.service" 2>/dev/null || echo ?)"; sleep 4
+      st2="$(systemctl --user show -p ActiveState --value "${U1}.service" 2>/dev/null || true)"
+      nr2="$(systemctl --user show -p NRestarts --value "${U1}.service" 2>/dev/null || echo ?)"
+      [[ "${st2}" == failed && "${nr}" == "${nr2}" ]] && { tripped=1; break; }
+    fi
+    sleep 1
   done
-  nr="$(systemctl --user show -p NRestarts --value "${U1}.service" 2>/dev/null || echo ?)"
-  if [[ "${st}" == failed && "${res}" == start-limit-hit ]]; then echo "  ok: behavioral: crash loop reached failed/start-limit-hit (NRestarts=${nr})"
-  else printf '  FAIL: behavioral: crash loop did not reach failed/start-limit-hit within 40s (state=%s result=%s NRestarts=%s; Restart=%s interval=%s(scaled %ss) burst=%s)\n' "${st}" "${res}" "${nr}" "${restart}" "${biv}" "${sciv}" "${bbu}" >&2; TEST_FAILS=$((TEST_FAILS+1)); fi
+  res="$(systemctl --user show -p Result --value "${U1}.service" 2>/dev/null || true)"
+  if [[ "${tripped}" == 1 ]]; then echo "  ok: behavioral: crash loop gave up and stayed failed (NRestarts=${nr}, Result=${res})"
+  else printf '  FAIL: behavioral: crash loop never gave up within 40s (state=%s result=%s NRestarts=%s; Restart=%s interval=%s(scaled %ss) burst=%s)\n' "${st}" "${res}" "${nr}" "${restart}" "${biv}" "${sciv}" "${bbu}" >&2; TEST_FAILS=$((TEST_FAILS+1)); fi
   systemctl --user stop "${U1}.service" >/dev/null 2>&1 || true; systemctl --user reset-failed "${U1}.service" >/dev/null 2>&1 || true
 
   # (b) a SIGKILLed (OOM-killed) main process must NOT be restarted when the unit says RestartPreventExitStatus=SIGKILL.
   U2="${PREFIX}-oomkill"; STARTED+=("${U2}")
   args=(-p "Restart=${restart}" -p RestartSec=1)
   [[ -z "${prevent}" ]] || args+=(-p "RestartPreventExitStatus=${prevent}")
-  systemd-run --user --quiet --unit="${U2}" "${args[@]}" bash -c 'kill -9 $$' >/dev/null 2>&1 || true
+  systemd-run --user --quiet --unit="${U2}" "${args[@]}" bash -c 'kill -9 $$$$' >/dev/null 2>&1 || true   # systemd turns $$ into $, so $$$$ reaches bash as $$
   sleep 4
   nr2="$(systemctl --user show -p NRestarts --value "${U2}.service" 2>/dev/null || echo ?)"
   st2="$(systemctl --user show -p ActiveState --value "${U2}.service" 2>/dev/null || true)"

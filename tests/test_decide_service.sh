@@ -52,7 +52,7 @@ wrote="$(
 )"
 assert_eq "${GU}" "${wrote}" "the unit generator writes the gateway unit into the user unit dir"
 assert_file_exists "${GU}" "gateway unit written"
-assert_file_contains "${GU}" "Restart=always" "Restart=always"
+assert_file_contains "${GU}" "Restart=on-failure" "Restart=on-failure"
 assert_file_contains "${GU}" "RestartSec=5" "RestartSec=5"
 assert_file_contains "${GU}" "WantedBy=default.target" "starts at login/boot (with linger)"
 assert_file_contains "${GU}" "svc_hook.sh\" run-gateway" "ExecStart is the wrapper that allocates the port then execs: llmctl-decide serve --foreground"

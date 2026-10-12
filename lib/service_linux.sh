@@ -254,10 +254,11 @@ Wants=network-online.target
 # Restart bounds belong in [Unit]: systemd ignores StartLimitIntervalSec= in
 # [Service] ("Unknown key ... ignoring", reproduced with systemd-analyze
 # --user verify on systemd 259), which silently left the interval at its
-# default. Restart=always never fires again once the burst is exhausted
-# (until reset-failed) - the crash-loop signal FR-044 surfaces in status.
-StartLimitBurst=5
-StartLimitIntervalSec=60
+# default. Restart=on-failure never fires again once the burst is exhausted
+# (until reset-failed) - the crash-loop signal FR-044 surfaces in status. 3 starts / 900 s: a real cycle (model load +
+# stop) exceeds the old 60 s window, so 5/60 could never trip and OOM kills were retried forever.
+StartLimitBurst=3
+StartLimitIntervalSec=900
 
 [Service]
 Type=simple
@@ -294,8 +295,13 @@ ExecStartPre=$(_svc_hook_cmd prestart %i)
 ExecStart=/bin/bash -c 'set -f; exec "\$LLMCTL_EXEC" \$LLMCTL_ARGS'
 ExecStartPost=-$(_svc_hook_cmd register %i)
 ExecStopPost=-$(_svc_hook_cmd unregister %i)
-Restart=always
+Restart=on-failure
 RestartSec=5
+RestartSteps=4
+RestartMaxDelaySec=120
+# No restart after an OOM kill (SIGKILL), a deliberate stop (SIGTERM) or 98 = "port already in use" (svc_hook.sh prestart,
+# EADDRINUSE): each of those only repeats itself. Real cycles are > 60 s (model load), so the window is 900 s / 3 starts.
+RestartPreventExitStatus=SIGKILL SIGTERM 98
 MemoryHigh=${memhigh}M
 MemoryMax=${memmax}M
 $(_svc_resource_directives)
@@ -337,6 +343,12 @@ svc_stale_units() {
     base="$(basename "${f}")"
     if awk '/^\[/{sec=$0} sec=="[Service]" && /^[[:space:]]*StartLimit(Interval(Sec)?|Burst)=/{found=1} END{exit !found}' "${f}"; then
       printf '%s: StartLimit*= inside [Service] is ignored by systemd (restart bound not applied); regenerate with: llmctl install\n' "${base}"
+    fi
+    if awk '/^\[/{sec=$0}
+            sec=="[Unit]" && /^StartLimitBurst=/ {split($0,a,"="); b=a[2]+0; hb=1}
+            sec=="[Unit]" && /^StartLimitIntervalSec=/ {split($0,a,"="); i=a[2]+0; hi=1}
+            END{exit (hb && hi && i >= 600 && b <= 3 && b >= 1)}' "${f}"; then
+      printf '%s: restart bound too weak to ever trip (need [Unit] StartLimitIntervalSec>=600 and StartLimitBurst<=3; Restart=always with 5/60 retried OOM kills forever); regenerate with: llmctl install\n' "${base}"
     fi
     case "${base}" in
       llmctl-llama@.service|llmctl-colibri@.service) expected="$(_svc_engine_unit_body x basic 1 1 | _svc_unit_directives)" ;;
@@ -501,10 +513,13 @@ _svc_restart_bound_ok() {
   local tmpl="${1%%@*}@.service" f
   f="$(svc_unit_dir)/${tmpl}"
   [[ -f "${f}" ]] || return 0
-  if awk '/^\[/{sec=$0} sec=="[Unit]" && /^StartLimitBurst=/{b=1} sec=="[Unit]" && /^StartLimitIntervalSec=/{i=1} END{exit !(b && i)}' "${f}"; then
+  if awk '/^\[/{sec=$0}
+          sec=="[Unit]" && /^StartLimitBurst=/ {split($0,a,"="); b=a[2]+0; hb=1}
+          sec=="[Unit]" && /^StartLimitIntervalSec=/ {split($0,a,"="); i=a[2]+0; hi=1}
+          END{exit !(hb && hi && i >= 600 && b <= 3 && b >= 1)}' "${f}"; then
     return 0
   fi
-  err "refusing to start ${1}: ${f} has no restart bound systemd applies (StartLimitBurst=/StartLimitIntervalSec= must be in [Unit]; inside [Service] or absent, systemd's 10 s default never trips at RestartSec=5, so an engine that fails at start would restart forever). Regenerate the units with: llmctl install"
+  err "refusing to start ${1}: ${f} has no restart bound systemd applies (StartLimitBurst<=3 and StartLimitIntervalSec>=600 must be in [Unit]; inside [Service], absent or weaker, systemd's 10 s default never trips at RestartSec=5, so an engine that fails at start would restart forever). Regenerate the units with: llmctl install"
   return 1
 }
 
@@ -642,8 +657,8 @@ Description=llmctl decision gateway (HTTPS, key-protected; engines stay loopback
 After=network-online.target
 Wants=network-online.target
 # Restart bounds in [Unit] - the only section systemd honours them in.
-StartLimitBurst=5
-StartLimitIntervalSec=60
+StartLimitBurst=3
+StartLimitIntervalSec=900
 
 [Service]
 Type=simple
@@ -665,8 +680,13 @@ EnvironmentFile=-$(_svc_pct "${LLMCTL_STATE_DIR}")/decide/gateway.conf
 # (kind=gateway) and finally EXECs: llmctl-decide serve --foreground
 ExecStart=$(_svc_hook_cmd run-gateway)
 ExecStopPost=-$(_svc_hook_cmd unregister gateway)
-Restart=always
+Restart=on-failure
 RestartSec=5
+RestartSteps=4
+RestartMaxDelaySec=120
+# No restart after an OOM kill (SIGKILL), a deliberate stop (SIGTERM) or 98 = "port already in use" (svc_hook.sh prestart,
+# EADDRINUSE): each of those only repeats itself. Real cycles are > 60 s (model load), so the window is 900 s / 3 starts.
+RestartPreventExitStatus=SIGKILL SIGTERM 98
 MemoryHigh=${memhigh}M
 MemoryMax=${memmax}M
 $(_svc_resource_directives)

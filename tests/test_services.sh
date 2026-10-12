@@ -17,10 +17,10 @@ export LLMCTL_FAKE_HW="${LLMCTL_ROOT}/tests/fixtures/hw-baseline.json"
 )
 
 UNIT="${LLMCTL_UNIT_DIR}/llmctl-llama@.service"
-assert_file_contains "${UNIT}" "Restart=always" "llama unit: Restart=always"
+assert_file_contains "${UNIT}" "Restart=on-failure" "llama unit: Restart=on-failure (OOM kills are not retried forever)"
 assert_file_contains "${UNIT}" "RestartSec=5" "llama unit: RestartSec=5"
-assert_file_contains "${UNIT}" "StartLimitBurst=5" "llama unit: StartLimitBurst=5 (bounded restarts, FR-044)"
-assert_file_contains "${UNIT}" "StartLimitIntervalSec=60" "llama unit: StartLimitIntervalSec=60 (bounded restarts, FR-044)"
+assert_file_contains "${UNIT}" "StartLimitBurst=3" "llama unit: StartLimitBurst=3 (bounded restarts, FR-044)"
+assert_file_contains "${UNIT}" "StartLimitIntervalSec=900" "llama unit: StartLimitIntervalSec=900 (bounded restarts, FR-044)"
 # Memory policy (supersedes the 2026-09-15 "full RAM" decision, which let one runaway profile take the host; see
 # docs/host-safety.md and tests/test_unit_memory_caps.sh for the per-profile drop-in contract). baseline fixture: total
 # 32768 MiB -> template backstop MemoryHigh=70% (22937M), MemoryMax=85% (27852M): strictly below total, High < Max.
