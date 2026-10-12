@@ -48,4 +48,17 @@ out="$(LLMCTL_REGISTER_WAIT=0 LLMCTL_DOCTOR_PROC_ROOTS="" doc)"
 if grep -E '^WARN' <<<"${out}" | grep -qi 'skipp.*stray\|stray.*skipp\|scope'; then echo "  ok: (iii) empty scope: WARN, check skipped"
 else printf '  FAIL: (iii) no WARN about the skipped stray-process check with an empty scope\n' >&2; TEST_FAILS=$((TEST_FAILS+1)); fi
 if stray_fail "${out}"; then printf '  FAIL: (iii) empty scope still judged a process\n' >&2; TEST_FAILS=$((TEST_FAILS+1)); fi
+echo "== (iv) non-numeric LLMCTL_REGISTER_WAIT: a loud WARN and the default, never a crashed scan with a false PASS =="
+out="$(LLMCTL_REGISTER_WAIT=abc doc)"
+if grep -E '^WARN' <<<"${out}" | grep -q 'LLMCTL_REGISTER_WAIT'; then echo "  ok: (iv) WARN names LLMCTL_REGISTER_WAIT"; else printf '  FAIL: (iv) no WARN for a non-numeric LLMCTL_REGISTER_WAIT\n' >&2; TEST_FAILS=$((TEST_FAILS+1)); fi
+kill "${PIDS[@]}" 2>/dev/null || true; PIDS=()
+
+echo "== (v) scope roots match on a path boundary: /x/proj must not match /x/proj2 =="
+mkdir -p "${TEST_TMP}/proj" "${TEST_TMP}/proj2"; cp "${TEST_TMP}/llama-server" "${TEST_TMP}/proj/llama-server"; cp "${TEST_TMP}/llama-server" "${TEST_TMP}/proj2/llama-server"
+P3="$(free_port)"; "${TEST_TMP}/proj2/llama-server" --port "${P3}" & PIDS+=("$!"); sleep 1
+out="$(LLMCTL_REGISTER_WAIT=0 LLMCTL_DOCTOR_PROC_ROOTS="${TEST_TMP}/proj" doc)"
+if stray_fail "${out}"; then printf '  FAIL: (v) a process under proj2 was judged with scope proj\n' >&2; TEST_FAILS=$((TEST_FAILS+1)); else echo "  ok: (v) proj2 is outside the scope proj"; fi
+P4="$(free_port)"; "${TEST_TMP}/proj/llama-server" --port "${P4}" & PIDS+=("$!"); sleep 1
+out="$(LLMCTL_REGISTER_WAIT=0 LLMCTL_DOCTOR_PROC_ROOTS="${TEST_TMP}/proj" doc)"
+if stray_fail "${out}"; then echo "  ok: (v) control: a process under proj IS judged"; else printf '  FAIL: (v) control: a process under proj was not judged\n' >&2; TEST_FAILS=$((TEST_FAILS+1)); fi
 test_finish

@@ -26,6 +26,9 @@ doc="$("${LLMCTL}" doctor 2>&1 | strip || true)"
 if grep -E '^WARN' <<<"${doc}" | grep -q 'llmctl-llama@fast.*inactive'; then echo "  ok: doctor WARNs about llmctl-llama@fast (inactive)"
 else printf '  FAIL: doctor has no WARN for the enabled-but-inactive llmctl-llama@fast\n' >&2; TEST_FAILS=$((TEST_FAILS+1)); fi
 
+case "${st}${doc}" in *"OOM-killed"*) printf '  FAIL: the WARN text claims an OOM kill without evidence\n' >&2; TEST_FAILS=$((TEST_FAILS+1));; *) echo "  ok: the WARN says the unit is down, it does not claim an OOM kill";; esac
+assert_contains "${st}" "down" "status WARN says the unit is down"
+
 echo "== failed state =="
 : > "${LLMCTL_RUNTIME_DIR}/fast.failed"; printf 'port=8080\nmode=gpu\nram_mb=2048\nvram_mb=100\n' > "${LLMCTL_RUNTIME_DIR}/fast.run"
 st="$("${LLMCTL}" status 2>&1 | strip)"

@@ -1610,7 +1610,7 @@ _sched_status_enabled_down() {
   local u st
   while IFS=$'\t' read -r u st; do
     [[ -n "${u}" ]] || continue
-    printf 'WARN: %s is enabled but %s (an OOM-killed unit is not restarted by design: llmctl start <profile>)\n' "${u}" "${st}"
+    printf 'WARN: %s is enabled but %s (it is down; a SIGKILLed unit is not restarted by design. Cause: journalctl --user -u %s; start it with: llmctl start <profile>)\n' "${u}" "${st}" "${u}"
   done < <(svc_enabled_down)
   return 0
 }

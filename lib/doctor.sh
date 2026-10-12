@@ -268,17 +268,21 @@ doctor_run() {
     local _doc_u _doc_st
     while IFS=$'\t' read -r _doc_u _doc_st; do
       [[ -n "${_doc_u}" ]] || continue
-      _doc_warn "${_doc_u} is enabled but ${_doc_st} (an OOM-killed unit is not restarted by design; start it with: llmctl start <profile>)"
+      _doc_warn "${_doc_u} is enabled but ${_doc_st} (it is down; a SIGKILLed unit - oomd, MemoryMax - is not restarted by design. Cause: journalctl --user -u ${_doc_u}; start it with: llmctl start <profile>)"
     done < <(svc_enabled_down)
   fi
 
   # A LIVE engine process with no registry row is invisible to the gateway and to every registry-based check, yet the
   # "registry == live set" line above would still say PASS (it compares against units llmctl knows, not processes).
   if declare -F portreg_active >/dev/null 2>&1 && portreg_active 2>/dev/null && [[ -d /proc ]]; then
-    local _doc_stray
+    local _doc_stray _doc_age="${LLMCTL_REGISTER_WAIT:-600}"
+    if [[ ! "${_doc_age}" =~ ^[0-9]+$ ]]; then
+      _doc_warn "LLMCTL_REGISTER_WAIT='${_doc_age}' is not a number of seconds; using 600 for the stray-engine check"
+      _doc_age=600
+    fi
     # Scope: only processes whose command line names one of THIS install's directories (LLMCTL_ROOT/state/data/models,
     # or LLMCTL_DOCTOR_PROC_ROOTS, colon-separated) - another project's llama-server is not ours to judge.
-    _doc_stray="$("$(portreg_bin)" registry list --json 2>/dev/null | PROC_ROOTS="${LLMCTL_DOCTOR_PROC_ROOTS-${LLMCTL_ROOT:-}:${LLMCTL_STATE_DIR:-}:${LLMCTL_DATA_DIR:-}:${LLMCTL_MODELS_DIR:-}}" MIN_AGE="${LLMCTL_REGISTER_WAIT:-600}" python3 -c '
+    _doc_stray="$("$(portreg_bin)" registry list --json 2>/dev/null | PROC_ROOTS="${LLMCTL_DOCTOR_PROC_ROOTS-${LLMCTL_ROOT:-}:${LLMCTL_STATE_DIR:-}:${LLMCTL_DATA_DIR:-}:${LLMCTL_MODELS_DIR:-}}" MIN_AGE="${_doc_age}" python3 -c '
 import json, os, socket, sys
 try:
     rows = json.load(sys.stdin).get("services", [])
@@ -315,7 +319,10 @@ for d in os.listdir("/proc"):
     args = [a.decode("utf-8", "replace") for a in args if a]
     if not any(os.path.basename(a) in ("llama-server", "onnx_server.py") for a in args[:3]):
         continue
-    if roots and not any(r in a for a in args for r in roots):
+    def inside(a, r):      # path-boundary match: /x/proj matches /x/proj and /x/proj/..., never /x/proj2
+        r = r.rstrip("/")
+        return any(p == r or p.startswith(r + "/") for p in (a, a.split("=", 1)[-1]))
+    if roots and not any(inside(a, r) for a in args for r in roots):
         continue
     port = 0
     for i, a in enumerate(args):
