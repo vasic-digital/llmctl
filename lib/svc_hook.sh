@@ -218,6 +218,55 @@ hk_register() {
   return 0
 }
 
+# _hk_validate_after_ready <inst> <port> <envfile> [pid] - the validation gate of the systemd path (docs/validation.md).
+# Runs in the detached waiter AFTER the engine answered its health endpoint, exactly once per start, through the
+# public CLI (`llmctl validate`, with LLMCTL_VALIDATE_ATTACH_PORT so it probes THIS unit and never starts a second
+# one). Only for catalog LLM profiles (kind llm, profile == instance; scaled/other instances are not its business).
+#   PASS -> nothing;  UNDETERMINED -> logged loudly, nothing stopped (strict mode: stopped);
+#   FAIL -> `systemctl --user stop <unit>` (the normal stop path; the engine never exits non-zero by itself, so
+#           Restart=on-failure cannot loop), the reservation is removed, the failure is logged.
+_hk_validate_after_ready() {
+  local inst="$1" port="$2" f="$3" pid="${4:-}" prof kind engine llmctl rc=0 unit st
+  # the engine must still be ALIVE (kill -0 alone also succeeds on a zombie): never validate (or stop) a dead service
+  if [[ -n "${pid}" ]]; then
+    sleep "${LLMCTL_VALIDATE_SETTLE:-1}"   # settle: an engine that dies right after answering must not be validated
+    kill -0 "${pid}" 2>/dev/null || return 0
+    st="$(awk '{print $3}' "/proc/${pid}/stat" 2>/dev/null || true)"
+    [[ "${st}" != "Z" ]] || return 0
+  fi
+  [[ "${LLMCTL_VALIDATE_ON_START:-1}" == "0" ]] && { _hk_log "${inst}: validation on start disabled (LLMCTL_VALIDATE_ON_START=0) - NOT validated"; return 0; }
+  [[ "${LLMCTL_DRY_RUN:-0}" == "1" ]] && return 0
+  prof="$(_hk_get "${f}" LLMCTL_REG_PROFILE)"; kind="$(_hk_get "${f}" LLMCTL_REG_KIND)"
+  [[ "${kind}" == "llm" && -n "${prof}" && "${prof}" == "${inst}" ]] || return 0
+  llmctl="${LLMCTL_ROOT}/bin/llmctl"
+  [[ -x "${llmctl}" ]] || { _hk_log "${inst}: ${llmctl} not executable - NOT validated"; return 0; }
+  if "${llmctl}" require-validated "${prof}" >/dev/null 2>&1; then
+    _hk_log "${inst}: validation: a fresh passing record exists - not re-run"
+    return 0
+  fi
+  _hk_log "${inst}: validation: running the validation suite(s) against the started unit (port ${port})"
+  LLMCTL_VALIDATE_ATTACH_PORT="${port}" "${llmctl}" validate "${prof}" >> "${LLMCTL_LOG_DIR}/svc_hook.log" 2>&1 || rc=$?
+  case "${rc}" in
+    0) _hk_log "${inst}: validation PASSED"; return 0 ;;
+    1) _hk_log "${inst}: validation FAILED (wrong answers) - stopping the unit through the normal stop path" ;;
+    *) if [[ "${LLMCTL_VALIDATE_STRICT:-0}" == "1" ]]; then
+         _hk_log "${inst}: validation UNDETERMINED and LLMCTL_VALIDATE_STRICT=1 - stopping the unit"
+       else
+         _hk_log "${inst}: validation UNDETERMINED (could not be validated) - the unit keeps running, NOT validated; llmctl require-validated ${prof} refuses"
+         return 0
+       fi ;;
+  esac
+  engine="$(_hk_get "${f}" LLMCTL_ENGINE)"
+  if command -v systemctl >/dev/null 2>&1 && [[ -n "${engine}" ]]; then
+    unit="llmctl-${engine}@${inst}.service"
+    systemctl --user stop "${unit}" >> "${LLMCTL_LOG_DIR}/svc_hook.log" 2>&1 || _hk_log "${inst}: could not stop ${unit} - stop it by hand: llmctl stop ${inst}"
+  else
+    "${llmctl}" stop "${inst}" >> "${LLMCTL_LOG_DIR}/svc_hook.log" 2>&1 || _hk_log "${inst}: could not stop - run: llmctl stop ${inst}"
+  fi
+  rm -f "${LLMCTL_RUNTIME_DIR}/${inst}.run"
+  return 0
+}
+
 hk__wait_register() {
   local inst="$1" pid="$2" f port
   f="$(_hk_envfile "${inst}")"
@@ -227,7 +276,8 @@ hk__wait_register() {
   _hk_wait_register "${inst}" "${port}" "${pid}" "$(_hk_get "${f}" LLMCTL_REG_TOKEN)" \
     "$(_hk_get "${f}" LLMCTL_REG_PROTOCOL)" "$(_hk_get "${f}" LLMCTL_REG_HEALTH)" \
     "$(_hk_get "${f}" LLMCTL_REG_KIND)" "$(_hk_get "${f}" LLMCTL_REG_PROFILE)" "${inst}" \
-    "$(_hk_get "${f}" LLMCTL_REG_LOOPBACK)" "$(_hk_get "${f}" LLMCTL_KEY_FILE)"
+    "$(_hk_get "${f}" LLMCTL_REG_LOOPBACK)" "$(_hk_get "${f}" LLMCTL_KEY_FILE)" || return 1
+  _hk_validate_after_ready "${inst}" "${port}" "${f}" "${pid}"
 }
 
 # The gateway publishes itself as "decide-gateway" (Go side); "gateway" is its
@@ -292,6 +342,10 @@ hk_run_gateway() {
   decide_timeout_adapt
   exec "${bin}" serve --foreground
 }
+
+# Sourced (by a test or another script that has its own positional parameters): define the functions, dispatch
+# nothing. Only an execution of this file as a program dispatches on its own arguments.
+[[ "${BASH_SOURCE[0]}" == "${0}" ]] || return 0 2>/dev/null || true
 
 case "${1:-}" in
   gate)          hk_gate "${2:-}" ;;

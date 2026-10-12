@@ -135,7 +135,12 @@ _val_downloaded() {
 # _val_port <profile> - port of a RUNNING profile (from its reservation), rc 1 when not running.
 _val_port() {
   local f="${LLMCTL_RUNTIME_DIR}/$1.run" port
-  [[ -f "${f}" ]] || return 1
+  if [[ ! -f "${f}" ]]; then
+    # A unit started by systemd (boot, Restart=, restart) may have no reservation: lib/svc_hook.sh's waiter passes the
+    # port of THE started unit so validation probes it instead of starting a second copy.
+    [[ "${LLMCTL_VALIDATE_ATTACH_PORT:-}" =~ ^[0-9]+$ ]] && { echo "${LLMCTL_VALIDATE_ATTACH_PORT}"; return 0; }
+    return 1
+  fi
   port="$(sed -n 's/^port=//p' "${f}" | head -1)"
   [[ "${port}" =~ ^[0-9]+$ ]] || return 1
   echo "${port}"
