@@ -430,4 +430,25 @@ chmod 700 "${LLMCTL_STATE_DIR}/validation"
 assert_eq "" "$(ls -A "${TEST_TMP}/tmpk")" "validate_after_start left no temp key file"
 rm -f "${LLMCTL_RUNTIME_DIR}/vision.run"
 
+echo "== 23. validate_profile restores the caller's INT/TERM/HUP traps and never touches its EXIT trap"
+U="$(fake_start "${FIX}/answers_good.json" --model-id "${CHATM}")"
+out="$(bash -c '
+  source "$1/lib/common.sh"; source "$1/lib/catalog.sh"; source "$1/lib/validate.sh"
+  trap "echo CALLER-INT" INT
+  trap "echo CALLER-TERM" TERM
+  trap "echo CALLER-EXIT" EXIT
+  validate_profile fast --host "$2" >/dev/null 2>&1; echo "rc=$?"
+  trap -p INT TERM HUP EXIT
+' _ "${LLMCTL_ROOT}" "${U}" 2>&1)"
+assert_contains "${out}" "rc=0" "validation ran"
+assert_contains "${out}" "trap -- 'echo CALLER-INT' SIGINT" "the caller's INT trap is back after validate_profile"
+assert_contains "${out}" "trap -- 'echo CALLER-TERM' SIGTERM" "the caller's TERM trap is back"
+assert_contains "${out}" "CALLER-EXIT" "the caller's EXIT trap still fires"
+# no caller trap -> none left behind either
+out="$(bash -c '
+  source "$1/lib/common.sh"; source "$1/lib/catalog.sh"; source "$1/lib/validate.sh"
+  validate_profile fast --host "$2" >/dev/null 2>&1; echo "rc=$?"; trap -p INT TERM HUP
+' _ "${LLMCTL_ROOT}" "${U}" 2>&1)"
+assert_eq "rc=0" "${out}" "with no caller traps none remain"
+
 test_finish

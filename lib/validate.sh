@@ -135,6 +135,12 @@ _val_port() {
   echo "${port}"
 }
 
+# _val_restore_traps <saved `trap -p` output> - drop ours, reinstate the caller's INT/TERM/HUP traps.
+_val_restore_traps() {
+  trap - INT TERM HUP
+  if [[ -n "${1:-}" ]]; then eval "$1"; fi
+}
+
 # validate_profile <profile> [--kind vision] [--host URL] [--json] [--keep]
 # Runs every (or every <kind>) suite of the profile against its endpoint; prints per-probe verdicts with
 # the model's raw answers; returns 0/1/2 (see header). With --host the endpoint is external: the result
@@ -160,7 +166,8 @@ validate_profile() {
   local suites
   suites="$(_val_suites "${p}" "${kind}")" || return 2
 
-  local endpoint started=0 starting=0 jpid="" key_file=""
+  local endpoint started=0 starting=0 jpid="" key_file="" saved_traps
+  saved_traps="$(trap -p INT TERM HUP)"      # the caller's traps (e.g. scheduler lock cleanup) are restored on every return
   # Interrupt safety: SIGINT/SIGTERM/SIGHUP removes the temp key file, kills the judge child (by PID, never by
   # process group) and stops a profile THIS call started (unless --keep). The handler reads this function's
   # locals, so it is only ever armed while validate_profile is on the stack.
@@ -186,7 +193,7 @@ validate_profile() {
     if ! port="$(_val_port "${p}")"; then
       if ! _val_downloaded "${p}"; then
         err "profile '${p}' is not downloaded (run: llmctl models download ${p}) - cannot validate: could not determine"
-        trap - INT TERM HUP
+        _val_restore_traps "${saved_traps}"
         return 2
       fi
       log "profile '${p}' is not running - starting it through the scheduler (budget-checked) to validate it"
@@ -194,11 +201,11 @@ validate_profile() {
       if ! sched_start "${p}"; then
         starting=0
         err "could not start '${p}' (see above: insufficient RAM/VRAM or a start failure) - cannot validate: could not determine"
-        trap - INT TERM HUP
+        _val_restore_traps "${saved_traps}"
         return 2
       fi
       started=1
-      port="$(_val_port "${p}")" || { err "'${p}' started but has no port reservation"; trap - INT TERM HUP; return 2; }
+      port="$(_val_port "${p}")" || { err "'${p}' started but has no port reservation"; _val_restore_traps "${saved_traps}"; return 2; }
     fi
     endpoint="http://127.0.0.1:${port}"
   fi
@@ -208,7 +215,7 @@ validate_profile() {
   if ! _val_key "${p}" "${key_file}" "${kind}"; then
     err "cannot compute the validation key of '${p}' - cannot validate: could not determine"
     rm -f "${key_file}"; key_file=""
-    trap - INT TERM HUP
+    _val_restore_traps "${saved_traps}"
     return 2
   fi
   # evidence may describe a protected endpoint: 0600, and the URL is logged without userinfo/query/fragment
@@ -259,7 +266,7 @@ validate_profile() {
     log "stopping '${p}' again (it was started only for validation; pass --keep to leave it running)"
     sched_stop "${p}" >/dev/null || warn "could not stop '${p}' after validation"
   fi
-  trap - INT TERM HUP
+  _val_restore_traps "${saved_traps}"
   return "${rc}"
 }
 
