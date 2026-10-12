@@ -53,6 +53,7 @@ portreg_active() {
 
 # portreg_profile_var <name> -> LLMCTL_PORT_<NAME> (same rule as the Go side).
 portreg_profile_var() {
+  valid_id "${1:-}" || { echo "portreg_profile_var: invalid profile name" >&2; return 1; }
   printf 'LLMCTL_PORT_%s' "$(printf '%s' "$1" | tr '[:lower:]-.' '[:upper:]__')"
 }
 
@@ -60,7 +61,8 @@ portreg_profile_var() {
 # dynamic port for this profile (global strategy or per-profile =auto) and
 # no explicit numeric port overrides it.
 portreg_dynamic_requested() {
-  local v; v="$(portreg_profile_var "$1")"
+  local v; valid_id "${1:-}" || return 1      # allow-list before ${!v} (array-subscript evaluation)
+  v="$(portreg_profile_var "$1")" || return 1
   case "${!v:-}" in
     auto) return 0 ;;
     "")   [[ "${LLMCTL_PORT_STRATEGY:-fixed}" == "dynamic" ]] ;;

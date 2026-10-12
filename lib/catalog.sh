@@ -126,6 +126,8 @@ catalog_port() {
   # the same "unknown profile" message rather than silently returning the
   # override for a profile that does not exist.
   local p="$1" override_var override
+  # allow-list BEFORE the name becomes a variable name: ${!var} evaluates an array subscript, i.e. runs $(...) in it
+  valid_id "${p}" || die "invalid profile name: ${p}"
   override_var="$(catalog_port_override_env_name "${p}")"
   override="${!override_var:-}"
   if [[ -n "${override}" && "${override}" != "auto" ]]; then
