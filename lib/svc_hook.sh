@@ -118,9 +118,19 @@ _hk_wait_register() {
 _hk_envfile() { printf '%s/%s.env' "${LLMCTL_SERVICES_DIR}" "$1"; }
 
 hk_prestart() {
-  local inst="$1" f keyf
+  local inst="$1" f keyf port
   f="$(_hk_envfile "${inst}")"
   [[ -f "${f}" ]] || return 0
+  # Port-in-use guard (second unit for the same profile, or a stray engine): fail FAST with the distinct code 98
+  # (EADDRINUSE; every engine unit lists it in RestartPreventExitStatus) BEFORE the model is loaded and BEFORE the
+  # key file is rotated under the live server. UNKNOWN: whether this systemd applies RestartPreventExitStatus to a
+  # failed ExecStartPre; the StartLimit bound applies either way.
+  port="$(_hk_get "${f}" LLMCTL_PORT)"
+  if [[ "${port}" =~ ^[0-9]+$ ]] && timeout 1 bash -c "exec 3<>/dev/tcp/127.0.0.1/${port}" 2>/dev/null; then
+    _hk_log "${inst}: port ${port} is already in use; refusing to start (exit 98), key file untouched"
+    printf 'llmctl: port %s is already in use on 127.0.0.1 (profile %s is probably running under another unit); not starting\n' "${port}" "${inst}" >&2
+    return 98
+  fi
   keyf="$(_hk_get "${f}" LLMCTL_KEY_FILE)"
   [[ -n "${keyf}" ]] || return 0
   _hk_new_key "${keyf}" || { _hk_log "${inst}: cannot rotate key file ${keyf}"; return 1; }
