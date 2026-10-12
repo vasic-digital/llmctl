@@ -46,7 +46,7 @@ llmctl status                       # a crash-looping unit shows failed (crash-l
 * An enabled profile that you `llmctl stop` comes back at the next login/boot unless you `llmctl disable` it.
 * Instance records (`$LLMCTL_SERVICES_DIR/<profile>.env`) survive reboots; the tmpfs reservations in `$LLMCTL_RUNTIME_DIR` do not and are reconciled on the next scheduler call.
 * More than one instance of a decision profile: `llmctl decide scale <profile> <N>`; the instance keys are `<profile>`, `<profile>.2`, ... and each has its own unit instance, port and key file ([user manual](user-manual.md#decide-scale)).
-* The unit templates carry `MemoryHigh`/`MemoryMax` at the host's probed RAM, `Restart=always`, `RestartSec=5`, `StartLimitBurst=5` (per 60 s) and strict hardening. Tighter per-unit limits are a drop-in (below).
+* The unit templates carry `MemoryHigh`/`MemoryMax` below the probed RAM (per-profile drop-in, see host-safety.md), `Restart=on-failure`, `RestartSec=5`, `StartLimitBurst=3` (per 900 s) and strict hardening. Tighter per-unit limits are a drop-in (below).
 
 ## Make the gateway persistent
 

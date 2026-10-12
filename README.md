@@ -286,6 +286,7 @@ fastest path to a running model.
 | [`docs/qa/decision-models-validation/README.md`](docs/qa/decision-models-validation/README.md) | Captured evidence for the decision-models feature's validation runs (iteration 1: 34 PASS / 7 pre-existing environment FAIL; iteration 2: 36 PASS / 7 environment FAIL) |
 | [`docs/validation.md`](docs/validation.md) | The project's V&V (validation & verification) contract |
 | [`docs/host-safety.md`](docs/host-safety.md) | Host-hang safeguards after the 2026-10-08 incident: cgroup limits, `bounded-run`, the memory-pressure guard, and the root-only steps |
+| [`docs/hardening-2026-10-changelog.md`](docs/hardening-2026-10-changelog.md) | Changelog-ready summary: per-profile memory caps, bounded restarts, the pressure start gate, one engine per profile |
 | [`docs/validation_and_verification.md`](docs/validation_and_verification.md) | Why fully-deterministic V&V matters for CLI-agent-driven development |
 | [`docs/CONTINUATION.md`](docs/CONTINUATION.md) | Live session-resumption state: current phase, next action, per-phase findings (Constitution §12.10) |
 | [`docs/commit-fully-integration.md`](docs/commit-fully-integration.md) | The `commit-fully` tooling integration |
