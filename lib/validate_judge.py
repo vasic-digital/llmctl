@@ -680,6 +680,18 @@ def main(argv=None):
     if a.cmd == "record":
         with open(a.key) as fh:
             key = json.load(fh)
+        if a.status == "undetermined" and os.path.isfile(a.out):
+            # could-not-determine is not evidence against an earlier PASS (endpoint blip, OOM on start):
+            # keep it. require-validated still compares the record to the CURRENT key, so a stale pass
+            # for a changed model/engine/suite is refused regardless.
+            try:
+                with open(a.out) as fh:
+                    prior = json.load(fh)
+            except (OSError, ValueError):
+                prior = {}
+            if prior.get("status") == "pass":
+                print("kept prior pass record %s (this run was UNDETERMINED)" % a.out)
+                return 0
         key.update({"status": a.status, "epoch": int(time.time()),
                     "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "evidence": a.evidence})
         tmp = a.out + ".tmp"

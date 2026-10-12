@@ -175,4 +175,30 @@ if grep -q Traceback "${TEST_TMP}/last.out"; then printf '  FAIL: traceback on a
 set_epoch 'null'
 assert_eq 1 "$(chk)" "null epoch -> not fresh"
 
+echo "== 9. an UNDETERMINED run never overwrites a prior PASS record"
+rm -f "${TEST_TMP}/state.json"
+rec() { python3 -I "${JUDGE}" record --key "${TEST_TMP}/key.json" --status "$1" --out "${TEST_TMP}/state.json" >"${TEST_TMP}/rec.out" 2>&1; }
+st() { python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["status"])' "${TEST_TMP}/state.json"; }
+rec pass
+assert_eq pass "$(st)" "pass recorded"
+rec undetermined
+assert_eq pass "$(st)" "undetermined run (endpoint down) did not replace the prior pass"
+assert_eq 0 "$(chk)" "...so the still-matching pass stays fresh"
+rec fail
+assert_eq fail "$(st)" "a real FAIL does replace a pass"
+rec undetermined
+assert_eq undetermined "$(st)" "undetermined may replace a fail (the wrong-answer evidence stays in the evidence log)"
+rec pass
+assert_eq pass "$(st)" "a new pass replaces anything"
+# end to end through validate_profile: a running profile whose endpoint is down must not wipe its PASS
+mkdir -p "${LLMCTL_MODELS_DIR}/vision"; : > "${LLMCTL_MODELS_DIR}/vision/gemma-3-4b-it-Q4_K_M.gguf"; : > "${LLMCTL_MODELS_DIR}/vision/mmproj-model-f16.gguf"
+U="$(fake_start "${FIX}/answers_good.json" --model-id "${LLMCTL_MODELS_DIR}/vision/gemma-3-4b-it-Q4_K_M.gguf")"
+write_run vision "${U##*:}"
+assert_eq 0 "$(run_rc "${LLMCTL}" vision validate)" "vision validates against the fixture endpoint"
+assert_eq pass "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["status"])' "${LLMCTL_STATE_DIR}/validation/vision.json")" "state: pass"
+sed -i "s/^port=.*/port=9/" "${LLMCTL_RUNTIME_DIR}/vision.run"
+assert_eq 2 "$(run_rc "${LLMCTL}" vision validate)" "endpoint down -> exit 2"
+assert_eq pass "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["status"])' "${LLMCTL_STATE_DIR}/validation/vision.json")" "state still pass after the undetermined run"
+rm -f "${LLMCTL_RUNTIME_DIR}/vision.run"
+
 test_finish
