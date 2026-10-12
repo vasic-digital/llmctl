@@ -318,4 +318,15 @@ PY
 }
 assert_eq True  "$(jt15 '1.5')" "'1.5' still passes for 1.5"
 
+echo "== 14. finish_reason=length without reasoning content: a WRONG truncated answer is FAIL, only a passing truncation is UNDETERMINED"
+U="$(fake_start "$(answers_with arith 41)" --mode truncate --model-id "${CHATM}")"
+assert_eq 1 "$(run_rc python3 -I "${JUDGE}" run --suite "${CSUITE}" --endpoint "${U}")" "truncated AND wrong (41) -> exit 1"
+assert_contains "$(cat "${TEST_TMP}/last.out")" "[FAIL] arith" "the wrong truncated probe is a FAIL"
+U="$(fake_start "$(answers_with arith '')" --mode truncate --model-id "${CHATM}")"
+assert_eq 1 "$(run_rc python3 -I "${JUDGE}" run --suite "${CSUITE}" --endpoint "${U}")" "truncated, empty content, no reasoning -> exit 1"
+U="$(fake_start "${FIX}/answers_good.json" --mode truncate --model-id "${CHATM}")"
+assert_eq 2 "$(run_rc python3 -I "${JUDGE}" run --suite "${CSUITE}" --endpoint "${U}")" "truncated but the content passes -> still exit 2 (cannot tell it was complete)"
+U="$(fake_start "$(answers_with arith 41)" --mode reasoning-budget --model-id "${CHATM}")"
+assert_eq 2 "$(run_rc python3 -I "${JUDGE}" run --suite "${CSUITE}" --endpoint "${U}")" "truncated with reasoning content -> exit 2 (unchanged)"
+
 test_finish

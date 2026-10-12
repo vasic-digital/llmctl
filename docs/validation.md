@@ -107,9 +107,11 @@ forbidden substring, number, regex and JSON-subset checks taken from the suite f
 * **number_equals rule (decided 2026-10-12):** when the answer restates an equation (`17 + 25 = 42`) the number after the **last** `=` is the answer;
   otherwise the **first** number in the answer (digits, or an English number word `zero`..`twenty` that is not part of a hyphenated compound such as
   `twenty-two`). `17 + 25 = 41`, `17 + 25` and `41, not 42` all FAIL.
-* **Complete answers only:** a completion with `finish_reason=length`, or empty `message.content` while the reasoning channel is non-empty, is
-  UNDETERMINED (exit 2) with a hint to raise `request.max_tokens` (chat/coder use 2048). A complete wrong answer, or a genuinely empty answer with no
-  reasoning content, is a FAIL. Only `message.content` is judged.
+* **Complete answers only:** a completion cut off by the token budget (`finish_reason=length`) **with reasoning content**, or empty
+  `message.content` while the reasoning channel is non-empty, is UNDETERMINED (exit 2) with a hint to raise `request.max_tokens` (chat/coder use
+  2048). A truncated answer without reasoning content is judged: if the truncated content is **wrong** it is a FAIL; if it would pass, it is still
+  UNDETERMINED (a cut-off pass is not trusted). A complete wrong answer, or a genuinely empty answer with no reasoning content, is a FAIL. Only
+  `message.content` is judged.
 * **Anti-bluff structure of every run:** suite file hashes, judge self-test with canned controls before any request, model-identity check against
   `/v1/models`, golden-bad controls, determinism repeat. See the header of `lib/validate_judge.py`.
 

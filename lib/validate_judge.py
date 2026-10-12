@@ -347,19 +347,28 @@ def ask(endpoint, suite, prompt, image_path=None, timeout=180):
         raise NoAnswer("malformed completion response: %s" % json.dumps(d)[:300])
 
 
-def undetermined_reason(a):
-    """None when the completion is a complete final answer that may be judged. Otherwise the reason it cannot
-    be judged: the answer was cut off by the token budget, or a reasoning model produced no final answer. Those
-    are budget problems, not wrong answers - UNDETERMINED (exit 2), never PASS and never FAIL. A completion with
-    empty content and NO reasoning content is a genuinely empty answer and is judged (FAIL)."""
+def undetermined_reason(a, checks=None):
+    """None when the completion may be judged as it stands. Otherwise the reason it cannot be judged (UNDETERMINED,
+    exit 2 - never PASS, never FAIL):
+      * finish_reason=length WITH reasoning content: the budget went into the reasoning channel, the final answer
+        never came;
+      * finish_reason=length, no reasoning content, and the (truncated) content PASSES `checks` (or no checks are
+        given): the pass cannot be trusted to be a complete answer;
+      * empty content with reasoning content (finish_reason=stop).
+    A truncated answer that is WRONG is a FAIL (judged normally), as is an empty answer with no reasoning content."""
+    rc = a.get("reasoning_chars", 0)
     if a.get("finish_reason") == "length":
-        return ("answer truncated (finish_reason=length, max_tokens=%s, reasoning_chars=%s): the model did not "
+        hint = ("answer truncated (finish_reason=length, max_tokens=%s, reasoning_chars=%s): the model did not "
                 "finish within the request budget - raise request.max_tokens in the suite; this is not a verdict "
-                "on the answer" % (a.get("max_tokens"), a.get("reasoning_chars", 0)))
-    if not str(a.get("content", "")).strip() and a.get("reasoning_chars", 0) > 0:
+                "on the answer" % (a.get("max_tokens"), rc))
+        if rc > 0 or checks is None:
+            return hint
+        if judge(checks, a.get("content", ""))[0]:
+            return hint + " (the truncated content would pass, but a cut-off pass is not trusted)"
+        return None
+    if not str(a.get("content", "")).strip() and rc > 0:
         return ("no final answer: message.content is empty but the reasoning channel has %d chars "
-                "(a reasoning model that spent its output in reasoning) - not a verdict on the answer"
-                % a["reasoning_chars"])
+                "(a reasoning model that spent its output in reasoning) - not a verdict on the answer" % rc)
     return None
 
 
@@ -514,7 +523,7 @@ def run(args):
                 out("[UNDETERMINED] %s: no answer: %s" % (key, msg))
             report["results"].append(rec)
             continue
-        why = undetermined_reason(a)
+        why = undetermined_reason(a, pr["checks"])
         if why:
             counts["undetermined"] += 1
             rec.update(verdict="UNDETERMINED", reasons=[why], answer=a["content"], finish_reason=a["finish_reason"])
@@ -545,7 +554,7 @@ def run(args):
                     out("[UNDETERMINED] control %s: no answer: %s" % (key, err[1]))
                     report["controls"].append({"key": key, "verdict": "UNDETERMINED", "reasons": [err[1]]})
                     continue
-                why = undetermined_reason(a)
+                why = undetermined_reason(a, gpr["checks"])
                 if why:
                     counts["undetermined"] += 1
                     out("[UNDETERMINED] control %s: %s" % (key, why))
