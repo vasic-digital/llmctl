@@ -180,7 +180,7 @@ validate_profile() {
   trap '_val_on_signal 129' HUP
   if [[ -n "${host}" ]]; then
     endpoint="${host%/}"
-    [[ "${json}" == "1" ]] || log "--host: external endpoint ${endpoint} - the result is evidence only, it is NOT recorded as '${p}' validation state"
+    [[ "${json}" == "1" ]] || log "--host: external endpoint $(_val_judge redact "${endpoint}") - the result is evidence only, it is NOT recorded as '${p}' validation state"
   else
     local port
     if ! port="$(_val_port "${p}")"; then
@@ -211,7 +211,9 @@ validate_profile() {
     trap - INT TERM HUP
     return 2
   fi
-  printf '\n==== %s llmctl validate %s endpoint=%s kind=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${p}" "${endpoint}" "${kind:-all}" >> "${evidence}"
+  # evidence may describe a protected endpoint: 0600, and the URL is logged without userinfo/query/fragment
+  ( umask 077; : >> "${evidence}" ); chmod 600 "${evidence}"
+  printf '\n==== %s llmctl validate %s endpoint=%s kind=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${p}" "$(_val_judge redact "${endpoint}")" "${kind:-all}" >> "${evidence}"
   printf 'KEY %s\n' "$(cat "${key_file}")" >> "${evidence}"
 
   local s rc=0 one worst=0 saw_undet=0

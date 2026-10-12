@@ -261,6 +261,27 @@ class Rejected(Exception):
     """The endpoint answered but refused the request (4xx): a real FAIL of the served model."""
 
 
+def redact_url(url):
+    """scheme://host[:port]/path - userinfo, query string and fragment (where tokens live) are dropped. For every
+    place a URL is printed, logged or recorded."""
+    try:
+        sp = urllib.parse.urlsplit(url)
+        host = sp.hostname or ""
+        if ":" in host:
+            host = "[" + host + "]"
+        port = sp.port
+        return "%s://%s%s%s" % (sp.scheme, host, (":%d" % port) if port else "", sp.path)
+    except ValueError:
+        return "<unparseable url>"
+
+
+def open_private(path, mode="a"):
+    """Open for writing with the file forced to 0600 (evidence and state may describe a protected endpoint)."""
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | (os.O_APPEND if mode == "a" else os.O_TRUNC), 0o600)
+    os.chmod(path, 0o600)
+    return os.fdopen(fd, mode)
+
+
 def api_key_for(url):
     """The bearer token (LLMCTL_VALIDATE_API_KEY) may be sent ONLY to a loopback host - 127.0.0.0/8, ::1,
     localhost - which is where every locally started profile listens, or to a host named EXACTLY in the
@@ -343,7 +364,7 @@ def http_json(url, body=None, timeout=60):
     request (connect, headers, body): a server that trickles bytes can no longer stall validation."""
     scheme = urllib.parse.urlsplit(url).scheme.lower()
     if scheme not in ("http", "https"):
-        raise NoAnswer("refusing endpoint with scheme %r (only http and https): %.80s" % (scheme, url))
+        raise NoAnswer("refusing endpoint with scheme %r (only http and https): %.80s" % (scheme, redact_url(url)))
     data = None if body is None else json.dumps(body).encode()
     req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"},
                                  method="GET" if body is None else "POST")
@@ -456,7 +477,7 @@ def run(args):
     suite = load_suite(suite_dir)
     timeout = float(os.environ.get("LLMCTL_VALIDATE_TIMEOUT", "180"))
     report = {"suite": suite.get("suite"), "kind": suite.get("kind"), "suite_hash": suite_hash(suite_dir),
-              "endpoint": args.endpoint, "expect_model": args.expect_model, "results": [],
+              "endpoint": redact_url(args.endpoint), "expect_model": args.expect_model, "results": [],
               "controls": [], "determinism": [], "judge_selftest": [], "notes": []}
     counts = {"pass": 0, "fail": 0, "undetermined": 0}
     lines = []
@@ -467,7 +488,7 @@ def run(args):
             print(s, flush=True)
 
     out("suite %s (%s) hash %s" % (suite.get("suite"), suite.get("kind"), report["suite_hash"]))
-    out("endpoint %s" % args.endpoint)
+    out("endpoint %s" % redact_url(args.endpoint))
 
     def finish():
         if counts["fail"]:
@@ -482,7 +503,7 @@ def run(args):
         if args.json:
             print(json.dumps(report, indent=1))
         if args.evidence:
-            with open(args.evidence, "a") as fh:
+            with open_private(args.evidence, "a") as fh:
                 fh.write("\n".join(lines) + "\n")
                 fh.write("JSON " + json.dumps(report) + "\n")
         return rc
@@ -782,6 +803,8 @@ def main(argv=None):
     r.add_argument("--evidence", default="")
     s = sub.add_parser("selftest")
     s.add_argument("--suite", required=True)
+    rd = sub.add_parser("redact")
+    rd.add_argument("url")
     h = sub.add_parser("hash")
     h.add_argument("--suite", required=True)
     a = ap.parse_args(argv)
@@ -811,7 +834,7 @@ def main(argv=None):
         key.update({"status": a.status, "epoch": int(time.time()),
                     "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "evidence": a.evidence})
         tmp = a.out + ".tmp"
-        with open(tmp, "w") as fh:
+        with open_private(tmp, "w") as fh:
             json.dump(key, fh, indent=1, sort_keys=True)
         os.replace(tmp, a.out)
         return 0
@@ -830,6 +853,9 @@ def main(argv=None):
             return 1
         print("fresh passing validation from %s (suites: %s)" % (state.get("timestamp"),
                                                                  ", ".join(sorted(state.get("suites", {})))))
+        return 0
+    if a.cmd == "redact":
+        print(redact_url(a.url))
         return 0
     if a.cmd == "hash":
         print(suite_hash(os.path.abspath(a.suite)))

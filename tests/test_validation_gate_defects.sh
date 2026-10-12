@@ -385,4 +385,31 @@ U="$(fake_start "${FIX}/answers_good.json" --mode endless --model-id "${CHATM}")
 assert_eq 2 "$(run_rc env LLMCTL_VALIDATE_TIMEOUT=20 timeout 60 python3 -I "${JUDGE}" run --suite "${CSUITE}" --endpoint "${U}")" "a 32 MiB body -> exit 2"
 assert_contains "$(cat "${TEST_TMP}/last.out")" "response too large" "the output says the response was too large"
 
+echo "== 21. evidence log and state are 0600; userinfo and query strings never reach logs, output or evidence"
+HOSTURL='http://user:SECRETPW@127.0.0.1:9/?tok=SECRETQ'
+rc="$(run_rc "${LLMCTL}" validate fast --host "${HOSTURL}")"
+assert_eq 2 "${rc}" "unreachable --host -> exit 2"
+EVLOG="${LLMCTL_VERIFY_DIR}/validate-fast.log"
+assert_file_exists "${EVLOG}" "evidence log written"
+assert_eq 600 "$(stat -c %a "${EVLOG}")" "evidence log mode is 0600"
+assert_eq 0 "$(grep -c 'SECRETPW\|SECRETQ' "${EVLOG}" || true)" "no userinfo/query secret in the evidence log"
+assert_eq 0 "$(grep -c 'SECRETPW\|SECRETQ' "${TEST_TMP}/last.out" || true)" "no userinfo/query secret in the command output"
+assert_contains "$(cat "${EVLOG}")" "127.0.0.1:9" "the host:port is still recorded"
+# a local record is 0600 too
+rm -rf "${LLMCTL_STATE_DIR}/validation"; mkdir -p "${LLMCTL_STATE_DIR}/validation"
+python3 -I "${JUDGE}" key --catalog "${LLMCTL_ROOT}/models/catalog.json" --profile vision --models-dir "${LLMCTL_MODELS_DIR}" \
+  --suites-dir "${LLMCTL_ROOT}/validation/suites" --engine-tag t > "${TEST_TMP}/key2.json"
+python3 -I "${JUDGE}" record --key "${TEST_TMP}/key2.json" --status pass --out "${LLMCTL_STATE_DIR}/validation/vision.json"
+assert_eq 600 "$(stat -c %a "${LLMCTL_STATE_DIR}/validation/vision.json")" "state record mode is 0600"
+rm -f "${EVLOG}"
+U="$(fake_start "${FIX}/answers_good.json" --model-id "${CHATM}")"
+assert_eq 0 "$(run_rc "${LLMCTL}" validate fast --host "${U}")" "validate against the fixture"
+assert_eq 600 "$(stat -c %a "${EVLOG}")" "evidence log written by a successful run is 0600"
+assert_eq "http://host:9/x" "$(python3 -I - "${JUDGE}" <<'PY'
+import importlib.util, sys
+sp = importlib.util.spec_from_file_location("vj", sys.argv[1]); m = importlib.util.module_from_spec(sp); sp.loader.exec_module(m)
+print(m.redact_url("http://u:p@host:9/x?tok=1#f"))
+PY
+)" "redact_url keeps scheme/host/port/path only"
+
 test_finish
