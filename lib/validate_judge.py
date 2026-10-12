@@ -297,7 +297,17 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
         return None
 
 
-_OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}), _NoRedirect)   # no env proxies: prompts + token go direct
+def _build_opener():
+    """An opener from an EXPLICIT handler list: http/https only. build_opener() would add file:, ftp: and data:
+    handlers (a `--host file:///path#` would then read a local file as a model reply); no env proxies either."""
+    op = urllib.request.OpenerDirector()
+    for h in (urllib.request.ProxyHandler({}), urllib.request.HTTPHandler(), urllib.request.HTTPSHandler(),
+              urllib.request.HTTPDefaultErrorHandler(), urllib.request.HTTPErrorProcessor(), _NoRedirect()):
+        op.add_handler(h)
+    return op
+
+
+_OPENER = _build_opener()
 _warned_hosts = set()
 
 
@@ -330,6 +340,9 @@ class _deadline:
 def http_json(url, body=None, timeout=60):
     """One JSON request. `timeout` is BOTH the per-socket timeout and an overall wall-clock deadline for the whole
     request (connect, headers, body): a server that trickles bytes can no longer stall validation."""
+    scheme = urllib.parse.urlsplit(url).scheme.lower()
+    if scheme not in ("http", "https"):
+        raise NoAnswer("refusing endpoint with scheme %r (only http and https): %.80s" % (scheme, url))
     data = None if body is None else json.dumps(body).encode()
     req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"},
                                  method="GET" if body is None else "POST")

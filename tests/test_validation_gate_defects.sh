@@ -368,4 +368,16 @@ assert_eq False "$(jt '42 = 17+25')" "'42 = 17+25' fails (documented trade-off)"
 assert_contains "$(cat "${LLMCTL_ROOT}/docs/validation.md")" "41 because 17+25=42" "docs state the first trade-off"
 assert_contains "$(cat "${LLMCTL_ROOT}/docs/validation.md")" "42 = 17+25" "docs state the second trade-off"
 
+echo "== 19. only http/https endpoints: file:, ftp:, data: and the fragment trick are refused before any open"
+echo '{"data":[{"id":"/m/x.gguf"}]}' > "${TEST_TMP}/models_reply.json"
+for ep in "file://${TEST_TMP}/models_reply.json#" "file://${TEST_TMP}/models_reply.json?" 'data:application/json,{"data":[{"id":"/m/x.gguf"}]}#' "ftp://127.0.0.1:9/x#" "FILE://${TEST_TMP}/models_reply.json#"; do
+  assert_eq 2 "$(run_rc python3 -I "${JUDGE}" run --suite "${CSUITE}" --endpoint "${ep}" --expect-model x.gguf)" "endpoint ${ep%%[#?]*} -> exit 2"
+  if grep -q "model identity: endpoint serves" "${TEST_TMP}/last.out"; then printf '  FAIL: %s was READ as a model reply\n' "${ep%%:*}" >&2; TEST_FAILS=$((TEST_FAILS+1)); else printf '  ok: not read as a model reply\n'; fi
+  assert_contains "$(cat "${TEST_TMP}/last.out")" "scheme" "the refusal names the scheme"
+done
+assert_eq "" "$(python3 -I -c "
+import importlib.util
+sp = importlib.util.spec_from_file_location('vj', '${JUDGE}'); m = importlib.util.module_from_spec(sp); sp.loader.exec_module(m)
+print([type(h).__name__ for h in m._OPENER.handlers if type(h).__name__ in ('FileHandler','FTPHandler','DataHandler')])" | sed 's/^\[\]$//')" "the opener has no File/FTP/Data handler"
+
 test_finish
