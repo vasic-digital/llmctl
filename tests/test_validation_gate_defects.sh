@@ -353,4 +353,19 @@ assert_eq 2 "$(run_rc env TMPDIR="${TEST_TMP}/tmpr" LLMCTL_CATALOG="${BADCAT}" "
 assert_contains "$(cat "${TEST_TMP}/last.out")" "cannot compute the validation key" "an error message names the cause"
 assert_eq "" "$(ls -A "${TEST_TMP}/tmpr")" "no mktemp key file left behind"
 
+echo "== 17. an overall wall-clock deadline per request (a trickling endpoint cannot stall validation)"
+U="$(fake_start "${FIX}/answers_good.json" --mode trickle --model-id "${CHATM}")"
+t0=$SECONDS
+assert_eq 2 "$(run_rc env LLMCTL_VALIDATE_TIMEOUT=3 timeout 50 python3 -I "${JUDGE}" run --suite "${CSUITE}" --endpoint "${U}")" "trickling /v1/models -> UNDETERMINED (exit 2)"
+el=$(( SECONDS - t0 ))
+if (( el <= 12 )); then printf '  ok: gave up after %ss (deadline 3s; per-socket timeouts alone would wait ~60s)\n' "${el}"
+else printf '  FAIL: took %ss, the per-request deadline did not fire\n' "${el}" >&2; TEST_FAILS=$((TEST_FAILS+1)); fi
+assert_contains "$(cat "${TEST_TMP}/last.out")" "deadline" "the output names the deadline"
+
+echo "== 18. documented '=' rule trade-offs are exactly the behaviour"
+assert_eq True  "$(jt '41 because 17+25=42')" "'41 because 17+25=42' passes (documented trade-off)"
+assert_eq False "$(jt '42 = 17+25')" "'42 = 17+25' fails (documented trade-off)"
+assert_contains "$(cat "${LLMCTL_ROOT}/docs/validation.md")" "41 because 17+25=42" "docs state the first trade-off"
+assert_contains "$(cat "${LLMCTL_ROOT}/docs/validation.md")" "42 = 17+25" "docs state the second trade-off"
+
 test_finish

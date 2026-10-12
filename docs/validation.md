@@ -106,7 +106,13 @@ forbidden substring, number, regex and JSON-subset checks taken from the suite f
 
 * **number_equals rule (decided 2026-10-12):** when the answer restates an equation (`17 + 25 = 42`) the number after the **last** `=` is the answer;
   otherwise the **first** number in the answer (digits, or an English number word `zero`..`twenty` that is not part of a hyphenated compound such as
-  `twenty-two`). `17 + 25 = 41`, `17 + 25` and `41, not 42` all FAIL.
+  `twenty-two`). A number is digits with an optional `.` fraction; a thousands separator (`10,000`, `42,000`) or a leading dot (`.42`) is **not** a number,
+  so `10,000` never equals 10. `17 + 25 = 41`, `17 + 25` and `41, not 42` all FAIL. **Trade-offs, stated plainly:** the `=` rule can accept
+  `41 because 17+25=42` (the number after the last `=` is 42, although the answer leads with 41) and rejects `42 = 17+25` (the number after the `=`
+  is 17). Both are deliberate: the rule is strict and mechanical, not a reading of intent; the suites ask for "only the number", so a model that
+  answers in either of those shapes has not followed the instruction, and a re-ask with a tighter prompt is the remedy - never a looser check.
+  A request is also bounded by a wall-clock deadline (`LLMCTL_VALIDATE_TIMEOUT`, default 180 s) in addition to per-socket timeouts, so a server that
+  trickles bytes yields UNDETERMINED instead of stalling the run.
 * **Complete answers only:** a completion cut off by the token budget (`finish_reason=length`) **with reasoning content**, or empty
   `message.content` while the reasoning channel is non-empty, is UNDETERMINED (exit 2) with a hint to raise `request.max_tokens` (chat/coder use
   2048). A truncated answer without reasoning content is judged: if the truncated content is **wrong** it is a FAIL; if it would pass, it is still

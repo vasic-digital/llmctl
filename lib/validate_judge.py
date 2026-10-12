@@ -40,7 +40,9 @@ import json
 import math
 import os
 import re
+import signal
 import sys
+import threading
 import time
 import urllib.error
 import urllib.parse
@@ -299,7 +301,35 @@ _OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}), _NoRedire
 _warned_hosts = set()
 
 
+class _Deadline(BaseException):
+    """Raised by the SIGALRM handler when a request exceeds its overall deadline (BaseException: no library
+    `except Exception` / `except OSError` can swallow it)."""
+
+
+class _deadline:
+    """Wall-clock deadline via setitimer/SIGALRM (main thread, POSIX). Elsewhere it degrades to per-socket timeouts."""
+    def __init__(self, seconds):
+        self.seconds = seconds
+        self.ok = hasattr(signal, "setitimer") and threading.current_thread() is threading.main_thread()
+
+    def __enter__(self):
+        if self.ok:
+            def handler(signum, frame):
+                raise _Deadline()
+            self.old = signal.signal(signal.SIGALRM, handler)
+            signal.setitimer(signal.ITIMER_REAL, float(self.seconds))
+        return self
+
+    def __exit__(self, *exc):
+        if self.ok:
+            signal.setitimer(signal.ITIMER_REAL, 0)
+            signal.signal(signal.SIGALRM, self.old)
+        return False
+
+
 def http_json(url, body=None, timeout=60):
+    """One JSON request. `timeout` is BOTH the per-socket timeout and an overall wall-clock deadline for the whole
+    request (connect, headers, body): a server that trickles bytes can no longer stall validation."""
     data = None if body is None else json.dumps(body).encode()
     req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"},
                                  method="GET" if body is None else "POST")
@@ -312,19 +342,22 @@ def http_json(url, body=None, timeout=60):
             _warned_hosts.add(h)
             print("note: LLMCTL_VALIDATE_API_KEY NOT sent to %r (not loopback; list it in "
                   "LLMCTL_VALIDATE_API_KEY_HOSTS to allow)" % h, file=sys.stderr)
-    try:
-        with _OPENER.open(req, timeout=timeout) as resp:
-            parsed = json.loads(resp.read().decode("utf-8", "replace"))
-            if not isinstance(parsed, dict):
-                raise NoAnswer("response is not a JSON object: %.200s" % json.dumps(parsed))
-            return parsed
-    except urllib.error.HTTPError as e:
-        detail = e.read().decode("utf-8", "replace")[:400]
-        if 400 <= e.code < 500:
-            raise Rejected("HTTP %d: %s" % (e.code, detail))
-        raise NoAnswer("HTTP %d: %s" % (e.code, detail))
-    except (urllib.error.URLError, OSError, ValueError) as e:
-        raise NoAnswer("%s: %s" % (type(e).__name__, e))
+    with _deadline(timeout):
+        try:
+            with _OPENER.open(req, timeout=timeout) as resp:
+                parsed = json.loads(resp.read().decode("utf-8", "replace"))
+                if not isinstance(parsed, dict):
+                    raise NoAnswer("response is not a JSON object: %.200s" % json.dumps(parsed))
+                return parsed
+        except urllib.error.HTTPError as e:
+            detail = e.read().decode("utf-8", "replace")[:400]
+            if 400 <= e.code < 500:
+                raise Rejected("HTTP %d: %s" % (e.code, detail))
+            raise NoAnswer("HTTP %d: %s" % (e.code, detail))
+        except _Deadline:
+            raise NoAnswer("overall deadline of %ss exceeded (server too slow or trickling bytes)" % timeout)
+        except (urllib.error.URLError, OSError, ValueError) as e:
+            raise NoAnswer("%s: %s" % (type(e).__name__, e))
 
 
 def served_model_ids(endpoint, timeout):

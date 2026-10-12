@@ -11,7 +11,7 @@ image's own probe with that prompt first, else any probe with that prompt). The 
 "<image fixture id>/<probe id>" (vision) or "<case id>" (chat/coder). Unknown key -> HTTP 500.
 
 Usage: fake_openai.py --suite DIR [--suite DIR2 ...] --answers FILE --port-file FILE [--model-id ID]
-                      [--mode normal|reject-images|error500|nondeterministic|slow|redirect|malformed-message|malformed-choice|truncate|reasoning-budget|reasoning-empty-stop]
+                      [--mode normal|reject-images|error500|nondeterministic|slow|trickle|redirect|malformed-message|malformed-choice|truncate|reasoning-budget|reasoning-empty-stop]
 """
 import argparse
 import base64
@@ -67,8 +67,24 @@ def main():
                 with open(a.record_auth, "a") as fh:
                     fh.write((self.headers.get("Authorization") or "-") + "\n")
 
+        def trickle(self):
+            # headers at once, then one body byte per second: no single socket read ever times out
+            import time
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", "60")
+            self.end_headers()
+            for _ in range(60):
+                try:
+                    self.wfile.write(b" "); self.wfile.flush()
+                except OSError:
+                    return
+                time.sleep(1)
+
         def do_GET(self):
             self.note_auth()
+            if a.mode == "trickle":
+                return self.trickle()
             if self.path == "/v1/models":
                 return self.send(200, {"object": "list", "data": [{"id": a.model_id}]})
             if self.path == "/health":
