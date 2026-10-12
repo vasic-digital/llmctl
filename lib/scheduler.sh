@@ -963,10 +963,14 @@ _sched_wait_ready() {
   return 1
 }
 
-# _sched_pressure_gate <profile> - hw_pressure_gate with the profile's plan footprint (rc 75 on refusal).
-# Hook point for `llmctl validate` (lib/validate.sh, owned by another writer): call this before sched_start.
+# _sched_pressure_gate <profile> [psi] - hw_pressure_gate with the profile's plan footprint (rc 75 on refusal).
+# "psi": PSI test only (footprint 0, reserve 0) - used BEFORE a switch stops the running set, because MemAvailable still
+# counts the memory of the models about to be stopped; the full memory test runs after the stop (_sched_start_impl) and
+# in the unit's ExecStartPre. Hook point for `llmctl validate` (lib/validate.sh is owned by another writer and is NOT
+# wired from this branch): call this before sched_start.
 _sched_pressure_gate() {
   local p="$1" fp=0
+  if [[ "${2:-}" == psi ]]; then LLMCTL_GATE_RESERVE_MB=0 hw_pressure_gate 0 "${p}"; return $?; fi
   fp="$(hw_probe_json | catalog_plan_json 2>/dev/null | json_stdin 'd["profiles"][argv[0]]["ram_mb"]' "${p}" 2>/dev/null || echo 0)"
   hw_pressure_gate "${fp}" "${p}"
 }
@@ -1002,7 +1006,10 @@ _sched_start_impl() {
     ram="$(json_query "${plan_file}" "d[\"profiles\"][argv[0]][\"ram_mb\"]" "${p}")"
     vram="$(json_query "${plan_file}" "d[\"profiles\"][argv[0]][\"vram_mb\"]" "${p}")"
     # Pressure gate (shared with svc_hook.sh gate / the unit's ExecStartPre): a refusal here touches nothing.
-    hw_pressure_gate "${ram}" "${p}" || { local _grc=$?; rm -f "${plan_file}"; return "${_grc}"; }
+    # (skipped on the rollback path of a failed switch: LLMCTL_SCHED_NO_GATE=1, see _sched_restore_set)
+    if [[ "${LLMCTL_SCHED_NO_GATE:-0}" != 1 ]]; then
+      hw_pressure_gate "${ram}" "${p}" || { local _grc=$?; rm -f "${plan_file}"; return "${_grc}"; }
+    fi
     if [[ "${fits}" != "True" ]] || \
        ! _sched_admission_fits "${ram}" "${vram}" "${used_ram}" "${used_vram}" "${ram_budget}" "${vram_budget}"; then
       local suggestion=""
@@ -1132,8 +1139,9 @@ _sched_start_impl() {
 _enable_impl() {
   local profile="$1"
   catalog_exists "${profile}" || die "unknown profile: ${profile} (see: llmctl models list)"
-  _sched_pressure_gate "${profile}" || return $?
   sched_load_backend
+  # Gate only when enabling starts something: re-running `enable` on a running profile must not return 75.
+  sched_is_running "${profile}" || _sched_pressure_gate "${profile}" || return $?
   # Reconcile any post-reboot state desync BEFORE the overcommit check below
   # reads sched_reserved_field - otherwise a genuinely-running-but-
   # unreconciled enabled profile (see _sched_reconcile_reservations) would
@@ -1265,7 +1273,8 @@ _sched_restore_set() {
     if (( counts[i] > 1 )) || [[ " $* " == *" ${bases[i]}."[0-9]* ]]; then :; else plain+=("${bases[i]}"); fi
   done
   local rc=0
-  [[ ${#plain[@]} -eq 0 ]] || _sched_start_impl "${plain[@]}" || rc=$?
+  # Rollback must not be refused by the start gate: a failed switch may never leave nothing running.
+  [[ ${#plain[@]} -eq 0 ]] || LLMCTL_SCHED_NO_GATE=1 _sched_start_impl "${plain[@]}" || rc=$?
   for (( i=0; i<${#bases[@]}; i++ )); do
     if (( counts[i] > 1 )) || [[ " $* " == *" ${bases[i]}."[0-9]* ]]; then
       SCHED_SCALE_BESTEFFORT=1 _sched_decision_scale_impl "${bases[i]}" "${counts[i]}" || rc=$?
@@ -1315,7 +1324,7 @@ _sched_switch_impl() {
     return 0
   fi
   # Gate BEFORE anything is stopped: a refused switch must leave the running set untouched.
-  _sched_pressure_gate "${target}" || return $?
+  _sched_pressure_gate "${target}" psi || return $?
 
   _sched_stop_impl all
 
