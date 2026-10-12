@@ -204,8 +204,8 @@ hk__wait_register() {
 # port-hold name, so both rows are cleared when asked to unregister "gateway".
 hk_unregister() {
   _hk_kill_waiter "$1"
-  portreg_unregister "$1"
-  [[ "$1" == "gateway" ]] && portreg_unregister decide-gateway
+  portreg_unregister "$1" "${MAINPID:-}"
+  [[ "$1" == "gateway" ]] && portreg_unregister decide-gateway "${MAINPID:-}"
   return 0
 }
 
