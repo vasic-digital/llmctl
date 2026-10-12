@@ -728,9 +728,9 @@ scheduling. Single-host usage never touches them.
 llmctl version
 ```
 
-Prints `llmctl <version>`, e.g. `llmctl 3.1.0` (the `LLMCTL_VERSION`
+Prints `llmctl <version>`, e.g. `llmctl 3.2.0` (the `LLMCTL_VERSION`
 constant at the top of `bin/llmctl`, kept equal to the `VERSION` file at the repository root). Real evidence
-(`tests/test_cli.sh`): the output contains the literal substring `llmctl 3.1.0`.
+(`tests/test_cli.sh`): the output contains the literal substring `llmctl 3.2.0`.
 
 ## help
 

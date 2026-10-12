@@ -64,7 +64,7 @@ For a service that survives logout/reboot, follow up with
 Forgot `--recursive`? `git submodule update --init` or just run
 `llmctl build all` (a target is required), which initializes the submodules itself.
 
-> **Release 3.1.0** adds typed local decisions (`noul` / `choice` / `score`) behind a secured HTTPS gateway.
+> **Release 3.2.0** adds typed local decisions (`noul` / `choice` / `score`) behind a secured HTTPS gateway.
 > What changed and what you must do when upgrading: [`CHANGELOG.md`](CHANGELOG.md) (migration table).
 > What it does not do, and what was not verified live: [`docs/limitations.md`](docs/limitations.md).
 > Building the decision binary needs Go >= 1.25; everything else still needs only bash, python3 and curl.

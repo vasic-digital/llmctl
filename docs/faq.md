@@ -22,7 +22,7 @@ real models for release gating — see [`docs/quickstart.md`](quickstart.md)),
 automated test (part of `make test`) or a real-model manual verification
 step; each entry says which.
 
-**Revision 2 (llmctl 3.1.0).** The cluster, tenant, API-key and audit entries were re-audited against the code under `llmctld/` and the
+**Revision 2 (llmctl 3.2.0).** The cluster, tenant, API-key and audit entries were re-audited against the code under `llmctld/` and the
 tests in `llmctld/internal/**` and `llmctld/test/integration/`. The first revision of this FAQ was written while `llmctld` was a scaffold;
 that is no longer true: the daemon has a Raft node with real multi-process bootstrap, join/leave and leader failover, an HTTP/3 API with mutual TLS,
 JWT/RBAC, tenants and namespace isolation, API keys, an in-memory hash-chained audit log, KV-cache WAL/checkpoint replication and a health monitor.
