@@ -19,6 +19,8 @@
   {"probe": "arith", "answer": "17 + 25 = 42", "expect": "pass"},
   {"probe": "arith", "answer": "17 + 25 = 41", "expect": "fail"},
   {"probe": "arith", "answer": "17 + 25", "expect": "fail"},
+  {"probe": "compare", "answer": "9", "expect": "pass"},
+  {"probe": "compare", "answer": "4", "expect": "fail"},
   {"probe": "capital", "answer": "Paris.", "expect": "pass"},
   {"probe": "capital", "answer": "London", "expect": "fail"},
   {"probe": "echo", "answer": "ZX-4417", "expect": "pass"},

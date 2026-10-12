@@ -8,6 +8,10 @@
 # first-number / regex / JSON checks - never an LLM judging an LLM. The catalog names each profile's
 # suites (`validation.suites`); a profile without one is never reported as validated.
 #
+# Documentation: docs/validation.md, section "Model validation gate". Tests: tests/test_vision_validate.sh,
+# tests/test_validation_suites.sh, tests/test_validation_gate_defects.sh. No real-model run has been recorded yet
+# (docs/qa/vision-validate-live-2026-10-12.md).
+#
 # Exit codes of validate / vision validate / validate-all: 0 every check passed; 1 any wrong result
 # (never excused, never loosened); 2 could not determine (not downloaded, not served, endpoint down,
 # insufficient resources, no suite). 1 outranks 2.
