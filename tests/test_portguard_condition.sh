@@ -35,11 +35,39 @@ for l in common os_detect hardware service_linux; do source "${LLMCTL_ROOT}/lib/
 ( svc_install ) >/dev/null 2>&1
 for eng in llama colibri onnx; do
   U="${LLMCTL_UNIT_DIR}/llmctl-${eng}@.service"
-  c="$(grep -nE '^ExecCondition=.*svc_hook\.sh.* portcheck' "${U}" | head -1 | cut -d: -f1 || true)"
+  c="$(grep -nE '^ExecCondition=.*portcheck.*svc_hook\.sh' "${U}" | head -1 | cut -d: -f1 || true)"
   g="$(grep -nE '^ExecStartPre=.*svc_hook\.sh.* gate' "${U}" | head -1 | cut -d: -f1 || true)"
   if [[ -n "${c}" && -n "${g}" ]]; then echo "  ok: ${eng}: ExecCondition portcheck present (line ${c}); gate at ${g}"
   else printf '  FAIL: %s: no ExecCondition=... portcheck line (cond=%s gate=%s)\n' "${eng}" "${c:-none}" "${g:-none}" >&2; TEST_FAILS=$((TEST_FAILS+1)); fi
 done
+
+echo "== a crashing hook must not be a silent skip (ExecCondition exit 1-254 = skipped; only 255 or a signal fails the unit) =="
+cond_line="$(sed -n 's/^ExecCondition=//p' "${LLMCTL_UNIT_DIR}/llmctl-llama@.service" | head -1)"
+if ! systemctl --user show-environment >/dev/null 2>&1 || ! command -v systemd-run >/dev/null 2>&1; then
+  assert_skip "no reachable systemd --user manager" "broken-hook ExecCondition semantics"
+else
+  hookpath="${LLMCTL_ROOT}/lib/svc_hook.sh"
+  run_cond() { # <label> <hook path to substitute> -> "ActiveState|Result" after 2 s (real hook env: services dir with a free port)
+    local u="${INST}-$1" line="${cond_line//%i/${INST}}"
+    line="${line//${hookpath}/$2}"; line="${line//%%/%}"
+    systemd-run --user --quiet --on-active=60s --unit="${u}-reaper" systemctl --user stop "${u}.service" >/dev/null 2>&1 || true
+    systemd-run --user --quiet --unit="${u}" -p "ExecCondition=${line}" -p "Environment=LLMCTL_SERVICES_DIR=${LLMCTL_SERVICES_DIR}" -p "Environment=LLMCTL_STATE_DIR=${LLMCTL_STATE_DIR}" -p "Environment=LLMCTL_LOG_DIR=${LLMCTL_LOG_DIR}" /bin/sleep 3 >/dev/null 2>&1 || true
+    sleep 2
+    printf '%s|%s' "$(systemctl --user show -p ActiveState --value "${u}.service")" "$(systemctl --user show -p Result --value "${u}.service")"
+    systemctl --user stop "${u}.service" >/dev/null 2>&1 || true; systemctl --user reset-failed "${u}.service" >/dev/null 2>&1 || true
+  }
+  mkenv "${FREE}"
+  r="$(run_cond ok "${hookpath}")"
+  [[ "${r%%|*}" == active || "${r%%|*}" == activating ]] && echo "  ok: real hook, free port: the unit starts (${r})" || { printf '  FAIL: real hook, free port: unit did not start (%s)\n' "${r}" >&2; TEST_FAILS=$((TEST_FAILS+1)); }
+  mkenv "$(head -1 "${TEST_TMP}/port")"
+  r="$(run_cond busy "${hookpath}")"
+  [[ "${r%%|*}" == inactive ]] && echo "  ok: real hook, busy port: skipped (${r})" || { printf '  FAIL: real hook, busy port: expected a clean skip, got %s\n' "${r}" >&2; TEST_FAILS=$((TEST_FAILS+1)); }
+  printf '#!/bin/bash\nexit 1\n' > "${TEST_TMP}/broken-hook.sh"
+  r="$(run_cond broken "${TEST_TMP}/broken-hook.sh")"
+  [[ "${r%%|*}" == failed ]] && echo "  ok: a hook that crashes with exit 1 FAILS the unit, it is not a silent skip (${r})" || { printf '  FAIL: a crashing hook (exit 1) was treated as a skip: %s\n' "${r}" >&2; TEST_FAILS=$((TEST_FAILS+1)); }
+  r="$(run_cond missing "${TEST_TMP}/no-such-hook.sh")"
+  [[ "${r%%|*}" == failed ]] && echo "  ok: a missing hook FAILS the unit (${r})" || { printf '  FAIL: a missing hook (exit 127) was treated as a skip: %s\n' "${r}" >&2; TEST_FAILS=$((TEST_FAILS+1)); }
+fi
 
 echo "== systemd semantics (real transient units) =="
 if ! systemctl --user show-environment >/dev/null 2>&1 || ! command -v systemd-run >/dev/null 2>&1; then

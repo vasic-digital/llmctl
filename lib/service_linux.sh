@@ -292,6 +292,13 @@ _svc_write_mem_dropin() {
   )
 }
 
+# _svc_portcheck_cmd <instance-specifier> -> the ExecCondition= command line. systemd treats ExecCondition exit codes 1-254 as
+# "skip the unit quietly", so a crashing or missing hook (exit 1 / 127) would silently skip every start. The wrapper maps:
+# hook exit 0 -> run, 98 (port busy) -> skip, anything else -> 255 (the unit FAILS, loudly).
+_svc_portcheck_cmd() {
+  printf "/bin/bash -c 'bash \"\$\$0\" portcheck \"\$\$1\"; rc=\$\$?; case \$\$rc in 0|98) exit \$\$rc;; *) exit 255;; esac' %s %s" "$(_svc_qx "${_svl_dir}/svc_hook.sh")" "$1"
+}
+
 # _svc_engine_unit_body <description> <basic|strict> <memhigh-MiB> <memmax-MiB>
 _svc_engine_unit_body() {
   local desc="$1" level="$2" memhigh="$3" memmax="$4"
@@ -340,7 +347,7 @@ EnvironmentFile=$(_svc_pct "${LLMCTL_SERVICES_DIR}")/%i.env
 # publishes the service in the registry once it answers its health endpoint;
 # ExecStopPost removes the row (the port hold stays so a restart reuses the
 # port, FR-088). Registration failures never fail the unit (the "-" prefix).
-ExecCondition=$(_svc_hook_cmd portcheck %i)
+ExecCondition=$(_svc_portcheck_cmd %i)
 ExecStartPre=$(_svc_hook_cmd gate %i)
 ExecStartPre=$(_svc_hook_cmd prestart %i)
 ExecStart=/bin/bash -c 'set -f; exec "\$LLMCTL_EXEC" \$LLMCTL_ARGS'
