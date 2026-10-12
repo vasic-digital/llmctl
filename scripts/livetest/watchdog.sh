@@ -2,6 +2,12 @@
 # watchdog.sh - host-safety watchdog for a live llmctl model test.
 #
 # Usage: watchdog.sh <profile> <evidence-dir> <parent-pid>
+#        watchdog.sh --stop <profile> <evidence-dir>     (one bounded stop, used by the driver's cleanup)
+#
+# Stop = `llmctl stop` bounded to 20 s (it queues behind the scheduler flock that `llmctl start`
+# holds while loading), then, if that did not return rc 0, `systemctl --user stop <real unit>`
+# (llmctl-<engine>@<instance>.service, engine from the unit env file; systemd does the killing,
+# we signal nothing). Exit of --stop mode: 0 llmctl stop ok | 10 only the systemd fallback worked | 11 both failed.
 #
 # Samples every 2 s: MemAvailable, memory PSI (some avg10), GPU memory used.
 # On the FIRST breach of any abort condition it records the trigger and runs
@@ -14,23 +20,57 @@
 # (hermetic tests); otherwise they are ignored.
 set -uo pipefail
 
-PROFILE="${1:?profile}"; EV="${2:?evidence dir}"; PARENT="${3:?parent pid}"
+MODE=watch
+if [ "${1:-}" = "--stop" ]; then MODE=stop; shift; PARENT=0; fi
+PROFILE="${1:?profile}"; EV="${2:?evidence dir}"; [ "$MODE" = stop ] || PARENT="${3:?parent pid}"
+SYSTEMCTL=systemctl
 LLMCTL=llmctl; NVSMI=nvidia-smi; MEMINFO=/proc/meminfo; PSI=/proc/pressure/memory
 if [ "${LT_HERMETIC:-0}" = "1" ]; then
-  LLMCTL="${LLMCTL_BIN:-llmctl}"; NVSMI="${NVIDIA_SMI_BIN:-nvidia-smi}"
+  LLMCTL="${LLMCTL_BIN:-llmctl}"; NVSMI="${NVIDIA_SMI_BIN:-nvidia-smi}"; SYSTEMCTL="${SYSTEMCTL_BIN:-systemctl}"
   MEMINFO="${LT_MEMINFO:-/proc/meminfo}"; PSI="${LT_PSI:-/proc/pressure/memory}"
 fi
 umask 077
 
-MIN_MEM_MB=5000; MAX_PSI=20; MAX_GPU_MB=11500; MAX_WALL=600; INTERVAL=2
+MIN_MEM_MB=5000; MAX_PSI=20; MAX_GPU_MB=11500; MAX_WALL=600; INTERVAL=2; STOP_BOUND=20
 if [ "${LT_HERMETIC:-0}" = "1" ]; then
-  MAX_WALL="${LT_WD_MAX_WALL:-$MAX_WALL}"; INTERVAL="${LT_WD_INTERVAL:-$INTERVAL}"
+  STOP_BOUND="${LT_STOP_BOUND:-$STOP_BOUND}"; MAX_WALL="${LT_WD_MAX_WALL:-$MAX_WALL}"; INTERVAL="${LT_WD_INTERVAL:-$INTERVAL}"
 fi
 
 mkdir -p "$EV"
 LOG="$EV/watchdog.log"; CSV="$EV/samples.csv"; TRIG="$EV/trigger"
 log() { printf '%s %s\n' "$(date -u +%FT%TZ)" "$*" >>"$LOG"; }
 [ -s "$CSV" ] || echo "utc,elapsed_s,memavail_mb,psi_some_avg10,psi_full_avg10,gpu_used_mb" >"$CSV"
+
+
+# run a command detached with a deadline; never signals it. rc 124 = still running at the deadline.
+run_bounded() {   # run_bounded <secs> <outfile> cmd...
+  local secs="$1" out="$2" i=0; shift 2
+  rm -f "$out.rc"
+  ( "$@" >"$out" 2>&1; echo $? >"$out.rc" ) &
+  while [ ! -s "$out.rc" ] && [ "$i" -lt $((secs * 10)) ]; do sleep 0.1; i=$((i + 1)); done
+  [ -s "$out.rc" ] || return 124
+  return "$(cat "$out.rc")"
+}
+unit_name() {   # mirrors lib/service_linux.sh _svc_unit_for: llmctl-<engine>@<instance>.service
+  local inst="$PROFILE" envf engine
+  [ -n "${LLMCTL_TENANT_ID:-}" ] && inst="${LLMCTL_TENANT_ID}--${PROFILE}"
+  envf="${LLMCTL_SERVICES_DIR:-${LLMCTL_STATE_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/llmctl}/services}/${inst}.env"
+  engine="$(sed -n 's/^LLMCTL_ENGINE=//p' "$envf" 2>/dev/null | tr -d "'")"
+  echo "llmctl-${engine:-llama}@${inst}.service"
+}
+bounded_stop() {
+  local rc rc2 unit
+  run_bounded "$STOP_BOUND" "$EV/stop.llmctl.$$.out" "$LLMCTL" stop "$PROFILE"; rc=$?
+  log "llmctl stop $PROFILE rc=$rc (bound ${STOP_BOUND}s)"
+  [ "$rc" = 0 ] && return 0
+  unit="$(unit_name)"
+  log "fallback: llmctl stop did not return rc 0 (likely queued behind the scheduler lock) -> systemctl --user stop $unit"
+  run_bounded "$STOP_BOUND" "$EV/stop.systemd.$$.out" "$SYSTEMCTL" --user stop "$unit"; rc2=$?
+  log "systemd stop rc=$rc2"
+  [ "$rc2" = 0 ] && return 10
+  return 11
+}
+if [ "$MODE" = stop ]; then bounded_stop; exit $?; fi
 
 GPU_PID=""; GPU_OUT="$EV/.gpu.$$"
 # nvidia-smi can hang under a driver stall: run it detached, wait <= 4 s, never signal it.
@@ -52,9 +92,8 @@ read_gpu() {
 fire() {   # fire <reason>
   local reason="$1"
   echo "$reason" >"$TRIG"
-  log "TRIGGER: $reason -> llmctl stop $PROFILE"
-  "$LLMCTL" stop "$PROFILE" >>"$EV/watchdog.stop.out" 2>&1
-  log "llmctl stop $PROFILE rc=$?"
+  log "TRIGGER: $reason -> bounded stop of $PROFILE"
+  bounded_stop
   rm -f "$GPU_OUT"
   exit 0
 }

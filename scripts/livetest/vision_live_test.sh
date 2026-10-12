@@ -28,11 +28,11 @@ fi
 GATE_MIN_MEM_MB=12000; GATE_MAX_PSI_SOME=5; GATE_MAX_PSI_FULL=1; GATE_MAX_GPU_MB=6000
 LARGE_RAM_MB=4000; LARGE_VRAM_MB=2000          # another running profile at/above either = "large model"
 READY_INTERVAL=3; READY_MAX=180; PORT_DEFAULT=8082; VRAM_SLACK_MB=500; VRAM_SETTLE_MAX=30
-VALIDATE_GRACE=30
+VALIDATE_GRACE=30; START_MAX=120
 if [ "${LT_HERMETIC:-0}" = "1" ]; then
   READY_INTERVAL="${LT_READY_INTERVAL:-$READY_INTERVAL}"; READY_MAX="${LT_READY_MAX:-$READY_MAX}"
   PORT_DEFAULT="${LT_PORT_DEFAULT:-$PORT_DEFAULT}"; VRAM_SETTLE_MAX="${LT_VRAM_SETTLE_MAX:-$VRAM_SETTLE_MAX}"
-  VALIDATE_GRACE="${LT_VALIDATE_GRACE:-$VALIDATE_GRACE}"
+  VALIDATE_GRACE="${LT_VALIDATE_GRACE:-$VALIDATE_GRACE}"; START_MAX="${LT_START_MAX:-$START_MAX}"
 fi
 
 # ---- profile allow-list: vision-pro (and anything not exactly `vision`) is refused unconditionally ----
@@ -56,7 +56,7 @@ CMDLOG="$EV/commands.log"; SIGLOG="$EV/signals.log"
 log() { printf '%s %s\n' "$(date -u +%FT%TZ)" "$*" | tee -a "$EV/run.log" >&2; }
 
 WD_PID=""; STOP_NEEDED=0; CLEANED=0; RESULT=2; VERDICT_REASON="not finished"
-GATE_RES="NOT RUN"; READY=0; GPU_BASE=""; GPU_FINAL=""; VALIDATE_RC="NA"; CLEAN_OK="NO"; MH="UNKNOWN"; PH="UNKNOWN"; LSV="UNKNOWN"
+GATE_RES="NOT RUN"; READY=0; FINAL_STOP_RC="NA"; GPU_BASE=""; GPU_FINAL=""; VALIDATE_RC="NA"; CLEAN_OK="NO"; MH="UNKNOWN"; PH="UNKNOWN"; LSV="UNKNOWN"
 
 print_table() {
   printf '\n%-28s %s\n' "CHECK" "RESULT"
@@ -90,8 +90,8 @@ cleanup() {   # always: stop our profile via llmctl, then reap our own watchdog
   [ "$CLEANED" = 1 ] && return; CLEANED=1
   if [ "$STOP_NEEDED" = 1 ]; then
     log "cleanup: llmctl stop $PROFILE"
-    run_logged "$LLMCTL" stop "$PROFILE" >>"$EV/stop.out" 2>&1
-    echo "llmctl stop rc=$?" >>"$EV/stop.out"
+    "$HERE/watchdog.sh" --stop "$PROFILE" "$EV" >>"$EV/stop.out" 2>&1
+    echo "cleanup stop rc=$? (0 llmctl ok | 10 systemd fallback | 11 failed)" >>"$EV/stop.out"
   fi
   safe_kill
   [ -n "$WD_PID" ] && wait "$WD_PID" 2>/dev/null
@@ -226,9 +226,20 @@ abort_if_triggered() {
 # ------------------------------------------------------------------ (c) start + readiness
 STOP_NEEDED=1
 log "starting: LLMCTL_VALIDATE_ON_START=0 nice -n 19 ionice -c 3 $LLMCTL start $PROFILE"
-echo "$(date -u +%FT%TZ) \$ LLMCTL_VALIDATE_ON_START=0 nice -n 19 ionice -c 3 $LLMCTL start $PROFILE" >>"$CMDLOG"
-LLMCTL_VALIDATE_ON_START=0 nice -n 19 ionice -c 3 "$LLMCTL" start "$PROFILE" >"$EV/start.out" 2>&1
-START_RC=$?
+echo "$(date -u +%FT%TZ) \$ LLMCTL_VALIDATE_ON_START=0 LLMCTL_READY_TIMEOUT=0 nice -n 19 ionice -c 3 $LLMCTL start $PROFILE (background)" >>"$CMDLOG"
+# `llmctl start` holds the scheduler flock across svc_start (+ its own readiness wait). LLMCTL_READY_TIMEOUT=0
+# (verified in lib/scheduler.sh _sched_wait_ready: <=0 disables the wait) makes it return right after svc_start,
+# releasing the lock so a watchdog stop is never queued behind the model load; WE poll readiness below, with
+# watchdog checks, under our own deadline. The start runs in the background so a breach during it is seen at once.
+rm -f "$EV/start.rc"
+( LLMCTL_VALIDATE_ON_START=0 LLMCTL_READY_TIMEOUT=0 nice -n 19 ionice -c 3 "$LLMCTL" start "$PROFILE" >"$EV/start.out" 2>&1; echo $? >"$EV/start.rc" ) &
+t0=$(date +%s)
+while [ ! -s "$EV/start.rc" ]; do
+  abort_if_triggered
+  [ $(( $(date +%s) - t0 )) -lt "$START_MAX" ] || { RESULT=2; VERDICT_REASON="llmctl start did not return within ${START_MAX}s"; exit 2; }
+  sleep 0.3
+done
+START_RC="$(cat "$EV/start.rc")"
 echo "start rc=$START_RC" >>"$EV/start.out"
 abort_if_triggered
 [ "$START_RC" = 0 ] || { RESULT=2; VERDICT_REASON="llmctl start rc=$START_RC"; exit 2; }
@@ -276,7 +287,7 @@ abort_if_triggered
 
 # ------------------------------------------------------------------ (e) finalize: stop, confirm, identity
 log "final: llmctl stop $PROFILE"
-run_logged "$LLMCTL" stop "$PROFILE" >>"$EV/stop.out" 2>&1; echo "llmctl stop rc=$?" >>"$EV/stop.out"
+"$HERE/watchdog.sh" --stop "$PROFILE" "$EV" >>"$EV/stop.out" 2>&1; FINAL_STOP_RC=$?; echo "final stop rc=$FINAL_STOP_RC (0 llmctl ok | 10 systemd fallback | 11 failed)" >>"$EV/stop.out"
 STOP_NEEDED=0
 safe_kill; wait "$WD_PID" 2>/dev/null; WD_PID=""
 abort_if_triggered   # a trigger recorded just before we reaped the watchdog still counts

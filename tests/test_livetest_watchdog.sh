@@ -133,7 +133,7 @@ run_main() {
   FAKE="$E/fake" PATH="$E/bin:$PATH" LT_HERMETIC=1 LT_WD_INTERVAL=0.2 LT_WD_MAX_WALL="${WALL:-600}" \
     LT_READY_INTERVAL=0.2 LT_READY_MAX="${READY_MAX:-4}" LT_VRAM_SETTLE_MAX=2 LT_VALIDATE_GRACE=3 \
     LT_MEMINFO="$E/meminfo" LT_PSI="$E/psi" LT_IOPSI="$E/iopsi" LT_EVIDENCE_ROOT="$E/ev" HOME="$E/home" \
-    LLMCTL_SERVICES_DIR="$E/services" LT_SUITE_DIR="$E/suite" LT_STOP_BOUND=2 LT_BOUND=2 LT_START_MAX=20 LT_POST_SAMPLE=2 \
+    LLMCTL_SERVICES_DIR="$E/services" LT_SUITE_DIR="$E/suite" LT_STOP_BOUND=2 LT_BOUND=2 LT_START_MAX="${START_MAX:-20}" LT_POST_SAMPLE=2 \
     timeout 60 bash "$MAIN" "$@" >"$E/out.txt" 2>"$E/err.txt" || RC=$?
   EVD="$(find "$E/ev" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | head -1)"
 }
@@ -370,6 +370,39 @@ badd=$(find "$E/ev" -mindepth 1 -type d ! -perm 700 | wc -l); badf=$(find "$E/ev
 check "evidence dirs all 0700" "$badd" "0"
 check "evidence files all 0600" "$badf" "0"
 [ "$(find "$E/ev" -type f | wc -l)" -gt 10 ] && ok "NEG-CONTROL: many files were checked" || bad "too few files"
+fi
+
+if want d1; then
+echo "== D1. breach during load while the scheduler lock is held: stop must land (bounded stop + systemd fallback) =="
+t0=$(date +%s)
+E="$(mkenv)"; echo 12 >"$E/fake/start_sleep"
+printf "printf 'MemAvailable: %%d kB\\n' %d >\"\${FAKE%%/fake}/meminfo\"\n" $((3000*1024)) >"$E/fake/start_mutate.sh"
+run_main "$E"; el=$(( $(date +%s) - t0 ))
+check "breach during blocked start -> exit 4" "$RC" "4"
+has "fallback: systemd stop of the real unit (llmctl-llama@vision.service)" "$E/fake/calls" '^systemctl stop llmctl-llama@vision\.service'
+[ ! -e "$E/fake/running" ] && ok "profile stopped while start still held the lock" || bad "profile still running"
+[ "$el" -lt 10 ] && ok "run ended (${el}s) before the 12 s lock-hold finished" || bad "took ${el}s: driver/watchdog waited for the lock"
+has "start ran with LLMCTL_READY_TIMEOUT=0 (lock released at svc_start)" "$E/fake/calls" 'ready_timeout=0'
+has "watchdog log shows bounded llmctl stop then fallback" "$EVD/watchdog.log" 'fallback'
+# real unit name follows the engine in the unit env file (not hardcoded)
+t0=$(date +%s); E="$(mkenv)"; echo 12 >"$E/fake/start_sleep"
+printf "LLMCTL_ENGINE='colibri'\nLLMCTL_ARGS=-m %s --mmproj %s\n" "$E/models/m.gguf" "$E/models/p.gguf" >"$E/services/vision.env"
+printf "printf 'MemAvailable: %%d kB\\n' %d >\"\${FAKE%%/fake}/meminfo\"\n" $((3000*1024)) >"$E/fake/start_mutate.sh"
+run_main "$E"
+has "unit name derived from LLMCTL_ENGINE (colibri)" "$E/fake/calls" '^systemctl stop llmctl-colibri@vision\.service'
+# systemd stop itself failing is reported, not hidden
+E="$(mkenv)"; echo 12 >"$E/fake/start_sleep"; touch "$E/fake/sysstop_fail"
+printf "printf 'MemAvailable: %%d kB\\n' %d >\"\${FAKE%%/fake}/meminfo\"\n" $((3000*1024)) >"$E/fake/start_mutate.sh"
+run_main "$E"
+has "fallback failure recorded in watchdog log" "$EVD/watchdog.log" 'systemd stop rc=1'
+# NEG-CONTROL: slow start (lock held) but NO breach -> no fallback, no abort, PASS
+E="$(mkenv)"; echo 3 >"$E/fake/start_sleep"; run_main "$E"
+check "NEG-CONTROL slow start without breach passes" "$RC" "0"
+hasnt "  no systemd fallback used" "$E/fake/calls" '^systemctl stop'
+# start itself hangs past its own deadline -> exit 2 + stop (not a spurious abort, not a hang)
+E="$(mkenv)"; echo 30 >"$E/fake/start_sleep"; START_MAX=3 run_main "$E"
+check "start exceeding its own deadline -> exit 2" "$RC" "2"
+has "  profile stop attempted" "$E/fake/calls" '^systemctl stop|^stop vision'
 fi
 
 if want always; then
