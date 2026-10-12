@@ -259,14 +259,26 @@ _svc_rm_mem_dropin() {
 _svc_write_mem_dropin() {
   local profile="$1" engine="$2" instance dir fp total caps
   valid_id "${profile}" || return 0      # security: allow-listed BEFORE any use; the name is data below, never code
+  instance="$(_svc_instance_key "${profile}")"
+  # a stale llmctl-written 10-memory.conf sorts AFTER the operator's 10-hostsafety.conf and would override it: it goes
+  # away on EVERY path of this function, including the warn-and-return ones below (review L6)
+  _svc_rm_stale_layout "$(svc_unit_dir)/llmctl-${engine}@${instance}.service.d"
   if ! declare -F catalog_plan_json >/dev/null 2>&1; then
     warn "no per-profile memory cap written for ${profile} (planner not loaded here); the template backstop applies - run: llmctl install"
     return 0
   fi
-  instance="$(_svc_instance_key "${profile}")"
-  # a scaled instance key (decide.2) has no catalog entry of its own: look its cap up under the base profile
-  local lookup="${profile}"
-  [[ "${profile}" =~ ^(.+)\.[0-9]+$ ]] && lookup="${BASH_REMATCH[1]}"
+  # a scaled instance key (decide.2) has no catalog entry of its own: look its cap up under the base profile - but only
+  # when that base IS a catalog profile (same semantics as _sched_base_profile in lib/scheduler.sh)
+  local lookup="${profile}" _base=""
+  [[ "${profile}" =~ ^(.+)\.[0-9]+$ ]] && _base="${BASH_REMATCH[1]}"      # copied: catalog_exists may clobber BASH_REMATCH
+  if [[ -n "${_base}" ]] && ! catalog_exists "${profile}" 2>/dev/null; then
+    if catalog_exists "${_base}" 2>/dev/null; then
+      lookup="${_base}"
+    else
+      warn "no per-profile memory cap written for ${profile}: its base '${_base}' is not a catalog profile; the template backstop applies"
+      return 0
+    fi
+  fi
   valid_id "${lookup}" || return 0
   fp="$(hw_probe_json | catalog_plan_json 2>/dev/null | json_stdin 'd["profiles"][argv[0]]["ram_mb"]' "${lookup}" 2>/dev/null)" || fp=""
   total="$(hw_probe_json | json_stdin 'd["memory"]["total_mb"]' 2>/dev/null)" || total=""

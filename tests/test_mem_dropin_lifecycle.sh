@@ -66,4 +66,18 @@ rm -f "${V}/10-memory.conf"
 mkdir -p "${TEST_TMP}/shim"; printf '#!/bin/sh\nexit 1\n' > "${TEST_TMP}/shim/mktemp"; chmod +x "${TEST_TMP}/shim/mktemp"
 out="$( PATH="${TEST_TMP}/shim:${PATH}" _svc_write_mem_dropin vision llama 2>&1 )" || true
 assert_contains "${out}" "cannot record the footprint" "a failing mktemp warns instead of silently skipping"
+echo "== L6 (review): the stale-layout cleanup also runs on the warn-and-return paths =="
+V="${U}/llmctl-llama@vision.service.d"; mkdir -p "${V}"
+printf '# written by llmctl (profile vision): old layout\n[Service]\nMemoryMax=99999M\n' > "${V}/10-memory.conf"
+printf '[Service]\nMemoryMax=1G\n' > "${V}/10-hostsafety.conf"
+( unset -f catalog_plan_json; _svc_write_mem_dropin vision llama ) >/dev/null 2>&1 || true
+assert_file_absent "${V}/10-memory.conf" "L6: planner-not-loaded path still removes the stale llmctl-written 10-memory.conf (it would override 10-hostsafety.conf)"
+assert_file_exists "${V}/10-hostsafety.conf" "L6: ...and never the operator's 10-hostsafety.conf"
+printf '# written by llmctl (profile vision): old layout\n[Service]\nMemoryMax=99999M\n' > "${V}/10-memory.conf"
+( hw_probe_json() { echo '{}'; }; _svc_write_mem_dropin vision llama ) >/dev/null 2>&1 || true
+assert_file_absent "${V}/10-memory.conf" "L6: footprint-unknown path also removes it"
+echo "== L6 (review): a scaled-key lookup requires the BASE to be a catalog profile =="
+out="$( _svc_write_mem_dropin bogus-profile.2 llama 2>&1 )" || true
+assert_contains "${out}" "not a catalog profile" "L6: 'bogus-profile.2' (base not in the catalog) is refused with a clear reason"
+assert_file_absent "${U}/llmctl-llama@bogus-profile.2.service.d/05-memory.conf" "L6: no cap file for a key whose base is not a catalog profile"
 test_finish
