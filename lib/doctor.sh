@@ -250,6 +250,64 @@ doctor_run() {
     fi
   fi
 
+  # One engine unit per profile (linux): two enabled llmctl-<engine>@<profile> units race for one port - one wins, the
+  # other loads GBs, dies with EADDRINUSE, loops, and its ExecStopPost used to drop the winner's registry row.
+  if [[ "$(uname -s)" == "Linux" ]]; then
+    local _doc_wants _doc_dups
+    _doc_wants="${LLMCTL_UNIT_DIR:-${XDG_CONFIG_HOME:-${HOME}/.config}/systemd/user}/default.target.wants"
+    _doc_dups="$(find "${_doc_wants}" -maxdepth 1 -name 'llmctl-*@*.service' 2>/dev/null | sed -E 's#.*/llmctl-[a-z]+@(.*)\.service#\1#' | sort | uniq -d | paste -sd, - || true)"
+    if [[ -n "${_doc_dups}" ]]; then
+      _doc_fail "profile(s) with more than one enabled engine unit: ${_doc_dups} (they fight for one port; keep one: llmctl disable <profile> && llmctl enable <profile>)"
+    else
+      _doc_pass "every profile has at most one enabled engine unit"
+    fi
+  fi
+
+  # A LIVE engine process with no registry row is invisible to the gateway and to every registry-based check, yet the
+  # "registry == live set" line above would still say PASS (it compares against units llmctl knows, not processes).
+  if declare -F portreg_active >/dev/null 2>&1 && portreg_active 2>/dev/null && [[ -d /proc ]]; then
+    local _doc_stray
+    # Scope: only processes whose command line names one of THIS install's directories (LLMCTL_ROOT/state/data/models,
+    # or LLMCTL_DOCTOR_PROC_ROOTS, colon-separated) - another project's llama-server is not ours to judge.
+    _doc_stray="$("$(portreg_bin)" registry list --json 2>/dev/null | PROC_ROOTS="${LLMCTL_DOCTOR_PROC_ROOTS:-${LLMCTL_ROOT:-}:${LLMCTL_STATE_DIR:-}:${LLMCTL_DATA_DIR:-}:${LLMCTL_MODELS_DIR:-}}" python3 -c '
+import json, os, sys
+try:
+    rows = json.load(sys.stdin).get("services", [])
+except Exception:
+    rows = []
+pids = {int(r.get("pid") or 0) for r in rows}
+ports = {int(r.get("port") or 0) for r in rows}
+me = os.getuid()
+roots = [r for r in os.environ.get("PROC_ROOTS", "").split(":") if r]
+out = []
+for d in os.listdir("/proc"):
+    if not d.isdigit():
+        continue
+    try:
+        if os.stat("/proc/" + d).st_uid != me:
+            continue
+        args = open("/proc/" + d + "/cmdline", "rb").read().split(b"\0")
+    except Exception:
+        continue
+    args = [a.decode("utf-8", "replace") for a in args if a]
+    if not any(os.path.basename(a) in ("llama-server", "onnx_server.py") for a in args[:3]):
+        continue
+    if roots and not any(r in a for a in args for r in roots):
+        continue
+    port = 0
+    for i, a in enumerate(args):
+        if a == "--port" and i + 1 < len(args) and args[i + 1].isdigit():
+            port = int(args[i + 1])
+    if int(d) not in pids and (port == 0 or port not in ports):
+        out.append("pid %s port %s" % (d, port or "?"))
+print("; ".join(out))' 2>/dev/null || true)"
+    if [[ -n "${_doc_stray}" ]]; then
+      _doc_fail "live engine process(es) with no registry row: ${_doc_stray} (llama-server/onnx_server.py not published in the registry; stop it or: llmctl-decide registry reconcile)"
+    else
+      _doc_pass "every live llama-server/onnx_server process has a registry row"
+    fi
+  fi
+
   # Registry rows that stay "unknown" (an https service with no CA to verify it against) are never
   # removed by default (a missing CA is not proof the service is gone, G-068); they pile up until a
   # CA appears or the operator opts in to forgetting them (G-074).

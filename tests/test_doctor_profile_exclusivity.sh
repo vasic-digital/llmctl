@@ -21,6 +21,8 @@ esac
 exit 0
 F
 chmod +x "${FD}"; export LLMCTL_DECIDE_BIN="${FD}"
+# scope the stray-process scan to this test (a real llama-server/onnx_server of the host must not decide the result)
+export LLMCTL_DOCTOR_PROC_ROOTS="${TEST_TMP}"
 W="${LLMCTL_UNIT_DIR:?}/default.target.wants"; mkdir -p "${W}" "${LLMCTL_SERVICES_DIR}"
 touch "${LLMCTL_UNIT_DIR}/llmctl-llama@.service" "${LLMCTL_UNIT_DIR}/llmctl-onnx@.service"
 doc() { timeout 150 bash -c 'source "$1/lib/doctor.sh"; doctor_run' _ "${LLMCTL_ROOT}" 2>&1 | sed 's/\x1b\[[0-9;]*m//g' || true; }
