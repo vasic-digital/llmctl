@@ -11,7 +11,7 @@ image's own probe with that prompt first, else any probe with that prompt). The 
 "<image fixture id>/<probe id>" (vision) or "<case id>" (chat/coder). Unknown key -> HTTP 500.
 
 Usage: fake_openai.py --suite DIR [--suite DIR2 ...] --answers FILE --port-file FILE [--model-id ID]
-                      [--mode normal|reject-images|error500|nondeterministic|truncate]
+                      [--mode normal|reject-images|error500|nondeterministic|truncate|reasoning-budget|reasoning-empty-stop]
 """
 import argparse
 import base64
@@ -105,7 +105,13 @@ def main():
             if a.mode == "nondeterministic" and calls[key] > 1:
                 ans = ans + " (second call differs)"
             finish = "length" if a.mode == "truncate" else "stop"
-            self.send(200, {"choices": [{"message": {"role": "assistant", "content": ans}, "finish_reason": finish}],
+            msg = {"role": "assistant", "content": ans}
+            if a.mode == "reasoning-budget":
+                # a reasoning model that spent the whole max_tokens budget in the reasoning channel
+                msg, finish = {"role": "assistant", "content": "", "reasoning_content": "Let me think step by step ..."}, "length"
+            elif a.mode == "reasoning-empty-stop":
+                msg = {"role": "assistant", "content": "", "reasoning_content": "thought about it, then said nothing"}
+            self.send(200, {"choices": [{"message": msg, "finish_reason": finish}],
                             "usage": {"prompt_tokens": 1, "completion_tokens": 1}})
 
     srv = ThreadingHTTPServer(("127.0.0.1", 0), H)

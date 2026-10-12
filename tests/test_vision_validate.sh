@@ -139,11 +139,11 @@ U="$(fake_start "${FIX}/answers_good.json" --model-id /m/fast/Llama-3.1-8B.gguf)
 assert_eq 2 "$(run_rc "${LLMCTL}" vision validate --profile vision --host "${U}")" "endpoint serves a different model -> exit 2"
 assert_contains "$(cat "${TEST_TMP}/last.out")" "not the expected model" "wrong-model refusal named"
 
-echo "== 8. served-wrong: images rejected (no mmproj) / truncated / non-deterministic -> exit 1"
+echo "== 8. served-wrong: images rejected (no mmproj) / non-deterministic -> exit 1; truncated -> exit 2"
 U="$(fake_start "${FIX}/answers_good.json" --mode reject-images --model-id /m/vision/gemma-3-4b-it-Q4_K_M.gguf)"
 assert_eq 1 "$(run_rc "${LLMCTL}" vision validate --host "${U}")" "server rejects image input -> exit 1"
 U="$(fake_start "${FIX}/answers_good.json" --mode truncate --model-id /m/vision/gemma-3-4b-it-Q4_K_M.gguf)"
-assert_eq 1 "$(run_rc "${LLMCTL}" vision validate --host "${U}")" "finish_reason=length -> exit 1"
+assert_eq 2 "$(run_rc "${LLMCTL}" vision validate --host "${U}")" "finish_reason=length -> exit 2 (UNDETERMINED: a budget problem, never PASS, never a wrong-answer FAIL)"
 U="$(fake_start "${FIX}/answers_good.json" --mode nondeterministic --model-id /m/vision/gemma-3-4b-it-Q4_K_M.gguf)"
 assert_eq 1 "$(run_rc "${LLMCTL}" vision validate --host "${U}")" "different answer on a repeated request -> exit 1"
 assert_contains "$(cat "${TEST_TMP}/last.out")" "[FAIL] determinism 01_text_large/read" "non-determinism named"

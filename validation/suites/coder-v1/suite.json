@@ -3,7 +3,7 @@
  "kind": "coder",
  "schema": 1,
  "notes": "Known-answer prompts for coding profiles. Model-written code is NEVER executed by the validator; code answers are judged by deterministic regular expressions over the answer text only.",
- "request": {"temperature": 0, "seed": 42, "top_k": 1, "top_p": 1.0, "max_tokens": 512, "cache_prompt": false},
+ "request": {"temperature": 0, "seed": 42, "top_k": 1, "top_p": 1.0, "max_tokens": 2048, "cache_prompt": false},
  "determinism_repeat": ["py_output"],
  "cases": [
   {"id": "py_output", "prompt": "What does this Python code print?\n\nprint(sum(range(5)))\n\nAnswer with only the printed output.", "checks": {"number_equals": 10}},

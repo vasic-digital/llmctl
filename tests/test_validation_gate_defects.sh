@@ -106,4 +106,52 @@ assert_eq "HOOK-ARGS: decide" "${out}" "a profile auto restarted (new started_ep
 assert_contains "$(grep -n 'auto)' "${LLMCTL_ROOT}/bin/llmctl")" "validate_auto" "bin/llmctl routes auto through validate_auto"
 rm -f "${LLMCTL_RUNTIME_DIR}"/*.run
 
+echo "== 7. false FAILs: budget exhaustion / reasoning channel is UNDETERMINED, a wrong answer is still FAIL"
+CHATM=/m/fast/Llama-3.1-8B-Instruct-Q4_K_M.gguf
+U="$(fake_start "${FIX}/answers_good.json" --mode reasoning-budget --model-id "${CHATM}")"
+assert_eq 2 "$(run_rc python3 -I "${JUDGE}" run --suite "${CSUITE}" --endpoint "${U}")" \
+  "reasoning model exhausted max_tokens in the reasoning channel (empty content, finish=length) -> exit 2, not FAIL"
+assert_contains "$(cat "${TEST_TMP}/last.out")" "reasoning" "the output names the reasoning channel as the cause"
+U="$(fake_start "${FIX}/answers_good.json" --mode reasoning-empty-stop --model-id "${CHATM}")"
+assert_eq 2 "$(run_rc python3 -I "${JUDGE}" run --suite "${CSUITE}" --endpoint "${U}")" \
+  "empty content with reasoning content present (finish=stop) -> exit 2"
+U="$(fake_start "${FIX}/answers_good.json" --mode truncate --model-id "${CHATM}")"
+assert_eq 2 "$(run_rc python3 -I "${JUDGE}" run --suite "${CSUITE}" --endpoint "${U}")" "finish_reason=length -> exit 2 (budget, not a wrong answer)"
+assert_contains "$(cat "${TEST_TMP}/last.out")" "max_tokens" "...and the hint says to raise max_tokens"
+# a genuinely wrong answer, and a genuinely empty answer WITHOUT reasoning, stay FAIL
+U="$(fake_start "$(answers_with arith 41)" --model-id "${CHATM}")"
+assert_eq 1 "$(run_rc python3 -I "${JUDGE}" run --suite "${CSUITE}" --endpoint "${U}")" "wrong answer 41 is still exit 1"
+U="$(fake_start "$(answers_with arith '')" --model-id "${CHATM}")"
+assert_eq 1 "$(run_rc python3 -I "${JUDGE}" run --suite "${CSUITE}" --endpoint "${U}")" "empty answer with NO reasoning content is still exit 1"
+# the request budget leaves room for reasoning models
+mt="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["request"]["max_tokens"])' "${CSUITE}/suite.json")"
+if (( mt >= 2048 )); then printf '  ok: chat-v1 max_tokens=%s\n' "${mt}"; else printf '  FAIL: chat-v1 max_tokens=%s < 2048\n' "${mt}" >&2; TEST_FAILS=$((TEST_FAILS+1)); fi
+
+echo "== 7b. number_equals rule: the number after the LAST '=' when the answer restates the equation, else the FIRST number"
+U="$(fake_start "$(answers_with arith '17+25=42')" --model-id "${CHATM}")"
+assert_eq 0 "$(run_rc python3 -I "${JUDGE}" run --suite "${CSUITE}" --endpoint "${U}")" "'17+25=42' passes"
+U="$(fake_start "$(answers_with arith '17 + 25 = 41')" --model-id "${CHATM}")"
+assert_eq 1 "$(run_rc python3 -I "${JUDGE}" run --suite "${CSUITE}" --endpoint "${U}")" "'17 + 25 = 41' still fails"
+jt() { python3 -I - "${JUDGE}" "$1" <<'PY'
+import importlib.util, sys
+sp = importlib.util.spec_from_file_location("vj", sys.argv[1]); m = importlib.util.module_from_spec(sp); sp.loader.exec_module(m)
+print(m.judge({"number_equals": 42}, sys.argv[2])[0])
+PY
+}
+assert_eq True  "$(jt '17 + 25 = 42.')" "equation with trailing period passes"
+assert_eq True  "$(jt '42')" "bare number passes"
+assert_eq True  "$(jt 'Answer: 42')" "first number rule unchanged when no '='"
+jt2() { python3 -I - "${JUDGE}" "$1" <<'PY'
+import importlib.util, sys
+sp = importlib.util.spec_from_file_location("vj", sys.argv[1]); m = importlib.util.module_from_spec(sp); sp.loader.exec_module(m)
+print(m.judge({"number_equals": 2}, sys.argv[2])[0])
+PY
+}
+assert_eq False "$(jt2 'twenty-two')" "hyphenated compound 'twenty-two' is not read as the word 'two' (false PASS guard)"
+assert_eq True  "$(jt2 'two')" "plain word 'two' still counts"
+assert_eq False "$(jt '41, not 42')" "first number 41 fails even though 42 is mentioned later"
+assert_eq False "$(jt '17 + 25 = 42 = 41')" "the LAST '=' decides: 41 fails"
+assert_eq False "$(jt '17 + 25')" "operands only: first number 17 fails"
+assert_eq False "$(jt 'The answer is 41.')" "wrong number fails"
+
 test_finish

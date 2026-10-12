@@ -16,7 +16,9 @@ Anti-bluff structure of every run (any one of these failing makes the run non-PA
   2. judge self-test: canned answers with a known verdict (judge_controls) are judged FIRST; a judge that
      passes a known-wrong answer (or fails a known-right one) is broken -> exit 1 before any request
   3. model identity: GET /v1/models must report the catalog model file (or the run is UNDETERMINED)
-  4. every probe needs a REAL answer from the endpoint; no answer is UNDETERMINED, never PASS
+  4. every probe needs a REAL, COMPLETE answer from the endpoint; no answer is UNDETERMINED, never PASS. An
+     answer cut off by the token budget (finish_reason=length) or empty content with reasoning content is
+     UNDETERMINED too (a budget problem, not a wrong answer); a complete wrong or genuinely empty answer FAILs
   5. golden-bad controls (vision): a control image answered with a golden probe's prompt MUST fail that
      golden probe's checks; if it passes, the validator does not discriminate -> exit 1
   6. determinism: the probes listed in determinism_repeat are asked twice; answers must be identical
@@ -60,16 +62,37 @@ def has_token(answer_norm, needle):
     return n.strip() != "" and n in answer_norm
 
 
-def first_number(raw):
-    """First number in the answer, digits or an English number word (zero..twenty); None if absent."""
+_NUM_RE = r"-?\d+(?:[.,]\d+)?"
+_WORD_RE = re.compile(r"(?<![\w-])(" + "|".join(NUMBER_WORDS) + r")(?![\w-])", re.I)   # not inside 'twenty-two'
+
+
+def _number_at(raw, start):
+    """The number that starts at or after `start` (digits or an English number word zero..twenty): (pos, value)."""
     best = None
-    m = re.search(r"-?\d+(?:[.,]\d+)?", raw)
+    m = re.compile(_NUM_RE).search(raw, start)
     if m:
         best = (m.start(), float(m.group(0).replace(",", ".")))
-    w = re.search(r"\b(" + "|".join(NUMBER_WORDS) + r")\b", raw, re.I)
+    w = _WORD_RE.search(raw, start)
     if w and (best is None or w.start() < best[0]):
         best = (w.start(), float(NUMBER_WORDS[w.group(1).lower()]))
-    return None if best is None else best[1]
+    return best
+
+
+def first_number(raw):
+    """The number an answer states, None if absent. Rule (documented in docs/validation.md):
+    when the answer restates an equation ("17 + 25 = 42") it is the number right after the LAST '=';
+    otherwise it is the FIRST number in the answer (digits, or an English number word zero..twenty that is
+    not part of a hyphenated compound such as 'twenty-two')."""
+    eq = [m.end() for m in re.finditer(r"=\s*", raw)]
+    for end in reversed(eq):
+        m = re.match(_NUM_RE, raw[end:])
+        if m:
+            return float(m.group(0).replace(",", "."))
+        w = _WORD_RE.match(raw, end)
+        if w:
+            return float(NUMBER_WORDS[w.group(1).lower()])
+    b = _number_at(raw, 0)
+    return None if b is None else b[1]
 
 
 def first_json_object(raw):
@@ -268,10 +291,29 @@ def ask(endpoint, suite, prompt, image_path=None, timeout=180):
     dt = time.monotonic() - t0
     try:
         ch = d["choices"][0]
-        return {"content": ch["message"].get("content") or "", "finish_reason": ch.get("finish_reason"),
-                "seconds": round(dt, 3), "usage": d.get("usage", {})}
+        msg = ch["message"]
+        reasoning = msg.get("reasoning_content") or msg.get("reasoning") or ""
+        return {"content": msg.get("content") or "", "finish_reason": ch.get("finish_reason"),
+                "reasoning_chars": len(reasoning) if isinstance(reasoning, str) else 0,
+                "max_tokens": req.get("max_tokens"), "seconds": round(dt, 3), "usage": d.get("usage", {})}
     except (KeyError, IndexError, TypeError):
         raise NoAnswer("malformed completion response: %s" % json.dumps(d)[:300])
+
+
+def undetermined_reason(a):
+    """None when the completion is a complete final answer that may be judged. Otherwise the reason it cannot
+    be judged: the answer was cut off by the token budget, or a reasoning model produced no final answer. Those
+    are budget problems, not wrong answers - UNDETERMINED (exit 2), never PASS and never FAIL. A completion with
+    empty content and NO reasoning content is a genuinely empty answer and is judged (FAIL)."""
+    if a.get("finish_reason") == "length":
+        return ("answer truncated (finish_reason=length, max_tokens=%s, reasoning_chars=%s): the model did not "
+                "finish within the request budget - raise request.max_tokens in the suite; this is not a verdict "
+                "on the answer" % (a.get("max_tokens"), a.get("reasoning_chars", 0)))
+    if not str(a.get("content", "")).strip() and a.get("reasoning_chars", 0) > 0:
+        return ("no final answer: message.content is empty but the reasoning channel has %d chars "
+                "(a reasoning model that spent its output in reasoning) - not a verdict on the answer"
+                % a["reasoning_chars"])
+    return None
 
 
 def embed(endpoint, text, timeout):
@@ -425,10 +467,15 @@ def run(args):
                 out("[UNDETERMINED] %s: no answer: %s" % (key, msg))
             report["results"].append(rec)
             continue
+        why = undetermined_reason(a)
+        if why:
+            counts["undetermined"] += 1
+            rec.update(verdict="UNDETERMINED", reasons=[why], answer=a["content"], finish_reason=a["finish_reason"])
+            report["results"].append(rec)
+            out("[UNDETERMINED] %s (%.2fs, finish=%s): %s" % (key, a["seconds"], a["finish_reason"], why))
+            continue
         answers[key] = a
         ok, reasons = judge(pr["checks"], a["content"])
-        if ok and a.get("finish_reason") == "length":
-            ok, reasons = False, ["answer truncated (finish_reason=length)"]
         counts["pass" if ok else "fail"] += 1
         rec.update(verdict="PASS" if ok else "FAIL", answer=a["content"], finish_reason=a["finish_reason"],
                    seconds=a["seconds"], reasons=reasons)
@@ -450,6 +497,12 @@ def run(args):
                     counts["undetermined"] += 1
                     out("[UNDETERMINED] control %s: no answer: %s" % (key, err[1]))
                     report["controls"].append({"key": key, "verdict": "UNDETERMINED", "reasons": [err[1]]})
+                    continue
+                why = undetermined_reason(a)
+                if why:
+                    counts["undetermined"] += 1
+                    out("[UNDETERMINED] control %s: %s" % (key, why))
+                    report["controls"].append({"key": key, "verdict": "UNDETERMINED", "reasons": [why]})
                     continue
                 golden_ok, golden_reasons = judge(gpr["checks"], a["content"])
                 if golden_ok:
@@ -476,6 +529,11 @@ def run(args):
         if err:
             counts["undetermined"] += 1
             out("[UNDETERMINED] determinism %s: no answer: %s" % (key, err[1]))
+            continue
+        why = undetermined_reason(a)
+        if why:
+            counts["undetermined"] += 1
+            out("[UNDETERMINED] determinism %s: %s" % (key, why))
             continue
         same = a["content"] == answers[key]["content"]
         counts["pass" if same else "fail"] += 1
