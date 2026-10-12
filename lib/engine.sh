@@ -35,6 +35,11 @@ engine_ensure_submodules() {
     fi
   done
   if [[ "${missing}" == "1" ]]; then
+    if [[ "${LLMCTL_DRY_RUN:-0}" == "1" ]]; then
+      # Never clone (~1.1 GB over SSH) from a dry-run / hermetic test.
+      log "[dry-run] git -C ${LLMCTL_ROOT} submodule update --init --recursive"
+      return 0
+    fi
     log "initializing submodules (git submodule update --init)"
     git -C "${LLMCTL_ROOT}" submodule update --init --recursive
   fi
