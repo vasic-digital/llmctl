@@ -66,6 +66,11 @@ t0=$(date +%s); rc=0; out="$(FAKE_START_MODE=slow LLMCTL_START_WAIT=3 timeout 45
 el=$(( $(date +%s) - t0 ))
 if [[ "${rc}" != 124 && "${el}" -lt 30 ]]; then echo "  ok: N5: start returned after ${el}s (bounded by LLMCTL_START_WAIT, rc=${rc})"
 else printf '  FAIL: N5: start blocked for %ss (rc=%s): the blocking `systemctl start` holds the scheduler lock for the unit gate wait\n' "${el}" "${rc}" >&2; TEST_FAILS=$((TEST_FAILS+1)); fi
+# L3 (independent review): the bound must produce the DOCUMENTED outcome, not merely "not hung": rc 0, the loud
+# "still starting" warning, and the unit left activating (the readiness poll - here the foreign listener - decides).
+assert_eq "0" "${rc}" "N5/L3: a start whose unit is still gating exits 0 (readiness decides, no spurious failure)"
+assert_contains "${out}" "is still starting after 3s" "N5/L3: the bounded start warns loudly that the unit is still starting"
+assert_eq "activating" "$(cat "${FAKE_STATE}/llmctl-llama@fast.service" 2>/dev/null || echo MISSING)" "N5/L3: the unit was left activating (fake systemctl state), not stopped or active"
 rm -rf "${FAKE_STATE:?}"/*
 if flock -n "${LLMCTL_RUNTIME_DIR}/.scheduler.lock" true; then echo "  ok: N5: the scheduler lock is free afterwards"; else printf '  FAIL: N5: scheduler lock still held\n' >&2; TEST_FAILS=$((TEST_FAILS+1)); fi
 test_finish
