@@ -1,0 +1,27 @@
+{
+ "suite": "coder-v1",
+ "kind": "coder",
+ "schema": 1,
+ "notes": "Known-answer prompts for coding profiles. Model-written code is NEVER executed by the validator; code answers are judged by deterministic regular expressions over the answer text only.",
+ "request": {"temperature": 0, "seed": 42, "top_k": 1, "top_p": 1.0, "max_tokens": 2048, "cache_prompt": false},
+ "determinism_repeat": ["py_output"],
+ "cases": [
+  {"id": "py_output", "prompt": "What does this Python code print?\n\nprint(sum(range(5)))\n\nAnswer with only the printed output.", "checks": {"number_equals": 10}},
+  {"id": "http_404", "prompt": "What is the HTTP status code that means 'Not Found'? Answer with only the number.", "checks": {"number_equals": 404}},
+  {"id": "def_add", "prompt": "Write a Python function named add that takes two arguments and returns their sum. Output only the code.", "checks": {"regex_all": ["def\\s+add\\s*\\(\\s*\\w+\\s*,\\s*\\w+\\s*\\)", "return\\s+\\w+\\s*\\+\\s*\\w+"]}},
+  {"id": "empty_array", "prompt": "In JSON, what literal represents an empty array? Answer with only the literal.", "checks": {"regex_all": ["\\[\\s*\\]"], "regex_none": ["\\{\\s*\\}"]}}
+ ],
+ "judge_controls": [
+  {"probe": "py_output", "answer": "10", "expect": "pass"},
+  {"probe": "py_output", "answer": "15", "expect": "fail"},
+  {"probe": "py_output", "answer": "10,000", "expect": "fail"},
+  {"probe": "py_output", "answer": "10.5", "expect": "fail"},
+  {"probe": "py_output", "answer": "10.", "expect": "pass"},
+  {"probe": "http_404", "answer": "404", "expect": "pass"},
+  {"probe": "http_404", "answer": "500", "expect": "fail"},
+  {"probe": "def_add", "answer": "```python\ndef add(a, b):\n    return a + b\n```", "expect": "pass"},
+  {"probe": "def_add", "answer": "def add(a, b):\n    return a - b", "expect": "fail"},
+  {"probe": "empty_array", "answer": "[]", "expect": "pass"},
+  {"probe": "empty_array", "answer": "{}", "expect": "fail"}
+ ]
+}

@@ -1,0 +1,61 @@
+{
+ "01_text_large/read": "ORANGE TIGER\n42",
+ "02_shapes_count/red_circles": "3",
+ "02_shapes_count/blue_squares": "2",
+ "03_login_form/transcribe": "SIGN IN\nUSERNAME\nPASSWORD\nLOGIN",
+ "03_login_form/screen_type": "The screenshot depicts a classic, low-resolution login screen.",
+ "04_list_view/items": "APPLE\nBANANA\nCHERRY\nGRAPE",
+ "04_list_view/count": "4",
+ "05_table/transcribe": "NAME\tAGE\tCITY\nANNA\t31\tPARIS\nBORIS\t45\tOSLO\nCLARA\t27\tROME",
+ "05_table/lookup": "OSLO",
+ "06_dialog/transcribe": "WARNING\nDELETE FILE?\nCANCEL\nDELETE",
+ "06_dialog/buttons": "CANCEL, DELETE",
+ "07_dark_theme/transcribe": "SETTINGS\nDARK MODE\nVOLUME 75",
+ "07_dark_theme/theme": "Dark",
+ "08_small_text/invoice": "7731",
+ "08_small_text/total": "58.40",
+ "09_color_blocks/colors": "Here's the breakdown of the colors from left to right:\n\n*   Red\n*   Green\n*   Blue",
+ "90_bad_blank/read": "NO TEXT",
+ "91_bad_wrong_content/read": "PURPLE HORSE\n17",
+ "arith": "42",
+ "compare": "9",
+ "capital": "Paris",
+ "echo": "ZX-4417",
+ "json": "{\"color\": \"blue\"}",
+ "py_output": "10",
+ "http_404": "404",
+ "def_add": "def add(a, b):\n    return a + b",
+ "empty_array": "[]",
+ "embeddings": {
+  "a cat is sleeping on the sofa": [
+   1.0,
+   0.1,
+   0.0
+  ],
+  "a kitten naps on the couch": [
+   0.9,
+   0.2,
+   0.0
+  ],
+  "the quarterly tax filing deadline": [
+   0.0,
+   0.1,
+   1.0
+  ],
+  "python function that sorts a list": [
+   0.0,
+   1.0,
+   0.1
+  ],
+  "def sort_items(xs): return sorted(xs)": [
+   0.1,
+   0.9,
+   0.1
+  ],
+  "recipe for chocolate cake with butter": [
+   1.0,
+   0.0,
+   0.2
+  ]
+ }
+}

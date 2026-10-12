@@ -49,7 +49,12 @@
           "sha256": "b3bdbf23b47d7e6bb791c99b206deb169cd5a96362a9e3399028df2faacdc506",
           "role": "model"
         }
-      ]
+      ],
+      "validation": {
+        "suites": [
+          "chat-v1"
+        ]
+      }
     },
     "coder": {
       "capability": [
@@ -75,7 +80,13 @@
           "sha256": "fadc3e5f8d42bf7e894a785b05082e47daee4df26680389817e2093056f088ad",
           "role": "model"
         }
-      ]
+      ],
+      "validation": {
+        "suites": [
+          "coder-v1",
+          "chat-v1"
+        ]
+      }
     },
     "vision": {
       "capability": [
@@ -108,7 +119,12 @@
           "sha256": "8c0fb064b019a6972856aaae2c7e4792858af3ca4561be2dbf649123ba6c40cb",
           "role": "mmproj"
         }
-      ]
+      ],
+      "validation": {
+        "suites": [
+          "vision-golden-v1"
+        ]
+      }
     },
     "vision-pro": {
       "capability": [
@@ -140,7 +156,12 @@
           "sha256": "30c02d056410848227001830866e0a269fcc28aaf8ca971bded494003de9f5a5",
           "role": "mmproj"
         }
-      ]
+      ],
+      "validation": {
+        "suites": [
+          "vision-golden-v1"
+        ]
+      }
     },
     "moe-fast": {
       "capability": [
@@ -165,7 +186,12 @@
           "sha256": "27cd6c432c7672cb812a92f611cf3ba7bbc35928262bb1e1253ff4ee6ae35901",
           "role": "model"
         }
-      ]
+      ],
+      "validation": {
+        "suites": [
+          "chat-v1"
+        ]
+      }
     },
     "small": {
       "capability": [
@@ -191,7 +217,12 @@
           "sha256": "6c99cc00ae910f6a532a80022cb4bc1939094527a089c29294b841c0bd87f74d",
           "role": "model"
         }
-      ]
+      ],
+      "validation": {
+        "suites": [
+          "chat-v1"
+        ]
+      }
     },
     "ws-dense-32b": {
       "capability": [
@@ -217,7 +248,13 @@
           "sha256": "2e5f6daea180dbc59f65a40641e94d3973b5dbaa32b3c0acf54647fa874e519e",
           "role": "model"
         }
-      ]
+      ],
+      "validation": {
+        "suites": [
+          "coder-v1",
+          "chat-v1"
+        ]
+      }
     },
     "ws-moe-30b": {
       "capability": [
@@ -243,7 +280,13 @@
           "sha256": "6c997b8af17debdfb01d890214400ccbab00db6acc0ba8da5de1cc906c4774d0",
           "role": "model"
         }
-      ]
+      ],
+      "validation": {
+        "suites": [
+          "coder-v1",
+          "chat-v1"
+        ]
+      }
     },
     "colibri-qwen36": {
       "engine": "colibri",
@@ -528,7 +571,13 @@
           "sha256": "5f9e4d4901a92b997e463c1f46055088b6cca5ca61a6522d1b9f64c4bb81cb42",
           "role": "model"
         }
-      ]
+      ],
+      "validation": {
+        "suites": [
+          "coder-v1",
+          "chat-v1"
+        ]
+      }
     },
     "colibri-glm": {
       "engine": "colibri",
@@ -1419,7 +1468,13 @@
           "sha256": null,
           "role": "model"
         }
-      ]
+      ],
+      "validation": {
+        "suites": [
+          "coder-v1",
+          "chat-v1"
+        ]
+      }
     },
     "decide-tiny": {
       "capability": [
@@ -1486,6 +1541,10 @@
           "status": "unmeasured",
           "reason": "the model is not downloaded on any host that has measured memory so far (G-137); measure it and re-run scripts/overhead_from_memory.py --write"
         }
+      },
+      "validation": {
+        "suites": [],
+        "reason": "typed-decision profiles are validated by the decision smoke test run at download (llmctl models download) and by the hash-pinned golden question set (docs/golden-set.md, scripts/golden/run_golden.py) through the decide gateway; they are not wired into llmctl validate yet (open item), so llmctl validate / require-validated report them as UNDETERMINED, never as validated"
       }
     },
     "decide": {
@@ -1561,6 +1620,10 @@
           "status": "unmeasured",
           "reason": "VRAM half unmeasured: the only run of this profile on record is on nezha, a CPU-only host (i7-1165G7, no GPU); no GPU-host run of this profile exists yet"
         }
+      },
+      "validation": {
+        "suites": [],
+        "reason": "typed-decision profiles are validated by the decision smoke test run at download (llmctl models download) and by the hash-pinned golden question set (docs/golden-set.md, scripts/golden/run_golden.py) through the decide gateway; they are not wired into llmctl validate yet (open item), so llmctl validate / require-validated report them as UNDETERMINED, never as validated"
       }
     },
     "decide-pro": {
@@ -1636,6 +1699,10 @@
           "status": "unmeasured",
           "reason": "VRAM half unmeasured: the only run of this profile on record is on nezha, a CPU-only host (i7-1165G7, no GPU); no GPU-host run of this profile exists yet"
         }
+      },
+      "validation": {
+        "suites": [],
+        "reason": "typed-decision profiles are validated by the decision smoke test run at download (llmctl models download) and by the hash-pinned golden question set (docs/golden-set.md, scripts/golden/run_golden.py) through the decide gateway; they are not wired into llmctl validate yet (open item), so llmctl validate / require-validated report them as UNDETERMINED, never as validated"
       }
     },
     "decide-nli": {
@@ -1724,6 +1791,10 @@
           "status": "unmeasured",
           "reason": "the model is not downloaded on any host that has measured memory so far (G-137); measure it and re-run scripts/overhead_from_memory.py --write"
         }
+      },
+      "validation": {
+        "suites": [],
+        "reason": "typed-decision profiles are validated by the decision smoke test run at download (llmctl models download) and by the hash-pinned golden question set (docs/golden-set.md, scripts/golden/run_golden.py) through the decide gateway; they are not wired into llmctl validate yet (open item), so llmctl validate / require-validated report them as UNDETERMINED, never as validated"
       }
     },
     "decide-2b": {
@@ -1799,6 +1870,10 @@
           "status": "unmeasured",
           "reason": "VRAM half unmeasured: the only run of this profile on record is on nezha, a CPU-only host (i7-1165G7, no GPU); no GPU-host run of this profile exists yet"
         }
+      },
+      "validation": {
+        "suites": [],
+        "reason": "typed-decision profiles are validated by the decision smoke test run at download (llmctl models download) and by the hash-pinned golden question set (docs/golden-set.md, scripts/golden/run_golden.py) through the decide gateway; they are not wired into llmctl validate yet (open item), so llmctl validate / require-validated report them as UNDETERMINED, never as validated"
       }
     },
     "decide-max": {
@@ -1874,6 +1949,10 @@
           "status": "unmeasured",
           "reason": "the model is not downloaded on any host that has measured memory so far (G-137); measure it and re-run scripts/overhead_from_memory.py --write"
         }
+      },
+      "validation": {
+        "suites": [],
+        "reason": "typed-decision profiles are validated by the decision smoke test run at download (llmctl models download) and by the hash-pinned golden question set (docs/golden-set.md, scripts/golden/run_golden.py) through the decide gateway; they are not wired into llmctl validate yet (open item), so llmctl validate / require-validated report them as UNDETERMINED, never as validated"
       }
     },
     "decide-julia": {
@@ -1970,6 +2049,10 @@
           "peak_vram_mib": 212,
           "peak_hwm_mib": 774.9
         }
+      },
+      "validation": {
+        "suites": [],
+        "reason": "typed-decision profiles are validated by the decision smoke test run at download (llmctl models download) and by the hash-pinned golden question set (docs/golden-set.md, scripts/golden/run_golden.py) through the decide gateway; they are not wired into llmctl validate yet (open item), so llmctl validate / require-validated report them as UNDETERMINED, never as validated"
       }
     },
     "decide-kev-08b": {
@@ -2065,6 +2148,10 @@
           "peak_vram_mib": 2900,
           "peak_hwm_mib": 2018.4
         }
+      },
+      "validation": {
+        "suites": [],
+        "reason": "typed-decision profiles are validated by the decision smoke test run at download (llmctl models download) and by the hash-pinned golden question set (docs/golden-set.md, scripts/golden/run_golden.py) through the decide gateway; they are not wired into llmctl validate yet (open item), so llmctl validate / require-validated report them as UNDETERMINED, never as validated"
       }
     },
     "decide-kev-4b": {
@@ -2154,6 +2241,10 @@
           "peak_vram_mib": 7328,
           "peak_hwm_mib": 4898.9
         }
+      },
+      "validation": {
+        "suites": [],
+        "reason": "typed-decision profiles are validated by the decision smoke test run at download (llmctl models download) and by the hash-pinned golden question set (docs/golden-set.md, scripts/golden/run_golden.py) through the decide gateway; they are not wired into llmctl validate yet (open item), so llmctl validate / require-validated report them as UNDETERMINED, never as validated"
       }
     },
     "decide-kev-9b": {
@@ -2229,6 +2320,10 @@
           "note": "engine failed cudaMalloc of this compute buffer at start (--ubatch-size 4096); the full gpu-mode peak is UNKNOWN (never started); ctx from the recorded plan row in live-models/decide-kev-9b/context.txt",
           "compute_buffer_mib": 4016
         }
+      },
+      "validation": {
+        "suites": [],
+        "reason": "typed-decision profiles are validated by the decision smoke test run at download (llmctl models download) and by the hash-pinned golden question set (docs/golden-set.md, scripts/golden/run_golden.py) through the decide gateway; they are not wired into llmctl validate yet (open item), so llmctl validate / require-validated report them as UNDETERMINED, never as validated"
       }
     },
     "decide-laya": {
@@ -2325,6 +2420,10 @@
           "peak_vram_mib": 574,
           "peak_hwm_mib": 666.2
         }
+      },
+      "validation": {
+        "suites": [],
+        "reason": "typed-decision profiles are validated by the decision smoke test run at download (llmctl models download) and by the hash-pinned golden question set (docs/golden-set.md, scripts/golden/run_golden.py) through the decide gateway; they are not wired into llmctl validate yet (open item), so llmctl validate / require-validated report them as UNDETERMINED, never as validated"
       }
     },
     "decide-lev": {
@@ -2416,6 +2515,10 @@
           "peak_vram_mib": 3926,
           "peak_hwm_mib": 3129.3
         }
+      },
+      "validation": {
+        "suites": [],
+        "reason": "typed-decision profiles are validated by the decision smoke test run at download (llmctl models download) and by the hash-pinned golden question set (docs/golden-set.md, scripts/golden/run_golden.py) through the decide gateway; they are not wired into llmctl validate yet (open item), so llmctl validate / require-validated report them as UNDETERMINED, never as validated"
       }
     }
   }
