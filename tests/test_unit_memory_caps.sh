@@ -68,7 +68,18 @@ static_keys() { # <label> <unitfile>
   else echo "  ok: ${label}: MemoryHigh != MemoryMax"; fi
 }
 
-check_cap "llama/vision" llama vision "${LLMCTL_UNIT_DIR}/llmctl-llama@.service"
+check_cap "llama/decide-julia (gpu, MEASURED provenance)" llama decide-julia "${LLMCTL_UNIT_DIR}/llmctl-llama@.service"
+# --- N1: a GPU-mode profile whose provenance is NOT measured has a plan RAM of 2048 MiB that is a placeholder (CUDA
+# context, pinned and compute buffers are host-side too): floor MemoryHigh>=5120, MemoryMax>=6144 MiB, still < 90% of RAM.
+for prof in vision small; do
+  ( svc_write_env "${prof}" llama /bin/true --port 18997; svc_enable "${prof}" ) >/dev/null 2>&1 || true
+  fcap="$(to_mib "$(effective llama "${prof}" MemoryMax)")"; fhi="$(to_mib "$(effective llama "${prof}" MemoryHigh)")"
+  if [[ -n "${fcap}" && "${fcap}" -ge 6144 && "${fcap}" -lt $(( TOTAL * 90 / 100 )) && -n "${fhi}" && "${fhi}" -ge 5120 && "${fhi}" -lt "${fcap}" ]]; then
+    echo "  ok: ${prof} (gpu, estimated provenance): MemoryHigh ${fhi} >= 5120, MemoryMax ${fcap} >= 6144 MiB, below 90% of RAM"
+  else printf '  FAIL: %s (gpu, estimated provenance): MemoryHigh=%s MemoryMax=%s (need >=5120 / >=6144, High<Max, Max<90%% RAM)\n' "${prof}" "${fhi:-unset}" "${fcap:-unset}" >&2; TEST_FAILS=$((TEST_FAILS+1)); fi
+done
+grep -q "provenance" "${LLMCTL_UNIT_DIR}/llmctl-llama@vision.service.d/05-memory.conf" && echo "  ok: the drop-in names the provenance (so a reader knows why)" || { printf '  FAIL: the drop-in does not record the provenance\n' >&2; TEST_FAILS=$((TEST_FAILS+1)); }
+
 check_cap "colibri/colibri-qwen36" colibri colibri-qwen36 "${LLMCTL_UNIT_DIR}/llmctl-colibri@.service"
 check_cap "onnx/decide-nli" onnx decide-nli "${LLMCTL_UNIT_DIR}/llmctl-onnx@.service"
 for u in llama@ colibri@ onnx@; do static_keys "${u}.service" "${LLMCTL_UNIT_DIR}/llmctl-${u}.service"; done

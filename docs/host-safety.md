@@ -258,7 +258,7 @@ is harmless when ignored).
 
 | Layer | Setting | Why |
 |---|---|---|
-| Memory (per profile drop-in `llmctl-<engine>@<profile>.service.d/05-memory.conf`) | `MemoryHigh` = 1.25x, `MemoryMax` = 1.5x of the plan footprint (floor 1 GiB, always < 90% of RAM) | a runaway profile dies alone, early; previously `MemoryHigh=MemoryMax=total RAM` contained nothing |
+| Memory (per profile drop-in `llmctl-<engine>@<profile>.service.d/05-memory.conf`) | `MemoryHigh` = 1.25x, `MemoryMax` = 1.5x of the plan footprint (code floors: 1024 / 1280 MiB; always < 90% of RAM). A GPU-mode profile whose provenance is not `measured` (the plan's 2048 MiB RAM is a placeholder; CUDA context and pinned/compute buffers are host-side) gets at least 5120 / 6144 MiB, because a cgroup OOM kill of a healthy model is final. **Measure VmHWM on the first live run** and record it (memory.gpu `measured`) to tighten the cap | a runaway profile dies alone, early; previously `MemoryHigh=MemoryMax=total RAM` contained nothing |
 | Memory (template backstop) | `MemoryHigh` 70% / `MemoryMax` 85% of RAM; gateway 20% / 25% (cap 3 / 4 GiB) | for a unit with no drop-in |
 | Swap / priority | `MemorySwapMax=0`, `Nice=10`, `IOWeight=50`, `CPUWeight=50`, `OOMScoreAdjust=500` | a swapping or hot model must not stall the desktop and agent fleet |
 | Stop / start | `TimeoutStopSec=20`, `TimeoutStartSec=300`, `KillMode=control-group` | the stop path was seen to exceed 90 s under pressure |

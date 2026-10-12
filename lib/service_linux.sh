@@ -218,10 +218,20 @@ _svc_gateway_caps() {
 }
 
 # _svc_profile_caps <footprint-MiB> <total-MiB> -> "<high> <max>" (1.25x / 1.5x, floor 1 GiB, max < 90% of total).
+# For a GPU-mode profile whose provenance is NOT "measured" the plan's 2048 MiB RAM is a placeholder, not a measurement: the
+# CUDA context, pinned staging and compute buffers (--ubatch-size 4096) live in host memory too, and a cgroup OOM kill of a
+# HEALTHY model is final (RestartPreventExitStatus=SIGKILL). Such a profile gets a floor of High 5120 / Max 6144 MiB
+# (about 3x the placeholder; still below 90% of RAM and below the app.slice ceiling of 80%). Tighten it by MEASURING:
+# after the first live run read VmHWM of the engine pid (llmctl keeps it in the QA evidence) and record it in the catalog
+# (memory.gpu status "measured"), which switches the profile back to the 1.25x / 1.5x rule.
+# _svc_profile_caps <footprint-MiB> <total-MiB> [<mode> <provenance>]
 _svc_profile_caps() {
-  local fp="$1" total="$2" h m lim=$(( $2 * 90 / 100 ))
+  local fp="$1" total="$2" mode="${3:-}" prov="${4:-}" h m lim=$(( $2 * 90 / 100 ))
   h=$(( fp * 125 / 100 )); m=$(( fp * 150 / 100 ))
   (( h < 1024 )) && h=1024; (( m < 1280 )) && m=1280
+  if [[ "${mode}" == gpu && "${prov}" != measured ]]; then
+    (( h < 5120 )) && h=5120; (( m < 6144 )) && m=6144
+  fi
   (( m > lim )) && m="${lim}"; (( h >= m )) && h=$(( m * 5 / 6 ))
   echo "${h} ${m}"
 }
@@ -247,6 +257,9 @@ _svc_write_mem_dropin() {
   instance="$(_svc_instance_key "${profile}")"
   fp="$(hw_probe_json | catalog_plan_json 2>/dev/null | json_stdin 'd["profiles"][argv[0]]["ram_mb"]' "${profile}" 2>/dev/null)" || fp=""
   total="$(hw_probe_json | json_stdin 'd["memory"]["total_mb"]' 2>/dev/null)" || total=""
+  local mp mode prov
+  mp="$(hw_probe_json | catalog_plan_json 2>/dev/null | json_stdin 'd["profiles"][argv[0]]["mode"] + " " + str(d["profiles"][argv[0]].get("vram_provenance"))' "${profile}" 2>/dev/null)" || mp=""
+  mode="${mp%% *}"; prov="${mp#* }"
   if [[ ! "${fp}" =~ ^[0-9]+$ || ! "${total}" =~ ^[0-9]+$ ]]; then
     warn "no per-profile memory cap written for ${profile} (footprint or total RAM unknown); the template backstop applies"
     return 0
@@ -256,7 +269,7 @@ _svc_write_mem_dropin() {
   for other in llama colibri onnx; do
     [[ "${other}" == "${engine}" ]] || _svc_rm_mem_dropin "${instance}" "${other}"
   done
-  caps="$(_svc_profile_caps "${fp}" "${total}")"
+  caps="$(_svc_profile_caps "${fp}" "${total}" "${mode}" "${prov}")"
   dir="$(svc_unit_dir)/llmctl-${engine}@${instance}.service.d"
   # Everything below runs under umask 077: the env record holds key-file paths and LLMCTL_REG_TOKEN (never wider than
   # 0600, also for the temp file of the rewrite - no `sed -i`), and the drop-in follows the same rule.
@@ -270,8 +283,8 @@ _svc_write_mem_dropin() {
       { grep -v '^LLMCTL_FOOTPRINT_MB=' "${envf}" || true; printf 'LLMCTL_FOOTPRINT_MB=%s\n' "${fp}"; } > "${tmp}"
       chmod 600 "${tmp}"; mv -f "${tmp}" "${envf}"
     fi
-    printf '# written by llmctl (profile %s): plan footprint %s MiB -> High 1.25x, Max 1.5x (floor 1 GiB, < 90%% of RAM)\n[Service]\nMemoryHigh=%sM\nMemoryMax=%sM\n' \
-      "${profile}" "${fp}" "${caps%% *}" "${caps##* }" > "${dir}/05-memory.conf"
+    printf '# written by llmctl (profile %s): plan footprint %s MiB, mode %s, provenance %s -> High 1.25x, Max 1.5x (floors High 1024 / Max 1280 MiB; gpu mode not measured: High >= 5120 / Max >= 6144; always < 90%% of RAM)\n[Service]\nMemoryHigh=%sM\nMemoryMax=%sM\n' \
+      "${profile}" "${fp}" "${mode}" "${prov}" "${caps%% *}" "${caps##* }" > "${dir}/05-memory.conf"
   )
 }
 
