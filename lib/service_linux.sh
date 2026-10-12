@@ -528,16 +528,36 @@ _svc_restart_bound_ok() {
 }
 
 # --- lifecycle ---------------------------------------------------------------
+# One profile = one engine unit. The env record is keyed by PROFILE, so two engine templates
+# (llmctl-llama@P / llmctl-onnx@P) can both be enabled for P; one wins the port, the other loads GBs, dies with
+# EADDRINUSE and loops. _svc_disable_siblings <profile> <keep-unit> disables (and stops) every OTHER engine's unit
+# for the profile. "Enabled" = the default.target.wants symlink systemd itself writes in the user unit dir.
+_svc_disable_siblings() {
+  local instance eng sib keep="$2"
+  instance="$(_svc_instance_key "$1")"
+  for eng in llama colibri onnx; do
+    sib="llmctl-${eng}@${instance}.service"
+    [[ "${sib}" == "${keep}" ]] && continue
+    if [[ -L "$(svc_unit_dir)/default.target.wants/${sib}" ]]; then
+      warn "profile ${1} has a second enabled engine unit ${sib}; disabling it (one engine per profile)"
+      _svc_sys disable "${sib}" || true
+      _svc_sys stop "${sib}" || true
+    fi
+  done
+}
+
 svc_enable() {
   local unit; unit="$(_svc_unit_for "$1")"
   _svc_restart_bound_ok "${unit}" || return 1
   _svc_ensure_tenant_slice_dropin "${unit}"
+  _svc_disable_siblings "$1" "${unit}"
   _svc_sys enable "${unit}"
   _svc_sys start "${unit}"
 }
 
 svc_disable() {
   local unit; unit="$(_svc_unit_for "$1")"
+  _svc_disable_siblings "$1" ""
   _svc_sys stop "${unit}" || true
   _svc_sys disable "${unit}" || true
   [[ "${LLMCTL_DRY_RUN}" == "1" ]] || rm -f "${LLMCTL_SERVICES_DIR}/$(_svc_instance_key "$1").env"
