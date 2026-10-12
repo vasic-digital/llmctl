@@ -258,12 +258,14 @@ is harmless when ignored).
 
 | Layer | Setting | Why |
 |---|---|---|
-| Memory (per profile drop-in `llmctl-<engine>@<profile>.service.d/10-memory.conf`) | `MemoryHigh` = 1.25x, `MemoryMax` = 1.5x of the plan footprint (floor 1 GiB, always < 90% of RAM) | a runaway profile dies alone, early; previously `MemoryHigh=MemoryMax=total RAM` contained nothing |
+| Memory (per profile drop-in `llmctl-<engine>@<profile>.service.d/05-memory.conf`) | `MemoryHigh` = 1.25x, `MemoryMax` = 1.5x of the plan footprint (floor 1 GiB, always < 90% of RAM) | a runaway profile dies alone, early; previously `MemoryHigh=MemoryMax=total RAM` contained nothing |
 | Memory (template backstop) | `MemoryHigh` 70% / `MemoryMax` 85% of RAM; gateway 20% / 25% (cap 3 / 4 GiB) | for a unit with no drop-in |
 | Swap / priority | `MemorySwapMax=0`, `Nice=10`, `IOWeight=50`, `CPUWeight=50`, `OOMScoreAdjust=500` | a swapping or hot model must not stall the desktop and agent fleet |
 | Stop / start | `TimeoutStopSec=20`, `TimeoutStartSec=300`, `KillMode=control-group` | the stop path was seen to exceed 90 s under pressure |
 | Restart | `Restart=on-failure`, `RestartSec=5`, `RestartSteps=4`, `RestartMaxDelaySec=120`; `[Unit]` `StartLimitBurst=3` per `StartLimitIntervalSec=900` | the old 5 / 60 s could never trip because a real cycle (model load) exceeds 60 s |
 | No restart after | `RestartPreventExitStatus=SIGKILL SIGTERM 98` | an OOM kill, a deliberate stop, or "port already in use" only repeat themselves |
+
+**Precedence**: llmctl writes `05-memory.conf`, which sorts before the operator's `10-hostsafety.conf`; systemd applies drop-ins in lexical order, so an existing `10-hostsafety.conf` (live: `llmctl-llama@decide-kev-08b`, `llmctl-onnx@decide-nli`, `llmctl-decide-gateway`) stays authoritative and llmctl never edits or removes it.
 
 Existing installed units are reported stale (`llmctl doctor`, `svc_stale_units`) and `start`/`enable` refuse a unit whose
 bound is weaker than 3 starts / 900 s: regenerate with `llmctl install`.

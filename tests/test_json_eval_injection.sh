@@ -44,5 +44,5 @@ assert_eq "2" "$(json_query "${TEST_TMP}/d.json" 'len(d.keys())+1')" "json_query
 assert_eq "yes" "$(catalog_exists vision >/dev/null 2>&1 && echo yes || echo no)" "catalog_exists vision"
 assert_eq "no" "$(catalog_exists no-such-profile >/dev/null 2>&1 && echo yes || echo no)" "catalog_exists unknown profile"
 ( _svc_write_mem_dropin vision llama ) >/dev/null 2>&1 || true
-assert_file_exists "${LLMCTL_UNIT_DIR}/llmctl-llama@vision.service.d/10-memory.conf" "legitimate profile still gets its memory drop-in"
+assert_file_exists "${LLMCTL_UNIT_DIR}/llmctl-llama@vision.service.d/05-memory.conf" "legitimate profile still gets its memory drop-in"
 test_finish

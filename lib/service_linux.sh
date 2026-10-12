@@ -243,7 +243,7 @@ _svc_write_mem_dropin() {
   # the start gate (svc_hook.sh gate) needs the footprint at restart time: record it in the env record
   { sed -i '/^LLMCTL_FOOTPRINT_MB=/d' "${LLMCTL_SERVICES_DIR}/${instance}.env" 2>/dev/null && printf 'LLMCTL_FOOTPRINT_MB=%s\n' "${fp}" >> "${LLMCTL_SERVICES_DIR}/${instance}.env"; } || true
   printf '# written by llmctl (profile %s): plan footprint %s MiB -> High 1.25x, Max 1.5x (floor 1 GiB, < 90%% of RAM)\n[Service]\nMemoryHigh=%sM\nMemoryMax=%sM\n' \
-    "${profile}" "${fp}" "${caps%% *}" "${caps##* }" > "${dir}/10-memory.conf"
+    "${profile}" "${fp}" "${caps%% *}" "${caps##* }" > "${dir}/05-memory.conf"
 }
 
 # _svc_engine_unit_body <description> <basic|strict> <memhigh-MiB> <memmax-MiB>

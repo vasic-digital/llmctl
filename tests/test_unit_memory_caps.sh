@@ -77,6 +77,15 @@ gcap="$(to_mib "$(val "${LLMCTL_UNIT_DIR}/llmctl-decide-gateway.service" MemoryM
 if [[ -n "${gcap}" && "${gcap}" -lt "${TOTAL}" ]]; then echo "  ok: decide-gateway: MemoryMax ${gcap} < total RAM"
 else printf '  FAIL: decide-gateway: MemoryMax %s is not below total RAM %s\n' "${gcap:-unset}" "${TOTAL}" >&2; TEST_FAILS=$((TEST_FAILS+1)); fi
 
+# --- precedence (review MEDIUM-1): the operator's 10-hostsafety.conf stays authoritative over llmctl's own drop-in
+HS="${LLMCTL_UNIT_DIR}/llmctl-llama@small.service.d"; mkdir -p "${HS}"
+printf '[Service]\nMemoryHigh=2500M\nMemoryMax=3000M\n' > "${HS}/10-hostsafety.conf"
+( svc_write_env small llama /bin/true --port 18998 ) >/dev/null 2>&1 || true
+assert_eq "3000M" "$(effective llama small MemoryMax)" "an existing 10-hostsafety.conf wins over llmctl's memory drop-in (MemoryMax)"
+assert_eq "2500M" "$(effective llama small MemoryHigh)" "an existing 10-hostsafety.conf wins over llmctl's memory drop-in (MemoryHigh)"
+assert_file_exists "${HS}/05-memory.conf" "llmctl's own drop-in is 05-memory.conf (sorts before 10-*)"
+assert_file_contains "${HS}/10-hostsafety.conf" "MemoryMax=3000M" "the operator's drop-in is left untouched"
+
 # --- negative control: the SAME predicates must reject a literal copy of the old behaviour (MemoryHigh=MemoryMax=total)
 OLD="${TEST_TMP}/old.service"
 printf '[Service]\nMemoryHigh=%sM\nMemoryMax=%sM\n' "${TOTAL}" "${TOTAL}" > "${OLD}"
