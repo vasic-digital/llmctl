@@ -55,7 +55,7 @@ mkenv() {
   echo fake-model >"$E/models/m.gguf"; echo fake-mmproj >"$E/models/p.gguf"
   cat >"$E/bin/nvidia-smi" <<'X'
 #!/usr/bin/env bash
-[ -f "$FAKE/gpu_hang" ] && sleep 8
+[ -f "$FAKE/gpu_hang" ] && sleep "$(cat "$FAKE/gpu_hang")"
 cat "$FAKE/gpu"
 X
   cat >"$E/bin/systemctl" <<'X'
@@ -80,6 +80,7 @@ X
 echo "$*" >>"$FAKE/calls.args"
 case "$1 ${2:-}" in
   "status --json")
+    [ -f "$FAKE/status_hang" ] && sleep "$(cat "$FAKE/status_hang")"
     python3 -I - "$FAKE" <<'PY'
 import json,os,sys
 f=sys.argv[1]; rows=json.load(open(f+"/others.json"))
@@ -103,7 +104,7 @@ PY
     [ -f "$FAKE/stop_rc1" ] && { rm -f "$FAKE/running_keep"; rm -f "$FAKE/running"; echo "stop failed" >&2; exit 1; }
     rm -f "$FAKE/running"
     [ -f "$FAKE/leak" ] || cp "$FAKE/gpu_base" "$FAKE/gpu"
-    [ -f "$FAKE/hang_after_stop" ] && touch "$FAKE/gpu_hang"
+    [ -f "$FAKE/hang_after_stop" ] && { echo 25 >"$FAKE/gpu_hang"; echo 25 >"$FAKE/status_hang"; }
     [ -f "$FAKE/stop_leaves_port" ] && touch "$FAKE/serving"
     exit 0 ;;
   "stop "*) echo "stop OTHER: $*" >>"$FAKE/calls"; exit 0 ;;
@@ -497,9 +498,29 @@ check "NEG-CONTROL CPU-only run (VRAM flat) with clean stop passes" "$RC" "0"
 has "  table says VRAM check is informational (no GPU use observed)" "$E/out.txt" 'no GPU use observed'
 fi
 
+if want d8; then
+echo "== D8. hung nvidia-smi / llmctl status never hang the watchdog or the driver =="
+# watchdog: GPU sensor hangs for the whole run -> fail-closed trigger (3 unreadable reads), profile stopped
+E="$(mkenv)"; mkdir -p "$E/wdev"; touch "$E/fake/running"; echo 30 >"$E/fake/gpu_hang"
+FAKE="$E/fake" PATH="$E/bin:$PATH" LT_HERMETIC=1 LT_WD_INTERVAL=0.2 LT_STOP_BOUND=2 LT_MEMINFO="$E/meminfo" LT_PSI="$E/psi" LT_IOPSI="$E/iopsi" \
+  timeout 30 bash "$WD" vision "$E/wdev" $$ >/dev/null 2>&1 &
+W=$!; for _ in $(seq 1 120); do [ -s "$E/wdev/trigger" ] && break; sleep 0.2; done
+has "watchdog: hung nvidia-smi -> sensor_unreadable trigger" "$E/wdev/trigger" 'sensor_unreadable'
+has "  watchdog still stopped the profile" "$E/fake/calls" '^stop vision'
+kill -TERM "$W" 2>/dev/null; wait "$W" 2>/dev/null
+# NEG-CONTROL: responsive sensor -> no trigger (covered by the healthy-watchdog test in section 5)
+# driver: GPU + status calls hang right after the stop -> still a verdict + finalized evidence, in bounded time
+t0=$(date +%s); E="$(mkenv)"; touch "$E/fake/hang_after_stop"; run_main "$E"; el=$(( $(date +%s) - t0 ))
+check "hung post-stop sensors -> exit 2 (undetermined), not a hang" "$RC" "2"
+[ "$el" -lt 40 ] && ok "  finished in ${el}s (bounded)" || bad "  took ${el}s"
+[ -s "$EVD/verdict.txt" ] && ok "  verdict.txt finalized" || bad "  no verdict.txt"
+has "  bounded.log records the timeouts" "$EVD/bounded.log" 'TIMEOUT'
+has "  verdict mentions unconfirmed cleanup" "$E/out.txt" 'cleanup not confirmed'
+fi
+
 if want always; then
 echo "== 7. whole-suite sanity: nothing real was touched =="
-[ -z "$(pgrep -f 'llama-server.*--port' || true)" ] && ok "no real llama-server process spawned by tests" || bad "llama-server present (may be pre-existing)"
+[ -z "$(pgrep -x llama-server || true)" ] && ok "no real llama-server process spawned by tests" || bad "llama-server present (may be pre-existing)"
 
 fi
 printf '\nRESULT: %d passed, %d failed\n' "$PASS" "$FAIL"

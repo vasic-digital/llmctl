@@ -122,20 +122,29 @@ refuse() { GATE_RES="REFUSED"; log "REFUSED (gate): $*"; echo "gate REFUSED: $*"
 need() { command -v "$1" >/dev/null 2>&1 || { log "missing tool: $1"; RESULT=2; VERDICT_REASON="missing tool $1"; exit 2; }; }
 need python3; need curl; need awk; need "$LLMCTL"; need "$NVSMI"; need nice; need ionice
 
-gpu_used() { "$NVSMI" --query-gpu=memory.used --format=csv,noheader,nounits 2>/dev/null \
-  | awk 'BEGIN{m=-1} /^[ \t]*[0-9]+[ \t]*$/{if($1+0>m)m=$1+0} END{if(m>=0)print m}'; }
+gpu_used() {
+  local o="$EV/.gpu.$BASHPID.$RANDOM"
+  if bounded "$BOUND" "$o" "$NVSMI" --query-gpu=memory.used --format=csv,noheader,nounits; then
+    awk 'BEGIN{m=-1} /^[ \t]*[0-9]+[ \t]*$/{if($1+0>m)m=$1+0} END{if(m>=0)print m}' "$o"
+  fi
+  rm -f "$o" "$o.rc"
+}
 
 # bounded <secs> <outfile> cmd... : detached with a deadline, never signalled; rc 124 = still running at the deadline.
 BOUND="${LT_BOUND_DEFAULT:-10}"; [ "${LT_HERMETIC:-0}" = 1 ] && BOUND="${LT_BOUND:-$BOUND}"
 bounded() {
   local secs="$1" out="$2" i=0; shift 2
   rm -f "$out.rc"
-  ( "$@" >"$out" 2>&1; echo $? >"$out.rc" ) &
+  ( "$@" >"$out" 2>&1; echo $? >"$out.rc" ) >/dev/null 2>&1 &   # own stdout detached: safe inside $(...)
   while [ ! -s "$out.rc" ] && [ "$i" -lt $((secs * 10)) ]; do sleep 0.1; i=$((i + 1)); done
   [ -s "$out.rc" ] || { echo "$(date -u +%FT%TZ) TIMEOUT ${secs}s: $*" >>"$EV/bounded.log"; return 124; }
   return "$(cat "$out.rc")"
 }
-status_json() { "$LLMCTL" status --json 2>/dev/null; }
+status_json() {
+  local o="$EV/.status.$BASHPID.$RANDOM"
+  bounded "$BOUND" "$o" "$LLMCTL" status --json && cat "$o"
+  local rc=$?; rm -f "$o" "$o.rc"; return "$rc"
+}
 
 
 # --- identity of what the unit ACTUALLY loaded: its env file's LLMCTL_ARGS (-m / --mmproj), never a default filename
@@ -304,7 +313,7 @@ echo "unit_env=$(services_env_file) model=${LOADED_MODEL:-UNKNOWN} mmproj=${LOAD
 
 # ------------------------------------------------------------------ (d) known-answer probes
 HAVE_VV=0
-if "$LLMCTL" vision help 2>/dev/null | grep -q 'vision validate'; then HAVE_VV=1; fi
+if bounded "$BOUND" "$EV/.vhelp" "$LLMCTL" vision help && grep -q 'vision validate' "$EV/.vhelp"; then HAVE_VV=1; fi
 [ "$HAVE_VV" = 1 ] || { RESULT=2; VERDICT_REASON="installed llmctl has no 'vision validate' (UNKNOWN: scratch harness not used live)"; exit 2; }
 # Immediately before validate: the profile must be up (health answers). validate gets --host so it validates an
 # explicit endpoint and can NEVER start the profile itself (without --host, lib/validate.sh calls sched_start when
