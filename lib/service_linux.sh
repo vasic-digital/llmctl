@@ -181,6 +181,67 @@ _svc_pct() { printf '%s' "${1//%/%%}"; }
 # one quoted systemd word; the args are systemd specifiers such as %i and stay as given).
 _svc_hook_cmd() { printf '/bin/bash %s %s' "$(_svc_qx "${_svl_dir}/svc_hook.sh")" "$*"; }
 
+# --- resource policy (fix/bounded-restart-and-pressure-gates, root cause 2) ----------------------------------------
+# The 2026-09-15 "no ceiling below physical RAM" policy let one runaway profile take the whole machine before its cgroup
+# limit applied (MemoryHigh==MemoryMax==total also leaves no throttle zone). New policy:
+#   * every PROFILE gets its own drop-in (written next to its env record, _svc_write_mem_dropin): MemoryHigh = 1.25x and
+#     MemoryMax = 1.5x of the plan footprint (ram_mb), floor 1 GiB, always below 90% of total RAM;
+#   * the TEMPLATE keeps a backstop below total (High 70%, Max 85%) for units whose drop-in is missing;
+#   * MemorySwapMax=0 (a model that swaps is a stalled host, not a slow model), Nice/IOWeight/CPUWeight so the engine
+#     yields to the desktop and the agent fleet, OOMScoreAdjust=500 (kernel picks the engine first), a bounded stop
+#     (TimeoutStopSec=20) and start (TimeoutStartSec=300 covers ExecStartPre only for Type=simple).
+#   * ManagedOOMPreference=avoid: the engine is already bounded by its own MemoryMax, so systemd-oomd (which acts per
+#     cgroup on PSI, see docs/host-safety.md) should pick other victims first. UNKNOWN: whether the user manager
+#     honours the xattr for an unprivileged unit; the directive is harmless when ignored.
+_svc_resource_directives() {
+  cat <<'EOF'
+MemorySwapMax=0
+Nice=10
+IOWeight=50
+CPUWeight=50
+OOMScoreAdjust=500
+ManagedOOMPreference=avoid
+TimeoutStopSec=20
+TimeoutStartSec=300
+EOF
+}
+
+# _svc_template_caps <total-MiB> -> "<high> <max>" backstop for a template unit (always below total RAM).
+_svc_template_caps() { echo "$(( $1 * 70 / 100 )) $(( $1 * 85 / 100 ))"; }
+
+# _svc_gateway_caps <total-MiB> -> "<high> <max>": the gateway is a small Go process; 20%/25% of RAM, capped 3/4 GiB.
+_svc_gateway_caps() {
+  local h=$(( $1 * 20 / 100 )) m=$(( $1 * 25 / 100 ))
+  (( h > 3072 )) && h=3072; (( m > 4096 )) && m=4096
+  echo "${h} ${m}"
+}
+
+# _svc_profile_caps <footprint-MiB> <total-MiB> -> "<high> <max>" (1.25x / 1.5x, floor 1 GiB, max < 90% of total).
+_svc_profile_caps() {
+  local fp="$1" total="$2" h m lim=$(( $2 * 90 / 100 ))
+  h=$(( fp * 125 / 100 )); m=$(( fp * 150 / 100 ))
+  (( h < 1024 )) && h=1024; (( m < 1280 )) && m=1280
+  (( m > lim )) && m="${lim}"; (( h >= m )) && h=$(( m * 5 / 6 ))
+  echo "${h} ${m}"
+}
+
+# _svc_write_mem_dropin <profile> <engine> - per-profile MemoryHigh/MemoryMax drop-in sized from the plan footprint.
+# Plain file I/O (also under LLMCTL_DRY_RUN=1, like svc_install). Silently skipped when the planner is not loaded
+# (the template backstop then applies) - never fatal.
+_svc_write_mem_dropin() {
+  local profile="$1" engine="$2" instance dir fp total caps
+  declare -F catalog_plan_json >/dev/null 2>&1 || return 0
+  instance="$(_svc_instance_key "${profile}")"
+  fp="$(hw_probe_json | catalog_plan_json 2>/dev/null | json_stdin "d['profiles']['${profile}']['ram_mb']" 2>/dev/null)" || return 0
+  [[ "${fp}" =~ ^[0-9]+$ ]] || return 0
+  total="$(hw_probe_json | json_stdin 'd["memory"]["total_mb"]' 2>/dev/null)" || return 0
+  caps="$(_svc_profile_caps "${fp}" "${total}")"
+  dir="$(svc_unit_dir)/llmctl-${engine}@${instance}.service.d"
+  ensure_dir "${dir}"
+  printf '# written by llmctl (profile %s): plan footprint %s MiB -> High 1.25x, Max 1.5x (floor 1 GiB, < 90%% of RAM)\n[Service]\nMemoryHigh=%sM\nMemoryMax=%sM\n' \
+    "${profile}" "${fp}" "${caps%% *}" "${caps##* }" > "${dir}/10-memory.conf"
+}
+
 # _svc_engine_unit_body <description> <basic|strict> <memhigh-MiB> <memmax-MiB>
 _svc_engine_unit_body() {
   local desc="$1" level="$2" memhigh="$3" memmax="$4"
@@ -236,6 +297,7 @@ Restart=always
 RestartSec=5
 MemoryHigh=${memhigh}M
 MemoryMax=${memmax}M
+$(_svc_resource_directives)
 $(_svc_hardening "${level}")
 StandardOutput=append:$(_svc_pct "${LLMCTL_LOG_DIR}")/%i.log
 StandardError=append:$(_svc_pct "${LLMCTL_LOG_DIR}")/%i.log
@@ -297,23 +359,13 @@ svc_install() {
   ensure_dir "${unit_dir}"
   ensure_state_dirs
 
-  # Memory limits from a live probe (fixtures allowed for tests). Operator
-  # decision (2026-09-15): served profiles carry NO artificial ceiling below
-  # the physical hardware - maximal performance and resources, not a
-  # percentage/headroom-reduced cap. MemoryMax is set to the FULL probed
-  # total RAM (not total-minus-headroom, not a 60%-style fraction), and
-  # MemoryHigh equals MemoryMax so there is no soft-throttle zone below it.
-  # The directives themselves stay present (satisfying the OS-level
-  # protection half of FR-015/Constitution §12.6 - a hard cgroup ceiling at
-  # the machine's own physical limit still contains a runaway profile to a
-  # clean, cgroup-level OOM-kill of just that one service rather than an
-  # uncontrolled whole-host kernel OOM event) - only the ARTIFICIAL
-  # reduction below that hardware ceiling is removed.
+  # Memory limits from a live probe (fixtures allowed for tests). The 2026-09-15 "no ceiling below physical RAM"
+  # decision is SUPERSEDED (root cause 2, docs/host-safety.md): the TEMPLATE carries a backstop below total RAM
+  # (_svc_template_caps); the per-profile limit is a drop-in sized from the plan footprint (_svc_write_mem_dropin).
   local total memmax memhigh
   total="$(hw_probe_json | json_stdin 'd["memory"]["total_mb"]')" \
     || die "cannot probe memory for service limits"
-  memmax="${total}"
-  memhigh="${total}"
+  read -r memhigh memmax <<<"$(_svc_template_caps "${total}")"
 
   # The three engine templates share one body (_svc_engine_unit_body); they
   # differ only in description and hardening level.
@@ -419,6 +471,7 @@ svc_write_env() {
     # health path, key-file PATH) - see portreg_env_lines.
     portreg_env_lines "${profile}" "${engine}" "${exec_bin}" "$@"
   } > "${env_file}"
+  _svc_write_mem_dropin "${profile}" "${engine}"
   # Owner-only (D-03): the record names key-file paths and is read by the
   # service manager as the same user; nothing else has a business reading it.
   chmod 600 "${env_file}"
@@ -615,6 +668,7 @@ Restart=always
 RestartSec=5
 MemoryHigh=${memhigh}M
 MemoryMax=${memmax}M
+$(_svc_resource_directives)
 $(_svc_hardening strict)
 StandardOutput=append:$(_svc_pct "${LLMCTL_LOG_DIR}")/decide-gateway.log
 StandardError=append:$(_svc_pct "${LLMCTL_LOG_DIR}")/decide-gateway.log
@@ -635,7 +689,8 @@ _decide_gateway_write_unit() {
   ensure_dir "${unit_dir}"
   ensure_state_dirs
   ensure_dir "${LLMCTL_STATE_DIR}/decide"
-  _decide_gateway_unit_body "${bin}" "${total}" "${total}" > "${unit_dir}/${DECIDE_GATEWAY_UNIT}"
+  local gh gm; read -r gh gm <<<"$(_svc_gateway_caps "${total}")"
+  _decide_gateway_unit_body "${bin}" "${gh}" "${gm}" > "${unit_dir}/${DECIDE_GATEWAY_UNIT}"
   printf '%s\n' "${unit_dir}/${DECIDE_GATEWAY_UNIT}"
 }
 

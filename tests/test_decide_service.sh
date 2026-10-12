@@ -62,9 +62,9 @@ assert_file_contains "${GU}" "EnvironmentFile=-${LLMCTL_STATE_DIR}/decide/gatewa
 assert_file_contains "${GU}" "svc_hook.sh\" unregister gateway" "ExecStopPost removes the registry row"
 assert_eq "[Unit]" "$(sect_of "${GU}" StartLimitIntervalSec)" "StartLimitIntervalSec is in [Unit] (honoured there)"
 assert_eq "[Unit]" "$(sect_of "${GU}" StartLimitBurst)" "StartLimitBurst is in [Unit]"
-# OD-14 (2026-09-15): no artificial ceiling below the machine: MemoryMax = MemoryHigh = probed total
-assert_file_contains "${GU}" "MemoryMax=32768M" "memory policy OD-14: MemoryMax = full probed RAM"
-assert_file_contains "${GU}" "MemoryHigh=32768M" "memory policy OD-14: MemoryHigh = MemoryMax (no soft throttle)"
+# Memory policy (supersedes OD-14): the gateway is small - High 20% / Max 25% of probed RAM (capped 3072M/4096M)
+assert_file_contains "${GU}" "MemoryMax=4096M" "memory policy: gateway MemoryMax = min(25% RAM, 4 GiB)"
+assert_file_contains "${GU}" "MemoryHigh=3072M" "memory policy: gateway MemoryHigh = min(20% RAM, 3 GiB), below MemoryMax"
 # no secret in the unit
 if grep -Eq '[0-9a-f]{40,}|API_KEY|PASSWORD|TOKEN=' "${GU}"; then printf '  FAIL: key-like material in the gateway unit\n' >&2; TEST_FAILS=$((TEST_FAILS+1)); else printf '  ok: no key material / credential variable in the unit\n'; fi
 
