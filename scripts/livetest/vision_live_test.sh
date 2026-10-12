@@ -186,18 +186,30 @@ except Exception as e:
     print("validate output is not parseable JSON (%s)"%e); sys.exit(0)
 try:
     suite=json.load(open(sys.argv[2]+"/expectations.json"))
-    expected=sum(len(f.get("probes",[])) for f in suite["fixtures"])
+    fx=suite["fixtures"]
+    expected=sum(len(f.get("probes",[])) for f in fx)
+    exp_controls=sum(len(f.get("discriminates",[])) for f in fx)
+    exp_det=len(suite.get("determinism_repeat",[]))
 except Exception as e:
     print("validate output cannot be checked: golden suite unreadable (%s)"%e); sys.exit(0)
-res=rep.get("results"); c=rep.get("counts") or {}
+# Shape of a fully correct run, as the real judge emits it (lib/validate_judge.py run()): one result per probe,
+# one control per `discriminates` entry, one determinism entry per determinism_repeat key; counts.pass is the SUM
+# of all three (controls and determinism repeats are counted too).
+res=rep.get("results"); c=rep.get("counts") or {}; ctl=rep.get("controls"); det=rep.get("determinism")
 if not isinstance(res,list) or not res: print("validate output has no probe results"); sys.exit(0)
+if not isinstance(ctl,list) or not isinstance(det,list): print("validate output lacks controls/determinism lists"); sys.exit(0)
 if rep.get("verdict")!="PASS" or rep.get("exit_code")!=0: print("validate output verdict=%r exit_code=%r"%(rep.get("verdict"),rep.get("exit_code"))); sys.exit(0)
 if c.get("fail") or c.get("undetermined"): print("validate output counts fail/undetermined non-zero: %r"%c); sys.exit(0)
 bad=[r.get("key") for r in res if r.get("verdict")!="PASS"]
 if bad: print("validate output has non-PASS probes: %s"%bad); sys.exit(0)
-if len(res)!=expected or c.get("pass")!=len(res): print("validate output probe count %d (counts.pass=%r) != golden suite %d"%(len(res),c.get("pass"),expected)); sys.exit(0)
-ctl=[x for x in rep.get("controls",[]) if x.get("verdict")!="PASS"]
-if ctl: print("validate output has non-PASS controls: %s"%[x.get("key") for x in ctl]); sys.exit(0)
+if len(res)!=expected: print("validate output probe count %d != golden suite %d"%(len(res),expected)); sys.exit(0)
+if len(ctl)!=exp_controls: print("validate output control count %d != suite discriminates %d"%(len(ctl),exp_controls)); sys.exit(0)
+badc=[x.get("key") for x in ctl if x.get("verdict")!="PASS"]
+if badc: print("validate output has non-PASS controls: %s"%badc); sys.exit(0)
+if len(det)!=exp_det: print("validate output determinism entries %d != determinism_repeat %d"%(len(det),exp_det)); sys.exit(0)
+badd=[x.get("key") for x in det if x.get("identical") is not True]
+if badd: print("validate output determinism not identical: %s"%badd); sys.exit(0)
+if c.get("pass")!=len(res)+len(ctl)+len(det): print("validate output counts.pass=%r != probes+controls+determinism=%d"%(c.get("pass"),len(res)+len(ctl)+len(det))); sys.exit(0)
 print("OK")
 PY
 }

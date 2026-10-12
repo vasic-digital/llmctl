@@ -51,7 +51,8 @@ mkenv() {
   echo 0 >"$E/fake/validate_rc"; echo 0 >"$E/fake/start_rc"
   mkdir -p "$E/services" "$E/suite"
   printf "LLMCTL_ENGINE='llama'\nLLMCTL_ARGS=-m %s --mmproj %s --port 8082\n" "$E/models/m.gguf" "$E/models/p.gguf" >"$E/services/vision.env"
-  printf '{"suite":"s","kind":"vision","fixtures":[{"id":"f1","probes":[{"id":"a"},{"id":"b"}]},{"id":"f2","probes":[{"id":"c"}]}]}\n' >"$E/suite/expectations.json"
+  cp "$ROOT/tests/fixtures/livetest/vision-golden-v1/expectations.json" "$E/suite/expectations.json"
+  cp "$ROOT/tests/fixtures/livetest/real_judge_pass.json" "$E/fake/validate_file"
   printf 'some avg10=0.00 avg60=0.00 avg300=0.00 total=1\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=1\n' >"$E/iopsi"
   echo fake-model >"$E/models/m.gguf"; echo fake-mmproj >"$E/models/p.gguf"
   cat >"$E/bin/nvidia-smi" <<'X'
@@ -123,14 +124,7 @@ PY
         *) echo "validate RESTARTED profile (no --host, no .run)" >>"$FAKE/calls"; touch "$FAKE/running"; echo "restarted" >&2; exit 2 ;;
       esac
     fi
-    mode=ok; [ -f "$FAKE/validate_mode" ] && mode=$(cat "$FAKE/validate_mode")
-    case "$mode" in
-      zero)    echo '{"suite":"s","verdict":"PASS","exit_code":0,"counts":{"pass":0,"fail":0,"undetermined":0},"results":[],"controls":[]}' ;;
-      badjson) echo 'this is not json {{{' ;;
-      partial) echo '{"verdict":"PASS","exit_code":0,"counts":{"pass":2,"fail":0,"undetermined":0},"results":[{"key":"a","verdict":"PASS"},{"key":"b","verdict":"PASS"}],"controls":[]}' ;;
-      onefail) echo '{"verdict":"PASS","exit_code":0,"counts":{"pass":2,"fail":1,"undetermined":0},"results":[{"key":"a","verdict":"PASS"},{"key":"b","verdict":"PASS"},{"key":"c","verdict":"FAIL"}],"controls":[]}' ;;
-      *)       echo 'suite header line'; echo '{"verdict":"PASS","exit_code":0,"counts":{"pass":3,"fail":0,"undetermined":0},"results":[{"key":"a","verdict":"PASS"},{"key":"b","verdict":"PASS"},{"key":"c","verdict":"PASS"}],"controls":[]}' ;;
-    esac
+    cat "$FAKE/validate_file"
     exit "$(cat "$FAKE/validate_rc")" ;;
   *) echo "fake llmctl: unexpected: $*" >>"$FAKE/calls"; exit 64 ;;
 esac
@@ -338,13 +332,37 @@ fi   # base
 
 if want d6; then
 echo "== D6. PASS needs parsed JSON, every probe PASS, probe count == suite, hash of the file the unit loaded =="
-for m in zero badjson partial onefail; do
-  E="$(mkenv)"; echo "$m" >"$E/fake/validate_mode"; run_main "$E"
-  check "validate output mode '$m' (rc 0) must NOT pass" "$([ "$RC" = 0 ] && echo PASSED || echo "no($RC)")" "no($RC)"
-  hasnt "  '$m': verdict is not PASS" "$E/out.txt" 'VERDICT +PASS'
-  has "  '$m': reason names the validate output" "$E/out.txt" 'validate output'
+FX="$ROOT/tests/fixtures/livetest"
+mutate() {  # mutate <real-capture> <python-statements on d> -> writes $E/fake/validate_file
+  python3 -I -c 'import json,sys; d=json.load(open(sys.argv[1])); exec(sys.argv[2]); json.dump(d,open(sys.argv[3],"w"),indent=1)' "$FX/$1" "$2" "$E/fake/validate_file"
+}
+neg() {  # neg <name> <capture> <statements> <validate_rc>
+  E="$(mkenv)"; mutate "$2" "$3"; echo "$4" >"$E/fake/validate_rc"; run_main "$E"
+  check "mutated real capture '$1' must NOT pass" "$([ "$RC" = 0 ] && echo PASSED || echo no)" "no"
+  hasnt "  '$1': verdict is not PASS" "$E/out.txt" 'VERDICT +PASS'
+}
+# the REAL captures themselves
+E="$(mkenv)"; run_main "$E"
+check "REAL judge capture of a fully correct run (18 probes, 2 controls, 1 determinism, counts.pass=21) PASSES" "$RC" "0"
+for c in wrong:1 truncate:2 malformed:2; do
+  n=${c%%:*}; rcv=${c##*:}; E="$(mkenv)"; cp "$FX/real_judge_$n.json" "$E/fake/validate_file"; echo "$rcv" >"$E/fake/validate_rc"; run_main "$E"
+  check "real judge capture '$n' (validate rc $rcv) must NOT pass" "$([ "$RC" = 0 ] && echo PASSED || echo no)" "no"
 done
-E="$(mkenv)"; run_main "$E"; check "NEG-CONTROL full valid JSON (3/3 probes) passes" "$RC" "0"
+E="$(mkenv)"; cp "$FX/real_judge_wrong.json" "$E/fake/validate_file"; echo 1 >"$E/fake/validate_rc"; run_main "$E"
+check "real wrong-answer capture -> exit 1 (FAIL)" "$RC" "1"
+# mutations of the real PASS capture, each must be rejected (rc 0 as a lying validate would give)
+neg "drop one control"          real_judge_pass.json 'd["controls"].pop(); d["counts"]["pass"]-=1' 0
+neg "flip determinism"          real_judge_pass.json 'd["determinism"][0]["identical"]=False' 0
+neg "no determinism entries"    real_judge_pass.json 'd["determinism"]=[]; d["counts"]["pass"]-=1' 0
+neg "one probe verdict FAIL"    real_judge_pass.json 'd["results"][0]["verdict"]="FAIL"' 0
+neg "wrong probe count (17)"    real_judge_pass.json 'd["results"].pop(); d["counts"]["pass"]-=1' 0
+neg "counts.pass off by one"    real_judge_pass.json 'd["counts"]["pass"]+=1' 0
+neg "a control is not PASS"     real_judge_pass.json 'd["controls"][0]["verdict"]="FAIL"' 0
+neg "an undetermined count"     real_judge_pass.json 'd["counts"]["undetermined"]=1' 0
+neg "no results"                real_judge_pass.json 'd["results"]=[]; d["counts"]["pass"]=3' 0
+E="$(mkenv)"; echo 'this is not json {{{' >"$E/fake/validate_file"; run_main "$E"
+check "garbage output must NOT pass" "$([ "$RC" = 0 ] && echo PASSED || echo no)" "no"
+has "  reason names the validate output" "$E/out.txt" 'validate output'
 E="$(mkenv)"; echo different-model-content >"$E/models/other.gguf"
 printf "LLMCTL_ENGINE='llama'\nLLMCTL_ARGS=-m %s --mmproj %s\n" "$E/models/other.gguf" "$E/models/p.gguf" >"$E/services/vision.env"
 run_main "$E"
