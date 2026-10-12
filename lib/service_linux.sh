@@ -608,13 +608,38 @@ _svc_disable_siblings() {
   done
 }
 
+# _svc_start_bounded <unit> - `systemctl --user start` with a bound (LLMCTL_START_WAIT s, default 20). The scheduler holds its
+# flock across this call, and the unit's ExecStartPre pressure gate can wait up to 120 s, so a blocking start would stall
+# every other llmctl invocation for that long. On timeout (rc 124) the unit is "still starting" (the systemd job continues):
+# return 0 and let the readiness poll that follows decide - it fails closed (and stops the unit) if the model never answers.
+_svc_start_bounded() {
+  if [[ "${LLMCTL_DRY_RUN}" == "1" ]]; then _svc_sys start "$1"; return; fi
+  local rc=0
+  timeout "${LLMCTL_START_WAIT:-20}" systemctl --user start "$1" || rc=$?
+  if [[ "${rc}" -eq 124 ]]; then
+    warn "$1 is still starting after ${LLMCTL_START_WAIT:-20}s (pressure gate waiting or model loading); not holding the scheduler lock for it"
+    return 0
+  fi
+  return "${rc}"
+}
+
+# svc_started_ok <profile> - after a successful start: is the unit active or activating? An ExecCondition skip (port already
+# taken) makes `systemctl start` return 0 with the unit inactive; a foreign listener on the port must not be mistaken for it.
+# Dry-run: a <runtime>/<profile>.skipped marker stands for "skipped".
+svc_started_ok() {
+  if [[ "${LLMCTL_DRY_RUN:-0}" == "1" ]]; then [[ ! -f "${LLMCTL_RUNTIME_DIR}/$1.skipped" ]]; return; fi
+  local st rc=0
+  st="$(systemctl --user is-active "$(_svc_unit_for "$1")" 2>/dev/null)" || rc=$?
+  [[ "${rc}" -eq 0 || "${st}" == activating || "${st}" == reloading ]]
+}
+
 svc_enable() {
   local unit; unit="$(_svc_unit_for "$1")"
   _svc_restart_bound_ok "${unit}" || return 1
   _svc_ensure_tenant_slice_dropin "${unit}"
   _svc_disable_siblings "$1" "${unit}"
   _svc_sys enable "${unit}"
-  _svc_sys start "${unit}"
+  _svc_start_bounded "${unit}"
 }
 
 svc_disable() {
@@ -627,7 +652,7 @@ svc_disable() {
   [[ "${LLMCTL_DRY_RUN}" == "1" ]] || rm -f "${LLMCTL_SERVICES_DIR}/$(_svc_instance_key "$1").env"
 }
 
-svc_start()   { local unit; unit="$(_svc_unit_for "$1")"; _svc_restart_bound_ok "${unit}" || return 1; _svc_ensure_tenant_slice_dropin "${unit}"; _svc_sys start "${unit}"; }
+svc_start()   { local unit; unit="$(_svc_unit_for "$1")"; _svc_restart_bound_ok "${unit}" || return 1; _svc_ensure_tenant_slice_dropin "${unit}"; _svc_start_bounded "${unit}"; }
 # LLMCTL_TEST_FORCE_STOP_FAIL: test-only hook (round-3 independent review,
 # 2026-10-03). Under LLMCTL_DRY_RUN=1, _svc_sys unconditionally returns 0,
 # so the hermetic test suite has no existing way to exercise a FAILED stop

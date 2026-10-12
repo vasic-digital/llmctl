@@ -811,6 +811,9 @@ _sched_decision_scale_impl() {
       if ! svc_start "${key}"; then
         err "failed to start '${key}': the service backend refused to start it (see: llmctl logs ${key})"
         ok=0
+      elif ! svc_started_ok "${key}"; then
+        err "failed to start '${key}': unit not active after start (skipped by the port check or exited); see: llmctl logs ${key}"
+        ok=0
       elif ! _sched_wait_ready "${port}" "$(portreg_health_path "$(catalog_engine "${profile}")")"; then
         err "started '${key}' but it never answered http://127.0.0.1:${port}$(portreg_health_path "$(catalog_engine "${profile}")") within ${LLMCTL_READY_TIMEOUT:-60}s (see: llmctl logs ${key})"
         svc_stop "${key}" || true
@@ -1092,6 +1095,12 @@ _sched_start_impl() {
       rm -f "${plan_file}"
       return 1
     fi
+    if ! svc_started_ok "${p}"; then
+      err "failed to start '${p}': unit not active after start (skipped by the port check or exited); see: llmctl logs ${p}"
+      portreg_release "${reg_name}"
+      rm -f "${plan_file}"
+      return 1
+    fi
     # svc_start reports the SERVICE MANAGER's own "active" signal, not the
     # model's readiness - see _sched_wait_ready's header comment for the
     # real, live-reproduced race this closes. A profile that never becomes
@@ -1208,6 +1217,11 @@ _enable_impl() {
   touch "${LLMCTL_SERVICES_DIR}/${profile}.enabled"
   if ! svc_enable "${profile}"; then
     err "failed to enable '${profile}': the service backend refused to enable/start it (see: llmctl logs ${profile})"
+    [[ "${allocated}" == 1 ]] && portreg_release "${reg_name}"
+    return 1
+  fi
+  if ! svc_started_ok "${profile}"; then
+    err "failed to start '${profile}': unit not active after start (skipped by the port check or exited); see: llmctl logs ${profile}"
     [[ "${allocated}" == 1 ]] && portreg_release "${reg_name}"
     return 1
   fi
