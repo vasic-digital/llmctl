@@ -68,7 +68,13 @@ bounded_stop() {
   log "fallback: llmctl stop did not return rc 0 (likely queued behind the scheduler lock) -> systemctl --user stop $unit"
   run_bounded "$STOP_BOUND" "$EV/stop.systemd.$$.out" "$SYSTEMCTL" --user stop "$unit"; rc2=$?
   log "systemd stop rc=$rc2"
-  [ "$rc2" = 0 ] && return 10
+  if [ "$rc2" = 0 ]; then
+    # systemd stopped the unit but left llmctl's bookkeeping: only `llmctl stop` removes <runtime>/<profile>.run and
+    # withdraws the registry entry (lib/scheduler.sh _sched_stop_impl), so retry it once, best effort and bounded.
+    run_bounded "$STOP_BOUND" "$EV/stop.llmctl2.$$.out" "$LLMCTL" stop "$PROFILE"
+    log "post-fallback llmctl stop (clears .run/registry) rc=$?"
+    return 10
+  fi
   return 11
 }
 if [ "$MODE" = stop ]; then bounded_stop; exit $?; fi

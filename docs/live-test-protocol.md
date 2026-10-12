@@ -64,7 +64,7 @@ explicit endpoint, so it can never start the profile (without it, validate start
 file); its verdict is evidence only and is not recorded as local validation state.
 
 PASS requires: validate rc 0; its JSON parses, verdict PASS, no failed/undetermined, every probe PASS, probe count equal
-to the golden suite's (18 for vision-golden-v1); sha256 of the model and mmproj the unit ACTUALLY loaded (from the
+to the golden suite's, plus one control per `discriminates` entry and one determinism entry per `determinism_repeat` key, with counts.pass equal to the sum (21 for vision-golden-v1: 18 probes + 2 controls + 1 determinism, as captured from the real judge, see tests/fixtures/livetest/); sha256 of the model and mmproj the unit ACTUALLY loaded (from the
 unit env file's `-m` / `--mmproj`); final stop rc 0 (not only the systemd fallback); unit inactive; port closed; profile
 no longer in `llmctl status`; VRAM within 500 MiB of the baseline (informational when no GPU use was observed, since a
 CPU-only model proves nothing by VRAM).
@@ -82,6 +82,21 @@ bounded.log (timeouts) identity.txt verdict.txt run.log
 Thresholds, timings and every sensor/binary redirection (`LT_*`, `LLMCTL_BIN`, `NVIDIA_SMI_BIN`, `SYSTEMCTL_BIN`) are
 honoured ONLY when `LT_HERMETIC=1` (the tests). Outside it they are ignored and the ignore is recorded in
 `overrides.log`; under it the evidence says loudly it is not a live run.
+
+## llmctl bookkeeping caveats (read from lib/scheduler.sh)
+
+- `LLMCTL_READY_TIMEOUT=0` makes `_sched_wait_ready` return at once, so llmctl writes the `.run` reservation and publishes the
+  registry entry right after `svc_start`, BEFORE the model answers. llmctl will therefore also not stop a model that never becomes
+  ready; this driver's own readiness deadline and cleanup do that.
+- Only `llmctl stop` (`_sched_stop_impl`) removes `<runtime>/<profile>.run` and withdraws the registry entry. A systemd-fallback
+  stop leaves them; `_sched_reconcile_reservations` only ADDS missing reservations and never removes stale ones. A stale `.run`
+  keeps showing as running in `llmctl status` and keeps reserving RAM/VRAM in the scheduler budget until an `llmctl stop vision`
+  succeeds. The tooling therefore retries `llmctl stop` once after a successful fallback (logged as "post-fallback llmctl stop");
+  if that also fails, run `llmctl stop vision` by hand.
+- A late `llmctl start` (the unit appearing after the first stop) is handled by the watchdog's 60 s post-fire re-check and by the
+  driver's cleanup waiting for the background start and stopping again.
+- The watchdog runs in its own session (`setsid`), so a group signal at the driver does not also hit it; conversely a
+  Ctrl-C does not reach it either, which is intended (the driver's trap reaps it).
 
 ## Known unknowns
 

@@ -100,7 +100,7 @@ PY
     [ -f "$FAKE/gpu_after_start" ] && cp "$FAKE/gpu_after_start" "$FAKE/gpu"
     [ -f "$FAKE/start_mutate.sh" ] && bash "$FAKE/start_mutate.sh"
     if [ -f "$FAKE/start_sleep" ]; then   # simulates holding the scheduler flock across svc_start + readiness
-      touch "$FAKE/lock_held"; sleep "$(cat "$FAKE/start_sleep")"; rm -f "$FAKE/lock_held"
+      touch "$FAKE/lock_held"; sleep "$(cat "$FAKE/start_sleep")"; rm -f "$FAKE/lock_held"; echo "start returned" >>"$FAKE/calls"
     fi
     exit "$rc" ;;
   "stop vision")
@@ -414,7 +414,8 @@ run_main "$E"; el=$(( $(date +%s) - t0 ))
 check "breach during blocked start -> exit 4" "$RC" "4"
 has "fallback: systemd stop of the real unit (llmctl-llama@vision.service)" "$E/fake/calls" '^systemctl stop llmctl-llama@vision\.service'
 [ ! -e "$E/fake/running" ] && ok "profile stopped while start still held the lock" || bad "profile still running"
-[ "$el" -lt 10 ] && ok "run ended (${el}s) before the 12 s lock-hold finished" || bad "took ${el}s: driver/watchdog waited for the lock"
+l_sys=$(grep -n '^systemctl stop' "$E/fake/calls" | head -1 | cut -d: -f1); l_ret=$(grep -n '^start returned' "$E/fake/calls" | head -1 | cut -d: -f1)
+[ -n "$l_sys" ] && [ -n "$l_ret" ] && [ "$l_sys" -lt "$l_ret" ] && ok "systemd stop landed (call #$l_sys) BEFORE the lock-holding start returned (call #$l_ret)" || bad "stop did not land during the lock hold (sys=$l_sys ret=$l_ret)"
 has "start ran with LLMCTL_READY_TIMEOUT=0 (lock released at svc_start)" "$E/fake/calls" 'ready_timeout=0'
 has "watchdog log shows bounded llmctl stop then fallback" "$EVD/watchdog.log" 'fallback'
 # real unit name follows the engine in the unit env file (not hardcoded)
@@ -665,6 +666,18 @@ wdp=$(sed -n 's/.*started watchdog pid \([0-9]*\)/\1/p' "$EVD/signals.log")
 pg_main=$(ps -o pgid= -p "$M" | tr -d ' '); pg_wd=$(ps -o pgid= -p "$wdp" | tr -d ' ')
 [ -n "$pg_main" ] && [ -n "$pg_wd" ] && [ "$pg_main" != "$pg_wd" ] && ok "watchdog (pgid $pg_wd) is in a different process group than the driver ($pg_main)" || bad "same process group ($pg_main/$pg_wd)"
 rm -f "$E/fake/validate_wait"; wait "$M" 2>/dev/null
+fi
+
+if want n7; then
+echo "== N7. after a systemd-fallback stop, llmctl stop is retried once to clear the stale .run/registry reservation =="
+E="$(mkenv)"; touch "$E/fake/stop_rc1"; run_main "$E"
+l_sys=$(grep -n '^systemctl stop' "$E/fake/calls" | head -1 | cut -d: -f1); l_last=$(grep -n '^stop vision' "$E/fake/calls" | tail -1 | cut -d: -f1)
+[ -n "$l_sys" ] && [ "$l_last" -gt "$l_sys" ] && ok "llmctl stop retried AFTER the systemd stop (line $l_last > $l_sys)" || bad "no llmctl stop after the systemd stop (sys=$l_sys last-stop=$l_last)"
+has "  retry recorded in the evidence" "$EVD/watchdog.log" 'post-fallback llmctl stop'
+# NEG-CONTROL: clean llmctl stop -> no systemd stop and no extra retry
+E="$(mkenv)"; run_main "$E"
+check "NEG-CONTROL clean stop: no systemctl stop" "$(grep -c '^systemctl stop' "$E/fake/calls")" "0"
+check "  exactly one llmctl stop" "$(grep -c '^stop vision' "$E/fake/calls")" "1"
 fi
 
 if want always; then
