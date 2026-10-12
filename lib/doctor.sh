@@ -278,16 +278,30 @@ doctor_run() {
     local _doc_stray
     # Scope: only processes whose command line names one of THIS install's directories (LLMCTL_ROOT/state/data/models,
     # or LLMCTL_DOCTOR_PROC_ROOTS, colon-separated) - another project's llama-server is not ours to judge.
-    _doc_stray="$("$(portreg_bin)" registry list --json 2>/dev/null | PROC_ROOTS="${LLMCTL_DOCTOR_PROC_ROOTS:-${LLMCTL_ROOT:-}:${LLMCTL_STATE_DIR:-}:${LLMCTL_DATA_DIR:-}:${LLMCTL_MODELS_DIR:-}}" python3 -c '
-import json, os, sys
+    _doc_stray="$("$(portreg_bin)" registry list --json 2>/dev/null | PROC_ROOTS="${LLMCTL_DOCTOR_PROC_ROOTS-${LLMCTL_ROOT:-}:${LLMCTL_STATE_DIR:-}:${LLMCTL_DATA_DIR:-}:${LLMCTL_MODELS_DIR:-}}" MIN_AGE="${LLMCTL_REGISTER_WAIT:-600}" python3 -c '
+import json, os, socket, sys
 try:
     rows = json.load(sys.stdin).get("services", [])
 except Exception:
     rows = []
+roots = [r for r in os.environ.get("PROC_ROOTS", "").split(":") if r]
+if not roots:
+    print("SKIPPED-NO-SCOPE")
+    sys.exit(0)
+min_age = float(os.environ.get("MIN_AGE") or 600)
+clk = os.sysconf("SC_CLK_TCK")
+uptime = float(open("/proc/uptime").read().split()[0])
+def listening(port):
+    s = socket.socket(); s.settimeout(0.5)
+    try:
+        s.connect(("127.0.0.1", port)); return True
+    except Exception:
+        return False
+    finally:
+        s.close()
 pids = {int(r.get("pid") or 0) for r in rows}
 ports = {int(r.get("port") or 0) for r in rows}
 me = os.getuid()
-roots = [r for r in os.environ.get("PROC_ROOTS", "").split(":") if r]
 out = []
 for d in os.listdir("/proc"):
     if not d.isdigit():
@@ -307,10 +321,21 @@ for d in os.listdir("/proc"):
     for i, a in enumerate(args):
         if a == "--port" and i + 1 < len(args) and args[i + 1].isdigit():
             port = int(args[i + 1])
-    if int(d) not in pids and (port == 0 or port not in ports):
-        out.append("pid %s port %s" % (d, port or "?"))
+    if int(d) in pids or (port and port in ports):
+        continue
+    try:
+        start = float(open("/proc/" + d + "/stat").read().rsplit(")", 1)[1].split()[19]) / clk
+    except Exception:
+        continue
+    if uptime - start < min_age:      # still loading: the registration waiter has not had its time (LLMCTL_REGISTER_WAIT)
+        continue
+    if not port or not listening(port):  # not serving yet / port unknown: not judged
+        continue
+    out.append("pid %s port %s" % (d, port))
 print("; ".join(out))' 2>/dev/null || true)"
-    if [[ -n "${_doc_stray}" ]]; then
+    if [[ "${_doc_stray}" == SKIPPED-NO-SCOPE ]]; then
+      _doc_warn "stray engine-process check skipped: no install directory scope known (set LLMCTL_DOCTOR_PROC_ROOTS); other projects' llama-servers are never judged"
+    elif [[ -n "${_doc_stray}" ]]; then
       _doc_fail "live engine process(es) with no registry row: ${_doc_stray} (llama-server/onnx_server.py not published in the registry; stop it or: llmctl-decide registry reconcile)"
     else
       _doc_pass "every live llama-server/onnx_server process has a registry row"

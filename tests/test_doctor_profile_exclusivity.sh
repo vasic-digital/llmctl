@@ -42,10 +42,14 @@ rm -f "${W}/llmctl-llama@decide-nli.service"
 echo "== (b) a live engine process with no registry row =="
 cat > "${TEST_TMP}/llama-server" <<'P'
 #!/usr/bin/env python3
-import time; time.sleep(120)
+import socket, sys, time
+port = int(sys.argv[sys.argv.index("--port") + 1])
+s = socket.socket(); s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1); s.bind(("127.0.0.1", port)); s.listen(5)   # serving: the scan only judges listening engines
+time.sleep(120)
 P
 chmod +x "${TEST_TMP}/llama-server"
 PORT="$(python3 -c 'import socket;s=socket.socket();s.bind(("127.0.0.1",0));print(s.getsockname()[1])')"
+LLMCTL_REGISTER_WAIT=0; export LLMCTL_REGISTER_WAIT   # the scan skips processes younger than the registration wait
 "${TEST_TMP}/llama-server" --port "${PORT}" --alias llmctl-test-stray & FAKEPID=$!
 sleep 0.5
 out="$(doc)"
