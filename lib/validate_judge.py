@@ -266,11 +266,17 @@ def api_key_for(url):
     key = os.environ.get("LLMCTL_VALIDATE_API_KEY")
     if not key:
         return None
+    # Parser-differential guard: refuse any URL a different parser could read differently (backslash, whitespace,
+    # control characters), and require urlsplit and urllib's own Request (what actually connects) to agree on the host.
+    if "\\" in url or any(c.isspace() or ord(c) < 0x20 or ord(c) == 0x7f for c in url):
+        return None
     try:
         host = (urllib.parse.urlsplit(url).hostname or "").lower()
+        conn = urllib.request.Request(url).host or ""
+        conn_host = (urllib.parse.urlsplit("//" + conn.rpartition("@")[2]).hostname or "").lower()
     except ValueError:
         return None
-    if not host:
+    if not host or host != conn_host:
         return None
     allowed = {h.strip().lower() for h in os.environ.get("LLMCTL_VALIDATE_API_KEY_HOSTS", "").split(",") if h.strip()}
     if host == "localhost" or host in allowed:
