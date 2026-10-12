@@ -255,10 +255,14 @@ _svc_write_mem_dropin() {
     return 0
   fi
   instance="$(_svc_instance_key "${profile}")"
-  fp="$(hw_probe_json | catalog_plan_json 2>/dev/null | json_stdin 'd["profiles"][argv[0]]["ram_mb"]' "${profile}" 2>/dev/null)" || fp=""
+  # a scaled instance key (decide.2) has no catalog entry of its own: look its cap up under the base profile
+  local lookup="${profile}"
+  [[ "${profile}" =~ ^(.+)\.[0-9]+$ ]] && lookup="${BASH_REMATCH[1]}"
+  valid_id "${lookup}" || return 0
+  fp="$(hw_probe_json | catalog_plan_json 2>/dev/null | json_stdin 'd["profiles"][argv[0]]["ram_mb"]' "${lookup}" 2>/dev/null)" || fp=""
   total="$(hw_probe_json | json_stdin 'd["memory"]["total_mb"]' 2>/dev/null)" || total=""
   local mp mode prov
-  mp="$(hw_probe_json | catalog_plan_json 2>/dev/null | json_stdin 'd["profiles"][argv[0]]["mode"] + " " + str(d["profiles"][argv[0]].get("vram_provenance"))' "${profile}" 2>/dev/null)" || mp=""
+  mp="$(hw_probe_json | catalog_plan_json 2>/dev/null | json_stdin 'd["profiles"][argv[0]]["mode"] + " " + str(d["profiles"][argv[0]].get("vram_provenance"))' "${lookup}" 2>/dev/null)" || mp=""
   mode="${mp%% *}"; prov="${mp#* }"
   if [[ ! "${fp}" =~ ^[0-9]+$ || ! "${total}" =~ ^[0-9]+$ ]]; then
     warn "no per-profile memory cap written for ${profile} (footprint or total RAM unknown); the template backstop applies"

@@ -42,4 +42,10 @@ S="${U}/llmctl-llama@small.service.d"; mkdir -p "${S}"; printf '[Service]\nMemor
 ( _svc_write_mem_dropin small colibri ) >/dev/null 2>&1 || true
 assert_file_absent "${S}/05-memory.conf" "the llama drop-in for small was removed when small became a colibri unit"
 assert_file_exists "${U}/llmctl-colibri@small.service.d/05-memory.conf" "the colibri drop-in exists"
+echo "== N3: a scaled instance key (decide-tiny.2) takes the base profile's cap, without a warning =="
+printf 'LLMCTL_PROFILE=decide-tiny\nLLMCTL_ENGINE=llama\nLLMCTL_PORT=8099\n' > "${LLMCTL_SERVICES_DIR}/decide-tiny.2.env"
+out="$( _svc_write_mem_dropin decide-tiny.2 llama 2>&1 )" || true
+case "${out}" in *"no per-profile memory cap"*) printf '  FAIL: N3: warned for a scaled instance whose base profile is known: %s\n' "${out}" >&2; TEST_FAILS=$((TEST_FAILS+1));; *) echo "  ok: N3: no warning";; esac
+assert_file_exists "${U}/llmctl-llama@decide-tiny.2.service.d/05-memory.conf" "N3: the scaled instance got a per-profile cap file"
+assert_file_contains "${LLMCTL_SERVICES_DIR}/decide-tiny.2.env" "LLMCTL_FOOTPRINT_MB=" "N3: footprint recorded for the scaled instance"
 test_finish
