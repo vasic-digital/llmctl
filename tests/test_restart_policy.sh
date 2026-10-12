@@ -17,6 +17,13 @@ sect_val() { awk -v s="$2" -v k="$3" '/^\[/{cur=$0} cur==s && index($0,k"=")==1{
 
 PREFIX="llmctl-test-$$"
 STARTED=()
+# Every transient unit gets a systemd-run --on-active reaper timer: if this test is SIGKILLed before its EXIT trap, the
+# user manager itself stops the (possibly Restart=always looping) unit after 120 s.
+arm_reaper() { # <unit-name-without-.service>
+  systemd-run --user --quiet --on-active=120s --unit="$1-reaper" systemctl --user stop "$1.service" >/dev/null 2>&1 || true
+  if systemctl --user list-units --all --plain --no-legend "$1-reaper.timer" 2>/dev/null | grep -q "$1-reaper.timer"; then echo "  ok: reaper timer armed for $1"
+  else printf '  FAIL: no reaper timer armed for %s (a SIGKILLed test could leave a looping unit in the live user manager)\n' "$1" >&2; TEST_FAILS=$((TEST_FAILS+1)); fi
+}
 cleanup() {
   local u; for u in ${STARTED[@]+"${STARTED[@]}"}; do systemctl --user stop "${u}.service" >/dev/null 2>&1 || true; systemctl --user reset-failed "${u}.service" >/dev/null 2>&1 || true; done
   test_teardown_env
@@ -46,7 +53,7 @@ else
   sciv=$(( biv / 20 )); [[ "${sciv}" -ge 1 ]] || sciv=1     # time scaled 1/20: 60s -> 3s, 600s -> 30s
   # (a) a unit whose real cycle (2s run + 1s RestartSec = 3s+) is longer than the scaled 3s interval: only a long
   #     interval + small burst bounds it. Wait up to ~40 s for it to give up.
-  U1="${PREFIX}-loop"; STARTED+=("${U1}")
+  U1="${PREFIX}-loop"; STARTED+=("${U1}"); arm_reaper "${U1}"
   systemd-run --user --quiet --unit="${U1}" -p "Restart=${restart}" -p RestartSec=1 -p "StartLimitIntervalSec=${sciv}" \
     -p "StartLimitBurst=${bbu}" bash -c 'sleep 2; exit 1' >/dev/null 2>&1 || true
   st=""; res=""; nr=""; tripped=0
@@ -69,7 +76,7 @@ else
   systemctl --user stop "${U1}.service" >/dev/null 2>&1 || true; systemctl --user reset-failed "${U1}.service" >/dev/null 2>&1 || true
 
   # (b) a SIGKILLed (OOM-killed) main process must NOT be restarted when the unit says RestartPreventExitStatus=SIGKILL.
-  U2="${PREFIX}-oomkill"; STARTED+=("${U2}")
+  U2="${PREFIX}-oomkill"; STARTED+=("${U2}"); arm_reaper "${U2}"
   args=(-p "Restart=${restart}" -p RestartSec=1)
   [[ -z "${prevent}" ]] || args+=(-p "RestartPreventExitStatus=${prevent}")
   systemd-run --user --quiet --unit="${U2}" "${args[@]}" bash -c 'kill -9 $$$$' >/dev/null 2>&1 || true   # systemd turns $$ into $, so $$$$ reaches bash as $$
@@ -81,7 +88,7 @@ else
   systemctl --user stop "${U2}.service" >/dev/null 2>&1 || true; systemctl --user reset-failed "${U2}.service" >/dev/null 2>&1 || true
 
   # --- negative control: today's policy (Restart=always, 5/60) with the SAME scaled loop does NOT trip within 12 s
-  U3="${PREFIX}-ctl"; STARTED+=("${U3}")
+  U3="${PREFIX}-ctl"; STARTED+=("${U3}"); arm_reaper "${U3}"
   systemd-run --user --quiet --unit="${U3}" -p Restart=always -p RestartSec=1 -p StartLimitIntervalSec=3 -p StartLimitBurst=5 bash -c 'sleep 2; exit 1' >/dev/null 2>&1 || true
   sleep 12
   st3="$(systemctl --user show -p ActiveState --value "${U3}.service" 2>/dev/null || true)"
@@ -90,4 +97,8 @@ else
   else printf '  FAIL: negative control: old policy tripped (result=%s); the behavioral harness cannot discriminate\n' "${res3}" >&2; TEST_FAILS=$((TEST_FAILS+1)); fi
   systemctl --user stop "${U3}.service" >/dev/null 2>&1 || true; systemctl --user reset-failed "${U3}.service" >/dev/null 2>&1 || true
 fi
+# prove nothing of this run is left in the live user manager (units AND reaper timers)
+for u in ${STARTED[@]+"${STARTED[@]}"}; do systemctl --user stop "${u}.service" "${u}-reaper.timer" "${u}-reaper.service" >/dev/null 2>&1 || true; systemctl --user reset-failed "${u}.service" >/dev/null 2>&1 || true; done
+left="$(systemctl --user list-units --all --plain --no-legend "${PREFIX}-*" 2>/dev/null | wc -l)"
+assert_eq "0" "${left}" "no ${PREFIX}-* unit or timer remains in the user manager"
 test_finish
