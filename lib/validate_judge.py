@@ -35,6 +35,7 @@ Usage:
 import argparse
 import base64
 import hashlib
+import ipaddress
 import json
 import math
 import os
@@ -42,6 +43,7 @@ import re
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 
 CLOCK_SKEW_SECONDS = 60   # a validation record stamped further ahead than this is rejected
@@ -254,15 +256,56 @@ class Rejected(Exception):
     """The endpoint answered but refused the request (4xx): a real FAIL of the served model."""
 
 
+def api_key_for(url):
+    """The bearer token (LLMCTL_VALIDATE_API_KEY) may be sent ONLY to a loopback host - 127.0.0.0/8, ::1,
+    localhost - which is where every locally started profile listens, or to a host named EXACTLY in the
+    comma-separated allowlist LLMCTL_VALIDATE_API_KEY_HOSTS. Any other endpoint (a --host URL pointing
+    elsewhere) never receives it. No DNS lookup: a hostname is loopback only if it IS 'localhost'."""
+    key = os.environ.get("LLMCTL_VALIDATE_API_KEY")
+    if not key:
+        return None
+    try:
+        host = (urllib.parse.urlsplit(url).hostname or "").lower()
+    except ValueError:
+        return None
+    if not host:
+        return None
+    allowed = {h.strip().lower() for h in os.environ.get("LLMCTL_VALIDATE_API_KEY_HOSTS", "").split(",") if h.strip()}
+    if host == "localhost" or host in allowed:
+        return key
+    try:
+        if ipaddress.ip_address(host).is_loopback:
+            return key
+    except ValueError:
+        pass
+    return None
+
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """Never follow a redirect: urllib would replay the request headers (Authorization) to the new host."""
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+_OPENER = urllib.request.build_opener(_NoRedirect)
+_warned_hosts = set()
+
+
 def http_json(url, body=None, timeout=60):
     data = None if body is None else json.dumps(body).encode()
     req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"},
                                  method="GET" if body is None else "POST")
-    key = os.environ.get("LLMCTL_VALIDATE_API_KEY")
+    key = api_key_for(url)
     if key:
         req.add_header("Authorization", "Bearer " + key)
+    elif os.environ.get("LLMCTL_VALIDATE_API_KEY"):
+        h = urllib.parse.urlsplit(url).hostname
+        if h not in _warned_hosts:
+            _warned_hosts.add(h)
+            print("note: LLMCTL_VALIDATE_API_KEY NOT sent to %r (not loopback; list it in "
+                  "LLMCTL_VALIDATE_API_KEY_HOSTS to allow)" % h, file=sys.stderr)
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
+        with _OPENER.open(req, timeout=timeout) as resp:
             return json.loads(resp.read().decode("utf-8", "replace"))
     except urllib.error.HTTPError as e:
         detail = e.read().decode("utf-8", "replace")[:400]

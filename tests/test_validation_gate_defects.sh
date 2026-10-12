@@ -242,4 +242,36 @@ for sig in TERM INT; do
   pkill -f "validate_judge.py run .*--endpoint http://127.0.0.1:${SPORT}" 2>/dev/null || true
 done
 
+echo "== 11. LLMCTL_VALIDATE_API_KEY is only ever sent to loopback hosts (or an explicit allowlist)"
+TOKEN="dummy-validate-token-1234"
+AUTHLOG="${TEST_TMP}/auth.log"; : > "${AUTHLOG}"
+U="$(fake_start "${FIX}/answers_good.json" --record-auth "${AUTHLOG}" --model-id /m/fast/Llama-3.1-8B-Instruct-Q4_K_M.gguf)"
+assert_eq 0 "$(run_rc env LLMCTL_VALIDATE_API_KEY="${TOKEN}" python3 -I "${JUDGE}" run --suite "${CSUITE}" --endpoint "${U}")" "chat suite against the loopback fixture"
+assert_contains "$(cat "${AUTHLOG}")" "Bearer ${TOKEN}" "loopback endpoint DOES receive the bearer token"
+akey() { python3 -I - "${JUDGE}" "$1" <<'PY'
+import importlib.util, os, sys
+sp = importlib.util.spec_from_file_location("vj", sys.argv[1]); m = importlib.util.module_from_spec(sp); sp.loader.exec_module(m)
+print(m.api_key_for(sys.argv[2]) or "NONE")
+PY
+}
+export LLMCTL_VALIDATE_API_KEY="${TOKEN}"
+assert_eq "${TOKEN}" "$(akey http://127.0.0.1:8082)" "127.0.0.1 -> key"
+assert_eq "${TOKEN}" "$(akey 'http://[::1]:8082')" "::1 -> key"
+assert_eq "${TOKEN}" "$(akey http://localhost:8082/v1)" "localhost -> key"
+assert_eq NONE "$(akey http://evil.example.com:8082)" "a foreign hostname -> no key"
+assert_eq NONE "$(akey http://203.0.113.9:8082)" "a foreign IP -> no key"
+assert_eq NONE "$(akey http://127.0.0.1.evil.example.com:8082)" "a hostname that merely starts with 127.0.0.1 -> no key"
+assert_eq NONE "$(akey http://localhost.evil.example.com)" "localhost.<foreign> -> no key"
+assert_eq NONE "$(akey http://127.0.0.1@evil.example.com)" "userinfo trickery: the host is evil.example.com, not 127.0.0.1 -> no key"
+assert_eq "${TOKEN}" "$(LLMCTL_VALIDATE_API_KEY_HOSTS=gw.lan.example,other akey http://gw.lan.example:8443)" "an explicitly allow-listed host -> key"
+assert_eq NONE "$(LLMCTL_VALIDATE_API_KEY_HOSTS=gw.lan.example akey http://gw2.lan.example:8443)" "...only that exact host"
+unset LLMCTL_VALIDATE_API_KEY
+# a redirect must never be followed (urllib would forward the Authorization header to the Location host)
+: > "${AUTHLOG}"; TARGETLOG="${TEST_TMP}/target.log"; : > "${TARGETLOG}"
+T="$(fake_start "${FIX}/answers_good.json" --record-auth "${TARGETLOG}" --model-id /m/fast/Llama-3.1-8B-Instruct-Q4_K_M.gguf)"
+U="$(fake_start "${FIX}/answers_good.json" --record-auth "${AUTHLOG}" --mode redirect --redirect-to "${T}/v1/chat/completions" --model-id /m/fast/Llama-3.1-8B-Instruct-Q4_K_M.gguf)"
+assert_eq 2 "$(run_rc env LLMCTL_VALIDATE_API_KEY="${TOKEN}" python3 -I "${JUDGE}" run --suite "${CSUITE}" --endpoint "${U}")" "a redirecting endpoint -> exit 2"
+assert_eq 0 "$(grep -c . "${TARGETLOG}" || true)" "the redirect target received NO request at all (redirect not followed, token not forwarded)"
+assert_eq 0 "$(grep -c "${TOKEN}" "${TEST_TMP}/last.out" || true)" "the token is never echoed into the output"
+
 test_finish

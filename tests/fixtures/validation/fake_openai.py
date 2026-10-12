@@ -11,7 +11,7 @@ image's own probe with that prompt first, else any probe with that prompt). The 
 "<image fixture id>/<probe id>" (vision) or "<case id>" (chat/coder). Unknown key -> HTTP 500.
 
 Usage: fake_openai.py --suite DIR [--suite DIR2 ...] --answers FILE --port-file FILE [--model-id ID]
-                      [--mode normal|reject-images|error500|nondeterministic|slow|truncate|reasoning-budget|reasoning-empty-stop]
+                      [--mode normal|reject-images|error500|nondeterministic|slow|redirect|truncate|reasoning-budget|reasoning-empty-stop]
 """
 import argparse
 import base64
@@ -29,6 +29,8 @@ def main():
     ap.add_argument("--port-file", required=True)
     ap.add_argument("--model-id", default="/models/vision/gemma-3-4b-it-Q4_K_M.gguf")
     ap.add_argument("--mode", default="normal")
+    ap.add_argument("--redirect-to", default="http://127.0.0.1:9/v1/chat/completions")
+    ap.add_argument("--record-auth", default="", help="append the Authorization header of every request to FILE ('-' when absent)")
     ap.add_argument("--max-seconds", type=int, default=900, help="self-terminate (a leaked fixture must not outlive its test)")
     a = ap.parse_args()
     answers = json.load(open(a.answers))
@@ -60,7 +62,13 @@ def main():
             self.end_headers()
             self.wfile.write(body)
 
+        def note_auth(self):
+            if a.record_auth:
+                with open(a.record_auth, "a") as fh:
+                    fh.write((self.headers.get("Authorization") or "-") + "\n")
+
         def do_GET(self):
+            self.note_auth()
             if self.path == "/v1/models":
                 return self.send(200, {"object": "list", "data": [{"id": a.model_id}]})
             if self.path == "/health":
@@ -68,6 +76,13 @@ def main():
             self.send(404, {"error": "not found"})
 
         def do_POST(self):
+            self.note_auth()
+            if a.mode == "redirect":
+                self.send_response(302)
+                self.send_header("Location", a.redirect_to)
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+                return
             req = json.loads(self.rfile.read(int(self.headers.get("Content-Length", "0"))) or b"{}")
             if a.mode == "slow":
                 import time
