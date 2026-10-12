@@ -518,6 +518,32 @@ has "  bounded.log records the timeouts" "$EVD/bounded.log" 'TIMEOUT'
 has "  verdict mentions unconfirmed cleanup" "$E/out.txt" 'cleanup not confirmed'
 fi
 
+if want d5; then
+echo "== D5. IO pressure + memory PSI full in gate and watchdog (fail-closed) =="
+setio() { printf 'some avg10=%s avg60=0 avg300=0 total=1\nfull avg10=%s avg60=0 avg300=0 total=1\n' "$2" "$3" >"$1/iopsi"; }
+E="$(mkenv)"; setio "$E" 10.00 0; run_main "$E"; check "gate: IO PSI some 10.00 -> exit 3" "$RC" "3"; has "  reason names IO some" "$EVD/gate.log" 'REFUSED: IO PSI some'
+E="$(mkenv)"; setio "$E" 0 2.00; run_main "$E"; check "gate: IO PSI full 2.00 -> exit 3" "$RC" "3"; has "  reason names IO full" "$EVD/gate.log" 'REFUSED: IO PSI full'
+E="$(mkenv)"; rm -f "$E/iopsi"; run_main "$E"; check "gate: IO PSI unreadable -> exit 3 (fail-closed)" "$RC" "3"; has "  reason names IO unreadable" "$EVD/gate.log" 'REFUSED: cannot read IO PSI'
+E="$(mkenv)"; setio "$E" 9.99 1.99; run_main "$E"; check "NEG-CONTROL IO 9.99/1.99 passes gate and run" "$RC" "0"
+# watchdog triggers
+w5() {  # w5 <name> <mutation>
+  E="$(mkenv)"; touch "$E/fake/validate_wait"; printf '%s\n' "$2" >"$E/fake/mutate.sh"; run_main "$E"
+  check "watchdog: $1 -> exit 4" "$RC" "4"; has "  $1: trigger recorded" "$EVD/trigger" '.'; has "  $1: stop vision" "$E/fake/calls" '^stop vision'
+}
+w5 "memory PSI full avg10 10.5 > 10" "printf 'some avg10=0 avg60=0 avg300=0 total=1\nfull avg10=10.50 avg60=0 avg300=0 total=1\n' >\"\${FAKE%/fake}/psi\""
+w5 "IO PSI some avg10 60.5 > 60" "printf 'some avg10=60.50 avg60=0 avg300=0 total=1\nfull avg10=0 avg60=0 avg300=0 total=1\n' >\"\${FAKE%/fake}/iopsi\""
+w5 "IO PSI full avg10 30.5 > 30" "printf 'some avg10=0 avg60=0 avg300=0 total=1\nfull avg10=30.50 avg60=0 avg300=0 total=1\n' >\"\${FAKE%/fake}/iopsi\""
+w5 "IO PSI file unreadable x3" "rm -f \"\${FAKE%/fake}/iopsi\""
+n5() {  # at-limit controls: release validate after a moment
+  E="$(mkenv)"; touch "$E/fake/validate_wait"; printf '%s\nsleep 1\nrm -f "$FAKE/validate_wait"\n' "$2" >"$E/fake/mutate.sh"; run_main "$E"
+  check "NEG-CONTROL at-limit $1 does not trigger (exit 0)" "$RC" "0"
+}
+n5 "mem PSI full 10.00" "printf 'some avg10=0 avg60=0 avg300=0 total=1\nfull avg10=10.00 avg60=0 avg300=0 total=1\n' >\"\${FAKE%/fake}/psi\""
+n5 "IO some 60.00" "printf 'some avg10=60.00 avg60=0 avg300=0 total=1\nfull avg10=0 avg60=0 avg300=0 total=1\n' >\"\${FAKE%/fake}/iopsi\""
+n5 "IO full 30.00" "printf 'some avg10=0 avg60=0 avg300=0 total=1\nfull avg10=30.00 avg60=0 avg300=0 total=1\n' >\"\${FAKE%/fake}/iopsi\""
+has "samples.csv carries IO + mem-full columns" "$EVD/samples.csv" 'io_some_avg10,io_full_avg10'
+fi
+
 if want always; then
 echo "== 7. whole-suite sanity: nothing real was touched =="
 [ -z "$(pgrep -x llama-server || true)" ] && ok "no real llama-server process spawned by tests" || bad "llama-server present (may be pre-existing)"

@@ -18,14 +18,14 @@ set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROFILE="${1:-vision}"
 # Sensor/binary redirections exist for the hermetic tests ONLY: honoured exclusively when LT_HERMETIC=1.
-LLMCTL=llmctl; NVSMI=nvidia-smi; SYSCTL=systemctl; MEMINFO=/proc/meminfo; PSI=/proc/pressure/memory
+LLMCTL=llmctl; NVSMI=nvidia-smi; SYSCTL=systemctl; MEMINFO=/proc/meminfo; PSI=/proc/pressure/memory; IOPSI=/proc/pressure/io
 OVERRIDE_NAMES="LT_MEMINFO LT_PSI LT_IOPSI NVIDIA_SMI_BIN LLMCTL_BIN SYSTEMCTL_BIN LT_SUITE_DIR"
 if [ "${LT_HERMETIC:-0}" = "1" ]; then
   LLMCTL="${LLMCTL_BIN:-llmctl}"; NVSMI="${NVIDIA_SMI_BIN:-nvidia-smi}"; SYSCTL="${SYSTEMCTL_BIN:-systemctl}"
-  MEMINFO="${LT_MEMINFO:-/proc/meminfo}"; PSI="${LT_PSI:-/proc/pressure/memory}"
+  MEMINFO="${LT_MEMINFO:-/proc/meminfo}"; PSI="${LT_PSI:-/proc/pressure/memory}"; IOPSI="${LT_IOPSI:-/proc/pressure/io}"
 fi
 
-GATE_MIN_MEM_MB=12000; GATE_MAX_PSI_SOME=5; GATE_MAX_PSI_FULL=1; GATE_MAX_GPU_MB=6000
+GATE_MIN_MEM_MB=12000; GATE_MAX_PSI_SOME=5; GATE_MAX_PSI_FULL=1; GATE_MAX_GPU_MB=6000; GATE_MAX_IO_SOME=10; GATE_MAX_IO_FULL=2
 LARGE_RAM_MB=4000; LARGE_VRAM_MB=2000          # another running profile at/above either = "large model"
 READY_INTERVAL=3; READY_MAX=180; PORT_DEFAULT=8082; VRAM_SLACK_MB=500; VRAM_SETTLE_MAX=30
 VALIDATE_GRACE=30; START_MAX=120
@@ -205,14 +205,19 @@ SUITE_DIR="$HERE/../../validation/suites/vision-golden-v1"
 
 # ------------------------------------------------------------------ (a) pre-gate
 gate() {
-  local mem psi_s psi_f gpu st
+  local mem psi_s psi_f io_s io_f gpu st
   mem=$(awk '/^MemAvailable:/{printf "%d",$2/1024}' "$MEMINFO" 2>/dev/null)
   psi_s=$(awk '$1=="some"{for(i=2;i<=NF;i++)if($i~/^avg10=/){sub("avg10=","",$i);print $i}}' "$PSI" 2>/dev/null)
   psi_f=$(awk '$1=="full"{for(i=2;i<=NF;i++)if($i~/^avg10=/){sub("avg10=","",$i);print $i}}' "$PSI" 2>/dev/null)
   gpu=$(gpu_used)
-  { echo "MemAvailable_MiB=${mem:-UNREADABLE} psi_some=${psi_s:-UNREADABLE} psi_full=${psi_f:-UNREADABLE} gpu_used_MiB=${gpu:-UNREADABLE}"; } | tee "$EV/gate.log" >&2
+  io_s=$(awk '$1=="some"{for(i=2;i<=NF;i++)if($i~/^avg10=/){sub("avg10=","",$i);print $i}}' "$IOPSI" 2>/dev/null)
+  io_f=$(awk '$1=="full"{for(i=2;i<=NF;i++)if($i~/^avg10=/){sub("avg10=","",$i);print $i}}' "$IOPSI" 2>/dev/null)
+  { echo "MemAvailable_MiB=${mem:-UNREADABLE} psi_some=${psi_s:-UNREADABLE} psi_full=${psi_f:-UNREADABLE} gpu_used_MiB=${gpu:-UNREADABLE} io_some=${io_s:-UNREADABLE} io_full=${io_f:-UNREADABLE}"; } | tee "$EV/gate.log" >&2
   [ -n "$mem" ]   || refuse "cannot read MemAvailable"
   [ -n "$psi_s" ] && [ -n "$psi_f" ] || refuse "cannot read memory PSI"
+  [ -n "$io_s" ] && [ -n "$io_f" ] || refuse "cannot read IO PSI"
+  awk -v p="$io_s" -v m="$GATE_MAX_IO_SOME" 'BEGIN{exit !(p<m)}' || refuse "IO PSI some avg10 ${io_s} not < ${GATE_MAX_IO_SOME}"
+  awk -v p="$io_f" -v m="$GATE_MAX_IO_FULL" 'BEGIN{exit !(p<m)}' || refuse "IO PSI full avg10 ${io_f} not < ${GATE_MAX_IO_FULL}"
   [ -n "$gpu" ]   || refuse "cannot read GPU memory (nvidia-smi)"
   [ "$mem" -ge "$GATE_MIN_MEM_MB" ] || refuse "MemAvailable ${mem} MiB < ${GATE_MIN_MEM_MB}"
   awk -v p="$psi_s" -v m="$GATE_MAX_PSI_SOME" 'BEGIN{exit !(p<m)}' || refuse "PSI some avg10 ${psi_s} not < ${GATE_MAX_PSI_SOME}"
