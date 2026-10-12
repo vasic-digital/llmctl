@@ -259,13 +259,14 @@ _hk_validate_after_ready() {
        fi ;;
   esac
   engine="$(_hk_get "${f}" LLMCTL_ENGINE)"
+  # the reservation goes FIRST: `systemctl stop` (KillMode=control-group) SIGTERMs this very waiter, so nothing after it runs
+  rm -f "${LLMCTL_RUNTIME_DIR}/${inst}.run"
   if command -v systemctl >/dev/null 2>&1 && [[ -n "${engine}" ]]; then
     unit="llmctl-${engine}@${inst}.service"
     systemctl --user stop "${unit}" >> "${LLMCTL_LOG_DIR}/svc_hook.log" 2>&1 || _hk_log "${inst}: could not stop ${unit} - stop it by hand: llmctl stop ${inst}"
   else
     "${llmctl}" stop "${inst}" >> "${LLMCTL_LOG_DIR}/svc_hook.log" 2>&1 || _hk_log "${inst}: could not stop - run: llmctl stop ${inst}"
   fi
-  rm -f "${LLMCTL_RUNTIME_DIR}/${inst}.run"
   return 0
 }
 
