@@ -438,11 +438,11 @@ with tempfile.TemporaryDirectory() as d:
     for i in range(6):                                       # refill + rotate repeatedly: never more than keep=3 archives
         open(lp, "a").write(line * 1200)
         g.log(lp, {"event": "ok"}, max_bytes=1000000, keep=3)
-    arch = sorted(f for f in os.listdir(d) if f.startswith("guard.log."))
+    arch = sorted(f for f in os.listdir(d) if f.startswith("guard.log.") and not f.endswith(".lock"))
     check("R2 at most N=3 gz archives are kept (.1 .2 .3), older ones are dropped", arch == ["guard.log.1.gz", "guard.log.2.gz", "guard.log.3.gz"], repr(arch))
     check("R3 live log + archives stay bounded (cap + 3 compressed archives, < 1.2 MB total here)", sum(os.path.getsize(os.path.join(d, f)) for f in os.listdir(d)) < 1200000, repr(os.listdir(d)))
     g.log(lp, {"event": "again"}, max_bytes=10 ** 9, keep=3)
-    check("R4 under the cap: plain append, no rotation", "again" in open(lp).read() and sorted(f for f in os.listdir(d) if f.startswith("guard.log.")) == arch)
+    check("R4 under the cap: plain append, no rotation", "again" in open(lp).read() and sorted(f for f in os.listdir(d) if f.startswith("guard.log.") and not f.endswith(".lock")) == arch)
     check("R5 live log keeps mode of a normal append (a rotation never leaves the live log missing)", os.path.exists(lp))
 # main() wires the cap from HOSTSAFETY_LOG_MAX_BYTES (the log pre-exists with 5 KB of old records)
 calls, lines, d = run_main(BAD, storm_tbl, pre_state={"streak": 1}, env={"HOSTSAFETY_LOG_MAX_BYTES": "1048576"}, pre_log="x" * 1100000 + "\n")
@@ -537,6 +537,86 @@ with tempfile.TemporaryDirectory() as d:
     finally:
         os.fsync = real_fsync
     check("V2 the new state file is fsync-ed before it replaces the old one", len(fs) >= 1 and "pgrp" in open(vf).read(), repr(fs))
+
+# ---------------------------------------------------------------- re-review: all storm scopes tried, strict JSON, content-verified + locked rotation
+SMALL_CG = "app.slice/tmx-small-build.scope"
+small_grp = [proc(B + 720000 + i, "git", B + 720000, 8, SMALL_CG, ppid=B + 720000 if i else 1) for i in range(3)]     # biggest task count, tiny cost
+calls, lines, d, rec = storm_run(BAD, {SMALL_CG: 9000, STORM_CG: 3000, "app.slice/hog.scope": 5}, tbl=table(*guard_ancestry(), *small_grp, *storm_grp, *hog_grp),
+                                 env={"HOSTSAFETY_STORM_MIN_COST_FRAC": "0.02"})
+check("TS11 the first (largest) storm scope is rejected by the cost fraction: the NEXT acceptable storm scope is still tried and wins",
+      rec.get("rule") == "tasks_storm" and rec.get("victim", {}).get("pgrp") == B + 546537, repr((rec.get("rule"), rec.get("victim", {}).get("pgrp"), rec.get("tasks_storm_rejected"))))
+check("TS11b every rejected storm scope is logged compactly", isinstance(rec.get("tasks_storm_rejected"), list) and [x["cgroup"] for x in rec["tasks_storm_rejected"]] == [SMALL_CG], repr(rec.get("tasks_storm_rejected")))
+
+def strict(l):
+    def bad(c):
+        raise ValueError("non-JSON constant " + c)
+    return _json.loads(l, parse_constant=bad)
+NANPSI = "some avg10=nan avg60=1 avg300=1 total=1\nfull avg10=inf avg60=70.00 avg300=50.00 total=1\n"
+calls, lines, d, rec = storm_run(NANPSI, {STORM_CG: 3000, "app.slice/hog.scope": 5}, tbl=table(*guard_ancestry(), *storm_grp, *hog_grp), env={"HOSTSAFETY_STORM_MIN_COST_FRAC": "nan"})
+try:
+    for l in lines: strict(l)
+    ok_strict = bool(lines)
+except ValueError as e:
+    ok_strict = False
+check("J1 nan/inf (PSI file, env) never appear as bare NaN/Infinity in any record", ok_strict, repr(lines[:2]))
+g_tmp = tempfile.mkdtemp()
+g.log(os.path.join(g_tmp, "guard.log"), {"event": "x", "v": float("nan"), "w": [float("inf")], "n": {"k": float("-inf")}})
+try:
+    strict(open(os.path.join(g_tmp, "guard.log")).read()); ok2 = True
+except ValueError:
+    ok2 = False
+check("J2 g.log sanitises non-finite floats recursively", ok2)
+
+def seed_rot(d, size=200000):
+    lp = os.path.join(d, "guard.log")
+    arch = {}
+    for i in (1, 2, 3):
+        with gzip.open("%s.%d.gz" % (lp, i), "wb") as f:
+            f.write(b"archive %d\n" % i)
+        arch[i] = open("%s.%d.gz" % (lp, i), "rb").read()
+    open(lp, "wb").write(os.urandom(size))
+    return lp, arch
+with tempfile.TemporaryDirectory() as d:
+    lp, arch = seed_rot(d)
+    live = open(lp, "rb").read()
+    real_cp = g.shutil.copyfileobj
+    def wrong(fi, fo, n=0):                      # same LENGTH, wrong bytes
+        data = fi.read()
+        fo.write(b"X" * len(data))
+    g.shutil.copyfileobj = wrong
+    try:
+        g.rotate_log(lp, 1000, 3)
+    finally:
+        g.shutil.copyfileobj = real_cp
+    same = all(open("%s.%d.gz" % (lp, i), "rb").read() == arch[i] for i in (1, 2, 3)) and open(lp, "rb").read() == live
+    check("R9 an archive with the right length but wrong content is NOT accepted (archives + live log untouched)", same and not [f for f in os.listdir(d) if f.endswith(".tmp")], repr(sorted(os.listdir(d))))
+with tempfile.TemporaryDirectory() as d:
+    import fcntl as _fc
+    lp, arch = seed_rot(d)
+    live = open(lp, "rb").read()
+    lk = open(lp + ".lock", "w"); _fc.flock(lk, _fc.LOCK_EX | _fc.LOCK_NB)
+    g.rotate_log(lp, 1000, 3)
+    skipped = os.path.exists(lp) and open(lp, "rb").read() == live and all(open("%s.%d.gz" % (lp, i), "rb").read() == arch[i] for i in (1, 2, 3))
+    lk.close()
+    check("R10 rotation lock held by another run => this tick skips rotation (non-blocking)", skipped)
+    g.rotate_log(lp, 1000, 3)
+    check("R10b lock free => rotation happens", not os.path.exists(lp) or open(lp, "rb").read() != live)
+import subprocess
+with tempfile.TemporaryDirectory() as d:
+    lp, arch = seed_rot(d, 50000)
+    code = "import importlib.util,sys;sp=importlib.util.spec_from_file_location('g',sys.argv[1]);m=importlib.util.module_from_spec(sp);sp.loader.exec_module(m);m.rotate_log(sys.argv[2],1000,3)"
+    ps = [subprocess.Popen([sys.executable, "-I", "-c", code, path, lp]) for _ in range(3)]
+    for p_ in ps:
+        p_.wait(timeout=60)
+    names = sorted(os.listdir(d))
+    ok = not [f for f in names if f.endswith(".tmp")] and all(n in ("guard.log", "guard.log.lock") or n in ("guard.log.%d.gz" % i for i in (1, 2, 3)) for n in names)
+    try:
+        for i in (1, 2, 3):
+            if os.path.exists("%s.%d.gz" % (lp, i)):
+                gzip.open("%s.%d.gz" % (lp, i), "rb").read()
+    except Exception:
+        ok = False
+    check("R11 three concurrent rotations leave only live log + <=3 valid archives, no tmp files", ok, repr(names))
 
 print("RESULT: %d failed" % len(fails))
 sys.exit(1 if fails else 0)

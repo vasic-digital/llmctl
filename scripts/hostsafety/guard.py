@@ -37,6 +37,7 @@ import argparse
 import fcntl
 import gzip
 import json
+import math
 import os
 import re
 import shutil
@@ -378,7 +379,10 @@ def tmpfs_used_pct(path="/tmp", fixture=None):
 def cfg(name, env):
     try:
         t = type(DEF[name])
-        return t(env.get("HOSTSAFETY_" + name, DEF[name]))
+        val = t(env.get("HOSTSAFETY_" + name, DEF[name]))
+        if t is float and not math.isfinite(val):       # "nan"/"inf" parse as floats: never let them into a comparison or a record
+            return DEF[name]
+        return val
     except ValueError:
         return DEF[name]
 
@@ -386,38 +390,45 @@ def cfg(name, env):
 LOG_LIMITS = {"max_bytes": DEF["LOG_MAX_BYTES"], "keep": DEF["LOG_KEEP"]}     # main() overrides from HOSTSAFETY_LOG_*
 
 
+def _same_content(gz_path, src_path, chunk=1 << 20):
+    """True iff gz_path decompresses to exactly the bytes of src_path (chunked, bounded memory)."""
+    with gzip.open(gz_path, "rb") as g1, open(src_path, "rb") as f1:
+        while True:
+            a = g1.read(chunk)
+            b = f1.read(len(a) if a else 1)
+            if a != b:
+                return False
+            if not a:
+                return True
+
+
 def rotate_log(path, max_bytes, keep):
     """size-capped rotation without logrotate: path -> path.1.gz -> .2.gz ... .keep.gz (oldest dropped).  Streams through gzip
-    (a 100 MB legacy log never sits in memory).  The new archive is written to a tmp file COMPLETELY and verified (it must
-    decompress to exactly the source length) BEFORE any existing archive is shifted or deleted; on any failure the tmp is
-    removed and every archive and the live log stay as they were.  Best effort: errors never propagate."""
+    (a 100 MB legacy log never sits in memory).  The new archive is written to a pid-unique tmp file COMPLETELY and verified
+    (its decompressed bytes must equal the source, compared chunk by chunk) BEFORE any existing archive is shifted or deleted;
+    on any failure the tmp is removed and every archive and the live log stay as they were.  A non-blocking flock on
+    path.lock makes overlapping runs skip (a systemd oneshot cannot overlap itself, a manual run can).  Best effort."""
     try:
         if keep < 1 or os.path.getsize(path) <= max_bytes:
             return
     except OSError:
         return
-    tmp = path + ".1.gz.tmp"
+    lockf = None
+    tmp = "%s.1.gz.%d.tmp" % (path, os.getpid())
     try:
-        size = os.path.getsize(path)
+        lockf = os.fdopen(os.open(path + ".lock", os.O_WRONLY | os.O_CREAT, 0o600), "a")
+        try:
+            fcntl.flock(lockf, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            lockf.close()
+            return                      # another rotation is running: skip this tick
+        if os.path.getsize(path) <= max_bytes:
+            return                      # the other run already rotated
         os.close(os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600))   # create private; gzip.open keeps the mode
         with open(path, "rb") as fi, gzip.open(tmp, "wb", compresslevel=1) as fo:
             shutil.copyfileobj(fi, fo, 1 << 20)
-        n = 0
-        with gzip.open(tmp, "rb") as chk:
-            while True:
-                chunk = chk.read(1 << 20)
-                if not chunk:
-                    break
-                n += len(chunk)
-        if n != size:
-            raise OSError("archive verification failed: %d != %d bytes" % (n, size))
-    except (OSError, EOFError, ValueError):
-        try:
-            os.unlink(tmp)
-        except OSError:
-            pass
-        return
-    try:
+        if not _same_content(tmp, path):
+            raise OSError("archive verification failed: content differs")
         oldest = "%s.%d.gz" % (path, keep)
         if os.path.exists(oldest):
             os.unlink(oldest)
@@ -427,16 +438,35 @@ def rotate_log(path, max_bytes, keep):
                 os.replace(src, "%s.%d.gz" % (path, i + 1))
         os.replace(tmp, path + ".1.gz")
         os.unlink(path)
-    except OSError:
+    except (OSError, EOFError, ValueError):
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+    finally:
+        if lockf is not None and not lockf.closed:
+            lockf.close()
         try:
             os.unlink(tmp)
         except OSError:
             pass
 
 
+def _finite(x):
+    """records must be strict JSON: non-finite floats (nan/inf from a hostile PSI file or env) become null."""
+    if isinstance(x, float):
+        return x if math.isfinite(x) else None
+    if isinstance(x, dict):
+        return {k: _finite(val) for k, val in x.items()}
+    if isinstance(x, (list, tuple)):
+        return [_finite(val) for val in x]
+    return x
+
+
 def log(logfile, rec, max_bytes=None, keep=None):
+    rec = _finite(rec)
     rec["ts"] = time.strftime("%Y-%m-%dT%H:%M:%S%z")
-    line = json.dumps(rec, sort_keys=True)
+    line = json.dumps(rec, sort_keys=True, allow_nan=False)
     print(line, flush=True)
     if logfile:
         try:
@@ -681,7 +711,7 @@ def main(argv=None):
     # the /proc walk (~0.8 s with ~7,000 processes) happens ONLY here: PSI said "sustained pressure" and no cooldown is running.
     # Every healthy / building / cooldown run returns above without touching /proc/<pid> (incident 2026-10-13).
     procs = scan(a.proc_root)
-    v, ev, rule, rejected = None, {}, "psi", None
+    v, ev, rule, rejected = None, {}, "psi", []
     pv, pev = select_victim(procs, a.uid, a.self_pid, only, cfg("PROC_WEIGHT_KB", env), own_pgrp=own_pgrp)   # the PSI-ranked pick
     v, ev = pv, pev
     if not only and any(r.startswith("tasks_storm") for r in why):
@@ -689,15 +719,19 @@ def main(argv=None):
         # a victim; every eligibility / protection check (uid, protected comm, cgroup allowlist, own group) is unchanged.
         # It is used only when it is not a much smaller victim than the PSI pick (cost >= STORM_MIN_COST_FRAC of it).
         frac = cfg("STORM_MIN_COST_FRAC", env)
-        for sg in storms[:3]:
+        rejected = []
+        best_sv = None
+        for sg in storms[:3]:       # try EVERY storm scope: a rejected one must not hide an acceptable next one
             sv, sev = select_victim(procs, a.uid, a.self_pid, "^" + re.escape(sg["cg"]) + "$", cfg("PROC_WEIGHT_KB", env), own_pgrp=own_pgrp)
             if not sv:
                 continue
             if pv is None or sv["cost_kb"] >= frac * pv["cost_kb"]:
-                v, ev, rule = sv, sev, "tasks_storm"
+                if best_sv is None or sv["cost_kb"] > best_sv[0]["cost_kb"]:
+                    best_sv = (sv, sev)
             else:
-                rejected = {"cgroup": sg["cg"], "storm_cost_kb": sv["cost_kb"], "psi_cost_kb": pv["cost_kb"], "min_cost_frac": frac}
-            break
+                rejected.append({"cgroup": sg["cg"], "storm_cost_kb": sv["cost_kb"], "psi_cost_kb": pv["cost_kb"], "min_cost_frac": frac})
+        if best_sv:
+            v, ev, rule = best_sv[0], best_sv[1], "tasks_storm"
     if not v:
         log(log_file, {"event": "no-killable-victim", "reasons": why, "evidence": ev,
                        "note": ev.get("storm_in_protected_group", "no eligible process"), **metrics})

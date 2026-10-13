@@ -245,15 +245,18 @@ mutate "argv[0] basename protection reintroduced (spoof)" "S2" 'return bool(PROT
 mutate "dominance rule removed (T1b)" "T1b" 'if dom and dom["storm_kb"] > DOMINANCE * best_cost and' 'if False and'
 mutate "protected cgroup regex made imprecise again ([^/]*gnome[^/]*)" "S4" 'app-gnome-shell[^/]*|gnome-shell[^/]*' '[^/]*gnome[^/]*|gnome-shell[^/]*'
 mutate "m10 storm victim accepted without the cost-fraction check" "TS8" 'if pv is None or sv["cost_kb"] >= frac * pv["cost_kb"]:' 'if True:'
-mutate "m11 rotation shifts/deletes archives before the new one is written" "R7" '    tmp = path + ".1.gz.tmp"
-    try:
-        size = os.path.getsize(path)' '    tmp = path + ".1.gz.tmp"
+mutate "m11 rotation shifts/deletes archives before the new one is written" "R7" '    tmp = "%s.1.gz.%d.tmp" % (path, os.getpid())
+    try:' '    tmp = "%s.1.gz.%d.tmp" % (path, os.getpid())
     for i in range(keep, 0, -1):
         _s = "%s.%d.gz" % (path, i)
         if os.path.exists(_s):
             os.unlink(_s)
-    try:
-        size = os.path.getsize(path)'
+    try:'
+mutate "m12 storm loop stops at the first rejected scope" "TS11" '                rejected.append({"cgroup": sg["cg"], "storm_cost_kb": sv["cost_kb"], "psi_cost_kb": pv["cost_kb"], "min_cost_frac": frac})' '                rejected.append({"cgroup": sg["cg"], "storm_cost_kb": sv["cost_kb"], "psi_cost_kb": pv["cost_kb"], "min_cost_frac": frac}); break'
+mutate "m13 archive verified by length only" "R9" '        if not _same_content(tmp, path):' '        if os.path.getsize(path) > 0 and False:'
+mutate "m14 no rotation flock" "R10" '            fcntl.flock(lockf, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:' '            pass
+        except OSError:'
 
 # --- 5. podman audit (fake podman) ---------------------------------------------------------
 cat >"${TEST_TMP}/fakepodman" <<'FP'
