@@ -242,10 +242,50 @@ else
     FAILURES+=("Cannot check upstream remotes: constitution/ is not an initialised submodule checkout")
 fi
 
+# Nested-submodule readiness (invariants 9 and 10).
+#
+# run_verification.sh REQUIRES every submodule in its REQUIRED_SUBMODULES list to be checked out under
+# constitution/submodules/ (it tests `[ -f <name>/README.md ]` ...). A checkout that populated constitution/ but
+# not ITS nested submodules (cloned without --recursive, offline, a linked worktree) fails that harness even though
+# the pin is perfectly fine, and meta_test_verification.sh (which re-runs the harness) fails with it.
+# That is an environment condition, not an inheritance defect, so invariants 9/10 are then SKIPPED - loudly (a
+# `  SKIP:` line each, counted and listed by tests/run_tests.sh, the summary no longer says "ALL INVARIANTS PASSED")
+# - and ONLY when all of the following hold, so that a genuinely broken constitution is never masked:
+#   * the harness and the meta-test exist and parse (`bash -n`), checked unconditionally;
+#   * the constitution is a git checkout of its own (invariant 8 already enforces that);
+#   * EVERY name the harness requires is a gitlink (mode 160000) in the pinned tree, i.e. the pin really carries it;
+#   * every required name whose directory is missing/empty is exactly an uninitialised submodule.
+# A required name that is NOT a gitlink in the pin, or an initialised-but-broken submodule, still runs the real
+# harness and FAILS. LLMCTL_REQUIRE_NESTED_SUBMODULES=1 refuses the skip altogether (use it for release gates).
+NESTED_SKIP_REASON=""
+declare -a SKIPPED=()
+HARNESS="${CONSTITUTION_DIR}/scripts/validation/run_verification.sh"
+META_TEST="${CONSTITUTION_DIR}/scripts/validation/meta_test_verification.sh"
+if [[ -f "${HARNESS}" && -f "${META_TEST}" ]] && bash -n "${HARNESS}" 2>/dev/null && bash -n "${META_TEST}" 2>/dev/null \
+   && is_own_repo "${CONSTITUTION_DIR}"; then
+    mapfile -t _required < <(sed -n '/^REQUIRED_SUBMODULES=(/,/^)/p' "${HARNESS}" | grep -o '"[^"]*"' | tr -d '"')
+    _uninit=(); _not_gitlink=()
+    for _n in ${_required[@]+"${_required[@]}"}; do
+        _entry="$(git -C "${CONSTITUTION_DIR}" ls-tree HEAD -- "submodules/${_n}" 2>/dev/null || true)"
+        if [[ "${_entry}" != "160000 commit "* ]]; then
+            _not_gitlink+=("${_n}")
+        elif [[ ! -d "${CONSTITUTION_DIR}/submodules/${_n}" || -z "$(ls -A "${CONSTITUTION_DIR}/submodules/${_n}" 2>/dev/null)" ]]; then
+            _uninit+=("${_n}")
+        fi
+    done
+    if [[ ${#_required[@]} -gt 0 && ${#_not_gitlink[@]} -eq 0 && ${#_uninit[@]} -gt 0 && "${LLMCTL_REQUIRE_NESTED_SUBMODULES:-}" != "1" ]]; then
+        NESTED_SKIP_REASON="${#_uninit[@]} of ${#_required[@]} nested submodules required by run_verification.sh are not initialised in constitution/submodules/ (${_uninit[*]}); the pin itself is consistent (all ${#_required[@]} are gitlinks in the pinned tree) - run: git submodule update --init --recursive constitution (or set LLMCTL_REQUIRE_NESTED_SUBMODULES=1 to make this a failure)"
+    fi
+fi
+
 # Run the verification harness
 echo
 echo "Invariant 9: Constitution verification harness executes successfully"
-if [[ -f "${CONSTITUTION_DIR}/scripts/validation/run_verification.sh" ]]; then
+if [[ -n "${NESTED_SKIP_REASON}" ]]; then
+    echo "  - harness script present and parses; NOT executed"
+    echo "  SKIP: Invariant 9 (verification harness execution) - ${NESTED_SKIP_REASON}"
+    SKIPPED+=("Invariant 9")
+elif [[ -f "${CONSTITUTION_DIR}/scripts/validation/run_verification.sh" ]]; then
     echo "  ✓ Verification harness exists"
     if bash "${CONSTITUTION_DIR}/scripts/validation/run_verification.sh" > /tmp/verification_output.txt 2>&1; then
         echo "  ✓ Verification harness executes successfully"
@@ -262,7 +302,11 @@ fi
 # Run meta-test mutation
 echo
 echo "Invariant 10: Meta-test mutation proves gate is not a bluff"
-if [[ -f "${CONSTITUTION_DIR}/scripts/validation/meta_test_verification.sh" ]]; then
+if [[ -n "${NESTED_SKIP_REASON}" ]]; then
+    echo "  - meta-test script present and parses; NOT executed (it re-runs the harness)"
+    echo "  SKIP: Invariant 10 (meta-test mutation) - ${NESTED_SKIP_REASON}"
+    SKIPPED+=("Invariant 10")
+elif [[ -f "${CONSTITUTION_DIR}/scripts/validation/meta_test_verification.sh" ]]; then
     echo "  ✓ Meta-test mutation script exists"
     if bash "${CONSTITUTION_DIR}/scripts/validation/meta_test_verification.sh" > /tmp/meta_test_output.txt 2>&1; then
         echo "  ✓ Meta-test mutation passes (gate catches regressions)"
@@ -279,9 +323,13 @@ fi
 # Summary
 echo
 echo "=== INHERITANCE VERIFICATION SUMMARY ==="
-if [[ ${#FAILURES[@]} -eq 0 ]]; then
+if [[ ${#FAILURES[@]} -eq 0 && ${#SKIPPED[@]} -eq 0 ]]; then
     echo "ALL INVARIANTS PASSED ✓"
     echo "  ok: all constitution inheritance invariants passed"
+    exit 0
+elif [[ ${#FAILURES[@]} -eq 0 ]]; then
+    echo "INVARIANTS 1-8 PASSED; SKIPPED (not run, NOT passed): ${SKIPPED[*]}"
+    echo "  ok: constitution inheritance invariants 1-8 passed (harness/meta-test present and parse; ${SKIPPED[*]} skipped, see SKIP lines above)"
     exit 0
 else
     echo "FAILURES (${#FAILURES[@]}):"
