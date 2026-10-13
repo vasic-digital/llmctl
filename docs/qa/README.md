@@ -10,6 +10,7 @@ Evidence directories kept in the repository (Constitution 11.4.83). Each is a po
 | [006-cli-daemon-wiring](006-cli-daemon-wiring/environment_finding_http3.md) | the HTTP/3 environment finding for the cluster CLI |
 | [vision-validate-live-2026-10-12](vision-validate-live-2026-10-12.md) | the model validation gate: what was UNKNOWN before the first live run (now partly answered by the page below) |
 | [vision-live-2026-10-13](vision-live-2026-10-13/README.md) | the first real run, profile `vision`, one host: **PASS 21/0/0**, with the evidence files and the honest limits |
+| [vision-live-2026-10-13-run2](vision-live-2026-10-13-run2/README.md) | run 2 of 2 on the same host: **PASS 21/0/0**, unit `MemoryPeak` 3005 MiB (calibration datum; cap floors unchanged) |
 | `005-cuda-gpu-inference`, `007-claude-toolkit-test-fixes`, `008-full-test-coverage` | raw logs and observations (plain text; no narrative page) |
 
 Release-3.1.0 evidence (gap register, review reports, engine advance, portability run) lives under `specs/009-jev-decision-models/evidence/`; the honest summary of what it does and does not prove is [limitations](../limitations.md).

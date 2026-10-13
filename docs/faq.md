@@ -579,7 +579,7 @@ Certificates, keys and models are untouched. See [runbooks](runbooks.md#upgrade-
 
 ## Host safety and the model validation gate (release 3.2.0)
 
-Apart from one guarded live run on this host ([evidence](qa/vision-live-2026-10-13/README.md): PASS, 21 pass / 0 fail / 0 undetermined, single run; `MemoryPeak`/`VmHWM` not captured, UNKNOWN; the profile tested was the vision one only), none of the entries below has been exercised against a real model or a real systemd user manager under real memory pressure; they describe what the code and the hermetic tests do. No other profile has been validated.
+Apart from one guarded live run on this host ([evidence](qa/vision-live-2026-10-13/README.md): PASS, 21 pass / 0 fail / 0 undetermined, single run; run 1 did not capture `MemoryPeak`, [run 2](qa/vision-live-2026-10-13-run2/README.md) did: 3005 MiB on this host; `VmHWM` UNKNOWN; the profile tested was the vision one only), none of the entries below has been exercised against a real model or a real systemd user manager under real memory pressure; they describe what the code and the hermetic tests do. No other profile has been validated.
 
 ### Why was my `start` / `enable` / `switch` refused with exit 75?
 

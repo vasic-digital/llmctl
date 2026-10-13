@@ -38,7 +38,7 @@ driver, which now looks the column up by header name; the real `samples.csv` of 
 
 ## UNKNOWN / not shown by this run
 
-* **UNKNOWN: unit cgroup peak (`MemoryPeak`) and the process VmHWM.** The driver of this run did not record them. Without them the memory cap of
+* **Superseded for the unit peak by [run 2](../vision-live-2026-10-13-run2/README.md): `MemoryPeak` 3005 MiB (3151007744 B) on this host.** The text below describes run 1 as it was. **UNKNOWN in run 1: unit cgroup peak (`MemoryPeak`) and the process VmHWM.** The driver of this run did not record them. Without them the memory cap of
   the `vision` unit is not calibrated by this run. The driver now records `MemoryPeak`, `MemoryHigh` and `MemoryMax` of the unit before the stop
   (`cgroup_peak.txt`, verdict rows `unit Memory* MiB`; `infinity`, `[not set]` and unavailable are reported as UNKNOWN, never 0); the first real value
   exists only after the next live run.

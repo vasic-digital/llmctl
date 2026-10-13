@@ -1,0 +1,17 @@
+
+CHECK                        RESULT
+pre-gate                     PASS
+watchdog trigger             none
+readiness                    up
+validate rc                  0
+vram base/final MiB          277/277
+vram peak MiB                4109
+unit MemoryPeak MiB          3005
+unit MemoryHigh MiB          5120
+unit MemoryMax MiB           6144
+profile stopped+vram ok      YES
+model sha256                 882e8d2db44dc554fb0ea5077cb7e4bc49e7342a1f0da57901c0802ea21a0863
+mmproj sha256                8c0fb064b019a6972856aaae2c7e4792858af3ca4561be2dbf649123ba6c40cb
+llama-server                 load_backend: loaded CPU backend from /usr/lib/x86_64-linux-gnu/ggml/backends0/libggml-cpu-haswell.so version: 8681 (Debian) built with GNU 15.2.0 for Linux x86_64 
+evidence                     $HOME/.cache/llmctl-livetest/20261013T132537Z
+VERDICT                      PASS (exit 0) - all known-answer probes matched; evidence captured; VRAM back to baseline
