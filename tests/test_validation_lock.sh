@@ -32,7 +32,7 @@ P2=$!
 wait "${P1}" "${P2}"
 n="$(gw_count '^validate_profile_begin small ')"
 assert_eq 2 "${n}" "both entry points validated (the stub records no PASS, so the second still runs): ${n} begin lines"
-b1="$(awk '$1=="validate_profile_begin"{print $3}' "${GW_CALLS}" | sed -n 1p)"; e1="$(awk '$1=="validate_profile_end"{print $4}' "${GW_CALLS}" | sed -n 1p)"
+e1="$(awk '$1=="validate_profile_end"{print $4}' "${GW_CALLS}" | sed -n 1p)"
 b2="$(awk '$1=="validate_profile_begin"{print $3}' "${GW_CALLS}" | sed -n 2p)"
 assert_eq 1 "$(python3 -I -c 'import sys; e1,b2=float(sys.argv[1] or 0),float(sys.argv[2] or 0); print(1 if e1>0 and b2>=e1 else 0)' "${e1:-0}" "${b2:-0}")" "the second validation began (${b2:-none}) only after the first ended (${e1:-none}): no concurrent probe loops"
 test_finish

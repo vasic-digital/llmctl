@@ -6,7 +6,8 @@ set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/helpers.sh"
 test_setup_env
 PIDS=()
-trap 'for p in ${PIDS[@]+"${PIDS[@]}"}; do kill "${p}" 2>/dev/null || true; done; test_teardown_env' EXIT
+cleanup() { local q; for q in ${PIDS[@]+"${PIDS[@]}"}; do kill "${q}" 2>/dev/null || true; done; test_teardown_env; }
+trap cleanup EXIT
 J="${LLMCTL_ROOT}/lib/validate_judge.py"
 SUITE="${LLMCTL_ROOT}/validation/suites/chat-v1"
 SRV="${LLMCTL_ROOT}/tests/fixtures/validation/code_server.py"

@@ -8,7 +8,8 @@ set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/helpers.sh"
 test_setup_env
 PIDS=()
-trap 'for p in ${PIDS[@]+"${PIDS[@]}"}; do kill "${p}" 2>/dev/null || true; done; test_teardown_env' EXIT
+cleanup() { local q; for q in ${PIDS[@]+"${PIDS[@]}"}; do kill "${q}" 2>/dev/null || true; done; test_teardown_env; }
+trap cleanup EXIT
 export LLMCTL_FAKE_HW="${LLMCTL_ROOT}/tests/fixtures/hw-baseline.json"
 vp() { env "$@" bash -c 'for l in common os_detect hardware catalog scheduler validate; do source "${LLMCTL_ROOT}/lib/${l}.sh"; done; _val_port small' 2>/dev/null || echo NONE; }
 assert_eq NONE "$(vp LLMCTL_ROOT="${LLMCTL_ROOT}" LLMCTL_VALIDATE_ATTACH_PORT=4321)" "(a) port without a matching profile marker is ignored"

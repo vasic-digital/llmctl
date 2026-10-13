@@ -7,7 +7,9 @@ set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/helpers.sh"
 test_setup_env
 PIDS=()
-trap 'for p in ${PIDS[@]+"${PIDS[@]}"}; do kill "${p}" 2>/dev/null || true; done; chmod -R u+rwx "${TEST_TMP}" 2>/dev/null || true; test_teardown_env' EXIT
+cleanup() { local q; for q in ${PIDS[@]+"${PIDS[@]}"}; do kill "${q}" 2>/dev/null || true; done; chmod -R u+rwx "${TEST_TMP}" 2>/dev/null || true; test_teardown_env; }
+trap cleanup EXIT
+REAL_ROOT="${LLMCTL_ROOT}"
 J="${LLMCTL_ROOT}/lib/validate_judge.py"
 SUITE="${LLMCTL_ROOT}/validation/suites/chat-v1"
 SRV="${LLMCTL_ROOT}/tests/fixtures/validation/code_server.py"
@@ -75,7 +77,7 @@ PY
 mkdir -p "${LLMCTL_RUNTIME_DIR}" "${LLMCTL_MODELS_DIR}/small"
 printf 'profile=small\nmode=gpu\nport=%s\nram_mb=1\nvram_mb=1\nstarted_epoch=%s\n' "${URL##*:}" "$(date +%s)" > "${LLMCTL_RUNTIME_DIR}/small.run"
 rc=0
-LLMCTL_ROOT="${TREE}" LLMCTL_FAKE_HW="${LLMCTL_ROOT}/tests/fixtures/hw-baseline.json" LLMCTL_VALIDATE_HERMETIC=1 bash -c '
+env LLMCTL_ROOT="${TREE}" LLMCTL_FAKE_HW="${REAL_ROOT}/tests/fixtures/hw-baseline.json" LLMCTL_VALIDATE_HERMETIC=1 bash -c '
   for l in common os_detect hardware catalog scheduler validate; do source "${LLMCTL_ROOT}/lib/${l}.sh"; done
   validate_profile small
 ' >"${TEST_TMP}/v.out" 2>&1 || rc=$?
