@@ -23,6 +23,58 @@ where `scripts/release/preflight_submodules.sh` reports a fully clean
 35-file test suite is green. Both `v3.0.0` and `v3.0.1` tags remain in the
 repository as an honest record of that process.
 
+## 3.2.2 (2026-10-13)
+
+A **patch release: duplicate-engine-unit robustness, host-safety verification, governance-test and documentation corrections.** Scope since `v3.2.1`: `lib/onnx_server.py`, `lib/portreg.sh`, `lib/svc_hook.sh`, `scripts/hostsafety/install.sh`, comments in `lib/scheduler.sh` and `lib/service_linux.sh`, tests, carrier files (`CLAUDE.md`, `AGENTS.md`, `QWEN.md`, `GEMINI.md`), `docs/`, and the version pins. No catalog, unit-template or CLI command-surface change.
+
+**Release status (read first).**
+
+- **The fixes below were proven hermetically** (fake registry, fixture files, unit text assertions, one test per fix; each in `tests/`), not on the live units of the affected host. Which of the two registry mechanisms described under Fixed occurred on that host is UNKNOWN.
+- **Live evidence is unchanged in kind:** the guarded live test has now run twice, on one host, for profile `vision` only (21 pass / 0 fail / 0 undetermined each time as recorded in `docs/qa/vision-live-2026-10-13/` and `docs/qa/vision-live-2026-10-13-run2/`). Every other profile is UNKNOWN. Nothing about the validation gate changed.
+- The standing caveats are unchanged: manual QA was operator-waived; macOS is verified statically only; Windows is unsupported; accuracy figures are provisional.
+- Installed user units are not changed by upgrading the checkout; re-run `llmctl install` to refresh them.
+
+### Added
+
+- Tests for each fix: `tests/test_onnx_eaddrinuse.sh`, `tests/test_dup_unit_registry.sh`, `tests/test_kill_waiter_pid_prefix.sh`, `tests/test_hostsafety.sh` (extended: effective-vs-installed verify), `tests/test_constitution_inheritance_worktree.sh`, `tests/test_carriers_pointer_form.sh`, `tests/test_docs_restart_policy.sh`.
+- [`docs/qa/vision-live-2026-10-13-run2/`](docs/qa/vision-live-2026-10-13-run2/README.md): the second guarded live run of profile `vision` (same host), including the unit's cgroup `MemoryPeak`.
+- [`docs/release-3.2.2-checklist.md`](docs/release-3.2.2-checklist.md): the release checklist of this patch (nothing in it has been executed against a remote).
+
+### Changed
+
+- **Measured calibration datum (no limit changed).** Unit `MemoryPeak` of `vision` was 3151007744 B (3005 MiB) on one host, in run 2 of 2. It is below the profile's `MemoryHigh` (5120 MiB) and `MemoryMax`. It is one measurement on one host; the memory-cap floors are unchanged.
+- **Stale restart-policy statements corrected** in `CLAUDE.md`, `AGENTS.md`, `QWEN.md`, `GEMINI.md`, `docs/` and code comments: units use `Restart=on-failure` with a start limit (exit 98, `SIGKILL`, `SIGTERM` are not restarted), not `Restart=always`. A stale gateway memory-policy comment in `lib/service_linux.sh` was corrected the same way. Documentation and comments only.
+- **`AGENTS.md` uses the standard `## INHERITED FROM constitution/AGENTS.md` pointer heading** (checked by `tests/test_carriers_pointer_form.sh`).
+- Version pins moved from 3.2.1 to 3.2.2 (`VERSION`, `bin/llmctl`, `README.md` banner and status table header, `docs/*.md` version statements, the OpenAPI `info.version`). The `llmctl-decide` gateway and its `decide scale`, `decide calibrate`, `probe-order` and `completions` commands, per-type maturity labels, `llmctl doctor`, `llmctl status --json`, the planner's `overhead_mb` term, the `LLMCTL_CTX_<PROFILE>` overrides and the scheduler's eviction rules are the 3.2.1 code (the only edits under `lib/scheduler.sh` are comments).
+
+### Fixed
+
+- **`lib/onnx_server.py` exits 98 on `EADDRINUSE`.** Previously the loser of a bind race exited 1, so systemd retried it into the start limit; now exit 98 is in the unit's no-restart set and the duplicate unit stops.
+- **The registration waiter no longer overwrites a live engine's registry row** (`portreg_row_live_other` in `lib/portreg.sh`, used by `lib/svc_hook.sh`), and **the loser's stop no longer kills the winner's waiter**. Together these removed the case where `llmctl status` showed nothing while the winner answered.
+- **`_hk_kill_waiter` delimits the pid in its command-line match,** so stopping pid 12 no longer matches the waiter of pid 123.
+- **`scripts/hostsafety/install.sh verify` compares the effective limits to the installed drop-in** (not a re-derived `MemTotal`) and **fails closed** when it cannot derive the expected limits.
+- **The constitution inheritance test measures the right repository in a linked git worktree** (it inspected the enclosing project instead of the submodule's own repository), and its own-repo check also rejects a symlink back to the enclosing project.
+
+### Security
+
+- No security-relevant change. `scripts/hostsafety/install.sh verify` now fails closed instead of passing when it cannot derive the limits it checks.
+
+### Removed
+
+- Nothing.
+
+### Migration notes
+
+- None required. To pick up the exit-98 behaviour on already installed engine units, run `llmctl install` (refreshes units). Duplicate enabled engine units that exist before the upgrade (known case `decide-nli`: `llmctl-llama@` and `llmctl-onnx@`) are reported by `llmctl doctor` and are **not** removed; run `llmctl disable <profile> && llmctl enable <profile>` to keep one.
+
+### Known limitations
+
+- **Duplicate enabled engine units remain possible** until the operator runs `llmctl disable` then `llmctl enable`; `llmctl doctor` flags them. The fix makes the loser stop cleanly and not corrupt the winner's registry row; it does not remove the duplicate.
+- **Hardware-specific evidence.** Both live runs and the `MemoryPeak` datum come from one host and one profile; behaviour on other hosts and profiles is UNKNOWN.
+- **Process `VmHWM` is UNKNOWN** (only the cgroup peak was captured).
+- **Only profile `vision` has been live-tested** (two runs, one host); every other profile is UNKNOWN.
+- Everything in the 3.2.1 and 3.2.0 "Known limitations" still applies, including the waiter gap (port registry inactive means no validation on the systemd path).
+
 ## 3.2.1 (2026-10-13)
 
 A **documentation and help-text correction release**. No script, library, unit-template or catalog behaviour changed since 3.2.0: `git diff --stat v3.2.0..` touches `CHANGELOG.md`, `bin/llmctl` (the `help` text only), `docs/`, one new test and the version pins. The only edit in `bin/llmctl` besides the `LLMCTL_VERSION` pin is in the text printed by `llmctl help`.
