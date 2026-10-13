@@ -2,7 +2,7 @@
 
 | Field | Value |
 |---|---|
-| Revision | 2 |
+| Revision | 3 |
 | Created | 2026-10-09 |
 | Status | active (guard ships in DRY-RUN) |
 | Code | `scripts/hostsafety/` |
@@ -111,7 +111,7 @@ overwrites to `~/.local/share/hostsafety-backup/<timestamp>/`):
    - PSI robustness: a missing or malformed `/proc/pressure/memory` yields `psi_available:false` in the heartbeat
      and one `psi-unavailable` log event (no rule can fire; the guard is blind, not "healthy").
    - **Dry-run by default.** `~/.config/hostsafety/guard.env` ships `HOSTSAFETY_GUARD_ARM=0`: the
-     guard logs `would-kill` with the full victim evidence to `~/.local/state/hostsafety/guard.log`
+     guard logs `would-kill` with the victim evidence (counts + first/last 20 pids; see the cost section below) to `~/.local/state/hostsafety/guard.log`
      and the journal, and signals nothing. A heartbeat `~/.local/state/hostsafety/guard.status` is
      written every run (a silent guard must be distinguishable from a dead one). To arm, review the
      `would-kill` records first, then set `HOSTSAFETY_GUARD_ARM=1` (picked up on the next tick).
@@ -220,6 +220,39 @@ under a cap too small to hold it).
   Reading: the High counter is large but it counts cache-reclaim events, and the stall time is small. **No retune
   recommended on this evidence.** UNCONFIRMED: whether any individual `high` burst coincided with a user-visible stall
   (needs a time-series; the new heartbeat plus `memory.pressure` sampling would give it).
+
+## Guard cost, log size and the `tasks_storm` rule (2026-10-13 incident, host `anton`)
+
+**Evidence** (guard.log / journal / `~/.cache/anton-hang-forensics/`): during a process storm (a `bash p1.sh` process group of
+about 6,000 processes in `app.slice/tmx-notes-8580.scope`, cost heuristic 22-48 GB, ~6,950 processes on the host) the guard,
+which was a 10 s oneshot at default priority:
+
+- walked `/proc` on **every** run, before looking at PSI: ~0.8 s per run, roughly 8-10% of one core while the host was already
+  starved;
+- wrote ~152 KB per `would-kill` record (the full pid list and the starttimes map), so `guard.log` reached 96.8 MB (1,306
+  lines since 10-09) and the journal split the records into truncated `python3[...]` lines; nothing rotated it;
+- chose the right victim (the 6,000-process group) 629 times over 105 minutes and correctly refused the group holding `claude`
+  (protected comm) - but, dry-run, decided nothing.
+
+**What changed** (the guard is **still dry-run: arming is an operator decision**; none of this changes `HOSTSAFETY_GUARD_ARM`):
+
+| Change | Behaviour |
+|---|---|
+| Unit cost caps | `hostsafety-guard.service`: `Nice=19`, `IOSchedulingClass=idle`, `CPUWeight=10`, `MemoryMax=256M`, `RuntimeMaxSec=15`, `TimeoutStartSec=20`. |
+| Lazy `/proc` walk | PSI, swap, cgroup counters and the streak/cooldown are evaluated first; `/proc/<pid>` is read only when a decision is actually due (sustained pressure, no cooldown). Healthy, "pressure-building" and cooldown runs never touch it. |
+| Bounded log detail | `guard.log` and the journal carry `pid_count`, `pids_first`/`pids_last` (20 each) and `starttimes_count`. With `HOSTSAFETY_GUARD_ARM=1` only, the full victim (pids + starttimes) is also written to `guard-victim.json` beside the log (mode 0600, at most `HOSTSAFETY_VICTIM_FILE_MAX_BYTES`, previous kept as `.1`). It is forensics only: the kill path re-reads every pid **and starttime from `/proc`** before each signal and never reads the log or this file (fixture L8). |
+| Log rotation | `guard.log` > `HOSTSAFETY_LOG_MAX_BYTES` (5 MiB) is gzipped to `guard.log.1.gz` ... `.3.gz` (`HOSTSAFETY_LOG_KEEP`, default 3); done inside `guard.py`, no logrotate. |
+| `tasks_storm` rule | Every run reads `pids.current` of the `app.slice`/`background.slice` descendants (O(cgroups), no per-pid walk; heartbeat fields `max_scope_tasks`, `max_scope_cg`). While PSI `full avg10 >= HOSTSAFETY_PSI_FULL`, a scope above `HOSTSAFETY_TASKS_STORM` (default 2500) adds the reason `tasks_storm=<cgroup>:<n>><limit>` and is tried first as the would-kill candidate (`"rule": "tasks_storm"`). The rule only narrows where a victim may be anchored; uid, protected process names (`claude`, `tmux*`, `gnome*` ...), the cgroup allowlist, the own-group rule and the pid+starttime revalidation are the same shared predicates. A scope whose group holds `claude` is therefore still never signalled as a group, and when the storm scope yields no eligible victim the normal cost ranking applies (`"rule": "psi"`). A big scope without PSI pressure triggers nothing. |
+
+Tunables (`~/.config/hostsafety/guard.env`): `HOSTSAFETY_PSI_FULL`, `HOSTSAFETY_PSI_SOME`, `HOSTSAFETY_SWAP_FREE_PCT`,
+`HOSTSAFETY_CONSECUTIVE`, `HOSTSAFETY_COOLDOWN_S`, `HOSTSAFETY_TASKS_STORM`, `HOSTSAFETY_LOG_MAX_BYTES`, `HOSTSAFETY_LOG_KEEP`,
+`HOSTSAFETY_VICTIM_FILE_MAX_BYTES`.
+
+**Not measured / unknown**: the CPU saving on the real host is an estimate. On a synthetic 6,950-process `/proc` tree (tmpfs files,
+not kernel-generated `/proc`) a healthy-run took ~0.44 s before and ~0.06 s after; real `/proc` reads cost more (0.8 s observed), so
+the live gain should be larger but is unconfirmed until measured on `anton`. Whether `RuntimeMaxSec=` is enforced for a `Type=oneshot`
+unit by the host's systemd is unconfirmed (`TimeoutStartSec=20` is the enforced backstop). Installing the new unit is an operator step
+(`scripts/hostsafety/install.sh`); nothing here was installed or armed.
 
 ## Limits of this approach (read before trusting it)
 
