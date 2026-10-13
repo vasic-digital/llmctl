@@ -11,7 +11,12 @@ CONSTITUTION_DIR="${PROJECT_ROOT}/constitution"
 # `git submodule update --init`, constitution/ is absent or EMPTY: every `git -C constitution ...` would then
 # silently resolve to the ENCLOSING project repo and measure the wrong remotes. In a linked worktree the
 # submodule content lives only in the main worktree, so resolve it from there (same pinned content, read-only).
-is_own_repo() { [[ -e "$1/.git" ]]; }
+# ...and git must agree that this directory is the TOP LEVEL of its own work tree (a stray .git entry, or a
+# symlink to the enclosing repo, resolves to a different toplevel and does not count).
+is_own_repo() {
+    [[ -e "$1/.git" && -d "$1" ]] || return 1
+    [[ "$(git -C "$1" rev-parse --show-toplevel 2>/dev/null)" == "$(cd "$1" && pwd -P)" ]]
+}
 if ! is_own_repo "${CONSTITUTION_DIR}"; then
     _common="$(git -C "${PROJECT_ROOT}" rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)"
     _main_root="${_common%/.git}"

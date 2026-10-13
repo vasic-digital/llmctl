@@ -170,11 +170,17 @@ fmt_bytes() { if [[ "$1" =~ ^[0-9]+$ ]]; then echo "$1 ($(( $1 / 1048576 )) MiB)
 #   sizing is only used to flag STALE drop-ins (host re-sized: RAM/swap change), with a 1% tolerance on the
 #   byte limits; TasksMax is derived from the CPU count and must match exactly.
 do_verify() {
-  local s rc=0 line k v want inst f diff
+  local s rc=0 line k v want inst f diff want_all n
   [[ "${HOSTSAFETY_NO_SYSTEMCTL:-0}" == 1 ]] && { hs_log "verify skipped (HOSTSAFETY_NO_SYSTEMCTL=1)"; return 0; }
   for s in "${SLICES[@]}"; do
     f="${UNIT_DIR}/${s}.slice.d/10-hostsafety.conf"
     if [[ ! -f "${f}" ]]; then hs_log "MISMATCH   ${s}.slice: drop-in ${f} is not installed"; rc=1; continue; fi
+    # capture first: a failing hs_limits inside `done < <(...)` would yield zero lines and verify nothing
+    if ! want_all="$(hs_limits "${s}" 2>&1)"; then
+      hs_log "MISMATCH   ${s}.slice: cannot derive expected limits (${want_all}); nothing verified"; rc=1; continue
+    fi
+    n="$(printf '%s\n' "${want_all}" | grep -c '^[A-Za-z]*=[0-9]\+$' || true)"
+    if (( n < 4 )); then hs_log "MISMATCH   ${s}.slice: cannot derive expected limits (got ${n} of 4 keys); nothing verified"; rc=1; continue; fi
     while IFS= read -r line; do
       k="${line%%=*}"; want="${line#*=}"
       inst="$(sed -n "s/^${k}=//p" "${f}" | tail -1)"
@@ -183,11 +189,14 @@ do_verify() {
       if [[ "${v}" != "${inst}" ]]; then
         hs_log "MISMATCH   ${s}.slice ${k}: installed ${inst}, effective ${v}"; rc=1; continue
       fi
+      if ! [[ "${inst}" =~ ^[0-9]+$ && "${v}" =~ ^[0-9]+$ && "${want}" =~ ^[0-9]+$ ]]; then
+        hs_log "MISMATCH   ${s}.slice ${k}: not a number (installed ${inst}, effective ${v}); cannot verify"; rc=1; continue
+      fi
       if [[ "${k}" == TasksMax ]]; then diff=$(( want == inst ? 0 : 1 ))
       else diff=$(( (want > inst ? want - inst : inst - want) * 100 > inst ? 1 : 0 )); fi
       if (( diff )); then hs_log "MISMATCH   ${s}.slice ${k}: installed ${inst} is stale, this host now sizes ${want}; re-run install.sh"; rc=1
       else hs_log "verified   ${s}.slice ${k}=$(fmt_bytes "${v}")"; fi
-    done < <(hs_limits "${s}")
+    done <<<"${want_all}"
   done
   hs_log "guard timer: $(systemctl --user is-active hostsafety-guard.timer 2>&1) / $(systemctl --user is-enabled hostsafety-guard.timer 2>&1)"
   return "${rc}"

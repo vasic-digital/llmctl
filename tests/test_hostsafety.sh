@@ -588,7 +588,7 @@ esac
 S
 chmod +x "${vf}/shim/systemctl"
 vrun() { ( unset HOSTSAFETY_NO_SYSTEMCTL; PATH="${vf}/shim:${PATH}" VF_CFG="${vf}/cfg" HOSTSAFETY_CONFIG_HOME="${vf}/cfg" \
-  HOSTSAFETY_NPROC=16 HOSTSAFETY_MEMINFO="${1}" VF_OVERRIDE="${2:-}" "${HS}/install.sh" verify ) 2>&1; }
+  HOSTSAFETY_NPROC="${VF_NPROC:-16}" HOSTSAFETY_MEMINFO="${1}" VF_OVERRIDE="${2:-}" "${HS}/install.sh" verify ) 2>&1; }
 vout="$(vrun "${vf}/meminfo_now"; echo "rc=$?")" || true
 assert_contains "${vout}" "rc=0" "verify passes when effective == installed and MemTotal drifted by 8 kB since install"
 assert_contains "${vout}" "verified   user.slice MemoryMax=24359046144" "verify reports the installed value as verified"
@@ -598,7 +598,28 @@ assert_contains "${vout}" "MISMATCH   user.slice MemoryMax" "NEGATIVE: the misma
 printf 'MemTotal:       16777216 kB\nSwapTotal:       8388608 kB\n' >"${vf}/meminfo_small"
 vout="$(vrun "${vf}/meminfo_small"; echo "rc=$?")" || true
 assert_contains "${vout}" "rc=1" "NEGATIVE: verify fails when the host was re-sized materially (stale drop-ins, 32 GiB -> 16 GiB)"
-assert_contains "${vout}" "stale" "NEGATIVE: the stale-sizing failure says so"
+assert_contains "${vout}" "MemoryMax: installed 25982982553 is stale" "NEGATIVE: the stale-sizing failure names the key and says stale"
+# hs_limits failing (unreadable / garbage MemTotal) used to leave the loop with zero lines: rc=0, nothing verified.
+vout="$(vrun "${vf}/no_such_meminfo"; echo "rc=$?")" || true
+assert_contains "${vout}" "rc=1" "NEGATIVE: unreadable meminfo => verify fails (nothing verified is not a pass)"
+assert_contains "${vout}" "cannot derive expected limits" "NEGATIVE: unreadable meminfo names the cause"
+[[ "${vout}" != *"verified   "* ]] && echo "  ok: nothing is reported verified when expected limits cannot be derived" || { echo "  FAIL: 'verified' printed without a comparison" >&2; TEST_FAILS=$((TEST_FAILS+1)); }
+printf 'MemTotal:       garbage kB\nSwapTotal:       8388608 kB\n' >"${vf}/meminfo_garbage"
+vout="$(vrun "${vf}/meminfo_garbage"; echo "rc=$?")" || true
+assert_contains "${vout}" "rc=1" "NEGATIVE: garbage meminfo => verify fails"
+assert_contains "${vout}" "cannot derive expected limits" "NEGATIVE: garbage meminfo names the cause"
+# TasksMax-only staleness (CPU count changed 16 -> 32; memory unchanged)
+vout="$(VF_NPROC=32 vrun "${vf}/meminfo_now"; echo "rc=$?")" || true
+assert_contains "${vout}" "rc=1" "NEGATIVE: CPU count changed => verify fails on TasksMax alone"
+assert_contains "${vout}" "app.slice TasksMax: installed 16384 is stale" "NEGATIVE: the TasksMax stale message names slice and key"
+# non-numeric installed/effective value must be a clean MISMATCH, not an unbound-variable abort
+cp "${vf}/cfg/systemd/user/background.slice.d/10-hostsafety.conf" "${vf}/bg.bak"
+sed -i 's/^MemoryMax=.*/MemoryMax=infinity/' "${vf}/cfg/systemd/user/background.slice.d/10-hostsafety.conf"
+vout="$(vrun "${vf}/meminfo_now"; echo "rc=$?")" || true
+assert_contains "${vout}" "rc=1" "NEGATIVE: non-numeric limit (infinity) => verify fails"
+assert_contains "${vout}" "background.slice MemoryMax: not a number (installed infinity, effective infinity)" "NEGATIVE: non-numeric limit is a clean MISMATCH"
+[[ "${vout}" != *"unbound variable"* ]] && echo "  ok: no shell abort on a non-numeric limit" || { echo "  FAIL: unbound variable abort" >&2; TEST_FAILS=$((TEST_FAILS+1)); }
+cp "${vf}/bg.bak" "${vf}/cfg/systemd/user/background.slice.d/10-hostsafety.conf"
 rm -f "${vf}/cfg/systemd/user/app.slice.d/10-hostsafety.conf"
 vout="$(vrun "${vf}/meminfo_now"; echo "rc=$?")" || true
 assert_contains "${vout}" "rc=1" "NEGATIVE: verify fails when a drop-in is not installed"

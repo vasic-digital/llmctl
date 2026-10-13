@@ -56,4 +56,19 @@ G -C "${TEST_TMP}/C" worktree add -q "${TEST_TMP}/Cwt" -b wt
 out="$(inv8 "${TEST_TMP}/Cwt")"
 assert_contains "${out}" "✗ Insufficient upstream remotes" "linked worktree whose main submodule has 2 remotes / 1 push URL: Invariant 8 still FAILS"
 
+# D. NEGATIVE: a stray .git FILE (not a gitlink to a real repo) or a symlink to the enclosing repo must NOT count
+#    as the submodule's own repository.
+mk_proj "${TEST_TMP}/D" 6; mkdir -p "${TEST_TMP}/D/constitution"; echo "stray" >"${TEST_TMP}/D/constitution/.git"
+out="$(inv8 "${TEST_TMP}/D")"
+assert_contains "${out}" "✗" "stray .git file in constitution/: Invariant 8 FAILS"
+[[ "${out}" != *"✓ At least 4"* ]] && echo "  ok: stray .git file not treated as an own repo" || { echo "  FAIL: stray .git counted" >&2; TEST_FAILS=$((TEST_FAILS+1)); }
+mk_proj "${TEST_TMP}/E" 6; ln -s . "${TEST_TMP}/E/constitution"
+out="$(inv8 "${TEST_TMP}/E")"
+assert_contains "${out}" "✗" "constitution -> symlink to the enclosing repo: Invariant 8 FAILS"
+[[ "${out}" != *"✓ At least 4"* ]] && echo "  ok: symlink to the enclosing repo not treated as an own repo" || { echo "  FAIL: symlink counted" >&2; TEST_FAILS=$((TEST_FAILS+1)); }
+# F. POSITIVE: a symlinked constitution/ pointing at a genuine standalone repo still works.
+mk_proj "${TEST_TMP}/F" 0; mk_const "${TEST_TMP}/Freal" 5 4; ln -s "${TEST_TMP}/Freal" "${TEST_TMP}/F/constitution"
+out="$(inv8 "${TEST_TMP}/F")"
+assert_contains "${out}" "✓ At least 4 upstream remotes configured" "constitution -> symlink to a genuine standalone repo: Invariant 8 passes"
+
 test_finish
