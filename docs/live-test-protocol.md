@@ -24,7 +24,9 @@ backend `decide-nli`); the operator has accepted that.**
 1. Before anything is stopped the running set is RECORDED (fail closed if `llmctl status --json` cannot be read): `prior_status.json`
    (the raw rows, `enabled` flag included), `prior_set.txt` (the running base profiles, restore order = status order),
    `prior_units.txt` (`systemctl --user list-units 'llmctl-*@*.service'`), `prior_unrestorable.txt` (scaled instances `p.N`:
-   `llmctl start p` brings back ONE instance, so they are reported as a failed restore, never silently dropped).
+   `llmctl start p` brings back ONE instance, so they are reported as a failed restore (exit 7) and named in `restore.txt`,
+   `RESTORE_MANUAL.txt` and the runner summary, never silently dropped - also through the runner, whose `--restore-only` call reads the
+   recorded `prior_status.json` next to the set file).
 2. The profile is loaded with llmctl's own `llmctl switch <profile>` (same env as before: `LLMCTL_VALIDATE_ON_START=0`,
    `LLMCTL_READY_TIMEOUT=0`, nice 19, ionice idle, in the background under the watchdog): llmctl takes the scheduler lock, applies its
    pressure gate, stops EVERY running profile, starts exactly the target, and rolls back by itself if the start fails. This tool stops
@@ -33,14 +35,20 @@ backend `decide-nli`); the operator has accepted that.**
    `llmctl-<engine>@<profile>.service`). Evidence: `commands.log` (the switch and every restore command).
 3. The pre-gate counts the RAM/VRAM llmctl has reserved for the resident set (status json `ram_mb`/`vram_mb`, estimates) as free,
    because the switch stops it: `effective = measured + reserved` (memory, free VRAM) / `measured - reserved` (GPU used); both are
-   written to `gate.log`. A resident profile in a failed state is still a refusal; another resident profile is no longer one. The
+   written to `gate.log`. The credit never lowers the watchdog's floor: the watchdog checks RAW MemAvailable while the resident set is still
+   loaded, so the gate also refuses unless RAW MemAvailable >= 5000 (watchdog floor) + 1024 MiB, and a last `guard` check (watchdog
+   triggered/dead) runs right before the switch is launched; otherwise the resident set would be stopped for a run the watchdog aborts
+   at once. `ram_mb`/`vram_mb` are llmctl's ESTIMATES; `llmctl switch` has its own pressure gate and rolls the set back itself when
+   the target fails to start, so a wrong estimate costs a refused or rolled-back switch, not a lost set. A resident profile in a failed state is still a refusal; another resident profile is no longer one. The
    post-stop VRAM check compares with the MEASURED pre-switch value when a set was switched off.
 4. After the run, on EVERY exit path (PASS, FAIL, abort, failed switch, signal; via the existing EXIT trap), once the test model is
    confirmed stopped and the watchdog is reaped, the recorded set is RESTORED with
    `LLMCTL_VALIDATE_ON_START=0 nice -n 19 ionice -c 3 llmctl start <profile>`, one profile at a time, bounded (300 s each, never
    signalled), each preceded by a pressure check (memory PSI some < 5 / full < 1, IO PSI some < 10 / full < 2, MemAvailable >= the
-   profile's reserved RAM + 2048 MiB) and each followed by a health check (the engine's `/health`, `/healthz` for onnx, up to 120 s;
-   unit active when no port is known). Restore is idempotent: a profile that already runs is only verified (`ALREADY RUNNING`).
+   profile's reserved RAM + 2048 MiB; when a row's `ram_mb` is missing, zero or non-numeric the conservative default floor of 6144 MiB
+   is used and the reason says so) and each followed by a health check (the unit env file's `LLMCTL_REG_HEALTH` path for ANY engine,
+   else `/healthz` for onnx and `/health`; the status row's port, else the env file's `LLMCTL_PORT`; unit active when no port is
+   known; up to 120 s). Restore is idempotent: a profile that already runs is only verified (`ALREADY RUNNING`).
    Evidence: `restore.txt` (one line per profile: `RESTORED (healthy)` / `ALREADY RUNNING` / `SKIPPED (why)` / `FAILED (why)`),
    `after_status.json`, `after_units.txt`; the verdict table has `resident set switched off` and `prior set restored`.
 5. A restore that cannot or must not run is LOUD, never silent: if the host is under pressure, or the stop of the test model is not
@@ -48,6 +56,12 @@ backend `decide-nli`); the operator has accepted that.**
    (`nice -n 19 ionice -c 3 llmctl start <profiles>`), and the exit code is **6**; a profile that failed to start, never became healthy
    or is a scaled instance gives **7** (the others are still attempted). When the run itself ended non-zero (1 FAIL, 2, 3, 4 abort,
    5) that code stays and is never masked: the restore problem is in the verdict reason, `restore.txt` and `RESTORE_MANUAL.txt`.
+   A machine-readable `RESTORE_STATE=<ok|manual|failed|none>` line ends the verdict output and the runner summary and is stored in the
+   `restore_state` evidence file, so a consumer that only sees the run's own code (1 to 5) still learns the host-service state
+   (`deferred` appears only with `--no-restore`, when the caller restores).
+   A first INT/TERM/HUP during the restore lets the start attempt in flight finish (llmctl runs it detached; abandoning it would leave
+   an untracked half-started unit), starts nothing further, marks the rest `SKIPPED (interrupted)`, writes their exact commands to
+   `RESTORE_MANUAL.txt` and exits 6; a second signal changes nothing. SIGKILL cannot be handled (see Known unknowns).
    The restore itself is not under the watchdog (the watchdog guards the test model); it relies on the per-profile pressure check
    before every start and llmctl's own admission/pressure gates.
 6. `--plan` is a dry run: static refusals, `llmctl plan --json` fit and the recording run, then it prints what would be stopped, what
