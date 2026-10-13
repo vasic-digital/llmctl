@@ -278,7 +278,7 @@ with tempfile.TemporaryDirectory() as d:
     check("P3 PSI of a missing file is empty (and main reports psi_available=false)", g.psi(os.path.join(d, "nope")) == {})
 
 # ---------------------------------------------------------------- main(): the /proc walk is lazy (incident 2026-10-13)
-def run_main(psi_text, procs, extra=None, env=None, pre_state=None, meminfo="MemTotal: 32000000 kB\nSwapTotal: 8000000 kB\nSwapFree: 8000000 kB\n"):
+def run_main(psi_text, procs, extra=None, env=None, pre_state=None, pre_log=None, meminfo="MemTotal: 32000000 kB\nSwapTotal: 8000000 kB\nSwapFree: 8000000 kB\n"):
     """run g.main() against a synthetic psi file with g.scan replaced by a counting fake; returns (scan_calls, log_lines, dir)."""
     d = tempfile.mkdtemp(prefix="hsfx")
     open(os.path.join(d, "psi"), "w").write(psi_text)
@@ -286,6 +286,8 @@ def run_main(psi_text, procs, extra=None, env=None, pre_state=None, meminfo="Mem
     if pre_state is not None:
         import json as _j
         open(os.path.join(d, "st"), "w").write(_j.dumps(pre_state))
+    if pre_log is not None:
+        os.makedirs(os.path.join(d, "log")); open(os.path.join(d, "log", "guard.log"), "w").write(pre_log)
     calls = []
     real_scan = g.scan
     g.scan = lambda root: (calls.append(root), procs)[1]
@@ -419,6 +421,32 @@ check("TS6 storm scope owned by another uid is never the victim", rec.get("victi
 gnome = [dict(p, cg="app.slice/app-gnome-shell-1.scope", name="gnome-shell") for p in storm_grp]
 calls, lines, d, rec = storm_run(BAD, {"app.slice/app-gnome-shell-1.scope": 6182, OTHER_CG: 5}, tbl=table(*guard_ancestry(), *gnome, *other_grp))
 check("TS7 storm scope that is protected by cgroup/name (gnome-shell) is never the victim", rec.get("victim", {}).get("pgrp") != B + 546537, repr(rec.get("victim", {}).get("pgrp")))
+
+# ---------------------------------------------------------------- guard.log rotation (was 96.8 MB, never rotated)
+import gzip
+with tempfile.TemporaryDirectory() as d:
+    lp = os.path.join(d, "guard.log")
+    line = '{"event": "would-kill", "pad": "%s"}\n' % ("x" * 900)
+    open(lp, "w").write(line * 3500)                       # ~3.2 MB synthetic big log
+    orig = open(lp).read()
+    g.log(lp, {"event": "ok"}, max_bytes=1000000, keep=3)
+    cur = open(lp).read() if os.path.exists(lp) else ""
+    r1 = os.path.join(d, "guard.log.1.gz")
+    check("R1 log over the cap is rotated: live file restarts small, content lands in guard.log.1.gz byte-identical",
+          os.path.exists(r1) and gzip.open(r1, "rt").read() == orig and len(cur) < 1000 and '"event": "ok"' in cur, repr((os.listdir(d), len(cur))))
+    for i in range(6):                                       # refill + rotate repeatedly: never more than keep=3 archives
+        open(lp, "a").write(line * 1200)
+        g.log(lp, {"event": "ok"}, max_bytes=1000000, keep=3)
+    arch = sorted(f for f in os.listdir(d) if f.startswith("guard.log."))
+    check("R2 at most N=3 gz archives are kept (.1 .2 .3), older ones are dropped", arch == ["guard.log.1.gz", "guard.log.2.gz", "guard.log.3.gz"], repr(arch))
+    check("R3 live log + archives stay bounded (cap + 3 compressed archives, < 1.2 MB total here)", sum(os.path.getsize(os.path.join(d, f)) for f in os.listdir(d)) < 1200000, repr(os.listdir(d)))
+    g.log(lp, {"event": "again"}, max_bytes=10 ** 9, keep=3)
+    check("R4 under the cap: plain append, no rotation", "again" in open(lp).read() and sorted(f for f in os.listdir(d) if f.startswith("guard.log.")) == arch)
+    check("R5 live log keeps mode of a normal append (a rotation never leaves the live log missing)", os.path.exists(lp))
+# main() wires the cap from HOSTSAFETY_LOG_MAX_BYTES (the log pre-exists with 5 KB of old records)
+calls, lines, d = run_main(BAD, storm_tbl, pre_state={"streak": 1}, env={"HOSTSAFETY_LOG_MAX_BYTES": "3000"}, pre_log="x" * 5000 + "\n")
+check("R6 main() honours HOSTSAFETY_LOG_MAX_BYTES (old log rotated to .1.gz before the new record)",
+      os.path.exists(os.path.join(d, "log", "guard.log.1.gz")) and any('would-kill' in l for l in lines), repr(os.listdir(os.path.join(d, "log"))))
 
 print("RESULT: %d failed" % len(fails))
 sys.exit(1 if fails else 0)

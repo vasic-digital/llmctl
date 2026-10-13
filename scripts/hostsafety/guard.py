@@ -35,9 +35,11 @@ Safety rules (constitution 11.4.201 / 11.4.263 / 12):
 """
 import argparse
 import fcntl
+import gzip
 import json
 import os
 import re
+import shutil
 import signal
 import sys
 import time
@@ -50,6 +52,8 @@ DEF = {
     "COOLDOWN_S": 20,        # no second action within this window
     "PROC_WEIGHT_KB": 2048,  # each process adds this much "cost" (fork storms)
     "TASKS_STORM": 2500,     # tasks_storm: one user scope / group with more tasks than this (while PSI full >= PSI_FULL) is the victim candidate
+    "LOG_MAX_BYTES": 5242880,  # guard.log is rotated (gzip) when it exceeds this
+    "LOG_KEEP": 3,           # number of gz archives kept: guard.log.1.gz (newest) .. guard.log.N.gz
     "VICTIM_FILE_MAX_BYTES": 1048576,  # cap of the ARM=1 forensic victim state file (guard-victim.json)
     "TMPFS_WARN_PCT": 60.0,  # /tmp (tmpfs = RAM) fuller than this: report-only event (docs/host-safety.md, GNOME "Application Stopped")
 }
@@ -378,13 +382,43 @@ def cfg(name, env):
         return DEF[name]
 
 
-def log(logfile, rec):
+LOG_LIMITS = {"max_bytes": DEF["LOG_MAX_BYTES"], "keep": DEF["LOG_KEEP"]}     # main() overrides from HOSTSAFETY_LOG_*
+
+
+def rotate_log(path, max_bytes, keep):
+    """size-capped rotation without logrotate: path -> path.1.gz -> .2.gz ... .keep.gz (oldest dropped).  Streams through gzip
+    (a 100 MB legacy log never sits in memory).  Best effort: any OSError leaves the live log as it was."""
+    try:
+        if keep < 1 or os.path.getsize(path) <= max_bytes:
+            return
+    except OSError:
+        return
+    try:
+        for i in range(keep, 0, -1):
+            src = "%s.%d.gz" % (path, i)
+            if i == keep:
+                if os.path.exists(src):
+                    os.unlink(src)
+            elif os.path.exists(src):
+                os.replace(src, "%s.%d.gz" % (path, i + 1))
+        tmp = path + ".1.gz.tmp"
+        with open(path, "rb") as fi, gzip.open(tmp, "wb", compresslevel=1) as fo:
+            shutil.copyfileobj(fi, fo, 1 << 20)
+        os.replace(tmp, path + ".1.gz")
+        os.unlink(path)
+    except OSError:
+        pass
+
+
+def log(logfile, rec, max_bytes=None, keep=None):
     rec["ts"] = time.strftime("%Y-%m-%dT%H:%M:%S%z")
     line = json.dumps(rec, sort_keys=True)
     print(line, flush=True)
     if logfile:
         try:
             os.makedirs(os.path.dirname(logfile), exist_ok=True)
+            rotate_log(logfile, LOG_LIMITS["max_bytes"] if max_bytes is None else max_bytes,
+                       LOG_LIMITS["keep"] if keep is None else keep)
             with open(logfile, "a") as f:
                 f.write(line + "\n")
         except OSError:
@@ -523,6 +557,8 @@ def main(argv=None):
     log_file = a.log_file or env.get("HOSTSAFETY_GUARD_LOG") or os.path.join(
         env.get("XDG_STATE_HOME", os.path.expanduser("~/.local/state")), "hostsafety", "guard.log")
 
+    LOG_LIMITS["max_bytes"] = cfg("LOG_MAX_BYTES", env)
+    LOG_LIMITS["keep"] = cfg("LOG_KEEP", env)
     own_pgrp = os.getpgrp() if a.self_pid == os.getpid() else None   # independent of the /proc snapshot
     if a.select_only:
         procs = scan(a.proc_root)
