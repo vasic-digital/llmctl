@@ -71,6 +71,7 @@ case "$*" in
      [ -f "$FAKE/leak" ] || cp "$FAKE/gpu_base" "$FAKE/gpu"; exit 0 ;;
   *"--user is-active"*) if [ -f "$FAKE/unit_state" ]; then cat "$FAKE/unit_state"; [ "$(cat "$FAKE/unit_state")" = active ] && exit 0; exit 3; fi
      if [ -f "$FAKE/running" ] || [ -f "$FAKE/unit_stuck_active" ]; then echo active; exit 0; else echo inactive; exit 3; fi ;;
+  *"--user show"*) [ -f "$FAKE/cgshow" ] && cat "$FAKE/cgshow"; echo "show ${*: -1}" >>"$FAKE/calls"; exit 0 ;;
   *"list-units"*) [ -f "$FAKE/units" ] || exit 0
      for a in "$@"; do case "$a" in *@*) pat="@${a##*@}"; pat="${pat%%.service}"; pat="${pat%\*}";; esac; done
      grep -F -- "${pat:-}" "$FAKE/units"; exit 0 ;;
@@ -749,6 +750,35 @@ RC=0; FAKE="$E/fake" PATH="$E/bin:$PATH" LLMCTL_RUNTIME_DIR="$E/run" HOME="$E/ho
 EVD="$(find "$E/home/.cache/llmctl-livetest" -mindepth 1 -maxdepth 1 -type d | head -1)"
 has "NEG-CONTROL explicit LT_LLMCTL_TREE override is honoured and logged" "$EVD/overrides.log" 'HONOURED LT_LLMCTL_TREE'
 hasnt "  tree check no longer the refusal reason" "$EVD/gate.log" 'REFUSED: llmctl .* not inside'
+fi
+
+if want gpupeak; then
+echo "== G1. GPU peak is read from the gpu_used_mb column (real samples.csv shape: 8 columns, gpu LAST) =="
+E="$(mkenv)"; echo 4109 >"$E/fake/gpu_after_start"; run_main "$E"
+check "run with real GPU use passes" "$RC" "0"
+hasnt "GPU use must not be reported as 'no GPU use observed'" "$EVD/verdict.txt" 'no GPU use observed'
+has "verdict table carries the real vram peak" "$EVD/verdict.txt" 'vram peak MiB +4109'
+has "NEG-CONTROL samples.csv really has gpu 4109 in its last column" "$EVD/samples.csv" ',4109$'
+E="$(mkenv)"; run_main "$E"
+has "NEG-CONTROL: no GPU rise -> informational note kept" "$EVD/verdict.txt" 'no GPU use observed, peak 1200MiB'
+# the exact shape of the real live-test file (not just what this watchdog writes today)
+RS="$ROOT/tests/fixtures/livetest/real_samples_vision_2026-10-13.csv"
+[ -f "$RS" ] && check "fixture: peak computed by the driver's own function = 4109" "$(bash -c 'source <(sed -n "/^gpu_peak_of()/,/^}/p" "$1"); gpu_peak_of "$2"' _ "$MAIN" "$RS")" "4109" || bad "fixture $RS missing"
+
+echo "== G2. unit cgroup peak recorded before the stop; infinity/[not set]/unavailable are UNKNOWN, never 0 =="
+E="$(mkenv)"; printf 'MemoryPeak=3221225472\nMemoryHigh=infinity\nMemoryMax=[not set]\n' >"$E/fake/cgshow"; run_main "$E"
+has "cgroup evidence file saved" "$EVD/cgroup_peak.txt" '^MemoryPeak=3221225472'
+has "verdict: MemoryPeak in MiB" "$EVD/verdict.txt" 'unit MemoryPeak MiB +3072'
+has "verdict: MemoryHigh infinity -> UNKNOWN" "$EVD/verdict.txt" 'unit MemoryHigh MiB +UNKNOWN'
+has "verdict: MemoryMax [not set] -> UNKNOWN" "$EVD/verdict.txt" 'unit MemoryMax MiB +UNKNOWN'
+l_show=$(grep -n '^show ' "$E/fake/calls" | head -1 | cut -d: -f1); l_stop=$(grep -n '^stop vision' "$E/fake/calls" | head -1 | cut -d: -f1)
+[ -n "$l_show" ] && [ -n "$l_stop" ] && [ "$l_show" -lt "$l_stop" ] && ok "show ran BEFORE the stop (call #$l_show < #$l_stop)" || bad "show not before stop (show=$l_show stop=$l_stop)"
+E="$(mkenv)"; printf 'MemoryPeak=[not set]\nMemoryHigh=18446744073709551615\nMemoryMax=infinity\n' >"$E/fake/cgshow"; run_main "$E"
+has "[not set] peak -> UNKNOWN (not 0)" "$EVD/verdict.txt" 'unit MemoryPeak MiB +UNKNOWN'
+has "uint64-max limit -> UNKNOWN" "$EVD/verdict.txt" 'unit MemoryHigh MiB +UNKNOWN'
+E="$(mkenv)"; run_main "$E"
+has "unavailable (empty show output) -> UNKNOWN" "$EVD/verdict.txt" 'unit MemoryPeak MiB +UNKNOWN'
+hasnt "  never rendered as 0" "$EVD/verdict.txt" 'unit Memory[A-Za-z]+ MiB +0$'
 fi
 
 if want always; then

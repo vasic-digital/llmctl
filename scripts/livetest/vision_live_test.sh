@@ -60,6 +60,7 @@ CMDLOG="$EV/commands.log"; SIGLOG="$EV/signals.log"
 log() { printf '%s %s\n' "$(date -u +%FT%TZ)" "$*" | tee -a "$EV/run.log" >&2; }
 
 WD_PID=""; START_SUB=""; START_PENDING=0; STOP_NEEDED=0; CLEANED=0; RESULT=2; VERDICT_REASON="not finished"
+CG_PEAK=UNKNOWN; CG_HIGH=UNKNOWN; CG_MAX=UNKNOWN; GPU_PEAK=UNKNOWN
 GATE_RES="NOT RUN"; READY=0; VRAM_NOTE=""; UNIT_STATE=""; PORT_SERVING=""; UNIT=""; FINAL_STOP_RC="NA"; GPU_BASE=""; GPU_FINAL=""; VALIDATE_RC="NA"; CLEAN_OK="NO"; MH="UNKNOWN"; PH="UNKNOWN"; LSV="UNKNOWN"
 
 print_table() {
@@ -70,6 +71,10 @@ print_table() {
   printf '%-28s %s\n' "readiness" "$READY_TXT"
   printf '%-28s %s\n' "validate rc" "$VALIDATE_RC"
   printf '%-28s %s\n' "vram base/final MiB" "$GPU_BASE/$GPU_FINAL"
+  printf '%-28s %s\n' "vram peak MiB" "$GPU_PEAK"
+  printf '%-28s %s\n' "unit MemoryPeak MiB" "$CG_PEAK"
+  printf '%-28s %s\n' "unit MemoryHigh MiB" "$CG_HIGH"
+  printf '%-28s %s\n' "unit MemoryMax MiB" "$CG_MAX"
   printf '%-28s %s\n' "profile stopped+vram ok" "$CLEAN_OK${VRAM_NOTE:-}"
   printf '%-28s %s\n' "model sha256" "$MH"
   printf '%-28s %s\n' "mmproj sha256" "$PH"
@@ -162,6 +167,16 @@ bounded() {
   while [ ! -s "$out.rc" ] && [ "$i" -lt $((secs * 10)) ]; do sleep 0.1; i=$((i + 1)); done
   [ -s "$out.rc" ] || { echo "$(date -u +%FT%TZ) TIMEOUT ${secs}s: $*" >>"$EV/bounded.log"; return 124; }
   return "$(cat "$out.rc")"
+}
+# gpu_peak_of <samples.csv>: max of the column NAMED gpu_used_mb (looked up in the header, never a hard-coded index:
+# 3.2.0 read column 6 = io_some_avg10 (a float), so the peak was always reported as 0).
+gpu_peak_of() {
+  awk -F, 'NR==1{for(i=1;i<=NF;i++) if($i=="gpu_used_mb") c=i; next} c && $c ~ /^[0-9]+$/ {if($c+0>m)m=$c+0} END{print m+0}' "$1" 2>/dev/null
+}
+# cg_mib <file> <key>: MiB of a numeric systemd property; infinity / [not set] / uint64-max / missing -> UNKNOWN (never 0)
+cg_mib() {
+  local v; v="$(sed -n "s/^$2=//p" "$1" 2>/dev/null | head -1)"
+  if [[ "$v" =~ ^[0-9]+$ ]] && [ "${#v}" -lt 19 ]; then echo $(( v / 1048576 )); else echo UNKNOWN; fi
 }
 status_json() {
   local o="$EV/.status.$BASHPID.$RANDOM"
@@ -422,6 +437,9 @@ echo "$VALIDATE_RC" >"$EV/validate.rc"
 guard
 
 # ------------------------------------------------------------------ (e) finalize: stop, confirm, identity
+# cgroup peak of the running unit, captured BEFORE the stop destroys it (calibration datum; bounded, never signalled)
+bounded "$BOUND" "$EV/cgroup_peak.txt" "$SYSCTL" --user show -p MemoryPeak -p MemoryHigh -p MemoryMax "$(unit_name)" || true
+CG_PEAK="$(cg_mib "$EV/cgroup_peak.txt" MemoryPeak)"; CG_HIGH="$(cg_mib "$EV/cgroup_peak.txt" MemoryHigh)"; CG_MAX="$(cg_mib "$EV/cgroup_peak.txt" MemoryMax)"
 log "final: llmctl stop $PROFILE"
 "$HERE/watchdog.sh" --stop "$PROFILE" "$EV" >>"$EV/stop.out" 2>&1; FINAL_STOP_RC=$?; echo "final stop rc=$FINAL_STOP_RC (0 llmctl ok | 10 systemd fallback | 11 failed)" >>"$EV/stop.out"
 if [ "$FINAL_STOP_RC" != 0 ] && [ "$FINAL_STOP_RC" != 10 ]; then
@@ -449,7 +467,7 @@ bounded "$BOUND" "$EV/.unit_active" "$SYSCTL" --user is-active "$UNIT"; echo "un
 UNIT_STATE="$(head -1 "$EV/.unit_active" 2>/dev/null)"
 PORT_SERVING=no; curl -fsS --max-time 3 "$URL/health" >/dev/null 2>&1 && PORT_SERVING=yes
 echo "port $PORT health still answering: $PORT_SERVING" >>"$EV/post_stop_state.txt"
-GPU_PEAK="$(awk -F, 'NR>1 && $6 ~ /^[0-9]+$/ {if($6+0>m)m=$6+0} END{print m+0}' "$EV/samples.csv" 2>/dev/null)"
+GPU_PEAK="$(gpu_peak_of "$EV/samples.csv")"
 VRAM_NOTE=""; [ $(( ${GPU_PEAK:-0} - ${GPU_BASE:-0} )) -lt 200 ] && VRAM_NOTE=" (VRAM check informational: no GPU use observed, peak ${GPU_PEAK}MiB)"
 if [ "$STILL" = "no" ] && [ -n "$GPU_FINAL" ] && [ "$GPU_FINAL" -le $((GPU_BASE + VRAM_SLACK_MB)) ]; then CLEAN_OK="YES"; fi
 
