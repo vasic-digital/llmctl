@@ -5,6 +5,10 @@
 # is ever done here, so a bad pgid can never reach "kill -1" (constitution 11.4.263).
 #
 # usage: bounded-run [-m MEM] [-t TASKS] [-c CPU%] [-s SWAP] [-T SECONDS] [-n NAME] [-q] [--tiny] [--no-disk-tmp] -- CMD [ARGS...]
+#        bounded-run [--agent] [--tasks N] [--mem SIZE] [--timeout S] -- CMD [ARGS...]   (long forms of -t -m -T; --tasks=N also works)
+#   --agent  profile for agent / test probes: TasksMax=200, MemoryMax=1G, timeout 300 s (scripts/hostsafety/agent-run = bounded-run --agent).
+#            The scope is never ManagedOOMPreference=avoid (oomd may pick a runaway probe before containers or the desktop);
+#            on timeout ONLY this run's own scope is killed and stopped.
 #   -m  MemoryMax   (systemd size, e.g. 6G)           default: 50% of MemTotal; < 1 GiB is refused unless --tiny
 #       minimums: go test -race 4G; builds / archives 6G+; llama-server = model size + 3G (docs/host-safety.md)
 #   -t  TasksMax    (count)                           default: clamp(nproc*128, 512, 8192)
@@ -44,18 +48,39 @@ tiny=0 disk_tmp=1
 timeout_s="${BOUNDED_RUN_TIMEOUT:-0}"
 name="$$" quiet=0
 # long flags (getopts has none): strip them from the arg list, stop at "--"
+agent=0 l_mem="" l_tasks="" l_timeout=""
 _args=()
-for _a in "$@"; do
-  if [[ "${_a}" == -- ]]; then _args+=("$@"); break; fi
+while (( $# )); do
+  _a="$1"
+  case "${_a}" in
+    --) _args+=("$@"); break ;;
+    --tiny) tiny=1 ;;
+    --no-disk-tmp) disk_tmp=0 ;;
+    --agent) agent=1 ;;
+    --mem|--tasks|--timeout)
+      (( $# >= 2 )) || { echo "bounded-run: ${_a} needs a value" >&2; exit 125; }
+      case "${_a}" in --mem) l_mem="$2" ;; --tasks) l_tasks="$2" ;; --timeout) l_timeout="$2" ;; esac
+      shift ;;
+    --mem=*) l_mem="${_a#*=}" ;;
+    --tasks=*) l_tasks="${_a#*=}" ;;
+    --timeout=*) l_timeout="${_a#*=}" ;;
+    *) _args+=("${_a}") ;;
+  esac
   shift
-  case "${_a}" in --tiny) tiny=1 ;; --no-disk-tmp) disk_tmp=0 ;; *) _args+=("${_a}") ;; esac
 done
 set -- "${_args[@]}"
+# --agent: the profile for agent / test probes (what scripts/hostsafety/agent-run uses): 200 tasks, 1G, 300 s.  BOUNDED_RUN_* still win.
+if (( agent )); then
+  mem="${BOUNDED_RUN_MEM:-1G}"; tasks="${BOUNDED_RUN_TASKS:-200}"; timeout_s="${BOUNDED_RUN_TIMEOUT:-300}"
+fi
+[[ -n "${l_mem}" ]] && mem="${l_mem}"
+[[ -n "${l_tasks}" ]] && tasks="${l_tasks}"
+[[ -n "${l_timeout}" ]] && timeout_s="${l_timeout}"
 while getopts ':m:t:c:s:T:n:qh' o; do
   case "${o}" in
     m) mem="${OPTARG}" ;; t) tasks="${OPTARG}" ;; c) cpu="${OPTARG}" ;;
     s) swap="${OPTARG}" ;; T) timeout_s="${OPTARG}" ;; n) name="${OPTARG}" ;; q) quiet=1 ;;
-    h) sed -n '2,26p' "${BASH_SOURCE[0]}"; exit 0 ;;
+    h) sed -n '2,31p' "${BASH_SOURCE[0]}"; exit 0 ;;
     *) echo "bounded-run: bad option -${OPTARG:-?}" >&2; exit 125 ;;
   esac
 done

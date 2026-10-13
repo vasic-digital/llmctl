@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# agent-run - contain an agent / test probe: bounded-run with the agent profile (TasksMax=200, MemoryMax=1G, timeout 300 s).
+#   agent-run [--tasks N] [--mem SIZE] [--timeout S] [-n NAME] [-q] -- CMD [ARGS...]
+# A new transient systemd --user scope per call, no ManagedOOMPreference=avoid, torn down (its own scope only) on timeout.
+# Exit: the command's status; 124 on timeout; 125 on agent-run / bounded-run error.  See docs/host-safety.md.
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+exec "${here}/bounded-run" --agent "$@"

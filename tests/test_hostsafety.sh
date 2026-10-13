@@ -16,7 +16,7 @@ export HOSTSAFETY_NO_SYSTEMCTL=1
 # --- 0. static: shellcheck + python compile ------------------------------------------------
 if command -v shellcheck >/dev/null 2>&1; then
   assert_rc 0 "shellcheck -x clean on every hostsafety shell script" \
-    shellcheck -S warning -x -P SCRIPTDIR "${HS}"/lib.sh "${HS}"/bounded-run "${HS}"/install.sh "${HS}"/podman-audit.sh \
+    shellcheck -S warning -x -P SCRIPTDIR "${HS}"/lib.sh "${HS}"/bounded-run "${HS}"/agent-run "${HS}"/install.sh "${HS}"/podman-audit.sh \
       "${HS}"/tracker-exclude.sh "${HS}"/root-steps.sh "${LLMCTL_ROOT}/tests/test_hostsafety.sh"
 else
   assert_skip "shellcheck not installed" "shellcheck on hostsafety scripts"

@@ -7,7 +7,7 @@
 #
 # What `install` changes (printed as it goes; nothing else is touched):
 #   ~/.config/systemd/user/{app,background,user}.slice.d/10-hostsafety.conf   slice limits
-#   ~/.local/bin/{bounded-run,hostsafety-podman-audit,hostsafety-tracker-exclude}
+#   ~/.local/bin/{bounded-run,agent-run,hostsafety-podman-audit,hostsafety-tracker-exclude}
 #   ~/.local/share/hostsafety/{lib.sh,guard.py}                               installed copies
 #   ~/.config/systemd/user/hostsafety-guard.{service,timer}                   guard (DRY-RUN by default)
 #   ~/.config/hostsafety/guard.env                                            only if absent (arming switch)
@@ -135,6 +135,7 @@ do_install() {
     put_file "${UNIT_DIR}/${unit}.d/10-hostsafety.conf" 644 < <(hs_slice_dropin "${s}")
   done
   put_file "${BIN_DIR}/bounded-run" 755 <"${src}/bounded-run"
+  put_file "${BIN_DIR}/agent-run" 755 <"${src}/agent-run"
   put_file "${BIN_DIR}/hostsafety-podman-audit" 755 <"${src}/podman-audit.sh"
   put_file "${BIN_DIR}/hostsafety-tracker-exclude" 755 <"${src}/tracker-exclude.sh"
   put_file "${SHARE}/lib.sh" 644 <"${src}/lib.sh"
