@@ -58,6 +58,7 @@ Decision layer (3.1.0), also run by `make test`:
 | the 66 defects of the first-candidate register stay fixed | `test_regression_defects.sh` (map: `specs/009-jev-decision-models/evidence/red-to-green-map.json`) |
 | no literal keys in docs/templates; no retired variables; no stray binaries; no secrets in release archives | `test_docs_no_literal_keys.sh`, `test_no_retired_vars.sh`, `test_no_stray_binaries.sh`, `test_release_no_secrets.sh` |
 | every doc reachable from the README | `test_doc_reachability.sh` |
+| no shipped doc or help text calls the enforced validation gate advisory | `test_docs_gate_not_advisory.sh` |
 | rootless vantage container | `test_vantage.sh`, `test_vantage_classifier.sh` (SKIP with a reason when podman or an image is missing) |
 
 Per-suite assertion counts are measured by `scripts/doc_counts.sh`, not typed (see `docs/scripts/doc_counts.md`). A suite that cannot run on

@@ -80,6 +80,7 @@ One page per script, library or test suite (Constitution 11.4.18). Test pages st
 | [test_determinism](test_determinism.md) | Overview |
 | [test_doc_reachability](test_doc_reachability.md) | `test_doc_reachability.sh` |
 | [test_docs_audit](test_docs_audit.md) | Overview |
+| [test_docs_gate_not_advisory](test_docs_gate_not_advisory.md) | Overview |
 | [test_doctor_decide](test_doctor_decide.md) | Overview |
 | [test_docs_no_literal_keys](test_docs_no_literal_keys.md) | Overview |
 | [test_download](test_download.md) | Overview |

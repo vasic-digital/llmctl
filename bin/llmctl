@@ -97,9 +97,12 @@ VALIDATION (deterministic known-answer gate - run BEFORE any use)
                               record (same model sha, engine build, launch
                               flags, suite hash; younger than
                               LLMCTL_VALIDATION_MAX_AGE) - for consumers
-                              start/auto/switch run the suite after a start
-                              (LLMCTL_VALIDATE_ON_START=0 disables; then
-                              require-validated refuses)
+                              start/switch/auto/enable/restart and systemd-
+                              started units run the suite once after the
+                              profile is ready; a FAIL stops the profile and
+                              exits non-zero, UNDETERMINED never stops or
+                              passes it (LLMCTL_VALIDATE_ON_START=0 disables;
+                              then require-validated refuses)
   logs <profile> [lines]      tail a service log
 
 DECISION MODELS (typed noul/choice/score decisions)
@@ -145,8 +148,8 @@ MISC
 ENVIRONMENT
   LLMCTL_DRY_RUN=1            print service actions instead of executing them
   LLMCTL_VALIDATE_STRICT=1    stop a profile whose validation is UNDETERMINED (default: only FAIL stops it)
-  LLMCTL_VALIDATE_ON_START=0  do not run the validation suite after start/auto/
-                              switch (require-validated then refuses)
+  LLMCTL_VALIDATE_ON_START=0  do not run the validation suite after start/switch/
+                              auto/enable/restart (require-validated then refuses)
   LLMCTL_VALIDATION_MAX_AGE=<s>  freshness window of a passing validation
                               record (default 604800 = 7 days)
   LLMCTL_VALIDATE_TIMEOUT=<s> per-request timeout of the validator (default 180)

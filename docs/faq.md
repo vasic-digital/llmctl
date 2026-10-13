@@ -597,7 +597,7 @@ Whether this systemd applies `RestartPreventExitStatus` to a failing `ExecStartP
 
 `llmctl validate <profile>` runs every known-answer suite the catalog names for the profile (`validation.suites`) against the running endpoint; if the profile is downloaded but idle it starts it (through the scheduler, so budget and pressure gate apply) and stops it again unless you pass `--keep`.
 `llmctl vision validate [--profile vision|vision-pro]` runs the golden-screenshot suite only, `llmctl validate-all` covers every running profile, and `llmctl require-validated <profile>` is the check a consumer script uses (exit 0 only for a fresh passing record).
-Exit codes: **0** every check passed, **1** a wrong result, **2** could not determine. A model that was never run through this is **not validated**, and `llmctl models verify <profile>` says so. Reference: [validation](validation.md#model-validation-gate). The gate is advisory: after `start` a failing model keeps serving unless you act on the result.
+Exit codes: **0** every check passed, **1** a wrong result, **2** could not determine. A model that was never run through this is **not validated**, and `llmctl models verify <profile>` says so. Reference: [validation](validation.md#model-validation-gate). The gate is enforced: every start path (including systemd-started units) runs it once after the profile is ready, and a wrong answer stops the profile and exits non-zero; an undetermined result neither stops nor passes it (`LLMCTL_VALIDATE_STRICT=1` stops it).
 
 ### What does UNDETERMINED mean?
 

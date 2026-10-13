@@ -327,7 +327,7 @@ stateDiagram-v2
 
 ### Start path (gate, admission, start, readiness, validation)
 
-What `llmctl start`, `switch` and `auto` do, in order, in this release. A refusal at any step starts nothing; a `switch` refuses before it stops anything. The validation step is advisory (see [validation](validation.md#model-validation-gate)).
+What `llmctl start`, `switch` and `auto` do, in order, in this release. A refusal at any step starts nothing; a `switch` refuses before it stops anything. The validation step is enforced: a wrong answer stops the profile (see [validation](validation.md#enforcement-of-the-gate-wired-settled-decisions)).
 
 ```mermaid
 flowchart TD
@@ -341,11 +341,11 @@ flowchart TD
     RD -- timeout --> RF[start fails, reported]
     RD -- ready --> V{validation gate<br/>validate_after_start, unless LLMCTL_VALIDATE_ON_START=0}
     V -- exit 0 --> OK[serving, record written]
-    V -- exit 1 wrong answer --> BAD[still serving, exit 1 reported, require-validated refuses]
-    V -- exit 2 undetermined --> UND[still serving, no pass recorded]
+    V -- exit 1 wrong answer --> BAD[profile stopped through the normal stop path, exit non-zero]
+    V -- exit 2 undetermined --> UND[kept running, no pass recorded, require-validated refuses; LLMCTL_VALIDATE_STRICT=1 stops it]
 ```
 
-Units started by systemd (boot, `enable`, `restart`) pass the pressure gate as the unit's first `ExecStartPre` but not the validation step.
+Units started by systemd (boot, `Restart=`, `enable`, `restart`) pass the pressure gate as the unit's first `ExecStartPre`, and the detached registration waiter (`lib/svc_hook.sh`) runs the same validation hook once the health endpoint answers; on FAIL it stops the unit with `systemctl --user stop`. The waiter reads the unit's environment, not the operator's shell.
 
 ### State machine: restart policy of an engine unit
 
