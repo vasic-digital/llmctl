@@ -738,7 +738,7 @@ svc_is_active() {
 
 # svc_is_failed <profile> - true once the unit has exceeded its restart
 # bound (StartLimitBurst within StartLimitIntervalSec, see svc_install) and
-# systemd has given up restarting it (Restart=always never fires again until
+# systemd has given up restarting it (Restart=on-failure never fires again until
 # `systemctl --user reset-failed`). This is the crash-loop signal FR-044
 # expects `llmctl status` to surface.
 svc_is_failed() {

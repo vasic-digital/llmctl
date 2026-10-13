@@ -4,8 +4,11 @@
 set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/helpers.sh"
 cd "${LLMCTL_ROOT}"
-for f in AGENTS.md docs/architecture.md docs/faq.md; do
+for f in AGENTS.md CLAUDE.md QWEN.md GEMINI.md docs/architecture.md docs/faq.md; do
   assert_eq 0 "$(grep -c 'Restart=always' "${f}" || true)" "${f}: no stale Restart=always"
+done
+for f in lib/svc_hook.sh lib/scheduler.sh; do
+  assert_eq 0 "$(grep -c 'Restart=always' "${f}" || true)" "${f}: no comment describing the current policy as Restart=always"
 done
 assert_eq 0 "$(grep -c 'NO artificial ceiling below physical RAM' lib/service_linux.sh || true)" "service_linux.sh: no stale 'NO artificial ceiling' comment"
 assert_eq 1 "$(grep -q 'Restart=on-failure' lib/service_linux.sh && echo 1 || echo 0)" "the generated units really use Restart=on-failure"

@@ -22,7 +22,7 @@
 #                                        detached registration waiter for THIS pid, then
 #                                        exec the engine command - so a KeepAlive respawn
 #                                        re-registers the service exactly like a systemd
-#                                        Restart=always does (C-13).
+#                                        Restart=on-failure does (C-13).
 #   svc_hook.sh run-gateway              ExecStart wrapper of the decision
 #                                        gateway: allocate its port (fixed 8095
 #                                        by default, dynamic on request), select

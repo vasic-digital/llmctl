@@ -28,7 +28,7 @@ launchd agents (macOS).
 - **Verified downloads**: every file checksummed against sha256 from Hugging Face API
 - **Smoke tests**: GGUF profiles booted in real `llama-server` and must answer deterministic prompt
 - **Budget refusals**: scheduler never overcommits; refuses with exact numbers
-- **OS-level protection**: systemd units carry `MemoryHigh`/`MemoryMax`, `Restart=always`
+- **OS-level protection**: systemd units carry `MemoryHigh`/`MemoryMax`, `Restart=on-failure` (bounded: `StartLimitBurst=3` per 900 s; no restart after `SIGKILL`, `SIGTERM` or exit 98)
 - **Local-only**: all servers bind to `127.0.0.1`
 
 ### Development Commands

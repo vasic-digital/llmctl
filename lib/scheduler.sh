@@ -498,10 +498,10 @@ sched_build_launch() {
       # the llama engine, whose SCHED_EXEC already falls back to its own
       # submodule's absolute build path when no override is set. Under
       # systemd this fails LOUDLY (exit 127, "command not found",
-      # Restart=always looping every few seconds) rather than silently -
+      # Restart=on-failure retrying, bounded by the start limit) rather than silently -
       # but `llmctl start`/`switch`/`enable` still reported a clean
       # "started" because systemd's own start-transition succeeds
-      # regardless of what the unit's Restart=always loop does next; only
+      # regardless of what the unit's restart policy does next; only
       # checking `systemctl status`/the real port caught it. The `coli`
       # script itself is a plain, already-executable (shebang + +x) Python
       # file living in the SAME submodule tree python3 can run directly
@@ -915,7 +915,8 @@ sched_enable() { scheduler::with_lock _enable_impl "$@"; }
 # "started 'fast' but it never answered ... within 60s" - the operator had
 # to independently run `ss -ltnp` to learn the real cause, even though
 # llama-server's OWN log already named it precisely: "couldn't bind HTTP
-# server socket, hostname: 0.0.0.0, port: 8080". `Restart=always` means the
+# server socket, hostname: 0.0.0.0, port: 8080". The unit restart policy (formerly an unbounded
+# always-restart, now Restart=on-failure with a start limit) meant the
 # engine was retrying (and re-logging the identical line) every ~100-200ms
 # the whole time _sched_wait_ready polled - the evidence was always there,
 # just never read back.
