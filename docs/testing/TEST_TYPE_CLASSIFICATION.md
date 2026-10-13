@@ -265,7 +265,7 @@ checkable statement; the table cell is shorthand for the same verdict.)
 ### Chaos
 
 - **llmctl — COVERED.** `tests/test_services_crashloop.sh` — proves
-  systemd `StartLimitBurst=5`/`StartLimitIntervalSec=60` restart-bounding
+  systemd `StartLimitBurst=3`/`StartLimitIntervalSec=900` restart-bounding
   for both llama.cpp and colibri units, the launchd throttle-widening
   fallback, AND that `llmctl status` surfaces a crash-looped profile
   with its last log line.

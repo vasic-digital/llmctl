@@ -38,19 +38,17 @@ Also runs as part of the full suite via `tests/run_tests.sh` or
 ## Edge cases
 
 * **Linux systemd `--user` template units**: after `svc_install`, asserts
-  the llama unit (`llmctl-llama@.service`) contains `Restart=always`,
-  `RestartSec=5`, `StartLimitBurst=5` (FR-044 bounded restarts),
-  `StartLimitIntervalSec=60` (FR-044), an `EnvironmentFile=` line
+  the llama unit (`llmctl-llama@.service`) contains `Restart=on-failure`,
+  `RestartSec=5`, `StartLimitBurst=3` (FR-044 bounded restarts),
+  `StartLimitIntervalSec=900` (FR-044), an `EnvironmentFile=` line
   pointing at the per-profile `.env` template, an
   `ExecStart=${LLMCTL_EXEC} ${LLMCTL_ARGS}` line sourced from that env
   file, and an `append:${LLMCTL_LOG_DIR}/%i.log` log-append directive.
-* **Full-hardware `MemoryMax`/`MemoryHigh` (operator decision, Phase 6
-  T035, 2026-09-15)**: on the baseline fixture (32768 MiB total RAM),
-  asserts `MemoryMax=32768M` and `MemoryHigh=32768M` — i.e. served-model
-  resource limits carry **no artificial ceiling below hardware
-  capacity**: a served profile gets the full probed hardware and maximal
-  performance, and `MemoryHigh` equals `MemoryMax` (no soft-throttle zone
-  below the hard cap). This is explicitly called out as distinct from,
+* **Template memory backstop**: on the baseline fixture (32768 MiB total RAM),
+  asserts `MemoryMax=27852M` (85%) and `MemoryHigh=22937M` (70%): strictly
+  below total RAM, with a soft-throttle zone below the hard cap. Per-profile
+  drop-ins (1.25x / 1.5x of the plan footprint, below 90% of RAM) override it.
+  This is explicitly called out as distinct from,
   and not the same mechanism as, the planner's RAM/VRAM admission-control
   budgets — see `docs/architecture.md`'s memory-model note.
 * **Colibri unit installed too**: asserts

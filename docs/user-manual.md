@@ -281,11 +281,13 @@ Installs (or refreshes) the persistent-service backend for this OS
   `llmctl-llama@.service` and `llmctl-colibri@.service` into
   `${LLMCTL_UNIT_DIR:-$XDG_CONFIG_HOME/systemd/user}`. Each instance reads
   its launch parameters from an `EnvironmentFile` written by `enable`/
-  `start`. `MemoryHigh`/`MemoryMax` are set to the host's full probed RAM
-  (a hard cgroup ceiling at the physical limit, not an artificially reduced
-  one — see the comment in `lib/service_linux.sh`), with
-  `Restart=always`/`RestartSec=5`/`StartLimitBurst=5` for crash-loop
-  bounding. Runs `systemctl --user daemon-reload` and attempts
+  `start`. Each profile
+  gets its own memory drop-in: `MemoryHigh` = 1.25x and `MemoryMax` = 1.5x of the
+  plan footprint (floors apply, always below 90% of RAM), with `MemorySwapMax=0`
+  (see the comment in `lib/service_linux.sh`). The units use
+  `Restart=on-failure`/`RestartSec=5` with `StartLimitBurst=3` in
+  `StartLimitIntervalSec=900` and `RestartPreventExitStatus=SIGKILL SIGTERM 98`
+  for crash-loop bounding. Runs `systemctl --user daemon-reload` and attempts
   `loginctl enable-linger` so services survive logout.
 - **macOS**: prepares the LaunchAgents directory
   (`${LLMCTL_PLIST_DIR:-~/Library/LaunchAgents}`); per-profile plists are

@@ -12,7 +12,7 @@ list, and drives the unit lifecycle (`enable`/`disable`/`start`/`stop`/
 `restart`/`status`/`logs`) via `systemctl --user`. It also implements
 optional per-tenant cgroup isolation (via a per-instance `Slice=` drop-in)
 for the opt-in multi-tenant cluster mode. It exists so llmctl gets
-`Restart=always` with a bounded restart budget, a `MemoryHigh`/`MemoryMax`
+`Restart=on-failure` with a bounded restart budget (3 starts per 900 s), a `MemoryHigh`/`MemoryMax`
 cgroup ceiling, and autostart-at-login (via `loginctl enable-linger`) for
 free from the host OS, rather than llmctl having to supervise processes
 itself (see `docs/architecture.md`'s "Service backends" section).
@@ -134,8 +134,8 @@ LLMCTL_DRY_RUN=1 llmctl enable fast
   immediately on symbol lookup; prepending the exec's own directory fixes it
   (confirmed via `ldd` and a live `/health` check).
 * **`svc_is_failed` (crash-loop signal)** — becomes true only once
-  `StartLimitBurst` (5) restarts within `StartLimitIntervalSec` (60s) are
-  exceeded and systemd gives up (`Restart=always` stops firing until
+  `StartLimitBurst` (3) starts within `StartLimitIntervalSec` (900s) are
+  exceeded and systemd gives up (`Restart=on-failure` stops firing until
   `systemctl --user reset-failed`); under `LLMCTL_DRY_RUN=1` it instead
   checks for a marker file (`${LLMCTL_RUNTIME_DIR}/${profile}.failed`) so
   the OS-agnostic status logic in `scheduler.sh` is testable without a real
@@ -194,8 +194,8 @@ LLMCTL_DRY_RUN=1 llmctl enable fast
 4. **`svc_install`** — ensures the unit dir + state dirs exist, probes total
    RAM via `hw_probe_json | json_stdin`, writes both template unit files
    (`llmctl-llama@.service`, `llmctl-colibri@.service`) with the
-   `bash -c 'set -f; exec ...'` `ExecStart=` form, `Restart=always` +
-   bounded restart limits, and the computed `MemoryHigh`/`MemoryMax`; then
+   `bash -c 'set -f; exec ...'` `ExecStart=` form, `Restart=on-failure` +
+   bounded restart limits (3 per 900 s, `RestartPreventExitStatus=SIGKILL SIGTERM 98`), and the template `MemoryHigh`/`MemoryMax` backstop (70%/85% of probed RAM; per-profile drop-ins override it); then
    `daemon-reload`s and attempts `loginctl enable-linger`.
 5. **`svc_write_env <profile> <engine> <exec> <args...>`** — resolves the
    tenant-qualified instance key, writes
@@ -260,7 +260,7 @@ LLMCTL_DRY_RUN=1 llmctl enable fast
 * `svc_main_pid <profile>` and `svc_peak_rss_kb <pid>` (new).
 * **Gateway service (G-041)**: `decide_service_enable` writes
   `llmctl-decide-gateway.service` (`ExecStart` = `lib/svc_hook.sh run-gateway`,
-  which ends in `exec llmctl-decide serve --foreground`; `Restart=always`;
+  which ends in `exec llmctl-decide serve --foreground`; `Restart=on-failure` with the same 3/900 start limit;
   optional operator overrides in `$LLMCTL_STATE_DIR/decide/gateway.conf`),
   reloads, enables and starts it; `decide_service_disable` stops, disables,
   removes the unit and the gateway's registry/port state;

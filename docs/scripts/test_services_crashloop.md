@@ -48,10 +48,10 @@ Also runs as part of the full suite via `tests/run_tests.sh` or
 * **systemd `--user` unit bounds restarts**: after calling `svc_install`
   (in a subshell with the relevant libs sourced), asserts both the llama
   unit (`llmctl-llama@.service`) and the colibri unit
-  (`llmctl-colibri@.service`) contain `StartLimitBurst=5` and
-  `StartLimitIntervalSec=60` — the bounded-restart configuration that
-  stops the unit (rather than looping forever) once 5 restart attempts
-  occur within a 60-second window.
+  (`llmctl-colibri@.service`) contain `StartLimitBurst=3` and
+  `StartLimitIntervalSec=900` — the bounded-restart configuration that
+  stops the unit (rather than looping forever) once 3 starts
+  occur within a 900-second window.
 * **launchd plist widens its restart throttle (honest partial parity)**:
   after calling `svc_write_env` for a `fast`/`llama` profile via
   `lib/service_macos.sh`, asserts the generated plist
@@ -80,8 +80,8 @@ Also runs as part of the full suite via `tests/run_tests.sh` or
    export `LLMCTL_DRY_RUN=1` and the baseline `LLMCTL_FAKE_HW` fixture.
 2. Section 1: in a subshell, source `common.sh`, `os_detect.sh`,
    `hardware.sh`, `service_linux.sh`, call `svc_install`; assert both
-   generated unit files contain the expected `StartLimitBurst=5` /
-   `StartLimitIntervalSec=60` directives.
+   generated unit files contain the expected `StartLimitBurst=3` /
+   `StartLimitIntervalSec=900` directives.
 3. Section 2: in a subshell, source `common.sh`, `service_macos.sh`, call
    `svc_write_env fast llama <exec> --model ... --host 127.0.0.1 --port
    8080`; assert the generated plist contains the widened
@@ -110,7 +110,7 @@ Also runs as part of the full suite via `tests/run_tests.sh` or
 * Sibling test `tests/test_services.sh` covers the broader (non-crash-loop)
   service unit/plist generation surface for both backends.
 * Cited directly by `docs/architecture.md`'s "Service backends" section
-  (`StartLimitBurst=5`/`StartLimitIntervalSec=60`, launchd's honest
+  (`StartLimitBurst=3`/`StartLimitIntervalSec=900`, launchd's honest
   `ThrottleInterval` gap) and its scheduler state diagram (the
   `Running --> CrashLoop --> Failed` transition).
 * Discovered and run automatically by `tests/run_tests.sh`; syntax and
