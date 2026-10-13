@@ -9,7 +9,7 @@ launchd agents (macOS).
 Engines (llama.cpp and colibri vendored as git submodules, pinned to stable
 tags; the `onnx` runner ships in-tree):
 
-* [llama.cpp](https://github.com/ggml-org/llama.cpp) tag `b11379` (3.1.0 pin; it was `b10969`) — GGUF models,
+* [llama.cpp](https://github.com/ggml-org/llama.cpp) tag `b11379` (unchanged since 3.1.0; it was `b10969` before 3.1.0) — GGUF models,
   OpenAI-compatible `llama-server` (CUDA / ROCm / Metal / CPU backends).
 * [colibri](https://github.com/JustVugg/colibri) `v1.11.0` — pure-C engines
   for very large MoE models memory-mapped from NVMe (no GPU required);
@@ -72,8 +72,7 @@ Forgot `--recursive`? `git submodule update --init` or just run
 
 > **3.2.0 (host safety and model validation), status stated plainly.** Services now run under per-profile memory caps with no swap, a bounded restart policy
 > (a `SIGKILL`/oom-kill is **not** restarted automatically) and a memory-pressure start gate (`start`, `restart`, `enable`, `switch` can exit 75). A deterministic
-> model validation gate was added (`llmctl validate`, `vision validate`, `validate-all`, `require-validated`). **No real-model validation run has been performed yet**;
-> the gate is proven against a fixture server only, and the restart/cap/gate behaviour against hermetic tests, not a real systemd under real pressure. Live test result: PENDING.
+> model validation gate was added (`llmctl validate`, `vision validate`, `validate-all`, `require-validated`). **One real-model run exists**: the guarded live test of profile `vision` PASSED on the author's host on 2026-10-13 (21 pass / 0 fail / 0 undetermined, single run, this host only; model sha256 `882e8d2d...0863`, mmproj sha256 `8c0fb064...40cb`; evidence [`docs/qa/vision-live-2026-10-13/`](docs/qa/vision-live-2026-10-13/README.md)). Not shown by it: the unit's `MemoryPeak`/`VmHWM` (UNKNOWN, not captured in this run), run-to-run variation, `vision-pro` and every other profile. The gate is otherwise proven against a fixture server only, and the restart/cap/gate behaviour against hermetic tests, not a real systemd under real pressure.
 > Details and upgrade steps: [`CHANGELOG.md`](CHANGELOG.md); boundaries: [`docs/limitations.md`](docs/limitations.md); gates and limits: [`docs/host-safety.md`](docs/host-safety.md).
 
 ### Supported platforms
@@ -189,7 +188,7 @@ benchmarks) is `docs/decision-models.md`.
   enabled engine units for one profile. See [`docs/host-safety.md`](docs/host-safety.md).
 * **Model validation gate**: `llmctl validate <profile>` runs deterministic known-answer
   suites judged by plain code; UNDETERMINED (exit 2) is never a pass; the API token goes
-  only to loopback hosts and no proxy is used. No real-model run has been performed yet
+  only to loopback hosts and no proxy is used. One real-model run (profile `vision`, one host, 2026-10-13: PASS) is recorded; every other profile is not validated
   ([`docs/validation.md`](docs/validation.md)).
 * **LAN-accessible by default, with an explicit trade-off**: every engine
   server binds to `0.0.0.0` by default, so any device on the local network
@@ -308,7 +307,7 @@ fastest path to a running model.
 | [`docs/qa/decision-models-validation/README.md`](docs/qa/decision-models-validation/README.md) | Captured evidence for the decision-models feature's validation runs (iteration 1: 34 PASS / 7 pre-existing environment FAIL; iteration 2: 36 PASS / 7 environment FAIL) |
 | [`docs/validation.md`](docs/validation.md) | The project's V&V (validation & verification) contract |
 | [`docs/host-safety.md`](docs/host-safety.md) | Host-hang safeguards after the 2026-10-08 incident: cgroup limits, `bounded-run`, the memory-pressure guard, and the root-only steps |
-| [`docs/live-test-protocol.md`](docs/live-test-protocol.md) | The guarded live test of the `vision` profile: pre-gate, watchdog, exit codes 0-4, evidence directory (never run live yet) |
+| [`docs/live-test-protocol.md`](docs/live-test-protocol.md) | The guarded live test of the `vision` profile: pre-gate, watchdog, exit codes 0-4, evidence directory (run live once for `vision`, 2026-10-13: PASS, [evidence](docs/qa/vision-live-2026-10-13/README.md)) |
 | [`docs/hardening-2026-10-changelog.md`](docs/hardening-2026-10-changelog.md) | Changelog-ready summary: per-profile memory caps, bounded restarts, the pressure start gate, one engine per profile |
 | [`docs/validation_and_verification.md`](docs/validation_and_verification.md) | Why fully-deterministic V&V matters for CLI-agent-driven development |
 | [`docs/CONTINUATION.md`](docs/CONTINUATION.md) | Live session-resumption state: current phase, next action, per-phase findings (Constitution §12.10) |

@@ -338,7 +338,7 @@ The daemon's decider appends an entry for every token validation, RBAC check, qu
 
 ## Release automation (User Story 5)
 
-**Status for this whole section: wired (scripts), covered by `tests/test_create_release.sh`, `tests/test_preflight_submodules.sh` and `tests/test_release_no_secrets.sh`; 3.1.0 itself has not been published yet.** The release tooling lives in `scripts/release/`
+**Status for this whole section: wired (scripts), covered by `tests/test_create_release.sh`, `tests/test_preflight_submodules.sh` and `tests/test_release_no_secrets.sh`; the `v3.1.0` tag exists on all five remotes (codeberg, gitflic, github, gitlab, gitverse; annotated tag `f322aa0` peeling to `2467cc5`, checked with `git ls-remote` on 2026-10-13); GitHub and GitLab also list a `v3.1.0` release object (`gh release list`, `glab release list`), the other three were not checked for release objects (UNKNOWN).** The release tooling lives in `scripts/release/`
 (`create_release.sh`, `preflight_submodules.sh`, `build_archive.sh`, `scan_archive.py`); see [release-process](release-process.md).
 
 ### What happens when `gh release create` succeeds but `glab release create` fails, or vice versa?
@@ -579,7 +579,7 @@ Certificates, keys and models are untouched. See [runbooks](runbooks.md#upgrade-
 
 ## Host safety and the model validation gate (release 3.2.0)
 
-None of the entries below has been exercised against a real model or a real systemd user manager under real memory pressure; they describe what the code and the hermetic tests do. No real-model validation run has been performed yet (live test result: PENDING).
+Apart from one guarded live run of profile `vision` (2026-10-13, this host only, PASS with 21 pass / 0 fail / 0 undetermined; [evidence](qa/vision-live-2026-10-13/README.md); `MemoryPeak`/`VmHWM` not captured, UNKNOWN), none of the entries below has been exercised against a real model or a real systemd user manager under real memory pressure; they describe what the code and the hermetic tests do. No other profile has been validated.
 
 ### Why was my `start` / `enable` / `switch` refused with exit 75?
 
@@ -608,7 +608,7 @@ An UNDETERMINED run never replaces an earlier PASS record. Remedy: fix the cause
 ### How do I run the safe live test?
 
 Only with the operator's explicit go-ahead, on a quiet host, and once: `scripts/livetest/vision_live_test.sh` (profile `vision` only). It refuses with exit 3 when memory, PSI, VRAM or the running set is not quiet, starts a watchdog that stops the profile through `llmctl stop vision` when a limit is crossed (exit 4), runs `llmctl vision validate`, always stops the profile and checks the VRAM baseline.
-Evidence goes to `~/.cache/llmctl-livetest/<UTC timestamp>/`. Do not wrap it in retries and do not set `LT_HERMETIC` for a live run. Protocol and exit codes: [live-test-protocol](live-test-protocol.md). It has not been run live yet.
+Evidence goes to `~/.cache/llmctl-livetest/<UTC timestamp>/`. Do not wrap it in retries and do not set `LT_HERMETIC` for a live run. Protocol and exit codes: [live-test-protocol](live-test-protocol.md). It has run live once, for `vision` on 2026-10-13 (PASS; [evidence](qa/vision-live-2026-10-13/README.md)).
 
 ### Where is the systemd-oomd 50% rule?
 

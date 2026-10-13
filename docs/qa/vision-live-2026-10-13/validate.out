@@ -1,0 +1,343 @@
+{
+ "suite": "vision-golden-v1",
+ "kind": "vision",
+ "suite_hash": "9a897414915ef2d8bc7d83b2a82e209f7fe2da3c09e8a9ae7c22579ccc18320f",
+ "endpoint": "http://127.0.0.1:8082",
+ "expect_model": "gemma-3-4b-it-Q4_K_M.gguf",
+ "results": [
+  {
+   "key": "01_text_large/read",
+   "role": "golden",
+   "prompt": "Read all the text in this image exactly as written. Reply with only the text, nothing else. If the image contains no text at all, reply exactly: NO TEXT",
+   "verdict": "PASS",
+   "answer": "ORANGE TIGER\n42",
+   "finish_reason": "stop",
+   "seconds": 1.087,
+   "reasons": []
+  },
+  {
+   "key": "02_shapes_count/red_circles",
+   "role": "golden",
+   "prompt": "How many red circles are in this image? Answer with a single number.",
+   "verdict": "PASS",
+   "answer": "3",
+   "finish_reason": "stop",
+   "seconds": 0.872,
+   "reasons": []
+  },
+  {
+   "key": "02_shapes_count/blue_squares",
+   "role": "golden",
+   "prompt": "How many blue squares are in this image? Answer with a single number.",
+   "verdict": "PASS",
+   "answer": "2",
+   "finish_reason": "stop",
+   "seconds": 0.847,
+   "reasons": []
+  },
+  {
+   "key": "03_login_form/transcribe",
+   "role": "golden",
+   "prompt": "This is a screenshot of a software user interface. Transcribe every piece of text you can read in it, one item per line. Output only the text.",
+   "verdict": "PASS",
+   "answer": "SIGN IN\nUSERNAME\nPASSWORD\nLOGIN",
+   "finish_reason": "stop",
+   "seconds": 0.926,
+   "reasons": []
+  },
+  {
+   "key": "03_login_form/screen_type",
+   "role": "golden",
+   "prompt": "What kind of screen is shown in this screenshot? Answer in one short sentence.",
+   "verdict": "PASS",
+   "answer": "This screenshot depicts a classic, pixelated login screen reminiscent of early 1980s computer systems.",
+   "finish_reason": "stop",
+   "seconds": 1.077,
+   "reasons": []
+  },
+  {
+   "key": "04_list_view/items",
+   "role": "golden",
+   "prompt": "Read the items of the list below the FRUITS header from top to bottom, one per line. Output only the items.",
+   "verdict": "PASS",
+   "answer": "APPLE\nBANANA\nCHERRY\nGRAPE",
+   "finish_reason": "stop",
+   "seconds": 0.967,
+   "reasons": []
+  },
+  {
+   "key": "04_list_view/count",
+   "role": "golden",
+   "prompt": "How many items are in the list below the FRUITS header? Answer with a single number.",
+   "verdict": "PASS",
+   "answer": "4",
+   "finish_reason": "stop",
+   "seconds": 0.838,
+   "reasons": []
+  },
+  {
+   "key": "05_table/transcribe",
+   "role": "golden",
+   "prompt": "Transcribe this table row by row, separating the cells of a row with spaces. Output only the table text.",
+   "verdict": "PASS",
+   "answer": "NAME   AGE   CITY\nANNA   31   PARIS\nBORIS  45   OSLO\nCLARA  27   ROME",
+   "finish_reason": "stop",
+   "seconds": 1.186,
+   "reasons": []
+  },
+  {
+   "key": "05_table/lookup",
+   "role": "golden",
+   "prompt": "In this table, what is the CITY of BORIS? Answer with one word.",
+   "verdict": "PASS",
+   "answer": "OSLO",
+   "finish_reason": "stop",
+   "seconds": 0.86,
+   "reasons": []
+  },
+  {
+   "key": "06_dialog/transcribe",
+   "role": "golden",
+   "prompt": "This is a screenshot of a dialog box. Transcribe every piece of text in it. Output only the text.",
+   "verdict": "PASS",
+   "answer": "WARNING\nDELETE FILE?\nCANCEL\nDELETE",
+   "finish_reason": "stop",
+   "seconds": 0.947,
+   "reasons": []
+  },
+  {
+   "key": "06_dialog/buttons",
+   "role": "golden",
+   "prompt": "What are the labels of the two buttons in this dialog? Answer with the two labels only.",
+   "verdict": "PASS",
+   "answer": "CANCEL, DELETE",
+   "finish_reason": "stop",
+   "seconds": 0.874,
+   "reasons": []
+  },
+  {
+   "key": "07_dark_theme/transcribe",
+   "role": "golden",
+   "prompt": "Transcribe every piece of text in this screenshot, one item per line. Output only the text.",
+   "verdict": "PASS",
+   "answer": "SETTINGS\nDARK MODE\nVOLUME 75",
+   "finish_reason": "stop",
+   "seconds": 0.935,
+   "reasons": []
+  },
+  {
+   "key": "07_dark_theme/theme",
+   "role": "golden",
+   "prompt": "Is the background of this interface dark or light? Answer with one word.",
+   "verdict": "PASS",
+   "answer": "Dark",
+   "finish_reason": "stop",
+   "seconds": 0.858,
+   "reasons": []
+  },
+  {
+   "key": "08_small_text/invoice",
+   "role": "golden",
+   "prompt": "What is the invoice number shown in this receipt? Answer with the number only.",
+   "verdict": "PASS",
+   "answer": "7731",
+   "finish_reason": "stop",
+   "seconds": 0.923,
+   "reasons": []
+  },
+  {
+   "key": "08_small_text/total",
+   "role": "golden",
+   "prompt": "What is the TOTAL amount shown in this receipt? Answer with the number only.",
+   "verdict": "PASS",
+   "answer": "58.40",
+   "finish_reason": "stop",
+   "seconds": 0.873,
+   "reasons": []
+  },
+  {
+   "key": "09_color_blocks/colors",
+   "role": "golden",
+   "prompt": "Name the colors of the three squares from left to right, one word per color.",
+   "verdict": "PASS",
+   "answer": "Red, Green, Blue",
+   "finish_reason": "stop",
+   "seconds": 0.879,
+   "reasons": []
+  },
+  {
+   "key": "90_bad_blank/read",
+   "role": "control-self",
+   "prompt": "Read all the text in this image exactly as written. Reply with only the text, nothing else. If the image contains no text at all, reply exactly: NO TEXT",
+   "verdict": "PASS",
+   "answer": "NO TEXT",
+   "finish_reason": "stop",
+   "seconds": 0.856,
+   "reasons": []
+  },
+  {
+   "key": "91_bad_wrong_content/read",
+   "role": "control-self",
+   "prompt": "Read all the text in this image exactly as written. Reply with only the text, nothing else. If the image contains no text at all, reply exactly: NO TEXT",
+   "verdict": "PASS",
+   "answer": "PURPLE HORSE\n17",
+   "finish_reason": "stop",
+   "seconds": 0.912,
+   "reasons": []
+  }
+ ],
+ "controls": [
+  {
+   "key": "90_bad_blank vs 01_text_large/read",
+   "verdict": "PASS",
+   "answer": "NO TEXT",
+   "golden_reasons": [
+    "contains_all: missing ['ORANGE', 'TIGER', '42']",
+    "forbidden: answer claims ['NO TEXT']"
+   ]
+  },
+  {
+   "key": "91_bad_wrong_content vs 01_text_large/read",
+   "verdict": "PASS",
+   "answer": "PURPLE HORSE\n17",
+   "golden_reasons": [
+    "contains_all: missing ['ORANGE', 'TIGER', '42']",
+    "forbidden: answer claims ['PURPLE', 'HORSE', '17']"
+   ]
+  }
+ ],
+ "determinism": [
+  {
+   "key": "01_text_large/read",
+   "identical": true
+  }
+ ],
+ "judge_selftest": [
+  {
+   "probe": "01_text_large/read",
+   "answer": "ORANGE TIGER\n42",
+   "ok": true,
+   "detail": "judged PASS (want PASS) "
+  },
+  {
+   "probe": "01_text_large/read",
+   "answer": "orange tiger 42",
+   "ok": true,
+   "detail": "judged PASS (want PASS) "
+  },
+  {
+   "probe": "01_text_large/read",
+   "answer": "PURPLE HORSE 17",
+   "ok": true,
+   "detail": "judged FAIL (want FAIL) contains_all: missing ['ORANGE', 'TIGER', '42']; forbidden: answer claims ['PURPLE', 'HORSE', '17']"
+  },
+  {
+   "probe": "01_text_large/read",
+   "answer": "ORANGE TIGER 420",
+   "ok": true,
+   "detail": "judged FAIL (want FAIL) contains_all: missing ['42']"
+  },
+  {
+   "probe": "01_text_large/read",
+   "answer": "",
+   "ok": true,
+   "detail": "judged FAIL (want FAIL) empty answer"
+  },
+  {
+   "probe": "01_text_large/read",
+   "answer": "NO TEXT",
+   "ok": true,
+   "detail": "judged FAIL (want FAIL) contains_all: missing ['ORANGE', 'TIGER', '42']; forbidden: answer claims ['NO TEXT']"
+  },
+  {
+   "probe": "02_shapes_count/red_circles",
+   "answer": "3",
+   "ok": true,
+   "detail": "judged PASS (want PASS) "
+  },
+  {
+   "probe": "02_shapes_count/red_circles",
+   "answer": "There are three red circles.",
+   "ok": true,
+   "detail": "judged PASS (want PASS) "
+  },
+  {
+   "probe": "02_shapes_count/red_circles",
+   "answer": "4",
+   "ok": true,
+   "detail": "judged FAIL (want FAIL) number_equals: expected 3, first number in answer is 4.0"
+  },
+  {
+   "probe": "02_shapes_count/red_circles",
+   "answer": "I cannot count them.",
+   "ok": true,
+   "detail": "judged FAIL (want FAIL) number_equals: expected 3, first number in answer is None"
+  },
+  {
+   "probe": "04_list_view/items",
+   "answer": "APPLE\nBANANA\nCHERRY\nGRAPE",
+   "ok": true,
+   "detail": "judged PASS (want PASS) "
+  },
+  {
+   "probe": "04_list_view/items",
+   "answer": "BANANA\nAPPLE\nCHERRY\nGRAPE",
+   "ok": true,
+   "detail": "judged FAIL (want FAIL) ordered: 'BANANA' not found after the previous item (expected order ['APPLE', 'BANANA', 'CHERRY', 'GRAPE'])"
+  },
+  {
+   "probe": "05_table/lookup",
+   "answer": "PARIS",
+   "ok": true,
+   "detail": "judged FAIL (want FAIL) contains_all: missing ['OSLO']; forbidden: answer claims ['PARIS']"
+  },
+  {
+   "probe": "07_dark_theme/theme",
+   "answer": "Light",
+   "ok": true,
+   "detail": "judged FAIL (want FAIL) contains_any: none of ['DARK', 'BLACK'] present; forbidden: answer claims ['LIGHT']"
+  },
+  {
+   "probe": "08_small_text/total",
+   "answer": "58.40",
+   "ok": true,
+   "detail": "judged PASS (want PASS) "
+  },
+  {
+   "probe": "08_small_text/total",
+   "answer": "58.04",
+   "ok": true,
+   "detail": "judged FAIL (want FAIL) number_equals: expected 58.4, first number in answer is 58.04"
+  },
+  {
+   "probe": "09_color_blocks/colors",
+   "answer": "Blue, green, red",
+   "ok": true,
+   "detail": "judged FAIL (want FAIL) ordered: 'GREEN' not found after the previous item (expected order ['RED', 'GREEN', 'BLUE'])"
+  },
+  {
+   "probe": "90_bad_blank/read",
+   "answer": "NO TEXT",
+   "ok": true,
+   "detail": "judged PASS (want PASS) "
+  },
+  {
+   "probe": "90_bad_blank/read",
+   "answer": "ORANGE TIGER 42",
+   "ok": true,
+   "detail": "judged FAIL (want FAIL) contains_all: missing ['NO TEXT']; forbidden: answer claims ['ORANGE', 'TIGER', '42']"
+  }
+ ],
+ "notes": [],
+ "served_models": [
+  "$HOME/.local/share/llmctl/models/vision/gemma-3-4b-it-Q4_K_M.gguf",
+  "$HOME/.local/share/llmctl/models/vision/gemma-3-4b-it-Q4_K_M.gguf"
+ ],
+ "verdict": "PASS",
+ "exit_code": 0,
+ "counts": {
+  "pass": 21,
+  "fail": 0,
+  "undetermined": 0
+ }
+}

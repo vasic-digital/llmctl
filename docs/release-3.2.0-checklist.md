@@ -29,7 +29,7 @@ BOUNDED() { local t="$1"; shift; nice -n 19 ionice -c 3 systemd-run --user --sco
 | Local tags | `v2.0.0 v3.0.0 v3.0.1 v3.0.2 v3.1.0` (annotated; `v3.1.0` peels to `2467cc51c8dd6631062bf6121939360d68ec1ec9`) |
 | `main` at base | `8097ecc20dd3a5faa50609f950c6283293039cc1`; one commit after `v3.1.0` (`Auto-commit`) |
 | `git describe --tags --abbrev=0` | `v3.1.0`, so `create_release.sh` builds the changelog from `v3.1.0..HEAD` |
-| Remote reachability | see the table in section 3: all five reachable over ssh; four hold `v3.1.0`, **gitflic does not** |
+| Remote reachability | see the table in section 3: all five reachable over ssh; all five hold `v3.1.0` (re-checked 2026-10-13, `git ls-remote`: `f322aa0...` peeling to `2467cc5...` on every remote; gitflic earlier lacked it) |
 | Repo size | `git count-objects -vH`: loose 15.50 MiB, one pack of 100.36 MiB. Largest reachable blobs: `archive/llmctl.zip` 45,950,200 B, `vendor/llama.cpp/models/ggml-vocab-gemma-4.gguf` 15,776,467 B, then 12.2 MB, 10.9 MB, 7.8 MB, 6.8 MB. **No single blob is >= 100 MiB** |
 | Tools | `gh` at `/usr/bin/gh`, `glab` at `/snap/bin/glab` (snap-confined: files it reads must live under `$HOME`, not `/tmp`) |
 
@@ -122,13 +122,12 @@ Read-only `git ls-remote` measured 2026-10-12 from this host:
 | Remote (push URL) | Reachable | `refs/heads/main` | Latest tag present | Latest tag object / peeled commit |
 |---|---|---|---|---|
 | codeberg `ssh://git@codeberg.org/vasic-digital/llmctl.git` | yes | `8097ecc20dd3a5faa50609f950c6283293039cc1` | `v3.1.0` | `f322aa0279a310fc1c853dcd4be9802b8aa339dc` / `2467cc51c8dd6631062bf6121939360d68ec1ec9` |
-| gitflic `git@gitflic.ru:vasic-digital/llmctl.git` | yes (prints an ssh post-quantum KEX warning, harmless) | `8097ecc20dd3a5faa50609f950c6283293039cc1` | **`v3.0.2`; no `v3.1.0`** | `v3.0.2`: `651c7059f156e42e7dd8024c0c6d4891db46de1e` / `d206466519752e6811e4e5f2ac1ab227070773b9` |
+| gitflic `git@gitflic.ru:vasic-digital/llmctl.git` | yes (prints an ssh post-quantum KEX warning, harmless) | `8097ecc20dd3a5faa50609f950c6283293039cc1` | `v3.1.0` (was missing on 2026-10-12; present on 2026-10-13) | `f322aa0...` / `2467cc5...` (re-checked 2026-10-13 with `git ls-remote`) |
 | github `git@github.com:vasic-digital/llmctl.git` | yes | `8097ecc20dd3a5faa50609f950c6283293039cc1` | `v3.1.0` | `f322aa0...` / `2467cc5...` |
 | gitlab `git@gitlab.com:vasic-digital/llmctl.git` | yes | `8097ecc20dd3a5faa50609f950c6283293039cc1` | `v3.1.0` | `f322aa0...` / `2467cc5...` |
 | gitverse `git@gitverse.ru:vasic-digital/llmctl.git` | yes (the 3.1.0 `GATES.md` recorded it unreachable; it answered today) | `8097ecc20dd3a5faa50609f950c6283293039cc1` | `v3.1.0` | `f322aa0...` / `2467cc5...` |
 
-Fact to resolve: gitflic has `main` at `8097ecc` but no `v3.1.0` tag. Whether the tag push was never done or was rejected (for example by the size cap) is **UNKNOWN**; check before step 9
-with `git ls-remote gitflic 'refs/tags/*'` and, with the operator's go-ahead, try pushing only `v3.1.0` (an existing, never-moved tag, not a force) so gitflic is consistent before `v3.2.0`.
+Resolved 2026-10-13: `git ls-remote <remote> refs/tags/v3.1.0 'refs/tags/v3.1.0^{}'` shows `f322aa0279a310fc1c853dcd4be9802b8aa339dc` peeling to `2467cc51c8dd6631062bf6121939360d68ec1ec9` on **all five** remotes, gitflic included. The earlier gap (cause never established, UNKNOWN) is closed; no tag push is needed and G6 is moot. Re-run the `ls-remote` immediately before the release push, the remotes can change.
 
 Fast-forward check, run in step 7 (re-run immediately before the push; the remote can move):
 
@@ -249,7 +248,7 @@ inside the tracked-files archive SKIP (submodule content is not in it); report S
 | G3 | Archive-scan decision (allowlist line vs. untracking `archive/llmctl.zip`) | removing a shipped file, Helix 11.4.122 |
 | G4 | `git push <remote> main` to the five remotes | external, not undoable without force |
 | G5 | `git push <remote> refs/tags/v3.2.0` | a pushed tag must never be moved |
-| G6 | Pushing the missing `v3.1.0` tag to gitflic | touches a public remote, outside this release's content |
+| G6 | (moot since 2026-10-13: `v3.1.0` is present on gitflic) | - |
 | G7 | `gh release create` / `glab release create` | public, partly reversible |
 | G8 | Any `gh release edit/delete`, `glab release delete`, tag deletion, asset replacement | history-visible |
 | G9 | Manual-QA waiver wording (constitution gate 11.4.185 was operator-waived in 3.1.0, not satisfied) | must not be described as passed |
@@ -274,7 +273,7 @@ and any `git push` are all inside the gated set.
 | Content of the three feature branches in the CHANGELOG | not merged at preparation time; the lead writes the section after integration |
 | Which feature-specific tests exist and pass | unknown until the merge; step 3 requires listing and running them |
 | `challenges/scripts/*` (host-safety challenge named in the notes repo CLAUDE.md) | the directory does not exist in this repo at `8097ecc`; nothing to run |
-| gitflic missing `v3.1.0` | cause UNKNOWN, see section 3 |
+| gitflic missing `v3.1.0` | resolved 2026-10-13 (present, same peel); the cause of the earlier gap stays UNKNOWN |
 | Whether the scan is clean on the real 3.2.0 archive | only known after step 12 |
 | `llmctld` version `0.1.0` alignment | operator decision |
 | Reviewer identity | Helix 11.4.209 asks for the Fable model at xhigh effort; step 4 must name the reviewer and model |

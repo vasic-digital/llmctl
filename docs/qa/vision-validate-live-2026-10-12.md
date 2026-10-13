@@ -2,15 +2,17 @@
 
 | Field | Value |
 |---|---|
-| Revision | 1 |
+| Revision | 2 (2026-10-13: first live run recorded, see below) |
 | Date | 2026-10-12 |
-| Status | **PENDING - no real-model run has been performed** |
+| Status | **Partly answered: the `vision` profile PASSED one live run on 2026-10-13 (this host only); everything else below stays UNKNOWN** |
 | Subject | `llmctl vision validate` / `llmctl validate <profile>` against a real llama-server |
 
 ## What this document is
 
-The evidence page for the first live run of the model validation gate ([validation](../validation.md#model-validation-gate)). It exists so the gap is
-written down; it is **not** a pass.
+The evidence page for the first live run of the model validation gate ([validation](../validation.md#model-validation-gate)). It was written on 2026-10-12 so the gap was
+written down. **Update 2026-10-13:** the first live run of profile `vision` was made and PASSED (21 pass / 0 fail / 0 undetermined, this host only, single run;
+model sha256 `882e8d2db44dc554fb0ea5077cb7e4bc49e7342a1f0da57901c0802ea21a0863`, mmproj sha256 `8c0fb064b019a6972856aaae2c7e4792858af3ca4561be2dbf649123ba6c40cb`). The captured evidence and its honest limits are in
+[vision-live-2026-10-13](vision-live-2026-10-13/README.md). The text from here down is the 2026-10-12 state, kept as written so the history is visible.
 
 ## Honest status
 
@@ -26,9 +28,9 @@ written down; it is **not** a pass.
 
 | Question | Status |
 |---|---|
-| Does the `vision` profile (Gemma 3 4B + mmproj) pass all 18 probes, both golden-bad controls and the determinism repeat? | UNKNOWN |
-| Is the answer byte-identical on a repeated request with the real engine build (temperature 0, seed 42, top_k 1)? | UNKNOWN |
-| Do the probe prompts and `max_tokens` (200) fit the real model's answer style (no false FAIL from verbosity, no truncation)? | UNKNOWN |
+| Does the `vision` profile (Gemma 3 4B + mmproj) pass all probes, both golden-bad controls and the determinism repeat? | **Answered for this host, one run, 2026-10-13: yes** (21/0/0, determinism identical); other hosts UNKNOWN |
+| Is the answer byte-identical on a repeated request with the real engine build (temperature 0, seed 42, top_k 1)? | Answered once, 2026-10-13, this host: identical (`determinism` in `validate.out`) |
+| Do the probe prompts and `max_tokens` (200) fit the real model's answer style (no false FAIL from verbosity, no truncation)? | No false FAIL or truncation in that one run; UNKNOWN beyond it |
 | Do `chat-v1` / `coder-v1` pass on a real chat and a real reasoning model (budget 2048)? | UNKNOWN |
 | Does `embedding-v1` pass on a real embedding profile? | UNKNOWN - no catalog profile serves embeddings |
 | Do the typed-decision profiles have any validation? | No suite; reported UNDETERMINED by design (catalog `validation.reason`) |

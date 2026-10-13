@@ -80,9 +80,10 @@ relies on it. This is the *model* gate; the harness above verifies *llmctl*. Imp
 `lib/validate_judge.py` (runner and judge, stdlib only). Suites live in `validation/suites/<name>/`; the catalog names each profile's suites in
 `validation.suites` (a profile with none carries a non-empty `validation.reason` and is **never** reported validated).
 
-**Status of the evidence (read this first).** No real-model run of any suite has been performed in this repository yet. Everything below is proven
+**Status of the evidence (read this first).** One real-model run exists: profile `vision`, 2026-10-13, one host, PASS (21 pass / 0 fail / 0 undetermined; evidence
+[vision-live-2026-10-13](qa/vision-live-2026-10-13/README.md)). Nothing else has been run against a real model. Everything else below is proven
 against a fixture OpenAI-compatible server (`tests/fixtures/validation/fake_openai.py`, an answer table - not a model). What a real run still has to
-show is tracked in [vision-validate-live-2026-10-12](qa/vision-validate-live-2026-10-12.md) (status: PENDING / UNKNOWN).
+show is tracked in [vision-validate-live-2026-10-12](qa/vision-validate-live-2026-10-12.md) (remaining questions UNKNOWN).
 
 ### Commands and exit codes
 

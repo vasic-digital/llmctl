@@ -1,0 +1,6 @@
+2026-10-13T11:50:09Z gate PASS (mem=20438MiB psi=0.93/0.93 gpu=277MiB)
+2026-10-13T11:50:10Z watchdog running (pid 830668)
+2026-10-13T11:50:10Z starting: LLMCTL_VALIDATE_ON_START=0 nice -n 19 ionice -c 3 llmctl start vision
+2026-10-13T11:50:15Z waiting for http://127.0.0.1:8082/health (every 3s, max 180s)
+2026-10-13T11:50:21Z ready: {"status":"ok"}
+2026-10-13T11:50:43Z final: llmctl stop vision
