@@ -607,8 +607,8 @@ An UNDETERMINED run never replaces an earlier PASS record. Remedy: fix the cause
 
 ### How do I run the safe live test?
 
-Only with the operator's explicit go-ahead, on a quiet host, and once: `scripts/livetest/vision_live_test.sh` (profile `vision` only). It refuses with exit 3 when memory, PSI, VRAM or the running set is not quiet, starts a watchdog that stops the profile through `llmctl stop vision` when a limit is crossed (exit 4), runs `llmctl vision validate`, always stops the profile and checks the VRAM baseline.
-Evidence goes to `~/.cache/llmctl-livetest/<UTC timestamp>/`. Do not wrap it in retries and do not set `LT_HERMETIC` for a live run. Protocol and exit codes: [live-test-protocol](live-test-protocol.md). It has run live once, for `vision` on 2026-10-13 (PASS; [evidence](qa/vision-live-2026-10-13/README.md)).
+Only with the operator's explicit go-ahead, on a quiet host, and once: `scripts/livetest/vision_live_test.sh [--allow-large] [<profile>]` (default `vision`; the profile must be in the catalog, listed as fitting by `llmctl plan --json`, checksum-verified and have a validation suite; large profiles such as `vision-pro` also need `--allow-large`), or `scripts/livetest/run_profiles.sh` for an ordered list, one at a time. It refuses with exit 3 when the profile is not allowed or memory, PSI, VRAM or the running set is not quiet, starts a watchdog that stops the profile through `llmctl stop <profile>` when a limit is crossed (exit 4), runs the profile's validation (`llmctl vision validate` or `llmctl validate`), always stops the profile and checks the VRAM baseline.
+Evidence goes to `~/.cache/llmctl-livetest/<UTC timestamp>-<profile>/`. Do not wrap it in retries and do not set `LT_HERMETIC` for a live run. Protocol and exit codes: [live-test-protocol](live-test-protocol.md). It has run live once, for `vision` on 2026-10-13 (PASS; no other profile has run live yet; [evidence](qa/vision-live-2026-10-13/README.md)).
 
 ### Where is the systemd-oomd 50% rule?
 
