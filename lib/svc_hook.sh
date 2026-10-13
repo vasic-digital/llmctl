@@ -194,7 +194,7 @@ _hk_track_waiter() { ( umask 077; mkdir -p "$(dirname "$(_hk_waiter_file "$1")")
 # process. With <stop_pid> (the stopping unit's MAINPID) only the waiter of THAT pid is ours: two units of one profile share
 # the pid file, and a stopping loser must not kill (or untrack) the winner's waiter.
 _hk_kill_waiter() {
-  local f pid cmd want="${1} "
+  local f pid cmd want="${1}"
   [[ "${2:-}" =~ ^[0-9]+$ ]] && want="${1} ${2}"
   f="$(_hk_waiter_file "$1")"
   [[ -f "${f}" ]] || return 0
@@ -202,7 +202,7 @@ _hk_kill_waiter() {
   [[ "${pid}" =~ ^[0-9]+$ && "${pid}" -gt 1 ]] || { rm -f "${f}"; return 0; }
   cmd="$(tr '\0' ' ' < "/proc/${pid}/cmdline" 2>/dev/null || true)"
   case "${cmd}" in
-    *"_wait_register ${want}"*) kill "${pid}" 2>/dev/null || true; rm -f "${f}" ;;
+    *"_wait_register ${want} "*) kill "${pid}" 2>/dev/null || true; rm -f "${f}" ;;
     *"_wait_register ${1} "*) : ;;          # another unit's waiter: neither killed nor untracked
     *) rm -f "${f}" ;;                      # stale pid file
   esac
