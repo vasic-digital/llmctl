@@ -105,6 +105,13 @@ _hk_wait_register() {
   while (( waited < limit )); do
     kill -0 "${pid}" 2>/dev/null || { _hk_log "${name}: pid ${pid} exited before becoming ready; not registered"; return 1; }
     if _hk_ready "${port}" "${health}" "${proto}"; then
+      # Two units of one profile share this port: the answer may come from the OTHER unit's engine (we are the loser, still
+      # loading until our bind fails). Never publish over a live engine's row, or our later unregister (pid == ours) would
+      # delete the row of the engine that actually serves the port.
+      if portreg_row_live_other "${name}" "${pid}"; then
+        _hk_log "${name}: pid ${pid} not registered: the row is held by another live engine (a duplicate unit for this profile?)"
+        return 1
+      fi
       portreg_register "$@" || { _hk_log "${name}: registry register failed"; return 1; }
       _hk_log "${name}: registered port ${port} pid ${pid}"
       return 0
@@ -183,16 +190,22 @@ hk_gate() {
 # inside the unit's cgroup, after the engine is gone).
 _hk_waiter_file() { printf '%s/waiters/%s.pid' "${LLMCTL_RUNTIME_DIR:-${LLMCTL_STATE_DIR}/run}" "$1"; }
 _hk_track_waiter() { ( umask 077; mkdir -p "$(dirname "$(_hk_waiter_file "$1")")" && printf '%s\n' "$2" > "$(_hk_waiter_file "$1")" ) 2>/dev/null || true; }
-# _hk_kill_waiter <inst> - kills the tracked waiter ONLY when /proc says it is our `_wait_register <inst>` process.
+# _hk_kill_waiter <inst> [<stop_pid>] - kills the tracked waiter ONLY when /proc says it is our `_wait_register <inst>`
+# process. With <stop_pid> (the stopping unit's MAINPID) only the waiter of THAT pid is ours: two units of one profile share
+# the pid file, and a stopping loser must not kill (or untrack) the winner's waiter.
 _hk_kill_waiter() {
-  local f pid cmd
+  local f pid cmd want="${1} "
+  [[ "${2:-}" =~ ^[0-9]+$ ]] && want="${1} ${2}"
   f="$(_hk_waiter_file "$1")"
   [[ -f "${f}" ]] || return 0
   pid="$(head -1 "${f}" 2>/dev/null || true)"
-  rm -f "${f}"
-  [[ "${pid}" =~ ^[0-9]+$ && "${pid}" -gt 1 ]] || return 0
+  [[ "${pid}" =~ ^[0-9]+$ && "${pid}" -gt 1 ]] || { rm -f "${f}"; return 0; }
   cmd="$(tr '\0' ' ' < "/proc/${pid}/cmdline" 2>/dev/null || true)"
-  case "${cmd}" in *"_wait_register ${1} "*) kill "${pid}" 2>/dev/null || true ;; esac
+  case "${cmd}" in
+    *"_wait_register ${want}"*) kill "${pid}" 2>/dev/null || true; rm -f "${f}" ;;
+    *"_wait_register ${1} "*) : ;;          # another unit's waiter: neither killed nor untracked
+    *) rm -f "${f}" ;;                      # stale pid file
+  esac
 }
 
 hk_register() {
@@ -292,7 +305,7 @@ hk__wait_register() {
 # The gateway publishes itself as "decide-gateway" (Go side); "gateway" is its
 # port-hold name, so both rows are cleared when asked to unregister "gateway".
 hk_unregister() {
-  _hk_kill_waiter "$1"
+  _hk_kill_waiter "$1" "${MAINPID:-}"
   portreg_unregister "$1" "${MAINPID:-}"
   [[ "$1" == "gateway" ]] && portreg_unregister decide-gateway "${MAINPID:-}"
   return 0
