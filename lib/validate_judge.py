@@ -543,7 +543,8 @@ def run(args):
         return finish()
     report["served_models"] = ids
     if args.expect_model:
-        if not any(args.expect_model in i for i in ids):
+        # exact identity: the served id IS the expected name, or is a path whose basename is (llama-server serves the path)
+        if not any(i == args.expect_model or os.path.basename(i) == args.expect_model for i in ids):
             out("[UNDETERMINED] endpoint serves %s, not the expected model %s" % (ids, args.expect_model))
             counts["undetermined"] += 1
             return finish()

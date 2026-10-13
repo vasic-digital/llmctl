@@ -138,7 +138,9 @@ _val_port() {
   if [[ ! -f "${f}" ]]; then
     # A unit started by systemd (boot, Restart=, restart) may have no reservation: lib/svc_hook.sh's waiter passes the
     # port of THE started unit so validation probes it instead of starting a second copy.
-    [[ "${LLMCTL_VALIDATE_ATTACH_PORT:-}" =~ ^[0-9]+$ ]] && { echo "${LLMCTL_VALIDATE_ATTACH_PORT}"; return 0; }
+    # honoured ONLY with the matching profile marker (set together by the waiter): a stray exported port must never
+    # redirect the probes of another profile
+    [[ "${LLMCTL_VALIDATE_ATTACH_PROFILE:-}" == "$1" && "${LLMCTL_VALIDATE_ATTACH_PORT:-}" =~ ^[0-9]+$ ]] && { echo "${LLMCTL_VALIDATE_ATTACH_PORT}"; return 0; }
     return 1
   fi
   port="$(sed -n 's/^port=//p' "${f}" | head -1)"
