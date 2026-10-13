@@ -355,5 +355,70 @@ finally:
     g.read = real_read
 check("L8 kill_victim never reads guard.log / the victim state file", not any(("guard-victim" in x or x.endswith("guard.log")) for x in reads), repr(reads[:3]))
 
+# ---------------------------------------------------------------- cheap cgroup-level storm rule: tasks_storm (O(cgroups), no per-pid walk)
+def mk_cgroups(root, counts):
+    """counts: {'app.slice/x.scope': 6182, ...}; parents get pids.current = sum of descendants like the kernel does."""
+    tot = {}
+    for rel, n in counts.items():
+        parts = rel.split("/")
+        for i in range(1, len(parts) + 1):
+            tot["/".join(parts[:i])] = tot.get("/".join(parts[:i]), 0) + n
+    for rel, n in tot.items():
+        os.makedirs(os.path.join(root, rel), exist_ok=True)
+        open(os.path.join(root, rel, "pids.current"), "w").write("%d\n" % n)
+    return root
+
+
+with tempfile.TemporaryDirectory() as cg:
+    mk_cgroups(cg, {"app.slice/tmx-notes-8580.scope": 6182, "app.slice/app-llmctl.slice/llama.scope": 3000,
+                    "app.slice/tmx-small.scope": 600, "background.slice/job.service": 40})
+    os.makedirs(os.path.join(cg, "app.slice", "garbage.scope")); open(os.path.join(cg, "app.slice", "garbage.scope", "pids.current"), "w").write("not-a-number")
+    os.makedirs(os.path.join(cg, "app.slice", "nofile.scope"))
+    st_ = g.cgroup_storms(cg, 2500) if hasattr(g, "cgroup_storms") else None
+    names = [x["cg"] for x in (st_ or [])]
+    check("TS1 cgroup_storms: scopes over the threshold, largest first, parent slices not reported, garbage/missing pids.current tolerated",
+          names == ["app.slice/tmx-notes-8580.scope", "app.slice/app-llmctl.slice/llama.scope"], repr(st_))
+    check("TS1b cgroup_storms of a missing cgroup root is empty", hasattr(g, "cgroup_storms") and g.cgroup_storms(os.path.join(cg, "nope"), 1) == [])
+
+STORM_CG = "app.slice/tmx-notes-8580.scope"
+OTHER_CG = "app.slice/bounded-run-big.scope"
+storm_grp = [proc(B + 546537 + i, "bash" if i == 0 else "sleep", B + 546537, 8, STORM_CG, ppid=B + 546537 if i else 1, cmd=["bash", "p1.sh"]) for i in range(60)]
+other_grp = [proc(B + 700000 + i, "python3", B + 700000, 4000, OTHER_CG, ppid=B + 700000 if i else 1) for i in range(5)]   # costs far more than the storm
+storm_tbl2 = table(*guard_ancestry(), *storm_grp, *other_grp)
+
+
+def storm_run(psi, counts, env=None, tbl=storm_tbl2, pre={"streak": 1}):
+    cg = tempfile.mkdtemp(prefix="hscg")
+    mk_cgroups(cg, counts)
+    calls, lines, d = run_main(psi, tbl, extra=["--cgroup-root", cg], env=env, pre_state=pre)
+    wk = [_json.loads(l) for l in lines if '"would-kill"' in l]
+    return calls, lines, d, (wk[0] if wk else {})
+
+
+calls, lines, d, rec = storm_run(BAD, {STORM_CG: 6182, OTHER_CG: 5})
+check("TS2 tasks_storm: a >2500-task scope under PSI-full is the would-kill candidate even though another group costs more",
+      rec.get("victim", {}).get("pgrp") == B + 546537 and any(r.startswith("tasks_storm") for r in rec.get("reasons", [])) and rec.get("rule") == "tasks_storm", repr(rec.get("victim", {}).get("pgrp")) + repr(rec.get("reasons")))
+calls, lines, d, rec = storm_run(BAD, {STORM_CG: 6182, OTHER_CG: 5}, env={"HOSTSAFETY_TASKS_STORM": "10000"})
+check("TS3 HOSTSAFETY_TASKS_STORM raises the threshold: no tasks_storm, cost ranking (the other group) wins",
+      rec.get("victim", {}).get("pgrp") == B + 700000 and not any(r.startswith("tasks_storm") for r in rec.get("reasons", [])), repr(rec.get("reasons")))
+calls, lines, d, rec = storm_run(CALM, {STORM_CG: 6182, OTHER_CG: 5}, pre={"streak": 5})
+check("TS4 big scope WITHOUT PSI pressure: no tasks_storm, no /proc walk, nothing logged", calls == [] and lines == [], repr((calls, lines)))
+st_status = _json.load(open(os.path.join(d, "log", "guard.status")))
+check("TS4b heartbeat reports the largest scope task count (cheap observability)", st_status.get("max_scope_tasks") == 6182 and st_status.get("max_scope_cg") == STORM_CG, repr(st_status))
+# same protections: the storm scope's group holds a protected process => never chosen as a group; no unsafe fallback into it
+prot_grp = [proc(B + 546537, "bash", B + 546537, 8, STORM_CG, ppid=1, cmd=["bash", "p1.sh"]), proc(B + 546538, "claude", B + 546537, 900, STORM_CG, ppid=B + 546537)] + \
+           [proc(B + 546539 + i, "sleep", B + 546537, 8, STORM_CG, ppid=B + 546537) for i in range(5)]
+calls, lines, d, rec = storm_run(BAD, {STORM_CG: 6182, OTHER_CG: 5}, tbl=table(*guard_ancestry(), *prot_grp, *other_grp))
+vic = rec.get("victim", {})
+check("TS5 storm scope sharing a process group with claude: the group is NEVER the victim (protections unchanged)",
+      vic.get("kind") != "group" or vic.get("pgrp") != B + 546537, repr(vic.get("pgrp")))
+check("TS5b ... and no claude pid is ever in the victim", B + 546538 not in (vic.get("pids_first", []) + vic.get("pids_last", [])))
+foreign = [dict(p, uid=4242) for p in storm_grp]
+calls, lines, d, rec = storm_run(BAD, {STORM_CG: 6182, OTHER_CG: 5}, tbl=table(*guard_ancestry(), *foreign, *other_grp))
+check("TS6 storm scope owned by another uid is never the victim", rec.get("victim", {}).get("pgrp") != B + 546537, repr(rec.get("victim", {}).get("pgrp")))
+gnome = [dict(p, cg="app.slice/app-gnome-shell-1.scope", name="gnome-shell") for p in storm_grp]
+calls, lines, d, rec = storm_run(BAD, {"app.slice/app-gnome-shell-1.scope": 6182, OTHER_CG: 5}, tbl=table(*guard_ancestry(), *gnome, *other_grp))
+check("TS7 storm scope that is protected by cgroup/name (gnome-shell) is never the victim", rec.get("victim", {}).get("pgrp") != B + 546537, repr(rec.get("victim", {}).get("pgrp")))
+
 print("RESULT: %d failed" % len(fails))
 sys.exit(1 if fails else 0)

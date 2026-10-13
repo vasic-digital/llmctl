@@ -49,6 +49,7 @@ DEF = {
     "CONSECUTIVE": 2,        # consecutive triggered runs before acting
     "COOLDOWN_S": 20,        # no second action within this window
     "PROC_WEIGHT_KB": 2048,  # each process adds this much "cost" (fork storms)
+    "TASKS_STORM": 2500,     # tasks_storm: one user scope / group with more tasks than this (while PSI full >= PSI_FULL) is the victim candidate
     "VICTIM_FILE_MAX_BYTES": 1048576,  # cap of the ARM=1 forensic victim state file (guard-victim.json)
     "TMPFS_WARN_PCT": 60.0,  # /tmp (tmpfs = RAM) fuller than this: report-only event (docs/host-safety.md, GNOME "Application Stopped")
 }
@@ -299,6 +300,35 @@ def select_victim(procs, my_uid, self_pid, only_cg_re=None, proc_weight_kb=DEF["
 
 
 # ---------------------------------------------------------------------------
+def cgroup_storms(root, threshold, slices=("app.slice", "background.slice"), depth=2):
+    """O(cgroups) storm detector: read pids.current of the user manager's app.slice / background.slice descendants (never a
+    per-pid /proc walk).  Returns [{"cg": 'app.slice/x.scope', "pids": n}] for every cgroup with more than `threshold` tasks,
+    largest first.  The slices themselves are never reported, and a cgroup is dropped when a descendant is also over the
+    threshold (pids.current of a parent includes its children: report the deepest, i.e. the actual storm)."""
+    found = {}
+
+    def walk(rel, level):
+        try:
+            with os.scandir(os.path.join(root, rel)) as it:
+                kids = sorted(e.name for e in it if e.is_dir(follow_symlinks=False))
+        except OSError:
+            return
+        for k in kids:
+            r = rel + "/" + k
+            try:
+                n = int(read(os.path.join(root, r, "pids.current")).strip())
+            except ValueError:
+                n = 0
+            if n > threshold:
+                found[r] = n
+            if level < depth:
+                walk(r, level + 1)
+    for sl in slices:
+        walk(sl, 1)
+    deepest = [r for r in found if not any(o != r and o.startswith(r + "/") for o in found)]
+    return sorted(({"cg": r, "pids": found[r]} for r in deepest), key=lambda x: (-x["pids"], x["cg"]))
+
+
 def psi(path):
     """parse /proc/pressure/memory; tolerant of missing file, odd lines, extra fields.  Returns {} when unavailable."""
     out = {}
@@ -475,6 +505,7 @@ def main(argv=None):
     ap.add_argument("--proc-root", default="/proc")
     ap.add_argument("--psi-file", default="/proc/pressure/memory")
     ap.add_argument("--meminfo", default="/proc/meminfo")
+    ap.add_argument("--cgroup-root", default=None, help="user manager cgroup dir (default /sys/fs/cgroup/user.slice/user-UID.slice/user@UID.service)")
     ap.add_argument("--state-file", default=None)
     ap.add_argument("--log-file", default=None)
     ap.add_argument("--select-only", action="store_true", help="print the victim selection and exit")
@@ -511,8 +542,13 @@ def main(argv=None):
     some10 = p.get("some", {}).get("avg10", 0.0)
     swapf = swap_free_pct(a.meminfo)
     why = []
+    cg_root = a.cgroup_root or "/sys/fs/cgroup/user.slice/user-%d.slice/user@%d.service" % (a.uid, a.uid)
+    storms = cgroup_storms(cg_root, cfg("TASKS_STORM", env))
+    top = storms[0] if storms else None
     if full10 >= cfg("PSI_FULL", env):
         why.append("psi_full_avg10=%.2f>=%.1f" % (full10, cfg("PSI_FULL", env)))
+        for sg in storms[:3]:      # only while PSI full is high: a big scope alone (a build, a test fleet) is not an emergency
+            why.append("tasks_storm=%s:%d>%d" % (sg["cg"], sg["pids"], cfg("TASKS_STORM", env)))
     if swapf is not None and swapf <= cfg("SWAP_FREE_PCT", env) and some10 >= cfg("PSI_SOME", env):
         why.append("swap_free=%.1f%%<=%.1f%%&psi_some_avg10=%.2f>=%.1f" % (swapf, cfg("SWAP_FREE_PCT", env), some10, cfg("PSI_SOME", env)))
     if a.force_trigger:
@@ -526,6 +562,8 @@ def main(argv=None):
     now = time.time()
     tmpp = tmpfs_used_pct(a.tmp_dir, a.tmpfs_used_pct_fixture)
     metrics = {"psi_full_avg10": full10, "psi_some_avg10": some10, "swap_free_pct": swapf, "tmpfs_used_pct": tmpp}
+    # observability only: the largest scope above the storm threshold (None when no scope exceeds it)
+    status_extra = {"max_scope_tasks": top["pids"] if top else None, "max_scope_cg": top["cg"] if top else None}
     # report-only: a RAM-backed /tmp that is filling up charges its writers' cgroups (unreclaimable) - one event per crossing, never a kill
     if tmpp is not None and tmpp > cfg("TMPFS_WARN_PCT", env):
         if not st.get("tmpfs_high_logged"):
@@ -537,7 +575,7 @@ def main(argv=None):
     # heartbeat: a silent guard is indistinguishable from a dead one (11.4.201)
     _save(os.path.join(os.path.dirname(log_file), "guard.status") if log_file else state_file + ".status",
           {"last_run": time.strftime("%Y-%m-%dT%H:%M:%S%z"), "armed": armed, "streak": st["streak"],
-           "triggered": bool(why), "psi_available": psi_ok, **metrics})
+           "triggered": bool(why), "psi_available": psi_ok, **status_extra, **metrics})
     if not psi_ok and not st.get("psi_missing_logged"):
         log(log_file, {"event": "psi-unavailable", "psi_file": a.psi_file,
                        "note": "memory pressure cannot be read: no PSI rule can fire, the guard is blind until the file is readable"})
@@ -557,13 +595,23 @@ def main(argv=None):
     # the /proc walk (~0.8 s with ~7,000 processes) happens ONLY here: PSI said "sustained pressure" and no cooldown is running.
     # Every healthy / building / cooldown run returns above without touching /proc/<pid> (incident 2026-10-13).
     procs = scan(a.proc_root)
-    v, ev = select_victim(procs, a.uid, a.self_pid, only, cfg("PROC_WEIGHT_KB", env), own_pgrp=own_pgrp)
+    v, ev, rule = None, {}, "psi"
+    if not only and any(r.startswith("tasks_storm") for r in why):
+        # group-size rule: the storm scope itself is the preferred candidate.  The scope only NARROWS which processes may anchor
+        # a victim; every eligibility / protection check (uid, protected comm, cgroup allowlist, own group) is unchanged.
+        for sg in storms[:3]:
+            v, ev = select_victim(procs, a.uid, a.self_pid, "^" + re.escape(sg["cg"]) + "$", cfg("PROC_WEIGHT_KB", env), own_pgrp=own_pgrp)
+            if v:
+                rule = "tasks_storm"
+                break
+    if not v:
+        v, ev = select_victim(procs, a.uid, a.self_pid, only, cfg("PROC_WEIGHT_KB", env), own_pgrp=own_pgrp)
     if not v:
         log(log_file, {"event": "no-killable-victim", "reasons": why, "evidence": ev,
                        "note": ev.get("storm_in_protected_group", "no eligible process"), **metrics})
         _save(state_file, st)
         return 0
-    rec = {"event": "would-kill" if not armed else "kill", "armed": armed, "reasons": why,
+    rec = {"event": "would-kill" if not armed else "kill", "armed": armed, "reasons": why, "rule": rule,
            "victim": compact_victim(v), "evidence": ev, **metrics}
     if armed:
         write_victim_state(os.path.join(os.path.dirname(log_file), "guard-victim.json"), v, cfg("VICTIM_FILE_MAX_BYTES", env))
