@@ -280,6 +280,7 @@ fastest path to a running model.
 | [`docs/release-process.md`](docs/release-process.md) | The full GitHub+GitLab release procedure: dry-run, submodule preflight, archive build, idempotent per-forge retry |
 | [`docs/release-3.2.0-checklist.md`](docs/release-3.2.0-checklist.md) | The 3.2.0 release checklist: gates, merge order, version bump, tag and publication steps |
 | [`docs/release-3.2.1-checklist.md`](docs/release-3.2.1-checklist.md) | The 3.2.1 (documentation and help-text correction) release checklist |
+| [`docs/release-3.2.2-checklist.md`](docs/release-3.2.2-checklist.md) | The 3.2.2 release checklist (prepared, not executed against a remote) |
 | [`docs/scripts/bump_version.md`](docs/scripts/bump_version.md) | `scripts/release/bump_version.sh`: what it rewrites for a version bump and what stays manual |
 | [`docs/ports.md`](docs/ports.md) | Every port llmctl uses (generated from the catalog), the `LLMCTL_PORT_<PROFILE>` override named in the port-conflict message, fixed versus dynamic assignment, collisions seen on a real host |
 | [`docs/hardware-tiers.md`](docs/hardware-tiers.md) | The `below-minimum`/`baseline`/`workstation`/`datacenter` tier classification rules, plus decision-profile tiers and multi-instance capacity semantics |
