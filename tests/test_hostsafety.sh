@@ -53,6 +53,14 @@ assert_file_contains "${TEST_TMP}/c/systemd/user/app.slice.d/10-hostsafety.conf"
 assert_eq "755" "$(stat -c %a "${TEST_TMP}/b/bounded-run")" "bounded-run installed executable"
 assert_eq "600" "$(stat -c %a "${TEST_TMP}/c/hostsafety/guard.env")" "guard.env is 0600"
 assert_file_contains "${TEST_TMP}/c/hostsafety/guard.env" "HOSTSAFETY_GUARD_ARM=0" "guard ships DISARMED (dry-run)"
+# guard service unit: the guard must be a LOW-cost citizen (incident 2026-10-13: ~8-10% of a core under a 6,950-process storm)
+GUNIT="${TEST_TMP}/c/systemd/user/hostsafety-guard.service"
+for kv in "Nice=19" "IOSchedulingClass=idle" "CPUWeight=10" "MemoryMax=256M" "TimeoutStartSec=15" "Type=oneshot"; do
+  assert_file_contains "${GUNIT}" "${kv}" "guard service unit carries ${kv}"
+done
+assert_eq "1" "$(grep -c '^ExecStart=' "${GUNIT}")" "guard service unit has exactly one ExecStart"
+assert_eq "0" "$(grep -c '^RuntimeMaxSec=' "${GUNIT}" || true)" "no RuntimeMaxSec (ignored for Type=oneshot; TimeoutStartSec is the only real wall-clock cap)"
+assert_eq "0" "$(grep -c '^TimeoutStartSec=20' "${GUNIT}" || true)" "TimeoutStartSec is 15, not the old 20"
 sed -i 's/ARM=0/ARM=1/' "${TEST_TMP}/c/hostsafety/guard.env"
 inst2="$(inst_env "${HS}/install.sh")"
 assert_eq "0" "$(printf '%s\n' "${inst2}" | grep -c 'wrote ' || true)" "second install changes nothing (idempotent)"
@@ -197,7 +205,12 @@ assert_contains "$(tail -1 "${TEST_TMP}/glog/guard.log")" 'swap_free=' "swap exh
 # armed against a fixture victim: re-validation against the REAL /proc finds nothing => no signal sent
 rm -f "${TEST_TMP}/guard.state"; : >"${TEST_TMP}/glog/guard.log"
 run_guard "${TEST_TMP}/psi_bad" "${TEST_TMP}/mi_ok" "${R2}" 1; run_guard "${TEST_TMP}/psi_bad" "${TEST_TMP}/mi_ok" "${R2}" 1
-assert_contains "$(tail -1 "${TEST_TMP}/glog/guard.log")" '"already-gone"' "armed kill re-validates against live /proc before signalling"
+assert_contains "$(tail -1 "${TEST_TMP}/glog/guard.log")" 'refused-fixture-proc-root' "armed guard with a fixture --proc-root refuses to signal (a fixture pid is never a real pid)"
+rm -f "${TEST_TMP}/guard.state"; : >"${TEST_TMP}/glog/guard.log"
+export HOSTSAFETY_TEST_ALLOW_FIXTURE_PROC=1
+run_guard "${TEST_TMP}/psi_bad" "${TEST_TMP}/mi_ok" "${R2}" 1; run_guard "${TEST_TMP}/psi_bad" "${TEST_TMP}/mi_ok" "${R2}" 1
+unset HOSTSAFETY_TEST_ALLOW_FIXTURE_PROC
+assert_contains "$(tail -1 "${TEST_TMP}/glog/guard.log")" 'revalidation-failed' "with the explicit test hook the armed kill path re-validates against the fixture proc root (fixture has no starttimes: signal withheld; pids above pid_max anyway)"
 
 # --- 4b. guard: fixture suite (T1 storm-in-claude's-group, kill-path re-validation, pgid reuse) + mutation proof ----
 fx_out="$(python3 -I "${FIX}" "${GUARD}" 2>&1)" && fx_rc=0 || fx_rc=$?
@@ -231,6 +244,19 @@ mutate "protected-name check removed" "S3" 'return bool(PROTECTED_COMM.match(p["
 mutate "argv[0] basename protection reintroduced (spoof)" "S2" 'return bool(PROTECTED_COMM.match(p["name"]))' 'return bool(PROTECTED_COMM.match(p["name"]) or (p["cmd"] and PROTECTED_COMM.match(os.path.basename(p["cmd"][0]))))'
 mutate "dominance rule removed (T1b)" "T1b" 'if dom and dom["storm_kb"] > DOMINANCE * best_cost and' 'if False and'
 mutate "protected cgroup regex made imprecise again ([^/]*gnome[^/]*)" "S4" 'app-gnome-shell[^/]*|gnome-shell[^/]*' '[^/]*gnome[^/]*|gnome-shell[^/]*'
+mutate "m10 storm victim accepted without the cost-fraction check" "TS8" 'if pv is None or sv["cost_kb"] >= frac * pv["cost_kb"]:' 'if True:'
+mutate "m11 rotation shifts/deletes archives before the new one is written" "R7" '    tmp = "%s.1.gz.%d.tmp" % (path, os.getpid())
+    try:' '    tmp = "%s.1.gz.%d.tmp" % (path, os.getpid())
+    for i in range(keep, 0, -1):
+        _s = "%s.%d.gz" % (path, i)
+        if os.path.exists(_s):
+            os.unlink(_s)
+    try:'
+mutate "m12 storm loop stops at the first rejected scope" "TS11" '                rejected.append({"cgroup": sg["cg"], "storm_cost_kb": sv["cost_kb"], "psi_cost_kb": pv["cost_kb"], "min_cost_frac": frac})' '                rejected.append({"cgroup": sg["cg"], "storm_cost_kb": sv["cost_kb"], "psi_cost_kb": pv["cost_kb"], "min_cost_frac": frac}); break'
+mutate "m13 archive verified by length only" "R9" '        if not _same_content(tmp, path):' '        if os.path.getsize(path) > 0 and False:'
+mutate "m14 no rotation flock" "R10" '            fcntl.flock(lockf, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:' '            pass
+        except OSError:'
 
 # --- 5. podman audit (fake podman) ---------------------------------------------------------
 cat >"${TEST_TMP}/fakepodman" <<'FP'

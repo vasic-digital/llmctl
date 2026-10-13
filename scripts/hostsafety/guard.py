@@ -35,9 +35,12 @@ Safety rules (constitution 11.4.201 / 11.4.263 / 12):
 """
 import argparse
 import fcntl
+import gzip
 import json
+import math
 import os
 import re
+import shutil
 import signal
 import sys
 import time
@@ -49,6 +52,11 @@ DEF = {
     "CONSECUTIVE": 2,        # consecutive triggered runs before acting
     "COOLDOWN_S": 20,        # no second action within this window
     "PROC_WEIGHT_KB": 2048,  # each process adds this much "cost" (fork storms)
+    "TASKS_STORM": 2500,     # tasks_storm: one user scope / group with more tasks than this (while PSI full >= PSI_FULL) is the victim candidate
+    "STORM_MIN_COST_FRAC": 0.5,  # a tasks_storm victim must cost >= this fraction of the PSI-ranked best victim, else the PSI pick stands
+    "LOG_MAX_BYTES": 5242880,  # guard.log is rotated (gzip) when it exceeds this
+    "LOG_KEEP": 3,           # number of gz archives kept: guard.log.1.gz (newest) .. guard.log.N.gz
+    "VICTIM_FILE_MAX_BYTES": 1048576,  # cap of the ARM=1 forensic victim state file (guard-victim.json)
     "TMPFS_WARN_PCT": 60.0,  # /tmp (tmpfs = RAM) fuller than this: report-only event (docs/host-safety.md, GNOME "Application Stopped")
 }
 
@@ -298,6 +306,35 @@ def select_victim(procs, my_uid, self_pid, only_cg_re=None, proc_weight_kb=DEF["
 
 
 # ---------------------------------------------------------------------------
+def cgroup_storms(root, threshold, slices=("app.slice", "background.slice"), depth=2):
+    """O(cgroups) storm detector: read pids.current of the user manager's app.slice / background.slice descendants (never a
+    per-pid /proc walk).  Returns [{"cg": 'app.slice/x.scope', "pids": n}] for every cgroup with more than `threshold` tasks,
+    largest first.  The slices themselves are never reported, and a cgroup is dropped when a descendant is also over the
+    threshold (pids.current of a parent includes its children: report the deepest, i.e. the actual storm)."""
+    found = {}
+
+    def walk(rel, level):
+        try:
+            with os.scandir(os.path.join(root, rel)) as it:
+                kids = sorted(e.name for e in it if e.is_dir(follow_symlinks=False))
+        except OSError:
+            return
+        for k in kids:
+            r = rel + "/" + k
+            try:
+                n = int(read(os.path.join(root, r, "pids.current")).strip())
+            except ValueError:
+                n = 0
+            if n > threshold:
+                found[r] = n
+            if level < depth:
+                walk(r, level + 1)
+    for sl in slices:
+        walk(sl, 1)
+    deepest = [r for r in found if not any(o != r and o.startswith(r + "/") for o in found)]
+    return sorted(({"cg": r, "pids": found[r]} for r in deepest), key=lambda x: (-x["pids"], x["cg"]))
+
+
 def psi(path):
     """parse /proc/pressure/memory; tolerant of missing file, odd lines, extra fields.  Returns {} when unavailable."""
     out = {}
@@ -342,20 +379,169 @@ def tmpfs_used_pct(path="/tmp", fixture=None):
 def cfg(name, env):
     try:
         t = type(DEF[name])
-        return t(env.get("HOSTSAFETY_" + name, DEF[name]))
+        val = t(env.get("HOSTSAFETY_" + name, DEF[name]))
+        if t is float and not math.isfinite(val):       # "nan"/"inf" parse as floats: never let them into a comparison or a record
+            return DEF[name]
+        return val
     except ValueError:
         return DEF[name]
 
 
-def log(logfile, rec):
+LOG_LIMITS = {"max_bytes": DEF["LOG_MAX_BYTES"], "keep": DEF["LOG_KEEP"]}     # main() overrides from HOSTSAFETY_LOG_*
+
+
+def _same_content(gz_path, src_path, chunk=1 << 20):
+    """True iff gz_path decompresses to exactly the bytes of src_path (chunked, bounded memory)."""
+    with gzip.open(gz_path, "rb") as g1, open(src_path, "rb") as f1:
+        while True:
+            a = g1.read(chunk)
+            b = f1.read(len(a) if a else 1)
+            if a != b:
+                return False
+            if not a:
+                return True
+
+
+def rotate_log(path, max_bytes, keep):
+    """size-capped rotation without logrotate: path -> path.1.gz -> .2.gz ... .keep.gz (oldest dropped).  Streams through gzip
+    (a 100 MB legacy log never sits in memory).  The new archive is written to a pid-unique tmp file COMPLETELY and verified
+    (its decompressed bytes must equal the source, compared chunk by chunk) BEFORE any existing archive is shifted or deleted;
+    on any failure the tmp is removed and every archive and the live log stay as they were.  A non-blocking flock on
+    path.lock makes overlapping runs skip (a systemd oneshot cannot overlap itself, a manual run can).  Best effort."""
+    try:
+        if keep < 1 or os.path.getsize(path) <= max_bytes:
+            return
+    except OSError:
+        return
+    lockf = None
+    tmp = "%s.1.gz.%d.tmp" % (path, os.getpid())
+    try:
+        lockf = os.fdopen(os.open(path + ".lock", os.O_WRONLY | os.O_CREAT, 0o600), "a")
+        try:
+            fcntl.flock(lockf, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            lockf.close()
+            return                      # another rotation is running: skip this tick
+        if os.path.getsize(path) <= max_bytes:
+            return                      # the other run already rotated
+        os.close(os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600))   # create private; gzip.open keeps the mode
+        with open(path, "rb") as fi, gzip.open(tmp, "wb", compresslevel=1) as fo:
+            shutil.copyfileobj(fi, fo, 1 << 20)
+        if not _same_content(tmp, path):
+            raise OSError("archive verification failed: content differs")
+        oldest = "%s.%d.gz" % (path, keep)
+        if os.path.exists(oldest):
+            os.unlink(oldest)
+        for i in range(keep - 1, 0, -1):
+            src = "%s.%d.gz" % (path, i)
+            if os.path.exists(src):
+                os.replace(src, "%s.%d.gz" % (path, i + 1))
+        os.replace(tmp, path + ".1.gz")
+        os.unlink(path)
+    except (OSError, EOFError, ValueError):
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+    finally:
+        if lockf is not None and not lockf.closed:
+            lockf.close()
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+
+
+def _finite(x):
+    """records must be strict JSON: non-finite floats (nan/inf from a hostile PSI file or env) become null."""
+    if isinstance(x, float):
+        return x if math.isfinite(x) else None
+    if isinstance(x, dict):
+        return {k: _finite(val) for k, val in x.items()}
+    if isinstance(x, (list, tuple)):
+        return [_finite(val) for val in x]
+    return x
+
+
+def log(logfile, rec, max_bytes=None, keep=None):
+    rec = _finite(rec)
     rec["ts"] = time.strftime("%Y-%m-%dT%H:%M:%S%z")
-    line = json.dumps(rec, sort_keys=True)
+    line = json.dumps(rec, sort_keys=True, allow_nan=False)
     print(line, flush=True)
     if logfile:
         try:
             os.makedirs(os.path.dirname(logfile), exist_ok=True)
-            with open(logfile, "a") as f:
+            rotate_log(logfile, LOG_LIMITS["max_bytes"] if max_bytes is None else max_bytes,
+                       LOG_LIMITS["keep"] if keep is None else keep)
+            fd = os.open(logfile, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
+            with os.fdopen(fd, "a") as f:
+                os.fchmod(f.fileno(), 0o600)       # an older 0644/0664 log becomes private on its next write
                 f.write(line + "\n")
+        except OSError:
+            pass
+
+
+LOG_PIDS_EDGE = 20       # a logged victim shows only this many first / last pids
+
+
+def compact_victim(v, edge=LOG_PIDS_EDGE):
+    """what goes into guard.log / the journal: counts + first/last `edge` pids.  The full pid list and the starttimes map
+    (~150 KB for a 6,000-process storm) never go there.  NOT an input to anything: kill_victim() takes the in-memory victim
+    and re-reads every pid + starttime from /proc before each signal."""
+    c = {k: val for k, val in v.items() if k not in ("pids", "starttimes")}
+    pids = v.get("pids", [])
+    c.update({"pid_count": len(pids), "pids_first": pids[:edge], "pids_last": pids[-edge:] if len(pids) > edge else [],
+              "starttimes_count": len(v.get("starttimes") or {})})
+    if len(c.get("cgroups", [])) > edge:
+        c["cgroups_count"] = len(c["cgroups"]); c["cgroups"] = c["cgroups"][:edge]
+    return c
+
+
+def write_victim_state(path, v, max_bytes):
+    """ARM=1 only: the full victim (pids + starttimes) for post-mortem, mode 0600, bounded by max_bytes, previous one kept as .1.
+    Forensics only - the kill path never reads it."""
+    doc = {"ts": time.strftime("%Y-%m-%dT%H:%M:%S%z"), "victim": v}
+    data = json.dumps(doc, sort_keys=True)
+    if len(data) > max_bytes:
+        keep = max(0, (max_bytes - 2048) // 40)      # ~40 bytes per pid + starttime entry
+        t = dict(v)
+        t["pids"] = v["pids"][:keep]
+        t["starttimes"] = {str(k): (v.get("starttimes") or {}).get(str(k)) for k in t["pids"]}
+        doc = {"ts": doc["ts"], "victim": t, "truncated": True, "pid_count_total": len(v["pids"])}
+        data = json.dumps(doc, sort_keys=True)
+        while len(data) > max_bytes and t["pids"]:
+            t["pids"] = t["pids"][:len(t["pids"]) // 2]
+            t["starttimes"] = {str(k): t["starttimes"].get(str(k)) for k in t["pids"]}
+            data = json.dumps(doc, sort_keys=True)
+    tmp = path + ".tmp"
+    try:
+        os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w") as f:
+            f.write(data)
+            f.flush()
+            os.fsync(f.fileno())
+        os.chmod(tmp, 0o600)
+    except OSError:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        return
+    had_old = os.path.exists(path)
+    try:
+        if had_old:
+            os.replace(path, path + ".1")
+        os.replace(tmp, path)
+    except OSError:
+        # keep the previous record: put it back if the swap failed half way, drop the tmp
+        if had_old and not os.path.exists(path) and os.path.exists(path + ".1"):
+            try:
+                os.replace(path + ".1", path)
+            except OSError:
+                pass
+        try:
+            os.unlink(tmp)
         except OSError:
             pass
 
@@ -365,6 +551,9 @@ def kill_victim(v, my_uid, self_pid, only_cg_re=None, own_pgrp=None, proc_root="
     """Signal the selected victim.  Before EACH signal the target is re-read and must still be exactly what was
     selected (same pids, same start times) and still individually eligible; see the module docstring.
     scan_fn/killpg/kill/pidfd_open/sleep are injectable so tests never signal a real process."""
+    if proc_root != "/proc" and scan_fn is None and killpg is None and kill is None and os.environ.get("HOSTSAFETY_TEST_ALLOW_FIXTURE_PROC") != "1":
+        # a fixture /proc must never lead to a real signal: its pids are not the host's pids
+        return [("-", "refused-fixture-proc-root")]
     scan_fn = scan_fn or scan
     killpg = killpg or os.killpg
     kill = kill or os.kill
@@ -429,6 +618,7 @@ def main(argv=None):
     ap.add_argument("--proc-root", default="/proc")
     ap.add_argument("--psi-file", default="/proc/pressure/memory")
     ap.add_argument("--meminfo", default="/proc/meminfo")
+    ap.add_argument("--cgroup-root", default=None, help="user manager cgroup dir (default /sys/fs/cgroup/user.slice/user-UID.slice/user@UID.service)")
     ap.add_argument("--state-file", default=None)
     ap.add_argument("--log-file", default=None)
     ap.add_argument("--select-only", action="store_true", help="print the victim selection and exit")
@@ -446,9 +636,12 @@ def main(argv=None):
     log_file = a.log_file or env.get("HOSTSAFETY_GUARD_LOG") or os.path.join(
         env.get("XDG_STATE_HOME", os.path.expanduser("~/.local/state")), "hostsafety", "guard.log")
 
-    procs = scan(a.proc_root)
+    lm, lk = cfg("LOG_MAX_BYTES", env), cfg("LOG_KEEP", env)
+    LOG_LIMITS["max_bytes"] = DEF["LOG_MAX_BYTES"] if lm <= 0 else max(lm, 1048576)     # garbage/0/negative => default; tiny => 1 MiB
+    LOG_LIMITS["keep"] = DEF["LOG_KEEP"] if lk <= 0 else min(lk, 10)
     own_pgrp = os.getpgrp() if a.self_pid == os.getpid() else None   # independent of the /proc snapshot
     if a.select_only:
+        procs = scan(a.proc_root)
         v, ev = select_victim(procs, a.uid, a.self_pid, only, own_pgrp=own_pgrp)
         print(json.dumps({"victim": v, "evidence": ev}, sort_keys=True))
         return 0
@@ -465,8 +658,13 @@ def main(argv=None):
     some10 = p.get("some", {}).get("avg10", 0.0)
     swapf = swap_free_pct(a.meminfo)
     why = []
+    cg_root = a.cgroup_root or "/sys/fs/cgroup/user.slice/user-%d.slice/user@%d.service" % (a.uid, a.uid)
+    storms = cgroup_storms(cg_root, cfg("TASKS_STORM", env))
+    top = storms[0] if storms else None
     if full10 >= cfg("PSI_FULL", env):
         why.append("psi_full_avg10=%.2f>=%.1f" % (full10, cfg("PSI_FULL", env)))
+        for sg in storms[:3]:      # only while PSI full is high: a big scope alone (a build, a test fleet) is not an emergency
+            why.append("tasks_storm=%s:%d>%d" % (sg["cg"], sg["pids"], cfg("TASKS_STORM", env)))
     if swapf is not None and swapf <= cfg("SWAP_FREE_PCT", env) and some10 >= cfg("PSI_SOME", env):
         why.append("swap_free=%.1f%%<=%.1f%%&psi_some_avg10=%.2f>=%.1f" % (swapf, cfg("SWAP_FREE_PCT", env), some10, cfg("PSI_SOME", env)))
     if a.force_trigger:
@@ -480,6 +678,8 @@ def main(argv=None):
     now = time.time()
     tmpp = tmpfs_used_pct(a.tmp_dir, a.tmpfs_used_pct_fixture)
     metrics = {"psi_full_avg10": full10, "psi_some_avg10": some10, "swap_free_pct": swapf, "tmpfs_used_pct": tmpp}
+    # observability only: the largest scope above the storm threshold (None when no scope exceeds it)
+    status_extra = {"max_scope_tasks": top["pids"] if top else None, "max_scope_cg": top["cg"] if top else None}
     # report-only: a RAM-backed /tmp that is filling up charges its writers' cgroups (unreclaimable) - one event per crossing, never a kill
     if tmpp is not None and tmpp > cfg("TMPFS_WARN_PCT", env):
         if not st.get("tmpfs_high_logged"):
@@ -491,7 +691,7 @@ def main(argv=None):
     # heartbeat: a silent guard is indistinguishable from a dead one (11.4.201)
     _save(os.path.join(os.path.dirname(log_file), "guard.status") if log_file else state_file + ".status",
           {"last_run": time.strftime("%Y-%m-%dT%H:%M:%S%z"), "armed": armed, "streak": st["streak"],
-           "triggered": bool(why), "psi_available": psi_ok, **metrics})
+           "triggered": bool(why), "psi_available": psi_ok, **status_extra, **metrics})
     if not psi_ok and not st.get("psi_missing_logged"):
         log(log_file, {"event": "psi-unavailable", "psi_file": a.psi_file,
                        "note": "memory pressure cannot be read: no PSI rule can fire, the guard is blind until the file is readable"})
@@ -508,16 +708,40 @@ def main(argv=None):
         log(log_file, {"event": "cooldown", "reasons": why, **metrics})
         _save(state_file, st)
         return 0
-    v, ev = select_victim(procs, a.uid, a.self_pid, only, cfg("PROC_WEIGHT_KB", env), own_pgrp=own_pgrp)
+    # the /proc walk (~0.8 s with ~7,000 processes) happens ONLY here: PSI said "sustained pressure" and no cooldown is running.
+    # Every healthy / building / cooldown run returns above without touching /proc/<pid> (incident 2026-10-13).
+    procs = scan(a.proc_root)
+    v, ev, rule, rejected = None, {}, "psi", []
+    pv, pev = select_victim(procs, a.uid, a.self_pid, only, cfg("PROC_WEIGHT_KB", env), own_pgrp=own_pgrp)   # the PSI-ranked pick
+    v, ev = pv, pev
+    if not only and any(r.startswith("tasks_storm") for r in why):
+        # group-size rule: the storm scope itself is the preferred candidate.  The scope only NARROWS which processes may anchor
+        # a victim; every eligibility / protection check (uid, protected comm, cgroup allowlist, own group) is unchanged.
+        # It is used only when it is not a much smaller victim than the PSI pick (cost >= STORM_MIN_COST_FRAC of it).
+        frac = cfg("STORM_MIN_COST_FRAC", env)
+        rejected = []
+        best_sv = None
+        for sg in storms[:3]:       # try EVERY storm scope: a rejected one must not hide an acceptable next one
+            sv, sev = select_victim(procs, a.uid, a.self_pid, "^" + re.escape(sg["cg"]) + "$", cfg("PROC_WEIGHT_KB", env), own_pgrp=own_pgrp)
+            if not sv:
+                continue
+            if pv is None or sv["cost_kb"] >= frac * pv["cost_kb"]:
+                if best_sv is None or sv["cost_kb"] > best_sv[0]["cost_kb"]:
+                    best_sv = (sv, sev)
+            else:
+                rejected.append({"cgroup": sg["cg"], "storm_cost_kb": sv["cost_kb"], "psi_cost_kb": pv["cost_kb"], "min_cost_frac": frac})
+        if best_sv:
+            v, ev, rule = best_sv[0], best_sv[1], "tasks_storm"
     if not v:
         log(log_file, {"event": "no-killable-victim", "reasons": why, "evidence": ev,
                        "note": ev.get("storm_in_protected_group", "no eligible process"), **metrics})
         _save(state_file, st)
         return 0
-    rec = {"event": "would-kill" if not armed else "kill", "armed": armed, "reasons": why,
-           "victim": v, "evidence": ev, **metrics}
+    rec = {"event": "would-kill" if not armed else "kill", "armed": armed, "reasons": why, "rule": rule,
+           **({"tasks_storm_rejected": rejected} if rejected else {}), "victim": compact_victim(v), "evidence": ev, **metrics}
     if armed:
-        rec["signals"] = kill_victim(v, a.uid, a.self_pid, only, own_pgrp)
+        write_victim_state(os.path.join(os.path.dirname(log_file), "guard-victim.json"), v, cfg("VICTIM_FILE_MAX_BYTES", env))
+        rec["signals"] = kill_victim(v, a.uid, a.self_pid, only, own_pgrp, proc_root=a.proc_root)
         st["last_action"] = now
         st["streak"] = 0
     log(log_file, rec)
@@ -529,9 +753,11 @@ def _save(path, st):
     try:
         os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
         tmp = path + ".tmp"
-        with open(tmp, "w") as f:
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w") as f:
             json.dump(st, f)
         os.replace(tmp, path)
+        os.chmod(path, 0o600)
     except OSError:
         pass
 

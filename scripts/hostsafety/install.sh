@@ -91,7 +91,15 @@ Type=oneshot
 Slice=session.slice
 EnvironmentFile=-%h/.config/hostsafety/guard.env
 ExecStart=/usr/bin/python3 -I %h/.local/share/hostsafety/guard.py
-TimeoutStartSec=20
+# TimeoutStartSec is the ONLY wall-clock cap that works for Type=oneshot (RuntimeMaxSec is ignored for oneshot units:
+# systemd.service(5); probed: RuntimeMaxSec=3 ignored, TimeoutStartSec=3 enforced)
+TimeoutStartSec=15
+# the guard must cost (almost) nothing and never become the load it watches (incident 2026-10-13): lowest CPU/IO
+# priority and a small memory cap
+Nice=19
+IOSchedulingClass=idle
+CPUWeight=10
+MemoryMax=256M
 StandardOutput=journal
 StandardError=journal
 UNIT

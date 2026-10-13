@@ -277,5 +277,346 @@ with tempfile.TemporaryDirectory() as d:
     check("P2 PSI tolerates a missing avg60, garbage and blank lines", r.get("some", {}).get("avg10") == 1.0 and r.get("full", {}).get("avg10") == 7.5, repr(r))
     check("P3 PSI of a missing file is empty (and main reports psi_available=false)", g.psi(os.path.join(d, "nope")) == {})
 
+# ---------------------------------------------------------------- main(): the /proc walk is lazy (incident 2026-10-13)
+def run_main(psi_text, procs, extra=None, env=None, pre_state=None, pre_log=None, meminfo="MemTotal: 32000000 kB\nSwapTotal: 8000000 kB\nSwapFree: 8000000 kB\n"):
+    """run g.main() against a synthetic psi file with g.scan replaced by a counting fake; returns (scan_calls, log_lines, dir)."""
+    d = tempfile.mkdtemp(prefix="hsfx")
+    open(os.path.join(d, "psi"), "w").write(psi_text)
+    open(os.path.join(d, "mi"), "w").write(meminfo)
+    if pre_state is not None:
+        import json as _j
+        open(os.path.join(d, "st"), "w").write(_j.dumps(pre_state))
+    if pre_log is not None:
+        os.makedirs(os.path.join(d, "log")); open(os.path.join(d, "log", "guard.log"), "w").write(pre_log)
+    calls = []
+    real_scan = g.scan
+    g.scan = lambda root: (calls.append(root), procs)[1]
+    old_env = dict(os.environ)
+    os.environ["XDG_RUNTIME_DIR"] = d
+    for k in [k for k in os.environ if k.startswith("HOSTSAFETY_")]:
+        del os.environ[k]
+    os.environ.update(env or {})
+    try:
+        g.main(["--psi-file", os.path.join(d, "psi"), "--meminfo", os.path.join(d, "mi"), "--log-file", os.path.join(d, "log", "guard.log"),
+                "--state-file", os.path.join(d, "st"), "--uid", str(ME), "--self-pid", str(GUARD_PID), "--tmpfs-used-pct-fixture", "1"] + (extra or []))
+    finally:
+        g.scan = real_scan
+        os.environ.clear(); os.environ.update(old_env)
+    lp = os.path.join(d, "log", "guard.log")
+    lines = open(lp).read().splitlines() if os.path.exists(lp) else []
+    return calls, lines, d
+
+
+CALM = "some avg10=1.00 avg60=1.00 avg300=1.00 total=1\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=1\n"
+BAD = "some avg10=90.00 avg60=80.00 avg300=50.00 total=1\nfull avg10=81.05 avg60=70.00 avg300=50.00 total=1\n"
+storm_tbl = table(*guard_ancestry(), *runaway)
+calls, lines, _ = run_main(CALM, storm_tbl)
+check("M1 calm PSI: the /proc walk is skipped entirely", calls == [], repr(calls))
+calls, lines, _ = run_main(BAD, storm_tbl)
+check("M2 first triggered run only builds the streak: no /proc walk", calls == [] and any('pressure-building' in l for l in lines), repr((calls, lines)))
+calls, lines, _ = run_main(BAD, storm_tbl, pre_state={"streak": 1})
+check("M3 sustained pressure (streak reached): exactly one /proc walk, decision logged", len(calls) == 1 and any('would-kill' in l for l in lines), repr((calls, lines)))
+calls, lines, _ = run_main(BAD, storm_tbl, extra=["--select-only"])
+check("M4 --select-only still walks /proc (diagnostic path unchanged)", len(calls) == 1)
+
+# ---------------------------------------------------------------- bounded log detail (incident: ~152 KB per would-kill record, 96.8 MB log)
+# real captured shape (guard.log 2026-10-13T22:27): group pgrp 546537 'bash p1.sh' in app.slice/tmx-notes-8580.scope, 6,182 members
+SC = "app.slice/tmx-notes-8580.scope"
+big = [proc(B + 546537 + i, "bash" if i == 0 else "sleep", B + 546537, 8, SC, ppid=B + 800 if i == 0 else B + 546537, cmd=["bash", "p1.sh"]) for i in range(6182)]
+big_tbl = table(*guard_ancestry(cg="app.slice/tmx-x.scope"), *big)
+calls, lines, d = run_main(BAD, big_tbl, pre_state={"streak": 1})
+wk = [l for l in lines if '"would-kill"' in l]
+import json as _json
+rec = _json.loads(wk[0]) if wk else {}
+vv = rec.get("victim", {})
+check("L1 would-kill record is bounded (<4 KB, was ~152 KB) for a 6,182-process victim", bool(wk) and len(wk[0]) < 4096, repr(len(wk[0]) if wk else None))
+check("L2 record carries counts + first/last 20 pids, no full pid list / starttimes map",
+      vv.get("pid_count") == 6182 and len(vv.get("pids_first", [])) == 20 and len(vv.get("pids_last", [])) == 20
+      and vv.get("pids_first")[0] == B + 546537 and "pids" not in vv and "starttimes" not in vv and vv.get("starttimes_count") == 6182, repr(sorted(vv)))
+check("L3 dry-run (ARM=0) writes NO victim state file", not os.path.exists(os.path.join(d, "log", "guard-victim.json")))
+calls, lines, d = run_main(BAD, big_tbl, pre_state={"streak": 1}, env={"HOSTSAFETY_GUARD_ARM": "1"})
+vf = os.path.join(d, "log", "guard-victim.json")
+full = _json.load(open(vf)) if os.path.exists(vf) else {}
+check("L4 ARM=1 writes the full pid list + starttimes to a state file", len(full.get("victim", {}).get("pids", [])) == 6182 and len(full.get("victim", {}).get("starttimes", {})) == 6182, repr(list(full)))
+check("L5 victim state file is mode 0600", os.path.exists(vf) and (os.stat(vf).st_mode & 0o777) == 0o600)
+armed_line = [l for l in lines if '"kill"' in l][0]
+check("L6 armed kill record in the log is bounded too", len(armed_line) < 4096 and "pids_first" in armed_line, repr(len(armed_line)))
+# bounded + rotated state file
+calls, lines, d2 = run_main(BAD, big_tbl, pre_state={"streak": 1}, env={"HOSTSAFETY_GUARD_ARM": "1", "HOSTSAFETY_VICTIM_FILE_MAX_BYTES": "20000"})
+vf2 = os.path.join(d2, "log", "guard-victim.json")
+check("L7 victim state file is size-bounded (limit 20000 bytes) and says so", os.path.exists(vf2) and os.path.getsize(vf2) <= 20000 and _json.load(open(vf2)).get("truncated") is True,
+      repr(os.path.getsize(vf2) if os.path.exists(vf2) else None))
+# the kill path revalidates from /proc, never from the log or the state file
+reads = []
+real_read = g.read
+g.read = lambda path, default="": (reads.append(path), real_read(path, default))[1]
+try:
+    g.kill_victim(vv_full := full.get("victim", {"kind": "group", "pgrp": B + 546537, "pids": [], "starttimes": {}}), ME, GUARD_PID,
+                  scan_fn=lambda r: big_tbl, killpg=lambda *a: None, kill=lambda *a: None, pidfd_open=False, sleep=lambda s: None)
+finally:
+    g.read = real_read
+check("L8 kill_victim never reads guard.log / the victim state file", not any(("guard-victim" in x or x.endswith("guard.log")) for x in reads), repr(reads[:3]))
+
+# ---------------------------------------------------------------- cheap cgroup-level storm rule: tasks_storm (O(cgroups), no per-pid walk)
+def mk_cgroups(root, counts):
+    """counts: {'app.slice/x.scope': 6182, ...}; parents get pids.current = sum of descendants like the kernel does."""
+    tot = {}
+    for rel, n in counts.items():
+        parts = rel.split("/")
+        for i in range(1, len(parts) + 1):
+            tot["/".join(parts[:i])] = tot.get("/".join(parts[:i]), 0) + n
+    for rel, n in tot.items():
+        os.makedirs(os.path.join(root, rel), exist_ok=True)
+        open(os.path.join(root, rel, "pids.current"), "w").write("%d\n" % n)
+    return root
+
+
+with tempfile.TemporaryDirectory() as cg:
+    mk_cgroups(cg, {"app.slice/tmx-notes-8580.scope": 6182, "app.slice/app-llmctl.slice/llama.scope": 3000,
+                    "app.slice/tmx-small.scope": 600, "background.slice/job.service": 40})
+    os.makedirs(os.path.join(cg, "app.slice", "garbage.scope")); open(os.path.join(cg, "app.slice", "garbage.scope", "pids.current"), "w").write("not-a-number")
+    os.makedirs(os.path.join(cg, "app.slice", "nofile.scope"))
+    st_ = g.cgroup_storms(cg, 2500) if hasattr(g, "cgroup_storms") else None
+    names = [x["cg"] for x in (st_ or [])]
+    check("TS1 cgroup_storms: scopes over the threshold, largest first, parent slices not reported, garbage/missing pids.current tolerated",
+          names == ["app.slice/tmx-notes-8580.scope", "app.slice/app-llmctl.slice/llama.scope"], repr(st_))
+    check("TS1b cgroup_storms of a missing cgroup root is empty", hasattr(g, "cgroup_storms") and g.cgroup_storms(os.path.join(cg, "nope"), 1) == [])
+
+STORM_CG = "app.slice/tmx-notes-8580.scope"
+OTHER_CG = "app.slice/bounded-run-big.scope"
+storm_grp = [proc(B + 546537 + i, "bash" if i == 0 else "sleep", B + 546537, 8, STORM_CG, ppid=B + 546537 if i else 1, cmd=["bash", "p1.sh"]) for i in range(60)]
+other_grp = [proc(B + 700000 + i, "python3", B + 700000, 198, OTHER_CG, ppid=B + 700000 if i else 1) for i in range(5)]   # costs ~1.7x the storm: cost ranking alone picks it, the storm rule (cost ratio 0.6 >= 0.5) still wins
+hog_grp = [proc(B + 710000 + i, "python3", B + 710000, 4000, "app.slice/hog.scope", ppid=B + 710000 if i else 1) for i in range(5)]   # ~20 GB
+storm_tbl2 = table(*guard_ancestry(), *storm_grp, *other_grp)
+
+
+def storm_run(psi, counts, env=None, tbl=storm_tbl2, pre={"streak": 1}):
+    cg = tempfile.mkdtemp(prefix="hscg")
+    mk_cgroups(cg, counts)
+    calls, lines, d = run_main(psi, tbl, extra=["--cgroup-root", cg], env=env, pre_state=pre)
+    wk = [_json.loads(l) for l in lines if '"would-kill"' in l]
+    return calls, lines, d, (wk[0] if wk else {})
+
+
+calls, lines, d, rec = storm_run(BAD, {STORM_CG: 6182, OTHER_CG: 5})
+check("TS2 tasks_storm: a >2500-task scope under PSI-full is the would-kill candidate even though another group costs more (but < 2x)",
+      rec.get("victim", {}).get("pgrp") == B + 546537 and any(r.startswith("tasks_storm") for r in rec.get("reasons", [])) and rec.get("rule") == "tasks_storm", repr(rec.get("victim", {}).get("pgrp")) + repr(rec.get("reasons")))
+calls, lines, d, rec = storm_run(BAD, {STORM_CG: 6182, OTHER_CG: 5}, env={"HOSTSAFETY_TASKS_STORM": "10000"})
+check("TS3 HOSTSAFETY_TASKS_STORM raises the threshold: no tasks_storm, cost ranking (the other group) wins",
+      rec.get("victim", {}).get("pgrp") == B + 700000 and not any(r.startswith("tasks_storm") for r in rec.get("reasons", [])), repr(rec.get("reasons")))
+calls, lines, d, rec = storm_run(CALM, {STORM_CG: 6182, OTHER_CG: 5}, pre={"streak": 5})
+check("TS4 big scope WITHOUT PSI pressure: no tasks_storm, no /proc walk, nothing logged", calls == [] and lines == [], repr((calls, lines)))
+st_status = _json.load(open(os.path.join(d, "log", "guard.status")))
+check("TS4b heartbeat reports the largest scope task count (cheap observability)", st_status.get("max_scope_tasks") == 6182 and st_status.get("max_scope_cg") == STORM_CG, repr(st_status))
+# same protections: the storm scope's group holds a protected process => never chosen as a group; no unsafe fallback into it
+prot_grp = [proc(B + 546537, "bash", B + 546537, 8, STORM_CG, ppid=1, cmd=["bash", "p1.sh"]), proc(B + 546538, "claude", B + 546537, 900, STORM_CG, ppid=B + 546537)] + \
+           [proc(B + 546539 + i, "sleep", B + 546537, 8, STORM_CG, ppid=B + 546537) for i in range(5)]
+calls, lines, d, rec = storm_run(BAD, {STORM_CG: 6182, OTHER_CG: 5}, tbl=table(*guard_ancestry(), *prot_grp, *other_grp))
+vic = rec.get("victim", {})
+check("TS5 storm scope sharing a process group with claude: the group is NEVER the victim (protections unchanged)",
+      vic.get("kind") != "group" or vic.get("pgrp") != B + 546537, repr(vic.get("pgrp")))
+check("TS5b ... and no claude pid is ever in the victim", B + 546538 not in (vic.get("pids_first", []) + vic.get("pids_last", [])))
+foreign = [dict(p, uid=4242) for p in storm_grp]
+calls, lines, d, rec = storm_run(BAD, {STORM_CG: 6182, OTHER_CG: 5}, tbl=table(*guard_ancestry(), *foreign, *other_grp))
+check("TS6 storm scope owned by another uid is never the victim", rec.get("victim", {}).get("pgrp") != B + 546537, repr(rec.get("victim", {}).get("pgrp")))
+gnome = [dict(p, cg="app.slice/app-gnome-shell-1.scope", name="gnome-shell") for p in storm_grp]
+calls, lines, d, rec = storm_run(BAD, {"app.slice/app-gnome-shell-1.scope": 6182, OTHER_CG: 5}, tbl=table(*guard_ancestry(), *gnome, *other_grp))
+check("TS7 storm scope that is protected by cgroup/name (gnome-shell) is never the victim", rec.get("victim", {}).get("pgrp") != B + 546537, repr(rec.get("victim", {}).get("pgrp")))
+
+# ---------------------------------------------------------------- guard.log rotation (was 96.8 MB, never rotated)
+import gzip
+with tempfile.TemporaryDirectory() as d:
+    lp = os.path.join(d, "guard.log")
+    line = '{"event": "would-kill", "pad": "%s"}\n' % ("x" * 900)
+    open(lp, "w").write(line * 3500)                       # ~3.2 MB synthetic big log
+    orig = open(lp).read()
+    g.log(lp, {"event": "ok"}, max_bytes=1000000, keep=3)
+    cur = open(lp).read() if os.path.exists(lp) else ""
+    r1 = os.path.join(d, "guard.log.1.gz")
+    check("R1 log over the cap is rotated: live file restarts small, content lands in guard.log.1.gz byte-identical",
+          os.path.exists(r1) and gzip.open(r1, "rt").read() == orig and len(cur) < 1000 and '"event": "ok"' in cur, repr((os.listdir(d), len(cur))))
+    for i in range(6):                                       # refill + rotate repeatedly: never more than keep=3 archives
+        open(lp, "a").write(line * 1200)
+        g.log(lp, {"event": "ok"}, max_bytes=1000000, keep=3)
+    arch = sorted(f for f in os.listdir(d) if f.startswith("guard.log.") and not f.endswith(".lock"))
+    check("R2 at most N=3 gz archives are kept (.1 .2 .3), older ones are dropped", arch == ["guard.log.1.gz", "guard.log.2.gz", "guard.log.3.gz"], repr(arch))
+    check("R3 live log + archives stay bounded (cap + 3 compressed archives, < 1.2 MB total here)", sum(os.path.getsize(os.path.join(d, f)) for f in os.listdir(d)) < 1200000, repr(os.listdir(d)))
+    g.log(lp, {"event": "again"}, max_bytes=10 ** 9, keep=3)
+    check("R4 under the cap: plain append, no rotation", "again" in open(lp).read() and sorted(f for f in os.listdir(d) if f.startswith("guard.log.") and not f.endswith(".lock")) == arch)
+    check("R5 live log keeps mode of a normal append (a rotation never leaves the live log missing)", os.path.exists(lp))
+# main() wires the cap from HOSTSAFETY_LOG_MAX_BYTES (the log pre-exists with 5 KB of old records)
+calls, lines, d = run_main(BAD, storm_tbl, pre_state={"streak": 1}, env={"HOSTSAFETY_LOG_MAX_BYTES": "1048576"}, pre_log="x" * 1100000 + "\n")
+check("R6 main() honours HOSTSAFETY_LOG_MAX_BYTES (old log rotated to .1.gz before the new record)",
+      os.path.exists(os.path.join(d, "log", "guard.log.1.gz")) and any('would-kill' in l for l in lines), repr(os.listdir(os.path.join(d, "log"))))
+
+# ---------------------------------------------------------------- review F1: storm victim must not be a much smaller victim than the PSI rule's
+calls, lines, d, rec = storm_run(BAD, {STORM_CG: 3000, "app.slice/hog.scope": 5}, tbl=table(*guard_ancestry(), *storm_grp, *hog_grp))
+check("TS8 storm scope costs ~3% of the PSI-ranked hog => the hog is the victim, rule=psi, rejection recorded",
+      rec.get("victim", {}).get("pgrp") == B + 710000 and rec.get("rule") == "psi" and "tasks_storm_rejected" in rec, repr((rec.get("victim", {}).get("pgrp"), rec.get("rule"), rec.get("tasks_storm_rejected"))))
+calls, lines, d, rec = storm_run(BAD, {STORM_CG: 3000, "app.slice/hog.scope": 5}, tbl=table(*guard_ancestry(), *storm_grp, *hog_grp), env={"HOSTSAFETY_STORM_MIN_COST_FRAC": "0.01"})
+check("TS9 HOSTSAFETY_STORM_MIN_COST_FRAC is honoured (0.01 => the storm scope wins again)", rec.get("victim", {}).get("pgrp") == B + 546537 and rec.get("rule") == "tasks_storm", repr((rec.get("victim", {}).get("pgrp"), rec.get("rule"))))
+calls, lines, d, rec = storm_run(BAD, {STORM_CG: 6182, OTHER_CG: 5})
+check("TS10 storm scope with comparable cost (>= 0.5 of the PSI pick) still wins (the p1.sh case)", rec.get("rule") == "tasks_storm" and rec.get("victim", {}).get("pgrp") == B + 546537)
+
+# ---------------------------------------------------------------- review F2: rotation must never lose archives
+import errno
+with tempfile.TemporaryDirectory() as d:
+    lp = os.path.join(d, "guard.log")
+    arch = {}
+    for i in (1, 2, 3):
+        with gzip.open("%s.%d.gz" % (lp, i), "wb") as f:
+            f.write(b"archive %d\n" % i)
+        arch[i] = open("%s.%d.gz" % (lp, i), "rb").read()
+    open(lp, "w").write("y" * 2000000)
+    real_gz = gzip.open
+    def boom(*a, **k):
+        raise OSError(errno.ENOSPC, "No space left on device")
+    gzip.open = boom
+    try:
+        g.rotate_log(lp, 1000000, 3)
+    finally:
+        gzip.open = real_gz
+    same = all(os.path.exists("%s.%d.gz" % (lp, i)) and open("%s.%d.gz" % (lp, i), "rb").read() == arch[i] for i in (1, 2, 3))
+    check("R7 ENOSPC while compressing: all 3 archives intact, live log intact, no tmp left",
+          same and os.path.exists(lp) and os.path.getsize(lp) == 2000000 and not [f for f in os.listdir(d) if f.endswith(".tmp")], repr(sorted(os.listdir(d))))
+# clamps (HOSTSAFETY_LOG_MAX_BYTES >= 1 MiB, LOG_KEEP 1..10, garbage/0/negative => defaults)
+def eff(env):
+    run_main(CALM, storm_tbl, env=env)
+    return g.LOG_LIMITS["max_bytes"], g.LOG_LIMITS["keep"]
+check("R8 LOG_MAX_BYTES: 10 => clamped to 1 MiB", eff({"HOSTSAFETY_LOG_MAX_BYTES": "10"})[0] == 1048576, repr(eff({"HOSTSAFETY_LOG_MAX_BYTES": "10"})))
+check("R8b LOG_MAX_BYTES garbage/0/negative => default 5 MiB", all(eff({"HOSTSAFETY_LOG_MAX_BYTES": v})[0] == 5242880 for v in ("abc", "0", "-5")))
+check("R8c LOG_KEEP: 99 => 10, 0/-2/garbage => 3, 4 stays", eff({"HOSTSAFETY_LOG_KEEP": "99"})[1] == 10 and all(eff({"HOSTSAFETY_LOG_KEEP": v})[1] == 3 for v in ("0", "-2", "x")) and eff({"HOSTSAFETY_LOG_KEEP": "4"})[1] == 4)
+
+# ---------------------------------------------------------------- review F4: private files
+calls, lines, d = run_main(BAD, storm_tbl, pre_state={"streak": 1}, pre_log="old\n")
+os.chmod(os.path.join(d, "log", "guard.log"), 0o644)
+open(os.path.join(d, "log", "guard.status"), "w").write("{}"); os.chmod(os.path.join(d, "log", "guard.status"), 0o664)
+calls, lines, d = run_main(BAD, storm_tbl, pre_state={"streak": 1}, env={"HOSTSAFETY_LOG_MAX_BYTES": "1048576"}, pre_log="z" * 1100000 + "\n")
+m = lambda n: oct(os.stat(os.path.join(d, "log", n)).st_mode & 0o777)
+check("P4 guard.log, guard.status and the rotated .gz are 0600", (m("guard.log"), m("guard.status"), m("guard.log.1.gz")) == ("0o600",) * 3, repr((m("guard.log"), m("guard.status"), m("guard.log.1.gz"))))
+calls, lines, d = run_main(BAD, storm_tbl, pre_state={"streak": 1}, pre_log="old\n")
+lp = os.path.join(d, "log", "guard.log"); os.chmod(lp, 0o644)
+g.log(lp, {"event": "x"})
+check("P4b an existing 0644 guard.log is chmod-ed 0600 on the next write", oct(os.stat(lp).st_mode & 0o777) == "0o600")
+
+# ---------------------------------------------------------------- review F5: a fixture proc root can never reach a real pid
+def armed_main(env):
+    sent = []
+    rk, rkp = os.kill, os.killpg
+    os.kill = lambda *a: sent.append(("kill",) + a)
+    os.killpg = lambda *a: sent.append(("killpg",) + a)
+    try:
+        calls, lines, d = run_main(BAD, storm_tbl, pre_state={"streak": 1}, env=dict({"HOSTSAFETY_GUARD_ARM": "1"}, **env), extra=["--proc-root", "/nonexistent-fixture-root"])
+    finally:
+        os.kill, os.killpg = rk, rkp
+    return sent, lines, calls
+sent, lines, calls = armed_main({})
+check("X1 armed + fixture --proc-root, no test hook: nothing is signalled and the refusal is logged",
+      sent == [] and any("refused-fixture-proc-root" in l for l in lines), repr((sent, [l[:80] for l in lines])))
+sent, lines, calls = armed_main({"HOSTSAFETY_TEST_ALLOW_FIXTURE_PROC": "1"})
+check("X2 with the explicit test hook the kill path re-validates against the SAME fixture proc root", calls.count("/nonexistent-fixture-root") >= 2, repr(calls))
+
+# ---------------------------------------------------------------- review F6: victim state file is replaced atomically
+with tempfile.TemporaryDirectory() as d:
+    vf = os.path.join(d, "guard-victim.json")
+    open(vf, "w").write("OLD-CONTENT")
+    real_replace, real_fsync, fs = os.replace, os.fsync, []
+    def bad_replace(src, dst):
+        if str(src).endswith(".tmp"):
+            raise OSError(errno.EIO, "io")
+        return real_replace(src, dst)
+    os.replace = bad_replace
+    try:
+        g.write_victim_state(vf, {"kind": "group", "pgrp": B + 1, "pids": [B + 1], "starttimes": {str(B + 1): 1}}, 100000)
+    finally:
+        os.replace = real_replace
+    check("V1 a failing replace keeps the previous victim state file", os.path.exists(vf) and open(vf).read() == "OLD-CONTENT", repr(os.listdir(d)))
+    os.fsync = lambda fd: (fs.append(fd), real_fsync(fd))[1]
+    try:
+        g.write_victim_state(vf, {"kind": "group", "pgrp": B + 1, "pids": [B + 1], "starttimes": {str(B + 1): 1}}, 100000)
+    finally:
+        os.fsync = real_fsync
+    check("V2 the new state file is fsync-ed before it replaces the old one", len(fs) >= 1 and "pgrp" in open(vf).read(), repr(fs))
+
+# ---------------------------------------------------------------- re-review: all storm scopes tried, strict JSON, content-verified + locked rotation
+SMALL_CG = "app.slice/tmx-small-build.scope"
+small_grp = [proc(B + 720000 + i, "git", B + 720000, 8, SMALL_CG, ppid=B + 720000 if i else 1) for i in range(3)]     # biggest task count, tiny cost
+calls, lines, d, rec = storm_run(BAD, {SMALL_CG: 9000, STORM_CG: 3000, "app.slice/hog.scope": 5}, tbl=table(*guard_ancestry(), *small_grp, *storm_grp, *hog_grp),
+                                 env={"HOSTSAFETY_STORM_MIN_COST_FRAC": "0.02"})
+check("TS11 the first (largest) storm scope is rejected by the cost fraction: the NEXT acceptable storm scope is still tried and wins",
+      rec.get("rule") == "tasks_storm" and rec.get("victim", {}).get("pgrp") == B + 546537, repr((rec.get("rule"), rec.get("victim", {}).get("pgrp"), rec.get("tasks_storm_rejected"))))
+check("TS11b every rejected storm scope is logged compactly", isinstance(rec.get("tasks_storm_rejected"), list) and [x["cgroup"] for x in rec["tasks_storm_rejected"]] == [SMALL_CG], repr(rec.get("tasks_storm_rejected")))
+
+def strict(l):
+    def bad(c):
+        raise ValueError("non-JSON constant " + c)
+    return _json.loads(l, parse_constant=bad)
+NANPSI = "some avg10=nan avg60=1 avg300=1 total=1\nfull avg10=inf avg60=70.00 avg300=50.00 total=1\n"
+calls, lines, d, rec = storm_run(NANPSI, {STORM_CG: 3000, "app.slice/hog.scope": 5}, tbl=table(*guard_ancestry(), *storm_grp, *hog_grp), env={"HOSTSAFETY_STORM_MIN_COST_FRAC": "nan"})
+try:
+    for l in lines: strict(l)
+    ok_strict = bool(lines)
+except ValueError as e:
+    ok_strict = False
+check("J1 nan/inf (PSI file, env) never appear as bare NaN/Infinity in any record", ok_strict, repr(lines[:2]))
+g_tmp = tempfile.mkdtemp()
+g.log(os.path.join(g_tmp, "guard.log"), {"event": "x", "v": float("nan"), "w": [float("inf")], "n": {"k": float("-inf")}})
+try:
+    strict(open(os.path.join(g_tmp, "guard.log")).read()); ok2 = True
+except ValueError:
+    ok2 = False
+check("J2 g.log sanitises non-finite floats recursively", ok2)
+
+def seed_rot(d, size=200000):
+    lp = os.path.join(d, "guard.log")
+    arch = {}
+    for i in (1, 2, 3):
+        with gzip.open("%s.%d.gz" % (lp, i), "wb") as f:
+            f.write(b"archive %d\n" % i)
+        arch[i] = open("%s.%d.gz" % (lp, i), "rb").read()
+    open(lp, "wb").write(os.urandom(size))
+    return lp, arch
+with tempfile.TemporaryDirectory() as d:
+    lp, arch = seed_rot(d)
+    live = open(lp, "rb").read()
+    real_cp = g.shutil.copyfileobj
+    def wrong(fi, fo, n=0):                      # same LENGTH, wrong bytes
+        data = fi.read()
+        fo.write(b"X" * len(data))
+    g.shutil.copyfileobj = wrong
+    try:
+        g.rotate_log(lp, 1000, 3)
+    finally:
+        g.shutil.copyfileobj = real_cp
+    same = all(open("%s.%d.gz" % (lp, i), "rb").read() == arch[i] for i in (1, 2, 3)) and open(lp, "rb").read() == live
+    check("R9 an archive with the right length but wrong content is NOT accepted (archives + live log untouched)", same and not [f for f in os.listdir(d) if f.endswith(".tmp")], repr(sorted(os.listdir(d))))
+with tempfile.TemporaryDirectory() as d:
+    import fcntl as _fc
+    lp, arch = seed_rot(d)
+    live = open(lp, "rb").read()
+    lk = open(lp + ".lock", "w"); _fc.flock(lk, _fc.LOCK_EX | _fc.LOCK_NB)
+    g.rotate_log(lp, 1000, 3)
+    skipped = os.path.exists(lp) and open(lp, "rb").read() == live and all(open("%s.%d.gz" % (lp, i), "rb").read() == arch[i] for i in (1, 2, 3))
+    lk.close()
+    check("R10 rotation lock held by another run => this tick skips rotation (non-blocking)", skipped)
+    g.rotate_log(lp, 1000, 3)
+    check("R10b lock free => rotation happens", not os.path.exists(lp) or open(lp, "rb").read() != live)
+import subprocess
+with tempfile.TemporaryDirectory() as d:
+    lp, arch = seed_rot(d, 50000)
+    code = "import importlib.util,sys;sp=importlib.util.spec_from_file_location('g',sys.argv[1]);m=importlib.util.module_from_spec(sp);sp.loader.exec_module(m);m.rotate_log(sys.argv[2],1000,3)"
+    ps = [subprocess.Popen([sys.executable, "-I", "-c", code, path, lp]) for _ in range(3)]
+    for p_ in ps:
+        p_.wait(timeout=60)
+    names = sorted(os.listdir(d))
+    ok = not [f for f in names if f.endswith(".tmp")] and all(n in ("guard.log", "guard.log.lock") or n in ("guard.log.%d.gz" % i for i in (1, 2, 3)) for n in names)
+    try:
+        for i in (1, 2, 3):
+            if os.path.exists("%s.%d.gz" % (lp, i)):
+                gzip.open("%s.%d.gz" % (lp, i), "rb").read()
+    except Exception:
+        ok = False
+    check("R11 three concurrent rotations leave only live log + <=3 valid archives, no tmp files", ok, repr(names))
+
 print("RESULT: %d failed" % len(fails))
 sys.exit(1 if fails else 0)
