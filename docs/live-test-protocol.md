@@ -15,6 +15,46 @@ Background: the host was force-powered-off after a memory/IO stall. This protoco
 never repeat that: it refuses to start on a stressed host, and a watchdog stops the profile the moment any limit is
 crossed.
 
+## Dynamic switching: the resident set is switched off for the run and restored (operator decision, accepted)
+
+llmctl manages models by dynamic switching, so the profile under test is loaded the way llmctl itself loads one and nothing is left
+idle: **this interrupts every resident llmctl service for the duration of a run, enabled ones included (e.g. the decision gateway
+backend `decide-nli`); the operator has accepted that.**
+
+1. Before anything is stopped the running set is RECORDED (fail closed if `llmctl status --json` cannot be read): `prior_status.json`
+   (the raw rows, `enabled` flag included), `prior_set.txt` (the running base profiles, restore order = status order),
+   `prior_units.txt` (`systemctl --user list-units 'llmctl-*@*.service'`), `prior_unrestorable.txt` (scaled instances `p.N`:
+   `llmctl start p` brings back ONE instance, so they are reported as a failed restore, never silently dropped).
+2. The profile is loaded with llmctl's own `llmctl switch <profile>` (same env as before: `LLMCTL_VALIDATE_ON_START=0`,
+   `LLMCTL_READY_TIMEOUT=0`, nice 19, ionice idle, in the background under the watchdog): llmctl takes the scheduler lock, applies its
+   pressure gate, stops EVERY running profile, starts exactly the target, and rolls back by itself if the start fails. This tool stops
+   nothing but the profile under test (its own, with the bounded stop below), never signals a foreign process, never touches a unit
+   llmctl does not own (the only `systemctl stop` that can ever happen is the bounded fallback on the test profile's own
+   `llmctl-<engine>@<profile>.service`). Evidence: `commands.log` (the switch and every restore command).
+3. The pre-gate counts the RAM/VRAM llmctl has reserved for the resident set (status json `ram_mb`/`vram_mb`, estimates) as free,
+   because the switch stops it: `effective = measured + reserved` (memory, free VRAM) / `measured - reserved` (GPU used); both are
+   written to `gate.log`. A resident profile in a failed state is still a refusal; another resident profile is no longer one. The
+   post-stop VRAM check compares with the MEASURED pre-switch value when a set was switched off.
+4. After the run, on EVERY exit path (PASS, FAIL, abort, failed switch, signal; via the existing EXIT trap), once the test model is
+   confirmed stopped and the watchdog is reaped, the recorded set is RESTORED with
+   `LLMCTL_VALIDATE_ON_START=0 nice -n 19 ionice -c 3 llmctl start <profile>`, one profile at a time, bounded (300 s each, never
+   signalled), each preceded by a pressure check (memory PSI some < 5 / full < 1, IO PSI some < 10 / full < 2, MemAvailable >= the
+   profile's reserved RAM + 2048 MiB) and each followed by a health check (the engine's `/health`, `/healthz` for onnx, up to 120 s;
+   unit active when no port is known). Restore is idempotent: a profile that already runs is only verified (`ALREADY RUNNING`).
+   Evidence: `restore.txt` (one line per profile: `RESTORED (healthy)` / `ALREADY RUNNING` / `SKIPPED (why)` / `FAILED (why)`),
+   `after_status.json`, `after_units.txt`; the verdict table has `resident set switched off` and `prior set restored`.
+5. A restore that cannot or must not run is LOUD, never silent: if the host is under pressure, or the stop of the test model is not
+   confirmed, or its start is still pending, nothing is started, the exact command is printed and written to `RESTORE_MANUAL.txt`
+   (`nice -n 19 ionice -c 3 llmctl start <profiles>`), and the exit code is **6**; a profile that failed to start, never became healthy
+   or is a scaled instance gives **7** (the others are still attempted). When the run itself ended non-zero (1 FAIL, 2, 3, 4 abort,
+   5) that code stays and is never masked: the restore problem is in the verdict reason, `restore.txt` and `RESTORE_MANUAL.txt`.
+   The restore itself is not under the watchdog (the watchdog guards the test model); it relies on the per-profile pressure check
+   before every start and llmctl's own admission/pressure gates.
+6. `--plan` is a dry run: static refusals, `llmctl plan --json` fit and the recording run, then it prints what would be stopped, what
+   would be started and how, and what would be restored, and exits 0 (verdict `PLAN`) without a switch, start, stop, verify or restore.
+   `--no-restore` (used by the runner) leaves the restore to the caller; `--restore-only <set-file>` restores a recorded set
+   (names, one per line; RAM figures read from a `prior_status.json` next to it) and is idempotent.
+
 ## Which profile is accepted (derived at run time; every refusal is exit 3 and starts nothing)
 
     vision_live_test.sh [--allow-large] [--gate-only] [<profile>]      # default profile: vision; env LT_ALLOW_LARGE=1 = --allow-large
@@ -74,6 +114,8 @@ Needs the explicit go-ahead of the lead. Never wrap it in retries. One profile p
 | 3 | refusal: not allowed for this profile/host, or the pre-gate refused (nothing was started) |
 | 4 | aborted by the watchdog (the profile was stopped) |
 | 5 | the watchdog itself died: aborted and stopped, the model never runs unguarded |
+| 6 | the run itself PASSed (or `--restore-only`) but the prior set was NOT restored: restore skipped (pressure / test model stop unconfirmed); manual command printed |
+| 7 | the run itself PASSed (or `--restore-only`) but a prior profile failed to restart, never became healthy, or was a scaled instance |
 
 ## Pre-gate (all must hold, else exit 3; unreadable sensor = refusal)
 
@@ -84,8 +126,8 @@ Needs the explicit go-ahead of the lead. Never wrap it in retries. One profile p
 - GPU used (max over GPUs, `nvidia-smi`) < 6000 MiB (unchanged for every profile)
 - when the plan gives the profile VRAM > 0: GPU free VRAM (`memory.free`, max over GPUs) >= the plan's `vram_mb` + 1024 MiB; an
   unreadable value is a refusal
-- `llmctl status --json` (read-only): the profile not already running; no other running profile with ram_mb >= 4000 or
-  vram_mb >= 2000 (our definition of "large"); no profile in a failed state
+- `llmctl status --json` (read-only): the profile not already running; no profile in a failed state (other RUNNING profiles are not a
+  refusal: they are the resident set that the switch stops and the tool restores, see above)
 - `systemctl --user list-units 'llmctl-*@<profile>*.service'` shows no failed / activating / auto-restart unit
 
 ## Watchdog (started before the model; samples every 2 s)
@@ -154,6 +196,11 @@ bounded.log (timeouts) identity.txt verdict.txt run.log
     run_profiles.sh [--allow-large] <profile> [<profile>...]     # explicit, ordered
     run_profiles.sh [--allow-large] --fitting                    # derived: catalog + plan + downloaded
 
+The runner records the resident set ONCE before the first run, runs the driver with `--no-restore` per profile (each driver `switch`
+stops the previous test model, so two test models are never resident), and restores the recorded set ONCE after the last run - also
+after a stop or an abort or an interrupt, whenever anything was switched off - through `vision_live_test.sh --restore-only`. Its exit
+code is the first failing profile's code, else the restore's (6/7). `--plan` prints the whole sequence and does nothing.
+
 Strictly sequential, never parallel: a `flock` on `<evidence root>/.runner.lock` refuses a second runner, the driver is run in the
 foreground, and before every run the runner refuses when ANY profile of the sequence shows as running in `llmctl status --json`.
 Before anything starts, every profile of the list is checked statically (an unknown/unsupported/large-without-flag profile anywhere
@@ -203,11 +250,21 @@ Cleanup ignores further Ctrl-C / TERM / HUP while it runs, so a second Ctrl-C ca
 - Pass criteria are suite-aware (vision / chat / coder / embedding): the expected counts come from the suite files.
 - Pre-gate memory and free-VRAM thresholds and the watchdog's GPU ceiling scale with the catalog footprint and are never below the
   original vision values; evidence directories are `<ts>-<profile>`; new `thresholds.txt` and `peaks.txt`.
+- Dynamic switching: the resident llmctl set is recorded, the profile under test is loaded with `llmctl switch`, and the set is
+  restored (pressure-gated, health-checked; exit 6 skipped / 7 failed; `--plan` dry run). It interrupts enabled services for the
+  duration of a run (accepted by the operator).
 - New `scripts/livetest/run_profiles.sh` runs an ordered list (or `--fitting`) one at a time and stops at the first non-zero exit.
 - Live evidence: unchanged. Only `vision` has ever run live; the new paths are verified by hermetic tests (fake llmctl/systemctl/nvidia-smi),
   which prove the checks and the flow, not any model's behaviour.
 
 ## Known unknowns
+
+- The restore is verified only against the hermetic fake llmctl: how a real `llmctl start <profile>` behaves for an enabled service
+  whose unit llmctl stopped (it may want `llmctl enable`/the waiter), whether `LLMCTL_VALIDATE_ON_START=0` is right for a restart,
+  and the accuracy of the status json `ram_mb`/`vram_mb` reservations used for the effective-memory gate are UNKNOWN until a live run.
+  `llmctl switch` itself restores the prior set when the target fails to start; this tool's restore is the second line.
+- If this tool is killed hard (SIGKILL, power loss) between the switch and the restore, nothing restores the set: the recorded
+  `RESTORE_MANUAL.txt` in the evidence dir is the recovery.
 
 - Nothing but `vision` has run live. Whether `llmctl validate <profile> --host ... --json --keep` of a chat/coder/embedding profile
   behaves on a live llama-server as in the hermetic runs (several JSON objects for a multi-suite profile; `--embeddings` needed for
