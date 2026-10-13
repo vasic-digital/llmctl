@@ -16,6 +16,7 @@ T = sys.argv[2]
 class H(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
         up = bool(glob.glob(T + "/env.*/fake/running") or glob.glob(T + "/env.*/fake/serving") or glob.glob(T + "/env.*/fake/restored"))
+        open(T + "/health_paths", "a").write(self.path + "\n")
         self.send_response(200 if up else 503); self.end_headers(); self.wfile.write(b'{"status":"ok"}' if up else b"down")
     def log_message(self, *a): pass
 http.server.HTTPServer(("127.0.0.1", int(sys.argv[1])), H).serve_forever()
@@ -124,6 +125,7 @@ sys.exit(0 if os.path.exists(f) and any(r.get("profile")==sys.argv[2] for r in j
       echo "restore $2" >>"$FAKE/calls"
       [ -f "$FAKE/running" ] && echo "restore $2 while $(cat "$FAKE/profile") is running" >>"$FAKE/overlap"
       [ -f "$FAKE/restore_fail.$2" ] && { echo "cannot start $2" >&2; exit 1; }
+      [ -f "$FAKE/restore_slow" ] && sleep "$(cat "$FAKE/restore_slow")"
       python3 -I - "$FAKE" "$2" <<'PY'
 import json,sys
 f,n=sys.argv[1],sys.argv[2]
@@ -197,16 +199,29 @@ X
   echo "$E"
 }
 
+# mainenv <env>: fills MENV with the hermetic environment of one driver run (used by run_main and start_main)
+mainenv() {
+  local E="$1"
+  MENV=(FAKE="$E/fake" PATH="$E/bin:$PATH" LT_HERMETIC=1 LT_WD_INTERVAL=0.2 LT_WD_MAX_WALL="${WALL:-600}"
+    LT_READY_INTERVAL=0.2 LT_READY_MAX="${READY_MAX:-4}" LT_VRAM_SETTLE_MAX=2 LT_VALIDATE_GRACE=3
+    LT_MEMINFO="$E/meminfo" LT_PSI="$E/psi" LT_IOPSI="$E/iopsi" LT_EVIDENCE_ROOT="$E/ev" HOME="$E/home"
+    LLMCTL_SERVICES_DIR="$E/services" LLMCTL_RUNTIME_DIR="$E/run" LT_SUITE_DIR="$E/suite" LT_SUITES_ROOT="$E/suites" LT_CATALOG="$E/catalog.json"
+    LT_VERIFY_BOUND=5 LT_PLAN_BOUND=5 LT_RESTORE_READY_MAX=3 LT_RESTORE_BOUND=5 LT_STOP_BOUND=2 LT_BOUND=2
+    LT_START_MAX="${START_MAX:-20}" LT_START_WAIT="${LT_START_WAIT_T:-15}" LT_POST_SAMPLE=2)
+}
 # run_main <env> [args...]: hermetic run, returns exit code in $RC, evidence dir in $EVD
 run_main() {
   local E="$1"; shift
-  RC=0
-  FAKE="$E/fake" PATH="$E/bin:$PATH" LT_HERMETIC=1 LT_WD_INTERVAL=0.2 LT_WD_MAX_WALL="${WALL:-600}" \
-    LT_READY_INTERVAL=0.2 LT_READY_MAX="${READY_MAX:-4}" LT_VRAM_SETTLE_MAX=2 LT_VALIDATE_GRACE=3 \
-    LT_MEMINFO="$E/meminfo" LT_PSI="$E/psi" LT_IOPSI="$E/iopsi" LT_EVIDENCE_ROOT="$E/ev" HOME="$E/home" \
-    LLMCTL_SERVICES_DIR="$E/services" LLMCTL_RUNTIME_DIR="$E/run" LT_SUITE_DIR="$E/suite" LT_SUITES_ROOT="$E/suites" LT_CATALOG="$E/catalog.json" LT_VERIFY_BOUND=5 LT_PLAN_BOUND=5 LT_RESTORE_READY_MAX=3 LT_RESTORE_BOUND=5 LT_STOP_BOUND=2 LT_BOUND=2 LT_START_MAX="${START_MAX:-20}" LT_START_WAIT="${LT_START_WAIT_T:-15}" LT_POST_SAMPLE=2 \
-    timeout 60 bash "$MAIN" "$@" >"$E/out.txt" 2>"$E/err.txt" || RC=$?
+  RC=0; mainenv "$E"
+  env "${MENV[@]}" timeout 60 bash "$MAIN" "$@" >"$E/out.txt" 2>"$E/err.txt" || RC=$?
   EVD="$(find "$E/ev" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | head -1)"
+}
+# start_main <env> [args...]: the same run in the BACKGROUND without `timeout` (so a signal reaches the driver itself); pid in MAINPID
+start_main() {
+  local E="$1"; shift
+  mainenv "$E"
+  env "${MENV[@]}" bash "$MAIN" "$@" >"$E/out.txt" 2>"$E/err.txt" &
+  MAINPID=$!
 }
 setmem() { printf 'MemAvailable:   %d kB\n' $(( $2 * 1024 )) >"$1/meminfo"; }
 setpsi() { printf 'some avg10=%s avg60=0 avg300=0 total=1\nfull avg10=%s avg60=0 avg300=0 total=1\n' "$2" "$3" >"$1/psi"; }

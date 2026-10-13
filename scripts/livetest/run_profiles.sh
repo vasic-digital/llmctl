@@ -111,7 +111,9 @@ mapfile -t PRIOR < <(printf '%s\n' "$PRIOR_OUT" | sed -n 's/^profile=//p')
 mapfile -t PRIOR_INST < <(printf '%s\n' "$PRIOR_OUT" | sed -n 's/^instance=//p')
 : >"$SEQ/prior_set.txt"; for _p in ${PRIOR[@]+"${PRIOR[@]}"}; do echo "$_p" >>"$SEQ/prior_set.txt"; done
 bounded 30 "$SEQ/prior_units.txt" systemctl --user list-units --all --plain --no-legend 'llmctl-*@*.service' || true
-[ "${#PRIOR[@]}" -eq 0 ] || echo "nice -n 19 ionice -c 3 $LLMCTL start ${PRIOR[*]}" >"$SEQ/RESTORE_MANUAL.txt"
+: >"$SEQ/RESTORE_MANUAL.txt"
+[ "${#PRIOR[@]}" -eq 0 ] || echo "nice -n 19 ionice -c 3 $LLMCTL start ${PRIOR[*]}" >>"$SEQ/RESTORE_MANUAL.txt"
+for _p in ${PRIOR_INST[@]+"${PRIOR_INST[@]}"}; do echo "scaled instance $_p was running: 'llmctl start' brings back ONE instance of its base profile; restore the instance count by hand" >>"$SEQ/RESTORE_MANUAL.txt"; done
 for _p in "${LIST[@]}"; do for _q in ${PRIOR[@]+"${PRIOR[@]}"}; do
   [ "$_p" != "$_q" ] || { log "REFUSED: profile '$_p' of the sequence is already running (never a second profile while one is running; nothing was switched off)"; exit 3; }
 done; done
@@ -181,13 +183,16 @@ for p in "${LIST[@]}"; do
 done
 
 # restore the recorded set ONCE, after the last driver run (also after a stop/abort/interrupt), if anything was switched off
-RESTORE_RC=0; RESTORE_TXT="NONE (nothing was running before)"
+RESTORE_RC=0; RESTORE_WORD=none; RESTORE_TXT="NONE (nothing was running before)"
 if [ "${#PRIOR[@]}" -gt 0 ] || [ "${#PRIOR_INST[@]}" -gt 0 ]; then
   if [ "$SWITCHED" = 1 ]; then
     log "restoring the recorded set: ${PRIOR[*]}"
     "$DRIVER" --restore-only "$SEQ/prior_set.txt" 9>&- >"$SEQ/restore.out" 2>&1; RESTORE_RC=$?
     cat "$SEQ/restore.out" >&2
-    case "$RESTORE_RC" in 0) RESTORE_TXT="YES" ;; 6) RESTORE_TXT="NO (SKIPPED: see above; manual: nice -n 19 ionice -c 3 $LLMCTL start ${PRIOR[*]})" ;; *) RESTORE_TXT="NO (FAILED/UNHEALTHY: see above; manual: nice -n 19 ionice -c 3 $LLMCTL start ${PRIOR[*]})" ;; esac
+    INST_TXT="${PRIOR_INST[*]:+; scaled instances NOT restorable by llmctl start: ${PRIOR_INST[*]} (see RESTORE_MANUAL.txt)}"
+    case "$RESTORE_RC" in 0) RESTORE_TXT="YES"; RESTORE_WORD=ok ;;
+      6) RESTORE_TXT="NO (SKIPPED: see above; manual: nice -n 19 ionice -c 3 $LLMCTL start ${PRIOR[*]}$INST_TXT)"; RESTORE_WORD=manual ;;
+      *) RESTORE_TXT="NO (FAILED/UNHEALTHY: see above; manual: nice -n 19 ionice -c 3 $LLMCTL start ${PRIOR[*]}$INST_TXT)"; RESTORE_WORD=failed ;; esac
   else RESTORE_TXT="n/a (nothing was switched off)"; fi
 fi
 
@@ -202,7 +207,9 @@ fi
   if [ "$STOP_RC" = 0 ]; then echo "SEQUENCE: PASS (${#LIST[@]} of ${#LIST[@]} profiles, one at a time)"
   else echo "SEQUENCE: STOPPED at '$STOPPED_AT' (exit $STOP_RC); remaining profiles were NOT run"; fi
   echo "prior set restored: $RESTORE_TXT"
+  echo "RESTORE_STATE=$RESTORE_WORD"
 } | tee "$SEQ/summary.txt"
+echo "$RESTORE_WORD" >"$SEQ/restore_state"
 echo "sequence evidence: $SEQ"
 [ "$STOP_RC" = 0 ] && STOP_RC="$RESTORE_RC"
 exit "$STOP_RC"

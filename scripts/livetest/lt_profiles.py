@@ -171,6 +171,14 @@ def cmd_fitting(a):
         print(name)
 
 
+def num(v):
+    try:
+        n = int(float(v))
+        return n if n > 0 else 0
+    except (TypeError, ValueError):
+        return 0
+
+
 def cmd_prior(a):
     try:
         rows = json.load(open(a.status))
@@ -184,15 +192,16 @@ def cmd_prior(a):
         name = str(r.get("profile", ""))
         if not str(r.get("state", "")).startswith("running") or name.split(".")[0] in ex:
             continue
-        ram += int(r.get("ram_mb") or 0)
-        vram += int(r.get("vram_mb") or 0)
+        r_ram, r_vram = num(r.get("ram_mb")), num(r.get("vram_mb"))   # missing / non-numeric -> 0 (callers treat 0 as UNKNOWN)
+        ram += r_ram
+        vram += r_vram
         if "." in name:
             print("instance=%s" % name)
             continue
         if name not in seen:
             seen.append(name)
             print("profile=%s" % name)
-            print("ram=%s:%d" % (name, int(r.get("ram_mb") or 0)))
+            print("ram=%s:%d" % (name, r_ram))
     print("total_ram_mb=%d" % ram)
     print("total_vram_mb=%d" % vram)
 

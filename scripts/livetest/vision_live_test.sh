@@ -43,6 +43,7 @@ if [ "${LT_HERMETIC:-0}" = "1" ]; then
 fi
 
 GATE_MIN_MEM_MB=12000; GATE_MIN_FREE_VRAM_MB=0; VRAM_NEED_MB=0; GATE_MAX_PSI_SOME=5; GATE_MAX_PSI_FULL=1; GATE_MAX_GPU_MB=6000; GATE_MAX_IO_SOME=10; GATE_MAX_IO_FULL=2
+WD_RAW_MARGIN_MB=1024; RESTORE_UNKNOWN_FLOOR_MB=6144   # raw MemAvailable must exceed the watchdog floor by this; restore floor when a profile's reserved RAM is unknown
 RESTORE_HEADROOM_MB=2048; RESTORE_BOUND=300; RESTORE_READY_MAX=120      # restore: RAM left free after a restart; bound of one `llmctl start`; health deadline
 READY_INTERVAL=3; READY_MAX=180; PORT_DEFAULT=8082; VRAM_SLACK_MB=500
 VALIDATE_GRACE=30; START_MAX=120; START_WAIT=60; POST_SAMPLE=20; PLAN_BOUND=60; VERIFY_BOUND=1800
@@ -125,7 +126,7 @@ log() { printf '%s %s\n' "$(date -u +%FT%TZ)" "$*" | tee -a "$EV/run.log" >&2; }
 
 WD_PID=""; START_SUB=""; START_PENDING=0; STOP_NEEDED=0; CLEANED=0; RESULT=2; VERDICT_REASON="not finished"
 CG_PEAK=UNKNOWN; CG_HIGH=UNKNOWN; CG_MAX=UNKNOWN; GPU_PEAK=UNKNOWN
-PRIOR_NAMES=(); PRIOR_RAM=0; PRIOR_VRAM=0; PRIOR_INSTANCES=(); RESTORE_NEEDED=0; RESTORE_DONE=0; RESTORE_RC=0; RESTORE_STATE="n/a (nothing was switched off)"; TARGET_STOP_OK=1
+RESTORE_WORD=none; PRIOR_NAMES=(); PRIOR_RAM=0; PRIOR_VRAM=0; PRIOR_INSTANCES=(); RESTORE_NEEDED=0; RESTORE_DONE=0; RESTORE_RC=0; RESTORE_STATE="n/a (nothing was switched off)"; TARGET_STOP_OK=1
 GPU_BASE_RAW=""; GPU_TOTAL=""; GATE_RES="NOT RUN"; READY=0; VRAM_NOTE=""; UNIT_STATE=""; PORT_SERVING=""; UNIT=""; FINAL_STOP_RC="NA"; GPU_BASE=""; GPU_FINAL=""; VALIDATE_RC="NA"; CLEAN_OK="NO"; MH="UNKNOWN"; PH="UNKNOWN"; LSV="UNKNOWN"
 
 print_table() {
@@ -152,6 +153,7 @@ print_table() {
   case "$RESULT" in 0) word=PASS; [ "$GATE_ONLY" = 1 ] && word=GATE-OK ;; 1) word=FAIL ;; 3) word=REFUSED ;; 4) word=ABORTED ;; 5) word=ABORTED-WATCHDOG-DEAD ;; 6) word=RESTORE-SKIPPED ;; 7) word=RESTORE-FAILED ;; *) ;; esac
   [ "$PLAN_ONLY" = 1 ] && [ "$RESULT" = 0 ] && word=PLAN
   printf '%-28s %s (exit %s) - %s\n' "VERDICT" "$word" "$RESULT" "$VERDICT_REASON"
+  echo "RESTORE_STATE=${RESTORE_WORD:-none}"
 }
 
 # peaks.txt: the resource peaks of THIS profile's run (also for aborted runs): GPU peak from the watchdog's samples,
@@ -220,8 +222,14 @@ cleanup() {   # always: stop our profile via llmctl, then reap our own watchdog
   return 0
 }
 # shellcheck disable=SC2329
+# machine-readable host-service state, for consumers that only see the exit code (the run's own 1-5 wins over 6/7): ok | manual | failed | none | deferred
+restore_word() {
+  case "$RESTORE_RC" in 6) echo manual; return ;; 7) echo failed; return ;; esac
+  case "$RESTORE_STATE" in YES*) echo ok ;; "left to the caller"*) echo deferred ;; "not yet"*) echo manual ;; *) echo none ;; esac
+}
 on_exit() {
   local rc=$?; trap '' INT TERM HUP; cleanup; collect_evidence; [ -z "$RESTORE_ONLY" ] && write_peaks
+  RESTORE_WORD="$(restore_word)"; echo "$RESTORE_WORD" >"$EV/restore_state"
   if [ "$RESTORE_RC" != 0 ]; then   # a run's own non-zero exit is never masked; a clean run with an unrestored set exits 6/7
     if [ "$rc" = 0 ]; then rc="$RESTORE_RC"; VERDICT_REASON="the run itself PASSed, but the prior set was NOT restored ($RESTORE_STATE) - see RESTORE_MANUAL.txt"
     else VERDICT_REASON="$VERDICT_REASON | PRIOR SET NOT RESTORED ($RESTORE_STATE) - see RESTORE_MANUAL.txt"; fi
@@ -279,10 +287,11 @@ services_env_file() {
   [ -n "${LLMCTL_TENANT_ID:-}" ] && inst="${LLMCTL_TENANT_ID}--${PROFILE}"
   echo "${LLMCTL_SERVICES_DIR:-${LLMCTL_STATE_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/llmctl}/services}/${inst}.env"
 }
-engine_of() {   # engine_of <profile>: from the unit env file llmctl wrote (default llama)
+env_get() {   # env_get <profile> <KEY>: a value from the unit env file llmctl wrote for that profile (empty when absent)
   local inst="${1:-$PROFILE}"; [ -n "${LLMCTL_TENANT_ID:-}" ] && inst="${LLMCTL_TENANT_ID}--${inst}"
-  sed -n 's/^LLMCTL_ENGINE=//p' "${LLMCTL_SERVICES_DIR:-${LLMCTL_STATE_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/llmctl}/services}/${inst}.env" 2>/dev/null | tr -d "'" | head -1
+  sed -n "s/^$2=//p" "${LLMCTL_SERVICES_DIR:-${LLMCTL_STATE_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/llmctl}/services}/${inst}.env" 2>/dev/null | tr -d "'" | head -1
 }
+engine_of() { env_get "${1:-$PROFILE}" LLMCTL_ENGINE; }
 unit_name() {   # unit_name [profile]
   local p="${1:-$PROFILE}" inst engine
   inst="$p"; [ -n "${LLMCTL_TENANT_ID:-}" ] && inst="${LLMCTL_TENANT_ID}--${p}"
@@ -348,7 +357,6 @@ record_prior() {
   for n in ${PRIOR_INSTANCES[@]+"${PRIOR_INSTANCES[@]}"}; do echo "scaled instance $n (llmctl start brings back ONE instance of the base profile)" >>"$EV/prior_unrestorable.txt"; done
   if [ "${#PRIOR_NAMES[@]}" -gt 0 ]; then
     echo "nice -n 19 ionice -c 3 $LLMCTL start ${PRIOR_NAMES[*]}" >"$EV/RESTORE_MANUAL.txt"
-    RESTORE_STATE="not yet (pending)"
   else RESTORE_STATE="NONE (no other llmctl profile was running)"; echo "nothing to restore (no other llmctl profile was running)" >"$EV/restore.txt"; fi
   log "recorded the running llmctl set: ${PRIOR_NAMES[*]:-<none>} (reserved RAM ${PRIOR_RAM} MiB, VRAM ${PRIOR_VRAM} MiB)"
 }
@@ -381,8 +389,11 @@ restore_gate() {   # restore_gate <ram_mb of the profile to restart>: 0 = the ho
   awk -v p="$R_PF" -v m="$GATE_MAX_PSI_FULL" 'BEGIN{exit !(p<m)}' || { RESTORE_WHY="memory PSI full avg10 ${R_PF} not < ${GATE_MAX_PSI_FULL} (host under pressure)"; return 1; }
   awk -v p="$R_IS" -v m="$GATE_MAX_IO_SOME" 'BEGIN{exit !(p<m)}' || { RESTORE_WHY="IO PSI some avg10 ${R_IS} not < ${GATE_MAX_IO_SOME} (host under pressure)"; return 1; }
   awk -v p="$R_IF" -v m="$GATE_MAX_IO_FULL" 'BEGIN{exit !(p<m)}' || { RESTORE_WHY="IO PSI full avg10 ${R_IF} not < ${GATE_MAX_IO_FULL} (host under pressure)"; return 1; }
-  need=$(( ${1:-0} + RESTORE_HEADROOM_MB ))
-  [ "$R_MEM" -ge "$need" ] || { RESTORE_WHY="MemAvailable ${R_MEM} MiB < ${need} (the profile's reserved RAM + ${RESTORE_HEADROOM_MB} headroom)"; return 1; }
+  if [[ "${1:-}" =~ ^[0-9]+$ ]] && [ "$1" -gt 0 ]; then
+    need=$(( $1 + RESTORE_HEADROOM_MB )); [ "$R_MEM" -ge "$need" ] || { RESTORE_WHY="MemAvailable ${R_MEM} MiB < ${need} (the profile's reserved RAM ${1} + ${RESTORE_HEADROOM_MB} headroom; both are estimates)"; return 1; }
+  else
+    need="$RESTORE_UNKNOWN_FLOOR_MB"; [ "$R_MEM" -ge "$need" ] || { RESTORE_WHY="MemAvailable ${R_MEM} MiB < ${need} (reserved RAM unknown for this profile: conservative default floor)"; return 1; }
+  fi
   return 0
 }
 
@@ -397,17 +408,23 @@ for r in rows:
         print(r.get("port") or ""); sys.exit(0)
 sys.exit(1)' "$1"
 }
-restore_healthy() {   # restore_healthy <profile> [port]: the engine's own health endpoint answers; no port known -> the llmctl unit is active
-  local p="$1" port="$2" path=/health
-  [ "$(engine_of "$p")" = onnx ] && path=/healthz
+restore_healthy() {   # restore_healthy <profile> [row-port]: the profile's own health endpoint answers; no port known -> its llmctl unit is active
+  local p="$1" port="${2:-}" path
+  path="$(env_get "$p" LLMCTL_REG_HEALTH)"   # llmctl's registry health path, any engine (portreg_health_path)
+  if [ -z "$path" ]; then path=/health; [ "$(engine_of "$p")" = onnx ] && path=/healthz; fi
+  [ -n "$port" ] || port="$(env_get "$p" LLMCTL_PORT)"
   if [ -n "$port" ]; then curl -fsS --max-time 3 "http://127.0.0.1:${port}${path}" >/dev/null 2>&1; return $?; fi
   bounded "$BOUND" "$EV/.ra.$p" "$SYSCTL" --user is-active "$(unit_name "$p")"; local rc=$?
   [ "$rc" = 0 ] && [ "$(head -1 "$EV/.ra.$p" 2>/dev/null)" = active ]
 }
 restore_manual_note() {   # restore_manual_note <names...>: loud, exact, in the evidence
-  local cmd="nice -n 19 ionice -c 3 $LLMCTL start $*"
-  echo "$cmd" >"$EV/RESTORE_MANUAL.txt"
-  log "RESTORE MANUALLY (the host is not touched any further by this tool): $cmd"
+  local cmd="nice -n 19 ionice -c 3 $LLMCTL start $*" i
+  : >"$EV/RESTORE_MANUAL.txt"
+  [ "$#" -eq 0 ] || { echo "$cmd" >>"$EV/RESTORE_MANUAL.txt"; log "RESTORE MANUALLY (the host is not touched any further by this tool): $cmd"; }
+  for i in ${PRIOR_INSTANCES[@]+"${PRIOR_INSTANCES[@]}"}; do
+    echo "scaled instance $i was running: 'llmctl start' brings back ONE instance of its base profile; restore the instance count by hand" >>"$EV/RESTORE_MANUAL.txt"
+    log "RESTORE MANUALLY: scaled instance $i (llmctl start restores one instance only)"
+  done
 }
 restore_skip_all() {   # restore_skip_all <reason> <names...>
   local why="$1" n; shift
@@ -418,19 +435,28 @@ restore_skip_all() {   # restore_skip_all <reason> <names...>
   restore_manual_note "$@"
 }
 # restore_set <names...>: llmctl start per profile, bounded, pressure-gated before EACH start, health-verified. Idempotent: a profile that
-# already runs (and is healthy) is left alone. Exit-code material: RESTORE_RC 0 ok | 6 something skipped (pressure) | 7 something failed.
+# already runs (and is healthy) is left alone. A profile whose reserved RAM is unknown/zero/non-numeric needs a conservative default floor.
+# SIGNALS: the first INT/TERM/HUP finishes the start attempt in flight (llmctl runs it detached; abandoning it would leave an untracked
+# half-started unit), then no further profile is started: the rest is SKIPPED (interrupted), the exact commands go to RESTORE_MANUAL.txt
+# and the exit is 6. A second signal changes nothing (the in-flight start is still tracked). SIGKILL cannot be handled: documented gap.
+# RESTORE_RC: 0 ok | 6 something skipped (pressure / interrupted) | 7 something failed.
+RESTORE_INTR=0
 restore_set() {
   local n ram port rc deadline failed=() skipped=() okc=0 ramfile="$EV/.ram.map" out
+  RESTORE_INTR=0; trap 'RESTORE_INTR=$((RESTORE_INTR + 1))' INT TERM HUP
   : >"$EV/restore.txt"
   if [ "$#" -eq 0 ] && [ "${#PRIOR_INSTANCES[@]}" -eq 0 ]; then
     echo "nothing to restore (no other llmctl profile was running)" >"$EV/restore.txt"; RESTORE_STATE="NONE (no other llmctl profile was running)"; return 0
   fi
   if [ -s "$EV/prior_status.json" ]; then ltp prior --status "$EV/prior_status.json" --exclude "$PROFILE" | sed -n 's/^ram=//p' >"$ramfile"; else : >"$ramfile"; fi
   for n in "$@"; do
+    if [ "$RESTORE_INTR" -gt 0 ]; then
+      printf '%-18s SKIPPED (interrupted: restore stopped after the profile in flight)\n' "$n" >>"$EV/restore.txt"; skipped+=("$n"); RESTORE_WHY="interrupted by a signal"; continue
+    fi
     ram="$(sed -n "s/^${n}://p" "$ramfile" | head -1)"; : "${ram:=0}"
     if port="$(restore_row_of "$n")"; then   # already running: idempotent, only verify
       deadline=$(( $(date +%s) + RESTORE_READY_MAX ))
-      while ! restore_healthy "$n" "$port"; do [ "$(date +%s)" -lt "$deadline" ] || break; sleep "$READY_INTERVAL"; done
+      while ! restore_healthy "$n" "$port"; do [ "$(date +%s)" -lt "$deadline" ] && [ "$RESTORE_INTR" = 0 ] || break; sleep "$READY_INTERVAL"; done
       if restore_healthy "$n" "$port"; then printf '%-18s ALREADY RUNNING (healthy)\n' "$n" >>"$EV/restore.txt"; okc=$((okc+1))
       else printf '%-18s FAILED (running but not healthy within %ss)\n' "$n" "$RESTORE_READY_MAX" >>"$EV/restore.txt"; failed+=("$n"); fi
       continue
@@ -442,15 +468,18 @@ restore_set() {
     if [ "$rc" != 0 ]; then printf '%-18s FAILED (llmctl start rc=%s: %s)\n' "$n" "$rc" "$(tail -1 "$EV/restore.$n.out" 2>/dev/null | cut -c1-120)" >>"$EV/restore.txt"; failed+=("$n"); continue; fi
     port="$(restore_row_of "$n")"; : "${port:=}"
     deadline=$(( $(date +%s) + RESTORE_READY_MAX ))
-    while ! restore_healthy "$n" "$port"; do [ "$(date +%s)" -lt "$deadline" ] || break; sleep "$READY_INTERVAL"; done
+    while ! restore_healthy "$n" "$port"; do [ "$(date +%s)" -lt "$deadline" ] && [ "$RESTORE_INTR" = 0 ] || break; sleep "$READY_INTERVAL"; done
     if restore_healthy "$n" "$port"; then printf '%-18s RESTORED (healthy)\n' "$n" >>"$EV/restore.txt"; okc=$((okc+1))
+    elif [ "$RESTORE_INTR" -gt 0 ]; then printf '%-18s SKIPPED (interrupted: started, health NOT verified - check llmctl status)\n' "$n" >>"$EV/restore.txt"; skipped+=("$n"); RESTORE_WHY="interrupted by a signal"
     else printf '%-18s FAILED (started but not healthy within %ss)\n' "$n" "$RESTORE_READY_MAX" >>"$EV/restore.txt"; failed+=("$n"); fi
   done
   for n in ${PRIOR_INSTANCES[@]+"${PRIOR_INSTANCES[@]}"}; do printf '%-18s FAILED (scaled instance: llmctl start restores one instance; restore it by hand)\n' "$n" >>"$EV/restore.txt"; failed+=("$n"); done
   status_json >"$EV/after_status.json" 2>/dev/null; bounded "$BOUND" "$EV/after_units.txt" "$SYSCTL" --user list-units --all --plain --no-legend 'llmctl-*@*.service' || true
+  local manual=()
   if [ "${#failed[@]}" -gt 0 ]; then
+    for n in "${failed[@]}" ${skipped[@]+"${skipped[@]}"}; do [[ "$n" == *.* ]] || manual+=("$n"); done
     RESTORE_RC=7; RESTORE_STATE="NO (FAILED: ${failed[*]}${skipped[*]:+; SKIPPED: ${skipped[*]}})"
-    log "RESTORE FAILED for: ${failed[*]} - see $EV/restore.txt"; restore_manual_note "${failed[@]}" ${skipped[@]+"${skipped[@]}"}
+    log "RESTORE FAILED for: ${failed[*]} - see $EV/restore.txt"; restore_manual_note ${manual[@]+"${manual[@]}"}
   elif [ "${#skipped[@]}" -gt 0 ]; then
     RESTORE_RC=6; RESTORE_STATE="NO (SKIPPED: ${skipped[*]}: $RESTORE_WHY)"
     log "RESTORE SKIPPED for: ${skipped[*]} ($RESTORE_WHY)"; restore_manual_note "${skipped[@]}"
@@ -467,7 +496,11 @@ restore_only_main() {   # --restore-only <set-file>: used by the runner for the 
   local -a names=(); local n
   while IFS= read -r n; do [[ "$n" =~ ^[a-z0-9][a-z0-9-]{0,62}$ ]] && names+=("$n"); done <"$RESTORE_ONLY"
   PRIOR_NAMES=("${names[@]}")
-  local d; d="$(dirname "$RESTORE_ONLY")"; [ -s "$d/prior_status.json" ] && cp "$d/prior_status.json" "$EV/prior_status.json"
+  local d po; d="$(dirname "$RESTORE_ONLY")"
+  if [ -s "$d/prior_status.json" ]; then   # the scaled instances (p.N) the set file cannot carry come from the recorded status
+    cp "$d/prior_status.json" "$EV/prior_status.json"
+    po="$(ltp prior --status "$EV/prior_status.json")" && mapfile -t PRIOR_INSTANCES < <(printf '%s\n' "$po" | sed -n 's/^instance=//p')
+  fi
   restore_set "${names[@]}"
   VERDICT_REASON="restore of ${#names[@]} profile(s): $RESTORE_STATE"
   exit "$RESTORE_RC"
@@ -494,6 +527,9 @@ gate() {
   awk -v p="$io_s" -v m="$GATE_MAX_IO_SOME" 'BEGIN{exit !(p<m)}' || refuse "IO PSI some avg10 ${io_s} not < ${GATE_MAX_IO_SOME}"
   awk -v p="$io_f" -v m="$GATE_MAX_IO_FULL" 'BEGIN{exit !(p<m)}' || refuse "IO PSI full avg10 ${io_f} not < ${GATE_MAX_IO_FULL}"
   [ -n "$gpu" ]   || refuse "cannot read GPU memory (nvidia-smi)"
+  # the reservation credit must never lower the watchdog's floor: the watchdog checks RAW MemAvailable while the resident set is still
+  # loaded, so a run that passes only thanks to the credit would be aborted (exit 4) AFTER the switch had stopped the resident set
+  [ "$mem_raw" -ge $(( WD_MIN_MEM_MB + WD_RAW_MARGIN_MB )) ] || refuse "RAW MemAvailable ${mem_raw} MiB < watchdog floor ${WD_MIN_MEM_MB} + ${WD_RAW_MARGIN_MB} margin (the resident set's reserved RAM is credited only above that floor; nothing was switched off)"
   [ "$mem" -ge "$GATE_MIN_MEM_MB" ] || refuse "MemAvailable ${mem} MiB < ${GATE_MIN_MEM_MB} (floor 12000 or catalog footprint ${FOOTPRINT_MB} + 4096 + 2048)"
   awk -v p="$psi_s" -v m="$GATE_MAX_PSI_SOME" 'BEGIN{exit !(p<m)}' || refuse "PSI some avg10 ${psi_s} not < ${GATE_MAX_PSI_SOME}"
   awk -v p="$psi_f" -v m="$GATE_MAX_PSI_FULL" 'BEGIN{exit !(p<m)}' || refuse "PSI full avg10 ${psi_f} not < ${GATE_MAX_PSI_FULL}"
@@ -620,10 +656,11 @@ abort_if_triggered() {
 }
 
 # ------------------------------------------------------------------ (c) start + readiness
+guard   # last look at the watchdog (trigger / death) BEFORE the resident set is switched off
 STOP_NEEDED=1; TARGET_STOP_OK=0; START_EPOCH=$(date +%s)
 if [ "${#PRIOR_NAMES[@]}" -gt 0 ] || [ "${#PRIOR_INSTANCES[@]}" -gt 0 ]; then
   if [ "$NO_RESTORE" = 1 ]; then RESTORE_STATE="left to the caller (--no-restore): ${PRIOR_NAMES[*]}"
-  else RESTORE_NEEDED=1; fi
+  else RESTORE_NEEDED=1; RESTORE_STATE="not yet (pending)"; fi
 fi
 log "starting: LLMCTL_VALIDATE_ON_START=0 nice -n 19 ionice -c 3 $LLMCTL switch $PROFILE (llmctl stops the resident set: ${PRIOR_NAMES[*]:-none})"
 echo "$(date -u +%FT%TZ) \$ LLMCTL_VALIDATE_ON_START=0 LLMCTL_READY_TIMEOUT=0 nice -n 19 ionice -c 3 $LLMCTL switch $PROFILE (background; stops: ${PRIOR_NAMES[*]:-none})" >>"$CMDLOG"

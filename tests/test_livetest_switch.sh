@@ -225,6 +225,103 @@ E="$(mkenv fast)"; setmem "$E" 11000; setprior "$E" decide-nli; run_run "$E" fas
 check "first profile refused by the gate: nothing was switched off, so no restore needed, exit stays 3" "$RC$(grep -c '^restore' "$E/fake/calls")" "30"
 fi
 
+if want review; then
+echo "== S8 (F1). a scaled instance is never silently dropped, also through the runner =="
+E="$(mkenv fast)"; setchat "$E"; setprior "$E" decide:800:0 decide.2:800:0
+run_main "$E" fast
+check "direct driver: resident decide + decide.2 -> restore exit 7" "$RC" "7"
+has "  restore.txt names the scaled instance" "$EVD/restore.txt" '^decide\.2 +FAILED \(scaled instance'
+E="$(mkenv fast)"; cp "$JD/chat-v1.json" "$E/fake/validate_file.fast"; setprior "$E" decide:800:0 decide.2:800:0
+run_run "$E" fast
+check "RUNNER with decide + decide.2 resident: exit 7 (not 0)" "$RC" "7"
+has "  summary says the prior set is NOT restored" "$E/out.txt" 'prior set restored: NO'
+has "  summary names the scaled instance" "$E/out.txt" 'decide\.2'
+has "  the sequence RESTORE_MANUAL.txt names the scaled instance" "$SEQD/RESTORE_MANUAL.txt" 'decide\.2'
+has "  the base profile was still restored" "$E/fake/calls" '^restore decide$'
+has "  machine-readable state in the summary" "$E/out.txt" '^RESTORE_STATE=failed$'
+E="$(mkenv fast)"; cp "$JD/chat-v1.json" "$E/fake/validate_file.fast"; setprior "$E" decide:800:0
+run_run "$E" fast; check "NEG-CONTROL: only the base profile resident -> runner exit 0" "$RC" "0"
+has "  RESTORE_STATE=ok" "$E/out.txt" '^RESTORE_STATE=ok$'
+
+echo "== S9 (F2). the reservation credit never lowers the watchdog's RAW memory floor =="
+E="$(mkenv fast)"; setchat "$E"; setprior "$E" big:10000:0; setmem "$E" 4000
+run_main "$E" fast
+check "raw MemAvailable 4000 (+10000 credited): refused by the gate (exit 3), not aborted by the watchdog" "$RC" "3"
+hasnt "  the resident set was NOT switched off for nothing" "$E/fake/calls" '^(switch|restore)'
+has "  reason names the raw floor" "$E/err.txt" 'RAW MemAvailable'
+E="$(mkenv fast)"; setchat "$E"; setprior "$E" big:10000:0; setmem "$E" 6023
+run_main "$E" fast; check "raw 6023 < floor 5000 + 1024: refused (exit 3)" "$RC" "3"
+E="$(mkenv fast)"; setchat "$E"; setprior "$E" big:10000:0; setmem "$E" 6024
+run_main "$E" fast; has "NEG-CONTROL raw 6024 passes the gate (switch issued)" "$E/fake/calls" '^switch fast$'
+g=$(grep -n '^guard[[:space:]]' "$MAIN" | head -1 | cut -d: -f1); sw=$(grep -n '^STOP_NEEDED=1; TARGET_STOP_OK=0' "$MAIN" | cut -d: -f1)
+[ -n "$g" ] && [ -n "$sw" ] && [ "$g" -lt "$sw" ] && ok "a watchdog guard check runs before the switch is launched (line $g < $sw)" || bad "no guard before the switch" "guard=$g switch=$sw"
+
+echo "== S10 (F3). unknown reserved RAM gets a conservative restore floor =="
+E="$(mkenv fast)"; setchat "$E"; setprior "$E" decide-nli:0:0
+printf 'printf "MemAvailable: %%d kB\\n" %d >"${FAKE%%/fake}/meminfo"\n' $((5500*1024)) >"$E/fake/mutate.sh"
+run_main "$E" fast
+check "ram_mb 0 and MemAvailable 5500 < 6144 floor: restore skipped (exit 6)" "$RC" "6"
+has "  the reason says the RAM figure is unknown and the default floor was used" "$EVD/restore.txt" 'SKIPPED.*6144.*(unknown|default)'
+E="$(mkenv fast)"; setchat "$E"; setprior "$E" decide-nli:0:0
+printf 'printf "MemAvailable: %%d kB\\n" %d >"${FAKE%%/fake}/meminfo"\n' $((6200*1024)) >"$E/fake/mutate.sh"
+run_main "$E" fast; check "NEG-CONTROL MemAvailable 6200 >= 6144: restored (exit 0)" "$RC" "0"
+E="$(mkenv fast)"; setchat "$E"; echo "[{\"profile\":\"decide-nli\",\"port\":$PORT,\"enabled\":true,\"state\":\"running\"},{\"profile\":\"small\",\"port\":$PORT,\"ram_mb\":\"abc\",\"enabled\":true,\"state\":\"running\"}]" >"$E/fake/others.json"
+printf 'printf "MemAvailable: %%d kB\\n" %d >"${FAKE%%/fake}/meminfo"\n' $((5500*1024)) >"$E/fake/mutate.sh"
+run_main "$E" fast; check "missing / non-numeric ram_mb are both treated as unknown (exit 6)" "$RC" "6"
+has "  both skipped" "$EVD/restore.txt" '^small +SKIPPED'
+
+echo "== S11 (F4). a first INT/TERM finishes the current restore start, then stops and leaves the manual commands =="
+E="$(mkenv fast)"; echo '[]' >"$E/fake/others.json"; setprior "$E" aaa:100:0 bbb:100:0 ccc:100:0; mv "$E/fake/others.json" "$E/fake/others.stopped.json"; echo '[]' >"$E/fake/others.json"
+echo 3 >"$E/fake/restore_slow"; printf 'aaa\nbbb\nccc\n' >"$E/set.txt"
+start_main "$E" --restore-only "$E/set.txt"; MP=$MAINPID
+for _ in $(seq 1 50); do grep -q '^restore aaa$' "$E/fake/calls" 2>/dev/null && break; sleep 0.1; done
+kill -TERM "$MP" 2>/dev/null; wait "$MP"; RC=$?; EVD="$(find "$E/ev" -mindepth 1 -maxdepth 1 -type d | head -1)"
+check "TERM during the first profile's start: exit 6" "$RC" "6"
+has "  the profile being started finished its start attempt" "$E/fake/calls" '^restore aaa$'
+hasnt "  no further profile was started" "$E/fake/calls" '^restore (bbb|ccc)$'
+has "  restore.txt: aaa has an outcome, bbb and ccc are SKIPPED (interrupted)" "$EVD/restore.txt" '^bbb +SKIPPED \(interrupted'
+has "  manual commands for the remaining profiles" "$EVD/RESTORE_MANUAL.txt" 'llmctl start bbb ccc'
+has "  the exit state is machine-readable" "$EVD/restore_state" '^manual$'
+E="$(mkenv fast)"; setprior "$E" aaa:100:0 bbb:100:0; mv "$E/fake/others.json" "$E/fake/others.stopped.json"; echo '[]' >"$E/fake/others.json"
+echo 3 >"$E/fake/restore_slow"; printf 'aaa\nbbb\n' >"$E/set.txt"
+start_main "$E" --restore-only "$E/set.txt"; MP=$MAINPID
+for _ in $(seq 1 50); do grep -q '^restore aaa$' "$E/fake/calls" 2>/dev/null && break; sleep 0.1; done
+kill -TERM "$MP" 2>/dev/null; sleep 0.3; kill -TERM "$MP" 2>/dev/null; wait "$MP"; RC=$?; EVD="$(find "$E/ev" -mindepth 1 -maxdepth 1 -type d | head -1)"
+check "a SECOND signal does not abort the start in flight: exit 6, aaa tracked" "$RC" "6"
+has "  aaa's outcome is recorded (not lost)" "$EVD/restore.txt" '^aaa '
+E="$(mkenv fast)"; setprior "$E" aaa:100:0 bbb:100:0; mv "$E/fake/others.json" "$E/fake/others.stopped.json"; echo '[]' >"$E/fake/others.json"; printf 'aaa\nbbb\n' >"$E/set.txt"
+run_main "$E" --restore-only "$E/set.txt"; check "NEG-CONTROL without a signal both are restored (exit 0)" "$RC$(grep -c '^restore ' "$E/fake/calls")" "02"
+
+echo "== S12 (F6). restore health path from the unit env file for ANY engine =="
+E="$(mkenv fast)"; setchat "$E"; setprior "$E" colibri-x:100:0
+printf "LLMCTL_ENGINE='colibri'\nLLMCTL_PORT=%s\nLLMCTL_REG_HEALTH=/v1/ready\n" "$PORT" >"$E/services/colibri-x.env"
+: >"$T/health_paths"; run_main "$E" fast
+check "colibri-style prior profile restored (exit 0)" "$RC" "0"
+has "  its health was probed on the env file's LLMCTL_REG_HEALTH path" "$T/health_paths" '^/v1/ready$'
+E="$(mkenv fast)"; setchat "$E"; setprior "$E" onnx-x:100:0; printf "LLMCTL_ENGINE='onnx'\n" >"$E/services/onnx-x.env"
+: >"$T/health_paths"; run_main "$E" fast
+has "onnx without REG_HEALTH falls back to /healthz" "$T/health_paths" '^/healthz$'
+E="$(mkenv fast)"; setchat "$E"; setprior "$E" llama-x:100:0; printf "LLMCTL_ENGINE='llama'\n" >"$E/services/llama-x.env"
+: >"$T/health_paths"; run_main "$E" fast
+has "NEG-CONTROL llama without REG_HEALTH uses /health" "$T/health_paths" '^/health$'
+E="$(mkenv fast)"; setchat "$E"; setprior "$E" colibri-y:100:0; printf "LLMCTL_ENGINE='colibri'\nLLMCTL_REG_HEALTH=/v1/ready\n" >"$E/services/colibri-y.env"
+# the row's port wins over the env file's port; no row port and no env port -> unit active
+: >"$T/health_paths"; run_main "$E" fast; has "row port + env health path" "$T/health_paths" '^/v1/ready$'
+
+echo "== S13. machine-readable RESTORE_STATE (verdict, evidence file) also when the run's own code wins =="
+E="$(mkenv fast)"; setchat "$E"; setprior "$E" decide-nli; run_main "$E" fast
+has "ok: verdict line" "$EVD/verdict.txt" '^RESTORE_STATE=ok$'; has "ok: evidence file" "$EVD/restore_state" '^ok$'
+E="$(mkenv fast)"; setchat "$E"; run_main "$E" fast; has "none: nothing resident" "$EVD/verdict.txt" '^RESTORE_STATE=none$'
+E="$(mkenv fast)"; setchat "$E"; setprior "$E" decide-nli; touch "$E/fake/restore_fail.decide-nli"; run_main "$E" fast
+has "failed" "$EVD/verdict.txt" '^RESTORE_STATE=failed$'
+E="$(mkenv fast)"; setchat "$E"; setprior "$E" decide-nli; echo 1 >"$E/fake/validate_rc"; echo x >"$E/fake/validate_file"; touch "$E/fake/restore_fail.decide-nli"
+run_main "$E" fast
+check "the run's own code (1 FAIL) wins over a failed restore" "$RC" "1"
+has "  but RESTORE_STATE=failed tells the host-service state" "$EVD/verdict.txt" '^RESTORE_STATE=failed$'
+E="$(mkenv fast)"; setchat "$E"; setprior "$E" decide-nli; printf 'printf "some avg10=8.00 avg60=0 avg300=0 total=1\\nfull avg10=0.00 avg60=0 avg300=0 total=1\\n" >"${FAKE%%/fake}/psi"\n' >"$E/fake/mutate.sh"
+run_main "$E" fast; has "manual (pressure)" "$EVD/verdict.txt" '^RESTORE_STATE=manual$'
+fi
+
 printf '\nRESULT: %d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -ne 0 ] || printf '  ok: all %d livetest switch assertions passed\n' "$PASS"
 [ "$FAIL" = 0 ]
