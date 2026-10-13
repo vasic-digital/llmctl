@@ -23,6 +23,49 @@ where `scripts/release/preflight_submodules.sh` reports a fully clean
 35-file test suite is green. Both `v3.0.0` and `v3.0.1` tags remain in the
 repository as an honest record of that process.
 
+## 3.2.1 (2026-10-13)
+
+A **documentation and help-text correction release**. No script, library, unit-template or catalog behaviour changed since 3.2.0: `git diff --stat v3.2.0..` touches `CHANGELOG.md`, `bin/llmctl` (the `help` text only), `docs/`, one new test and the version pins. The only edit in `bin/llmctl` besides the `LLMCTL_VERSION` pin is in the text printed by `llmctl help`.
+
+**Release status (read first).**
+
+- **The 3.2.0 tag and tarball are immutable and keep the stale text.** The 3.2.0 documentation and `llmctl help` called the model validation gate advisory (a wrong answer leaving the service running, systemd-started units skipping the hook). That was wrong for the shipped code: the gate is enforced. 3.2.1 supersedes those documents; the release notes of 3.2.0 were corrected on the forges after publication, the 3.2.0 tarball was not and cannot be.
+- **No new live evidence.** Everything said in the 3.2.0 section about the live test (profile `vision`, this host only, one run) stands exactly as written there and is not repeated or extended here. The livetest GPU-peak fix and the cgroup peak capture were already in 3.2.0 (no script changed after the tag; `git log v3.2.0..main -- scripts bin` lists only the help-text commit).
+- The standing 3.1.0 / 3.2.0 caveats are unchanged: manual QA was operator-waived; macOS is verified statically only; Windows is unsupported; accuracy figures are provisional; restart, memory-cap and pressure-gate behaviour was tested hermetically, not under a real memory-pressure event.
+
+### Added
+
+- `tests/test_docs_gate_not_advisory.sh` (reference: [`docs/scripts/test_docs_gate_not_advisory.md`](docs/scripts/test_docs_gate_not_advisory.md)): proves its scanner against planted stale sentences, then fails if `README.md`, `CHANGELOG.md`, `docs/*.md`, the `llmctl help` text or the release notes (`LLMCTL_RELEASE_NOTES`, default `~/llmctl-release-3.2.1/RELEASE_NOTES.md`) call the validation gate advisory, and asserts the enforcement and the waiter gap are stated.
+- [`docs/release-3.2.1-checklist.md`](docs/release-3.2.1-checklist.md): the release checklist of this patch (nothing in it has been executed against a remote).
+
+### Changed
+
+- **Documentation and `llmctl help` now state that the validation gate is enforced:** `start`, `switch`, `auto`, `enable`, `restart` and systemd-started units (boot, `Restart=`, `systemctl start`, through the registration waiter) run the suites once after the profile is ready; a FAIL stops the profile and exits non-zero; UNDETERMINED never stops or passes it (`LLMCTL_VALIDATE_STRICT=1` stops it). Touched: [`docs/validation.md`](docs/validation.md), [`docs/architecture.md`](docs/architecture.md), [`docs/faq.md`](docs/faq.md), [`docs/limitations.md`](docs/limitations.md), the 3.2.0 CHANGELOG entries below, and the `llmctl help` VALIDATION and ENVIRONMENT text (`LLMCTL_VALIDATE_ON_START` now lists `enable` and `restart`).
+- **Documented gap, not a behaviour change: the waiter.** The systemd path validates only when the port registry is active (`LLMCTL_PORTREG`); when it is inactive the waiter does nothing and the unit starts without the gate. It reads the unit's environment, not the operator's shell, so `LLMCTL_VALIDATE_STRICT` / `LLMCTL_VALIDATE_ON_START` belong in a unit drop-in, and it validates only catalog LLM profiles. See [`docs/limitations.md`](docs/limitations.md) and [`docs/validation.md`](docs/validation.md).
+- Version pins moved from 3.2.0 to 3.2.1 (`VERSION`, `bin/llmctl`, `README.md` banner and status table header, `docs/*.md` version statements, the OpenAPI `info.version`). The `llmctl-decide` gateway and its `decide scale`, `decide calibrate`, `probe-order` and `completions` commands, per-type maturity labels, `llmctl doctor`, `llmctl status --json`, the planner's `overhead_mb` term, the `LLMCTL_CTX_<PROFILE>` overrides and the scheduler's eviction rules are byte-for-byte the 3.2.0 code.
+
+### Fixed
+
+- The stale statements listed under Changed (advisory gate; systemd units skipping the hook; `llmctl help` naming only `start/auto/switch`). These were documentation errors; the code already enforced the gate in 3.2.0.
+
+### Security
+
+- No security-relevant change.
+
+### Removed
+
+- Nothing.
+
+### Migration notes
+
+- None. Replacing 3.2.0 with 3.2.1 changes no unit, drop-in, state file or exit code. Read the 3.2.0 documentation's gate statements as superseded by this release.
+
+### Known limitations
+
+- The 3.2.0 tarball and tag keep the stale documentation text.
+- The waiter gap above (port registry inactive means no validation on the systemd path) is documented, not closed.
+- Everything in the 3.2.0 "Known limitations" and "Release status" still applies, including: one real-model run (profile `vision`, this host, one run) and UNKNOWN for every other profile.
+
 ## 3.2.0 (2026-10-12)
 
 A host-safety and model-validation release. It bounds what an llmctl service may do to the machine (memory caps, no swap, bounded stop, bounded restart, a memory-pressure start gate), adds a

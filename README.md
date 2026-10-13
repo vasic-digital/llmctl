@@ -64,7 +64,7 @@ For a service that survives logout/reboot, follow up with
 Forgot `--recursive`? `git submodule update --init` or just run
 `llmctl build all` (a target is required), which initializes the submodules itself.
 
-> **Release 3.2.0** adds typed local decisions (`noul` / `choice` / `score`) behind a secured HTTPS gateway.
+> **Release 3.2.1** adds typed local decisions (`noul` / `choice` / `score`) behind a secured HTTPS gateway.
 > What changed and what you must do when upgrading: [`CHANGELOG.md`](CHANGELOG.md) (migration table).
 > What it does not do, and what was not verified live: [`docs/limitations.md`](docs/limitations.md).
 > Building the decision binary needs Go >= 1.25; everything else still needs only bash, python3 and curl.
@@ -77,7 +77,7 @@ Forgot `--recursive`? `git submodule update --init` or just run
 
 ### Supported platforms
 
-| Platform | Status in 3.2.0 |
+| Platform | Status in 3.2.1 |
 |---|---|
 | Linux (systemd `--user`) | **Live-verified**: the development host, plus a second Linux machine (ALT Linux, CPU only) for portability runs |
 | macOS (launchd) | Shipped, **verified statically only** (code read and fixture-tested; never run on a Mac) |
@@ -279,6 +279,7 @@ fastest path to a running model.
 | [`docs/api-reference.md`](docs/api-reference.md) | The real llama.cpp/colibri HTTP API every profile serves, plus `llmctld`'s implemented HTTP/3 control-plane API |
 | [`docs/release-process.md`](docs/release-process.md) | The full GitHub+GitLab release procedure: dry-run, submodule preflight, archive build, idempotent per-forge retry |
 | [`docs/release-3.2.0-checklist.md`](docs/release-3.2.0-checklist.md) | The 3.2.0 release checklist: gates, merge order, version bump, tag and publication steps |
+| [`docs/release-3.2.1-checklist.md`](docs/release-3.2.1-checklist.md) | The 3.2.1 (documentation and help-text correction) release checklist |
 | [`docs/scripts/bump_version.md`](docs/scripts/bump_version.md) | `scripts/release/bump_version.sh`: what it rewrites for a version bump and what stays manual |
 | [`docs/ports.md`](docs/ports.md) | Every port llmctl uses (generated from the catalog), the `LLMCTL_PORT_<PROFILE>` override named in the port-conflict message, fixed versus dynamic assignment, collisions seen on a real host |
 | [`docs/hardware-tiers.md`](docs/hardware-tiers.md) | The `below-minimum`/`baseline`/`workstation`/`datacenter` tier classification rules, plus decision-profile tiers and multi-instance capacity semantics |
