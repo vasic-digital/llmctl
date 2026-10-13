@@ -46,7 +46,7 @@ mkenv() {
   mkdir -p "$E/services" "$E/suites"
   # one unit env file per profile the tests may run: the unit loads $E/models/m.gguf (+ p.gguf for the vision profiles)
   local sp
-  for sp in vision vision-pro fast coder embed-x; do
+  for sp in vision vision-pro fast coder embed-x small; do
     case "$sp" in
       vision|vision-pro) printf "LLMCTL_ENGINE='llama'\nLLMCTL_ARGS=-m %s --mmproj %s --port 8082\n" "$E/models/m.gguf" "$E/models/p.gguf" >"$E/services/$sp.env" ;;
       *) printf "LLMCTL_ENGINE='llama'\nLLMCTL_ARGS=-m %s --port 8082\n" "$E/models/m.gguf" >"$E/services/$sp.env" ;;
@@ -131,6 +131,10 @@ import json,sys
 f,n=sys.argv[1],sys.argv[2]
 rows=json.load(open(f+"/others.json")); st=[r for r in json.load(open(f+"/others.stopped.json")) if r["profile"]==n]
 if not any(r["profile"]==n for r in rows): rows+=st
+import os
+if os.path.exists(f+"/rollback_instances"):   # llmctl's own rollback brought the scaled instances back too
+    for r in json.load(open(f+"/others.stopped.json")):
+        if "." in r["profile"] and not any(x["profile"]==r["profile"] for x in rows): rows.append(r)
 json.dump(rows,open(f+"/others.json","w"))
 PY
       [ -f "$FAKE/restore_unhealthy.$2" ] || touch "$FAKE/restored"
@@ -142,7 +146,10 @@ PY
 import json,sys
 f=sys.argv[1]; rows=json.load(open(f+"/others.json"))
 if rows:
-    json.dump(rows,open(f+"/others.stopped.json","w")); json.dump([],open(f+"/others.json","w"))
+    try: old=json.load(open(f+"/others.stopped.json"))
+    except Exception: old=[]
+    have={r["profile"] for r in old}
+    json.dump(old+[r for r in rows if r["profile"] not in have],open(f+"/others.stopped.json","w")); json.dump([],open(f+"/others.json","w"))
 PY
       rm -f "$FAKE/restored"
       [ -f "$FAKE/switch_fail" ] && { echo "switch failed" >&2; exit 1; }

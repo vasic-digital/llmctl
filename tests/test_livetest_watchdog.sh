@@ -607,12 +607,13 @@ has "validate runs at nice 19" "$E/fake/calls" '^validate_nice=19 '
 has "  validate runs at ionice idle" "$E/fake/calls" 'validate_nice=19 idle'
 # llmctl must resolve into the driver's own tree (non-hermetic); override is explicit and logged
 E="$(mkenv)"; echo '[{"profile":"coder","port":8081,"mode":"x","ram_mb":9000,"vram_mb":7000,"enabled":true,"state":"running","last_log_line":null}]' >"$E/fake/others.json"
-RC=0; FAKE="$E/fake" PATH="$E/bin:$PATH" LLMCTL_RUNTIME_DIR="$E/run" HOME="$E/home" timeout 60 bash "$MAIN" >"$E/out.txt" 2>&1 || RC=$?
+# hermetic: sensors from fixtures (LT_HERMETIC=1 + LT_*), the tree check forced against a tree that does not contain the fake llmctl
+RC=0; FAKE="$E/fake" PATH="$E/bin:$PATH" LT_HERMETIC=1 LT_MEMINFO="$E/meminfo" LT_PSI="$E/psi" LT_IOPSI="$E/iopsi" LT_LLMCTL_TREE="$E/no-such-tree" LT_EVIDENCE_ROOT="$E/home/.cache/llmctl-livetest" LT_SUITE_DIR="$E/suite" LT_SUITES_ROOT="$E/suites" LT_CATALOG="$E/catalog.json" LLMCTL_RUNTIME_DIR="$E/run" LLMCTL_SERVICES_DIR="$E/services" HOME="$E/home" timeout 60 bash "$MAIN" >"$E/out.txt" 2>&1 || RC=$?
 EVD="$(find "$E/home/.cache/llmctl-livetest" -mindepth 1 -maxdepth 1 -type d | head -1)"
 check "llmctl outside the driver's tree -> refused (exit 3)" "$RC" "3"
 has "  reason names the tree" "$EVD/gate.log" 'REFUSED: llmctl .* not inside'
 rm -rf "${E:?}/home"
-RC=0; FAKE="$E/fake" PATH="$E/bin:$PATH" LLMCTL_RUNTIME_DIR="$E/run" HOME="$E/home" LT_LLMCTL_TREE="$E/bin" timeout 60 bash "$MAIN" >"$E/out.txt" 2>&1 || RC=$?
+RC=0; FAKE="$E/fake" PATH="$E/bin:$PATH" LT_HERMETIC=1 LT_MEMINFO="$E/meminfo" LT_PSI="$E/psi" LT_IOPSI="$E/iopsi" LT_EVIDENCE_ROOT="$E/home/.cache/llmctl-livetest" LT_SUITE_DIR="$E/suite" LT_SUITES_ROOT="$E/suites" LT_CATALOG="$E/catalog.json" LLMCTL_RUNTIME_DIR="$E/run" LLMCTL_SERVICES_DIR="$E/services" HOME="$E/home" LT_LLMCTL_TREE="$E/bin" LT_START_MAX=5 LT_READY_MAX=2 LT_BOUND=2 LT_STOP_BOUND=2 LT_POST_SAMPLE=1 timeout 60 bash "$MAIN" >"$E/out.txt" 2>&1 || RC=$?
 EVD="$(find "$E/home/.cache/llmctl-livetest" -mindepth 1 -maxdepth 1 -type d | head -1)"
 has "NEG-CONTROL explicit LT_LLMCTL_TREE override is honoured and logged" "$EVD/overrides.log" 'HONOURED LT_LLMCTL_TREE'
 hasnt "  tree check no longer the refusal reason" "$EVD/gate.log" 'REFUSED: llmctl .* not inside'

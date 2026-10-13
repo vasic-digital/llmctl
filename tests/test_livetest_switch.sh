@@ -322,6 +322,59 @@ E="$(mkenv fast)"; setchat "$E"; setprior "$E" decide-nli; printf 'printf "some 
 run_main "$E" fast; has "manual (pressure)" "$EVD/verdict.txt" '^RESTORE_STATE=manual$'
 fi
 
+if want rev2; then
+echo "== S14 (F-N1). a group-delivered TERM/HUP does not kill the in-flight restore start =="
+E="$(mkenv fast)"; setprior "$E" aaa:100:0 bbb:100:0; mv "$E/fake/others.json" "$E/fake/others.stopped.json"; echo '[]' >"$E/fake/others.json"
+echo 3 >"$E/fake/restore_slow"; printf 'aaa\nbbb\n' >"$E/set.txt"
+start_main "$E" --restore-only "$E/set.txt"; MP=$MAINPID
+for _ in $(seq 1 60); do grep -q '^restore aaa$' "$E/fake/calls" 2>/dev/null && break; sleep 0.1; done
+for c in $(pgrep -f "$E/bin/llmctl start aaa"); do kill -TERM "$c" 2>/dev/null; kill -HUP "$c" 2>/dev/null; done
+kill -TERM "$MP" 2>/dev/null; wait "$MP"; RC=$?; EVD="$(find "$E/ev" -mindepth 1 -maxdepth 1 -type d | head -1)"
+check "TERM to the driver AND the llmctl start child: exit 6" "$RC" "6"
+has "  the in-flight start finished: aaa RESTORED" "$EVD/restore.txt" '^aaa +RESTORED'
+hasnt "  aaa is not reported FAILED (rc 143)" "$EVD/restore.txt" '^aaa +FAILED'
+has "  bbb left for the manual command" "$EVD/RESTORE_MANUAL.txt" 'llmctl start bbb'
+
+echo "== S15 (F-N2). --no-restore run directly is loud =="
+E="$(mkenv fast)"; setchat "$E"; setprior "$E" decide:800:0
+run_main "$E" --no-restore fast
+check "direct --no-restore: exit code stays 0" "$RC" "0"
+has "  stderr warns loudly at the start" "$E/err.txt" 'WARNING: --no-restore.*decide'
+has "  stderr names RESTORE_MANUAL.txt and the exact command" "$E/err.txt" 'RESTORE_MANUAL\.txt.*llmctl start decide|llmctl start decide.*RESTORE_MANUAL\.txt'
+has "  final line NOT RESTORED" "$E/out.txt" '^NOT RESTORED: .*decide'
+E="$(mkenv fast)"; setchat "$E"; run_main "$E" --no-restore fast
+hasnt "NEG-CONTROL nothing resident: no warning" "$E/err.txt" 'WARNING: --no-restore'
+hasnt "  no NOT RESTORED line" "$E/out.txt" '^NOT RESTORED'
+E="$(mkenv fast)"; cp "$JD/chat-v1.json" "$E/fake/validate_file.fast"; setprior "$E" decide:800:0
+run_run "$E" fast
+check "via the runner: exit 0, set restored" "$RC" "0"
+hasnt "  the runner-invoked driver does not print NOT RESTORED" "$SEQD/fast.out" 'NOT RESTORED|WARNING: --no-restore'
+
+echo "== S16 (F-N3). a scaled instance that llmctl's rollback brought back is not a failure =="
+E="$(mkenv fast)"; setchat "$E"; setprior "$E" decide:800:0 decide.2:800:0; touch "$E/fake/rollback_instances"
+run_main "$E" fast
+check "instance running again after the restore: exit 0" "$RC" "0"
+has "  decide.2 ALREADY RUNNING" "$EVD/restore.txt" '^decide\.2 +ALREADY RUNNING'
+E="$(mkenv fast)"; setchat "$E"; setprior "$E" decide:800:0 decide.2:800:0
+run_main "$E" fast
+check "NEG-CONTROL instance still missing: exit 7" "$RC" "7"
+has "  FAILED with an actual command" "$EVD/restore.txt" '^decide\.2 +FAILED.*llmctl decide scale decide 2'
+has "  RESTORE_MANUAL has the scale command" "$EVD/RESTORE_MANUAL.txt" 'llmctl decide scale decide 2'
+
+echo "== S17 (F-N4). the runner restores what a driver switched off beyond the initial set =="
+E="$(mkenv fast)"; cp "$JD/chat-v1.json" "$E/fake/validate_file.fast"; cp "$JD/chat-v1.json" "$E/fake/validate_file.small"; setprior "$E" decide:800:0
+printf '[ -f "$FAKE/mutated" ] && exit 0; touch "$FAKE/mutated"\npython3 -I -c '"'"'import json,sys;f=sys.argv[1];r=json.load(open(f+"/others.json"));r.append({"profile":"extra","port":%d,"ram_mb":500,"vram_mb":0,"enabled":True,"state":"running"});json.dump(r,open(f+"/others.json","w"))'"'"' "$FAKE"\n' "$PORT" >"$E/fake/mutate.sh"
+run_run "$E" fast small
+check "something started during run 1 and switched off by run 2: sequence exit 0" "$RC" "0"
+has "  extra restored too" "$E/fake/calls" '^restore extra$'
+has "  the initial member restored" "$E/fake/calls" '^restore decide$'
+has "  summary names the additional profile" "$E/out.txt" 'extra'
+has "  RESTORE_STATE=ok" "$E/out.txt" '^RESTORE_STATE=ok$'
+
+echo "== S18 (F-N5). docs state the 1024 margin is estimate-based =="
+has "protocol doc says the margin is an estimate-based choice that can only cost an abort+restore" "$ROOT/docs/live-test-protocol.md" 'margin.*estimate'
+fi
+
 printf '\nRESULT: %d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -ne 0 ] || printf '  ok: all %d livetest switch assertions passed\n' "$PASS"
 [ "$FAIL" = 0 ]

@@ -113,7 +113,10 @@ mapfile -t PRIOR_INST < <(printf '%s\n' "$PRIOR_OUT" | sed -n 's/^instance=//p')
 bounded 30 "$SEQ/prior_units.txt" systemctl --user list-units --all --plain --no-legend 'llmctl-*@*.service' || true
 : >"$SEQ/RESTORE_MANUAL.txt"
 [ "${#PRIOR[@]}" -eq 0 ] || echo "nice -n 19 ionice -c 3 $LLMCTL start ${PRIOR[*]}" >>"$SEQ/RESTORE_MANUAL.txt"
-for _p in ${PRIOR_INST[@]+"${PRIOR_INST[@]}"}; do echo "scaled instance $_p was running: 'llmctl start' brings back ONE instance of its base profile; restore the instance count by hand" >>"$SEQ/RESTORE_MANUAL.txt"; done
+for _p in ${PRIOR_INST[@]+"${PRIOR_INST[@]}"}; do
+  _c=0; for _q in ${PRIOR[@]+"${PRIOR[@]}"} ${PRIOR_INST[@]+"${PRIOR_INST[@]}"}; do [ "${_q%%.*}" = "${_p%%.*}" ] && _c=$((_c + 1)); done
+  echo "scaled instance $_p was running: nice -n 19 ionice -c 3 $LLMCTL decide scale ${_p%%.*} $_c   # 'llmctl start' brings back ONE instance only" >>"$SEQ/RESTORE_MANUAL.txt"
+done
 for _p in "${LIST[@]}"; do for _q in ${PRIOR[@]+"${PRIOR[@]}"}; do
   [ "$_p" != "$_q" ] || { log "REFUSED: profile '$_p' of the sequence is already running (never a second profile while one is running; nothing was switched off)"; exit 3; }
 done; done
@@ -154,7 +157,21 @@ for r in rows:
 }
 
 declare -A EXIT_OF VERDICT_OF EV_OF
-STOP_RC=0; STOPPED_AT=""; first=1; SWITCHED=0
+STOP_RC=0; STOPPED_AT=""; first=1; SWITCHED=0; EXTRA=(); EXTRA_INST=()
+note_extra() {   # note_extra <driver evidence dir>: whatever that driver's own run switched off beyond the recorded initial set
+  local d="$1" n q known
+  [ -s "$d/prior_set.txt" ] || [ -s "$d/prior_unrestorable.txt" ] || return 0
+  while IFS= read -r n; do
+    [ -n "$n" ] || continue; known=0
+    for q in ${PRIOR[@]+"${PRIOR[@]}"} ${EXTRA[@]+"${EXTRA[@]}"} "${LIST[@]}"; do [ "$q" = "$n" ] && known=1; done
+    [ "$known" = 1 ] || EXTRA+=("$n")
+  done <"$d/prior_set.txt"
+  while IFS= read -r n; do
+    n="${n#scaled instance }"; n="${n%% *}"; [ -n "$n" ] || continue
+    for q in ${EXTRA_INST[@]+"${EXTRA_INST[@]}"}; do [ "$q" = "$n" ] && n=""; done
+    [ -z "$n" ] || EXTRA_INST+=("$n")
+  done <"$d/prior_unrestorable.txt" 2>/dev/null
+}
 for p in "${LIST[@]}"; do
   [ "$INTERRUPTED" = 0 ] || { STOP_RC=2; STOPPED_AT="${STOPPED_AT:-$p}"; break; }
   if [ "$first" = 0 ]; then
@@ -174,23 +191,31 @@ for p in "${LIST[@]}"; do
   fi
   log "running '$p' (exit codes: 0 PASS 1 FAIL 2 undetermined 3 refused 4 watchdog abort 5 watchdog died)"
   SWITCHED=1
-  "$DRIVER" ${ALLOW[@]+"${ALLOW[@]}"} --no-restore "$p" 9>&- 2>&1 | tee "$SEQ/$p.out"
+  LT_VIA_RUNNER=1 "$DRIVER" ${ALLOW[@]+"${ALLOW[@]}"} --no-restore "$p" 9>&- 2>&1 | tee "$SEQ/$p.out"
   rc="${PIPESTATUS[0]}"
   EXIT_OF[$p]="$rc"
   VERDICT_OF[$p]="$(sed -n 's/^VERDICT  *//p' "$SEQ/$p.out" | tail -1 | cut -c1-90)"; [ -n "${VERDICT_OF[$p]}" ] || VERDICT_OF[$p]="(no verdict line)"
   EV_OF[$p]="$(awk '$1=="evidence"{print $2}' "$SEQ/$p.out" | tail -1)"
+  [ -z "${EV_OF[$p]}" ] || note_extra "${EV_OF[$p]}"
   if [ "$rc" != 0 ]; then STOP_RC="$rc"; STOPPED_AT="$p"; log "STOP: '$p' exited $rc; no further profile is started (a watchdog abort is never continued past)"; break; fi
 done
 
 # restore the recorded set ONCE, after the last driver run (also after a stop/abort/interrupt), if anything was switched off
 RESTORE_RC=0; RESTORE_WORD=none; RESTORE_TXT="NONE (nothing was running before)"
-if [ "${#PRIOR[@]}" -gt 0 ] || [ "${#PRIOR_INST[@]}" -gt 0 ]; then
+if [ "${#PRIOR[@]}" -gt 0 ] || [ "${#PRIOR_INST[@]}" -gt 0 ] || [ "${#EXTRA[@]}" -gt 0 ] || [ "${#EXTRA_INST[@]}" -gt 0 ]; then
   if [ "$SWITCHED" = 1 ]; then
-    log "restoring the recorded set: ${PRIOR[*]}"
+    for _p in ${EXTRA[@]+"${EXTRA[@]}"}; do echo "$_p" >>"$SEQ/prior_set.txt"; done
+    [ "${#EXTRA[@]}" -eq 0 ] || { log "also switched off during the sequence (not in the initial record): ${EXTRA[*]}"; echo "nice -n 19 ionice -c 3 $LLMCTL start ${EXTRA[*]}" >>"$SEQ/RESTORE_MANUAL.txt"; }
+    log "restoring the recorded set: ${PRIOR[*]} ${EXTRA[*]}"
     "$DRIVER" --restore-only "$SEQ/prior_set.txt" 9>&- >"$SEQ/restore.out" 2>&1; RESTORE_RC=$?
     cat "$SEQ/restore.out" >&2
     INST_TXT="${PRIOR_INST[*]:+; scaled instances NOT restorable by llmctl start: ${PRIOR_INST[*]} (see RESTORE_MANUAL.txt)}"
-    case "$RESTORE_RC" in 0) RESTORE_TXT="YES"; RESTORE_WORD=ok ;;
+    if [ "${#EXTRA_INST[@]}" -gt 0 ]; then
+      INST_TXT+="; scaled instances switched off during the sequence: ${EXTRA_INST[*]} (restore by hand: $LLMCTL decide scale <base> <N>)"
+      for _p in "${EXTRA_INST[@]}"; do echo "scaled instance $_p was switched off during the sequence: restore by hand with $LLMCTL decide scale ${_p%%.*} <N>" >>"$SEQ/RESTORE_MANUAL.txt"; done
+      [ "$RESTORE_RC" != 0 ] || RESTORE_RC=6
+    fi
+    case "$RESTORE_RC" in 0) RESTORE_TXT="YES${EXTRA[*]:+ (additionally restored: ${EXTRA[*]})}"; RESTORE_WORD=ok ;;
       6) RESTORE_TXT="NO (SKIPPED: see above; manual: nice -n 19 ionice -c 3 $LLMCTL start ${PRIOR[*]}$INST_TXT)"; RESTORE_WORD=manual ;;
       *) RESTORE_TXT="NO (FAILED/UNHEALTHY: see above; manual: nice -n 19 ionice -c 3 $LLMCTL start ${PRIOR[*]}$INST_TXT)"; RESTORE_WORD=failed ;; esac
   else RESTORE_TXT="n/a (nothing was switched off)"; fi
