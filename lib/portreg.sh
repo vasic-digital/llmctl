@@ -158,19 +158,15 @@ _portreg_pid_is_engine() {
   return 1
 }
 
-portreg_unregister() {
-  portreg_active || return 0
-  local name="$1" stop_pid="${2:-}" row_pid=""
-  # Ownership guard: a row whose pid is ALIVE and is not the stopping unit's pid belongs to another process (two units
-  # once ran one profile; the loser's ExecStopPost dropped the live winner's row). During ExecStopPost the stopping
-  # unit's own main process is already gone, so a live row pid is never ours. Unknown/unlistable -> old behaviour.
-  local listf; listf="$(mktemp)"
+# _portreg_row_pid <name> -> prints "<pid> <cmd_token>" of the registry row <name> (empty when none / unlistable).
+_portreg_row_pid() {
+  local listf out; listf="$(mktemp)"
   if command -v timeout >/dev/null 2>&1; then
     timeout -s KILL 1 "$(portreg_bin)" registry list --json > "${listf}" 2>/dev/null || true   # bounded; file, not a pipe
   else
     "$(portreg_bin)" registry list --json > "${listf}" 2>/dev/null || true
   fi
-  row_pid="$(NAME="${name}" python3 -c '
+  out="$(NAME="$1" python3 -c '
 import json, os, sys
 try:
     rows = json.load(sys.stdin).get("services", [])
@@ -180,8 +176,25 @@ for r in rows:
     if r.get("name") == os.environ["NAME"]:
         print("%s %s" % (r.get("pid") or "", r.get("cmd_token") or ""))
         break' < "${listf}" 2>/dev/null || true)"
-  local row_tok="${row_pid#* }"; row_pid="${row_pid%% *}"
   rm -f "${listf}"
+  printf '%s\n' "${out}"
+}
+
+# portreg_row_live_other <name> <pid> - rc 0 when the row <name> belongs to a LIVE engine process other than <pid>.
+portreg_row_live_other() {
+  portreg_active || return 1
+  local r rp rt; r="$(_portreg_row_pid "$1")"; rt="${r#* }"; rp="${r%% *}"
+  [[ "${rp}" =~ ^[0-9]+$ && "${rp}" -gt 1 && "${rp}" != "$2" ]] && kill -0 "${rp}" 2>/dev/null && _portreg_pid_is_engine "${rp}" "${rt}"
+}
+
+portreg_unregister() {
+  portreg_active || return 0
+  local name="$1" stop_pid="${2:-}" row_pid=""
+  # Ownership guard: a row whose pid is ALIVE and is not the stopping unit's pid belongs to another process (two units
+  # once ran one profile; the loser's ExecStopPost dropped the live winner's row). During ExecStopPost the stopping
+  # unit's own main process is already gone, so a live row pid is never ours. Unknown/unlistable -> old behaviour.
+  row_pid="$(_portreg_row_pid "${name}")"
+  local row_tok="${row_pid#* }"; row_pid="${row_pid%% *}"
   if [[ "${row_pid}" =~ ^[0-9]+$ && "${row_pid}" -gt 1 && "${row_pid}" != "${stop_pid}" ]] && kill -0 "${row_pid}" 2>/dev/null \
      && _portreg_pid_is_engine "${row_pid}" "${row_tok}"; then
     return 0

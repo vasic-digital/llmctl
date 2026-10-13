@@ -45,6 +45,7 @@ if sys.version_info < (3, 9):  # pragma: no cover - defensive, py2/3.8 hosts
     sys.exit(2)
 
 import argparse
+import errno
 import hmac
 import json
 import math
@@ -71,6 +72,9 @@ def log_line(event, **fields):
     rec.update(fields)
     sys.stdout.write(json.dumps(rec, default=str) + "\n")
     sys.stdout.flush()
+
+
+EXIT_ADDRINUSE = 98
 
 
 def die(msg, rc=2):
@@ -573,7 +577,17 @@ def main(argv=None):
 
     handler = make_handler(st)
     handler.timeout = timeout
-    server = LoopbackServer((LOOPBACK, args.port), handler)
+    try:
+        server = LoopbackServer((LOOPBACK, args.port), handler)
+    except OSError as exc:
+        # 98 is the documented "port already in use" status: the generated units
+        # list it in RestartPreventExitStatus so a duplicate engine unit that
+        # lost the bind race stops instead of restart-looping into the start limit.
+        if exc.errno == errno.EADDRINUSE:
+            die("cannot bind %s:%d: address already in use (another process, "
+                "e.g. a duplicate engine unit for the same profile, holds the port)"
+                % (LOOPBACK, args.port), rc=EXIT_ADDRINUSE)
+        die("cannot bind %s:%d: %s" % (LOOPBACK, args.port, exc), rc=1)
     log_line("listening", host=LOOPBACK, port=args.port, profile=args.profile,
              ready=ok, max_tokens=max_tokens, max_pairs=max_pairs)
     try:
