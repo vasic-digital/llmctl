@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # watchdog.sh - host-safety watchdog for a live llmctl model test.
 #
-# Usage: watchdog.sh <profile> <evidence-dir> <parent-pid>
+# Usage: watchdog.sh <profile> <evidence-dir> <parent-pid> [--min-mem-mb N] [--max-gpu-mb N]
 #        watchdog.sh --stop <profile> <evidence-dir>     (one bounded stop, used by the driver's cleanup)
 #
 # Stop = `llmctl stop` bounded to 20 s (it queues behind the scheduler flock that `llmctl start`
@@ -16,7 +16,10 @@
 #   | IO PSI some avg10 > 60 | IO PSI full avg10 > 30 | GPU used > 11500 MiB
 #   | wall clock > 600 s | parent gone | 3 consecutive unreadable sensors
 # It NEVER signals any process, never touches process groups, never reboots.
-# Thresholds are fixed. Thresholds, timings AND every sensor/binary redirection
+# Thresholds are fixed per run. The driver derives two of them from the profile's catalog footprint and passes them as options:
+# --min-mem-mb (never below the absolute floor 5000: a smaller value is raised to it) and --max-gpu-mb (the GPU ceiling,
+# default 11500; a large profile raises it above its own VRAM, a small card lowers it). Anything non-numeric is refused (exit 2).
+# Thresholds, timings AND every sensor/binary redirection
 # (LT_MEMINFO LT_PSI LT_IOPSI NVIDIA_SMI_BIN LLMCTL_BIN SYSTEMCTL_BIN) are honoured ONLY when LT_HERMETIC=1
 # (hermetic tests); otherwise they are ignored.
 set -uo pipefail
@@ -24,6 +27,17 @@ set -uo pipefail
 MODE=watch
 if [ "${1:-}" = "--stop" ]; then MODE=stop; shift; PARENT=0; fi
 PROFILE="${1:?profile}"; EV="${2:?evidence dir}"; [ "$MODE" = stop ] || PARENT="${3:?parent pid}"
+OPT_MIN_MEM=""; OPT_MAX_GPU=""
+if [ "$MODE" = watch ]; then
+  shift 3
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --min-mem-mb) [ "$#" -ge 2 ] && [[ "$2" =~ ^[0-9]+$ ]] || { echo "watchdog: --min-mem-mb needs a number" >&2; exit 2; }; OPT_MIN_MEM="$2"; shift 2 ;;
+      --max-gpu-mb) [ "$#" -ge 2 ] && [[ "$2" =~ ^[0-9]+$ ]] || { echo "watchdog: --max-gpu-mb needs a number" >&2; exit 2; }; OPT_MAX_GPU="$2"; shift 2 ;;
+      *) echo "watchdog: unknown argument '$1'" >&2; exit 2 ;;
+    esac
+  done
+fi
 SYSTEMCTL=systemctl
 LLMCTL=llmctl; NVSMI=nvidia-smi; MEMINFO=/proc/meminfo; PSI=/proc/pressure/memory; IOPSI=/proc/pressure/io
 if [ "${LT_HERMETIC:-0}" = "1" ]; then
@@ -33,6 +47,8 @@ fi
 umask 077
 
 MIN_MEM_MB=5000; MAX_PSI=20; MAX_PSI_FULL=10; MAX_IO_SOME=60; MAX_IO_FULL=30; MAX_GPU_MB=11500; MAX_WALL=600; INTERVAL=2; STOP_BOUND=20; POSTFIRE=240
+[ -z "$OPT_MIN_MEM" ] || [ "$OPT_MIN_MEM" -le "$MIN_MEM_MB" ] || MIN_MEM_MB="$OPT_MIN_MEM"   # only ever raises the 5000 MiB floor
+[ -z "$OPT_MAX_GPU" ] || [ "$OPT_MAX_GPU" -le 0 ] || MAX_GPU_MB="$OPT_MAX_GPU"
 if [ "${LT_HERMETIC:-0}" = "1" ]; then
   STOP_BOUND="${LT_STOP_BOUND:-$STOP_BOUND}"; POSTFIRE="${LT_POSTFIRE:-$POSTFIRE}"; MAX_WALL="${LT_WD_MAX_WALL:-$MAX_WALL}"; INTERVAL="${LT_WD_INTERVAL:-$INTERVAL}"
 fi

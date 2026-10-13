@@ -1,25 +1,30 @@
 #!/usr/bin/env bash
-# vision_live_test.sh - guarded live known-answer test of the llmctl `vision` profile.
+# vision_live_test.sh - guarded live known-answer test of ONE llmctl profile (default `vision`).
 #
-# Usage: vision_live_test.sh [vision]        (anything else, incl. vision-pro, is refused)
+# Usage: vision_live_test.sh [--allow-large] [--gate-only] [<profile>]      (env LT_ALLOW_LARGE=1 = --allow-large)
+#
+# The profile is accepted only when ALL hold, derived at run time (nothing is hard-coded by name or size):
+#   in models/catalog.json | engine llama | has validation suites that exist | `llmctl plan --json` lists it with fits=true
+#   | `llmctl models verify <p>` (checksum) rc 0 | not already running | large profiles (catalog min_tier workstation/
+#   datacenter, or footprint >= 10 GiB; e.g. vision-pro) additionally need --allow-large. Anything else: exit 3, nothing started.
+# --gate-only runs every refusal check and the pre-gate, starts NOTHING, exits 0 when they pass (the runner uses it between runs).
 #
 # Exit: 0 PASS | 1 wrong answer (FAIL) | 2 undetermined | 3 pre-gate refusal | 4 aborted by watchdog | 5 watchdog died (model stopped)
 #
 # Safety contract (see docs/live-test-protocol.md):
-#  * pre-gate refuses unless MemAvailable>=12000 MiB, PSI some<5 & full<1, GPU used<6000 MiB,
-#    nothing else large running, no failed/restarting llmctl unit for the profile;
+#  * pre-gate refuses unless MemAvailable>=max(12000 MiB, catalog footprint+4 GiB+2 GiB), PSI some<5 & full<1, GPU used<6000 MiB,
+#    GPU free VRAM >= the plan's VRAM for the profile + 1 GiB, nothing else large running, no failed/restarting unit for the profile;
 #  * watchdog.sh is started BEFORE the model and stops the profile on any breach;
-#  * the model is started ONLY via `LLMCTL_VALIDATE_ON_START=0 nice -n 19 ionice -c 3 llmctl start vision`;
+#  * the model is started ONLY via `LLMCTL_VALIDATE_ON_START=0 nice -n 19 ionice -c 3 llmctl start <profile>`;
 #  * the only signal this script ever sends is to the watchdog PID it started (safe_kill);
-#  * trap on EXIT/INT/TERM/HUP always runs `llmctl stop vision`;
+#  * trap on EXIT/INT/TERM/HUP always runs `llmctl stop <profile>`;
 #  * no retries, thresholds are constants (overridable only with LT_HERMETIC=1, used by tests).
 set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROFILE="${1:-vision}"
 # Sensor/binary redirections exist for the hermetic tests ONLY: honoured exclusively when LT_HERMETIC=1.
 LLMCTL=llmctl; NVSMI=nvidia-smi; SYSCTL=systemctl; MEMINFO=/proc/meminfo; PSI=/proc/pressure/memory; IOPSI=/proc/pressure/io
-OVERRIDE_NAMES="LT_MEMINFO LT_PSI LT_IOPSI NVIDIA_SMI_BIN LLMCTL_BIN SYSTEMCTL_BIN LT_SUITE_DIR LLAMA_SERVER_BIN LT_BOUND_DEFAULT LT_EVIDENCE_ROOT"
+OVERRIDE_NAMES="LT_MEMINFO LT_PSI LT_IOPSI NVIDIA_SMI_BIN LLMCTL_BIN SYSTEMCTL_BIN LT_SUITE_DIR LT_SUITES_ROOT LT_CATALOG LLAMA_SERVER_BIN LT_BOUND_DEFAULT LT_EVIDENCE_ROOT"
 LLAMA_BIN=llama-server; EVROOT="$HOME/.cache/llmctl-livetest"
 if [ "${LT_HERMETIC:-0}" = "1" ]; then
   LLMCTL="${LLMCTL_BIN:-llmctl}"; NVSMI="${NVIDIA_SMI_BIN:-nvidia-smi}"; SYSCTL="${SYSTEMCTL_BIN:-systemctl}"
@@ -27,26 +32,62 @@ if [ "${LT_HERMETIC:-0}" = "1" ]; then
   MEMINFO="${LT_MEMINFO:-/proc/meminfo}"; PSI="${LT_PSI:-/proc/pressure/memory}"; IOPSI="${LT_IOPSI:-/proc/pressure/io}"
 fi
 
-GATE_MIN_MEM_MB=12000; GATE_MAX_PSI_SOME=5; GATE_MAX_PSI_FULL=1; GATE_MAX_GPU_MB=6000; GATE_MAX_IO_SOME=10; GATE_MAX_IO_FULL=2
+GATE_MIN_MEM_MB=12000; GATE_MIN_FREE_VRAM_MB=0; VRAM_NEED_MB=0; GATE_MAX_PSI_SOME=5; GATE_MAX_PSI_FULL=1; GATE_MAX_GPU_MB=6000; GATE_MAX_IO_SOME=10; GATE_MAX_IO_FULL=2
 LARGE_RAM_MB=4000; LARGE_VRAM_MB=2000          # another running profile at/above either = "large model"
 READY_INTERVAL=3; READY_MAX=180; PORT_DEFAULT=8082; VRAM_SLACK_MB=500
-VALIDATE_GRACE=30; START_MAX=120; START_WAIT=60; POST_SAMPLE=20
+VALIDATE_GRACE=30; START_MAX=120; START_WAIT=60; POST_SAMPLE=20; PLAN_BOUND=60; VERIFY_BOUND=1800
+WD_MIN_MEM_MB=5000; WD_MAX_GPU_MB=11500   # the watchdog's absolute floors/defaults (watchdog.sh); derived per profile after the gate
 if [ "${LT_HERMETIC:-0}" = "1" ]; then
   READY_INTERVAL="${LT_READY_INTERVAL:-$READY_INTERVAL}"; READY_MAX="${LT_READY_MAX:-$READY_MAX}"
-  PORT_DEFAULT="${LT_PORT_DEFAULT:-$PORT_DEFAULT}"
   VALIDATE_GRACE="${LT_VALIDATE_GRACE:-$VALIDATE_GRACE}"; START_MAX="${LT_START_MAX:-$START_MAX}"; START_WAIT="${LT_START_WAIT:-$START_WAIT}"; POST_SAMPLE="${LT_POST_SAMPLE:-$POST_SAMPLE}"
+  PLAN_BOUND="${LT_PLAN_BOUND:-$PLAN_BOUND}"; VERIFY_BOUND="${LT_VERIFY_BOUND:-$VERIFY_BOUND}"
 fi
 
-# ---- profile allow-list: vision-pro (and anything not exactly `vision`) is refused unconditionally ----
-if [ "$PROFILE" != "vision" ]; then
-  echo "REFUSED: profile '$PROFILE' is not allowed (only 'vision'; vision-pro is refused unconditionally)" >&2
-  exit 3
+# ---- arguments ----
+ALLOW_LARGE=0; [ "${LT_ALLOW_LARGE:-0}" = "1" ] && ALLOW_LARGE=1
+GATE_ONLY=0; PROFILE=""
+static_refuse() { echo "REFUSED: $*" >&2; exit 3; }
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --allow-large) ALLOW_LARGE=1 ;;
+    --gate-only)   GATE_ONLY=1 ;;
+    -*)            static_refuse "unknown option '$1' (usage: vision_live_test.sh [--allow-large] [--gate-only] [<profile>])" ;;
+    *)             [ -z "$PROFILE" ] || static_refuse "exactly one profile per run (got '$PROFILE' and '$1'); use run_profiles.sh for a sequence"; PROFILE="$1" ;;
+  esac
+  shift
+done
+PROFILE="${PROFILE:-vision}"
+
+# ---- profile allow-list, part 1 (pure file reads; nothing is run, no evidence dir yet): catalog, engine, suites, large ----
+# Part 2 (llmctl plan --json fits, llmctl models verify, not already running) runs after the evidence dir exists.
+LTP="$HERE/lt_profiles.py"
+CATALOG="$HERE/../../models/catalog.json"; SUITES_ROOT="$HERE/../../validation/suites"; LTP_OVERRIDES=()
+if [ "${LT_HERMETIC:-0}" = "1" ]; then
+  CATALOG="${LT_CATALOG:-$CATALOG}"; SUITES_ROOT="${LT_SUITES_ROOT:-$SUITES_ROOT}"
+  [ -n "${LT_SUITE_DIR:-}" ] && LTP_OVERRIDES=(--override "vision-golden-v1=$LT_SUITE_DIR")   # legacy single-suite redirection
 fi
+ltp() { python3 -I "$LTP" "$@"; }
+command -v python3 >/dev/null 2>&1 || { echo "missing tool: python3" >&2; exit 2; }
+INFO="$(ltp info --catalog "$CATALOG" --suites-root "$SUITES_ROOT" --profile "$PROFILE" ${LTP_OVERRIDES[@]+"${LTP_OVERRIDES[@]}"})" \
+  || static_refuse "cannot evaluate profile '$PROFILE' against the catalog $CATALOG"
+info_kv() { printf '%s\n' "$INFO" | sed -n "s/^$1=//p" | head -1; }
+[ -z "$(info_kv refusal)" ] || static_refuse "$(info_kv refusal)"
+FOOTPRINT_MB="$(info_kv footprint_mb)"; SUITES_CSV="$(info_kv suites)"; NEEDS_MMPROJ="$(info_kv mmproj)"; ALL_VISION="$(info_kv all_vision)"
+if [ "$(info_kv large)" = "1" ] && [ "$ALLOW_LARGE" != "1" ]; then
+  static_refuse "profile '$PROFILE' is large (min_tier $(info_kv min_tier), catalog footprint ${FOOTPRINT_MB} MiB): it needs the explicit --allow-large (or LT_ALLOW_LARGE=1) AND a plan that says it fits"
+fi
+IFS=, read -r -a SUITES <<<"$SUITES_CSV"
+[ -z "$(info_kv port)" ] || PORT_DEFAULT="$(info_kv port)"      # the catalog's port is the fallback when `llmctl status` has none
+[ "${LT_HERMETIC:-0}" = "1" ] && PORT_DEFAULT="${LT_PORT_DEFAULT:-$PORT_DEFAULT}"
 
 umask 077   # evidence (status, logs, outputs) is private: dirs 0700, files 0600
 TS="$(date -u +%Y%m%dT%H%M%SZ)"
-EV="$EVROOT/$TS"
-mkdir -p "$EV" || { echo "cannot create evidence dir $EV" >&2; exit 2; }
+mkdir -p "$EVROOT" || { echo "cannot create evidence root $EVROOT" >&2; exit 2; }
+EV="$EVROOT/$TS-$PROFILE"; _n=1
+while ! mkdir "$EV" 2>/dev/null; do   # one directory per run and profile; a same-second rerun never shares one
+  _n=$((_n + 1)); [ "$_n" -le 99 ] || { echo "cannot create evidence dir $EV" >&2; exit 2; }
+  EV="$EVROOT/$TS-$PROFILE-$_n"
+done
 for _n in $OVERRIDE_NAMES; do
   if [ -n "${!_n:-}" ]; then
     if [ "${LT_HERMETIC:-0}" = 1 ]; then echo "HONOURED $_n=${!_n} (LT_HERMETIC=1: TEST RUN, NOT LIVE EVIDENCE)" >>"$EV/overrides.log"
@@ -61,10 +102,11 @@ log() { printf '%s %s\n' "$(date -u +%FT%TZ)" "$*" | tee -a "$EV/run.log" >&2; }
 
 WD_PID=""; START_SUB=""; START_PENDING=0; STOP_NEEDED=0; CLEANED=0; RESULT=2; VERDICT_REASON="not finished"
 CG_PEAK=UNKNOWN; CG_HIGH=UNKNOWN; CG_MAX=UNKNOWN; GPU_PEAK=UNKNOWN
-GATE_RES="NOT RUN"; READY=0; VRAM_NOTE=""; UNIT_STATE=""; PORT_SERVING=""; UNIT=""; FINAL_STOP_RC="NA"; GPU_BASE=""; GPU_FINAL=""; VALIDATE_RC="NA"; CLEAN_OK="NO"; MH="UNKNOWN"; PH="UNKNOWN"; LSV="UNKNOWN"
+GPU_TOTAL=""; GATE_RES="NOT RUN"; READY=0; VRAM_NOTE=""; UNIT_STATE=""; PORT_SERVING=""; UNIT=""; FINAL_STOP_RC="NA"; GPU_BASE=""; GPU_FINAL=""; VALIDATE_RC="NA"; CLEAN_OK="NO"; MH="UNKNOWN"; PH="UNKNOWN"; LSV="UNKNOWN"
 
 print_table() {
   printf '\n%-28s %s\n' "CHECK" "RESULT"
+  printf '%-28s %s\n' "profile" "$PROFILE"
   printf '%-28s %s\n' "pre-gate" "$GATE_RES"
   printf '%-28s %s\n' "watchdog trigger" "$([ -s "$EV/trigger" ] && cat "$EV/trigger" || echo none)"
   local READY_TXT=no; [ "$READY" = 1 ] && READY_TXT=up
@@ -81,8 +123,16 @@ print_table() {
   printf '%-28s %s\n' "llama-server" "$LSV"
   printf '%-28s %s\n' "evidence" "$EV"
   local word=UNDETERMINED
-  case "$RESULT" in 0) word=PASS ;; 1) word=FAIL ;; 3) word=REFUSED ;; 4) word=ABORTED ;; 5) word=ABORTED-WATCHDOG-DEAD ;; *) ;; esac
+  case "$RESULT" in 0) word=PASS; [ "$GATE_ONLY" = 1 ] && word=GATE-OK ;; 1) word=FAIL ;; 3) word=REFUSED ;; 4) word=ABORTED ;; 5) word=ABORTED-WATCHDOG-DEAD ;; *) ;; esac
   printf '%-28s %s (exit %s) - %s\n' "VERDICT" "$word" "$RESULT" "$VERDICT_REASON"
+}
+
+# peaks.txt: the resource peaks of THIS profile's run (also for aborted runs): GPU peak from the watchdog's samples,
+# the unit's cgroup MemoryPeak/High/Max captured before the stop (UNKNOWN when not captured, never 0).
+write_peaks() {
+  [ -s "$EV/samples.csv" ] && [ "$GPU_PEAK" = UNKNOWN ] && GPU_PEAK="$(gpu_peak_of "$EV/samples.csv")"
+  { echo "profile=$PROFILE"; echo "gpu_peak_mb=$GPU_PEAK"; echo "gpu_baseline_mb=${GPU_BASE:-UNKNOWN}"; echo "gpu_final_mb=${GPU_FINAL:-UNKNOWN}"
+    echo "unit_memory_peak_mb=$CG_PEAK"; echo "unit_memory_high_mb=$CG_HIGH"; echo "unit_memory_max_mb=$CG_MAX"; } >"$EV/peaks.txt"
 }
 
 # The ONLY place a signal is sent: to the watchdog PID this script started. Logged first.
@@ -139,7 +189,7 @@ cleanup() {   # always: stop our profile via llmctl, then reap our own watchdog
   return 0
 }
 # shellcheck disable=SC2329
-on_exit() { local rc=$?; trap '' INT TERM HUP; cleanup; collect_evidence; RESULT="$rc"; print_table | tee "$EV/verdict.txt"; exit "$rc"; }
+on_exit() { local rc=$?; trap '' INT TERM HUP; cleanup; collect_evidence; write_peaks; RESULT="$rc"; print_table | tee "$EV/verdict.txt"; exit "$rc"; }
 # shellcheck disable=SC2329
 on_sig()  { log "interrupted by signal"; RESULT=2; VERDICT_REASON="interrupted"; exit 2; }
 trap on_exit EXIT
@@ -150,13 +200,14 @@ refuse() { GATE_RES="REFUSED"; log "REFUSED (gate): $*"; echo "gate REFUSED: $*"
 need() { command -v "$1" >/dev/null 2>&1 || { log "missing tool: $1"; RESULT=2; VERDICT_REASON="missing tool $1"; exit 2; }; }
 need python3; need curl; need awk; need "$LLMCTL"; need "$NVSMI"; need nice; need ionice
 
-gpu_used() {
+gpu_query() {   # gpu_query <memory.used|memory.total|memory.free> -> max over GPUs, empty when unreadable
   local o="$EV/.gpu.$BASHPID.$RANDOM"
-  if bounded "$BOUND" "$o" "$NVSMI" --query-gpu=memory.used --format=csv,noheader,nounits; then
+  if bounded "$BOUND" "$o" "$NVSMI" --query-gpu="$1" --format=csv,noheader,nounits; then
     awk 'BEGIN{m=-1} /^[ \t]*[0-9]+[ \t]*$/{if($1+0>m)m=$1+0} END{if(m>=0)print m}' "$o"
   fi
   rm -f "$o" "$o.rc"
 }
+gpu_used() { gpu_query memory.used; }
 
 # bounded <secs> <outfile> cmd... : detached with a deadline, never signalled; rc 124 = still running at the deadline.
 BOUND=10; [ "${LT_HERMETIC:-0}" = 1 ] && BOUND="${LT_BOUND:-$BOUND}"
@@ -212,47 +263,15 @@ except Exception: pass
 print(model); print(mm)' "$(services_env_file)"
 }
 
-# PASS evidence: parsed JSON, verdict PASS, every probe PASS, probe count == the golden suite's probe count
-check_validate_json() {   # check_validate_json <validate.out> <suite-dir> -> prints OK or the reason
-  python3 -I - "$1" "$2" <<'PY'
-import json,sys
-raw=open(sys.argv[1],errors="replace").read()
-try:
-    i=raw.index("{"); rep,_=json.JSONDecoder().raw_decode(raw[i:])
-except Exception as e:
-    print("validate output is not parseable JSON (%s)"%e); sys.exit(0)
-try:
-    suite=json.load(open(sys.argv[2]+"/expectations.json"))
-    fx=suite["fixtures"]
-    expected=sum(len(f.get("probes",[])) for f in fx)
-    exp_controls=sum(len(f.get("discriminates",[])) for f in fx)
-    exp_det=len(suite.get("determinism_repeat",[]))
-except Exception as e:
-    print("validate output cannot be checked: golden suite unreadable (%s)"%e); sys.exit(0)
-# Shape of a fully correct run, as the real judge emits it (lib/validate_judge.py run()): one result per probe,
-# one control per `discriminates` entry, one determinism entry per determinism_repeat key; counts.pass is the SUM
-# of all three (controls and determinism repeats are counted too).
-res=rep.get("results"); c=rep.get("counts") or {}; ctl=rep.get("controls"); det=rep.get("determinism")
-if not isinstance(res,list) or not res: print("validate output has no probe results"); sys.exit(0)
-if not isinstance(ctl,list) or not isinstance(det,list): print("validate output lacks controls/determinism lists"); sys.exit(0)
-if rep.get("verdict")!="PASS" or rep.get("exit_code")!=0: print("validate output verdict=%r exit_code=%r"%(rep.get("verdict"),rep.get("exit_code"))); sys.exit(0)
-if c.get("fail") or c.get("undetermined"): print("validate output counts fail/undetermined non-zero: %r"%c); sys.exit(0)
-bad=[r.get("key") for r in res if r.get("verdict")!="PASS"]
-if bad: print("validate output has non-PASS probes: %s"%bad); sys.exit(0)
-if len(res)!=expected: print("validate output probe count %d != golden suite %d"%(len(res),expected)); sys.exit(0)
-if len(ctl)!=exp_controls: print("validate output control count %d != suite discriminates %d"%(len(ctl),exp_controls)); sys.exit(0)
-badc=[x.get("key") for x in ctl if x.get("verdict")!="PASS"]
-if badc: print("validate output has non-PASS controls: %s"%badc); sys.exit(0)
-if len(det)!=exp_det: print("validate output determinism entries %d != determinism_repeat %d"%(len(det),exp_det)); sys.exit(0)
-badd=[x.get("key") for x in det if x.get("identical") is not True]
-if badd: print("validate output determinism not identical: %s"%badd); sys.exit(0)
-if c.get("pass")!=len(res)+len(ctl)+len(det): print("validate output counts.pass=%r != probes+controls+determinism=%d"%(c.get("pass"),len(res)+len(ctl)+len(det))); sys.exit(0)
-print("OK")
-PY
+# PASS evidence (lt_profiles.py check): the --json output of `llmctl validate` parses; there is exactly one report per suite of
+# the profile; each has verdict PASS, no fail/undetermined, every probe PASS, and the probe/control/determinism counts equal what
+# the SUITE FILE says the real judge emits (vision: probes + `discriminates` controls + determinism_repeat; chat/coder: cases +
+# determinism_repeat; embedding: cases), with counts.pass equal to their sum. Prints OK or the reason.
+check_validate_json() {   # check_validate_json <validate.out> -> prints OK or the reason
+  local -a sa=(); local x
+  for x in "${SUITES[@]}"; do sa+=(--suite "$x"); done
+  ltp check --report "$1" --suites-root "$SUITES_ROOT" "${sa[@]}" ${LTP_OVERRIDES[@]+"${LTP_OVERRIDES[@]}"} || echo "validate output cannot be checked (lt_profiles.py failed)"
 }
-SUITE_DIR="$HERE/../../validation/suites/vision-golden-v1"
-[ "${LT_HERMETIC:-0}" = 1 ] && SUITE_DIR="${LT_SUITE_DIR:-$SUITE_DIR}"
-
 
 harness_info() {
   { echo "git_head=$(git -C "$HERE" rev-parse HEAD 2>/dev/null || echo UNKNOWN)"
@@ -286,11 +305,18 @@ gate() {
   awk -v p="$io_s" -v m="$GATE_MAX_IO_SOME" 'BEGIN{exit !(p<m)}' || refuse "IO PSI some avg10 ${io_s} not < ${GATE_MAX_IO_SOME}"
   awk -v p="$io_f" -v m="$GATE_MAX_IO_FULL" 'BEGIN{exit !(p<m)}' || refuse "IO PSI full avg10 ${io_f} not < ${GATE_MAX_IO_FULL}"
   [ -n "$gpu" ]   || refuse "cannot read GPU memory (nvidia-smi)"
-  [ "$mem" -ge "$GATE_MIN_MEM_MB" ] || refuse "MemAvailable ${mem} MiB < ${GATE_MIN_MEM_MB}"
+  [ "$mem" -ge "$GATE_MIN_MEM_MB" ] || refuse "MemAvailable ${mem} MiB < ${GATE_MIN_MEM_MB} (floor 12000 or catalog footprint ${FOOTPRINT_MB} + 4096 + 2048)"
   awk -v p="$psi_s" -v m="$GATE_MAX_PSI_SOME" 'BEGIN{exit !(p<m)}' || refuse "PSI some avg10 ${psi_s} not < ${GATE_MAX_PSI_SOME}"
   awk -v p="$psi_f" -v m="$GATE_MAX_PSI_FULL" 'BEGIN{exit !(p<m)}' || refuse "PSI full avg10 ${psi_f} not < ${GATE_MAX_PSI_FULL}"
   [ "$gpu" -lt "$GATE_MAX_GPU_MB" ] || refuse "GPU used ${gpu} MiB not < ${GATE_MAX_GPU_MB}"
   GPU_BASE="$gpu"
+  # free VRAM must cover the plan's VRAM for the profile + margin (only when the profile uses the GPU); the absolute GPU-used gate above stays
+  GPU_TOTAL=""
+  if [ "$VRAM_NEED_MB" -gt 0 ]; then
+    local gfree; gfree="$(gpu_query memory.free)"; GPU_TOTAL="$(gpu_query memory.total)"
+    [ -n "$gfree" ] || refuse "cannot read free GPU memory (nvidia-smi memory.free) while '$PROFILE' needs ${VRAM_NEED_MB} MiB of VRAM"
+    [ "$gfree" -ge "$GATE_MIN_FREE_VRAM_MB" ] || refuse "free VRAM ${gfree} MiB < ${GATE_MIN_FREE_VRAM_MB} (plan VRAM ${VRAM_NEED_MB} + 1024 margin)"
+  else GPU_TOTAL="$(gpu_query memory.total)"; fi
 
   # --- preconditions that must fail BEFORE any model is started ---
   local tree real
@@ -300,7 +326,6 @@ gate() {
     case "$real" in "$(readlink -f "$tree")"/*) ;; *) refuse "llmctl ($real) not inside this tree ($tree): the installed llmctl may lack vision validate/--host (set LT_LLMCTL_TREE to override explicitly)" ;; esac
     echo "llmctl tree check: $real inside $tree" >>"$EV/gate.log"
   fi
-  [ -s "$SUITE_DIR/expectations.json" ] || refuse "golden suite missing: $SUITE_DIR/expectations.json (run from the integrated tree that has validation/suites/vision-golden-v1)"
   # The scheduler flock (lib/scheduler.sh scheduler::with_lock) has NO timeout: if someone holds it, our start and our
   # stops would queue behind it. Non-blocking shared probe, released immediately; never held past the check.
   local rt lock holder
@@ -340,14 +365,50 @@ print("OK")' "$PROFILE" "$LARGE_RAM_MB" "$LARGE_VRAM_MB")"
   fi
   GATE_RES="PASS"; echo "gate: PASS" >>"$EV/gate.log"; log "gate PASS (mem=${mem}MiB psi=${psi_s}/${psi_f} gpu=${gpu}MiB)"
 }
+# ------------------------------------------------------------------ (a0) eligibility, part 2: plan fits + checksum verified
+# `llmctl plan --json` is read-only (hardware probe + catalog); only stdout is the JSON (stderr kept apart).
+eligibility() {
+  local rc=0 fits_out why
+  bounded "$PLAN_BOUND" "$EV/plan.json" bash -c '"$@" 2>"$0"' "$EV/plan.err" "$LLMCTL" plan --json || rc=$?
+  [ "$rc" = 0 ] || refuse "llmctl plan --json failed or timed out (rc=$rc): cannot tell whether '$PROFILE' fits this host"
+  fits_out="$(ltp fits --plan "$EV/plan.json" --profile "$PROFILE" --footprint-mb "$FOOTPRINT_MB")" || refuse "llmctl plan --json output is not usable"
+  why="$(printf '%s\n' "$fits_out" | sed -n 's/^refusal=//p' | head -1)"
+  [ -z "$why" ] || refuse "$why"
+  printf '%s\n' "$fits_out" >"$EV/plan_fits.txt"
+  GATE_MIN_MEM_MB="$(printf '%s\n' "$fits_out" | sed -n 's/^gate_min_mem_mb=//p')"
+  GATE_MIN_FREE_VRAM_MB="$(printf '%s\n' "$fits_out" | sed -n 's/^gate_min_free_vram_mb=//p')"
+  VRAM_NEED_MB="$(printf '%s\n' "$fits_out" | sed -n 's/^vram_need_mb=//p')"
+  case "$GATE_MIN_MEM_MB$GATE_MIN_FREE_VRAM_MB$VRAM_NEED_MB" in ''|*[!0-9]*) refuse "plan-derived gate thresholds are not numbers" ;; esac
+  # the checksum of what is on disk must verify (hashes GBs: niced, bounded, never signalled; a timeout is a refusal, never a pass).
+  # --gate-only (the runner's between-runs re-check) leaves it to the real run: it re-checks the HOST, and must not re-hash GBs.
+  [ "$GATE_ONLY" = 1 ] && return 0
+  rc=0
+  bounded "$VERIFY_BOUND" "$EV/verify.out" nice -n 19 ionice -c 3 "$LLMCTL" models verify "$PROFILE" || rc=$?
+  echo "$(date -u +%FT%TZ) \$ nice -n 19 ionice -c 3 $LLMCTL models verify $PROFILE -> rc=$rc" >>"$CMDLOG"
+  if [ "$rc" = 124 ]; then refuse "checksum verification of '$PROFILE' did not finish within ${VERIFY_BOUND}s (not verified)"
+  elif [ "$rc" != 0 ]; then refuse "checksum NOT verified: 'llmctl models verify $PROFILE' rc=$rc (profile not downloaded or files do not match the catalog sha256; see verify.out)"; fi
+}
 harness_info
+eligibility
 gate
+
+# watchdog limits derived from the footprint with the absolute floors: memory abort floor 5000 MiB is never lowered (the gate already
+# guarantees >= footprint + 6 GiB before the start, so a legitimate load stays above it); the GPU ceiling is max(11500, baseline + plan
+# VRAM + 1024), capped at (card total - 256) when the total is readable (a small card lowers it: lower is safer).
+WD_MAX_GPU_MB=$(( GPU_BASE + VRAM_NEED_MB + 1024 )); [ "$WD_MAX_GPU_MB" -ge 11500 ] || WD_MAX_GPU_MB=11500
+if [ -n "$GPU_TOTAL" ] && [ "$GPU_TOTAL" -gt 256 ] && [ "$WD_MAX_GPU_MB" -gt $(( GPU_TOTAL - 256 )) ]; then WD_MAX_GPU_MB=$(( GPU_TOTAL - 256 )); fi
+{ echo "profile=$PROFILE"; echo "suites=$SUITES_CSV"; echo "allow_large=$ALLOW_LARGE"; echo "footprint_mb=$FOOTPRINT_MB"; echo "vram_need_mb=$VRAM_NEED_MB"
+  echo "gate_min_mem_mb=$GATE_MIN_MEM_MB"; echo "gate_min_free_vram_mb=$GATE_MIN_FREE_VRAM_MB"; echo "gpu_total_mb=${GPU_TOTAL:-UNKNOWN}"
+  echo "wd_min_mem_mb=$WD_MIN_MEM_MB"; echo "wd_max_gpu_mb=$WD_MAX_GPU_MB"; echo "catalog=$CATALOG"; } >"$EV/thresholds.txt"
+if [ "$GATE_ONLY" = 1 ]; then
+  RESULT=0; VERDICT_REASON="gate only: every refusal check and the pre-gate passed; NOTHING was started (this is not a test result)"; log "$VERDICT_REASON"; exit 0
+fi
 
 # ------------------------------------------------------------------ (b) watchdog BEFORE the model
 # own session/process group (setsid execs in place for a background job, so $! is still the watchdog PID): a
 # group-directed signal aimed at the driver (e.g. Ctrl-C / kill -- -PGID) does not also take out the guard.
-if command -v setsid >/dev/null 2>&1; then setsid "$HERE/watchdog.sh" "$PROFILE" "$EV" "$$" >>"$EV/watchdog.out" 2>&1 &
-else "$HERE/watchdog.sh" "$PROFILE" "$EV" "$$" >>"$EV/watchdog.out" 2>&1 & echo "setsid unavailable: watchdog shares the driver process group" >>"$EV/overrides.log"; fi
+if command -v setsid >/dev/null 2>&1; then setsid "$HERE/watchdog.sh" "$PROFILE" "$EV" "$$" --min-mem-mb "$WD_MIN_MEM_MB" --max-gpu-mb "$WD_MAX_GPU_MB" >>"$EV/watchdog.out" 2>&1 &
+else "$HERE/watchdog.sh" "$PROFILE" "$EV" "$$" --min-mem-mb "$WD_MIN_MEM_MB" --max-gpu-mb "$WD_MAX_GPU_MB" >>"$EV/watchdog.out" 2>&1 & echo "setsid unavailable: watchdog shares the driver process group" >>"$EV/overrides.log"; fi
 WD_PID=$!
 echo "$(date -u +%FT%TZ) started watchdog pid $WD_PID" >>"$SIGLOG"
 for _ in $(seq 1 20); do [ "$(wc -l <"$EV/samples.csv" 2>/dev/null || echo 0)" -ge 2 ] && break; sleep 0.5; done
@@ -412,15 +473,22 @@ echo "unit_env=$(services_env_file) model=${LOADED_MODEL:-UNKNOWN} mmproj=${LOAD
 
 # ------------------------------------------------------------------ (d) known-answer probes
 HAVE_VV=0
-if bounded "$BOUND" "$EV/.vhelp" "$LLMCTL" vision help && grep -q 'vision validate' "$EV/.vhelp" && grep -q -- '--host' "$EV/.vhelp"; then HAVE_VV=1; fi
-[ "$HAVE_VV" = 1 ] || { RESULT=2; VERDICT_REASON="installed llmctl has no 'vision validate --host' (without --host validate could restart the model); scratch harness not used live"; exit 2; }
+if [ "$ALL_VISION" = 1 ]; then
+  if bounded "$BOUND" "$EV/.vhelp" "$LLMCTL" vision help && grep -q 'vision validate' "$EV/.vhelp" && grep -q -- '--host' "$EV/.vhelp"; then HAVE_VV=1; fi
+  VV_NAME="'vision validate --host'"
+else
+  if bounded "$BOUND" "$EV/.vhelp" "$LLMCTL" help && grep -Eq 'validate <profile> \[--host' "$EV/.vhelp"; then HAVE_VV=1; fi
+  VV_NAME="'validate <profile> --host'"
+fi
+[ "$HAVE_VV" = 1 ] || { RESULT=2; VERDICT_REASON="installed llmctl has no $VV_NAME (without --host validate could restart the model); scratch harness not used live"; exit 2; }
 # Immediately before validate: the profile must be up (health answers). validate gets --host so it validates an
 # explicit endpoint and can NEVER start the profile itself (without --host, lib/validate.sh calls sched_start when
 # there is no .run file, which a stop removes - an un-niced, un-gated restart). --host also means the verdict is
 # evidence only and is not recorded as local validation state (fine: our evidence is the captured output).
 guard
 curl -fsS --max-time 3 "$URL/health" >/dev/null 2>&1 || { RESULT=2; VERDICT_REASON="profile not up immediately before validate"; exit 2; }
-VCMD=(nice -n 19 ionice -c 3 "$LLMCTL" vision validate --profile "$PROFILE" --host "$URL" --json --keep)
+if [ "$ALL_VISION" = 1 ]; then VCMD=(nice -n 19 ionice -c 3 "$LLMCTL" vision validate --profile "$PROFILE" --host "$URL" --json --keep)
+else VCMD=(nice -n 19 ionice -c 3 "$LLMCTL" validate "$PROFILE" --host "$URL" --json --keep); fi
 echo "$(date -u +%FT%TZ) \$ ${VCMD[*]}" >>"$CMDLOG"
 "${VCMD[@]}" >"$EV/validate.out" 2>"$EV/validate.err" &
 VPID=$!
@@ -473,15 +541,15 @@ if [ "$STILL" = "no" ] && [ -n "$GPU_FINAL" ] && [ "$GPU_FINAL" -le $((GPU_BASE 
 
 hash_of() { if [ -n "$1" ] && [ -f "$1" ]; then nice -n 19 ionice -c 3 sha256sum "$1" | awk '{print $1}'; else echo "MISSING"; fi; }
 MH="$(hash_of "${LOADED_MODEL:-}")"
-PH="$(hash_of "${LOADED_MMPROJ:-}")"
-JSON_VERDICT="$(check_validate_json "$EV/validate.out" "$SUITE_DIR")"; echo "$JSON_VERDICT" >"$EV/validate_check.txt"
+if [ "$NEEDS_MMPROJ" = 1 ]; then PH="$(hash_of "${LOADED_MMPROJ:-}")"; else PH="N/A"; fi   # only profiles whose catalog has an mmproj file need one
+JSON_VERDICT="$(check_validate_json "$EV/validate.out")"; echo "$JSON_VERDICT" >"$EV/validate_check.txt"
 bounded "$BOUND" "$EV/.lsv" "$LLAMA_BIN" --version; LSV="$(tr '\n' ' ' <"$EV/.lsv" 2>/dev/null | cut -c1-300)"; [ -n "$LSV" ] || LSV="UNKNOWN"
 { echo "model_sha256=$MH"; echo "mmproj_sha256=$PH"; echo "llama_server_version=$LSV"; echo "gpu_baseline_mb=$GPU_BASE gpu_final_mb=$GPU_FINAL"; } >"$EV/identity.txt"
 
 if [ "$VALIDATE_RC" = 1 ]; then RESULT=1; VERDICT_REASON="wrong answer(s): validate rc=1"
 elif [ "$VALIDATE_RC" != 0 ]; then RESULT=2; VERDICT_REASON="validate rc=$VALIDATE_RC (could not determine)"
 elif [ "$JSON_VERDICT" != OK ]; then RESULT=2; VERDICT_REASON="$JSON_VERDICT"
-elif [ "$MH" = MISSING ] || [ "$PH" = MISSING ]; then RESULT=2; VERDICT_REASON="hash of the model/mmproj the unit loaded not capturable"
+elif [ "$MH" = MISSING ] || [ "$PH" = MISSING ]; then RESULT=2; VERDICT_REASON="hash of the model$([ "$NEEDS_MMPROJ" = 1 ] && echo "/mmproj") the unit loaded not capturable"
 elif [ "$FINAL_STOP_RC" != 0 ]; then RESULT=2; VERDICT_REASON="final stop was not a clean llmctl stop (rc=$FINAL_STOP_RC; 10 = only the systemd fallback worked, 11 = failed)"
 elif [ "$UNIT_STATE" != inactive ] && [ "$UNIT_STATE" != failed ]; then RESULT=2; VERDICT_REASON="unit $UNIT state '${UNIT_STATE:-<empty/timeout>}' is not inactive/failed after stop"
 elif [ "$PORT_SERVING" = yes ]; then RESULT=2; VERDICT_REASON="port $PORT still answering /health after stop"

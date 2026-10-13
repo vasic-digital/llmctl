@@ -19,146 +19,13 @@ hasnt(){ if grep -qE -- "$3" "$2" 2>/dev/null; then bad "$1" "unexpected /$3/ in
 
 export LT_POSTFIRE=2   # hermetic-only knob: keep the watchdog's post-fire re-check short in tests
 want() { [ -z "${ONLY:-}" ] || [ "$1" = always ] || [[ ",$ONLY," == *",$1,"* ]]; }
-
-# ---- health server (fake llama-server /health) ----
-cat >"$T/srv.py" <<'PY'
-import glob, http.server, sys
-T = sys.argv[2]
-class H(http.server.BaseHTTPRequestHandler):
-    def do_GET(self):
-        up = bool(glob.glob(T + "/env.*/fake/running") or glob.glob(T + "/env.*/fake/serving"))
-        self.send_response(200 if up else 503); self.end_headers(); self.wfile.write(b'{"status":"ok"}' if up else b"down")
-    def log_message(self, *a): pass
-http.server.HTTPServer(("127.0.0.1", int(sys.argv[1])), H).serve_forever()
-PY
-PORT="$(python3 -I -c 'import socket;s=socket.socket();s.bind(("127.0.0.1",0));print(s.getsockname()[1])')"
-python3 -I "$T/srv.py" "$PORT" "$T" >/dev/null 2>&1 &
-HS_PID=$!
-sleep 1
-BYSTANDER_PID=""
-(sleep 7200) & BYSTANDER_PID=$!
-cleanup_t() { kill "$HS_PID" "$BYSTANDER_PID" 2>/dev/null; rm -rf "$T"; }   # test's own children only
-trap cleanup_t EXIT
-
-# ---- build one fake environment: $E/{bin,fake,ev,...}; echo its path ----
-mkenv() {
-  rm -f "$T"/env.*/fake/running "$T"/env.*/fake/serving   # previous scenarios must not keep the shared fake health server "up"
-  local E; E="$(mktemp -d "$T/env.XXXXXX")"
-  mkdir -p "$E/bin" "$E/fake" "$E/ev" "$E/models" "$E/run"
-  printf 'MemTotal: 32000000 kB\nMemAvailable:   %d kB\n' $((20000*1024)) >"$E/meminfo"
-  printf 'some avg10=0.00 avg60=0.00 avg300=0.00 total=1\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=1\n' >"$E/psi"
-  echo 1200 >"$E/fake/gpu"; echo 1200 >"$E/fake/gpu_base"
-  echo '[]' >"$E/fake/others.json"; : >"$E/fake/calls"
-  echo "$PORT" >"$E/fake/port"
-  echo 0 >"$E/fake/validate_rc"; echo 0 >"$E/fake/start_rc"
-  mkdir -p "$E/services" "$E/suite"
-  printf "LLMCTL_ENGINE='llama'\nLLMCTL_ARGS=-m %s --mmproj %s --port 8082\n" "$E/models/m.gguf" "$E/models/p.gguf" >"$E/services/vision.env"
-  cp "$ROOT/tests/fixtures/livetest/vision-golden-v1/expectations.json" "$E/suite/expectations.json"
-  cp "$ROOT/tests/fixtures/livetest/real_judge_pass.json" "$E/fake/validate_file"
-  printf 'some avg10=0.00 avg60=0.00 avg300=0.00 total=1\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=1\n' >"$E/iopsi"
-  echo fake-model >"$E/models/m.gguf"; echo fake-mmproj >"$E/models/p.gguf"
-  cat >"$E/bin/nvidia-smi" <<'X'
-#!/usr/bin/env bash
-[ -f "$FAKE/gpu_hang" ] && sleep "$(cat "$FAKE/gpu_hang")"
-cat "$FAKE/gpu"
-X
-  cat >"$E/bin/systemctl" <<'X'
-#!/usr/bin/env bash
-# fake systemctl: list-units reads $FAKE/units; stop/is-active act on the fake running state
-case "$*" in
-  *"--user stop "*) echo "systemctl stop ${*: -1}" >>"$FAKE/calls"; rm -f "$FAKE/running"
-     [ -f "$FAKE/sysstop_fail" ] && exit 1
-     [ -f "$FAKE/leak" ] || cp "$FAKE/gpu_base" "$FAKE/gpu"; exit 0 ;;
-  *"--user is-active"*) if [ -f "$FAKE/unit_state" ]; then cat "$FAKE/unit_state"; [ "$(cat "$FAKE/unit_state")" = active ] && exit 0; exit 3; fi
-     if [ -f "$FAKE/running" ] || [ -f "$FAKE/unit_stuck_active" ]; then echo active; exit 0; else echo inactive; exit 3; fi ;;
-  *"--user show"*) [ -f "$FAKE/cgshow" ] && cat "$FAKE/cgshow"; echo "show ${*: -1}" >>"$FAKE/calls"; exit 0 ;;
-  *"list-units"*) [ -f "$FAKE/units" ] || exit 0
-     for a in "$@"; do case "$a" in *@*) pat="@${a##*@}"; pat="${pat%%.service}"; pat="${pat%\*}";; esac; done
-     grep -F -- "${pat:-}" "$FAKE/units"; exit 0 ;;
-  *) exit 0 ;;
-esac
-X
-  for n in pkill killall; do printf '#!/usr/bin/env bash\necho "%s $*" >>"$FAKE/forbidden"\n' "$n" >"$E/bin/$n"; done
-  printf '#!/usr/bin/env bash\necho "fake journal line for $*"\n' >"$E/bin/journalctl"
-  printf '#!/usr/bin/env bash\necho "llama-server fake version: 1 (testbuild)"\n' >"$E/bin/llama-server"
-  cat >"$E/bin/llmctl" <<'X'
-#!/usr/bin/env bash
-# fake llmctl: never starts anything real
-echo "$*" >>"$FAKE/calls.args"
-case "$1 ${2:-}" in
-  "status --json")
-    [ -f "$FAKE/status_hang" ] && sleep "$(cat "$FAKE/status_hang")"
-    python3 -I - "$FAKE" <<'PY'
-import json,os,sys
-f=sys.argv[1]; rows=json.load(open(f+"/others.json"))
-if os.path.exists(f+"/running"):
-    rows.append({"profile":"vision","port":int(open(f+"/port").read()),"mode":"x","ram_mb":3000,"vram_mb":1500,"enabled":False,"state":"running","last_log_line":None})
-print(json.dumps(rows))
-PY
-    ;;
-  "start vision")
-    echo "start env=${LLMCTL_VALIDATE_ON_START:-unset} ready_timeout=${LLMCTL_READY_TIMEOUT:-unset} nice=$(awk '{print $19}' /proc/$$/stat) ionice=$(ionice -p $$ 2>&1)" >>"$FAKE/calls"
-    [ -f "$FAKE/start_delay" ] && sleep "$(cat "$FAKE/start_delay")"   # before svc_start: nothing exists yet
-    rc=$(cat "$FAKE/start_rc"); [ "$rc" = 0 ] && touch "$FAKE/running"
-    [ -f "$FAKE/gpu_after_start" ] && cp "$FAKE/gpu_after_start" "$FAKE/gpu"
-    [ -f "$FAKE/start_mutate.sh" ] && bash "$FAKE/start_mutate.sh"
-    if [ -f "$FAKE/start_sleep" ]; then   # simulates holding the scheduler flock across svc_start + readiness
-      touch "$FAKE/lock_held"; sleep "$(cat "$FAKE/start_sleep")"; rm -f "$FAKE/lock_held"; echo "start returned" >>"$FAKE/calls"
-    fi
-    exit "$rc" ;;
-  "stop vision")
-    n=0; while [ -f "$FAKE/lock_held" ] && [ "$n" -lt 300 ]; do sleep 0.1; n=$((n+1)); done   # blocked on the lock
-    echo "stop vision" >>"$FAKE/calls"
-    [ -f "$FAKE/stop_slow" ] && sleep "$(cat "$FAKE/stop_slow")"
-    [ -f "$FAKE/stop_rc1" ] && { rm -f "$FAKE/running_keep"; rm -f "$FAKE/running"; echo "stop failed" >&2; exit 1; }
-    rm -f "$FAKE/running"
-    [ -f "$FAKE/leak" ] || cp "$FAKE/gpu_base" "$FAKE/gpu"
-    [ -f "$FAKE/hang_after_stop" ] && { echo 25 >"$FAKE/gpu_hang"; echo 25 >"$FAKE/status_hang"; }
-    [ -f "$FAKE/stop_leaves_port" ] && touch "$FAKE/serving"
-    exit 0 ;;
-  "stop "*) echo "stop OTHER: $*" >>"$FAKE/calls"; exit 0 ;;
-  "vision help") if [ -f "$FAKE/help_nohost" ]; then echo "llmctl vision validate [--profile vision|vision-pro] [--json] [--keep]"; else echo "llmctl vision validate [--profile vision|vision-pro] [--host URL] [--json] [--keep]"; fi; exit 0 ;;
-  "logs vision") echo "fake log line"; exit 0 ;;
-  "version "*|"version") echo "llmctl fake-1.0"; exit 0 ;;
-  "vision validate")
-    echo "validate $*" >>"$FAKE/calls"
-    echo "validate_nice=$(awk '{print $19}' /proc/$$/stat) $(ionice -p $$ 2>&1)" >>"$FAKE/calls"
-    [ -f "$FAKE/mutate.sh" ] && bash "$FAKE/mutate.sh"
-    n=0; while [ -f "$FAKE/running" ] && [ -f "$FAKE/validate_wait" ] && [ "$n" -lt 100 ]; do sleep 0.1; n=$((n+1)); done
-    if [ ! -f "$FAKE/running" ]; then
-      case " $* " in
-        *" --host "*) echo "connection refused" >&2; exit 2 ;;
-        *) echo "validate RESTARTED profile (no --host, no .run)" >>"$FAKE/calls"; touch "$FAKE/running"; echo "restarted" >&2; exit 2 ;;
-      esac
-    fi
-    cat "$FAKE/validate_file"
-    exit "$(cat "$FAKE/validate_rc")" ;;
-  *) echo "fake llmctl: unexpected: $*" >>"$FAKE/calls"; exit 64 ;;
-esac
-X
-  chmod +x "$E"/bin/*
-  echo "$E"
-}
-
-# run_main <env> [args...]: hermetic run, returns exit code in $RC, evidence dir in $EVD
-run_main() {
-  local E="$1"; shift
-  RC=0
-  FAKE="$E/fake" PATH="$E/bin:$PATH" LT_HERMETIC=1 LT_WD_INTERVAL=0.2 LT_WD_MAX_WALL="${WALL:-600}" \
-    LT_READY_INTERVAL=0.2 LT_READY_MAX="${READY_MAX:-4}" LT_VRAM_SETTLE_MAX=2 LT_VALIDATE_GRACE=3 \
-    LT_MEMINFO="$E/meminfo" LT_PSI="$E/psi" LT_IOPSI="$E/iopsi" LT_EVIDENCE_ROOT="$E/ev" HOME="$E/home" \
-    LLMCTL_SERVICES_DIR="$E/services" LLMCTL_RUNTIME_DIR="$E/run" LT_SUITE_DIR="$E/suite" LT_STOP_BOUND=2 LT_BOUND=2 LT_START_MAX="${START_MAX:-20}" LT_START_WAIT="${LT_START_WAIT_T:-15}" LT_POST_SAMPLE=2 \
-    timeout 60 bash "$MAIN" "$@" >"$E/out.txt" 2>"$E/err.txt" || RC=$?
-  EVD="$(find "$E/ev" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | head -1)"
-}
-setmem() { printf 'MemAvailable:   %d kB\n' $(( $2 * 1024 )) >"$1/meminfo"; }
-setpsi() { printf 'some avg10=%s avg60=0 avg300=0 total=1\nfull avg10=%s avg60=0 avg300=0 total=1\n' "$2" "$3" >"$1/psi"; }
-calls_has_start() { grep -q '^start ' "$1/fake/calls"; }
-
+# shared fake environment (fake llmctl/systemctl/nvidia-smi, health server, mkenv, run_main): tests/livetest_fake_lib.sh
+# shellcheck source=tests/livetest_fake_lib.sh
+source "$ROOT/tests/livetest_fake_lib.sh"
 if want base; then
 echo "== 0. static: lint + signal discipline =="
 bash -n "$MAIN" && bash -n "$WD" && ok "bash -n both scripts" || bad "bash -n"
-if command -v shellcheck >/dev/null; then shellcheck -S warning "$MAIN" "$WD" "$0" >/dev/null 2>&1 && ok "shellcheck clean" || bad "shellcheck"; fi
+if command -v shellcheck >/dev/null; then shellcheck -S warning -x "$MAIN" "$WD" "$ROOT/scripts/livetest/run_profiles.sh" "$0" "$ROOT/tests/livetest_fake_lib.sh" >/dev/null 2>&1 && ok "shellcheck clean (driver, watchdog, runner, this suite, the shared lib)" || bad "shellcheck"; fi
 nk=$(grep -vE '^\s*#' "$MAIN" "$WD" | grep -cE '\b(kill|pkill|killall)\b')
 check "exactly one kill call site in scripts (safe_kill)" "$nk" "1"
 grep -vE '^\s*#' "$MAIN" | grep -E '\bkill\b' | grep -q 'kill -TERM "\$WD_PID"' && ok "the one kill targets \$WD_PID only" || bad "kill target"
@@ -190,7 +57,7 @@ has "the only signal targets the watchdog pid ($wdp)" "$EVD/signals.log" "SIGTER
 [ ! -d "/proc/$wdp" ] && ok "watchdog reaped after run" || bad "watchdog $wdp still alive"
 [ -d "/proc/$BYSTANDER_PID" ] && ok "bystander process untouched" || bad "bystander killed"
 
-echo "== 2. vision-pro / other profiles refused unconditionally =="
+echo "== 2. vision-pro without --allow-large, and profiles that are not in the catalog, are refused before any llmctl call =="
 for pr in vision-pro vision-pro-x chat; do
   E="$(mkenv)"; run_main "$E" "$pr"
   check "profile '$pr' refused exit 3" "$RC" "3"
@@ -734,7 +601,7 @@ if want p2; then
 echo "== P2. preconditions fail early; validate runs niced =="
 E="$(mkenv)"; rm -f "$E/suite/expectations.json"; run_main "$E"
 check "missing golden suite -> refused BEFORE any model start (exit 3)" "$RC" "3"
-has "  reason names the suite" "$EVD/gate.log" 'REFUSED: golden suite'
+has "  reason names the missing suite (static refusal on stderr, before any evidence dir)" "$E/err.txt" "REFUSED: validation suite 'vision-golden-v1' of profile 'vision' is missing"
 hasnt "  no start" "$E/fake/calls" '^start '
 E="$(mkenv)"; run_main "$E"
 has "validate runs at nice 19" "$E/fake/calls" '^validate_nice=19 '
