@@ -162,15 +162,31 @@ do_install() {
 
 fmt_bytes() { if [[ "$1" =~ ^[0-9]+$ ]]; then echo "$1 ($(( $1 / 1048576 )) MiB)"; else echo "$1"; fi; }
 
+# do_verify: are the INSTALLED limits the ones systemd actually applies?
+#   effective (systemctl show) must equal the value in the installed drop-in, byte for byte - that is the
+#   question "did the install take effect". The drop-in is sized once, at install time, from MemTotal; MemTotal
+#   itself drifts by a few kB between boots (kernel-reserved memory), so re-deriving the target from the CURRENT
+#   /proc/meminfo and demanding equality reported a false MISMATCH (live: 8 kB => ~5 KiB per limit). The fresh
+#   sizing is only used to flag STALE drop-ins (host re-sized: RAM/swap change), with a 1% tolerance on the
+#   byte limits; TasksMax is derived from the CPU count and must match exactly.
 do_verify() {
-  local s rc=0 line k v want
+  local s rc=0 line k v want inst f diff
   [[ "${HOSTSAFETY_NO_SYSTEMCTL:-0}" == 1 ]] && { hs_log "verify skipped (HOSTSAFETY_NO_SYSTEMCTL=1)"; return 0; }
   for s in "${SLICES[@]}"; do
+    f="${UNIT_DIR}/${s}.slice.d/10-hostsafety.conf"
+    if [[ ! -f "${f}" ]]; then hs_log "MISMATCH   ${s}.slice: drop-in ${f} is not installed"; rc=1; continue; fi
     while IFS= read -r line; do
       k="${line%%=*}"; want="${line#*=}"
+      inst="$(sed -n "s/^${k}=//p" "${f}" | tail -1)"
       v="$(systemctl --user show "${s}.slice" -p "${k}" --value)"
-      if [[ "${v}" == "${want}" ]]; then hs_log "verified   ${s}.slice ${k}=$(fmt_bytes "${v}")"
-      else hs_log "MISMATCH   ${s}.slice ${k}: wanted ${want}, effective ${v}"; rc=1; fi
+      if [[ -z "${inst}" ]]; then hs_log "MISMATCH   ${s}.slice ${k}: not set in ${f}"; rc=1; continue; fi
+      if [[ "${v}" != "${inst}" ]]; then
+        hs_log "MISMATCH   ${s}.slice ${k}: installed ${inst}, effective ${v}"; rc=1; continue
+      fi
+      if [[ "${k}" == TasksMax ]]; then diff=$(( want == inst ? 0 : 1 ))
+      else diff=$(( (want > inst ? want - inst : inst - want) * 100 > inst ? 1 : 0 )); fi
+      if (( diff )); then hs_log "MISMATCH   ${s}.slice ${k}: installed ${inst} is stale, this host now sizes ${want}; re-run install.sh"; rc=1
+      else hs_log "verified   ${s}.slice ${k}=$(fmt_bytes "${v}")"; fi
     done < <(hs_limits "${s}")
   done
   hs_log "guard timer: $(systemctl --user is-active hostsafety-guard.timer 2>&1) / $(systemctl --user is-enabled hostsafety-guard.timer 2>&1)"
