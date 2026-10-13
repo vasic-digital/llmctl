@@ -277,5 +277,45 @@ with tempfile.TemporaryDirectory() as d:
     check("P2 PSI tolerates a missing avg60, garbage and blank lines", r.get("some", {}).get("avg10") == 1.0 and r.get("full", {}).get("avg10") == 7.5, repr(r))
     check("P3 PSI of a missing file is empty (and main reports psi_available=false)", g.psi(os.path.join(d, "nope")) == {})
 
+# ---------------------------------------------------------------- main(): the /proc walk is lazy (incident 2026-10-13)
+def run_main(psi_text, procs, extra=None, env=None, pre_state=None, meminfo="MemTotal: 32000000 kB\nSwapTotal: 8000000 kB\nSwapFree: 8000000 kB\n"):
+    """run g.main() against a synthetic psi file with g.scan replaced by a counting fake; returns (scan_calls, log_lines, dir)."""
+    d = tempfile.mkdtemp(prefix="hsfx")
+    open(os.path.join(d, "psi"), "w").write(psi_text)
+    open(os.path.join(d, "mi"), "w").write(meminfo)
+    if pre_state is not None:
+        import json as _j
+        open(os.path.join(d, "st"), "w").write(_j.dumps(pre_state))
+    calls = []
+    real_scan = g.scan
+    g.scan = lambda root: (calls.append(root), procs)[1]
+    old_env = dict(os.environ)
+    os.environ["XDG_RUNTIME_DIR"] = d
+    for k in [k for k in os.environ if k.startswith("HOSTSAFETY_")]:
+        del os.environ[k]
+    os.environ.update(env or {})
+    try:
+        g.main(["--psi-file", os.path.join(d, "psi"), "--meminfo", os.path.join(d, "mi"), "--log-file", os.path.join(d, "log", "guard.log"),
+                "--state-file", os.path.join(d, "st"), "--uid", str(ME), "--self-pid", str(GUARD_PID), "--tmpfs-used-pct-fixture", "1"] + (extra or []))
+    finally:
+        g.scan = real_scan
+        os.environ.clear(); os.environ.update(old_env)
+    lp = os.path.join(d, "log", "guard.log")
+    lines = open(lp).read().splitlines() if os.path.exists(lp) else []
+    return calls, lines, d
+
+
+CALM = "some avg10=1.00 avg60=1.00 avg300=1.00 total=1\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=1\n"
+BAD = "some avg10=90.00 avg60=80.00 avg300=50.00 total=1\nfull avg10=81.05 avg60=70.00 avg300=50.00 total=1\n"
+storm_tbl = table(*guard_ancestry(), *runaway)
+calls, lines, _ = run_main(CALM, storm_tbl)
+check("M1 calm PSI: the /proc walk is skipped entirely", calls == [], repr(calls))
+calls, lines, _ = run_main(BAD, storm_tbl)
+check("M2 first triggered run only builds the streak: no /proc walk", calls == [] and any('pressure-building' in l for l in lines), repr((calls, lines)))
+calls, lines, _ = run_main(BAD, storm_tbl, pre_state={"streak": 1})
+check("M3 sustained pressure (streak reached): exactly one /proc walk, decision logged", len(calls) == 1 and any('would-kill' in l for l in lines), repr((calls, lines)))
+calls, lines, _ = run_main(BAD, storm_tbl, extra=["--select-only"])
+check("M4 --select-only still walks /proc (diagnostic path unchanged)", len(calls) == 1)
+
 print("RESULT: %d failed" % len(fails))
 sys.exit(1 if fails else 0)

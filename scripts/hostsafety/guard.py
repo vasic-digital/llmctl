@@ -446,9 +446,9 @@ def main(argv=None):
     log_file = a.log_file or env.get("HOSTSAFETY_GUARD_LOG") or os.path.join(
         env.get("XDG_STATE_HOME", os.path.expanduser("~/.local/state")), "hostsafety", "guard.log")
 
-    procs = scan(a.proc_root)
     own_pgrp = os.getpgrp() if a.self_pid == os.getpid() else None   # independent of the /proc snapshot
     if a.select_only:
+        procs = scan(a.proc_root)
         v, ev = select_victim(procs, a.uid, a.self_pid, only, own_pgrp=own_pgrp)
         print(json.dumps({"victim": v, "evidence": ev}, sort_keys=True))
         return 0
@@ -508,6 +508,9 @@ def main(argv=None):
         log(log_file, {"event": "cooldown", "reasons": why, **metrics})
         _save(state_file, st)
         return 0
+    # the /proc walk (~0.8 s with ~7,000 processes) happens ONLY here: PSI said "sustained pressure" and no cooldown is running.
+    # Every healthy / building / cooldown run returns above without touching /proc/<pid> (incident 2026-10-13).
+    procs = scan(a.proc_root)
     v, ev = select_victim(procs, a.uid, a.self_pid, only, cfg("PROC_WEIGHT_KB", env), own_pgrp=own_pgrp)
     if not v:
         log(log_file, {"event": "no-killable-victim", "reasons": why, "evidence": ev,
