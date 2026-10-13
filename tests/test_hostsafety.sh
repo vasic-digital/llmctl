@@ -53,6 +53,12 @@ assert_file_contains "${TEST_TMP}/c/systemd/user/app.slice.d/10-hostsafety.conf"
 assert_eq "755" "$(stat -c %a "${TEST_TMP}/b/bounded-run")" "bounded-run installed executable"
 assert_eq "600" "$(stat -c %a "${TEST_TMP}/c/hostsafety/guard.env")" "guard.env is 0600"
 assert_file_contains "${TEST_TMP}/c/hostsafety/guard.env" "HOSTSAFETY_GUARD_ARM=0" "guard ships DISARMED (dry-run)"
+# guard service unit: the guard must be a LOW-cost citizen (incident 2026-10-13: ~8-10% of a core under a 6,950-process storm)
+GUNIT="${TEST_TMP}/c/systemd/user/hostsafety-guard.service"
+for kv in "Nice=19" "IOSchedulingClass=idle" "CPUWeight=10" "MemoryMax=256M" "RuntimeMaxSec=15" "TimeoutStartSec=20" "Type=oneshot"; do
+  assert_file_contains "${GUNIT}" "${kv}" "guard service unit carries ${kv}"
+done
+assert_eq "1" "$(grep -c '^ExecStart=' "${GUNIT}")" "guard service unit has exactly one ExecStart"
 sed -i 's/ARM=0/ARM=1/' "${TEST_TMP}/c/hostsafety/guard.env"
 inst2="$(inst_env "${HS}/install.sh")"
 assert_eq "0" "$(printf '%s\n' "${inst2}" | grep -c 'wrote ' || true)" "second install changes nothing (idempotent)"
