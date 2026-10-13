@@ -110,19 +110,68 @@ assert_eq "0" "$(count_procs "${SH}/tr")" "recursive shim: leftover processes = 
 after=$(fork_rate min)
 assert_eq "yes" "$([[ ${after} -le $((baseline * 2 + 200)) ]] && echo yes || echo no)" "recursive shim: host fork rate back to baseline, <= 2x+200 of the measured idle rate; a runaway is thousands per second (${after}/s vs ${baseline}/s)"
 
-# --- 4. timeout tears down ITS OWN scope only ------------------------------------------------
+# --- 4. timeout tears down ITS OWN scope only (guarded: a regression FAILS, it never hangs) ----
+# the fixture lives 30 s (not 300) and the run is wrapped in an outer hard limit, so a broken watchdog shows as rc!=124 / slow
 "${BR}" -q --tasks 40 --mem 1G --timeout 120 -n "acbystander$$" -- sleep 20 >/dev/null 2>&1 &
 byp=$!
-for _ in $(seq 1 50); do systemctl --user is-active "bounded-run-acbystander$$.scope" >/dev/null 2>&1 && break; sleep 0.1; done
+"${BR}" -q --tasks 40 --mem 1G --timeout 120 -n "acbystander2$$" -- bash -c 'exec -a acbyloop-'"${mark}"' bash -c "while :; do /usr/bin/sleep 1; done"' >/dev/null 2>&1 &
+byp2=$!
+(exec -a "acbyplain-${mark}" /usr/bin/sleep 40) &   # a plain process of a different name, outside any scope of ours
+byp3=$!
+for _ in $(seq 1 50); do systemctl --user is-active "bounded-run-acbystander$$.scope" >/dev/null 2>&1 \
+  && systemctl --user is-active "bounded-run-acbystander2$$.scope" >/dev/null 2>&1 && break; sleep 0.1; done
 start=$SECONDS; rc=0
-"${BR}" -q --tasks 40 --mem 1G --timeout 2 -n "acto$$" -- bash -c "(exec -a acmarkb-${mark} sleep 300) & wait" >/dev/null 2>&1 || rc=$?
+/usr/bin/timeout -k 2 45 "${BR}" -q --tasks 40 --mem 1G --timeout 2 -n "acto$$" -- bash -c "(exec -a acmarkb-${mark} sleep 30) & wait" >/dev/null 2>&1 || rc=$?
 took=$((SECONDS - start))
 assert_eq "124" "${rc}" "--timeout 2 returns 124"
 assert_eq "yes" "$([[ ${took} -le 6 ]] && echo yes || echo no)" "--timeout enforced within seconds (took ${took}s)"
 sleep 1
 assert_eq "yes" "$(scope_gone "acto$$")" "timeout: its scope is stopped and gone"
 assert_eq "0" "$(count_procs "acmarkb-${mark}")" "timeout: leftover processes = 0"
-assert_eq "active" "$(systemctl --user is-active "bounded-run-acbystander$$.scope" 2>&1 | head -1)" "timeout did NOT touch a bystander scope"
-systemctl --user kill --kill-whom=all --signal=SIGKILL "bounded-run-acbystander$$.scope" 2>/dev/null || true
-wait "${byp}" 2>/dev/null || true
+assert_eq "active" "$(systemctl --user is-active "bounded-run-acbystander$$.scope" 2>&1 | head -1)" "timeout did NOT touch a bystander scope (command 'sleep 20')"
+assert_eq "active" "$(systemctl --user is-active "bounded-run-acbystander2$$.scope" 2>&1 | head -1)" "timeout did NOT touch a bystander scope running a command that does not match 'sleep 20'"
+assert_eq "yes" "$([[ "$(count_procs "acbyloop-${mark}")" -ge 1 ]] && echo yes || echo no)" "the second bystander's process is alive"
+assert_eq "1" "$(count_procs "acbyplain-${mark}")" "a plain bystander process of another name (outside any scope) survived"
+systemctl --user kill --kill-whom=all --signal=SIGKILL "bounded-run-acbystander$$.scope" "bounded-run-acbystander2$$.scope" 2>/dev/null || true
+kill "${byp3}" 2>/dev/null || true
+wait "${byp}" "${byp2}" "${byp3}" 2>/dev/null || true
+
+# --- 5. input validation + honest failure codes ------------------------------------------------
+rc=0; out="$("${BR}" -q --bogus -- true 2>&1)" || rc=$?
+assert_eq "125" "${rc}" "an unknown long option exits 125"
+assert_contains "${out}" "--bogus" "...and names the actual unknown option"
+rc=0; out="$("${BR}" -q -s notasize -n "acsw$$" -- true 2>&1)" || rc=$?
+assert_eq "125" "${rc}" "-s with a non-size exits 125 (validated, not passed to systemd)"
+assert_contains "${out}" "-s" "...and says which option"
+rc=0; out="$("${BR}" -q -s 64M -n "acsw2$$" -- true 2>&1)" || rc=$?
+assert_eq "0" "${rc}" "-s 64M (a valid size) is accepted"
+mkdir -p "${TEST_TMP}/xdg"; chmod 700 "${TEST_TMP}/xdg"
+rc=0; out="$(XDG_RUNTIME_DIR="${TEST_TMP}/xdg" DBUS_SESSION_BUS_ADDRESS='' "${BR}" -q -n "acfail$$" -- true 2>&1)" || rc=$?
+assert_eq "125" "${rc}" "systemd-run failing to start the scope exits 125, not systemd-run's own status (${rc})"
+# short options are parsed AFTER long ones and win; BOUNDED_RUN_* env beats the --agent profile
+out="$("${BR}" --tasks 77 -t 66 -n "acord$$" -- true 2>&1 || true)"
+assert_contains "${out}" "TasksMax=66" "short -t is parsed after long --tasks and wins (documented)"
+out="$(BOUNDED_RUN_TASKS=55 "${AR}" -n "acenv$$" -- true 2>&1 || true)"
+assert_contains "${out}" "TasksMax=55" "BOUNDED_RUN_TASKS overrides the --agent profile (documented)"
+
+# --- 6. independent hard timeout: RuntimeMaxSec on the scope (second line of defence) --------
+rms="$("${BR}" -q -T 2 -n "acrms$$" -- bash -c "systemctl --user show bounded-run-acrms$$.scope -p RuntimeMaxUSec" 2>&1 || true)"
+assert_contains "${rms}" "RuntimeMaxUSec=12s" "the scope carries RuntimeMaxSec = timeout + 10 (12 s for -T 2)"
+rms="$("${BR}" -q -n "acrms0$$" -- bash -c "systemctl --user show bounded-run-acrms0$$.scope -p RuntimeMaxUSec" 2>&1 || true)"
+assert_contains "${rms}" "RuntimeMaxUSec=infinity" "no timeout => no RuntimeMaxSec"
+# kill the wrapper AND its watchdog (both ours, found by cmdline): only the scope's own RuntimeMaxSec can still end the command
+"${BR}" -q -T 2 -n "acwd$$" -- /usr/bin/sleep 60 >/dev/null 2>&1 &
+wp=$!
+for _ in $(seq 1 50); do systemctl --user is-active "bounded-run-acwd$$.scope" >/dev/null 2>&1 && break; sleep 0.1; done
+wcmd="$(/usr/bin/tr '\0' ' ' <"/proc/${wp}/cmdline")"
+for c in $(cat "/proc/${wp}/task/${wp}/children" 2>/dev/null); do
+  [[ "$(/usr/bin/tr '\0' ' ' <"/proc/${c}/cmdline" 2>/dev/null)" == "${wcmd}" ]] && kill -KILL "${c}" 2>/dev/null   # our own watchdog subshell
+done
+kill -KILL "${wp}" 2>/dev/null || true
+wait "${wp}" 2>/dev/null || true
+start=$SECONDS
+for _ in $(seq 1 30); do [[ "$(scope_gone "acwd$$")" == yes ]] && break; sleep 1; done
+took=$((SECONDS - start))
+assert_eq "yes" "$(scope_gone "acwd$$")" "wrapper and watchdog killed: the scope still ends by itself via RuntimeMaxSec (after ${took}s more)"
+systemctl --user kill --kill-whom=all --signal=SIGKILL "bounded-run-acwd$$.scope" 2>/dev/null || true
 test_finish

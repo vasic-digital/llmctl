@@ -89,21 +89,113 @@ cp "${C}/exempt.sh" "${C}/exempt2.sh"; sed -i '1d' "${C}/exempt2.sh"
 run_lint "${C}/exempt2.sh"
 assert_eq 1 "${LINT_RC}" "the same shim WITHOUT the exemption is flagged (the exemption is what silenced it)"
 
-# --- the lint sees the real tree's shims at all (a lint that parses nothing proves nothing) ----
-run_lint "${LLMCTL_ROOT}/tests/test_create_release.sh"
-assert_eq 0 "${LINT_RC}" "test_create_release.sh (gh/glab shims) is clean"
-cat >"${C}/count.py" <<'PY'
-import importlib.util, glob, sys
-spec = importlib.util.spec_from_file_location("l", sys.argv[1]); m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
-print(sum(len(list(m.shims_in(open(f, errors="replace").read()))) for f in glob.glob(sys.argv[2] + "/tests/*.sh")))
-PY
-n="$(python3 -I "${C}/count.py" "${LINT}" "${LLMCTL_ROOT}")"
-assert_eq "yes" "$([[ ${n} -ge 40 ]] && echo yes || echo no)" "the lint recognises the repository's generated shims (${n} found, >= 40)"
+# --- reviewer shapes: each MUST be reported (these were false negatives of the first version) ---
+needle() { # <file> <expected-findings-count> <message>   (body of the planted file on stdin)
+  cat >"${C}/$1"; run_lint "${C}/$1"
+  assert_eq 1 "${LINT_RC}" "NEEDLE: $3"
+  assert_contains "${LINT_OUT}" "findings=$2" "  $3: findings=$2"
+}
+needle n_brace.sh 1 "brace-group writer { echo ...; } > \$B/tr, body calls tr" <<'EOS'
+{ echo '#!/bin/bash'; echo 'tr a b'; } > "$B/tr"
+EOS
+needle n_brace_multi.sh 1 "multi-line brace group writer" <<'EOS'
+{ echo '#!/bin/bash'
+  echo 'tr a b'
+} > "$B/tr"; chmod +x "$B/tr"
+EOS
+needle n_tee.sh 1 "heredoc piped to tee \$B/tr" <<'EOS'
+cat <<'S' | tee "$B/tr" >/dev/null
+#!/bin/bash
+tr a b
+S
+EOS
+needle n_loop.sh 2 "loop writer: for t in tr sed; printf '%s \"\$@\"' >\$B/\$t" <<'EOS'
+for t in tr sed; do printf '#!/bin/sh\n%s "$@"\n' "$t" > "$B/$t"; done
+EOS
+needle n_loop_cross.sh 1 "loop writer whose body names ANOTHER name of the loop" <<'EOS'
+for t in tr sed; do printf '#!/bin/sh\nsed s/a/b/\n' > "$B/$t"; done
+EOS
+needle n_noslash.sh 1 "target without a slash: cat >\"tr\"" <<'EOS'
+cat >"tr" <<'S'
+#!/bin/bash
+tr a b
+S
+EOS
+needle n_exec.sh 1 "exec tr \"\$@\" inside shim tr (the most idiomatic recursion)" <<'EOS'
+cat >"$B/tr" <<'S'
+#!/bin/bash
+exec tr "$@"
+S
+EOS
+needle n_wrappers.sh 6 "wrappers env/command/nice/xargs/timeout/nohup before the bare name" <<'EOS'
+cat >"$B/tr" <<'S'
+#!/bin/bash
+env X=1 tr a b
+command tr a b
+nice -n 5 tr a b
+xargs -0 tr a b
+timeout 5 tr a b
+nohup tr a b
+S
+EOS
+# Go test shim: planted
+mkdir -p "${C}/go"
+cat >"${C}/go/needle_test.go" <<'EOS'
+package x
+func fakeGit(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "fakegit")
+	os.WriteFile(p, []byte("#!/bin/sh\nfakegit status\n"), 0o755)
+}
+EOS
+run_lint "${C}/go/needle_test.go"
+assert_eq 1 "${LINT_RC}" "NEEDLE: a Go test shim whose script calls its own name is flagged"
+assert_contains "${LINT_OUT}" "go-shim-sites=1" "the Go shim site is counted"
 
-# --- the real tree --------------------------------------------------------------------------
+# --- negative controls for the new shapes: each MUST pass ---
+cat >"${C}/clean_shapes.sh" <<'EOS'
+{ echo '#!/bin/bash'; echo 'exec /usr/bin/tr "$@"'; } > "$B/tr"
+cat >"$B/sed" <<'S'
+#!/bin/bash
+command -v tr >/dev/null && exec "$REAL_SED" "$@"
+exec /usr/bin/env /usr/bin/sed "$@"
+S
+for t in tr sed; do printf '#!/bin/sh\nexec /usr/bin/%s "$@"\n' "$t" > "$B/$t"; done
+cat >"tr" <<'S'
+#!/bin/bash
+exec /usr/bin/tr "$@"
+S
+EOS
+run_lint "${C}/clean_shapes.sh"
+assert_eq 0 "${LINT_RC}" "NEGATIVE CONTROL: absolute-path exec in brace/heredoc/loop/no-slash shims, and 'command -v tr', stay clean"
+cat >"${C}/go/clean_test.go" <<'EOS'
+package x
+func fakeGit(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "fakegit")
+	os.WriteFile(p, []byte("#!/bin/sh\nexit 0\n"), 0o755)
+}
+EOS
+run_lint "${C}/go/clean_test.go"
+assert_eq 0 "${LINT_RC}" "NEGATIVE CONTROL: a clean Go test shim passes"
+cat >"${C}/unresolved.sh" <<'EOS'
+cat >"${STUB}" <<'S'
+#!/bin/bash
+tr a b
+S
+EOS
+run_lint "${C}/unresolved.sh"
+assert_contains "${LINT_OUT}" "name-unresolved=1" "a dynamic, non-loop shim name is COUNTED as unresolved (not silently passed)"
+
+# --- the real tree: coverage is reported, not asserted away ------------------------------------
 files=()
-for f in "${LLMCTL_ROOT}"/tests/*.sh "${LLMCTL_ROOT}"/scripts/*.sh "${LLMCTL_ROOT}"/scripts/*/*.sh "${LLMCTL_ROOT}"/lib/*.sh; do [[ -f "${f}" ]] && files+=("${f}"); done
-run_lint "${files[@]}"
-printf '  evidence: %s\n' "$(printf '%s' "${LINT_OUT}" | tail -3)"
-assert_eq 0 "${LINT_RC}" "no generated shim in tests/ scripts/ lib/ calls itself or a sibling shim by bare name"
+for f in "${LLMCTL_ROOT}"/tests/*.sh "${LLMCTL_ROOT}"/tests/*/*.sh "${LLMCTL_ROOT}"/tests/*.py "${LLMCTL_ROOT}"/tests/*/*.py \
+         "${LLMCTL_ROOT}"/scripts/*.sh "${LLMCTL_ROOT}"/scripts/*/*.sh "${LLMCTL_ROOT}"/lib/*.sh "${LLMCTL_ROOT}"/internal/*/*_test.go; do
+  [[ -f "${f}" ]] && files+=("${f}")
+done
+run_lint -v "${files[@]}"
+printf '%s\n' "${LINT_OUT}" | tail -4 | sed 's/^/  evidence: /'
+assert_eq 0 "${LINT_RC}" "no generated shim in tests/ scripts/ lib/ (and no Go test shim literal) calls itself or a sibling by bare name"
+sites="$(printf '%s' "${LINT_OUT}" | sed -n 's/.*sh-shebang-sites=\([0-9]*\).*/\1/p')"
+recog="$(printf '%s' "${LINT_OUT}" | sed -n 's/.* recognised=\([0-9]*\) .*/\1/p')"
+assert_eq "${sites}" "${recog}" "every shell shebang-writing site the lint can see is recognised (${recog}/${sites}); unresolved names and Go/python are reported above, not hidden"
+assert_eq "yes" "$([[ ${sites} -ge 100 ]] && echo yes || echo no)" "the lint sees >= 100 shebang-writing sites (${sites})"
 test_finish

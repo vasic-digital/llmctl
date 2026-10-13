@@ -2,7 +2,7 @@
 
 | Field | Value |
 |---|---|
-| Revision | 3 |
+| Revision | 4 |
 | Created | 2026-10-09 |
 | Status | active (guard ships in DRY-RUN) |
 | Code | `scripts/hostsafety/` |
@@ -191,15 +191,35 @@ recursive tr shim  : max_events=5 peak=40
 afterwards         : scope gone, 0 leftover processes, host fork rate back to baseline
 ```
 
+### Limits of the containment (read before relying on it)
+
+* Short options (`-m -t -T ...`) are parsed after the long ones and win; `BOUNDED_RUN_*` environment variables override the `--agent` profile.
+* A nested `bounded-run` creates a **sibling** scope, not a child: the outer scope's caps do not cover it. Give every level its own caps.
+* The timeout watchdog is a plain child of the wrapper. As an independent backstop the scope itself carries `RuntimeMaxSec=timeout+10`
+  and `TimeoutStopSec=5` (probed: `systemd-run --scope -p RuntimeMaxSec=3` ends the command after 3 s on this host, systemd 259), so the
+  command still ends if the wrapper and its watchdog are both killed (tested: both killed, scope gone 13 s later).
+* A scope that systemd could not start (no user manager, bad property) exits **125** with the command not run; invalid `-m`/`-s` values and
+  unknown long options also exit 125.
+* UNKNOWN: whether tearing down a whole enclosing session cgroup also ends a capped scope (they are siblings under the same slice, not nested).
+
 ### Rules for shims and fakes
 
 * A generated shim must `exec` the real binary by **absolute path** (or a variable holding one); it must never call, by bare
-  name, a command that is also a shim in the same directory, itself included. `tests/test_shim_no_self_recursion.sh` (lint
-  `tests/lint_shim_self_recursion.py`) flags this statically in heredoc- and `printf`-written shims, with planted needles and
-  negative controls; a deliberate recursive fixture needs `# SHIM-LINT-OK: <reason>` and may only run under `agent-run`/`bounded-run`.
+  name, a command that is also a shim in the same directory, itself included.
+* What the lint enforces (`tests/test_shim_no_self_recursion.sh`, `tests/lint_shim_self_recursion.py`): shims written by here-document,
+  `... | tee`, one-line `printf`/`echo`, one-line and multi-line `{ echo ...; } > file` groups, and `for t in a b; do printf ... > "$B/$t"` loop
+  writers; a bare call at command position of the shim's own name, a sibling's name, or any name of its loop, also behind `exec env command
+  nice xargs time timeout sudo nohup builtin stdbuf` (`command -v X` is not a call). Each shape has a planted needle and a negative control.
+* Honest coverage on the repository (`tests/*.sh tests/*/*.sh tests/*.py scripts lib internal/*/*_test.go`, as printed by the test):
+  108 shell shebang-writing sites, all 108 recognised by the lint's own definition (a cruder line count gives about 113 because it also counts
+  lines inside planted-needle heredocs, which are data), 95 with a resolved name and checked, **10 with a dynamic name that cannot be checked**
+  (e.g. `> "${STUB}"`; counted, not hidden), 0 findings.
+* Go test shims (6 sites in `internal/*/*_test.go`) are written to a temp dir and run by absolute path, never through `PATH`; the lint only checks that no
+  script literal in the same file calls the shim's literal name. Python shebang literals (5) are counted and **not** checked.
+* A deliberate recursive fixture needs `# SHIM-LINT-OK: <reason>` and may only run under `agent-run`/`bounded-run`.
 * Never run an unfamiliar script that writes shims outside a capped scope.
 * UNKNOWN: whether `systemd-oomd` on this host would pick an agent scope first under real pressure (the property is not `avoid`;
-  the selection itself was not exercised). The lint covers heredoc and `printf` shims in this repository's shell files only.
+  the selection itself was not exercised).
 
 ## Tests
 
