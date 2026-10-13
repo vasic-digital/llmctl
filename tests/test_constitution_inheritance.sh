@@ -7,6 +7,20 @@ set -euo pipefail
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CONSTITUTION_DIR="${PROJECT_ROOT}/constitution"
 
+# A submodule checkout carries a `.git` entry (file or dir). In a linked `git worktree`, or before
+# `git submodule update --init`, constitution/ is absent or EMPTY: every `git -C constitution ...` would then
+# silently resolve to the ENCLOSING project repo and measure the wrong remotes. In a linked worktree the
+# submodule content lives only in the main worktree, so resolve it from there (same pinned content, read-only).
+is_own_repo() { [[ -e "$1/.git" ]]; }
+if ! is_own_repo "${CONSTITUTION_DIR}"; then
+    _common="$(git -C "${PROJECT_ROOT}" rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)"
+    _main_root="${_common%/.git}"
+    if [[ -n "${_common}" && "${_main_root}" != "${PROJECT_ROOT}" ]] && is_own_repo "${_main_root}/constitution"; then
+        echo "NOTE: linked worktree - constitution/ is not checked out here; using the main worktree's: ${_main_root}/constitution"
+        CONSTITUTION_DIR="${_main_root}/constitution"
+    fi
+fi
+
 echo "=== Constitution Inheritance Verification ==="
 echo "Project root: ${PROJECT_ROOT}"
 echo "Constitution dir: ${CONSTITUTION_DIR}"
@@ -200,11 +214,11 @@ done
 # Verify upstream remotes configured
 echo
 echo "Invariant 8: Constitution submodule has 4+ upstream remotes configured"
-if [[ -d "${CONSTITUTION_DIR}" ]]; then
+if is_own_repo "${CONSTITUTION_DIR}"; then
     (
-        cd "${CONSTITUTION_DIR}"
-        REMOTE_COUNT=$(git remote | grep -v '^origin$' | wc -l)
-        ORIGIN_PUSH_COUNT=$(git remote get-url --push --all origin 2>/dev/null | wc -l)
+        # -C on a directory that IS its own repo (checked above) - never the enclosing project repo
+        REMOTE_COUNT=$(git -C "${CONSTITUTION_DIR}" remote | grep -v '^origin$' | wc -l)
+        ORIGIN_PUSH_COUNT=$(git -C "${CONSTITUTION_DIR}" remote get-url --push --all origin 2>/dev/null | wc -l)
         echo "  Upstream remotes (excluding origin): ${REMOTE_COUNT}"
         echo "  Origin push URLs: ${ORIGIN_PUSH_COUNT}"
         [[ ${REMOTE_COUNT} -ge 4 ]] && [[ ${ORIGIN_PUSH_COUNT} -ge 4 ]]
@@ -213,8 +227,8 @@ if [[ -d "${CONSTITUTION_DIR}" ]]; then
         FAILURES+=("Insufficient upstream remotes or constitution/ directory missing")
     }
 else
-    echo "  ✗ constitution/ directory missing - cannot check upstream remotes"
-    FAILURES+=("Cannot check upstream remotes: constitution/ directory missing")
+    echo "  ✗ constitution/ is not a git checkout of its own (missing, or an uninitialised submodule: git submodule update --init constitution) - cannot check upstream remotes"
+    FAILURES+=("Cannot check upstream remotes: constitution/ is not an initialised submodule checkout")
 fi
 
 # Run the verification harness
