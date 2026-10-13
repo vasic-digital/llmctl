@@ -49,6 +49,7 @@ DEF = {
     "CONSECUTIVE": 2,        # consecutive triggered runs before acting
     "COOLDOWN_S": 20,        # no second action within this window
     "PROC_WEIGHT_KB": 2048,  # each process adds this much "cost" (fork storms)
+    "VICTIM_FILE_MAX_BYTES": 1048576,  # cap of the ARM=1 forensic victim state file (guard-victim.json)
     "TMPFS_WARN_PCT": 60.0,  # /tmp (tmpfs = RAM) fuller than this: report-only event (docs/host-safety.md, GNOME "Application Stopped")
 }
 
@@ -360,6 +361,51 @@ def log(logfile, rec):
             pass
 
 
+LOG_PIDS_EDGE = 20       # a logged victim shows only this many first / last pids
+
+
+def compact_victim(v, edge=LOG_PIDS_EDGE):
+    """what goes into guard.log / the journal: counts + first/last `edge` pids.  The full pid list and the starttimes map
+    (~150 KB for a 6,000-process storm) never go there.  NOT an input to anything: kill_victim() takes the in-memory victim
+    and re-reads every pid + starttime from /proc before each signal."""
+    c = {k: val for k, val in v.items() if k not in ("pids", "starttimes")}
+    pids = v.get("pids", [])
+    c.update({"pid_count": len(pids), "pids_first": pids[:edge], "pids_last": pids[-edge:] if len(pids) > edge else [],
+              "starttimes_count": len(v.get("starttimes") or {})})
+    if len(c.get("cgroups", [])) > edge:
+        c["cgroups_count"] = len(c["cgroups"]); c["cgroups"] = c["cgroups"][:edge]
+    return c
+
+
+def write_victim_state(path, v, max_bytes):
+    """ARM=1 only: the full victim (pids + starttimes) for post-mortem, mode 0600, bounded by max_bytes, previous one kept as .1.
+    Forensics only - the kill path never reads it."""
+    doc = {"ts": time.strftime("%Y-%m-%dT%H:%M:%S%z"), "victim": v}
+    data = json.dumps(doc, sort_keys=True)
+    if len(data) > max_bytes:
+        keep = max(0, (max_bytes - 2048) // 40)      # ~40 bytes per pid + starttime entry
+        t = dict(v)
+        t["pids"] = v["pids"][:keep]
+        t["starttimes"] = {str(k): (v.get("starttimes") or {}).get(str(k)) for k in t["pids"]}
+        doc = {"ts": doc["ts"], "victim": t, "truncated": True, "pid_count_total": len(v["pids"])}
+        data = json.dumps(doc, sort_keys=True)
+        while len(data) > max_bytes and t["pids"]:
+            t["pids"] = t["pids"][:len(t["pids"]) // 2]
+            t["starttimes"] = {str(k): t["starttimes"].get(str(k)) for k in t["pids"]}
+            data = json.dumps(doc, sort_keys=True)
+    try:
+        os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+        if os.path.exists(path):
+            os.replace(path, path + ".1")
+        fd = os.open(path + ".tmp", os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w") as f:
+            f.write(data)
+        os.chmod(path + ".tmp", 0o600)
+        os.replace(path + ".tmp", path)
+    except OSError:
+        pass
+
+
 def kill_victim(v, my_uid, self_pid, only_cg_re=None, own_pgrp=None, proc_root="/proc", scan_fn=None,
                 killpg=None, kill=None, pidfd_open=None, sleep=time.sleep, sig_delay=2.0):
     """Signal the selected victim.  Before EACH signal the target is re-read and must still be exactly what was
@@ -518,8 +564,9 @@ def main(argv=None):
         _save(state_file, st)
         return 0
     rec = {"event": "would-kill" if not armed else "kill", "armed": armed, "reasons": why,
-           "victim": v, "evidence": ev, **metrics}
+           "victim": compact_victim(v), "evidence": ev, **metrics}
     if armed:
+        write_victim_state(os.path.join(os.path.dirname(log_file), "guard-victim.json"), v, cfg("VICTIM_FILE_MAX_BYTES", env))
         rec["signals"] = kill_victim(v, a.uid, a.self_pid, only, own_pgrp)
         st["last_action"] = now
         st["streak"] = 0

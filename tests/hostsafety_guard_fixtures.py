@@ -317,5 +317,43 @@ check("M3 sustained pressure (streak reached): exactly one /proc walk, decision 
 calls, lines, _ = run_main(BAD, storm_tbl, extra=["--select-only"])
 check("M4 --select-only still walks /proc (diagnostic path unchanged)", len(calls) == 1)
 
+# ---------------------------------------------------------------- bounded log detail (incident: ~152 KB per would-kill record, 96.8 MB log)
+# real captured shape (guard.log 2026-10-13T22:27): group pgrp 546537 'bash p1.sh' in app.slice/tmx-notes-8580.scope, 6,182 members
+SC = "app.slice/tmx-notes-8580.scope"
+big = [proc(B + 546537 + i, "bash" if i == 0 else "sleep", B + 546537, 8, SC, ppid=B + 800 if i == 0 else B + 546537, cmd=["bash", "p1.sh"]) for i in range(6182)]
+big_tbl = table(*guard_ancestry(cg="app.slice/tmx-x.scope"), *big)
+calls, lines, d = run_main(BAD, big_tbl, pre_state={"streak": 1})
+wk = [l for l in lines if '"would-kill"' in l]
+import json as _json
+rec = _json.loads(wk[0]) if wk else {}
+vv = rec.get("victim", {})
+check("L1 would-kill record is bounded (<4 KB, was ~152 KB) for a 6,182-process victim", bool(wk) and len(wk[0]) < 4096, repr(len(wk[0]) if wk else None))
+check("L2 record carries counts + first/last 20 pids, no full pid list / starttimes map",
+      vv.get("pid_count") == 6182 and len(vv.get("pids_first", [])) == 20 and len(vv.get("pids_last", [])) == 20
+      and vv.get("pids_first")[0] == B + 546537 and "pids" not in vv and "starttimes" not in vv and vv.get("starttimes_count") == 6182, repr(sorted(vv)))
+check("L3 dry-run (ARM=0) writes NO victim state file", not os.path.exists(os.path.join(d, "log", "guard-victim.json")))
+calls, lines, d = run_main(BAD, big_tbl, pre_state={"streak": 1}, env={"HOSTSAFETY_GUARD_ARM": "1"})
+vf = os.path.join(d, "log", "guard-victim.json")
+full = _json.load(open(vf)) if os.path.exists(vf) else {}
+check("L4 ARM=1 writes the full pid list + starttimes to a state file", len(full.get("victim", {}).get("pids", [])) == 6182 and len(full.get("victim", {}).get("starttimes", {})) == 6182, repr(list(full)))
+check("L5 victim state file is mode 0600", os.path.exists(vf) and (os.stat(vf).st_mode & 0o777) == 0o600)
+armed_line = [l for l in lines if '"kill"' in l][0]
+check("L6 armed kill record in the log is bounded too", len(armed_line) < 4096 and "pids_first" in armed_line, repr(len(armed_line)))
+# bounded + rotated state file
+calls, lines, d2 = run_main(BAD, big_tbl, pre_state={"streak": 1}, env={"HOSTSAFETY_GUARD_ARM": "1", "HOSTSAFETY_VICTIM_FILE_MAX_BYTES": "20000"})
+vf2 = os.path.join(d2, "log", "guard-victim.json")
+check("L7 victim state file is size-bounded (limit 20000 bytes) and says so", os.path.exists(vf2) and os.path.getsize(vf2) <= 20000 and _json.load(open(vf2)).get("truncated") is True,
+      repr(os.path.getsize(vf2) if os.path.exists(vf2) else None))
+# the kill path revalidates from /proc, never from the log or the state file
+reads = []
+real_read = g.read
+g.read = lambda path, default="": (reads.append(path), real_read(path, default))[1]
+try:
+    g.kill_victim(vv_full := full.get("victim", {"kind": "group", "pgrp": B + 546537, "pids": [], "starttimes": {}}), ME, GUARD_PID,
+                  scan_fn=lambda r: big_tbl, killpg=lambda *a: None, kill=lambda *a: None, pidfd_open=False, sleep=lambda s: None)
+finally:
+    g.read = real_read
+check("L8 kill_victim never reads guard.log / the victim state file", not any(("guard-victim" in x or x.endswith("guard.log")) for x in reads), repr(reads[:3]))
+
 print("RESULT: %d failed" % len(fails))
 sys.exit(1 if fails else 0)
