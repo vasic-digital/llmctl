@@ -130,7 +130,7 @@ content hash and timestamp. `require-validated` accepts it only when every one o
 `LLMCTL_VALIDATION_MAX_AGE` seconds (default 604800) **and** its epoch is not in the future (more than 60 s ahead, or null/non-numeric, is rejected).
 An UNDETERMINED run never replaces a prior PASS record (a FAIL does). A `--host` run is evidence only and is never recorded as local state.
 
-`llmctl start`, `switch` and `auto` run the profile's suites after the service is up (`validate_after_start`, `lib/validate.sh`); `auto` hands the hook
+`llmctl start`, `switch`, `auto`, `enable` and `restart` run the profile's suites after the service is up (`validate_after_start`, `lib/validate.sh`), and units started by systemd through the registration waiter (see below); `auto` hands the hook
 only the profiles it started or restarted (`validate_auto`), not every running service. Scaled instance keys are skipped with a message.
 `LLMCTL_VALIDATE_ON_START=0` disables the hook loudly; `LLMCTL_DRY_RUN=1` never claims a validation.
 
@@ -188,7 +188,7 @@ is UNDETERMINED, nothing is stopped. `LLMCTL_VALIDATE_ATTACH_PORT` is honoured o
 knobs) exported in an operator's interactive shell do **not** reach it. Set them in the unit's environment (a drop-in
 `Environment=LLMCTL_VALIDATE_STRICT=1` for `llmctl-<engine>@<profile>.service`, then `systemctl --user daemon-reload`) or they are ignored there.
 
-Known limits: the portreg stray-process check (`cmd_token`) matches any argv word whose basename equals the recorded token (L4, documented, not changed);
+Known limits: the waiter does nothing, so a systemd-started unit is **NOT validated**, when `hk_register` has no `MAINPID` or the port registry is inactive (`LLMCTL_PORTREG=0|off|no`, no portreg binary, or `LLMCTL_DRY_RUN=1` with `LLMCTL_PORTREG` unset/`auto`; `lib/svc_hook.sh`, `portreg_active`); `require-validated` then refuses until `llmctl validate` passes. The portreg stray-process check (`cmd_token`) matches any argv word whose basename equals the recorded token (L4, documented, not changed);
 the systemd-path waiter validates only catalog LLM profiles (kind `llm`, profile equals instance), never scaled instances or non-LLM services.
 
 ### Known gaps

@@ -12,4 +12,4 @@ The scanner is proven first: each stale shape planted in a temp file MUST be fla
 Scope: README.md, CHANGELOG.md, docs/*.md (not docs/qa evidence, not specs), bin/llmctl help text.
 ```
 
-Run: `bash tests/test_docs_gate_not_advisory.sh`. **6 passing** assertions (measured with `scripts/doc_counts.sh docs_gate_not_advisory`). The count is regenerated, not typed: `scripts/doc_counts.sh docs_gate_not_advisory` (see [doc_counts](doc_counts.md)).
+Run: `bash tests/test_docs_gate_not_advisory.sh`. **8 passing** assertions (measured with `scripts/doc_counts.sh docs_gate_not_advisory`). The count is regenerated, not typed: `scripts/doc_counts.sh docs_gate_not_advisory` (see [doc_counts](doc_counts.md)).
