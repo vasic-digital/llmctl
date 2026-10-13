@@ -2,11 +2,11 @@
 
 | Field | Value |
 |---|---|
-| Revision | 2 |
+| Revision | 4 |
 | Created | 2026-10-09 |
 | Status | active (guard ships in DRY-RUN) |
 | Code | `scripts/hostsafety/` |
-| Tests | `tests/test_hostsafety.sh` |
+| Tests | `tests/test_hostsafety.sh`, `tests/test_agent_containment.sh`, `tests/test_shim_no_self_recursion.sh` |
 
 ## Why: the 2026-10-08 incident (host `anton`, 31 GB RAM, 8 GB swap, 16 CPUs)
 
@@ -152,6 +152,75 @@ cargo ld collect2 ninja` - `sh`/`bash` cannot be preferred (they are also every 
 shell/python/node runner is chosen by size only. The test suite proves the list against the real earlyoom 1.9.0
 (`--dryrun -d`, fed through systemd's own `EnvironmentFile`/`$EARLYOOM_ARGS` expansion).
 
+## Containing agent and test jobs
+
+Anything an agent or a test runs that can fork (probes, shims, generated scripts, fixtures) goes through one command:
+
+```
+agent-run [--tasks N] [--mem SIZE] [--timeout S] [-n NAME] [-q] -- CMD [ARGS...]
+bounded-run --agent [--tasks N] [--mem SIZE] [--timeout S] -- CMD [ARGS...]   # same thing
+```
+
+`agent-run` is `bounded-run --agent`; `--tasks`, `--mem` and `--timeout` are long forms of `-t`, `-m` and `-T`
+(`--tasks=N` also works), and explicit flags beat the profile. Plain `bounded-run` keeps its host-sized defaults for builds.
+
+| Setting | Agent default | Why |
+|---|---|---|
+| `TasksMax` | 200 | a runaway fork loop hits `EAGAIN` at 200 tasks instead of exhausting the host |
+| `MemoryMax` | 1G (`MemoryHigh` at 75%) | 1 GiB is the floor `bounded-run` accepts; builds and `go test -race` need `-m 4G`/`6G` |
+| timeout | 300 s | a hung probe cannot outlive the session; exit status 124 |
+| `ManagedOOMPreference` | not `avoid` (live scope reads `none`) | `systemd-oomd` must be able to pick the runaway scope before containers or the desktop |
+| scope | new transient `bounded-run-<NAME>.scope` per call | one cgroup per job, no shared session scope |
+
+On timeout, `bounded-run` kills and stops **its own scope only** (`systemctl --user kill`/`stop` on the scope it created and
+proved started); a scope with the same name is refused (exit 125), and no pid or process group is ever signalled.
+Command exit status is passed through; the TMPDIR is disk-backed and removed afterwards.
+
+### Why: the 2026-10-13 incident
+
+A review script put a PATH shim named `tr` first on `PATH`. The shim's body ran `tr` by bare name, so `PATH` resolved it
+to the shim itself: every call re-executed itself and forked. The shell was in the uncapped session scope, so nothing stopped it:
+about 6,000 processes accumulated on host `anton`. A cap of 200 tasks
+would have stopped the chain at 200 processes with `EAGAIN`.
+
+Evidence that the cap now holds (`tests/test_agent_containment.sh`, `TasksMax=40` for a fast test, same shape as the incident):
+
+```
+fork-bomb fixture  : spawned=39 failed=261 max_events=261 peak=40
+recursive tr shim  : max_events=5 peak=40
+afterwards         : scope gone, 0 leftover processes, host fork rate back to baseline
+```
+
+### Limits of the containment (read before relying on it)
+
+* Short options (`-m -t -T ...`) are parsed after the long ones and win; `BOUNDED_RUN_*` environment variables override the `--agent` profile.
+* A nested `bounded-run` creates a **sibling** scope, not a child: the outer scope's caps do not cover it. Give every level its own caps.
+* The timeout watchdog is a plain child of the wrapper. As an independent backstop the scope itself carries `RuntimeMaxSec=timeout+10`
+  and `TimeoutStopSec=5` (probed: `systemd-run --scope -p RuntimeMaxSec=3` ends the command after 3 s on this host, systemd 259), so the
+  command still ends if the wrapper and its watchdog are both killed (tested: both killed, scope gone 13 s later).
+* A scope that systemd could not start (no user manager, bad property) exits **125** with the command not run; invalid `-m`/`-s` values and
+  unknown long options also exit 125.
+* UNKNOWN: whether tearing down a whole enclosing session cgroup also ends a capped scope (they are siblings under the same slice, not nested).
+
+### Rules for shims and fakes
+
+* A generated shim must `exec` the real binary by **absolute path** (or a variable holding one); it must never call, by bare
+  name, a command that is also a shim in the same directory, itself included.
+* What the lint enforces (`tests/test_shim_no_self_recursion.sh`, `tests/lint_shim_self_recursion.py`): shims written by here-document,
+  `... | tee`, one-line `printf`/`echo`, one-line and multi-line `{ echo ...; } > file` groups, and `for t in a b; do printf ... > "$B/$t"` loop
+  writers; a bare call at command position of the shim's own name, a sibling's name, or any name of its loop, also behind `exec env command
+  nice xargs time timeout sudo nohup builtin stdbuf` (`command -v X` is not a call). Each shape has a planted needle and a negative control.
+* Honest coverage on the repository (`tests/*.sh tests/*/*.sh tests/*.py scripts lib internal/*/*_test.go`, as printed by the test):
+  108 shell shebang-writing sites, all 108 recognised by the lint's own definition (a cruder line count gives about 113 because it also counts
+  lines inside planted-needle heredocs, which are data), 95 with a resolved name and checked, **10 with a dynamic name that cannot be checked**
+  (e.g. `> "${STUB}"`; counted, not hidden), 0 findings.
+* Go test shims (6 sites in `internal/*/*_test.go`) are written to a temp dir and run by absolute path, never through `PATH`; the lint only checks that no
+  script literal in the same file calls the shim's literal name. Python shebang literals (5) are counted and **not** checked.
+* A deliberate recursive fixture needs `# SHIM-LINT-OK: <reason>` and may only run under `agent-run`/`bounded-run`.
+* Never run an unfamiliar script that writes shims outside a capped scope.
+* UNKNOWN: whether `systemd-oomd` on this host would pick an agent scope first under real pressure (the property is not `avoid`;
+  the selection itself was not exercised).
+
 ## Tests
 
 `tests/test_hostsafety.sh` - fixture-driven (fake `/proc` with pids above `pid_max`, fake
@@ -165,6 +234,9 @@ PSI/stat parsing); `test_hostsafety.sh` section 4b also mutates a scratch copy o
 and requires each mutation to make a named fixture fail. `bounded-run` only ever kills a scope **this run created**
 (a pre-existing scope of the same `-n` name makes it exit 125 and is untouched; a lost start race leaves no marker
 and nothing is killed).
+
+`tests/test_agent_containment.sh` (live, needs `systemd --user`; run it inside a scope too) covers the agent profile, the
+long flags, the fork-bomb and recursive-shim fixtures under `TasksMax=40`, and the timeout tearing down only its own scope.
 
 ## Why GNOME says "Application Stopped" (2026-10-09 evidence chain)
 

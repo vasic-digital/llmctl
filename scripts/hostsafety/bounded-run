@@ -5,6 +5,15 @@
 # is ever done here, so a bad pgid can never reach "kill -1" (constitution 11.4.263).
 #
 # usage: bounded-run [-m MEM] [-t TASKS] [-c CPU%] [-s SWAP] [-T SECONDS] [-n NAME] [-q] [--tiny] [--no-disk-tmp] -- CMD [ARGS...]
+#        bounded-run [--agent] [--tasks N] [--mem SIZE] [--timeout S] -- CMD [ARGS...]   (long forms of -t -m -T; --tasks=N also works)
+#   Notes: short options (-m -t -T ...) are parsed AFTER the long ones and win; BOUNDED_RUN_* env vars override the --agent profile.
+#          A nested bounded-run creates a SIBLING scope, not a child: the outer scope's caps do not cover it.
+#          The timeout watchdog is a plain child of this wrapper; as an independent backstop the scope also carries
+#          RuntimeMaxSec=timeout+10 and TimeoutStopSec=5, so it ends by itself even if the wrapper is killed.
+#          systemd-run failing to start the scope exits 125.
+#   --agent  profile for agent / test probes: TasksMax=200, MemoryMax=1G, timeout 300 s (scripts/hostsafety/agent-run = bounded-run --agent).
+#            The scope is never ManagedOOMPreference=avoid (oomd may pick a runaway probe before containers or the desktop);
+#            on timeout ONLY this run's own scope is killed and stopped.
 #   -m  MemoryMax   (systemd size, e.g. 6G)           default: 50% of MemTotal; < 1 GiB is refused unless --tiny
 #       minimums: go test -race 4G; builds / archives 6G+; llama-server = model size + 3G (docs/host-safety.md)
 #   -t  TasksMax    (count)                           default: clamp(nproc*128, 512, 8192)
@@ -44,18 +53,40 @@ tiny=0 disk_tmp=1
 timeout_s="${BOUNDED_RUN_TIMEOUT:-0}"
 name="$$" quiet=0
 # long flags (getopts has none): strip them from the arg list, stop at "--"
+agent=0 l_mem="" l_tasks="" l_timeout=""
 _args=()
-for _a in "$@"; do
-  if [[ "${_a}" == -- ]]; then _args+=("$@"); break; fi
+while (( $# )); do
+  _a="$1"
+  case "${_a}" in
+    --) _args+=("$@"); break ;;
+    --tiny) tiny=1 ;;
+    --no-disk-tmp) disk_tmp=0 ;;
+    --agent) agent=1 ;;
+    --mem|--tasks|--timeout)
+      (( $# >= 2 )) || { echo "bounded-run: ${_a} needs a value" >&2; exit 125; }
+      case "${_a}" in --mem) l_mem="$2" ;; --tasks) l_tasks="$2" ;; --timeout) l_timeout="$2" ;; esac
+      shift ;;
+    --mem=*) l_mem="${_a#*=}" ;;
+    --tasks=*) l_tasks="${_a#*=}" ;;
+    --timeout=*) l_timeout="${_a#*=}" ;;
+    --*) echo "bounded-run: unknown option ${_a}" >&2; exit 125 ;;
+    *) _args+=("${_a}") ;;
+  esac
   shift
-  case "${_a}" in --tiny) tiny=1 ;; --no-disk-tmp) disk_tmp=0 ;; *) _args+=("${_a}") ;; esac
 done
 set -- "${_args[@]}"
+# --agent: the profile for agent / test probes (what scripts/hostsafety/agent-run uses): 200 tasks, 1G, 300 s.  BOUNDED_RUN_* still win.
+if (( agent )); then
+  mem="${BOUNDED_RUN_MEM:-1G}"; tasks="${BOUNDED_RUN_TASKS:-200}"; timeout_s="${BOUNDED_RUN_TIMEOUT:-300}"
+fi
+[[ -n "${l_mem}" ]] && mem="${l_mem}"
+[[ -n "${l_tasks}" ]] && tasks="${l_tasks}"
+[[ -n "${l_timeout}" ]] && timeout_s="${l_timeout}"
 while getopts ':m:t:c:s:T:n:qh' o; do
   case "${o}" in
     m) mem="${OPTARG}" ;; t) tasks="${OPTARG}" ;; c) cpu="${OPTARG}" ;;
     s) swap="${OPTARG}" ;; T) timeout_s="${OPTARG}" ;; n) name="${OPTARG}" ;; q) quiet=1 ;;
-    h) sed -n '2,26p' "${BASH_SOURCE[0]}"; exit 0 ;;
+    h) sed -n '2,36p' "${BASH_SOURCE[0]}"; exit 0 ;;
     *) echo "bounded-run: bad option -${OPTARG:-?}" >&2; exit 125 ;;
   esac
 done
@@ -67,6 +98,7 @@ shift $((OPTIND - 1))
 
 # resolve MemoryMax into bytes for the 80% MemoryHigh watermark
 mem_bytes="$(numfmt --from=iec "${mem}" 2>/dev/null)" || { echo "bounded-run: bad memory size '${mem}'" >&2; exit 125; }
+[[ "${mem_bytes}" =~ ^[0-9]+$ ]] || { echo "bounded-run: memory size '${mem}' is not a whole number of bytes" >&2; exit 125; }
 min_bytes=$((1024 * 1024 * 1024))
 if (( mem_bytes < min_bytes && ! tiny )); then
   echo "bounded-run: MemoryMax ${mem} is below 1 GiB - refused. Small caps OOM-kill ordinary tools (git, zip, go) and GNOME then shows 'Application Stopped'." >&2
@@ -76,6 +108,10 @@ fi
 high=$((mem_bytes * 75 / 100))   # a real gap below Max: the kernel reclaims/throttles here long before any kill
 if [[ -z "${swap}" ]]; then      # shmem/tmpfs pages are only reclaimable via swap; a little swap beats an OOM kill, never more than 1/4 of the device
   swap="$(hs_min $((mem_bytes / 2)) $(($(hs_swaptotal_bytes) / 4)))"
+fi
+if [[ ! "${swap}" =~ ^[0-9]+$ ]]; then   # -s takes a size like 512M (or bytes); anything else is refused here, not handed to systemd
+  _sw="$(numfmt --from=iec "${swap}" 2>/dev/null)" && [[ "${_sw}" =~ ^[0-9]+$ ]] || { echo "bounded-run: bad -s swap size '${swap}'" >&2; exit 125; }
+  swap="${_sw}"
 fi
 unit="bounded-run-${name}.scope"
 # Only a scope THIS run created may be killed: a name collision must never reach another run's scope.
@@ -100,9 +136,12 @@ started="${flag}.started"   # written by the wrapper INSIDE the scope we created
 cleanup() { rm -f "${flag}" "${started}"; [[ -n "${run_tmp}" && -d "${run_tmp}" ]] && rm -rf -- "${run_tmp}"; return 0; }
 trap cleanup EXIT
 
+# second line of defence, independent of this wrapper and its watchdog (both plain processes): the SCOPE itself ends at timeout+10 s
+rms_args=()
+(( timeout_s > 0 )) && rms_args=(-p RuntimeMaxSec="$((timeout_s + 10))" -p TimeoutStopSec=5)
 systemd-run --user --scope --quiet --collect --unit="${unit}" \
   -p MemoryMax="${mem_bytes}" -p MemoryHigh="${high}" -p MemorySwapMax="${swap}" \
-  -p TasksMax="${tasks}" -p CPUQuota="${cpu}%" -p OOMPolicy=kill \
+  -p TasksMax="${tasks}" -p CPUQuota="${cpu}%" -p OOMPolicy=kill "${rms_args[@]}" \
   -- bash -c 'echo "$$" >"$1"; shift; exec "$@"' bounded-run-wrap "${started}" "$@" &
 runner=$!
 
@@ -129,6 +168,12 @@ trap 'forward SIGINT' INT
 
 wait "${runner}"; rc=$?
 while [[ ${rc} -ge 128 && -z "$(cat "${flag}" 2>/dev/null)" ]] && kill -0 "${runner}" 2>/dev/null; do wait "${runner}"; rc=$?; done
+# the scope never started (systemd-run failed: no user manager, bad property, ...): the command did not run - 125, not systemd-run's status
+if [[ ! -s "${started}" && ${rc} -ne 0 && "$(cat "${flag}" 2>/dev/null)" != timeout ]]; then
+  echo "bounded-run: systemd-run could not start ${unit} (status ${rc}); the command did not run" >&2
+  [[ -n "${watchdog}" ]] && { kill "${watchdog}" 2>/dev/null; wait "${watchdog}" 2>/dev/null; }
+  exit 125
+fi
 # the scope is the unit of containment: anything the command left behind dies with the run (only if it is OURS)
 if [[ -s "${started}" ]]; then systemctl --user kill --kill-whom=all --signal=SIGKILL "${unit}" >/dev/null 2>&1; fi
 if [[ -n "${watchdog}" ]]; then
