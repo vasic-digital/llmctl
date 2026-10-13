@@ -21,7 +21,7 @@ fi
 mark="ac$$x${RANDOM}"
 forks_now() { awk '/^processes /{print $2}' /proc/stat; }
 # forks in 1 s, three samples: "max" (baseline: a busy host varies) or "min" (after: a lingering runaway cannot hide in the minimum)
-fork_rate() { local a b i best="" v; for i in 1 2 3; do a=$(forks_now); sleep 1; b=$(forks_now); v=$((b - a))
+fork_rate() { local a b best="" v; for _ in 1 2 3; do a=$(forks_now); sleep 1; b=$(forks_now); v=$((b - a))
   if [[ -z "${best}" ]] || { [[ $1 == max ]] && (( v > best )); } || { [[ $1 == min ]] && (( v < best )); }; then best=${v}; fi; done; echo "${best}"; }
 count_procs() { # live processes whose cmdline contains a fixed string (reads /proc directly: no pgrep self-match)
   local n=0 p c
@@ -87,6 +87,7 @@ assert_eq "yes" "$([[ ${after} -le $((baseline * 2 + 200)) ]] && echo yes || ech
 
 # --- 3. the p1.sh failure: a PATH shim `tr` that calls `tr` by bare name --------------------
 SH="${TEST_TMP}/recshim-${mark}"; mkdir -p "${SH}"
+# SHIM-LINT-OK: deliberate self-recursive fixture reproducing the 2026-10-13 incident; only ever run inside a TasksMax=40 scope
 printf '#!/bin/bash\ntr a b </dev/null\n' >"${SH}/tr"; chmod +x "${SH}/tr"
 cat >"${TEST_TMP}/rec.sh" <<'EOS'
 #!/bin/bash

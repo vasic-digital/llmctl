@@ -308,7 +308,7 @@ fastest path to a running model.
 | [`docs/research/README.md`](docs/research/README.md) | Index of the decision-models research briefs (Jev ecosystem survey, verified HF hashes, encoder-model hashes, implementation architecture map) |
 | [`docs/qa/decision-models-validation/README.md`](docs/qa/decision-models-validation/README.md) | Captured evidence for the decision-models feature's validation runs (iteration 1: 34 PASS / 7 pre-existing environment FAIL; iteration 2: 36 PASS / 7 environment FAIL) |
 | [`docs/validation.md`](docs/validation.md) | The project's V&V (validation & verification) contract |
-| [`docs/host-safety.md`](docs/host-safety.md) | Host-hang safeguards after the 2026-10-08 incident: cgroup limits, `bounded-run`, the memory-pressure guard, and the root-only steps |
+| [`docs/host-safety.md`](docs/host-safety.md) | Host-hang safeguards after the 2026-10-08 incident: cgroup limits, `bounded-run`, [containing agent and test jobs](docs/host-safety.md#containing-agent-and-test-jobs) (`agent-run`), the memory-pressure guard, and the root-only steps |
 | [`docs/live-test-protocol.md`](docs/live-test-protocol.md) | The guarded live test of the `vision` profile: pre-gate, watchdog, exit codes 0-4, evidence directory (run live once for `vision`, 2026-10-13: PASS, [evidence](docs/qa/vision-live-2026-10-13/README.md)) |
 | [`docs/hardening-2026-10-changelog.md`](docs/hardening-2026-10-changelog.md) | Changelog-ready summary: per-profile memory caps, bounded restarts, the pressure start gate, one engine per profile |
 | [`docs/validation_and_verification.md`](docs/validation_and_verification.md) | Why fully-deterministic V&V matters for CLI-agent-driven development |
