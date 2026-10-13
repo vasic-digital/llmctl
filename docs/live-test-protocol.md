@@ -38,7 +38,7 @@ backend `decide-nli`); the operator has accepted that.**
    written to `gate.log`. The credit never lowers the watchdog's floor: the watchdog checks RAW MemAvailable while the resident set is still
    loaded, so the gate also refuses unless RAW MemAvailable >= 5000 (watchdog floor) + 1024 MiB, and a last `guard` check (watchdog
    triggered/dead) runs right before the switch is launched; otherwise the resident set would be stopped for a run the watchdog aborts
-   at once. `ram_mb`/`vram_mb` are llmctl's ESTIMATES; `llmctl switch` has its own pressure gate and rolls the set back itself when
+   at once. The 1024 MiB raw-memory margin is an estimate-based choice (it can only cost an abort followed by a restore, never a lost set). `ram_mb`/`vram_mb` are llmctl's ESTIMATES; `llmctl switch` has its own pressure gate and rolls the set back itself when
    the target fails to start, so a wrong estimate costs a refused or rolled-back switch, not a lost set. A resident profile in a failed state is still a refusal; another resident profile is no longer one. The
    post-stop VRAM check compares with the MEASURED pre-switch value when a set was switched off.
 4. After the run, on EVERY exit path (PASS, FAIL, abort, failed switch, signal; via the existing EXIT trap), once the test model is
@@ -62,6 +62,16 @@ backend `decide-nli`); the operator has accepted that.**
    A first INT/TERM/HUP during the restore lets the start attempt in flight finish (llmctl runs it detached; abandoning it would leave
    an untracked half-started unit), starts nothing further, marks the rest `SKIPPED (interrupted)`, writes their exact commands to
    `RESTORE_MANUAL.txt` and exits 6; a second signal changes nothing. SIGKILL cannot be handled (see Known unknowns).
+   Group-delivered signals (terminal/ssh close, a TERM to the whole process group) do not kill the `llmctl start` in flight: it is
+   started with TERM/HUP/INT ignored (inherited through exec; nobody is signalled by us, still bounded by its 300 s deadline). Limits:
+   SIGKILL cannot be ignored, and the main-flow `llmctl switch` (a background job of the driver) is NOT immune - a group signal there
+   ends the switch and the cleanup path (stop of the test profile, then restore) takes over.
+   `--no-restore` run directly by a human prints a WARNING on stderr when a resident set was switched off (naming
+   `RESTORE_MANUAL.txt` and the exact `llmctl start` command) and a final `NOT RESTORED: ...` line; the exit code is unchanged. The runner
+   marks its own driver calls with `LT_VIA_RUNNER=1` (no warning there) and instead restores, once at the end, the recorded set PLUS any
+   profile a later driver run found running and switched off (shown in the summary as `additionally restored`); scaled instances found
+   that way end as RESTORE_STATE=manual (exit 6). A scaled instance that llmctl's switch rollback already brought back is reported
+   `ALREADY RUNNING`; otherwise `FAILED` with the command `llmctl decide scale <base> <count>`.
    The restore itself is not under the watchdog (the watchdog guards the test model); it relies on the per-profile pressure check
    before every start and llmctl's own admission/pressure gates.
 6. `--plan` is a dry run: static refusals, `llmctl plan --json` fit and the recording run, then it prints what would be stopped, what
@@ -272,6 +282,9 @@ Cleanup ignores further Ctrl-C / TERM / HUP while it runs, so a second Ctrl-C ca
   which prove the checks and the flow, not any model's behaviour.
 
 ## Known unknowns
+
+- `harness.txt` records `git_head` from the driver's own checkout; an archive copy without `.git` shows `UNKNOWN` (the run is still valid).
+- The hermetic tree-check test forces `LT_LLMCTL_TREE` (hermetic sensors); the default-tree derivation (`readlink -f $HERE/../..`) is only exercised live.
 
 - The restore is verified only against the hermetic fake llmctl: how a real `llmctl start <profile>` behaves for an enabled service
   whose unit llmctl stopped (it may want `llmctl enable`/the waiter), whether `LLMCTL_VALIDATE_ON_START=0` is right for a restart,
