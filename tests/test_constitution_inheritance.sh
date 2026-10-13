@@ -15,7 +15,13 @@ CONSTITUTION_DIR="${PROJECT_ROOT}/constitution"
 # symlink to the enclosing repo, resolves to a different toplevel and does not count).
 is_own_repo() {
     [[ -e "$1/.git" && -d "$1" ]] || return 1
-    [[ "$(git -C "$1" rev-parse --show-toplevel 2>/dev/null)" == "$(cd "$1" && pwd -P)" ]]
+    local phys top
+    phys="$(cd "$1" && pwd -P)"
+    top="$(git -C "$1" rev-parse --show-toplevel 2>/dev/null)" || return 1
+    [[ "${top}" == "${phys}" ]] || return 1
+    # a symlink back to the enclosing project (or its main worktree) is that project, not a submodule
+    [[ "${phys}" != "$(cd "${PROJECT_ROOT}" && pwd -P)" ]] || return 1
+    [[ "${phys}" != "$(git -C "${PROJECT_ROOT}" rev-parse --show-toplevel 2>/dev/null)" ]]
 }
 if ! is_own_repo "${CONSTITUTION_DIR}"; then
     _common="$(git -C "${PROJECT_ROOT}" rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)"
