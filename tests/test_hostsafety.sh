@@ -545,6 +545,85 @@ SH
   wait 2>/dev/null || true
 fi
 
+# --- 8b. verify compares EFFECTIVE vs INSTALLED, tolerating MemTotal drift (fixture, real captured values) ---
+# Root cause of the former live failure: the drop-ins were sized at install time from MemTotal=32478728192, and
+# verify re-derived "wanted" from the CURRENT /proc/meminfo (kernel-reserved memory drifts a few kB between
+# boots/hours) then demanded byte equality. systemd applied the installed values exactly (effective == drop-in);
+# only the re-derivation moved. Values below are captured from the live host (2026-10-13).
+vf="${TEST_TMP}/verify"; mkdir -p "${vf}/cfg/systemd/user" "${vf}/shim"
+printf 'MemTotal:       31717516 kB\nSwapTotal:       8388608 kB\n' >"${vf}/meminfo_now"       # 32478736384 B (live, later)
+for s_ in app background user; do mkdir -p "${vf}/cfg/systemd/user/${s_}.slice.d"; done
+cat >"${vf}/cfg/systemd/user/app.slice.d/10-hostsafety.conf" <<'D'
+[Slice]
+MemoryHigh=22735109734
+MemoryMax=25982982553
+MemorySwapMax=1073741824
+TasksMax=16384
+D
+cat >"${vf}/cfg/systemd/user/background.slice.d/10-hostsafety.conf" <<'D'
+[Slice]
+MemoryHigh=12991491276
+MemoryMax=16239364096
+MemorySwapMax=536870912
+TasksMax=4096
+D
+cat >"${vf}/cfg/systemd/user/user.slice.d/10-hostsafety.conf" <<'D'
+[Slice]
+MemoryHigh=19487236915
+MemoryMax=24359046144
+MemorySwapMax=2147482624
+TasksMax=8192
+D
+# fake systemctl: `show <unit> -p <Key> --value` answers from the drop-in (i.e. systemd applied exactly what was
+# installed), unless VF_OVERRIDE="<unit>:<Key>:<value>" says otherwise; is-active/is-enabled answer fixed words.
+cat >"${vf}/shim/systemctl" <<'S'
+#!/usr/bin/env bash
+[[ "$1" == "--user" ]] && shift
+case "$1" in
+  show) unit="$2"; key="$4"
+        if [[ "${VF_OVERRIDE:-}" == "${unit}:${key}:"* ]]; then echo "${VF_OVERRIDE##*:}"; exit 0; fi
+        sed -n "s/^${key}=//p" "${VF_CFG}/systemd/user/${unit}.d/10-hostsafety.conf" | head -1 ;;
+  is-active) echo active ;;  is-enabled) echo enabled ;;  *) exit 0 ;;
+esac
+S
+chmod +x "${vf}/shim/systemctl"
+vrun() { ( unset HOSTSAFETY_NO_SYSTEMCTL; PATH="${vf}/shim:${PATH}" VF_CFG="${vf}/cfg" HOSTSAFETY_CONFIG_HOME="${vf}/cfg" \
+  HOSTSAFETY_NPROC="${VF_NPROC:-16}" HOSTSAFETY_MEMINFO="${1}" VF_OVERRIDE="${2:-}" "${HS}/install.sh" verify ) 2>&1; }
+vout="$(vrun "${vf}/meminfo_now"; echo "rc=$?")" || true
+assert_contains "${vout}" "rc=0" "verify passes when effective == installed and MemTotal drifted by 8 kB since install"
+assert_contains "${vout}" "verified   user.slice MemoryMax=24359046144" "verify reports the installed value as verified"
+vout="$(vrun "${vf}/meminfo_now" "user.slice:MemoryMax:24000000000"; echo "rc=$?")" || true
+assert_contains "${vout}" "rc=1" "NEGATIVE: verify still fails when the effective limit differs from the installed one"
+assert_contains "${vout}" "MISMATCH   user.slice MemoryMax" "NEGATIVE: the mismatch names the slice and key"
+printf 'MemTotal:       16777216 kB\nSwapTotal:       8388608 kB\n' >"${vf}/meminfo_small"
+vout="$(vrun "${vf}/meminfo_small"; echo "rc=$?")" || true
+assert_contains "${vout}" "rc=1" "NEGATIVE: verify fails when the host was re-sized materially (stale drop-ins, 32 GiB -> 16 GiB)"
+assert_contains "${vout}" "MemoryMax: installed 25982982553 is stale" "NEGATIVE: the stale-sizing failure names the key and says stale"
+# hs_limits failing (unreadable / garbage MemTotal) used to leave the loop with zero lines: rc=0, nothing verified.
+vout="$(vrun "${vf}/no_such_meminfo"; echo "rc=$?")" || true
+assert_contains "${vout}" "rc=1" "NEGATIVE: unreadable meminfo => verify fails (nothing verified is not a pass)"
+assert_contains "${vout}" "cannot derive expected limits" "NEGATIVE: unreadable meminfo names the cause"
+[[ "${vout}" != *"verified   "* ]] && echo "  ok: nothing is reported verified when expected limits cannot be derived" || { echo "  FAIL: 'verified' printed without a comparison" >&2; TEST_FAILS=$((TEST_FAILS+1)); }
+printf 'MemTotal:       garbage kB\nSwapTotal:       8388608 kB\n' >"${vf}/meminfo_garbage"
+vout="$(vrun "${vf}/meminfo_garbage"; echo "rc=$?")" || true
+assert_contains "${vout}" "rc=1" "NEGATIVE: garbage meminfo => verify fails"
+assert_contains "${vout}" "cannot derive expected limits" "NEGATIVE: garbage meminfo names the cause"
+# TasksMax-only staleness (CPU count changed 16 -> 32; memory unchanged)
+vout="$(VF_NPROC=32 vrun "${vf}/meminfo_now"; echo "rc=$?")" || true
+assert_contains "${vout}" "rc=1" "NEGATIVE: CPU count changed => verify fails on TasksMax alone"
+assert_contains "${vout}" "app.slice TasksMax: installed 16384 is stale" "NEGATIVE: the TasksMax stale message names slice and key"
+# non-numeric installed/effective value must be a clean MISMATCH, not an unbound-variable abort
+cp "${vf}/cfg/systemd/user/background.slice.d/10-hostsafety.conf" "${vf}/bg.bak"
+sed -i 's/^MemoryMax=.*/MemoryMax=infinity/' "${vf}/cfg/systemd/user/background.slice.d/10-hostsafety.conf"
+vout="$(vrun "${vf}/meminfo_now"; echo "rc=$?")" || true
+assert_contains "${vout}" "rc=1" "NEGATIVE: non-numeric limit (infinity) => verify fails"
+assert_contains "${vout}" "background.slice MemoryMax: not a number (installed infinity, effective infinity)" "NEGATIVE: non-numeric limit is a clean MISMATCH"
+[[ "${vout}" != *"unbound variable"* ]] && echo "  ok: no shell abort on a non-numeric limit" || { echo "  FAIL: unbound variable abort" >&2; TEST_FAILS=$((TEST_FAILS+1)); }
+cp "${vf}/bg.bak" "${vf}/cfg/systemd/user/background.slice.d/10-hostsafety.conf"
+rm -f "${vf}/cfg/systemd/user/app.slice.d/10-hostsafety.conf"
+vout="$(vrun "${vf}/meminfo_now"; echo "rc=$?")" || true
+assert_contains "${vout}" "rc=1" "NEGATIVE: verify fails when a drop-in is not installed"
+
 # --- 9. live: installed limits actually applied (only when installed on this host) ---------
 if [[ -f "${HOME}/.config/systemd/user/app.slice.d/10-hostsafety.conf" ]] && systemctl --user show app.slice -p MemoryMax >/dev/null 2>&1; then
   unset HOSTSAFETY_NO_SYSTEMCTL
