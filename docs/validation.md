@@ -170,6 +170,22 @@ Decisions taken conservatively:
 * **Host-pressure gate** (`hw_pressure_gate`, lib/hardware.sh): `validate_profile` calls it before its own `sched_start` (profile footprint included) and again before the probe loop (PSI only). The thresholds are the hardening branch's, not new ones: PSI memory `full avg10 > 2`, `some avg10 > 10`, `MemAvailable < footprint + 4096 MiB` (tunable `LLMCTL_GATE_FULL_MAX`, `LLMCTL_GATE_SOME_MAX`, `LLMCTL_GATE_RESERVE_MB`). A refusal (rc 75) prints "refused under memory pressure", exits **2**, records nothing (never a FAIL), starts nothing, probes nothing, and stops again a model that this very call had started. It covers `validate`, `validate-all`, `vision validate`, `models verify --live` and the start hook, since all go through `validate_profile`. IO pressure is not part of the hardening gate and is deliberately not checked here (UNKNOWN whether it is needed; adding it would be a separate threshold decision). `--host` (external endpoint) is not gated: it does not load this host.
 * **Restart revalidation** follows the freshness key (model, engine, launch, suite): an unchanged restart with a fresh PASS record is not re-probed.
 
+Exit-code contract (review hardening): **exit 1 means exactly one thing - the judge printed `VERDICT: FAIL`** (the judge also writes its verdict to
+`--verdict-file`; `validate.sh` treats a bare exit 1 without it as UNDETERMINED). Every crash, exception (PermissionError on the evidence write, a
+malformed suite or response), `die()` or `set -e` failure is **UNDETERMINED (2)** and never stops a model. Only HTTP **400 and 422** (the endpoint
+refused the request shape) count as FAIL; 401, 403, 404, 408, 413, 429 and 5xx are "no answer" (UNDETERMINED). `--expect-model` is an exact match
+(the served id, or the basename of a served path). The systemd waiter stops a unit only on the private FAIL code 64
+(`LLMCTL_VALIDATE_FAIL_RC`), never on a bare exit 1 of the `llmctl` process, and removes the reservation **before** `systemctl --user stop`
+(the stop SIGTERMs the whole control group, including the waiter itself).
+
+Concurrency: `validate_after_start` (CLI) and the systemd waiter serialise on a per-profile lock (`<runtime>/.validate-<profile>.lock`, not the
+scheduler lock; `LLMCTL_VALIDATE_LOCK_WAIT`, default 900 s): the second validator waits and then reuses the first one's fresh record. A lock timeout
+is UNDETERMINED, nothing is stopped. `LLMCTL_VALIDATE_ATTACH_PORT` is honoured only together with `LLMCTL_VALIDATE_ATTACH_PROFILE` equal to the profile.
+
+**Environment of the systemd path.** The waiter runs inside the unit: `LLMCTL_VALIDATE_STRICT`, `LLMCTL_VALIDATE_ON_START` (and the lock/timeout
+knobs) exported in an operator's interactive shell do **not** reach it. Set them in the unit's environment (a drop-in
+`Environment=LLMCTL_VALIDATE_STRICT=1` for `llmctl-<engine>@<profile>.service`, then `systemctl --user daemon-reload`) or they are ignored there.
+
 Known limits: the portreg stray-process check (`cmd_token`) matches any argv word whose basename equals the recorded token (L4, documented, not changed);
 the systemd-path waiter validates only catalog LLM profiles (kind `llm`, profile equals instance), never scaled instances or non-LLM services.
 
