@@ -14,12 +14,13 @@
 | Item | Value (from the files in this directory) |
 |---|---|
 | Counts (`validate.out`) | pass=21, fail=0, undetermined=0 |
-| Composition | 16 golden probes, 2 golden-bad controls, judge self-test 20/20, determinism repeat identical |
+| Composition | 16 golden probes + 2 control-self probes + 2 discrimination controls + 1 determinism repeat (identical); judge self-test 19/19 entries ok |
 | Suite | `vision-golden-v1`, suite hash `9a897414915ef2d8bc7d83b2a82e209f7fe2da3c09e8a9ae7c22579ccc18320f` |
 | Model file | `gemma-3-4b-it-Q4_K_M.gguf`, sha256 `882e8d2db44dc554fb0ea5077cb7e4bc49e7342a1f0da57901c0802ea21a0863` |
 | mmproj file | sha256 `8c0fb064b019a6972856aaae2c7e4792858af3ca4561be2dbf649123ba6c40cb` |
 | Readiness | up about 11 s after `llmctl start vision` (`run.log`) |
 | Watchdog | never triggered (`watchdog.log`: started, then terminated by the parent with no action) |
+| Note on the figures | `validate.out` holds 18 probe results (16 golden, 2 control-self), 2 discrimination controls, 1 determinism entry (21 = 18+2+1) and 19 judge self-test entries, all ok. The task brief that requested this write-up said "self-test 20/20"; the file says 19/19 and the file is the evidence. |
 | Min MemAvailable | 19397 MiB (start 20135 MiB), from `samples.csv` |
 | Max memory PSI some avg10 | 1.74, from `samples.csv` |
 | GPU used (nvidia-smi) | baseline 277 MiB, max 4109 MiB during the run, back to 277 MiB after the stop (`samples.csv`, `identity.txt`) |
