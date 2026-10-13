@@ -231,7 +231,7 @@ flowchart LR
     ALL["chat engines: LLMCTL_BIND_HOST (default 0.0.0.0)<br/>decision engines: 127.0.0.1 only<br/>gateway: HTTPS, LLMCTL_DECIDE_BIND"] --- P8080 & P8081 & P8082 & P8083 & P8084 & P8085 & P8086 & P8087 & P8090 & P8091 & P8092 & P8093 & P8094 & P8095 & P8096 & P8097 & P8098 & P8103 & P8104 & P8105 & P8106 & P8107 & P8108
 ```
 
-## Decision subsystem (llmctl 3.2.1)
+## Decision subsystem (llmctl 3.2.2)
 
 Reference for each box: [decide-gateway](decide-gateway.md), [decision-models](decision-models.md), [registry-discovery](registry-discovery.md), [tls-and-keys](tls-and-keys.md).
 The diagrams below were written from the code (`cmd/llmctl-decide`, `internal/*`, `lib/svc_hook.sh`, `lib/service_linux.sh`) and are syntax-checked; see [diagram checking](#diagram-checking).

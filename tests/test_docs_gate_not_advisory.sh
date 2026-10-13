@@ -46,7 +46,7 @@ cd "${LLMCTL_ROOT}"
 files=(README.md CHANGELOG.md bin/llmctl)
 while IFS= read -r f; do files+=("$f"); done < <(find docs -maxdepth 1 -name '*.md' | sort)
 # The release notes live outside the repository (the release directory); LLMCTL_RELEASE_NOTES overrides the path.
-notes="${LLMCTL_RELEASE_NOTES:-${HOME}/llmctl-release-3.2.1/RELEASE_NOTES.md}"
+notes="${LLMCTL_RELEASE_NOTES:-${HOME}/llmctl-release-3.2.2/RELEASE_NOTES.md}"
 if [[ -f "${notes}" ]]; then files+=("${notes}"); else echo "  SKIP: release notes not found at ${notes} (not scanned)"; fi
 hits="$(scan "${files[@]}")"
 assert_eq "" "${hits}" "no shipped doc or help text calls the validation gate advisory (hits: ${hits})"

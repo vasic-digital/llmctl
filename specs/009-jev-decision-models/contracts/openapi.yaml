@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: llmctl decision gateway
-  version: 3.2.1
+  version: 3.2.2
   summary: Hosted-Jev-compatible typed-decision endpoint served by llmctl over HTTPS.
   description: |
     The decision gateway is the single network-facing decision endpoint of llmctl.
