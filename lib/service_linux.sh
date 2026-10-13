@@ -813,10 +813,10 @@ svc_peak_rss_kb() {
 DECIDE_GATEWAY_UNIT="llmctl-decide-gateway.service"
 
 # _decide_gateway_unit_body <bin> <memhigh-MiB> <memmax-MiB>
-# Memory policy (OD-14, the 2026-09-15 operator decision, same as every other
-# llmctl unit): NO artificial ceiling below physical RAM. MemoryHigh=MemoryMax=
-# the probed total keeps the cgroup-level containment of a runaway process
-# without throttling the gateway. The measured peak is recorded in the QA
+# Memory policy: the gateway is a small Go process, so its caps are small
+# fractions of RAM (_svc_gateway_caps: MemoryHigh 20%, MemoryMax 25%, capped at
+# 3/4 GiB), not the full probed total. Every other llmctl unit also stays below
+# 90% of RAM (per-profile caps). The measured peak is recorded in the QA
 # evidence regardless of policy (FR-083).
 _decide_gateway_unit_body() {
   local bin="$1" memhigh="$2" memmax="$3"

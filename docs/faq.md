@@ -105,9 +105,9 @@ Both failure shapes are handled by the same OS-level mechanism, described
 once in the README's "Safety guarantees" section:
 
 - **Linux** (`lib/service_linux.sh`): every generated systemd `--user` unit
-  carries `Restart=always` plus a bounded restart budget —
-  `StartLimitBurst=5` within `StartLimitIntervalSec=60`
-  (`lib/service_linux.sh` lines 71–72 and 94–95). Once that burst limit is
+  carries `Restart=on-failure` plus a bounded restart budget —
+  `StartLimitBurst=3` within `StartLimitIntervalSec=900`
+  (see `lib/service_linux.sh`; `RestartPreventExitStatus=SIGKILL SIGTERM 98`). Once that burst limit is
   exceeded within the interval, systemd stops restarting the unit and
   `llmctl status` reports it as `failed (crash-loop)` with the last
   captured log line, rather than looping forever (this is the FR-044

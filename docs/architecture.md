@@ -143,8 +143,8 @@ stateDiagram-v2
 * Linux: three template units `llmctl-llama@.service` /
   `llmctl-colibri@.service` / `llmctl-onnx@.service` installed into
   `~/.config/systemd/user/`.
-  `Restart=always`, `RestartSec=5`, bounded restarts via
-  `StartLimitBurst=5` within `StartLimitIntervalSec=60` (once exceeded the
+  `Restart=on-failure`, `RestartSec=5` (backing off), bounded restarts via
+  `StartLimitBurst=3` within `StartLimitIntervalSec=900`, no restart after `SIGKILL`/`SIGTERM`/exit 98 (once exceeded the
   unit stops and `llmctl status` reports `failed (crash-loop)` with the
   last captured log line, rather than looping forever — Constitution
   Clarification 14). `MemoryHigh`/`MemoryMax` = the full probed total
@@ -170,7 +170,7 @@ process-management calls are printed instead of executed.
 flowchart TD
     subgraph Linux
         L1["llmctl install"] --> L2["systemd --user template units<br/>llmctl-llama@.service<br/>llmctl-colibri@.service<br/>llmctl-onnx@.service"]
-        L2 --> L3["Restart=always, RestartSec=5<br/>StartLimitBurst=5 / IntervalSec=60<br/>MemoryMax=MemoryHigh=full probed RAM"]
+        L2 --> L3["Restart=on-failure, RestartSec=5<br/>StartLimitBurst=3 / IntervalSec=900<br/>per-profile MemoryHigh/MemoryMax (below 90% of RAM)"]
         L3 --> L4["~/.local/state/llmctl/logs/&lt;profile&gt;.log"]
     end
     subgraph macOS
