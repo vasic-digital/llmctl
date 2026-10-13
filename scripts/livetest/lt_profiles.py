@@ -12,6 +12,9 @@ Subcommands (all print `key=value` lines or a plain list, exit 0; a refusal is a
            what `llmctl plan --json` says about the profile (fits?) and the pre-gate numbers derived from the footprint
   fitting  --catalog F --suites-root D --plan F [--allow-large] [--models-dir D] [--override SUITE=DIR]...
            ordered list (smallest footprint first) of the profiles the runner may run on this host
+  prior    --status FILE [--exclude NAME]...
+           the profiles `llmctl status --json` shows running (restorable set, base names, status order), their reserved RAM/VRAM,
+           and scaled instances (`p.N`, which `llmctl start p` cannot bring back)
   check    --report FILE --suites-root D --suite NAME [--suite NAME]... [--override SUITE=DIR]...
            judge the captured `--json` output of `llmctl validate`; prints OK or the reason it is not a PASS
 """
@@ -168,6 +171,32 @@ def cmd_fitting(a):
         print(name)
 
 
+def cmd_prior(a):
+    try:
+        rows = json.load(open(a.status))
+        if not isinstance(rows, list):
+            raise ValueError("not a list")
+    except Exception as e:
+        die("cannot read status json %s: %s" % (a.status, e))
+    ex = set(a.exclude or [])
+    seen, ram, vram = [], 0, 0
+    for r in rows:
+        name = str(r.get("profile", ""))
+        if not str(r.get("state", "")).startswith("running") or name.split(".")[0] in ex:
+            continue
+        ram += int(r.get("ram_mb") or 0)
+        vram += int(r.get("vram_mb") or 0)
+        if "." in name:
+            print("instance=%s" % name)
+            continue
+        if name not in seen:
+            seen.append(name)
+            print("profile=%s" % name)
+            print("ram=%s:%d" % (name, int(r.get("ram_mb") or 0)))
+    print("total_ram_mb=%d" % ram)
+    print("total_vram_mb=%d" % vram)
+
+
 def parse_reports(raw):
     """All JSON objects in the validate output, in order. Raises ValueError when one cannot be parsed."""
     starts = [m.start() for m in re.finditer(r"(?m)^\{", raw)] or ([raw.index("{")] if "{" in raw else [])
@@ -290,6 +319,9 @@ def main():
     s.add_argument("--plan", required=True); s.add_argument("--allow-large", action="store_true")
     s.add_argument("--models-dir"); s.add_argument("--override", action="append")
     s.set_defaults(fn=cmd_fitting)
+    s = sub.add_parser("prior")
+    s.add_argument("--status", required=True); s.add_argument("--exclude", action="append")
+    s.set_defaults(fn=cmd_prior)
     s = sub.add_parser("check")
     s.add_argument("--report", required=True); s.add_argument("--suites-root", required=True)
     s.add_argument("--suite", action="append", required=True); s.add_argument("--override", action="append")

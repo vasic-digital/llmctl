@@ -80,7 +80,6 @@ g_psis()  { setpsi "$1" 5.00 0.00; }
 g_psif()  { setpsi "$1" 0.00 1.00; }
 g_gpu()   { echo 6000 >"$1/fake/gpu"; }
 g_gpuna() { echo "N/A" >"$1/fake/gpu"; }
-g_other() { echo '[{"profile":"coder","port":8081,"mode":"x","ram_mb":9000,"vram_mb":7000,"enabled":true,"state":"running","last_log_line":null}]' >"$1/fake/others.json"; }
 g_failedp(){ echo '[{"profile":"chat","port":8080,"mode":"x","ram_mb":10,"vram_mb":0,"enabled":true,"state":"failed (crash-loop)","last_log_line":"x"}]' >"$1/fake/others.json"; }
 g_self()  { echo '[{"profile":"vision","port":8082,"mode":"x","ram_mb":10,"vram_mb":0,"enabled":false,"state":"running","last_log_line":null}]' >"$1/fake/others.json"; }
 g_unit()  { echo 'llmctl-llama@vision.service loaded failed failed llama-server vision' >"$1/fake/units"; }
@@ -91,7 +90,7 @@ gate_case "PSI some avg10 5.00 (not <5)" g_psis
 gate_case "PSI full avg10 1.00 (not <1)" g_psif
 gate_case "GPU used 6000 MiB (not <6000)" g_gpu
 gate_case "GPU unreadable (nvidia-smi N/A)" g_gpuna
-gate_case "other large model running" g_other
+# (another large model running is NOT a refusal any more: llmctl's switch stops it and the driver restores it; tests/test_livetest_switch.sh)
 gate_case "other profile in failed state" g_failedp
 gate_case "profile already running" g_self
 gate_case "llmctl unit failed" g_unit
@@ -148,7 +147,7 @@ has "trigger text names the wall-clock condition" "$EVD/trigger" 'wall clock'
 echo "== 5. watchdog started BEFORE model, standalone behaviour =="
 E="$(mkenv)"; run_main "$E"
 w_first=$(grep -m1 -n 'watchdog start' "$EVD/watchdog.log" | cut -d: -f1)
-st_ts=$(grep -m1 'start vision' "$EVD/commands.log" | cut -d' ' -f1); wd_ts=$(head -1 "$EVD/watchdog.log" | cut -d' ' -f1)
+st_ts=$(grep -m1 'switch vision' "$EVD/commands.log" | cut -d' ' -f1); wd_ts=$(head -1 "$EVD/watchdog.log" | cut -d' ' -f1)
 [ -n "$w_first" ] && [[ "$wd_ts" < "$st_ts" || "$wd_ts" = "$st_ts" ]] && ok "watchdog log begins no later than model start ($wd_ts <= $st_ts)" || bad "ordering" 
 awk -F, 'NR>1{ if($3!~/^[0-9]+$/) b=1 } END{exit b}' "$EVD/samples.csv" && ok "samples.csv has numeric memory samples" || bad "samples.csv malformed"
 check "NEG-CONTROL samples header present" "$(head -1 "$EVD/samples.csv" | cut -c1-8)" "utc,elap"
@@ -460,11 +459,11 @@ fi
 if want n2; then
 echo "== N2. a start that reaches svc_start AFTER the stop must not leave the model running =="
 {
-  E="$(mkenv)"; echo 3 >"$E/fake/start_delay"; echo 8 >"$E/fake/start_sleep"
-  ( sleep 1; printf 'MemAvailable: %d kB\n' $((3000*1024)) >"$E/meminfo" ) &
+  E="$(mkenv)"; echo 7 >"$E/fake/start_delay"; echo 8 >"$E/fake/start_sleep"   # delay > the eligibility checks + gate that now precede the start
+  ( sleep 3; printf 'MemAvailable: %d kB\n' $((3000*1024)) >"$E/meminfo" ) &
   MP=$!
   START_MAX=30 run_main "$E"; wait "$MP"
-  sleep 5   # let the orphaned fake start reach its svc_start (t=3s) - the dangerous late moment
+  sleep 9   # let the orphaned fake start reach its svc_start (t=7s) - the dangerous late moment
   check "breach before svc_start -> exit 4" "$RC" "4"
   [ ! -e "$E/fake/running" ] && ok "profile ends STOPPED although start reached svc_start after the first stop" || bad "profile left running"
   [ "$(grep -c '^stop vision' "$E/fake/calls")" -ge 2 ] && ok "a second stop ran after the start finished" || bad "only $(grep -c '^stop vision' "$E/fake/calls") stop call(s)"
@@ -564,8 +563,8 @@ kill "$LK" 2>/dev/null; wait "$LK" 2>/dev/null
 E="$(mkenv)"; : >"$E/run/.scheduler.lock"; run_main "$E"
 check "NEG-CONTROL lock file present but free -> run passes" "$RC" "0"
 # (b)/(c) start still pending after START_WAIT while holding the lock; breach early
-E="$(mkenv)"; echo 9 >"$E/fake/start_delay"; echo 6 >"$E/fake/start_sleep"
-( sleep 1; printf 'MemAvailable: %d kB\n' $((3000*1024)) >"$E/meminfo" ) & MP=$!
+E="$(mkenv)"; echo 12 >"$E/fake/start_delay"; echo 6 >"$E/fake/start_sleep"
+( sleep 3; printf 'MemAvailable: %d kB\n' $((3000*1024)) >"$E/meminfo" ) & MP=$!
 START_MAX=30 LT_START_WAIT_T=3 run_main "$E"; wait "$MP"
 wdp=$(sed -n 's/.*started watchdog pid \([0-9]*\)/\1/p' "$EVD/signals.log")
 check "breach with a start that stays pending -> exit 4" "$RC" "4"

@@ -15,7 +15,7 @@ import glob, http.server, sys
 T = sys.argv[2]
 class H(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
-        up = bool(glob.glob(T + "/env.*/fake/running") or glob.glob(T + "/env.*/fake/serving"))
+        up = bool(glob.glob(T + "/env.*/fake/running") or glob.glob(T + "/env.*/fake/serving") or glob.glob(T + "/env.*/fake/restored"))
         self.send_response(200 if up else 503); self.end_headers(); self.wfile.write(b'{"status":"ok"}' if up else b"down")
     def log_message(self, *a): pass
 http.server.HTTPServer(("127.0.0.1", int(sys.argv[1])), H).serve_forever()
@@ -32,7 +32,7 @@ trap cleanup_t EXIT
 # ---- build one fake environment: $E/{bin,fake,ev,...}; echo its path ----
 mkenv() {
   local PROF="${1:-vision}"
-  rm -f "$T"/env.*/fake/running "$T"/env.*/fake/serving   # previous scenarios must not keep the shared fake health server "up"
+  rm -f "$T"/env.*/fake/running "$T"/env.*/fake/serving "$T"/env.*/fake/restored   # previous scenarios must not keep the shared fake health server "up"
   local E; E="$(mktemp -d "$T/env.XXXXXX")"
   mkdir -p "$E/bin" "$E/fake" "$E/ev" "$E/models" "$E/run"
   printf 'MemTotal: 32000000 kB\nMemAvailable:   %d kB\n' $((20000*1024)) >"$E/meminfo"
@@ -116,7 +116,35 @@ if os.path.exists(f+"/running"):
 print(json.dumps(rows))
 PY
     ;;
-  "start "*)
+  "start "*|"switch "*)
+    # a start of a profile that a previous `switch` stopped (the prior set) is a RESTORE: never the profile under test
+    if [ "$1" = start ] && python3 -I -c 'import json,os,sys
+f=sys.argv[1]+"/others.stopped.json"
+sys.exit(0 if os.path.exists(f) and any(r.get("profile")==sys.argv[2] for r in json.load(open(f))) else 1)' "$FAKE" "$2"; then
+      echo "restore $2" >>"$FAKE/calls"
+      [ -f "$FAKE/running" ] && echo "restore $2 while $(cat "$FAKE/profile") is running" >>"$FAKE/overlap"
+      [ -f "$FAKE/restore_fail.$2" ] && { echo "cannot start $2" >&2; exit 1; }
+      python3 -I - "$FAKE" "$2" <<'PY'
+import json,sys
+f,n=sys.argv[1],sys.argv[2]
+rows=json.load(open(f+"/others.json")); st=[r for r in json.load(open(f+"/others.stopped.json")) if r["profile"]==n]
+if not any(r["profile"]==n for r in rows): rows+=st
+json.dump(rows,open(f+"/others.json","w"))
+PY
+      [ -f "$FAKE/restore_unhealthy.$2" ] || touch "$FAKE/restored"
+      exit 0
+    fi
+    if [ "$1" = switch ]; then   # llmctl switch: stops EVERY running profile, then starts the target (fake: park the prior set)
+      echo "switch $2" >>"$FAKE/calls"
+      python3 -I - "$FAKE" <<'PY'
+import json,sys
+f=sys.argv[1]; rows=json.load(open(f+"/others.json"))
+if rows:
+    json.dump(rows,open(f+"/others.stopped.json","w")); json.dump([],open(f+"/others.json","w"))
+PY
+      rm -f "$FAKE/restored"
+      [ -f "$FAKE/switch_fail" ] && { echo "switch failed" >&2; exit 1; }
+    fi
     [ -f "$FAKE/running" ] && echo "start $2 while $(cat "$FAKE/profile") is running" >>"$FAKE/overlap"
     echo "$2" >"$FAKE/profile"
     echo "start env=${LLMCTL_VALIDATE_ON_START:-unset} ready_timeout=${LLMCTL_READY_TIMEOUT:-unset} nice=$(awk '{print $19}' /proc/$$/stat) ionice=$(ionice -p $$ 2>&1)" >>"$FAKE/calls"
@@ -176,7 +204,7 @@ run_main() {
   FAKE="$E/fake" PATH="$E/bin:$PATH" LT_HERMETIC=1 LT_WD_INTERVAL=0.2 LT_WD_MAX_WALL="${WALL:-600}" \
     LT_READY_INTERVAL=0.2 LT_READY_MAX="${READY_MAX:-4}" LT_VRAM_SETTLE_MAX=2 LT_VALIDATE_GRACE=3 \
     LT_MEMINFO="$E/meminfo" LT_PSI="$E/psi" LT_IOPSI="$E/iopsi" LT_EVIDENCE_ROOT="$E/ev" HOME="$E/home" \
-    LLMCTL_SERVICES_DIR="$E/services" LLMCTL_RUNTIME_DIR="$E/run" LT_SUITE_DIR="$E/suite" LT_SUITES_ROOT="$E/suites" LT_CATALOG="$E/catalog.json" LT_VERIFY_BOUND=5 LT_PLAN_BOUND=5 LT_STOP_BOUND=2 LT_BOUND=2 LT_START_MAX="${START_MAX:-20}" LT_START_WAIT="${LT_START_WAIT_T:-15}" LT_POST_SAMPLE=2 \
+    LLMCTL_SERVICES_DIR="$E/services" LLMCTL_RUNTIME_DIR="$E/run" LT_SUITE_DIR="$E/suite" LT_SUITES_ROOT="$E/suites" LT_CATALOG="$E/catalog.json" LT_VERIFY_BOUND=5 LT_PLAN_BOUND=5 LT_RESTORE_READY_MAX=3 LT_RESTORE_BOUND=5 LT_STOP_BOUND=2 LT_BOUND=2 LT_START_MAX="${START_MAX:-20}" LT_START_WAIT="${LT_START_WAIT_T:-15}" LT_POST_SAMPLE=2 \
     timeout 60 bash "$MAIN" "$@" >"$E/out.txt" 2>"$E/err.txt" || RC=$?
   EVD="$(find "$E/ev" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | head -1)"
 }

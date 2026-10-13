@@ -134,7 +134,7 @@ E="$(mkenv fast)"; echo '[{"profile":"fast","port":8080,"mode":"x","ram_mb":10,"
 run_main "$E" fast; refused "profile already running" "$E"; has "  reason says it is already running" "$E/err.txt" 'already running'
 E="$(mkenv fast)"; echo '[{"profile":"fast.2","port":8080,"mode":"x","ram_mb":10,"vram_mb":0,"enabled":false,"state":"running","last_log_line":null}]' >"$E/fake/others.json"
 run_main "$E" fast; check "a scaled instance fast.2 counts as fast running: exit 3" "$RC" "3"
-E="$(mkenv fast)"; setval "$E" chat-v1; echo '[{"profile":"small","port":8083,"mode":"x","ram_mb":10,"vram_mb":0,"enabled":false,"state":"running","last_log_line":null}]' >"$E/fake/others.json"
+E="$(mkenv fast)"; setval "$E" chat-v1; echo '[{"profile":"small","port":'"$PORT"',"mode":"x","ram_mb":10,"vram_mb":0,"enabled":false,"state":"running","last_log_line":null}]' >"$E/fake/others.json"
 run_main "$E" fast; check "NEG-CONTROL: another small profile running does not block (exit 0)" "$RC" "0"
 
 # 1f. large profiles need the explicit flag AND a fitting plan

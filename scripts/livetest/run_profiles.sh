@@ -1,8 +1,16 @@
 #!/usr/bin/env bash
 # run_profiles.sh - thin sequential runner over the guarded live-test driver (vision_live_test.sh).
 #
-# Usage: run_profiles.sh [--allow-large] <profile> [<profile>...]     explicit, ordered list
-#        run_profiles.sh [--allow-large] --fitting                    every profile the driver would accept on this host
+# Usage: run_profiles.sh [--allow-large] [--plan] <profile> [<profile>...]     explicit, ordered list
+#        run_profiles.sh [--allow-large] [--plan] --fitting                    every profile the driver would accept on this host
+#
+# DYNAMIC SWITCHING: the models llmctl runs now are recorded ONCE before the first run (evidence: prior_status.json, prior_set.txt).
+# Each profile is loaded with llmctl's own `llmctl switch` (inside the driver), which stops what runs - the resident set for the first
+# profile, the previous test model for every later one - so at no time are two test models resident. After the last run, and also
+# after a stop/abort/signal, the recorded set is restored ONCE through `vision_live_test.sh --restore-only` (llmctl start, one profile at
+# a time, pressure-gated, each verified healthy). A restore skipped for pressure exits 6, a failed/unhealthy one 7, with the manual
+# command printed; the sequence's own non-zero exit is never masked by them. --plan prints all this and does nothing.
+# This interrupts the resident services (enabled ones such as a decision gateway backend too) for the duration of the sequence.
 #
 # Strictly sequential, one profile at a time, never in parallel (a flock on <evidence root>/.runner.lock refuses a second
 # runner). For each profile in order:
@@ -36,12 +44,13 @@ if [ "${LT_HERMETIC:-0}" = "1" ]; then
 fi
 umask 077
 
-usage_refuse() { echo "REFUSED: $*" >&2; echo "usage: run_profiles.sh [--allow-large] (--fitting | <profile> [<profile>...])" >&2; exit 3; }
-ALLOW=(); FITTING=0; LIST=()
+usage_refuse() { echo "REFUSED: $*" >&2; echo "usage: run_profiles.sh [--allow-large] [--plan] (--fitting | <profile> [<profile>...])" >&2; exit 3; }
+ALLOW=(); FITTING=0; PLAN=0; LIST=()
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --allow-large) ALLOW=(--allow-large) ;;
     --fitting)     FITTING=1 ;;
+    --plan)        PLAN=1 ;;
     -*)            usage_refuse "unknown option '$1'" ;;
     *)             [[ "$1" =~ ^[a-z0-9][a-z0-9-]{0,62}$ ]] || usage_refuse "'$1' is not a valid profile id"
                    for _p in ${LIST[@]+"${LIST[@]}"}; do [ "$_p" != "$1" ] || usage_refuse "profile '$1' listed twice"; done
@@ -94,6 +103,35 @@ done
 log "sequence (strictly one at a time): ${LIST[*]}"
 printf '%s\n' "${LIST[@]}" >"$SEQ/profiles.txt"
 
+# record what llmctl runs NOW (once, before anything is switched off); fail closed when it cannot be read
+rc=0; bounded 30 "$SEQ/prior_status.json" "$LLMCTL" status --json || rc=$?
+[ "$rc" = 0 ] || { log "REFUSED: llmctl status --json failed (rc=$rc): cannot record the running set before a switch would stop it"; exit 3; }
+PRIOR_OUT="$(python3 -I "$LTP" prior --status "$SEQ/prior_status.json")" || { log "REFUSED: llmctl status --json is not parseable"; exit 3; }
+mapfile -t PRIOR < <(printf '%s\n' "$PRIOR_OUT" | sed -n 's/^profile=//p')
+mapfile -t PRIOR_INST < <(printf '%s\n' "$PRIOR_OUT" | sed -n 's/^instance=//p')
+: >"$SEQ/prior_set.txt"; for _p in ${PRIOR[@]+"${PRIOR[@]}"}; do echo "$_p" >>"$SEQ/prior_set.txt"; done
+bounded 30 "$SEQ/prior_units.txt" systemctl --user list-units --all --plain --no-legend 'llmctl-*@*.service' || true
+[ "${#PRIOR[@]}" -eq 0 ] || echo "nice -n 19 ionice -c 3 $LLMCTL start ${PRIOR[*]}" >"$SEQ/RESTORE_MANUAL.txt"
+for _p in "${LIST[@]}"; do for _q in ${PRIOR[@]+"${PRIOR[@]}"}; do
+  [ "$_p" != "$_q" ] || { log "REFUSED: profile '$_p' of the sequence is already running (never a second profile while one is running; nothing was switched off)"; exit 3; }
+done; done
+log "llmctl runs now (will be switched off, then restored): ${PRIOR[*]:-nothing}"
+
+if [ "$PLAN" = 1 ]; then
+  {
+    echo "PLAN (dry run: nothing is stopped, started or restored)"
+    echo "llmctl currently runs: ${PRIOR[*]:-nothing}${PRIOR_INST[*]:+ (+ scaled instances: ${PRIOR_INST[*]})}"
+    i=0; for _p in "${LIST[@]}"; do i=$((i + 1))
+      if [ "$i" = 1 ]; then echo "step $i: $_p - loaded with llmctl switch; that stops: ${PRIOR[*]:-nothing}"
+      else echo "step $i: $_p - after ${SETTLE}s the pre-gate is re-checked (--gate-only), then llmctl switch replaces ${LIST[$((i - 2))]}"; fi
+    done
+    echo "stops at the first non-zero exit; a watchdog abort is never continued past"
+    echo "would restore after the last run (and after any stop/abort/signal), one at a time, pressure-gated, health-checked: ${PRIOR[*]:-nothing}"
+    echo "this interrupts those services (enabled ones too, e.g. a decision gateway backend) for the duration of the sequence"
+  } | tee "$SEQ/plan.txt"
+  exit 0
+fi
+
 INTERRUPTED=0
 # shellcheck disable=SC2329  # invoked via trap
 on_sig() { INTERRUPTED=1; log "interrupted: the running driver (if any) finishes its own cleanup; no further profile will start"; }
@@ -114,7 +152,7 @@ for r in rows:
 }
 
 declare -A EXIT_OF VERDICT_OF EV_OF
-STOP_RC=0; STOPPED_AT=""; first=1
+STOP_RC=0; STOPPED_AT=""; first=1; SWITCHED=0
 for p in "${LIST[@]}"; do
   [ "$INTERRUPTED" = 0 ] || { STOP_RC=2; STOPPED_AT="${STOPPED_AT:-$p}"; break; }
   if [ "$first" = 0 ]; then
@@ -133,13 +171,25 @@ for p in "${LIST[@]}"; do
     STOP_RC=3; STOPPED_AT="$p"; log "STOP: ${VERDICT_OF[$p]}; never starting a second profile while one is running"; break
   fi
   log "running '$p' (exit codes: 0 PASS 1 FAIL 2 undetermined 3 refused 4 watchdog abort 5 watchdog died)"
-  "$DRIVER" ${ALLOW[@]+"${ALLOW[@]}"} "$p" 9>&- 2>&1 | tee "$SEQ/$p.out"
+  SWITCHED=1
+  "$DRIVER" ${ALLOW[@]+"${ALLOW[@]}"} --no-restore "$p" 9>&- 2>&1 | tee "$SEQ/$p.out"
   rc="${PIPESTATUS[0]}"
   EXIT_OF[$p]="$rc"
   VERDICT_OF[$p]="$(sed -n 's/^VERDICT  *//p' "$SEQ/$p.out" | tail -1 | cut -c1-90)"; [ -n "${VERDICT_OF[$p]}" ] || VERDICT_OF[$p]="(no verdict line)"
   EV_OF[$p]="$(awk '$1=="evidence"{print $2}' "$SEQ/$p.out" | tail -1)"
   if [ "$rc" != 0 ]; then STOP_RC="$rc"; STOPPED_AT="$p"; log "STOP: '$p' exited $rc; no further profile is started (a watchdog abort is never continued past)"; break; fi
 done
+
+# restore the recorded set ONCE, after the last driver run (also after a stop/abort/interrupt), if anything was switched off
+RESTORE_RC=0; RESTORE_TXT="NONE (nothing was running before)"
+if [ "${#PRIOR[@]}" -gt 0 ] || [ "${#PRIOR_INST[@]}" -gt 0 ]; then
+  if [ "$SWITCHED" = 1 ]; then
+    log "restoring the recorded set: ${PRIOR[*]}"
+    "$DRIVER" --restore-only "$SEQ/prior_set.txt" 9>&- >"$SEQ/restore.out" 2>&1; RESTORE_RC=$?
+    cat "$SEQ/restore.out" >&2
+    case "$RESTORE_RC" in 0) RESTORE_TXT="YES" ;; 6) RESTORE_TXT="NO (SKIPPED: see above; manual: nice -n 19 ionice -c 3 $LLMCTL start ${PRIOR[*]})" ;; *) RESTORE_TXT="NO (FAILED/UNHEALTHY: see above; manual: nice -n 19 ionice -c 3 $LLMCTL start ${PRIOR[*]})" ;; esac
+  else RESTORE_TXT="n/a (nothing was switched off)"; fi
+fi
 
 {
   printf '\n%-3s %-18s %-5s %-34s %s\n' "#" "PROFILE" "EXIT" "VERDICT" "EVIDENCE"
@@ -151,6 +201,8 @@ done
   done
   if [ "$STOP_RC" = 0 ]; then echo "SEQUENCE: PASS (${#LIST[@]} of ${#LIST[@]} profiles, one at a time)"
   else echo "SEQUENCE: STOPPED at '$STOPPED_AT' (exit $STOP_RC); remaining profiles were NOT run"; fi
+  echo "prior set restored: $RESTORE_TXT"
 } | tee "$SEQ/summary.txt"
 echo "sequence evidence: $SEQ"
+[ "$STOP_RC" = 0 ] && STOP_RC="$RESTORE_RC"
 exit "$STOP_RC"

@@ -121,8 +121,8 @@ E="$(mkenv)"; run_seq "$E" --bogus fast; check "unknown option refused" "$RC" "3
 E="$(mkenv)"; echo '[{"profile":"fast","port":8080,"mode":"x","ram_mb":10,"vram_mb":0,"enabled":false,"state":"running","last_log_line":null}]' >"$E/fake/others.json"
 run_seq "$E" vision fast
 check "a profile OF THE SEQUENCE (fast) is already running: nothing started (exit 3)" "$RC$(starts "$E")" "30"
-has "  reason: never a second profile while one is running" "$E/err.txt" 'never starting a second profile'
-E="$(mkenv)"; echo '[{"profile":"small","port":8083,"mode":"x","ram_mb":10,"vram_mb":0,"enabled":false,"state":"running","last_log_line":null}]' >"$E/fake/others.json"
+has "  reason: never a second profile while one is running" "$E/err.txt" 'never a second profile'
+E="$(mkenv)"; echo '[{"profile":"small","port":'"$PORT"',"mode":"x","ram_mb":10,"vram_mb":0,"enabled":false,"state":"running","last_log_line":null}]' >"$E/fake/others.json"
 run_seq "$E" vision; check "NEG-CONTROL: an unrelated small profile running does not stop the sequence" "$RC" "0"
 # a second concurrent runner is refused (the flock is held by someone else)
 E="$(mkenv)"; mkdir -p "$E/ev"; flock "$E/ev/.runner.lock" sleep 20 & LK=$!
