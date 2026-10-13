@@ -1,0 +1,6 @@
+# covenant_propagation_exclusions.tsv - per-entry-justified carrier exclusions for the CM-COVENANT-114-NNN-PROPAGATION family (11.4.224(E) fence).
+# Schema: <path-glob><TAB><class><TAB><justification>. Class from {vendored-third-party|generated-code|non-shipping-fixtures|filename-collision}.
+# Globs are matched with find -path against the absolute carrier path, so start with */ . ONE row per vendored / third-party tree; own-org submodules are NOT excluded (11.4.28).
+*/.specify/extensions/superspec/examples/*	non-shipping-fixtures	SpecKit/superspec sample-project fixture (static-landing-page example CLAUDE.md) shipped inside llmctl vendored superspec extension tracked at .specify/extensions/superspec; a demo project, not a governance carrier of llmctl.
+*/submodules/superspec/*	vendored-third-party	WangX0111/superspec vendored submodule (third-party); its only carrier is examples/static-landing-page/CLAUDE.md, an upstream sample.
+*/submodules/llama.cpp/*	vendored-third-party	ggml-org/llama.cpp vendored inference engine (third-party); its AGENTS.md and CLAUDE.md are upstream-authored contributor/agent policies for llama.cpp.
