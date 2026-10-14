@@ -140,7 +140,9 @@ fi
 # ev_path <file>: the evidence dir the driver wrote there; accepted only when it is a directory under the evidence root that we own
 ev_path() {
   local d; d="$(head -1 "$1" 2>/dev/null)"
-  case "$d" in "$EVROOT"/*) [ -d "$d" ] && [ -O "$d" ] && printf '%s' "$d" ;; esac
+  case "$d" in "$EVROOT"/*) ;; *) return 0 ;; esac
+  local rd re; rd="$(realpath -e -- "$d" 2>/dev/null)" && re="$(realpath -e -- "$EVROOT" 2>/dev/null)" || return 0
+  case "$rd" in "$re"/*) [ -d "$rd" ] && [ -O "$rd" ] && printf '%s' "$rd" ;; esac
   return 0
 }
 INTERRUPTED=0

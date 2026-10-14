@@ -7,7 +7,7 @@
 | Status | prepared on branch `integration/llmctl-3.2.2-final` (on top of `release/3.2.2-notes`, which sits on `integration/llmctl-3.2.2`; merged: agent containment, guard cost, constitution pin 4091798, nested-submodule inheritance test, covenant exclusions); the version bump to `3.2.2` and the CHANGELOG section `## 3.2.2 (2026-10-13)` are applied; **nothing in this list has been executed against a remote** (no push, no tag, no release) |
 | Base | `main` at `db07bd5` (release 3.2.1); tag `v3.2.1` is published and immutable |
 | Content | fix: engine unit loses a port race with exit 98 and is not restarted into the start limit (`fix/onnx-eaddrinuse-exit98`); fix: a stop kills only its own registration waiter, now with a delimited pid match; baselined test fixes (`fix/baselined-tests`); carrier headings (`AGENTS.md` uses the standard `## INHERITED FROM constitution/AGENTS.md` form); stale restart-policy and gateway-memory statements corrected; second live `vision` run recorded as tracked evidence (`docs/qa/vision-live-2026-10-13-run2/`); host-safety agent containment and guard improvements (guard still dry-run); constitution pin moved to upstream `4091798`; loud-skip inheritance test; live-test runner profiles and dynamic switching (`feat/livetest-profiles` at `b6b2d3c`, merged; see the section of that name below) |
-| Version | `3.2.1` -> `3.2.2` (patch). Tag: `vX.Y.Z` |
+| Version | `3.2.1` -> `3.2.2` (patch). Tag: `v3.2.2` |
 | Companion | `docs/release-3.2.1-checklist.md`, `docs/release-3.2.0-checklist.md` (the full procedure; the steps below only list what differs), `docs/release-process.md`, `scripts/release/bump_version.sh` |
 
 Wording note: like the earlier checklists, this file avoids the literal "llmctl" + space + digits pattern that `tests/test_version_consistency.sh` rejects in `docs/*.md`.
@@ -38,7 +38,8 @@ done
 # 2. push-size check (gitflic accepts at most 100 MiB per push; above 90 MiB STOP and ask)
 for r in $REMOTES; do
   m="$(git ls-remote "$r" refs/heads/main | cut -f1)"
-  printf '%-9s %s bytes\n' "$r" "$(git rev-list --objects "^$m" HEAD | git pack-objects --stdout --revs 2>/dev/null </dev/null | wc -c)"
+  [ -n "$m" ] || { echo "$r: remote main unreadable, STOP"; continue; }
+  printf '%-9s %s bytes\n' "$r" "$(git rev-list --objects "^$m" HEAD | git pack-objects --stdout 2>/dev/null | wc -c)"
 done
 # 3. GATE (operator confirms in this session): push main, ff-only, per remote; the first failure aborts
 for r in $REMOTES; do echo "== push main -> $r"; git push "$r" main; done
