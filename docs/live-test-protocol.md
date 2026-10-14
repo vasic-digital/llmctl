@@ -63,7 +63,17 @@ backend `decide-nli`); the operator has accepted that.**
    an untracked half-started unit), starts nothing further, marks the rest `SKIPPED (interrupted)`, writes their exact commands to
    `RESTORE_MANUAL.txt` and exits 6; a second signal changes nothing. SIGKILL cannot be handled (see Known unknowns).
    Group-delivered signals (terminal/ssh close, a TERM to the whole process group) do not kill the `llmctl start` in flight: it is
-   started with TERM/HUP/INT ignored (inherited through exec; nobody is signalled by us, still bounded by its 300 s deadline). Limits:
+   started with TERM/HUP/INT ignored (inherited through exec; nobody is signalled by us). The 300 s limit is only a WAIT deadline:
+   when it passes the tool stops waiting (the profile is reported FAILED) and signals nothing, so a runaway start keeps running and,
+   being immune, ignores TERM/HUP/INT. The real bounds are llmctl's own: `LLMCTL_START_WAIT` (default 20 s) limits `systemctl --user start`, `LLMCTL_READY_TIMEOUT` (default 60 s, 1 s steps, `_sched_wait_ready`) the readiness poll, about 80 s per
+   profile plus time queued on the scheduler lock. The **operator abort path** for such an orphan is `systemctl --user stop
+   <llmctl-engine>@<profile>.service` (printed in the message and in `RESTORE_MANUAL.txt`) or SIGKILL of its recorded pid. Because the
+   signals are ignored at entry, llmctl's own TERM/INT traps inside the restore tree are disabled (a signal ignored at entry cannot
+   be trapped) - intended. A scaled instance is `ALREADY RUNNING` only when it is also healthy (same health check as a base profile,
+   port from its status row); a present reservation whose health cannot be verified is reported `RESERVED (... health not verified)`,
+   leaves RESTORE_STATE=manual and exits 6. The runner no longer scrapes the driver's stdout for the evidence path: the driver writes it
+   to a file (`LT_EVIDENCE_PATH_FILE`, honoured only with `LT_VIA_RUNNER=1`) and the runner accepts a path only under the evidence root
+   and owned by the user. Profile names must not contain `.` (a test asserts it for the catalog). Limits:
    SIGKILL cannot be ignored, and the main-flow `llmctl switch` (a background job of the driver) is NOT immune - a group signal there
    ends the switch and the cleanup path (stop of the test profile, then restore) takes over.
    `--no-restore` run directly by a human prints a WARNING on stderr when a resident set was switched off (naming
