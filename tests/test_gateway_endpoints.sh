@@ -291,9 +291,13 @@ for _ in range(3):
 time.sleep(0.3)
 # The deliberate RST of connection shedding can arrive during connect() itself (race), or on the
 # first read: both mean "shed". Data, a hang, or a successful TLS-less answer would be a failure.
+# The cap evicts the oldest unauthenticated connection of the source and admits the newcomer, which
+# is then reset by the 3 s pre-auth/handshake timeout (gateway B keeps the defaults). The client wait
+# MUST therefore exceed that timeout by a wide margin: a 3 s wait raced it by ~1 ms (RST at 3.001 s)
+# and failed under load. 10 s still fails a connection that is never shed.
 try:
     extra = socket.create_connection(("127.0.0.1", port), timeout=3)
-    extra.settimeout(3)
+    extra.settimeout(10)
     data = extra.recv(1)
     closed = (data == b"")
 except ConnectionResetError:
