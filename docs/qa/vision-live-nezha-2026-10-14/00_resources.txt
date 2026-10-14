@@ -1,0 +1,32 @@
+== 2026-10-14T12:02:26Z host=nezha kernel=6.12.61-6.12-alt1
+8
+MemTotal:       65625048 kB
+MemAvailable:   56670440 kB
+SwapFree:       49589240 kB
+               total        used        free      shared  buff/cache   available
+Mem:           64086        8745       22566         354       34420       55341
+Swap:          48426           0       48426
+60% cap of MemTotal (MiB): 38452
+-- PSI memory
+some avg10=0.00 avg60=0.00 avg300=0.00 total=0
+full avg10=0.00 avg60=0.00 avg300=0.00 total=0
+-- PSI cpu
+some avg10=0.19 avg60=0.19 avg300=0.07 total=385519264
+full avg10=0.00 avg60=0.00 avg300=0.00 total=0
+ 14:02:26 up 2 days, 18:18,  5 users,  load average: 1.74, 0.67, 0.29
+Filesystem      Size  Used Avail Use% Mounted on
+/dev/nvme1n1p3  916G  770G  130G  86% /home
+-- llama-server/onnx processes (operator-owned, untouched)
+   1674 26844  238709 /home/milosvasic/llmctl-3.1.0/build/llmctl-decide serve --foreground
+   2146 3244692 238709 /home/milosvasic/.local/share/llmctl/venv-onnx/bin/python /home/milosvasic/llmctl-3.1.0/lib/onnx_server.py --model-dir /home/milosvasic/.
+   2153 358628 238709 /home/milosvasic/llmctl-work-live/llama.cpp/build/bin/llama-server --model /home/milosvasic/.local/share/llmctl/models/decide-max/jevk5-9b
+   2195 224232 238709 /home/milosvasic/llmctl-work-live/llama.cpp/build/bin/llama-server --model /home/milosvasic/.local/share/llmctl/models/decide-2b/jevk5-2b-
+   2219 320416 238709 /home/milosvasic/llmctl-work-live/llama.cpp/build/bin/llama-server --model /home/milosvasic/.local/share/llmctl/models/decide-pro/spark-x2
+-- engine reused read-only
+version: 0.5.0-dev (build 1, commit 1537a0a)
+built with GNU 14.3.1 for Linux x86_64
+-- nezha installed llmctl
+LLMCTL_VERSION="3.1.0"
+count of vision-validate in 3.1.0 help: 0
+-- isolated checkout
+d7def51 docs(qa): third live vision run 2026-10-14 - PASS 21/0/0, raw answers, pressure-gate refusal investigated

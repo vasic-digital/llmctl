@@ -1,0 +1,7 @@
+== 2026-10-14T12:05:01Z sha256 vs catalog (ggml-org/gemma-3-4b-it-GGUF@main)
+gemma-3-4b-it-Q4_K_M.gguf: OK
+mmproj-model-f16.gguf: OK
+rc=0
+total 3262708
+-rw-r--r-- 1 milosvasic milosvasic 2489757856 Oct 14 14:03 gemma-3-4b-it-Q4_K_M.gguf
+-rw-r--r-- 1 milosvasic milosvasic  851251104 Oct 14 14:04 mmproj-model-f16.gguf

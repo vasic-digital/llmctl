@@ -1,0 +1,13 @@
+== 2026-10-14T12:05:19Z launch
+some avg10=0.00 avg60=0.00 avg300=0.00 total=0
+full avg10=0.00 avg60=0.00 avg300=0.00 total=0
+Running as unit: llmctl-validate-vision.service; invocation ID: f76d69d3e2c64f90a95adc5b6a9150ce
+health=200 after 4s
+{"models":[{"name":"/home/milosvasic/llmctl-validate-state/data/models/vision/gemma-3-4b-it-Q4_K_M.gguf","model":"/home/milosvasic/llmctl-validate-state/data/models/vision/gemma-3-4b-it-Q4_K_M.gguf","modified_at":"","size":"","digest":"","type":"model","description":"","tags":[""],"capabilities":["completion","multimodal"],"parameters":"","details":{"parent_model":"","format":"gguf","family":"","families":[""],"parameter_size":"","quantization_level":""}}],"object":"list","data":[{"id":"/home/milosvasic/llmctl-validate-state/data/models/vision/gemma-3-4b-it-Q4_K_M.gguf","aliases":["/home/milosvasic/llmctl-validate-state/data/models/vision/gemma-3-4b-it-Q4_K_M.gguf"],"tags":[],"object":"model","created":1791979523,"owned_by":"llamacpp","meta":{"vocab_type":1,"n_vocab":262144,"n_ctx":24064,"n_ctx_train":131072,"n_embd":2560,"n_params":3880099328,"size":2483218432,"ftype":"Q4_K - Medium"}}]}
+ActiveState=active
+MainPID=3204739
+MemoryCurrent=2707300352
+CPUQuotaPerSecUSec=4s
+MemoryMax=21474836480
+some avg10=0.00 avg60=0.00 avg300=0.00 total=0
+full avg10=0.00 avg60=0.00 avg300=0.00 total=0

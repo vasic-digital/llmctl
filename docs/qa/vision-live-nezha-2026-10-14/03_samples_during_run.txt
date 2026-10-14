@@ -1,0 +1,13 @@
+cut: '"': No such file or directory
+12:05:38 psi_mem_full=avg10=0.00 psi_cpu_some=avg10=0.00 load=0.56 0.60 0.33 1/1194 3204998 unit_mem=2707292160 avail_kB=54181948
+cut: '"': No such file or directory
+12:05:48 psi_mem_full=avg10=0.00 psi_cpu_some=avg10=0.00 load=0.47 0.58 0.33 1/1189 3205125 unit_mem=2707292160 avail_kB=54152440
+cut: '"': No such file or directory
+12:05:58 psi_mem_full=avg10=0.00 psi_cpu_some=avg10=0.00 load=0.40 0.56 0.32 1/1186 3205228 unit_mem=2707292160 avail_kB=54178872
+cut: '"': No such file or directory
+12:06:08 psi_mem_full=avg10=0.00 psi_cpu_some=avg10=0.00 load=0.34 0.54 0.32 1/1186 3205483 unit_mem=2707292160 avail_kB=54152516
+cut: '"': No such file or directory
+12:06:18 psi_mem_full=avg10=0.00 psi_cpu_some=avg10=0.00 load=0.29 0.52 0.32 1/1186 3205618 unit_mem=2707292160 avail_kB=54150732
+cut: '"': No such file or directory
+12:06:28 psi_mem_full=avg10=0.00 psi_cpu_some=avg10=0.00 load=0.32 0.52 0.32 2/1186 3205749 unit_mem=2707292160 avail_kB=54156272
+-- progress so far
