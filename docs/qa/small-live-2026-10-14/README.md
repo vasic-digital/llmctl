@@ -38,12 +38,14 @@ and no cap was changed because of it. The run lasted about 12 s from start to st
 |---|---|---|---|
 | `attempt-refused-psi-20261014T090901Z/` | `small` | REFUSED, exit 3, **nothing started** | pre-gate: `PSI full avg10 1.02 not < 1` (the first attempt for `small`, 10 minutes before the PASS above) |
 | `attempt-fast-refused-psi-20261014T093330Z/` | `fast` | REFUSED, exit 3, **nothing started** | pre-gate: `PSI full avg10 1.20 not < 1` |
-| `attempt-fast-port-in-use-20261014T093444Z/` | `fast` | **UNDETERMINED, exit 2: `fast` did NOT run live** | the pre-gate passed, then `llmctl switch fast` failed: `port 8080 for "fast" is already in use by another program` (`start.out`). The port owner was HelixCode's `helixcode-server.service`, not an llmctl service (that attribution is the operator's observation; these files do not contain it). llmctl failed closed: no usable port, no model loaded, `cleanup stop rc=0`, nothing of the other program was touched. `validate` was never reached |
+| `attempt-fast-port-in-use-20261014T093444Z/` | `fast` | **UNDETERMINED, exit 2: `fast` did NOT run live** | the pre-gate passed, then `llmctl switch fast` failed: `port 8080 for "fast" is already in use by another program` (`start.out`). The port owner was HelixCode's `helixcode-server.service`, not an llmctl service (that attribution was observed read-only later in the session with `ss`, about 1 minute after the attempt; it is NOT captured in these files). llmctl failed closed: no usable port, no model loaded, `cleanup stop rc=0`, nothing of the other program was touched. `validate` was never reached |
 
 The two refusals show the pre-gate working as designed on a host that was briefly under memory pressure; they are not failures of a model. The `fast`
 attempt is **not** a run of `fast`: no model was served, no probe was answered, and no `fast` claim of any kind follows from it.
 
 ## UNKNOWN / not shown by this run
+
+* **Hardware tier.** On this host `llmctl plan` classifies the host as `below-minimum` (its RAM-budget rule), so the profile `small` (`min_tier` baseline) is `tier_ok=false` and not recommended here. The live driver gates on `fits=true` only, as does an explicit `llmctl start` (`docs/hardware-tiers.md`: tier gating affects recommendations and `llmctl auto`). The PASS therefore says nothing about a host that meets the baseline tier. (`plan_fits.txt` and `plan.json` of the run were not copied; the values are quoted from the original run directory.)
 
 * **UNKNOWN: the process `VmHWM`** (not recorded), and the unit peak under a longer, larger-context or heavier workload than five short probes.
 * **Run-to-run variation.** There is exactly one `small` run; other hosts, loads and reboots are not covered.
