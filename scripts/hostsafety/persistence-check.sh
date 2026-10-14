@@ -132,6 +132,8 @@ else row "pressure advisory" PASS "${pj}" "guard timer" "age ${age}s" - ""; fi
 rs="${here}/root-steps.sh"; [[ -f "${rs}" ]] || rs="${SHARE}/root-steps.sh"
 if [[ -f "${rs}" ]]; then
   # rc must be 0/1/2 and exactly 6 rows must come back; an abort that drops rows is UNDETERMINED, never a silent pass.
+  # (A set -e/-u abort exits 1 like a FAIL verdict, so the row count is the effective guard; an abort AFTER the 6th row is
+  # not detectable here.)
   # Empty fields become "-" first: `IFS=$'\t' read` would collapse two adjacent tabs and shift the columns.
   rout="$(bash "${rs}" --verify 2>/dev/null)"; rrc=$?
   nrows=0

@@ -289,7 +289,7 @@ case "${mode}" in
     tmp_line
     echo "backups (if any) in ${BK}; originals in ${ORIG}"
     echo "=== verify (persistent / boot / live) ==="
-    do_verify || true
+    do_verify || true   # deliberate: --apply exits 0 once the files are written; FAIL rows (e.g. a refused or failed remount) are the operator's signal
     ;;
   revert)
     for f in "${!FILES[@]}"; do
@@ -307,7 +307,8 @@ case "${mode}" in
     # a grow (live smaller than the remaining boot size) is always safe; anything else is a shrink and follows the refusal rules
     if [[ -n "${bs}" ]]; then
       bb="$(size_bytes "${bs}")"; lb="$(size_bytes "$(size_of_options "$(live_tmp_options)")")"
-      if [[ "${bb}" =~ ^[0-9]+$ && "${lb}" =~ ^[0-9]+$ ]] && (( bb >= lb )); then remount_tmp "${bs}" grow; else remount_tmp "${bs}"; fi
+      # equal within 1% (the kernel page-rounds a percent size: 2 KiB on anton) counts as a grow, i.e. a no-op
+      if [[ "${bb}" =~ ^[0-9]+$ && "${lb}" =~ ^[0-9]+$ ]] && { within_1pct "${bb}" "${lb}" || (( bb >= lb )); }; then remount_tmp "${bs}" grow; else remount_tmp "${bs}"; fi
     fi
     ;;
   verify)

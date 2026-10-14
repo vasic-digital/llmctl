@@ -576,7 +576,12 @@ HOSTSAFETY_TMP_USED_BYTES=3500000000 LIVE_TMP_OPTIONS='rw,size=4194304k' rst --r
 assert_contains "$(cat "${TEST_TMP}/rst_revert0.out")" "REFUSED live remount" "--revert that would shrink /tmp (remaining boot size 1G < live 4G) is refused while /tmp is full"
 rm -f "${RT}/etc/systemd/system/tmp.mount.d/90-operator.conf"
 HOSTSAFETY_TMP_USED_BYTES=1073741824 rst --apply >/dev/null 2>&1
-rst --revert >"${TEST_TMP}/rst_revert.out" 2>&1
+# re-review finding 1: an EQUAL-size revert (live = vendor 50%, page-rounded 2 KiB above the MemTotal-derived value) is a no-op
+# grow, never a "REFUSED" shrink, even with a full /tmp
+HOSTSAFETY_TMP_USED_BYTES=3500000000 rst --revert >"${TEST_TMP}/rst_revert_eq.out" 2>&1
+assert_contains "$(cat "${TEST_TMP}/rst_revert_eq.out")" "live: remount /tmp size=50% skipped (test root)" "revert to an equal size (2 KiB page rounding) is a grow, not a refused shrink"
+HOSTSAFETY_TMP_USED_BYTES=1073741824 rst --apply >/dev/null 2>&1
+HOSTSAFETY_TMP_USED_BYTES=0 rst --revert >"${TEST_TMP}/rst_revert.out" 2>&1
 assert_eq "no" "$([[ -e ${RT}${TD} ]] && echo yes || echo no)" "--revert removes the tmp.mount drop-in"
 assert_contains "$(cat "${TEST_TMP}/rst_revert.out")" "live: remount /tmp size=50% skipped (test root)" "--revert restores the live size from the boot definition that remains (vendor 50%)"
 assert_eq "no" "$([[ -e ${RT}/etc/sysctl.d/90-hostsafety.conf ]] && echo yes || echo no)" "--revert removes the legacy hostsafety file too (there was no pre-hostsafety original)"
