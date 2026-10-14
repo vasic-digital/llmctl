@@ -17,7 +17,9 @@ class H(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
         up = bool(glob.glob(T + "/env.*/fake/running") or glob.glob(T + "/env.*/fake/serving") or glob.glob(T + "/env.*/fake/restored"))
         open(T + "/health_paths", "a").write(self.path + "\n")
-        self.send_response(200 if up else 503); self.end_headers(); self.wfile.write(b'{"status":"ok"}' if up else b"down")
+        import os
+        body = open(T + "/health_body", "rb").read() if os.path.exists(T + "/health_body") else b'{"status":"ok"}'
+        self.send_response(200 if up else 503); self.end_headers(); self.wfile.write(body if up else b"down")
     def log_message(self, *a): pass
 http.server.HTTPServer(("127.0.0.1", int(sys.argv[1])), H).serve_forever()
 PY
@@ -213,7 +215,7 @@ mainenv() {
     LT_READY_INTERVAL=0.2 LT_READY_MAX="${READY_MAX:-4}" LT_VRAM_SETTLE_MAX=2 LT_VALIDATE_GRACE=3
     LT_MEMINFO="$E/meminfo" LT_PSI="$E/psi" LT_IOPSI="$E/iopsi" LT_EVIDENCE_ROOT="$E/ev" HOME="$E/home"
     LLMCTL_SERVICES_DIR="$E/services" LLMCTL_RUNTIME_DIR="$E/run" LT_SUITE_DIR="$E/suite" LT_SUITES_ROOT="$E/suites" LT_CATALOG="$E/catalog.json"
-    LT_VERIFY_BOUND=5 LT_PLAN_BOUND=5 LT_RESTORE_READY_MAX=3 LT_RESTORE_BOUND=5 LT_STOP_BOUND=2 LT_BOUND=2
+    LT_VERIFY_BOUND=5 LT_PLAN_BOUND=5 LT_RESTORE_READY_MAX=3 LT_RESTORE_BOUND="${RESTORE_BOUND_T:-5}" LT_STOP_BOUND=2 LT_BOUND=2
     LT_START_MAX="${START_MAX:-20}" LT_START_WAIT="${LT_START_WAIT_T:-15}" LT_POST_SAMPLE=2)
 }
 # run_main <env> [args...]: hermetic run, returns exit code in $RC, evidence dir in $EVD

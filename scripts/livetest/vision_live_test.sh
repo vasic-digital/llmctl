@@ -123,6 +123,8 @@ done
 env | cut -d= -f1 | sort >"$EV/env_names.txt"   # NAMES only, never values (secrets)
 CMDLOG="$EV/commands.log"; SIGLOG="$EV/signals.log"
 log() { printf '%s %s\n' "$(date -u +%FT%TZ)" "$*" | tee -a "$EV/run.log" >&2; }
+# the runner (LT_VIA_RUNNER=1) names a file for the evidence path: it never has to scrape it from our stdout
+if [ "${LT_VIA_RUNNER:-0}" = 1 ] && [ -n "${LT_EVIDENCE_PATH_FILE:-}" ]; then printf '%s\n' "$EV" >"$LT_EVIDENCE_PATH_FILE" 2>/dev/null; fi
 
 WD_PID=""; START_SUB=""; START_PENDING=0; STOP_NEEDED=0; CLEANED=0; RESULT=2; VERDICT_REASON="not finished"
 CG_PEAK=UNKNOWN; CG_HIGH=UNKNOWN; CG_MAX=UNKNOWN; GPU_PEAK=UNKNOWN
@@ -267,8 +269,14 @@ bounded() {
 }
 # bounded_immune: like bounded, but the job ignores TERM/HUP/INT (ignored dispositions are inherited through exec), so a signal delivered to
 # the whole process group (terminal or ssh close, `kill -TERM -PGID` by someone else) cannot kill a restore `llmctl start` half way and
-# leave a half-started unit untracked. Nobody is signalled by us (CONST/§11.4.263); the job stays bounded by its deadline (rc 124, never
-# killed). LIMIT: SIGKILL cannot be ignored, and the main-flow `llmctl switch` (background job of the driver) is NOT immune - a group
+# leave a half-started unit untracked. Nobody is signalled by us (CONST/§11.4.263).
+# THE DEADLINE IS ONLY A WAIT DEADLINE: when it passes we stop WAITING (rc 124) and signal nothing, so a runaway start keeps running and,
+# being immune, ignores TERM/HUP/INT. The REAL bounds are llmctl's own: `systemctl --user start` is bounded by LLMCTL_START_WAIT (default
+# 20 s, lib/service_linux.sh _svc_start_bounded) and _sched_wait_ready polls the profile for LLMCTL_READY_TIMEOUT (default 60 s, 1 s steps,
+# lib/scheduler.sh) - about 80 s per profile - plus time queued on the scheduler lock. OPERATOR ABORT PATH for an orphan: `systemctl --user
+# stop <llmctl-unit>` (printed in the 124 message and RESTORE_MANUAL.txt) or SIGKILL of the recorded pid (cannot be ignored).
+# Because the signals are ignored AT ENTRY, llmctl's own TERM/INT traps inside this tree are disabled (a trap cannot re-arm a signal that
+# was ignored on entry) - intended. LIMIT: the main-flow `llmctl switch` (background job of the driver) is NOT immune - a group
 # signal there ends the switch and the cleanup path (stop + restore) takes over.
 bounded_immune() {
   local secs="$1" out="$2" i=0; shift 2
@@ -435,6 +443,7 @@ restore_manual_note() {   # restore_manual_note <names...>: loud, exact, in the 
   local cmd="nice -n 19 ionice -c 3 $LLMCTL start $*" i
   : >"$EV/RESTORE_MANUAL.txt"
   [ "$#" -eq 0 ] || { echo "$cmd" >>"$EV/RESTORE_MANUAL.txt"; log "RESTORE MANUALLY (the host is not touched any further by this tool): $cmd"; }
+  for i in ${ABORT_HINTS[@]+"${ABORT_HINTS[@]}"}; do echo "restore start still running when we stopped waiting (abort path; or SIGKILL its pid): $i" >>"$EV/RESTORE_MANUAL.txt"; done
   for i in ${INST_OPEN[@]+"${INST_OPEN[@]}"}; do
     echo "scaled instance $i was running: nice -n 19 ionice -c 3 $LLMCTL decide scale ${i%%.*} $(inst_count "${i%%.*}")   # 'llmctl start' brings back ONE instance only" >>"$EV/RESTORE_MANUAL.txt"
     log "RESTORE MANUALLY: scaled instance $i: $LLMCTL decide scale ${i%%.*} $(inst_count "${i%%.*}")"
@@ -454,7 +463,7 @@ restore_skip_all() {   # restore_skip_all <reason> <names...>
 # half-started unit), then no further profile is started: the rest is SKIPPED (interrupted), the exact commands go to RESTORE_MANUAL.txt
 # and the exit is 6. A second signal changes nothing (the in-flight start is still tracked). SIGKILL cannot be handled: documented gap.
 # RESTORE_RC: 0 ok | 6 something skipped (pressure / interrupted) | 7 something failed.
-RESTORE_INTR=0; INST_OPEN=()
+RESTORE_INTR=0; INST_OPEN=(); ABORT_HINTS=(); INST_UNVERIFIED=()
 inst_count() {   # inst_count <base>: how many instances of <base> were running (the base itself + its p.N rows)
   local c=0 n; for n in ${PRIOR_NAMES[@]+"${PRIOR_NAMES[@]}"}; do [ "$n" = "$1" ] && c=$((c + 1)); done
   for n in ${PRIOR_INSTANCES[@]+"${PRIOR_INSTANCES[@]}"}; do [ "${n%%.*}" = "$1" ] && c=$((c + 1)); done
@@ -483,7 +492,11 @@ restore_set() {
     if ! restore_gate "$ram"; then printf '%-18s SKIPPED (%s)\n' "$n" "$RESTORE_WHY" >>"$EV/restore.txt"; skipped+=("$n"); continue; fi
     echo "$(date -u +%FT%TZ) \$ LLMCTL_VALIDATE_ON_START=0 nice -n 19 ionice -c 3 $LLMCTL start $n" >>"$CMDLOG"
     rc=0; bounded_immune "$RESTORE_BOUND" "$EV/restore.$n.out" env LLMCTL_VALIDATE_ON_START=0 nice -n 19 ionice -c 3 "$LLMCTL" start "$n" || rc=$?
-    if [ "$rc" = 124 ]; then printf '%-18s FAILED (llmctl start still running after %ss; never signalled)\n' "$n" "$RESTORE_BOUND" >>"$EV/restore.txt"; failed+=("$n"); continue; fi
+    if [ "$rc" = 124 ]; then
+      local hint; hint="the start is NOT killed (we only stopped waiting); operator abort path: systemctl --user stop $(unit_name "$n")"
+      printf '%-18s FAILED (llmctl start still running after %ss; %s)\n' "$n" "$RESTORE_BOUND" "$hint" >>"$EV/restore.txt"
+      log "RESTORE: llmctl start $n still running after ${RESTORE_BOUND}s: $hint"; ABORT_HINTS+=("systemctl --user stop $(unit_name "$n")"); failed+=("$n"); continue
+    fi
     if [ "$rc" != 0 ]; then printf '%-18s FAILED (llmctl start rc=%s: %s)\n' "$n" "$rc" "$(tail -1 "$EV/restore.$n.out" 2>/dev/null | cut -c1-120)" >>"$EV/restore.txt"; failed+=("$n"); continue; fi
     port="$(restore_row_of "$n")"; : "${port:=}"
     deadline=$(( $(date +%s) + RESTORE_READY_MAX ))
@@ -495,7 +508,11 @@ restore_set() {
   INST_OPEN=()
   for n in ${PRIOR_INSTANCES[@]+"${PRIOR_INSTANCES[@]}"}; do
     # llmctl's own switch rollback may already have brought the instance back: look at the CURRENT status before calling it lost
-    if restore_row_of "$n" >/dev/null; then printf '%-18s ALREADY RUNNING (llmctl status lists the instance again)\n' "$n" >>"$EV/restore.txt"; okc=$((okc+1))
+    if port="$(restore_row_of "$n")"; then
+      deadline=$(( $(date +%s) + RESTORE_READY_MAX ))
+      while ! restore_healthy "$n" "$port"; do [ "$(date +%s)" -lt "$deadline" ] && [ "$RESTORE_INTR" = 0 ] || break; sleep "$READY_INTERVAL"; done
+      if restore_healthy "$n" "$port"; then printf '%-18s ALREADY RUNNING (healthy)\n' "$n" >>"$EV/restore.txt"; okc=$((okc+1))
+      else printf '%-18s RESERVED (reservation present, health not verified within %ss: check llmctl status / llmctl logs %s)\n' "$n" "$RESTORE_READY_MAX" "$n" >>"$EV/restore.txt"; INST_UNVERIFIED+=("$n"); fi
     else printf '%-18s FAILED (scaled instance not running; llmctl start restores ONE instance only; run: %s decide scale %s %s)\n' "$n" "$LLMCTL" "${n%%.*}" "$(inst_count "${n%%.*}")" >>"$EV/restore.txt"; failed+=("$n"); INST_OPEN+=("$n"); fi
   done
   status_json >"$EV/after_status.json" 2>/dev/null; bounded "$BOUND" "$EV/after_units.txt" "$SYSCTL" --user list-units --all --plain --no-legend 'llmctl-*@*.service' || true
@@ -504,9 +521,9 @@ restore_set() {
     for n in "${failed[@]}" ${skipped[@]+"${skipped[@]}"}; do [[ "$n" == *.* ]] || manual+=("$n"); done
     RESTORE_RC=7; RESTORE_STATE="NO (FAILED: ${failed[*]}${skipped[*]:+; SKIPPED: ${skipped[*]}})"
     log "RESTORE FAILED for: ${failed[*]} - see $EV/restore.txt"; restore_manual_note ${manual[@]+"${manual[@]}"}
-  elif [ "${#skipped[@]}" -gt 0 ]; then
-    RESTORE_RC=6; RESTORE_STATE="NO (SKIPPED: ${skipped[*]}: $RESTORE_WHY)"
-    log "RESTORE SKIPPED for: ${skipped[*]} ($RESTORE_WHY)"; restore_manual_note "${skipped[@]}"
+  elif [ "${#skipped[@]}" -gt 0 ] || [ "${#INST_UNVERIFIED[@]}" -gt 0 ]; then
+    RESTORE_RC=6; RESTORE_STATE="NO (SKIPPED: ${skipped[*]:-none}${INST_UNVERIFIED[*]:+; instance health not verified: ${INST_UNVERIFIED[*]}}${RESTORE_WHY:+: $RESTORE_WHY})"
+    log "RESTORE SKIPPED/UNVERIFIED for: ${skipped[*]} ${INST_UNVERIFIED[*]} (${RESTORE_WHY:-instance health})"; restore_manual_note ${skipped[@]+"${skipped[@]}"}
   else RESTORE_RC=0; RESTORE_STATE="YES"; log "prior set restored: $okc profile(s), each verified healthy"; fi
   out="$(sed 's/^/  /' "$EV/restore.txt")"; log "restore result:"$'\n'"$out"
 }

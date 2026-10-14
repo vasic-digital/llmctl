@@ -154,6 +154,26 @@ E="$(mkenv)"; mkdl "$E"; run_seq "$E" --fitting; check "nothing downloaded: refu
 E="$(mkenv)"; mkdl "$E" fast; echo 1 >"$E/fake/plan_rc"; run_seq "$E" --fitting; check "plan failure: --fitting refused (exit 3)" "$RC$(starts "$E")" "30"
 fi
 
+if want extras; then
+echo "== R7. extras switched off by a later driver run are restored by the runner =="
+E="$(mkenv fast)"; cp "$JD/chat-v1.json" "$E/fake/validate_file.fast"; cp "$JD/chat-v1.json" "$E/fake/validate_file.small"
+echo "[{\"profile\":\"decide\",\"port\":$PORT,\"ram_mb\":800,\"vram_mb\":0,\"enabled\":true,\"state\":\"running\"}]" >"$E/fake/others.json"
+printf '[ -f "$FAKE/mutated" ] && exit 0; touch "$FAKE/mutated"\npython3 -I -c '"'"'import json,sys;f=sys.argv[1];r=json.load(open(f+"/others.json"));r.append({"profile":"extra","port":%d,"ram_mb":500,"vram_mb":0,"enabled":True,"state":"running"});json.dump(r,open(f+"/others.json","w"))'"'"' "$FAKE"\n' "$PORT" >"$E/fake/mutate.sh"
+run_seq "$E" fast small
+check "sequence exit 0" "$RC" "0"
+has "the initial member is restored" "$E/fake/calls" '^restore decide$'
+has "the extra profile (switched off by run 2) is restored too" "$E/fake/calls" '^restore extra$'
+has "summary names it" "$E/out.txt" 'additionally restored: extra'
+
+echo "== R8. profile names carry no dot (the scaled-instance parsing relies on it) =="
+python3 -I - "$ROOT/models/catalog.json" "$E/catalog.json" <<'PY' && ok "no catalog profile name contains a '.'" || bad "a catalog profile name contains '.': the base-name parsing would break"
+import json, sys
+bad = [n for f in sys.argv[1:] for n in json.load(open(f))["profiles"] if "." in n]
+print("dotted names:", bad) if bad else None
+sys.exit(1 if bad else 0)
+PY
+fi
+
 printf '\nRESULT: %d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -ne 0 ] || printf '  ok: all %d livetest runner assertions passed\n' "$PASS"
 [ "$FAIL" = 0 ]

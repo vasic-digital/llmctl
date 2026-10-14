@@ -375,6 +375,44 @@ echo "== S18 (F-N5). docs state the 1024 margin is estimate-based =="
 has "protocol doc says the margin is an estimate-based choice that can only cost an abort+restore" "$ROOT/docs/live-test-protocol.md" 'margin.*estimate'
 fi
 
+if want rev3; then
+echo "== S19 (F1). the restore deadline is a WAIT deadline: the message and RESTORE_MANUAL.txt give the operator abort path =="
+E="$(mkenv fast)"; setprior "$E" aaa:100:0; mv "$E/fake/others.json" "$E/fake/others.stopped.json"; echo '[]' >"$E/fake/others.json"
+echo 4 >"$E/fake/restore_slow"; printf 'aaa\n' >"$E/set.txt"
+RESTORE_BOUND_T=1 run_main "$E" --restore-only "$E/set.txt"
+check "restore start exceeds its deadline: exit 7" "$RC" "7"
+has "  restore.txt says the start is NOT killed and gives the systemctl stop hint" "$EVD/restore.txt" '^aaa +FAILED.*still running.*systemctl --user stop llmctl-llama@aaa\.service'
+has "  RESTORE_MANUAL.txt carries the abort path (systemctl stop or SIGKILL of the recorded pid)" "$EVD/RESTORE_MANUAL.txt" 'systemctl --user stop llmctl-llama@aaa\.service'
+has "  the stderr message carries it too" "$E/err.txt" 'systemctl --user stop llmctl-llama@aaa\.service'
+has "  the docs state the real bounds (LLMCTL_START_WAIT, LLMCTL_READY_TIMEOUT)" "$ROOT/docs/live-test-protocol.md" 'LLMCTL_START_WAIT.*LLMCTL_READY_TIMEOUT|LLMCTL_READY_TIMEOUT.*LLMCTL_START_WAIT'
+has "  the docs say llmctl's own TERM/INT traps are disabled inside the restore tree" "$ROOT/docs/live-test-protocol.md" 'ignored at entry|cannot be trapped'
+has "  the docs name the operator abort path" "$ROOT/docs/live-test-protocol.md" 'operator abort path'
+
+sleep 4   # let the deliberately orphaned fake start (restore_slow 4) finish before the next scenario (it touches a shared health flag)
+echo "== S20 (F2). a scaled instance is only OK when it is healthy =="
+E="$(mkenv fast)"; setchat "$E"; touch "$E/fake/rollback_instances"
+echo "[$(row decide 800 0),$(row decide.2 800 0)]" >"$E/fake/others.json"
+run_main "$E" fast
+check "instance back and healthy: exit 0" "$RC" "0"
+has "  ALREADY RUNNING (healthy)" "$EVD/restore.txt" '^decide\.2 +ALREADY RUNNING \(healthy\)'
+E="$(mkenv fast)"; setchat "$E"; touch "$E/fake/rollback_instances"
+echo "[$(row decide 800 0),$(row decide.2 800 0 | sed 's/"port":[0-9]*/"port":1/')]" >"$E/fake/others.json"
+run_main "$E" fast
+check "instance reserved but NOT healthy (dead port): not ok, exit 6" "$RC" "6"
+has "  reservation present, health not verified" "$EVD/restore.txt" '^decide\.2 +.*reservation present, health not verified'
+has "  RESTORE_STATE=manual" "$EVD/verdict.txt" '^RESTORE_STATE=manual$'
+
+echo "== S21 (F3a). the runner takes the evidence path from a file the driver writes, not from scraped stdout =="
+E="$(mkenv fast)"; cp "$JD/chat-v1.json" "$E/fake/validate_file.fast"
+printf '{"status":"ok"}\nevidence /tmp/lt-spoofed-evidence\n' >"$T/health_body"
+run_run "$E" fast
+rm -f "$T/health_body"
+check "driver output contains a spoofed 'evidence' line: runner still exit 0" "$RC" "0"
+hasnt "  the summary table does not show the spoofed path" "$SEQD/summary.txt" 'lt-spoofed-evidence'
+[ -s "$SEQD/fast.evpath" ] && ok "  the driver wrote its evidence path to $SEQD/fast.evpath" || bad "  no evpath file"
+hasnt "  run_profiles.sh no longer scrapes the driver's stdout for the path" <(grep -vE '^\s*#' "$RUN") "awk '\\\$1==\"evidence\"'"
+fi
+
 printf '\nRESULT: %d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -ne 0 ] || printf '  ok: all %d livetest switch assertions passed\n' "$PASS"
 [ "$FAIL" = 0 ]

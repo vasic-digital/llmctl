@@ -137,6 +137,12 @@ if [ "$PLAN" = 1 ]; then
   exit 0
 fi
 
+# ev_path <file>: the evidence dir the driver wrote there; accepted only when it is a directory under the evidence root that we own
+ev_path() {
+  local d; d="$(head -1 "$1" 2>/dev/null)"
+  case "$d" in "$EVROOT"/*) [ -d "$d" ] && [ -O "$d" ] && printf '%s' "$d" ;; esac
+  return 0
+}
 INTERRUPTED=0
 # shellcheck disable=SC2329  # invoked via trap
 on_sig() { INTERRUPTED=1; log "interrupted: the running driver (if any) finishes its own cleanup; no further profile will start"; }
@@ -177,9 +183,9 @@ for p in "${LIST[@]}"; do
   if [ "$first" = 0 ]; then
     log "settling ${SETTLE}s, then re-checking the pre-gate for '$p' (nothing is started by the check)"
     sleep "$SETTLE"
-    grc=0; "$DRIVER" ${ALLOW[@]+"${ALLOW[@]}"} --gate-only "$p" 9>&- >"$SEQ/$p.gate.out" 2>&1 || grc=$?
+    grc=0; LT_VIA_RUNNER=1 LT_EVIDENCE_PATH_FILE="$SEQ/$p.gate.evpath" "$DRIVER" ${ALLOW[@]+"${ALLOW[@]}"} --gate-only "$p" 9>&- >"$SEQ/$p.gate.out" 2>&1 || grc=$?
     if [ "$grc" != 0 ]; then
-      EXIT_OF[$p]="$grc"; VERDICT_OF[$p]="GATE-REFUSED before start"; EV_OF[$p]="$(awk '$1=="evidence"{print $2}' "$SEQ/$p.gate.out" | tail -1)"
+      EXIT_OF[$p]="$grc"; VERDICT_OF[$p]="GATE-REFUSED before start"; EV_OF[$p]="$(ev_path "$SEQ/$p.gate.evpath")"
       STOP_RC="$grc"; STOPPED_AT="$p"; log "STOP: pre-gate re-check for '$p' exited $grc (see $SEQ/$p.gate.out); the sequence ends here"; break
     fi
   fi
@@ -191,11 +197,11 @@ for p in "${LIST[@]}"; do
   fi
   log "running '$p' (exit codes: 0 PASS 1 FAIL 2 undetermined 3 refused 4 watchdog abort 5 watchdog died)"
   SWITCHED=1
-  LT_VIA_RUNNER=1 "$DRIVER" ${ALLOW[@]+"${ALLOW[@]}"} --no-restore "$p" 9>&- 2>&1 | tee "$SEQ/$p.out"
+  LT_VIA_RUNNER=1 LT_EVIDENCE_PATH_FILE="$SEQ/$p.evpath" "$DRIVER" ${ALLOW[@]+"${ALLOW[@]}"} --no-restore "$p" 9>&- 2>&1 | tee "$SEQ/$p.out"
   rc="${PIPESTATUS[0]}"
   EXIT_OF[$p]="$rc"
   VERDICT_OF[$p]="$(sed -n 's/^VERDICT  *//p' "$SEQ/$p.out" | tail -1 | cut -c1-90)"; [ -n "${VERDICT_OF[$p]}" ] || VERDICT_OF[$p]="(no verdict line)"
-  EV_OF[$p]="$(awk '$1=="evidence"{print $2}' "$SEQ/$p.out" | tail -1)"
+  EV_OF[$p]="$(ev_path "$SEQ/$p.evpath")"
   [ -z "${EV_OF[$p]}" ] || note_extra "${EV_OF[$p]}"
   if [ "$rc" != 0 ]; then STOP_RC="$rc"; STOPPED_AT="$p"; log "STOP: '$p' exited $rc; no further profile is started (a watchdog abort is never continued past)"; break; fi
 done
