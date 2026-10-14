@@ -819,6 +819,68 @@ PY
   assert_eq "fired" "${wfired}" "B1: the shim killed the watchdog's first sleep (the fault was injected)"
   assert_eq "124" "${wrc}" "B1: watchdog sleep killed by someone else: the deadline still fires (rc 124, took ${wtook}s)"
   assert_eq "yes" "$([[ ${wtook} -le 8 ]] && echo yes || echo no)" "B1: the deadline fired near -T 4, not after the 12 s command (took ${wtook}s)"
+  assert_eq "yes" "$([[ ${wtook} -ge 3 ]] && echo yes || echo no)" "B1: the deadline did not fire EARLY when the sleep was killed at 0.5 s (took ${wtook}s >= 3)"
+
+  # --- round 5 (2026-10-14): Ctrl-C did not stop a run. systemd-run is started as a background job of a non-interactive
+  # script, so the COMMAND inherited SIGINT and SIGQUIT ignored (POSIX: async commands without job control); the INT the
+  # terminal sends to the foreground group, and the INT bounded-run forwards to the scope, were both ignored, and the run
+  # went on to its timeout. Fix: the command starts with default INT/QUIT handling (env --default-signal=INT,QUIT) and
+  # QUIT is forwarded like INT. Proof 1: the command's SigIgn mask has neither bit even when bounded-run itself was
+  # started as a background job. Proof 2: SIGINT to the run's own process group (what Ctrl-C does) ends it with rc 130
+  # within seconds and leaves no scope behind.
+  sigign="$( ( "${BR}" -q -T 30 -n "hssig$$" -- bash -c 'sed -n "s/^SigIgn:[[:space:]]*//p" /proc/self/status' & wait ) 2>/dev/null)"
+  assert_eq "0" "$(( 16#${sigign:-6} & 6 ))" "Ctrl-C: the command starts with SIGINT and SIGQUIT at their default action (SigIgn=${sigign:-?})"
+  ctrlc() { # <bounded-run> <tag> -> "<rc> <seconds> <scope-state> <survivors>"
+    local br="$1" tag="$2" s=$SECONDS r=0 pid pg st
+    env --default-signal=INT,QUIT setsid "${br}" -q -T 30 -n "${tag}" -- bash -c "exec -a hsmarkg-${mark} sleep 60" >/dev/null 2>&1 &
+    pid=$!
+    # readiness by the scope and an anchored pgrep (cheap): count_procs walks all of /proc and is too slow to poll with
+    for _ in $(seq 1 100); do pgrep -f "^hsmarkg-${mark} 60" >/dev/null 2>&1 && break; sleep 0.1; done
+    pg="$(ps -o pgid= -p "${pid}" 2>/dev/null | tr -d ' ')"
+    # signal ONLY a validated group: it is the run's own (pgid == the bounded-run pid we started), never ours, never <= 1
+    if [[ "${pg}" == "${pid}" && "${pg}" -gt 1 && "${pg}" != "$(ps -o pgid= -p $$ | tr -d ' ')" ]]; then
+      s=$SECONDS; kill -INT -- "-${pg}"
+    fi
+    wait "${pid}" 2>/dev/null || r=$?
+    sleep 0.5
+    st="$(systemctl --user is-active "bounded-run-${tag}.scope" 2>/dev/null | head -1)"
+    echo "${r} $((SECONDS - s)) ${st:-gone} $(count_procs "^hsmarkg-${mark} 60")"
+  }
+  read -r crc ctook cst csurv <<<"$(ctrlc "${BR}" "hsint$$")"
+  assert_eq "130" "${crc}" "Ctrl-C: SIGINT to the run's process group ends it with rc 130 (took ${ctook}s)"
+  assert_eq "yes" "$([[ ${ctook} -le 4 ]] && echo yes || echo no)" "Ctrl-C: the run ends within seconds of the SIGINT, not at its -T 30 timeout (took ${ctook}s)"
+  assert_eq "yes" "$([[ ${cst} != active && ${cst} != activating ]] && echo yes || echo no)" "Ctrl-C: no scope is left behind (${cst})"
+  assert_eq "0" "${csurv}" "Ctrl-C: the command is gone"
+
+  # --- round 5: a run killed by SIGKILL never runs its EXIT trap, so its private state dir (and the disk TMPDIR it
+  # recorded) stayed behind forever. A new run now removes run.* dirs older than one day whose owner is not a live
+  # bounded-run, with the TMPDIR they recorded; it never touches a live run's dir or a recent one.
+  export BOUNDED_RUN_STATE_ROOT="${TEST_TMP}/brstale" BOUNDED_RUN_TMP_ROOT="${TEST_TMP}/brstale-tmp"
+  mkdir -p "${BOUNDED_RUN_STATE_ROOT}" "${BOUNDED_RUN_TMP_ROOT}/dead1.abc"
+  sleep 0 & deadpid=$!; wait "${deadpid}"
+  mkdir "${BOUNDED_RUN_STATE_ROOT}/run.old1" "${BOUNDED_RUN_STATE_ROOT}/run.new1" "${BOUNDED_RUN_STATE_ROOT}/run.old3"
+  echo "${deadpid}" >"${BOUNDED_RUN_STATE_ROOT}/run.old1/owner"
+  echo "${BOUNDED_RUN_TMP_ROOT}/dead1.abc" >"${BOUNDED_RUN_STATE_ROOT}/run.old1/tmp"
+  echo "${deadpid}" >"${BOUNDED_RUN_STATE_ROOT}/run.new1/owner"
+  "${BR}" -q -T 30 -n "hslive$$" -- sleep 8 >/dev/null 2>&1 &
+  livepid=$!
+  ownerdir() { local d; for d in "${BOUNDED_RUN_STATE_ROOT}"/run.*; do [[ "$(cat "${d}/owner" 2>/dev/null)" == "$1" ]] && echo "${d}"; done; return 0; }
+  livedir=""; for _ in $(seq 1 50); do livedir="$(ownerdir "${livepid}")"; [[ -n "${livedir}" ]] && break; sleep 0.1; done
+  touch -d '2 days ago' "${BOUNDED_RUN_STATE_ROOT}/run.old1" "${BOUNDED_RUN_STATE_ROOT}/run.old3" ${livedir:+"${livedir}"}
+  staleprobe() { # <bounded-run> -> "old1 old3 tmp new1 live" each 1 = still present
+    "$1" -q -T 30 -n "hsstl$$-${RANDOM}" -- true >/dev/null 2>&1 || true
+    local x=""
+    for f in run.old1 run.old3; do [[ -e "${BOUNDED_RUN_STATE_ROOT}/${f}" ]] && x="${x}1 " || x="${x}0 "; done
+    [[ -e "${BOUNDED_RUN_TMP_ROOT}/dead1.abc" ]] && x="${x}1 " || x="${x}0 "
+    [[ -e "${BOUNDED_RUN_STATE_ROOT}/run.new1" ]] && x="${x}1 " || x="${x}0 "
+    [[ -n "${livedir}" && -e "${livedir}" ]] && x="${x}1" || x="${x}0"
+    echo "${x}"
+  }
+  read -r o1 o3 tmpd n1 lv <<<"$(staleprobe "${BR}")"
+  assert_eq "0 0 0" "${o1} ${o3} ${tmpd}" "stale: run.* dirs older than a day with a dead or no owner are removed, with the TMPDIR they recorded"
+  assert_eq "1" "${n1}" "stale: a RECENT dir with a dead owner is kept (a run starting right now)"
+  assert_eq "1" "${lv}" "stale: an OLD dir whose owner is a live bounded-run is kept (${livedir:-no live dir found})"
+  wait "${livepid}" 2>/dev/null || true
 
   # --- review B3 (2026-10-14): the verdict files lived next to a mktemp file in ${XDG_RUNTIME_DIR:-/tmp}; with
   # XDG_RUNTIME_DIR unset another user could pre-create the predictable "<flag>.claim" in /tmp and steal the verdict.
@@ -852,6 +914,10 @@ M = {
     "b3root": rep(src, '${XDG_STATE_HOME:-${HOME}/.local/state}', '${TMPDIR:-/tmp}'),
     "b3priv": rep(src, 'state="$(mktemp -d "${state_root}/run.XXXXXX" 2>/dev/null)"',
                   'state="${state_root}/run.$$"; mkdir -m 0755 "${state}" 2>/dev/null'),
+    "b1semi": rep(src, 'sleep "$((deadline - SECONDS))" && break', 'sleep "$((deadline - SECONDS))"; break'),
+    "sigint": rep(src, '-- env --default-signal=INT,QUIT bash -c', '-- bash -c'),
+    "staleage": rep(src, '-mmin +1440', '-mmin -999999'),
+    "staleowner": rep(src, '[[ "${_c}" == *bounded-run* ]] && continue', ':'),
 }
 for k, v in M.items():
     os.makedirs(os.path.join(out, k), exist_ok=True)
@@ -859,6 +925,21 @@ for k, v in M.items():
 PY
   read -r mrc _ _ <<<"$(wdkill "${TEST_TMP}/mut/b1/bounded-run")"
   assert_eq "yes" "$([[ ${mrc} -ne 124 ]] && echo yes || echo no)" "mutation [B1: sleep || exit 0]: the proof catches it (rc ${mrc}, not 124)"
+  read -r mrc mtook _ <<<"$(wdkill "${TEST_TMP}/mut/b1semi/bounded-run")"
+  assert_eq "yes" "$([[ ${mtook} -lt 3 ]] && echo yes || echo no)" "mutation [B1: sleep ...; break fires early]: the lower bound catches it (rc ${mrc}, took ${mtook}s < 3)"
+  read -r mrc _ _ _ <<<"$(ctrlc "${TEST_TMP}/mut/sigint/bounded-run" "hsmint$$")"
+  assert_eq "yes" "$([[ ${mrc} -ne 130 ]] && echo yes || echo no)" "mutation [command keeps SIGINT ignored]: the Ctrl-C proof catches it (rc ${mrc}, not 130)"
+  export BOUNDED_RUN_STATE_ROOT="${TEST_TMP}/brstale" BOUNDED_RUN_TMP_ROOT="${TEST_TMP}/brstale-tmp"
+  "${BR}" -q -T 30 -n "hslive2$$" -- sleep 8 >/dev/null 2>&1 &
+  livepid=$!
+  livedir=""; for _ in $(seq 1 50); do livedir="$(ownerdir "${livepid}")"; [[ -n "${livedir}" ]] && break; sleep 0.1; done
+  touch -d '2 days ago' ${livedir:+"${livedir}"}
+  read -r _ _ _ _ lv <<<"$(staleprobe "${TEST_TMP}/mut/staleowner/bounded-run")"
+  assert_eq "0" "${lv}" "mutation [stale cleanup ignores a live owner]: the proof catches it (a live run's dir was removed)"
+  wait "${livepid}" 2>/dev/null || true
+  read -r _ _ _ n1 _ <<<"$(staleprobe "${TEST_TMP}/mut/staleage/bounded-run")"
+  assert_eq "0" "${n1}" "mutation [stale cleanup ignores the age]: the proof catches it (a recent dir was removed)"
+  unset BOUNDED_RUN_STATE_ROOT BOUNDED_RUN_TMP_ROOT
   export BOUNDED_RUN_STATE_ROOT="${TEST_TMP}/brstate-m"
   for i in 1 2; do "${TEST_TMP}/mut/leak/bounded-run" -q -T 30 -n "hsml$$-${i}" -- true >/dev/null 2>&1 || true; done
   assert_eq "yes" "$([[ $(find "${BOUNDED_RUN_STATE_ROOT}" -mindepth 1 -maxdepth 1 | wc -l) -ge 1 ]] && echo yes || echo no)" "mutation [cleanup keeps the state dir]: the leak proof catches it"
