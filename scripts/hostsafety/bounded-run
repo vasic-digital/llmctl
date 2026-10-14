@@ -28,6 +28,8 @@
 #                  When the temp dir is a tmpfs (--no-disk-tmp, or BOUNDED_RUN_TMP_ROOT on tmpfs) a WARNING with its size and
 #                  fullness is printed (even with -q): /tmp may be capped at a few GB (root-steps.sh tmp.mount drop-in).
 # env: BOUNDED_RUN_MEM / _TASKS / _CPU / _SWAP / _TIMEOUT supply the defaults; BOUNDED_RUN_TMP_ROOT moves the TMPDIR root.
+#      BOUNDED_RUN_STATE_ROOT moves the root of the run's private 0700 marker dir (default $XDG_RUNTIME_DIR/bounded-run, else
+#      ${XDG_STATE_HOME:-~/.local/state}/bounded-run; never a shared /tmp).
 # exit: the command's status; 124 on timeout; 125 on bounded-run's own error.
 # Processes the command leaves behind (orphans) are killed when it exits - the scope is the unit.
 # The memory high watermark is set to 75% of MemoryMax (reclaim/throttle before kill).
@@ -88,7 +90,7 @@ while getopts ':m:t:c:s:T:n:qh' o; do
   case "${o}" in
     m) mem="${OPTARG}" ;; t) tasks="${OPTARG}" ;; c) cpu="${OPTARG}" ;;
     s) swap="${OPTARG}" ;; T) timeout_s="${OPTARG}" ;; n) name="${OPTARG}" ;; q) quiet=1 ;;
-    h) sed -n '2,36p' "${BASH_SOURCE[0]}"; exit 0 ;;
+    h) sed -n '2,38p' "${BASH_SOURCE[0]}"; exit 0 ;;
     *) echo "bounded-run: bad option -${OPTARG:-?}" >&2; exit 125 ;;
   esac
 done
@@ -141,15 +143,22 @@ if [[ "$(stat -f -c %T "${_eff_tmp}" 2>/dev/null)" == tmpfs ]]; then
   echo "bounded-run: WARNING: the command's temp dir ${_eff_tmp} is tmpfs (RAM): size $(numfmt --to=iec "${_tsz:-0}" 2>/dev/null || echo ?), used $(numfmt --to=iec "${_tused:-0}" 2>/dev/null || echo ?). Files there pin memory (killing a process frees none of it); put big artifacts on disk (${XDG_CACHE_HOME:-${HOME}/.cache}/...)." >&2
 fi
 (( quiet )) || echo "bounded-run: ${unit} MemoryMax=${mem} MemoryHigh=${high} TasksMax=${tasks} CPUQuota=${cpu}% SwapMax=${swap}${run_tmp:+ TMPDIR=${run_tmp}} timeout=${timeout_s}s" >&2
-flag="$(mktemp "${XDG_RUNTIME_DIR:-/tmp}/bounded-run.XXXXXX")" || exit 125
-started="${flag}.started"   # written by the wrapper INSIDE the scope we created: proof that the scope is ours
+# The run's own markers live in a PRIVATE 0700 dir (mktemp -d) under a per-user state root - never in a shared directory:
+# with XDG_RUNTIME_DIR unset the old fallback was /tmp, where another user could pre-create the predictable "<flag>.claim"
+# and steal the verdict (review B3, 2026-10-14).  BOUNDED_RUN_STATE_ROOT moves the root (tests).
+state_root="${BOUNDED_RUN_STATE_ROOT:-${XDG_RUNTIME_DIR:-${XDG_STATE_HOME:-${HOME}/.local/state}}/bounded-run}"
+state=""
+mkdir -p "${state_root}" 2>/dev/null && chmod 0700 "${state_root}" 2>/dev/null \
+  && state="$(mktemp -d "${state_root}/run.XXXXXX" 2>/dev/null)" && [[ -n "${state}" ]] \
+  || { echo "bounded-run: cannot create a private state dir under ${state_root}" >&2; exit 125; }
+started="${state}/started"   # written by the wrapper INSIDE the scope we created: proof that the scope is ours
 # The run's verdict (completed vs timed out) is decided ONCE, atomically: whoever mkdir()s ${claim} first owns it.  The
 # watchdog may write "timeout" / signal the scope only after winning the claim; the wrapper claims "completed" as soon as
 # the command has exited, BEFORE it stops the watchdog.  So stopping the watchdog (pkill/kill, in any order, with any
 # scheduling delay) can never turn a finished command into a 124 (measured: 2/200 spurious 124s before, 2026-10-14).
-claim="${flag}.claim"
+claim="${state}/claim"
 # shellcheck disable=SC2329  # invoked via trap
-cleanup() { rm -f "${flag}" "${started}"; rmdir "${claim}" 2>/dev/null; [[ -n "${run_tmp}" && -d "${run_tmp}" ]] && rm -rf -- "${run_tmp}"; return 0; }
+cleanup() { [[ -n "${state}" && -d "${state}" ]] && rm -rf -- "${state}"; [[ -n "${run_tmp}" && -d "${run_tmp}" ]] && rm -rf -- "${run_tmp}"; return 0; }
 trap cleanup EXIT
 
 # second line of defence, independent of this wrapper and its watchdog (both plain processes): the SCOPE itself ends at timeout+10 s
@@ -165,10 +174,16 @@ watchdog=""
 if (( timeout_s > 0 )); then
   (
     # watchdog fds are detached from any $(...) capture (shell-instrument footgun I7)
-    sleep "${timeout_s}" || exit 0       # sleep killed = the wrapper is stopping us: never fall through to "timeout"
+    # Sleep until the deadline.  An early end of the sleep means "the wrapper is stopping us" ONLY when the wrapper has
+    # already claimed "completed"; anything else that killed the sleep (an external pkill, the OOM killer) must not drop
+    # the deadline, so the remaining time is slept again (review B1, 2026-10-14).
+    deadline=$((SECONDS + timeout_s))
+    while (( SECONDS < deadline )); do
+      sleep "$((deadline - SECONDS))" && break
+      [[ -d "${claim}" ]] && exit 0     # the wrapper claimed "completed" and stopped our sleep
+    done
     [[ -s "${started}" ]] || exit 0      # our scope never started (e.g. lost a name race): nothing of ours to kill
     mkdir "${claim}" 2>/dev/null || exit 0   # the wrapper already claimed "completed": the command finished first
-    echo timeout >"${flag}"
     systemctl --user kill --kill-whom=all --signal=SIGTERM "${unit}" 2>/dev/null
     sleep 3
     systemctl --user kill --kill-whom=all --signal=SIGKILL "${unit}" 2>/dev/null

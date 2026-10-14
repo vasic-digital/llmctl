@@ -787,16 +787,89 @@ import sys
 s = open(sys.argv[1]).read()
 claim = 'we_claimed=0\nmkdir "${claim}" 2>/dev/null && we_claimed=1\n'
 stop_end = '  wait "${watchdog}" 2>/dev/null\nfi\n'
-sleep_ok = 'sleep "${timeout_s}" || exit 0'
+sleep_ok = ('    while (( SECONDS < deadline )); do\n      sleep "$((deadline - SECONDS))" && break\n'
+            '      [[ -d "${claim}" ]] && exit 0     # the wrapper claimed "completed" and stopped our sleep\n    done\n')
 for needle in (claim, stop_end, sleep_ok):
     if s.count(needle) != 1:
         sys.exit("mutation needle not found exactly once: %r" % needle)
-s = s.replace(claim, "").replace(stop_end, stop_end + claim).replace(sleep_ok, 'sleep "${timeout_s}"')
+s = s.replace(claim, "").replace(stop_end, stop_end + claim).replace(sleep_ok, '    sleep "${timeout_s}"\n')
 open(sys.argv[2], "w").write(s)
 PY
   chmod +x "${TEST_TMP}/bounded-run.mut"
   mut124="$(quick124 "${TEST_TMP}/bounded-run.mut" 10 hsqm shim)"
   assert_eq "yes" "$([[ ${mut124} -ge 1 ]] && echo yes || echo no)" "mutation [old stop-then-decide order]: the proof catches it (spurious 124 in ${mut124}/10)"
+
+  # --- review B1 (2026-10-14): `sleep T || exit 0` read ANY early end of the watchdog's sleep as "the wrapper is stopping
+  # us", so a sleep killed by anything else (an external pkill, the OOM killer) silently dropped the deadline and the
+  # command ran unbounded.  Fix: an early end exits only when the wrapper has already claimed "completed"; otherwise the
+  # watchdog sleeps the REMAINING time.  A sleep shim fails exactly the watchdog's first sleep (arg = the -T value) after
+  # 0.5 s, as an external kill would; the command is a 12 s sleep, so a lost deadline shows as rc 0 after ~12 s.
+  real_sleep="$(command -v sleep)"
+  mkdir -p "${TEST_TMP}/slshim"
+  printf '#!/usr/bin/env bash\nif [[ "$1" == "4" ]] && mkdir "%s/slshim.fired" 2>/dev/null; then "%s" 0.5; exit 143; fi\nexec "%s" "$@"\n' \
+    "${TEST_TMP}" "${real_sleep}" "${real_sleep}" >"${TEST_TMP}/slshim/sleep"
+  chmod +x "${TEST_TMP}/slshim/sleep"
+  wdkill() { # <bounded-run> -> "<rc> <seconds> <fired|not-fired>"
+    local s=$SECONDS r=0
+    rmdir "${TEST_TMP}/slshim.fired" 2>/dev/null || true
+    PATH="${TEST_TMP}/slshim:${PATH}" "$1" -q -T 4 -n "hswdk$$-${RANDOM}" -- sleep 12 >/dev/null 2>&1 || r=$?
+    echo "${r} $((SECONDS - s)) $([[ -d "${TEST_TMP}/slshim.fired" ]] && echo fired || echo not-fired)"
+  }
+  read -r wrc wtook wfired <<<"$(wdkill "${BR}")"
+  assert_eq "fired" "${wfired}" "B1: the shim killed the watchdog's first sleep (the fault was injected)"
+  assert_eq "124" "${wrc}" "B1: watchdog sleep killed by someone else: the deadline still fires (rc 124, took ${wtook}s)"
+  assert_eq "yes" "$([[ ${wtook} -le 8 ]] && echo yes || echo no)" "B1: the deadline fired near -T 4, not after the 12 s command (took ${wtook}s)"
+
+  # --- review B3 (2026-10-14): the verdict files lived next to a mktemp file in ${XDG_RUNTIME_DIR:-/tmp}; with
+  # XDG_RUNTIME_DIR unset another user could pre-create the predictable "<flag>.claim" in /tmp and steal the verdict.
+  # Fix: started/claim live in a PRIVATE `mktemp -d` (0700) under a per-user state root (BOUNDED_RUN_STATE_ROOT, else
+  # $XDG_RUNTIME_DIR/bounded-run, else ${XDG_STATE_HOME:-~/.local/state}/bounded-run - never /tmp), removed on exit.
+  export BOUNDED_RUN_STATE_ROOT="${TEST_TMP}/brstate"
+  sout="$("${BR}" -q -T 30 -n "hsst$$" -- bash -c 'for d in "${BOUNDED_RUN_STATE_ROOT}"/*; do [[ -d $d ]] && stat -c %a "$d"; done' 2>&1)" || true
+  assert_eq "700" "${sout}" "B3: during a run its state is ONE private 0700 dir under the state root"
+  for i in 1 2 3 4 5; do "${BR}" -q -T 30 -n "hsleak$$-${i}" -- true >/dev/null 2>&1 || true; done
+  for i in 1 2 3; do "${BR}" -q -T 30 -n "hsleakf$$-${i}" -- bash -c 'exit 3' >/dev/null 2>&1 || true; done
+  for i in 1 2; do "${BR}" -q -T 1 -n "hsleakt$$-${i}" -- sleep 4 >/dev/null 2>&1 || true; done
+  assert_eq "0" "$(find "${BOUNDED_RUN_STATE_ROOT}" -mindepth 1 2>/dev/null | wc -l)" "B3: no state dir or file left behind after 10 runs (5 ok, 3 failing, 2 timed out)"
+  unset BOUNDED_RUN_STATE_ROOT
+  xs="${TEST_TMP}/xstate"
+  xout="$(env -u XDG_RUNTIME_DIR XDG_STATE_HOME="${xs}" DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-unix:path=/run/user/$(id -u)/bus}" \
+    TMPDIR="${TEST_TMP}/shared" "${BR}" -q -T 30 -n "hsxs$$" -- bash -c 'ls -A "${XDG_STATE_HOME}/bounded-run" 2>/dev/null | wc -l' 2>&1)" || true
+  assert_eq "1" "${xout}" "B3: with XDG_RUNTIME_DIR unset the state dir is under XDG_STATE_HOME (private, per user), not a shared temp dir"
+  # mutation proofs, one per fix: each mutant must fail the assertion that guards it
+  python3 -I - "${BR}" "${TEST_TMP}/mut" <<'PY'
+import os, sys
+src = open(sys.argv[1]).read(); out = sys.argv[2]
+def rep(s, old, new):
+    if s.count(old) != 1:
+        sys.exit("mutation needle not found exactly once: %r" % old)
+    return s.replace(old, new)
+loop = ('    while (( SECONDS < deadline )); do\n      sleep "$((deadline - SECONDS))" && break\n'
+        '      [[ -d "${claim}" ]] && exit 0     # the wrapper claimed "completed" and stopped our sleep\n    done\n')
+M = {
+    "b1": rep(src, loop, '    sleep "${timeout_s}" || exit 0\n'),
+    "leak": rep(src, 'rm -rf -- "${state}"', ':'),
+    "b3root": rep(src, '${XDG_STATE_HOME:-${HOME}/.local/state}', '${TMPDIR:-/tmp}'),
+    "b3priv": rep(src, 'state="$(mktemp -d "${state_root}/run.XXXXXX" 2>/dev/null)"',
+                  'state="${state_root}/run.$$"; mkdir -m 0755 "${state}" 2>/dev/null'),
+}
+for k, v in M.items():
+    os.makedirs(os.path.join(out, k), exist_ok=True)
+    p = os.path.join(out, k, "bounded-run"); open(p, "w").write(v); os.chmod(p, 0o755)
+PY
+  read -r mrc _ _ <<<"$(wdkill "${TEST_TMP}/mut/b1/bounded-run")"
+  assert_eq "yes" "$([[ ${mrc} -ne 124 ]] && echo yes || echo no)" "mutation [B1: sleep || exit 0]: the proof catches it (rc ${mrc}, not 124)"
+  export BOUNDED_RUN_STATE_ROOT="${TEST_TMP}/brstate-m"
+  for i in 1 2; do "${TEST_TMP}/mut/leak/bounded-run" -q -T 30 -n "hsml$$-${i}" -- true >/dev/null 2>&1 || true; done
+  assert_eq "yes" "$([[ $(find "${BOUNDED_RUN_STATE_ROOT}" -mindepth 1 -maxdepth 1 | wc -l) -ge 1 ]] && echo yes || echo no)" "mutation [cleanup keeps the state dir]: the leak proof catches it"
+  export BOUNDED_RUN_STATE_ROOT="${TEST_TMP}/brstate-p"
+  mout="$("${TEST_TMP}/mut/b3priv/bounded-run" -q -T 30 -n "hsmp$$" -- bash -c 'for d in "${BOUNDED_RUN_STATE_ROOT}"/*; do [[ -d $d ]] && stat -c %a "$d"; done' 2>&1)" || true
+  assert_eq "yes" "$([[ ${mout} != 700 ]] && echo yes || echo no)" "mutation [predictable 0755 state dir]: the private-dir proof catches it (${mout})"
+  unset BOUNDED_RUN_STATE_ROOT
+  mkdir -p "${TEST_TMP}/shared"
+  mxout="$(env -u XDG_RUNTIME_DIR XDG_STATE_HOME="${xs}" DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-unix:path=/run/user/$(id -u)/bus}" \
+    TMPDIR="${TEST_TMP}/shared" "${TEST_TMP}/mut/b3root/bounded-run" -q -T 30 -n "hsmx$$" -- bash -c 'ls -A "${XDG_STATE_HOME}/bounded-run" 2>/dev/null | wc -l' 2>&1)" || true
+  assert_eq "yes" "$([[ ${mxout} != 1 ]] && echo yes || echo no)" "mutation [XDG_RUNTIME_DIR unset falls back to a shared temp dir]: the proof catches it (${mxout})"
 
   # name collision: a second run with the SAME -n must neither start nor touch the first run's scope
   cn="hscol$$"
