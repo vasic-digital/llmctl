@@ -93,16 +93,22 @@ VALIDATION (deterministic known-answer gate - run BEFORE any use)
                               vision model; deterministic judge, golden-bad
                               controls, determinism repeat
   validate-all [--json]       validate every running profile
-  require-validated <profile> exit 0 only if the profile has a FRESH passing
-                              record (same model sha, engine build, launch
-                              flags, suite hash; younger than
-                              LLMCTL_VALIDATION_MAX_AGE) - for consumers
-                              start/switch/auto/enable/restart and systemd-
-                              started units run the suite once after the
-                              profile is ready; a FAIL stops the profile and
-                              exits non-zero, UNDETERMINED never stops or
-                              passes it (LLMCTL_VALIDATE_ON_START=0 disables;
-                              then require-validated refuses)
+  require-validated <profile> exit 0 only if the profile has a FRESH, signed
+                              passing record (same model BYTES, engine build,
+                              launch flags, suite hash, machine; younger than
+                              LLMCTL_VALIDATION_MAX_AGE) - the consumer guard
+  endpoint <profile>          print the profile's URL ONLY when it is running,
+                              published and validated (exit 1 + reason
+                              otherwise) - what a project should call
+                              ENFORCED: start/switch/auto/enable/restart start
+                              a profile without a fresh record in QUARANTINE
+                              (loopback, private port, unpublished), validate
+                              it and publish it only on PASS; FAIL and
+                              UNDETERMINED are stopped (strict by default:
+                              a FAIL stops the profile, and so does an
+                              UNDETERMINED result);
+                              systemd units refuse to start without a fresh
+                              record (ExecCondition)
   logs <profile> [lines]      tail a service log
 
 DECISION MODELS (typed noul/choice/score decisions)
@@ -147,9 +153,14 @@ MISC
 
 ENVIRONMENT
   LLMCTL_DRY_RUN=1            print service actions instead of executing them
-  LLMCTL_VALIDATE_STRICT=1    stop a profile whose validation is UNDETERMINED (default: only FAIL stops it)
-  LLMCTL_VALIDATE_ON_START=0  do not run the validation suite after start/switch/
-                              auto/enable/restart (require-validated then refuses)
+  LLMCTL_VALIDATE_STRICT=0    opt-out: serve a NOT consumer-facing profile whose
+                              validation is UNDETERMINED (marked UNVALIDATED in
+                              status); refused for consumer-facing profiles.
+                              Default 1: UNDETERMINED is stopped, never served
+  LLMCTL_VALIDATE_ON_START=0  do not validate at start: refused for consumer-
+                              facing profiles (require-validated refuses)
+  LLMCTL_VALIDATE_REPEAT=<n>  asks per probe (default 3); 1 = quick mode, never
+                              recorded, never validates
   LLMCTL_VALIDATION_MAX_AGE=<s>  freshness window of a passing validation
                               record (default 604800 = 7 days)
   LLMCTL_VALIDATE_TIMEOUT=<s> per-request timeout of the validator (default 180)
@@ -233,6 +244,8 @@ main() {
       # 2026-09-17: this logic used to run right here with NO lock at all,
       # a genuine TOCTOU race on the exact read-budget-then-write-
       # reservation sequence scheduler::with_lock exists to serialize).
+      # validation gate (docs/validation.md "Enforcement"): no unit is enabled for a profile that has not PASSED
+      validate_before_enable "$1" || exit 1
       sched_enable "$1"
       validate_after_start "$1"
       ;;
@@ -246,15 +259,45 @@ main() {
     stop)     sched_stop "$@" ;;
     restart)
       [[ "$#" -eq 1 ]] || die "usage: llmctl restart <profile>"
-      sched_load_backend; svc_restart "$1"
-      validate_after_start "$1"
+      sched_load_backend
+      case "$(_val_gate_mode "$1")" in
+        refuse:*) err "cannot restart '$1': $(_val_gate_mode "$1" | sed 's/^refuse://')"; exit 1 ;;
+        quarantine)
+          # no fresh validation record: the unit is NOT restarted on its public port - stop it, start it in quarantine,
+          # validate, and publish only on PASS (the .enabled state is kept)
+          if [[ -f "${LLMCTL_RUNTIME_DIR}/$1.run" ]] || svc_is_active "$1" 2>/dev/null; then sched_stop "$1"; fi
+          sched_start "$1"; validate_after_start "$1" ;;
+        *) svc_restart "$1"; validate_after_start "$1" ;;
+      esac
       ;;
-    switch)   [[ "$#" -eq 1 ]] || die "usage: llmctl switch <profile>"; sched_switch "$1"; validate_after_start "$1" ;;
+    switch)
+      [[ "$#" -eq 1 ]] || die "usage: llmctl switch <profile>"
+      _sw_prev="$(sched_running 2>/dev/null | grep -vx -- "$1" || true)"
+      _sw_rc=0; sched_switch "$1" || _sw_rc=$?
+      if (( _sw_rc != 0 )); then
+        # the scheduler's own rollback may have restarted previous profiles in quarantine: validate / publish / stop them
+        # shellcheck disable=SC2086
+        [[ -z "${_sw_prev}" ]] || validate_after_start ${_sw_prev} || true
+        exit "${_sw_rc}"
+      fi
+      if ! validate_after_start "$1"; then
+        # the target did not pass: it is stopped (never served) - bring the previous set back through the same gate
+        if [[ -n "${_sw_prev}" ]]; then
+          err "switch to '$1' failed validation - restoring the previously-running set: $(tr '\n' ' ' <<<"${_sw_prev}")"
+          # shellcheck disable=SC2086
+          sched_start ${_sw_prev} || true
+          # shellcheck disable=SC2086
+          validate_after_start ${_sw_prev} || true
+        fi
+        exit 1
+      fi
+      ;;
     auto)     validate_auto "$@" ;;
     validate) _validate_cli "$@" ;;
     vision)   cmd_vision "$@" ;;
     validate-all) validate_all "$@" ;;
     require-validated) require_validated "$@" ;;
+    endpoint) endpoint "$@" ;;
     validate-after-start) validate_after_start "$@" ;;
     decide)   cmd_decide "$@" ;;
     admit)    cmd_admit "$@" ;;

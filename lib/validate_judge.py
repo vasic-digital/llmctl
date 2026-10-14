@@ -23,14 +23,21 @@ Anti-bluff structure of every run (any one of these failing makes the run non-PA
      UNDETERMINED too (a budget problem, not a wrong answer); a complete wrong or genuinely empty answer FAILs
   5. golden-bad controls (vision): a control image answered with a golden probe's prompt MUST fail that
      golden probe's checks; if it passes, the validator does not discriminate -> exit 1
-  6. determinism: the probes listed in determinism_repeat are asked twice; answers must be identical
+  6. determinism: every judged probe is asked LLMCTL_VALIDATE_REPEAT times (default 3, Constitution 11.4.50); all answers must be
+     byte-identical. 1 is the quick mode (only determinism_repeat, once more): never a decision-bearing run, never recorded
+  0. before all of these, the suite schema: an empty / unknown / uncompilable check, or a probe without a canned PASS and a canned
+     FAIL judge control, is a SuiteDefect (UNDETERMINED)
+  3b. local runs: the model file of the PROCESS that answers (cmdline, /v1/models path, /props) must be the profile's file
+Records (`key` / `record` / `check`): the real sha256 of every model file, the catalog pins, the machine id (hashed), the run's evidence
+sha256, an HMAC-SHA256 signature - see docs/validation.md "Records".
 
 Exit codes: 0 every check passed; 1 any wrong result (or a broken judge/undiscriminating control);
             2 could not determine (endpoint down, no answer, wrong model served, corrupt suite, ...).
 A wrong result outranks could-not-determine (1 beats 2).
 
 Usage:
-  validate_judge.py run --suite DIR --endpoint URL [--expect-model NAME] [--json] [--evidence FILE]
+  validate_judge.py run --suite DIR --endpoint URL [--expect-model NAME] [--expect-model-path PATH] [--json] [--evidence FILE]
+  validate_judge.py key|record|check|coverage ...   (validation records; called by lib/validate.sh)
   validate_judge.py selftest --suite DIR
   validate_judge.py hash --suite DIR
 """
@@ -1664,7 +1671,8 @@ def do_coverage(a):
     except ValueError:
         max_age = 0
     bad = 0
-    for name, prof in cat.items():
+    items = [(a.profile, cat[a.profile])] if a.profile else list(cat.items())
+    for name, prof in items:
         v = prof.get("validation") if isinstance(prof.get("validation"), dict) else {}
         suites = v.get("suites") or []
         unexec = []
@@ -1706,7 +1714,8 @@ def do_coverage(a):
         else:
             print("  %s: validated (signed PASS record %s; model bytes re-checked by require-validated)%s" % (
                 name, rec.get("timestamp"), note))
-    print("NOT VALIDATED: %d of %d catalog profiles" % (bad, len(cat)))
+    if not a.profile:
+        print("NOT VALIDATED: %d of %d catalog profiles" % (bad, len(cat)))
     return 0
 
 
@@ -1739,6 +1748,7 @@ def main(argv=None):
     cv.add_argument("--suites-dir", required=True)
     cv.add_argument("--hmac-key", default="")
     cv.add_argument("--max-age", default="604800")
+    cv.add_argument("--profile", default="", help="one catalog profile only (llmctl status)")
     r = sub.add_parser("run")
     r.add_argument("--suite", required=True)
     r.add_argument("--endpoint", required=True)

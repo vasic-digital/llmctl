@@ -706,11 +706,21 @@ _sched_decision_scale_impl() {
   sched_load_backend
   ensure_state_dirs
   sched_running >/dev/null   # reconcile post-reboot reservations before the budget is read
-
   local -a running=()
   local n
   while IFS= read -r n; do [[ -n "${n}" ]] && running+=("${n}"); done < <(_sched_scale_running "${profile}")
   local cur=${#running[@]}
+  # validation gate: scaled instances are the base profile's model - they are started only when the base profile has a
+  # fresh, signed PASS record (an instance is never quarantined: validate the base profile first)
+  local sgate
+  if (( target > cur )); then
+    sgate="$(_sched_gate_for "${profile}")"
+    case "${sgate}" in
+      public|public-unvalidated:*) ;;
+      refuse:*) err "cannot scale '${profile}': ${sgate#refuse:}"; return 1 ;;
+      *) err "cannot scale '${profile}': it has no fresh validation record (llmctl require-validated ${profile}); run 'llmctl validate ${profile}' first"; return 1 ;;
+    esac
+  fi
 
   if (( target == cur )); then
     info "${profile}: already ${cur} instance(s) running; nothing to do"
@@ -854,6 +864,35 @@ _sched_decision_scale_impl() {
 # sequence runs as ONE atomic locked unit instead of two separate acquisitions
 # with a gap between them - and so nested acquisition (which would deadlock
 # flock against itself) never happens.
+# --- validation gate helpers (review 2026-10-14 finding 1; policy in lib/validate.sh _val_gate_mode) ------------------------
+# _sched_gate_for <profile> -> public | quarantine | public-unvalidated:<why> | refuse:<why>. Without lib/validate.sh
+# (a caller that sources only the scheduler) there is no gate and every start is public, exactly as before.
+_sched_gate_for() {
+  if declare -F _val_gate_mode >/dev/null 2>&1; then _val_gate_mode "$1"; else echo public; fi
+}
+# _sched_private_port -> a free TCP port on 127.0.0.1 (bind-tested), never a documented catalog port.
+_sched_private_port() {
+  python3 -I -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1]); s.close()'
+}
+# _sched_args_loopback - rewrite the --host argument of SCHED_ARGS to 127.0.0.1 (a quarantine start is loopback-only).
+_sched_args_loopback() {
+  local i
+  for (( i=0; i<${#SCHED_ARGS[@]}; i++ )); do
+    [[ "${SCHED_ARGS[i]}" == "--host" ]] && SCHED_ARGS[i+1]="127.0.0.1"
+  done
+}
+# sched_start_unpublished <profile> - start ONE profile in quarantine (validation only: loopback, private port, never published)
+sched_start_unpublished() { local _sched_force_quarantine=1; scheduler::with_lock _sched_start_impl "$1"; }
+# sched_publish <profile> [unvalidated-reason] - replace the quarantined instance of a profile that PASSED (or, opt-out
+# only, could not be validated) by the published one on its documented port. Under ONE lock: stop, then start public.
+sched_publish() { scheduler::with_lock _sched_publish_impl "$@"; }
+_sched_publish_impl() {
+  local p="$1" why="${2:-}"
+  _sched_stop_impl "${p}" >/dev/null
+  local _sched_gate_pass="${p}" _sched_gate_unvalidated="${why}"
+  _sched_start_impl "${p}"
+}
+
 sched_start()  { scheduler::with_lock _sched_start_impl "$@"; }
 sched_stop()   { scheduler::with_lock _sched_stop_impl "$@"; }
 sched_auto()   { scheduler::with_lock _sched_auto_impl "$@"; }
@@ -1075,12 +1114,33 @@ _sched_start_impl() {
     # taken port fails HERE, naming the port and the override variable,
     # before anything is written or started.
     local reg_name; reg_name="$(_sched_reg_name "${p}")"
-    if ! port="$(portreg_allocate "${reg_name}" "${p}" "${port}")"; then
+    # Validation gate (review 2026-10-14 finding 1): a profile without a fresh, signed PASS record for its current model
+    # bytes / engine / launch / suites is started in QUARANTINE - loopback only, on a private ephemeral port, never
+    # published in the registry - and is published only after `validate_after_start` saw it PASS (lib/validate.sh).
+    local gate quarantine=0 unvalidated=""
+    gate="$(_sched_gate_for "${p}")"
+    case "${gate}" in
+      refuse:*) err "cannot start '${p}': ${gate#refuse:}"; rm -f "${plan_file}"; return 1 ;;
+      quarantine) quarantine=1 ;;
+      public-unvalidated:*) unvalidated="${gate#public-unvalidated:}" ;;
+    esac
+    if (( quarantine )); then
+      if ! port="$(_sched_private_port)"; then
+        err "cannot start '${p}' for validation: no free loopback port"
+        rm -f "${plan_file}"
+        return 1
+      fi
+    elif ! port="$(portreg_allocate "${reg_name}" "${p}" "${port}")"; then
       err "cannot start '${p}': no usable port"
       rm -f "${plan_file}"
       return 1
     fi
     sched_build_launch "${p}" "${mode}" "${port}" "${ctx}" "${ngl}" "${parallel}" "${fa}" "${kv_type}"
+    if (( quarantine )); then
+      _sched_args_loopback
+      local -x LLMCTL_SVC_QUARANTINE_UNTIL=$(( $(date +%s) + ${LLMCTL_QUARANTINE_TTL:-3600} ))
+    fi
+    [[ -n "${unvalidated}" ]] && local -x LLMCTL_SVC_UNVALIDATED="${unvalidated}"
     _sched_svc_write_env "${p}"
     # Root-caused 2026-09-17 (real repro, not guessed): this whole function
     # runs as the `command` operand of `scheduler::with_lock`'s
@@ -1129,11 +1189,17 @@ _sched_start_impl() {
         err "started '${p}' but it never answered http://127.0.0.1:${port}${ready_path} within ${LLMCTL_READY_TIMEOUT:-60}s (see: llmctl logs ${p})"
       fi
       svc_stop "${p}" || true
-      portreg_release "${reg_name}"
+      (( quarantine )) || portreg_release "${reg_name}"
       rm -f "${plan_file}"
       return 1
     fi
     _sched_write_reservation "${p}" "${mode}" "${port}" "${ram}" "${vram}"
+    if (( quarantine )); then
+      printf 'quarantine=1\n' >> "$(_sched_run_file "${p}")"
+      info "started ${p} UNPUBLISHED for validation (loopback 127.0.0.1:${port} only, not in the registry; mode=${mode}, reserved ${ram} MiB RAM + ${vram} MiB VRAM) - it is published only after its validation PASSES"
+      continue
+    fi
+    [[ -n "${unvalidated}" ]] && printf 'unvalidated=%s\n' "${unvalidated}" >> "$(_sched_run_file "${p}")"
     _sched_registry_publish "${p}" "${port}"
     info "started ${p} (mode=${mode}, port=${port}, reserved ${ram} MiB RAM + ${vram} MiB VRAM)"
   done
@@ -1158,6 +1224,14 @@ _sched_start_impl() {
 _enable_impl() {
   local profile="$1"
   catalog_exists "${profile}" || die "unknown profile: ${profile} (see: llmctl models list)"
+  # validation gate: a unit is enabled (public port, starts at login) only for a profile that may be served now
+  local egate
+  egate="$(_sched_gate_for "${profile}")"
+  case "${egate}" in
+    refuse:*) err "cannot enable '${profile}': ${egate#refuse:}"; return 1 ;;
+    quarantine) err "cannot enable '${profile}': it has no fresh validation record (llmctl validate ${profile}; 'llmctl enable' validates it first)"; return 1 ;;
+    public-unvalidated:*) local -x LLMCTL_SVC_UNVALIDATED="${egate#public-unvalidated:}" ;;
+  esac
   sched_load_backend
   # Gate only when enabling starts something: re-running `enable` on a running profile must not return 75.
   sched_is_running "${profile}" || _sched_pressure_gate "${profile}" || return $?
@@ -1614,8 +1688,18 @@ _sched_status_rows() {
     else
       state="running"
     fi
-    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "${p}" "${port}" "${mode}" "${ram}" "${vram}" "${en}" "${state}" "${last_log}"
+    # validation state (review 2026-10-14 finding 1): validated / QUARANTINE / UNVALIDATED (opt-out) / NOT VALIDATED (why)
+    local vst="unknown (lib/validate.sh not loaded)"
+    declare -F validation_state >/dev/null 2>&1 && vst="$(validation_state "${p}" 2>/dev/null || echo 'NOT VALIDATED (state could not be determined)')"
+    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "${p}" "${port}" "${mode}" "${ram}" "${vram}" "${en}" "${state}" "${vst//$'\t'/ }" "${last_log}"
   done
+}
+
+# _sched_status_optout_banner - the validation opt-outs in effect, said loudly (they must never be silent).
+_sched_status_optout_banner() {
+  [[ "${LLMCTL_VALIDATE_STRICT:-1}" == "0" ]] && printf 'WARN: LLMCTL_VALIDATE_STRICT=0 is set: an UNDETERMINED validation of a NON-consumer-facing profile is served UNVALIDATED (refused for consumer-facing profiles)\n'
+  [[ "${LLMCTL_VALIDATE_ON_START:-1}" == "0" ]] && printf 'WARN: LLMCTL_VALIDATE_ON_START=0 is set: starts are NOT validated (refused for consumer-facing profiles outside the test harness)\n'
+  return 0
 }
 
 # _sched_status_enabled_down - WARN lines for enabled engine units that are failed/inactive (not restarted after a
@@ -1638,12 +1722,15 @@ sched_status() {
     _sched_status_enabled_down
     return 0
   fi
+  _sched_status_optout_banner >&2   # stderr: the table on stdout keeps its shape for scripts
   printf '%-16s %-6s %-8s %-10s %-10s %-8s %s\n' "profile" "port" "mode" "RAM MiB" "VRAM MiB" "enabled" "state"
-  local p port mode ram vram en state last_log
-  while IFS=$'\t' read -r p port mode ram vram en state last_log; do
+  local p port mode ram vram en state last_log vst
+  # (vst before last_log: a tab is IFS whitespace, so an EMPTY field in the middle would be skipped by read)
+  while IFS=$'\t' read -r p port mode ram vram en state vst last_log; do
     local label="${p}" base; base="$(_sched_base_profile "${p}")"
     [[ "${base}" == "${p}" ]] || label="${base} #${p##*.}"
-    printf '%-16s %-6s %-8s %-10s %-10s %-8s %s\n' "${label}" "${port}" "${mode}" "${ram}" "${vram}" "${en}" "${state}"
+    # validation state on the SAME row (scripts parse column 1 of each row): validated / QUARANTINE / UNVALIDATED / NOT VALIDATED
+    printf '%-16s %-6s %-8s %-10s %-10s %-8s %s  validation: %s\n' "${label}" "${port}" "${mode}" "${ram}" "${vram}" "${en}" "${state}" "${vst}"
     [[ "${state}" == "failed (crash-loop)" ]] && printf '  last log line: %s\n' "${last_log}"
   done < <(_sched_status_rows)
   _sched_status_enabled_down
@@ -1661,7 +1748,8 @@ sched_status() {
 # bump in README): a JSON array, one object per currently-running profile:
 #   {"profile": str, "port": int, "mode": str, "ram_mb": int, "vram_mb": int,
 #    "enabled": bool, "state": "running"|"failed (crash-loop)",
-#    "last_log_line": str|null}
+#    "last_log_line": str|null, "validation": str}   ("validation" added 2026-10-14, additive: validated |
+#    QUARANTINE (...) | UNVALIDATED (<opt-out>) | NOT VALIDATED (<reason>))
 # "last_log_line" is null except when state is the crash-loop value. Unlike
 # `llmctl plan --json`, which never carries a "running" field (by design -
 # it is the plan, not live state), THIS is the one place a caller gets both
@@ -1675,7 +1763,7 @@ rows = []
 for line in sys.stdin.read().splitlines():
     if not line:
         continue
-    p, port, mode, ram, vram, en, state, last_log = line.split("\t")
+    p, port, mode, ram, vram, en, state, vst, last_log = (line.split("\t") + [""])[:9]
     base, _, ordn = p.rpartition(".")
     inst = {"instance": p} if (base and ordn.isdigit()) else {}
     rows.append({
@@ -1688,6 +1776,7 @@ for line in sys.stdin.read().splitlines():
         "enabled": en == "yes",
         "state": state,
         "last_log_line": last_log if last_log else None,
+        "validation": vst or None,
     })
 print(json.dumps(rows))
 ' < <(_sched_status_rows)

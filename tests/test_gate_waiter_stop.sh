@@ -3,8 +3,8 @@
 #  #3: `systemctl --user stop <unit>` SIGTERMs the whole control group - INCLUDING the detached waiter that issued it - so anything
 #      the waiter does after the stop never runs. The reservation (<runtime>/<profile>.run) must therefore be removed BEFORE the stop.
 #      The fake systemctl's `stop` kills its parent (the waiter) exactly like KillMode=control-group.
-#  #1: a bare exit 1 of the llmctl process (crash, die(), set -e) is NOT a wrong answer: the waiter stops the unit only on the
-#      explicit FAIL code. A fake llmctl exiting 1 must therefore NOT stop anything.
+#  #1: a bare exit 1 of the llmctl process (crash, die(), set -e) is NOT a wrong answer: it is UNDETERMINED (logged so),
+#      which strict mode - the default since review 2026-10-14 - does not serve either.
 set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/helpers.sh"
 source "$(dirname "${BASH_SOURCE[0]}")/gate_wiring_lib.sh"
@@ -50,13 +50,20 @@ rc="$(run_waiter GW_VALIDATE_RC=1)"
 assert_eq 1 "$(gw_count '^systemctl --user stop llmctl-llama@small.service$')" "FAIL: the unit was stopped through systemctl --user stop"
 assert_eq 0 "$(b2i gw_is_running small)" "FAIL: the reservation was removed BEFORE the stop (the waiter never got to clean up after it)"
 
-echo "== #1 a bare exit 1 of the llmctl process is NOT a verdict: nothing is stopped"
+echo "== #1 a bare exit 1 of the llmctl process is NOT a verdict: it is UNDETERMINED - never reported as a wrong answer"
+# (since review 2026-10-14 finding 1 strict is the default: an UNDETERMINED unit is stopped too, but it is logged as
+# UNDETERMINED, never as FAILED; only the opt-out marker of a non-consumer-facing profile keeps it serving)
 reset_world
 cp "${GW_TREE}/bin/llmctl" "${TEST_TMP}/llmctl.real"; rm -f "${GW_TREE}/bin/llmctl"
 printf '#!/usr/bin/env bash\nexit 1\n' > "${GW_TREE}/bin/llmctl"; chmod +x "${GW_TREE}/bin/llmctl"
 rc="$(run_waiter GW_VALIDATE_RC=1)"
-assert_eq 0 "$(gw_count '^systemctl --user stop')" "llmctl crashed (exit 1, no verdict): the unit is NOT stopped"
-assert_eq 1 "$(b2i gw_is_running small)" "llmctl crashed: the reservation is untouched"
 assert_eq 1 "$(b2i grep -qiE 'UNDETERMINED|could not be validated' "${LLMCTL_LOG_DIR}/svc_hook.log")" "llmctl crashed: reported loudly as UNDETERMINED"
+assert_eq 0 "$(b2i grep -q 'FAILED (wrong answers)' "${LLMCTL_LOG_DIR}/svc_hook.log")" "llmctl crashed: NOT reported as a wrong answer"
+assert_eq 1 "$(gw_count '^systemctl --user stop llmctl-llama@small.service$')" "llmctl crashed: UNDETERMINED -> the unit is stopped (strict default)"
+reset_world
+printf 'LLMCTL_UNVALIDATED=%s\n' "opt-out (test)" >> "${LLMCTL_SERVICES_DIR}/small.env"
+rc="$(run_waiter GW_VALIDATE_RC=1)"
+assert_eq 0 "$(gw_count '^systemctl --user stop')" "opt-out marker in the env record: the unit is NOT stopped"
+assert_eq 1 "$(b2i gw_is_running small)" "opt-out marker: the reservation is untouched"
 rm -f "${GW_TREE}/bin/llmctl"; cp "${TEST_TMP}/llmctl.real" "${GW_TREE}/bin/llmctl"; chmod +x "${GW_TREE}/bin/llmctl"
 test_finish

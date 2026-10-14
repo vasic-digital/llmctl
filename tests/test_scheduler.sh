@@ -46,7 +46,9 @@ try:
     names = sorted(r["profile"] for r in rows)
     assert names == ["fast", "small"], "expected exactly fast+small, got %r" % names
     for r in rows:
-        assert set(r.keys()) == {"profile","port","mode","ram_mb","vram_mb","enabled","state","last_log_line"}, r
+        # "validation" added 2026-10-14 (additive; validated / QUARANTINE / UNVALIDATED / NOT VALIDATED)
+        assert set(r.keys()) == {"profile","port","mode","ram_mb","vram_mb","enabled","state","last_log_line","validation"}, r
+        assert isinstance(r["validation"], str) and r["validation"], r
         assert r["state"] == "running", r
         assert r["last_log_line"] is None, r
         assert isinstance(r["enabled"], bool), r

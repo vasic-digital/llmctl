@@ -135,6 +135,15 @@ validate_profile() {
   printf 'validate_profile_end %s rc=%s %s\n' "${p}" "${rc}" "$(date +%s.%N)" >> "${GW_CALLS}"
   return "${rc}"
 }
+# Freshness of the recorder world: the recorder writes no record, so "a fresh PASS record exists" is modelled as GW_FRESH
+# listing the profile, or a recorded verdict 0 in this call log (a real PASS writes a signed record). The real record
+# path is tested with real records in tests/test_validation_record_integrity.sh.
+if [[ "${GW_REAL_VALIDATE:-0}" != 1 ]]; then
+_val_fresh() {
+  [[ " ${GW_FRESH:-} " == *" $1 "* ]] && return 0
+  grep -q "^validate_profile_end $1 rc=0 " "${GW_CALLS:?}" 2>/dev/null
+}
+fi
 OVERLAY
 }
 

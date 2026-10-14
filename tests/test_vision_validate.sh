@@ -252,7 +252,7 @@ sed -i "s/^port=.*/port=${U2##*:}/" "${LLMCTL_RUNTIME_DIR}/vision.run"
 cp "${LLMCTL_RUNTIME_DIR}/vision.run" "${TEST_TMP}/vision.run.bak"
 assert_eq 1 "$(run_rc env LLMCTL_VALIDATE_ON_START=1 "${LLMCTL}" validate-after-start vision)" "start hook: wrong answer after start -> 1"
 assert_contains "$(cat "${TEST_TMP}/last.out")" "gave WRONG answers" "start hook names the wrong-answer verdict"
-# the gate is enforced (docs/validation.md "Enforcement of the gate"): a WRONG answer STOPS the profile through the normal stop path
+# the gate is enforced (docs/validation.md "Enforcement (strict by default)"): a WRONG answer STOPS the profile through the normal stop path
 assert_contains "$(cat "${TEST_TMP}/last.out")" "stopping it through the normal stop path" "start hook says the profile is stopped"
 assert_file_absent "${LLMCTL_RUNTIME_DIR}/vision.run" "start hook: the failed profile is stopped (reservation removed)"
 cp "${TEST_TMP}/vision.run.bak" "${LLMCTL_RUNTIME_DIR}/vision.run"   # restore the fixture world for the sections below

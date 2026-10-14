@@ -6,6 +6,8 @@
 #   svc_hook.sh gate [<instance>]        ExecStartPre (first): refuse with exit 75 under memory pressure
 #                                        (PSI / MemAvailable) - see hw_pressure_gate in lib/hardware.sh.
 #   svc_hook.sh portcheck <instance>     ExecCondition: exit 98 (unit skipped, not retried) if the port is taken.
+#   svc_hook.sh validated <instance>     ExecCondition: exit 77 (unit skipped) unless the profile has a fresh, signed
+#                                        validation PASS record (or this is a llmctl quarantine/validation start).
 #   svc_hook.sh prestart <instance>      ExecStartPre: (re)create the engine's
 #                                        internal key file - true per-start
 #                                        rotation (gap G-028). No-op for
@@ -112,6 +114,10 @@ _hk_wait_register() {
         _hk_log "${name}: pid ${pid} not registered: the row is held by another live engine (a duplicate unit for this profile?)"
         return 1
       fi
+      if [[ -n "${_HK_PREREG_INST:-}" ]] && ! _hk_validate_after_ready "${_HK_PREREG_INST}" "${_HK_PREREG_PORT}" "${_HK_PREREG_FILE}" "${pid}"; then
+        _hk_log "${name}: NOT registered (not validated)"
+        return 1
+      fi
       portreg_register "$@" || { _hk_log "${name}: registry register failed"; return 1; }
       _hk_log "${name}: registered port ${port} pid ${pid}"
       return 0
@@ -140,6 +146,44 @@ hk_portcheck() {
     return 98
   fi
   return 0
+}
+
+# hk_validated <instance> - ExecCondition= of every engine unit (review 2026-10-14 finding 1): a unit starts on its public port
+# ONLY for a profile with a fresh, signed PASS record (`llmctl require-validated <profile>`); this is what gates a boot-time
+# start and a systemd Restart= that no llmctl command drives. Exit 77 (1-254: the unit is SKIPPED cleanly - neither
+# failed nor restarted) when it has none. Passes through:
+#   * a QUARANTINE start (LLMCTL_QUARANTINE_UNTIL in the env record, not expired): llmctl started it loopback-only on a
+#     private port, unpublished, to validate it (an expired quarantine record - a validation start that never finished -
+#     is refused, so it can never come back at boot);
+#   * an opt-out start (LLMCTL_UNVALIDATED in the env record, written only for a profile that is not consumer-facing).
+hk_validated() {
+  local inst="$1" f prof until why llmctl
+  f="$(_hk_envfile "${inst}")"
+  [[ -f "${f}" ]] || return 0
+  until="$(_hk_get "${f}" LLMCTL_QUARANTINE_UNTIL)"
+  if [[ -n "${until}" ]]; then
+    if [[ "${until}" =~ ^[0-9]+$ ]] && (( $(date +%s) <= until )); then
+      _hk_log "${inst}: quarantine start (validation only: loopback, private port, never registered)"
+      return 0
+    fi
+    _hk_log "${inst}: stale quarantine record (a validation start that never completed) - refusing to start (ExecCondition exit 77)"
+    printf 'llmctl: %s carries an expired validation-quarantine record; not starting (run: llmctl start %s)\n' "${inst}" "${inst}" >&2
+    return 77
+  fi
+  why="$(_hk_get "${f}" LLMCTL_UNVALIDATED)"
+  if [[ -n "${why}" ]]; then
+    _hk_log "${inst}: starting UNVALIDATED by opt-out (${why})"
+    return 0
+  fi
+  prof="$(_hk_get "${f}" LLMCTL_REG_PROFILE)"
+  [[ -n "${prof}" ]] || prof="${inst%%.*}"
+  llmctl="${LLMCTL_ROOT}/bin/llmctl"
+  if [[ -x "${llmctl}" ]] && "${llmctl}" require-validated "${prof}" >/dev/null 2>&1; then
+    return 0
+  fi
+  _hk_log "${inst}: '${prof}' has no fresh validation record - not starting (ExecCondition exit 77); run: llmctl start ${prof} (validates it first)"
+  printf 'llmctl: profile %s is not validated (no fresh, signed PASS record); not starting. Run: llmctl start %s\n' "${prof}" "${prof}" >&2
+  return 77
 }
 
 hk_prestart() {
@@ -232,27 +276,36 @@ hk_register() {
 }
 
 # _hk_validate_after_ready <inst> <port> <envfile> [pid] - the validation gate of the systemd path (docs/validation.md).
-# Runs in the detached waiter AFTER the engine answered its health endpoint, exactly once per start, through the
-# public CLI (`llmctl validate`, with LLMCTL_VALIDATE_ATTACH_PORT so it probes THIS unit and never starts a second
-# one). Only for catalog LLM profiles (kind llm, profile == instance; scaled/other instances are not its business).
-#   PASS -> nothing;  UNDETERMINED -> logged loudly, nothing stopped (strict mode: stopped);
-#   FAIL -> `systemctl --user stop <unit>` (the normal stop path; the engine never exits non-zero by itself, so
-#           Restart=on-failure cannot loop), the reservation is removed, the failure is logged.
+# Runs in the detached waiter AFTER the engine answered its health endpoint and BEFORE it is registered, exactly once per
+# start, through the public CLI (`llmctl validate`, with LLMCTL_VALIDATE_ATTACH_PORT so it probes THIS unit and never
+# starts a second one). For every catalog profile served by this unit (chat and decide kinds - the env record never says
+# "llm", so the former kind == llm test made this gate dead code in production; profile == instance: scaled instances are
+# covered by their base profile). Returns 0 when the unit may be published, 1 when it must not be.
+#   PASS -> 0;  FAIL -> `systemctl --user stop <unit>` (normal stop path), 1;  UNDETERMINED -> stopped as well (strict is
+#   the default), unless the env record carries the opt-out marker LLMCTL_UNVALIDATED (non-consumer-facing profiles only).
 _hk_validate_after_ready() {
   local inst="$1" port="$2" f="$3" pid="${4:-}" prof kind engine llmctl rc=0 unit st
   # the engine must still be ALIVE (kill -0 alone also succeeds on a zombie): never validate (or stop) a dead service
   if [[ -n "${pid}" ]]; then
     sleep "${LLMCTL_VALIDATE_SETTLE:-1}"   # settle: an engine that dies right after answering must not be validated
-    kill -0 "${pid}" 2>/dev/null || return 0
+    kill -0 "${pid}" 2>/dev/null || return 1
     st="$(awk '{print $3}' "/proc/${pid}/stat" 2>/dev/null || true)"
-    [[ "${st}" != "Z" ]] || return 0
+    [[ "${st}" != "Z" ]] || return 1
   fi
-  [[ "${LLMCTL_VALIDATE_ON_START:-1}" == "0" ]] && { _hk_log "${inst}: validation on start disabled (LLMCTL_VALIDATE_ON_START=0) - NOT validated"; return 0; }
   [[ "${LLMCTL_DRY_RUN:-0}" == "1" ]] && return 0
   prof="$(_hk_get "${f}" LLMCTL_REG_PROFILE)"; kind="$(_hk_get "${f}" LLMCTL_REG_KIND)"
-  [[ "${kind}" == "llm" && -n "${prof}" && "${prof}" == "${inst}" ]] || return 0
+  [[ "${kind}" != "gateway" && -n "${prof}" && "${prof}" == "${inst}" ]] || return 0
+  if [[ -n "$(_hk_get "${f}" LLMCTL_UNVALIDATED)" ]]; then
+    _hk_log "${inst}: served UNVALIDATED by opt-out ($(_hk_get "${f}" LLMCTL_UNVALIDATED))"
+    return 0
+  fi
+  if [[ "${LLMCTL_VALIDATE_ON_START:-1}" == "0" ]]; then
+    # mirrors lib/validate.sh _val_gate_mode: honoured only inside the test harness; a unit is otherwise never published unvalidated
+    if [[ "${LLMCTL_VALIDATE_HERMETIC:-0}" == "1" ]]; then _hk_log "${inst}: validation on start disabled (LLMCTL_VALIDATE_ON_START=0, test harness) - NOT validated"; return 0; fi
+    _hk_log "${inst}: validation on start disabled (LLMCTL_VALIDATE_ON_START=0) - NOT validated, NOT registered"; return 1
+  fi
   llmctl="${LLMCTL_ROOT}/bin/llmctl"
-  [[ -x "${llmctl}" ]] || { _hk_log "${inst}: ${llmctl} not executable - NOT validated"; return 0; }
+  [[ -x "${llmctl}" ]] || { _hk_log "${inst}: ${llmctl} not executable - NOT validated, NOT registered"; return 1; }
   # per-profile validation lock (the same file validate_after_start of lib/validate.sh uses): `enable`/`restart` are also
   # validated by the CLI hook; the second validator waits, then finds the first one's fresh record. Not the scheduler lock.
   mkdir -p "${LLMCTL_RUNTIME_DIR}" 2>/dev/null || true
@@ -260,33 +313,28 @@ _hk_validate_after_ready() {
   (
     flock -w "${LLMCTL_VALIDATE_LOCK_WAIT:-900}" 9 || exit 98
     if "${llmctl}" require-validated "${prof}" >/dev/null 2>&1; then exit 97; fi
-    # LLMCTL_VALIDATE_FAIL_RC: the explicit-verdict code (64). A bare exit 1 (llmctl crashed / die() / set -e) is NOT a wrong
-    # answer and never stops the unit.
+    # LLMCTL_VALIDATE_FAIL_RC: the explicit-verdict code (64). A bare exit 1 (llmctl crashed / die() / set -e) is NOT a
+    # wrong answer - it is UNDETERMINED, which strict mode (the default) does not serve either.
     LLMCTL_VALIDATE_FAIL_RC=64 LLMCTL_VALIDATE_ATTACH_PROFILE="${prof}" LLMCTL_VALIDATE_ATTACH_PORT="${port}" \
       "${llmctl}" validate "${prof}" >> "${LLMCTL_LOG_DIR}/svc_hook.log" 2>&1
   ) 9>"${LLMCTL_RUNTIME_DIR}/.validate-${prof}.lock" || rc=$?
   if [[ "${rc}" == "97" ]]; then _hk_log "${inst}: validation: a fresh passing record exists - not re-run"; return 0; fi
-  if [[ "${rc}" == "98" ]]; then _hk_log "${inst}: validation UNDETERMINED: another validator held the lock too long - nothing stopped"; return 0; fi
+  if [[ "${rc}" == "98" ]]; then _hk_log "${inst}: validation UNDETERMINED: another validator held the lock too long - NOT registered (that validator decides)"; return 1; fi
   case "${rc}" in
     0) _hk_log "${inst}: validation PASSED"; return 0 ;;
     64) _hk_log "${inst}: validation FAILED (wrong answers) - stopping the unit through the normal stop path" ;;
-    *) if [[ "${LLMCTL_VALIDATE_STRICT:-0}" == "1" ]]; then
-         _hk_log "${inst}: validation UNDETERMINED and LLMCTL_VALIDATE_STRICT=1 - stopping the unit"
-       else
-         _hk_log "${inst}: validation UNDETERMINED (could not be validated) - the unit keeps running, NOT validated; llmctl require-validated ${prof} refuses"
-         return 0
-       fi ;;
+    *) _hk_log "${inst}: validation UNDETERMINED (could not be validated) - stopping the unit: an unvalidated model is never served (strict default; the opt-out is the LLMCTL_UNVALIDATED marker of a non-consumer-facing profile)" ;;
   esac
   engine="$(_hk_get "${f}" LLMCTL_ENGINE)"
   # the reservation goes FIRST: `systemctl stop` (KillMode=control-group) SIGTERMs this very waiter, so nothing after it runs
-  rm -f "${LLMCTL_RUNTIME_DIR}/${inst}.run"
+  rm -f -- "${LLMCTL_RUNTIME_DIR:?}/${inst:?}.run"
   if command -v systemctl >/dev/null 2>&1 && [[ -n "${engine}" ]]; then
     unit="llmctl-${engine}@${inst}.service"
     systemctl --user stop "${unit}" >> "${LLMCTL_LOG_DIR}/svc_hook.log" 2>&1 || _hk_log "${inst}: could not stop ${unit} - stop it by hand: llmctl stop ${inst}"
   else
     "${llmctl}" stop "${inst}" >> "${LLMCTL_LOG_DIR}/svc_hook.log" 2>&1 || _hk_log "${inst}: could not stop - run: llmctl stop ${inst}"
   fi
-  return 0
+  return 1
 }
 
 hk__wait_register() {
@@ -295,11 +343,18 @@ hk__wait_register() {
   [[ -f "${f}" ]] || return 1
   port="$(_hk_get "${f}" LLMCTL_PORT)"
   [[ -n "${port}" ]] || return 1
+  # a QUARANTINE start is never registered (llmctl validates it and publishes it on PASS) - review 2026-10-14 finding 1
+  if [[ -n "$(_hk_get "${f}" LLMCTL_QUARANTINE_UNTIL)" ]]; then
+    _hk_log "${inst}: quarantine start - not registered (validation only)"
+    return 0
+  fi
+  # validate BEFORE registering: a unit is published only once it is validated (it used to be registered first and
+  # validated afterwards, so consumers could discover an unvalidated model)
+  _HK_PREREG_INST="${inst}" _HK_PREREG_FILE="${f}" _HK_PREREG_PORT="${port}" \
   _hk_wait_register "${inst}" "${port}" "${pid}" "$(_hk_get "${f}" LLMCTL_REG_TOKEN)" \
     "$(_hk_get "${f}" LLMCTL_REG_PROTOCOL)" "$(_hk_get "${f}" LLMCTL_REG_HEALTH)" \
     "$(_hk_get "${f}" LLMCTL_REG_KIND)" "$(_hk_get "${f}" LLMCTL_REG_PROFILE)" "${inst}" \
     "$(_hk_get "${f}" LLMCTL_REG_LOOPBACK)" "$(_hk_get "${f}" LLMCTL_KEY_FILE)" || return 1
-  _hk_validate_after_ready "${inst}" "${port}" "${f}" "${pid}"
 }
 
 # The gateway publishes itself as "decide-gateway" (Go side); "gateway" is its
@@ -337,6 +392,7 @@ hk_run_engine() {
   [[ "${1:-}" == "--" ]] || { echo "usage: svc_hook.sh run-engine <instance> -- <cmd...>" >&2; exit 2; }
   shift
   [[ "$#" -gt 0 ]] || { echo "svc_hook.sh run-engine: no command" >&2; exit 2; }
+  hk_validated "${inst}" || exit 77     # launchd parity of the systemd ExecCondition (validation gate)
   hk_prestart "${inst}" || exit 1
   hk_register "${inst}" "$$"
   hk_engine_libpath "$1"
@@ -371,6 +427,7 @@ hk_run_gateway() {
 
 case "${1:-}" in
   gate)          hk_gate "${2:-}" ;;
+  validated)     hk_validated "${2:?instance required}" ;;
   portcheck)     hk_portcheck "${2:?instance required}" ;;
   prestart)      hk_prestart "${2:?instance required}" ;;
   register)      hk_register "${2:?instance required}" "${3:-}" ;;
@@ -379,5 +436,5 @@ case "${1:-}" in
   run-gateway)   hk_run_gateway ;;
   run-engine)    shift; hk_run_engine "${1:?instance required}" "${@:2}" ;;
   "")            : ;;   # sourced for testing
-  *)             echo "usage: svc_hook.sh gate|portcheck|prestart|register|unregister <instance> | run-engine <instance> -- <cmd...> | run-gateway" >&2; exit 2 ;;
+  *)             echo "usage: svc_hook.sh gate|validated|portcheck|prestart|register|unregister <instance> | run-engine <instance> -- <cmd...> | run-gateway" >&2; exit 2 ;;
 esac

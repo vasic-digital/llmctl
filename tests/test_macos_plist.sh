@@ -17,8 +17,10 @@ printf '#!/bin/sh\nexit 0\n' > "${W}/bin/llmctl-decide"; chmod +x "${W}/bin/llmc
 export LLMCTL_DECIDE_BIN="${W}/bin/llmctl-decide"
 KEYF="${W}/keys/onnx.key"; mkdir -p "$(dirname "${KEYF}")"; echo OLD-KEY-CONTENT > "${KEYF}"
 
+# the env record carries a live QUARANTINE marker (a llmctl validation start): the run-engine wrapper's validation gate (launchd
+# parity of the systemd ExecCondition, review 2026-10-14) lets it through, so the key-rotation half of C2-04 is what is tested
 ( source "${LLMCTL_ROOT}/lib/common.sh"; source "${LLMCTL_ROOT}/lib/service_macos.sh"
-  svc_write_env small llama /bin/true --port 18081 --api-key-file "${KEYF}"
+  LLMCTL_SVC_QUARANTINE_UNTIL=$(( $(date +%s) + 600 )) svc_write_env small llama /bin/true --port 18081 --api-key-file "${KEYF}"
   _decide_gateway_write_plist >/dev/null ) >/dev/null 2>&1
 ENG="${LLMCTL_PLIST_DIR}/com.llmctl.small.plist"; GW="${LLMCTL_PLIST_DIR}/com.llmctl.decide-gateway.plist"
 assert_file_exists "${ENG}" "engine plist written"
@@ -63,4 +65,11 @@ now="$(cat "${KEYF}")"
 if [[ -n "${now}" && "${now}" != "OLD-KEY-CONTENT" ]]; then printf '  ok: C2-04: under the plist environment alone the wrapper rotated the key file\n'
 else printf '  FAIL: C2-04: the key file was not rotated under the plist environment alone (%s)\n' "${now}" >&2; TEST_FAILS=$((TEST_FAILS+1)); fi
 assert_file_exists "${LLMCTL_LOG_DIR}/svc_hook.log" "C2-04: the hook logged into the OVERRIDDEN log dir"
+# launchd parity of the validation gate: without the quarantine marker and without a validation record the wrapper refuses
+# (exit 77) BEFORE it rotates the key or execs the engine
+sed -i '/^LLMCTL_QUARANTINE_UNTIL=/d' "${LLMCTL_SERVICES_DIR}/small.env"
+echo OLD-KEY-CONTENT > "${KEYF}"
+rc=0; env -i HOME="${W}/home" PATH=/usr/bin:/bin "${envargs[@]}" "${args[@]}" >/dev/null 2>&1 || rc=$?
+assert_eq 77 "${rc}" "launchd: an unvalidated profile is refused by the run-engine wrapper (exit 77)"
+assert_eq "OLD-KEY-CONTENT" "$(cat "${KEYF}")" "launchd: ...before the key is rotated"
 test_finish

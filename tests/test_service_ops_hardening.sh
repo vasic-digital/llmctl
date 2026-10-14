@@ -280,6 +280,9 @@ KEYHOME="${TEST_TMP}/someone-home"; mkdir -p "${KEYHOME}"; chmod 755 "${KEYHOME}
 KEYFILE="${KEYHOME}/onnx.key"
 printf 'LLMCTL_PROFILE=eng\nLLMCTL_ENGINE=onnx\nLLMCTL_EXEC=python3\nLLMCTL_ARGS=\nLLMCTL_PORT=%s\nLLMCTL_REG_TOKEN=fake-engine.py\nLLMCTL_REG_KIND=decide\nLLMCTL_REG_PROTOCOL=http\nLLMCTL_REG_HEALTH=/readyz\nLLMCTL_REG_PROFILE=eng\nLLMCTL_REG_LOOPBACK=1\nLLMCTL_KEY_FILE=%s\n' \
   "${PORT}" "${KEYFILE}" > "${LLMCTL_SERVICES_DIR}/eng.env"
+# 'eng' is not a catalog profile, so the validation gate of run-engine (review 2026-10-14, launchd parity of the unit's
+# ExecCondition) would refuse it: the env record carries the opt-out marker, as an opt-out start of llmctl writes it
+printf 'LLMCTL_UNVALIDATED=%s\n' "test fixture: eng is not a catalog profile" >> "${LLMCTL_SERVICES_DIR}/eng.env"
 export LLMCTL_PORTREG=1 LLMCTL_DECIDE_BIN="${BIN}" LLMCTL_REGISTER_POLL=0.2 LLMCTL_REGISTER_WAIT=30
 reg_pid() { "${BIN}" registry list --json | python3 -c 'import json,sys;print(next((s["pid"] for s in json.load(sys.stdin)["services"] if s["name"]=="eng"),""))'; }
 spawn_engine() { # the launchd ProgramArguments, verbatim
@@ -330,7 +333,8 @@ ENGDIR="${TEST_TMP}/own-libs"; mkdir -p "${ENGDIR}" "${TEST_TMP}/plain-engine"
 : > "${ENGDIR}/libggml.so.0"
 printf '#!/bin/sh\nprintf "%%s|%%s\\n" "${LD_LIBRARY_PATH-UNSET}" "${DYLD_LIBRARY_PATH-UNSET}" > "$G129_OUT"\n' > "${ENGDIR}/llama-server"
 cp "${ENGDIR}/llama-server" "${TEST_TMP}/plain-engine/engine"; chmod +x "${ENGDIR}/llama-server" "${TEST_TMP}/plain-engine/engine"
-printf 'LLMCTL_PROFILE=g129\nLLMCTL_ENGINE=llama\n' > "${LLMCTL_SERVICES_DIR}/g129.env"
+# opt-out marker: g129 is not a catalog profile, and run-engine's validation gate (review 2026-10-14) would refuse it
+printf 'LLMCTL_PROFILE=g129\nLLMCTL_ENGINE=llama\nLLMCTL_UNVALIDATED=test fixture\n' > "${LLMCTL_SERVICES_DIR}/g129.env"
 run_engine_env() { # <exe> <LD_LIBRARY_PATH or -> : prints what the engine saw
   local exe="$1" ld="$2" out="${TEST_TMP}/g129.out"; rm -f "${out}"
   if [[ "${ld}" == "-" ]]; then

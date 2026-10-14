@@ -9,8 +9,10 @@
 #   vl_fake_start <answers> [args...]   start the fixture server (model id = the vision model PATH); prints the URL
 #   vl_mark_running <port>       write the vision reservation (.run) on <port>
 #   vl_rc <cmd...>               run, capture output in ${TEST_TMP}/last.out, echo the exit code
+set -euo pipefail
 VL_FIX="${LLMCTL_ROOT}/tests/fixtures/validation"
-VL_LLMCTL="${LLMCTL_ROOT}/bin/llmctl"
+VL_LLMCTL="${VL_LLMCTL_OVERRIDE:-${LLMCTL_ROOT}/bin/llmctl}"   # override: a mutant tree (tests/test_validation_mutants.sh)
+VL_JUDGE="$(cd "$(dirname "${VL_LLMCTL}")/.." && pwd)/lib/validate_judge.py"
 VL_PIDS_FILE="${VL_PIDS_FILE:-$(mktemp)}"
 
 vl_cleanup() {

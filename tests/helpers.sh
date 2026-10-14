@@ -93,6 +93,9 @@ test_setup_env() {
   # "starts" bind no real model server, so the hook is OFF for hermetic tests; tests/test_vision_validate.sh
   # exercises it explicitly.
   export LLMCTL_VALIDATE_ON_START=0
+  # ...and the validation GATE (lib/validate.sh _val_gate_mode) honours ON_START=0 for consumer-facing profiles only inside
+  # the test harness: LLMCTL_VALIDATE_HERMETIC=1 marks it (tests of the gate itself unset it).
+  export LLMCTL_VALIDATE_HERMETIC=1
   # Hermetic by default: the port allocator / registry adapter (lib/portreg.sh)
   # is OFF for every test unless the test opts in (LLMCTL_PORTREG=1 plus an
   # LLMCTL_DECIDE_BIN it built itself). Otherwise a host that happens to hold

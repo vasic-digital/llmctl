@@ -54,7 +54,7 @@ PY
 assert_eq 1 "$(vl_rc "${L}" require-validated vision)" "hand-written record (no signature, junk files) -> refused"
 assert_contains "$(cat "${TEST_TMP}/last.out")" "signature" "the reason names the signature"
 # the most convincing forgery: llmctl's OWN current key + status pass + a fresh epoch, everything matching - but not signed
-python3 -I "${LLMCTL_ROOT}/lib/validate_judge.py" key --catalog "${LLMCTL_CATALOG}" --profile vision --models-dir "${LLMCTL_MODELS_DIR}" \
+python3 -I "${VL_JUDGE}" key --catalog "${LLMCTL_CATALOG}" --profile vision --models-dir "${LLMCTL_MODELS_DIR}" \
   --suites-dir "${LLMCTL_ROOT}/validation/suites" --engine-tag "build 4242, commit deadbeef" > "${TEST_TMP}/key.json"
 python3 -I - "${TEST_TMP}/key.json" "${REC}" "${TEST_TMP}/rec.orig" <<'PY'
 import json, sys, time
@@ -106,7 +106,7 @@ for bad in nan inf -inf NaN -1 1e309 abc 1.5; do
   assert_eq 2 "$(vl_rc env LLMCTL_VALIDATION_MAX_AGE="${bad}" "${L}" require-validated vision)" "LLMCTL_VALIDATION_MAX_AGE='${bad}' -> refused with exit 2"
 done
 assert_eq 0 "$(vl_rc env LLMCTL_VALIDATION_MAX_AGE=600 "${L}" require-validated vision)" "control: a finite age is honoured"
-rc=0; python3 -I "${LLMCTL_ROOT}/lib/validate_judge.py" check --state "${REC}" --key "${REC}" --max-age nan >/dev/null 2>&1 || rc=$?
+rc=0; python3 -I "${VL_JUDGE}" check --state "${REC}" --key "${REC}" --max-age nan >/dev/null 2>&1 || rc=$?
 assert_eq 2 "${rc}" "the judge itself refuses --max-age nan with exit 2"
 
 echo "== 6. host identity: the machine id, never the hostname"
@@ -145,5 +145,18 @@ assert_eq 2 "$(vl_rc env LLMCTL_VALIDATE_REPEAT=1 "${L}" validate vision)" "a qu
 assert_contains "$(cat "${TEST_TMP}/last.out")" "quick mode" "...and says why"
 assert_file_absent "${REC}" "no record from a quick-mode run"
 assert_eq 1 "$(vl_rc "${L}" require-validated vision)" "require-validated still refuses"
+
+echo "== 10. llmctl endpoint (finding 1d): the URL only for a running, published, validated profile - with a REAL record"
+vl_mark_running "${PORT}"
+assert_eq 1 "$(vl_rc "${L}" endpoint vision)" "no record -> no endpoint (exit 1)"
+assert_eq 0 "$(vl_rc "${L}" validate vision)" "validate (real record)"
+assert_eq 0 "$(vl_rc "${L}" endpoint vision)" "validated -> exit 0"
+assert_eq "http://127.0.0.1:${PORT}" "$(grep -E '^http://' "${TEST_TMP}/last.out")" "...and the URL of its port is printed"
+printf 'quarantine=1\n' >> "${LLMCTL_RUNTIME_DIR}/vision.run"
+assert_eq 1 "$(vl_rc "${L}" endpoint vision)" "a quarantined instance is never handed out"
+vl_mark_running "${PORT}"
+python3 -I -c 'import json,sys; p=sys.argv[1]; d=json.load(open(p)); d["epoch"]-=1; json.dump(d,open(p,"w"))' "${REC}"
+assert_eq 1 "$(vl_rc "${L}" endpoint vision)" "an edited (unsigned) record -> no endpoint"
+assert_contains "$(cat "${TEST_TMP}/last.out")" "signature" "...and the reason is printed"
 
 test_finish

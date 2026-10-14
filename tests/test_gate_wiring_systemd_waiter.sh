@@ -8,7 +8,7 @@
 #     (llmctl validate / validate-after-start: the test accepts either - it observes validate_profile);
 #   * FAIL (1)         -> `systemctl --user stop <unit>` (the NORMAL stop path). The waiter must NOT kill the main
 #                         pid itself and the engine must NOT exit non-zero (Restart=on-failure would count/loop it);
-#   * UNDETERMINED (2) -> NO stop, loud, no PASS;  PASS (0) -> NO stop;
+#   * UNDETERMINED (2) -> stopped as well (strict default, review 2026-10-14), loud, no PASS;  PASS (0) -> NO stop;
 #   * LLMCTL_VALIDATE_ON_START=0 disables it;
 #   * hk_register (ExecStartPost) stays DETACHED: it returns promptly even while validation is slow - it must
 #     never block `systemctl start`.
@@ -118,11 +118,11 @@ assert_eq 1 "$(b2i kill -0 "${ENGINE_PID}")" "waiter FAIL: the waiter did NOT ki
 assert_eq 0 "$(gw_count '^systemctl --user (restart|kill|reset-failed)')" "waiter FAIL: no restart/kill games - only the normal stop"
 assert_eq 1 "$(b2i grep -qiE 'validat' "${TEST_TMP}/last.out" "${LLMCTL_LOG_DIR}/svc_hook.log")" "waiter FAIL: the failure is reported (waiter output or svc_hook.log)"
 
-echo "== waiter UNDETERMINED (rc 2): NO stop, loud, never a PASS"
+echo "== waiter UNDETERMINED (rc 2): STOPPED (strict default since review 2026-10-14), loud, never a PASS"
 reset_world
 rc="$(run_waiter GW_VALIDATE_RC=2)"
 assert_eq 1 "$(gw_count '^validate_profile small ')" "waiter UNDETERMINED: validated exactly once"
-assert_eq 0 "$(gw_count '^systemctl --user stop')" "waiter UNDETERMINED: the unit is NOT stopped"
+assert_eq 1 "$(gw_count "^systemctl --user stop ${UNIT}\$")" "waiter UNDETERMINED: the unit is stopped (an unvalidated model is never served)"
 assert_eq 1 "$(b2i grep -qiE 'UNDETERMINED|could not be validated' "${TEST_TMP}/last.out" "${LLMCTL_LOG_DIR}/svc_hook.log")" "waiter UNDETERMINED: reported loudly"
 assert_eq 0 "$(b2i grep -q PASSED "${TEST_TMP}/last.out" "${LLMCTL_LOG_DIR}/svc_hook.log")" "waiter UNDETERMINED: never reported as PASSED"
 assert_file_absent "${LLMCTL_STATE_DIR}/validation/small.json" "waiter UNDETERMINED: no PASS recorded"

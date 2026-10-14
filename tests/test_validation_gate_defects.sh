@@ -81,8 +81,12 @@ out="$(cat "${TEST_TMP}/last.out")"
 if [[ "${out}" == *Traceback* ]]; then printf '  FAIL: traceback from judge key\n' >&2; TEST_FAILS=$((TEST_FAILS+1))
 else printf '  ok: judge key prints a message, not a traceback\n'; fi
 # a multi-profile hook (the `auto` shape) must still validate the other profile after the instance key
-assert_eq 0 "$(run_rc env LLMCTL_VALIDATE_ON_START=1 "${LLMCTL}" validate-after-start decide.2 decide)" \
-  "an instance key amongst other keys does not stop the loop"
+# (decide itself cannot be validated here - no engine on port 9 - so, strict being the default since review 2026-10-14
+# finding 1, the hook stops it and exits 1: what matters is that the loop REACHED decide after skipping decide.2)
+run_rc env LLMCTL_VALIDATE_ON_START=1 "${LLMCTL}" validate-after-start decide.2 decide >/dev/null
+out="$(cat "${TEST_TMP}/last.out")"
+assert_contains "${out}" "scaled instance" "an instance key amongst other keys is skipped..."
+assert_contains "${out}" "running the deterministic validation suite(s) of 'decide'" "...and does not stop the loop: decide is validated after it"
 rm -f "${LLMCTL_RUNTIME_DIR}"/decide*.run
 
 echo "== 5. models verify: a profile with no suite is reported as NOT validated and the usage text says exactly that"
@@ -530,7 +534,7 @@ fi
 echo "== 24. LLMCTL_VALIDATION_SUITES_DIR is ignored unless LLMCTL_VALIDATE_HERMETIC=1 (suite regexes are code-adjacent input)"
 EMPTYS="${TEST_TMP}/empty_suites"; mkdir -p "${EMPTYS}"
 U="$(fake_start "${FIX}/answers_good.json" --model-id "${CHATM}")"
-assert_eq 0 "$(run_rc env LLMCTL_VALIDATION_SUITES_DIR="${EMPTYS}" "${LLMCTL}" validate fast --host "${U}")" "override without the hermetic switch is ignored (shipped suites used)"
+assert_eq 0 "$(run_rc env -u LLMCTL_VALIDATE_HERMETIC LLMCTL_VALIDATION_SUITES_DIR="${EMPTYS}" "${LLMCTL}" validate fast --host "${U}")" "override without the hermetic switch is ignored (shipped suites used)"
 assert_contains "$(cat "${TEST_TMP}/last.out")" "LLMCTL_VALIDATION_SUITES_DIR ignored" "the ignore is announced"
 assert_eq 2 "$(run_rc env LLMCTL_VALIDATE_HERMETIC=1 LLMCTL_VALIDATION_SUITES_DIR="${EMPTYS}" "${LLMCTL}" validate fast --host "${U}")" "with LLMCTL_VALIDATE_HERMETIC=1 the override is honoured"
 

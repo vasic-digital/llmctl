@@ -99,6 +99,11 @@ svc_write_env() {
     printf '%q ' "$@"
     printf '\n'
     portreg_env_lines "${profile}" "${engine}" "${exec_bin}" "$@"
+    # validation gate markers (lib/scheduler.sh, docs/validation.md): a QUARANTINE start (validation only, loopback,
+    # private port, never registered) carries its deadline; an opt-out start of a non-consumer-facing profile says why
+    # it runs unvalidated. lib/svc_hook.sh `validated` (the unit's ExecCondition) reads both.
+    [[ -n "${LLMCTL_SVC_QUARANTINE_UNTIL:-}" ]] && printf 'LLMCTL_QUARANTINE_UNTIL=%q\n' "${LLMCTL_SVC_QUARANTINE_UNTIL}"
+    [[ -n "${LLMCTL_SVC_UNVALIDATED:-}" ]] && printf 'LLMCTL_UNVALIDATED=%q\n' "${LLMCTL_SVC_UNVALIDATED}"
   } > "${env_file}"
   chmod 600 "${env_file}"
 

@@ -125,12 +125,12 @@ assert_eq 1 "$(( $(gw_count '^hw_pressure_gate ') >= 1 ? 1 : 0 ))" "A7: models v
 assert_eq 0 "$(nreq)" "A7: no probe under pressure (got $(nreq))"
 assert_eq 2 "${rc}" "A7: exit 2 (UNDETERMINED)"
 
-echo "== A8. post-start hook validate_after_start, gate REFUSES: nothing probed, NOT stopped, not FAIL"
+echo "== A8. post-start hook validate_after_start, gate REFUSES: nothing probed, stopped as UNDETERMINED (strict), not FAIL"
 reset_world; gw_mark_running small "${PORT}"
 rc="$(GW_GATE_RC=75 gw_run "${L}" validate-after-start small)"
 assert_eq 1 "$(( $(gw_count '^hw_pressure_gate ') >= 1 ? 1 : 0 ))" "A8: the start hook consults the gate (RED)"
 assert_eq 0 "$(nreq)" "A8: no probe under pressure (got $(nreq))"
-assert_eq 0 "$(gw_count '^svc_stop ')" "A8: a refusal (UNDETERMINED) never stops a running profile"
+assert_eq 1 "$(gw_count '^svc_stop small$')" "A8: a refusal is UNDETERMINED: the profile is stopped (strict default since review 2026-10-14; it also relieves the pressure)"
 assert_eq 1 "$(b2i not_fail small)" "A8: not recorded as FAIL"
 assert_eq 1 "$(b2i out_has 'refus|pressure')" "A8: reported loudly"
 

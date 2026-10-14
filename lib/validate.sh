@@ -8,18 +8,20 @@
 # first-number / regex / JSON checks - never an LLM judging an LLM. The catalog names each profile's
 # suites (`validation.suites`); a profile without one is never reported as validated.
 #
-# Documentation: docs/validation.md, section "Model validation gate". Tests: tests/test_vision_validate.sh,
-# tests/test_validation_suites.sh, tests/test_validation_gate_defects.sh. No real-model run has been recorded yet
-# (docs/qa/vision-validate-live-2026-10-12.md).
+# Documentation: docs/validation.md, section "Model validation gate". Tests: tests/test_validation_*.sh, tests/test_vision_validate.sh,
+# tests/test_gate_wiring_*.sh. Real-model runs on record (docs/qa/): `vision` and `small` on the authoring host and a --host run on a second
+# host, all made with the judge BEFORE the 2026-10-14 fix round (their suites changed since, so none of their records is current); colibri
+# and decide-* profiles have never been run against their real model.
 #
 # Exit codes of validate / vision validate / validate-all: 0 every check passed; 1 any wrong result
 # (never excused, never loosened); 2 could not determine (not downloaded, not served, endpoint down,
-# insufficient resources, no suite). 1 outranks 2.
+# insufficient resources, no suite, suite defect, quick mode). 1 outranks 2.
 #
-# State: $LLMCTL_STATE_DIR/validation/<profile>.json records status + model sha256 (catalog) + model file
-# size/mtime + engine tag + launch fingerprint + per-suite content hash + timestamp. `require-validated`
-# exits 0 only when that record is a PASS that still matches all of them and is younger than
-# LLMCTL_VALIDATION_MAX_AGE seconds (default 604800 = 7 days).
+# State: $LLMCTL_STATE_DIR/validation/<profile>.json - a SIGNED record (HMAC-SHA256, key .hmac.key 0600) of the status, the real sha256
+# of every model file (= its catalog pin), engine tag, launch fingerprint, per-suite content hash, machine id (hashed), the probed
+# process's model file, the repeat count and the sha256 of the run's own evidence file. `require-validated` exits 0 only when that record
+# verifies, is a PASS that matches all of them now and is younger than LLMCTL_VALIDATION_MAX_AGE whole seconds (default 604800 = 7 days).
+# ENFORCEMENT (strict by default): a profile without such a record is never served - see "ENFORCEMENT" below and lib/scheduler.sh.
 set -euo pipefail
 
 _val_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -525,46 +527,58 @@ _val_coverage() {
     --suites-dir "${LLMCTL_VALIDATION_SUITES_DIR}" --hmac-key "$(_val_hmac_key)" --max-age "${age}"
 }
 
-# _val_after_start_one <profile> - one profile of validate_after_start (called under the per-profile validation lock):
-# freshness check, validation, and the verdict policy (FAIL -> stop; UNDETERMINED -> keep, or stop in strict mode).
-# Returns 1 when the profile failed validation / was stopped, else 0.
-_val_after_start_one() {
-  local p="$1" rc=0 one key_file base
-  [[ -f "${LLMCTL_RUNTIME_DIR}/${p}.run" ]] || return 0
-  if base="$(_val_instance_base "${p}")"; then
-    info "validation: '${p}' is a scaled instance of '${base}' (no catalog entry of its own) - skipped; its validation state is that of '${base}' (llmctl require-validated ${base})"
-    return 0
-  fi
-  key_file="$(mktemp)"
-  if ! _val_key "${p}" "${key_file}"; then
-    rm -f "${key_file}"
-    warn "validation: '${p}' has no computable validation key (not a catalog profile?) - UNDETERMINED; llmctl require-validated ${p} refuses"
-    return 0
-  fi
-  if _val_check "${p}" "${key_file}" >/dev/null 2>&1; then
-    info "validation: '${p}' already has a fresh passing record for this model, engine, launch and suite"
-    rm -f "${key_file}"
-    return 0
-  fi
-  rm -f "${key_file}"
-  log "validation: running the deterministic validation suite(s) of '${p}' before it is used"
-  one=0
-  validate_profile "${p}" || one=$?
-  case "${one}" in
-    0) info "validation: '${p}' PASSED" ;;
-    1) err "validation: '${p}' gave WRONG answers (validation FAILED) - stopping it through the normal stop path; it is NOT left running (evidence: ${LLMCTL_VERIFY_DIR}/validate-${p}.log)"
-       _val_stop_after_verdict "${p}"
-       rc=1 ;;
-    *) if [[ "${LLMCTL_VALIDATE_STRICT:-0}" == "1" ]]; then
-         err "validation: '${p}' could not be validated (UNDETERMINED) and LLMCTL_VALIDATE_STRICT=1 - stopping it (no validation suite / no answer / refused is not good enough in strict mode)"
-         _val_stop_after_verdict "${p}"
-         rc=1
-       else
-         warn "validation: '${p}' could not be validated (UNDETERMINED) - it keeps running, NOT validated; llmctl require-validated ${p} refuses until it passes (LLMCTL_VALIDATE_STRICT=1 would stop it)"
-       fi ;;
-  esac
+# --- ENFORCEMENT (review 2026-10-14 finding 1) -----------------------------------------------------------------------
+# A profile is served to consumers (documented port, catalog bind host, registry row, enabled unit) ONLY when it has a
+# fresh, signed PASS record for its current model bytes, engine build, launch flags and suites. Otherwise the scheduler
+# starts it in QUARANTINE (loopback, private ephemeral port, never registered); validate_after_start then validates it
+# and publishes it on PASS. Strict is the DEFAULT: FAIL and UNDETERMINED are never served.
+#   LLMCTL_VALIDATE_STRICT=0   opt-out: an UNDETERMINED profile is published (marked UNVALIDATED in status) - REFUSED for a
+#                              consumer-facing profile (catalog validation.consumer_facing, default true)
+#   LLMCTL_VALIDATE_ON_START=0 no validation at start: the same refusal for a consumer-facing profile (allowed only under
+#                              LLMCTL_VALIDATE_HERMETIC=1, the test harness)
+
+# _val_consumer_facing <profile> - rc 0 unless the catalog says validation.consumer_facing: false (fail-closed default).
+_val_consumer_facing() {
+  [[ "$(json_query "${LLMCTL_CATALOG}" 'str((d["profiles"].get(argv[0], {}).get("validation") or {}).get("consumer_facing", True))' "$1" 2>/dev/null || echo True)" != "False" ]]
+}
+
+# _val_strict <profile> - rc 0 when an UNDETERMINED validation must NOT be served (the default); rc 1 only for the
+# documented opt-out on a profile that is not consumer-facing.
+_val_strict() {
+  [[ "${LLMCTL_VALIDATE_STRICT:-1}" == "0" ]] || return 0
+  _val_consumer_facing "$1" && return 0
+  return 1
+}
+
+# _val_fresh <profile> - rc 0 when the profile has a fresh, signed PASS record for what would run now (quiet).
+_val_fresh() {
+  local kf rc=0
+  kf="$(mktemp)"
+  if _val_key "$1" "${kf}" 2>/dev/null; then _val_check "$1" "${kf}" >/dev/null 2>&1 || rc=1; else rc=1; fi
+  rm -f "${kf}"
   return "${rc}"
 }
+
+# _val_gate_mode <profile> -> public | quarantine | public-unvalidated:<why> | refuse:<why>  (lib/scheduler.sh _sched_gate_for)
+_val_gate_mode() {
+  local p="$1"
+  if [[ "${_sched_force_quarantine:-0}" == "1" ]]; then echo quarantine; return 0; fi
+  if [[ -n "${_sched_gate_pass:-}" && "${_sched_gate_pass}" == "${p}" ]]; then
+    if [[ -n "${_sched_gate_unvalidated:-}" ]]; then echo "public-unvalidated:${_sched_gate_unvalidated}"; else echo public; fi
+    return 0
+  fi
+  if [[ "${LLMCTL_DRY_RUN:-0}" == "1" ]]; then echo public; return 0; fi
+  if [[ "${LLMCTL_VALIDATE_ON_START:-1}" == "0" ]]; then
+    if [[ "${LLMCTL_VALIDATE_HERMETIC:-0}" == "1" ]]; then echo "public-unvalidated:LLMCTL_VALIDATE_ON_START=0 (hermetic test harness)"; return 0; fi
+    if ! _val_consumer_facing "${p}"; then echo "public-unvalidated:LLMCTL_VALIDATE_ON_START=0 (opt-out; '${p}' is not consumer-facing)"; return 0; fi
+    echo "refuse:LLMCTL_VALIDATE_ON_START=0 is refused for the consumer-facing profile '${p}': every model must pass its validation before it is used (unset it, or validate first: llmctl validate ${p})"
+    return 0
+  fi
+  if _val_fresh "${p}"; then echo public; else echo quarantine; fi
+}
+
+# _val_is_quarantined <profile> - rc 0 when the running reservation of the profile is a quarantine start.
+_val_is_quarantined() { grep -qx 'quarantine=1' "${LLMCTL_RUNTIME_DIR}/$1.run" 2>/dev/null; }
 
 # _val_stop_after_verdict <profile> - the stop half of the gate: sched_stop (-> svc_stop, reservation removed).
 # Callers run OUTSIDE the scheduler lock (sched_stop takes it itself).
@@ -572,12 +586,72 @@ _val_stop_after_verdict() {
   sched_stop "$1" || warn "validation: could not stop '$1' - stop it by hand: llmctl stop $1"
 }
 
-# validate_after_start <profile...> - post-start hook for start/switch/auto/enable/restart. Runs each running
-# profile's suites unless a fresh passing record already covers it (OUTSIDE the scheduler lock).
-#   PASS (0)         -> keeps running.
+# _val_verdict_policy <profile> <rc> <published:0|1> - what a verdict means for a running profile: PASS -> publish (when
+# quarantined); FAIL -> stop; UNDETERMINED -> stop (strict default) or, opt-out on a non-consumer-facing profile only,
+# serve it marked UNVALIDATED. Returns 1 when the profile is not served.
+_val_verdict_policy() {
+  local p="$1" one="$2" quarantined="$3"
+  case "${one}" in
+    0)
+      if [[ "${quarantined}" == "1" ]]; then
+        if sched_publish "${p}"; then
+          info "validation: '${p}' PASSED - published on its documented port (llmctl endpoint ${p})"
+        else
+          err "validation: '${p}' PASSED but could not be published (see above) - it is NOT served"
+          return 1
+        fi
+      else
+        info "validation: '${p}' PASSED"
+      fi
+      return 0 ;;
+    1)
+      err "validation: '${p}' gave WRONG answers (validation FAILED) - stopping it through the normal stop path; it is NOT left running (evidence: ${LLMCTL_VERIFY_DIR}/validate-${p}.log)"
+      _val_stop_after_verdict "${p}"
+      return 1 ;;
+  esac
+  if _val_strict "${p}"; then
+    if [[ "${LLMCTL_VALIDATE_STRICT:-1}" == "0" ]]; then
+      err "validation: '${p}' could not be validated (UNDETERMINED); LLMCTL_VALIDATE_STRICT=0 is REFUSED for the consumer-facing profile '${p}' - stopping it, it is NOT served"
+    else
+      err "validation: '${p}' could not be validated (UNDETERMINED) - stopping it: an unvalidated model is never served (strict is the default; see docs/validation.md)"
+    fi
+    _val_stop_after_verdict "${p}"
+    return 1
+  fi
+  warn "validation: '${p}' could not be validated (UNDETERMINED) and LLMCTL_VALIDATE_STRICT=0 (opt-out; '${p}' is not consumer-facing): it is SERVED UNVALIDATED - 'llmctl status' says so and 'llmctl require-validated ${p}' / 'llmctl endpoint ${p}' refuse"
+  if [[ "${quarantined}" == "1" ]]; then
+    sched_publish "${p}" "LLMCTL_VALIDATE_STRICT=0 opt-out after an UNDETERMINED validation" || return 1
+  fi
+  return 0
+}
+
+# _val_after_start_one <profile> - one profile of validate_after_start (called under the per-profile validation lock).
+# Returns 1 when the profile failed validation / was stopped / is not served, else 0.
+_val_after_start_one() {
+  local p="$1" one base q=0
+  [[ -f "${LLMCTL_RUNTIME_DIR}/${p}.run" ]] || return 0
+  if base="$(_val_instance_base "${p}")"; then
+    info "validation: '${p}' is a scaled instance of '${base}' (no catalog entry of its own) - skipped; its validation state is that of '${base}' (llmctl require-validated ${base})"
+    return 0
+  fi
+  _val_is_quarantined "${p}" && q=1
+  if [[ "${q}" == "0" ]] && _val_fresh "${p}"; then
+    info "validation: '${p}' already has a fresh passing record for this model, engine, launch and suite"
+    return 0
+  fi
+  log "validation: running the deterministic validation suite(s) of '${p}' before it is used$([[ "${q}" == "1" ]] && echo ' (it is quarantined: loopback, private port, unpublished)')"
+  one=0
+  validate_profile "${p}" || one=$?
+  _val_verdict_policy "${p}" "${one}" "${q}"
+}
+# validate_after_start <profile...> - post-start hook for start/switch/auto/enable/restart (OUTSIDE the scheduler lock).
+# A quarantined profile (no fresh record: started loopback-only on a private port, unpublished) is validated and then
+#   PASS (0)         -> PUBLISHED on its documented port (sched_publish), keeps serving.
 #   FAIL (1)         -> STOPPED through sched_stop, the hook returns 1 (non-zero exit of the command).
-#   UNDETERMINED (2) -> never stopped, never a PASS, reported loudly - unless LLMCTL_VALIDATE_STRICT=1, which stops
-#                       it and returns 1 (no suite / no answer / refused under pressure is then not good enough).
+#   UNDETERMINED (2) -> STOPPED (strict is the default), the hook returns 1; LLMCTL_VALIDATE_STRICT=0 publishes it marked
+#                       UNVALIDATED, but ONLY for a profile that is not consumer-facing (refused otherwise).
+# A profile already published with a fresh record is left alone; one published without (started before the gate existed,
+# record expired) is validated in place under the same policy.
 validate_after_start() {
   if [[ "${LLMCTL_DRY_RUN:-0}" == "1" ]]; then
     log "validation not run (LLMCTL_DRY_RUN=1): nothing was started, so there is nothing to validate"
@@ -596,7 +670,8 @@ validate_after_start() {
     exec {lockfd}>"${lf}"
     if ! flock -w "${LLMCTL_VALIDATE_LOCK_WAIT:-900}" "${lockfd}"; then
       exec {lockfd}>&-
-      warn "validation: '${p}' is being validated by another process and did not finish within ${LLMCTL_VALIDATE_LOCK_WAIT:-900}s - UNDETERMINED here (nothing stopped)"
+      warn "validation: '${p}' is being validated by another process and did not finish within ${LLMCTL_VALIDATE_LOCK_WAIT:-900}s - UNDETERMINED here (that validator publishes or stops it)"
+      rc=1
       continue
     fi
     one=0
@@ -605,6 +680,78 @@ validate_after_start() {
     [[ "${one}" == "0" ]] || rc=1
   done
   return "${rc}"
+}
+
+# validate_before_enable <profile> - `llmctl enable` / `llmctl restart` gate: a unit is enabled / restarted on its public
+# port only for a profile with a fresh PASS record. Without one, the profile is first validated in quarantine (started
+# loopback-only on a private port, validated, stopped again). Returns 0 when it may be served, 1 otherwise.
+validate_before_enable() {
+  local p="$1" gate one=0
+  catalog_exists "${p}" || { err "unknown profile: ${p}"; return 1; }
+  gate="$(_val_gate_mode "${p}")"
+  case "${gate}" in
+    public|public-unvalidated:*) return 0 ;;
+    refuse:*) err "${gate#refuse:}"; return 1 ;;
+  esac
+  log "'${p}' has no fresh validation record - validating it in quarantine (loopback, private port, unpublished) before it is enabled/served"
+  if [[ -f "${LLMCTL_RUNTIME_DIR}/${p}.run" ]]; then
+    # running already (published before the gate existed, or its record expired): the running-profile policy applies
+    _val_after_start_one "${p}"
+    return
+  fi
+  validate_profile "${p}" || one=$?      # starts it unpublished (sched_start_unpublished) and stops it again
+  case "${one}" in
+    0) return 0 ;;
+    1) err "'${p}' gave WRONG answers (validation FAILED) - it is NOT enabled/served"; return 1 ;;
+  esac
+  if _val_strict "${p}"; then
+    err "'${p}' could not be validated (UNDETERMINED) - it is NOT enabled/served (strict is the default; LLMCTL_VALIDATE_STRICT=0 is refused for consumer-facing profiles)"
+    return 1
+  fi
+  warn "'${p}' could not be validated (UNDETERMINED); LLMCTL_VALIDATE_STRICT=0 opt-out on a non-consumer-facing profile: enabling it UNVALIDATED"
+  # global on purpose: the scheduler's gate (_val_gate_mode, called under the lock by _enable_impl) reads it
+  _sched_gate_pass="${p}"
+  _sched_gate_unvalidated="LLMCTL_VALIDATE_STRICT=0 opt-out after an UNDETERMINED validation"
+  return 0
+}
+
+# validation_state <profile> -> one line for `llmctl status`: validated (...) | QUARANTINE | UNVALIDATED (<why>) | NOT VALIDATED (<reason>).
+# Cheap on purpose (status runs it per profile): the record's signature, status and age; the model BYTES are re-checked by
+# require-validated / endpoint, which is what a consumer calls.
+validation_state() {
+  local p="$1" f="${LLMCTL_RUNTIME_DIR}/$1.run" why base line age
+  if base="$(_val_instance_base "${p}" 2>/dev/null)"; then p="${base}"; fi
+  if _val_is_quarantined "$1"; then echo "QUARANTINE (validating: loopback, private port, unpublished)"; return 0; fi
+  why="$(sed -n 's/^unvalidated=//p' "${f}" 2>/dev/null | head -1)"
+  if [[ -n "${why}" ]]; then echo "UNVALIDATED (${why})"; return 0; fi
+  catalog_exists "${p}" || { echo "NOT VALIDATED (not a catalog profile)"; return 0; }
+  age="$(_val_max_age 2>/dev/null)" || age=0
+  line="$(_val_judge coverage --catalog "${LLMCTL_CATALOG}" --state-dir "$(_val_state_dir)" --suites-dir "${LLMCTL_VALIDATION_SUITES_DIR}" \
+          --hmac-key "$(_val_hmac_key)" --max-age "${age}" --profile "${p}" 2>/dev/null | head -1)"
+  line="${line#*: }"
+  case "${line}" in
+    validated*) echo "validated (signed PASS record; bytes re-checked by require-validated)" ;;
+    "NOT VALIDATED - "*) echo "NOT VALIDATED (${line#NOT VALIDATED - })" ;;
+    *) echo "NOT VALIDATED (state could not be determined)" ;;
+  esac
+}
+
+# endpoint <profile> - `llmctl endpoint`: prints the profile's URL ONLY when it is running, published and has a fresh,
+# signed PASS record - the one call a consuming project needs. rc 0 URL printed; 1 not validated / not served (reason on
+# stderr); 2 usage / unknown profile.
+endpoint() {
+  [[ "$#" -eq 1 ]] || { err "usage: llmctl endpoint <profile>"; return 2; }
+  local p="$1" port host
+  catalog_exists "${p}" || { err "unknown profile: ${p}"; return 2; }
+  if [[ ! -f "${LLMCTL_RUNTIME_DIR}/${p}.run" ]]; then err "'${p}' is not running (start it: llmctl start ${p})"; return 1; fi
+  if _val_is_quarantined "${p}"; then err "'${p}' is being validated (quarantine: unpublished) - not served yet"; return 1; fi
+  local why vrc=0
+  why="$(require_validated "${p}" 2>&1)" || vrc=$?
+  if [[ "${vrc}" != "0" ]]; then printf '%s\n' "${why}" >&2; return 1; fi
+  port="$(sed -n 's/^port=//p' "${LLMCTL_RUNTIME_DIR}/${p}.run" | head -1)"
+  [[ "${port}" =~ ^[0-9]+$ ]] || { err "'${p}' has no port in its reservation"; return 1; }
+  host="127.0.0.1"
+  printf 'http://%s:%s\n' "${host}" "${port}"
 }
 
 # _val_run_snapshot - "<key> <started_epoch>" per reservation file in LLMCTL_RUNTIME_DIR (sorted).

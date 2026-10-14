@@ -372,7 +372,12 @@ EnvironmentFile=$(_svc_pct "${LLMCTL_SERVICES_DIR}")/%i.env
 # publishes the service in the registry once it answers its health endpoint;
 # ExecStopPost removes the row (the port hold stays so a restart reuses the
 # port, FR-088). Registration failures never fail the unit (the "-" prefix).
+# ExecCondition `validated` (docs/validation.md "Enforcement"): the unit is skipped
+# (exit 77, not failed, not restarted) unless its profile has a fresh, signed
+# validation PASS record - a boot-time start or a Restart= is gated too; a
+# llmctl quarantine (validation-only) start passes through.
 ExecCondition=$(_svc_portcheck_cmd %i)
+ExecCondition=$(_svc_hook_cmd validated %i)
 ExecStartPre=$(_svc_hook_cmd gate %i)
 ExecStartPre=$(_svc_hook_cmd prestart %i)
 ExecStart=/bin/bash -c 'set -f; exec "\$LLMCTL_EXEC" \$LLMCTL_ARGS'
@@ -585,6 +590,11 @@ svc_write_env() {
     # Registration metadata for lib/svc_hook.sh (port, process token, kind,
     # health path, key-file PATH) - see portreg_env_lines.
     portreg_env_lines "${profile}" "${engine}" "${exec_bin}" "$@"
+    # validation gate markers (lib/scheduler.sh, docs/validation.md): a QUARANTINE start (validation only, loopback,
+    # private port, never registered) carries its deadline; an opt-out start of a non-consumer-facing profile says why
+    # it runs unvalidated. lib/svc_hook.sh `validated` (the unit's ExecCondition) reads both.
+    [[ -n "${LLMCTL_SVC_QUARANTINE_UNTIL:-}" ]] && printf 'LLMCTL_QUARANTINE_UNTIL=%q\n' "${LLMCTL_SVC_QUARANTINE_UNTIL}"
+    [[ -n "${LLMCTL_SVC_UNVALIDATED:-}" ]] && printf 'LLMCTL_UNVALIDATED=%q\n' "${LLMCTL_SVC_UNVALIDATED}"
   } > "${env_file}"
   _svc_write_mem_dropin "${profile}" "${engine}"
   # Owner-only (D-03): the record names key-file paths and is read by the

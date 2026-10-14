@@ -6,10 +6,10 @@
 #     sched_start, whose flock is not re-entrant);
 #   * FAIL (1)          -> the profile is STOPPED through the normal stop path (sched_stop -> svc_stop), the command
 #                          exits non-zero with a clear message;
-#   * UNDETERMINED (2)  -> the profile is NOT stopped, the result is reported loudly, nothing records a PASS;
-#   * PASS (0)          -> the profile keeps running;
-#   * a catalog profile WITHOUT a validation suite -> loud warning by default (never a silent pass) and, in the
-#     configurable strict mode (assumed name: LLMCTL_VALIDATE_STRICT=1), stopped + non-zero;
+#   * UNDETERMINED (2)  -> STOPPED as well (strict is the default since review 2026-10-14 finding 1), loud, no PASS;
+#   * PASS (0)          -> the QUARANTINE instance (loopback, private port, unpublished) is replaced by the published
+#                          one, which keeps running (tests/test_validation_enforcement.sh covers the quarantine itself);
+#   * a catalog profile that cannot be validated -> stopped + non-zero by default, the reason named;
 #   * LLMCTL_VALIDATE_ON_START=0 still disables the hook (hermetic tests), loudly;
 #   * `llmctl require-validated` exit codes (0 fresh PASS / 1 refused / 2 usage).
 # Harness: tests/gate_wiring_lib.sh (recording service backend, validate_profile recorder, throw-away tree). No
@@ -57,7 +57,8 @@ for verb in start switch; do
   assert_eq 0 "${rc}" "${verb}: PASS -> exit 0"
   assert_eq 1 "$(gw_count '^validate_profile small ')" "${verb}: validate_profile called exactly once"
   assert_eq 1 "$(gw_count '^validate_profile small lock_held=no$')" "${verb}: validation ran OUTSIDE the scheduler lock (not recursive)"
-  assert_eq 0 "$(gw_count '^svc_stop ')" "${verb}: PASS never stops the profile"
+  assert_eq 1 "$(gw_count '^svc_stop small$')" "${verb}: PASS: the quarantine instance is stopped once (then the profile is published)"
+  assert_eq 2 "$(gw_count '^svc_start small$')" "${verb}: PASS: started twice - quarantine, then published"
   assert_eq 1 "$(b2i gw_is_running small)" "${verb}: PASS leaves the profile running"
   s_start="$(gw_line '^svc_start small$')"; s_val="$(gw_line '^validate_profile small ')"
   assert_eq 1 "$(( s_start > 0 && s_val > s_start ? 1 : 0 ))" "${verb}: validation is AFTER the profile became ready (svc_start line ${s_start} < validate line ${s_val})"
@@ -75,12 +76,13 @@ for verb in start switch; do
   assert_eq 1 "$(b2i out_has 'stopp(ed|ing)')" "${verb}: FAIL: the message says the profile was STOPPED"
   assert_eq 1 "$(b2i out_has 'validat')" "${verb}: FAIL: the message says it was the validation that failed"
 
-  echo "== ${verb} UNDETERMINED (rc 2): NOT stopped, loud, never a PASS"
+  echo "== ${verb} UNDETERMINED (rc 2): STOPPED (strict default), loud, never a PASS"
   reset_world
   rc="$(GW_VALIDATE_RC=2 gw_run "${L}" "${verb}" small)"
   assert_eq 1 "$(gw_count '^validate_profile small ')" "${verb}: UNDETERMINED: validation ran exactly once"
-  assert_eq 0 "$(gw_count '^svc_stop ')" "${verb}: UNDETERMINED never stops a running profile"
-  assert_eq 1 "$(b2i gw_is_running small)" "${verb}: UNDETERMINED leaves the profile running"
+  assert_eq 1 "$(gw_count '^svc_stop small$')" "${verb}: UNDETERMINED: the profile is stopped (an unvalidated model is never served)"
+  assert_eq 0 "$(b2i gw_is_running small)" "${verb}: UNDETERMINED: nothing left running"
+  assert_eq 1 "$(( rc != 0 ? 1 : 0 ))" "${verb}: UNDETERMINED: exit code is non-zero (rc=${rc})"
   assert_eq 1 "$(b2i out_has 'UNDETERMINED|could not be validated')" "${verb}: UNDETERMINED is reported loudly"
   assert_eq 0 "$(b2i grep -q PASSED "${TEST_TMP}/last.out")" "${verb}: UNDETERMINED is never reported as PASSED"
   assert_file_absent "${LLMCTL_STATE_DIR}/validation/small.json" "${verb}: UNDETERMINED records no PASS (no state file)"
@@ -103,33 +105,31 @@ else
   assert_eq 1 "$(( rc != 0 ? 1 : 0 ))" "auto FAIL: exit code is non-zero (rc=${rc})"
   reset_world
   rc="$(GW_VALIDATE_RC=2 gw_run "${L}" auto chat)"
-  assert_eq 0 "$(gw_count '^svc_stop ')" "auto UNDETERMINED: nothing is stopped"
+  assert_eq 1 "$(gw_count "^svc_stop ${started}\$")" "auto UNDETERMINED: '${started}' is stopped (strict default)"
 fi
 
-echo "== (b) a catalog profile that CANNOT be validated (decide-tiny: jev-verdict has no driver): warn loudly by default, strict mode stops it"
+echo "== (b) a catalog profile that CANNOT be validated (decide-tiny: jev-verdict has no driver): stopped by default, reason named"
 gw_touch_model decide-tiny
 reset_world
-export GW_REAL_VALIDATE=1   # the REAL validate_profile: it reports 'no llmctl validation suite' (exit 2)
+export GW_REAL_VALIDATE=1   # the REAL validate_profile: decide-tiny's suite is UNDETERMINED (no driver for jev-verdict)
 rc="$(gw_run "${L}" start decide-tiny)"
-if ! gw_is_running decide-tiny; then
-  assert_skip "decide-tiny could not be started on the fixture host (rc=${rc}): $(gw_out | head -c 300 | tr '\n' ' ')" "no-suite profile cannot be exercised here"
-else
-  assert_eq 1 "$(b2i out_has 'NOT validated|could not be validated|no llmctl validation suite')" "no-suite default: loud warning, never a silent pass"
-  assert_eq 0 "$(gw_count '^svc_stop ')" "no-suite default: the profile is NOT stopped"
-  assert_eq 0 "$(python3 -I -c 'import json,sys
+assert_eq 1 "$(gw_count '^svc_start decide-tiny$')" "decide-tiny was started (in quarantine) for its validation"
+assert_eq 1 "$(gw_count '^svc_stop decide-tiny$')" "default (strict): the profile is stopped"
+assert_eq 0 "$(b2i gw_is_running decide-tiny)" "...nothing left running"
+assert_eq 1 "$(( rc != 0 ? 1 : 0 ))" "...exit non-zero (rc=${rc})"
+assert_eq 1 "$(b2i out_has 'no (llmctl )?validation suite|implemented by no decide driver')" "...the message names why it cannot be validated (jev-verdict has no driver)"
+assert_eq 0 "$(python3 -I -c 'import json,sys
 try: print(1 if json.load(open(sys.argv[1])).get("status") == "pass" else 0)
-except OSError: print(0)' "${LLMCTL_STATE_DIR}/validation/decide-tiny.json")" "no-suite default: nothing records a PASS"
-  assert_eq 1 "$(gw_run "${L}" require-validated decide-tiny)" "no-suite default: require-validated refuses"
-  reset_world
-  export GW_REAL_VALIDATE=1
-  rc="$(gw_run env LLMCTL_VALIDATE_STRICT=1 "${L}" start decide-tiny)"
-  assert_eq 1 "$(gw_count '^svc_stop decide-tiny$')" "no-suite STRICT (LLMCTL_VALIDATE_STRICT=1): the profile is stopped (RED: no strict mode today)"
-  assert_eq 1 "$(( rc != 0 ? 1 : 0 ))" "no-suite STRICT: exit non-zero (rc=${rc})"
-  assert_eq 1 "$(b2i out_has 'no (llmctl )?validation suite|implemented by no decide driver')" "no-suite STRICT: the message names why it cannot be validated (no suite / jev-verdict has no driver)"
-fi
+except OSError: print(0)' "${LLMCTL_STATE_DIR}/validation/decide-tiny.json")" "...nothing records a PASS"
+assert_eq 1 "$(gw_run "${L}" require-validated decide-tiny)" "...require-validated refuses"
+reset_world
+export GW_REAL_VALIDATE=1
+rc="$(gw_run env LLMCTL_VALIDATE_STRICT=0 "${L}" start decide-tiny)"
+assert_eq 1 "$(gw_count '^svc_stop decide-tiny$')" "LLMCTL_VALIDATE_STRICT=0 on a consumer-facing profile: refused, stopped"
+assert_eq 1 "$(( rc != 0 ? 1 : 0 ))" "...exit non-zero (rc=${rc})"
 unset GW_REAL_VALIDATE
 
-echo "== (c) LLMCTL_VALIDATE_ON_START=0 still disables the hook (hermetic tests)"
+echo "== (c) LLMCTL_VALIDATE_ON_START=0 still disables the hook inside the test harness (LLMCTL_VALIDATE_HERMETIC=1; refused outside it: tests/test_validation_enforcement.sh)"
 reset_world
 rc="$(GW_VALIDATE_RC=1 gw_run env LLMCTL_VALIDATE_ON_START=0 "${L}" start small)"
 assert_eq 0 "${rc}" "ON_START=0: start exits 0 even though a validator would FAIL"
