@@ -146,6 +146,23 @@ _val_expect_model() {
   done < <(catalog_files "$1")
 }
 
+# _val_expect_model_path <profile> - what a server of the profile loads: the profile directory (colibri, onnx) or the
+# first non-mmproj catalog file (llama). The judge compares the probed process's model with it (finding 6).
+_val_expect_model_path() {
+  case "$(catalog_engine "$1")" in
+    colibri|onnx) echo "${LLMCTL_MODELS_DIR}/$1" ;;
+    *) echo "${LLMCTL_MODELS_DIR}/$1/$(_val_expect_model_file "$1")" ;;
+  esac
+}
+
+# _val_expect_model_file <profile> - the first non-mmproj catalog file of the profile.
+_val_expect_model_file() {
+  local name role
+  while IFS='|' read -r name _ _ role; do
+    [[ "${role}" != "mmproj" ]] && { echo "${name}"; return 0; }
+  done < <(catalog_files "$1")
+}
+
 # _val_downloaded <profile> - every catalog file of the profile is present.
 _val_downloaded() {
   local name
@@ -335,6 +352,7 @@ validate_profile() {
     local -a jargs=(run --suite "${LLMCTL_VALIDATION_SUITES_DIR}/${s}" --endpoint "${endpoint}"
                     --expect-model "$(_val_expect_model "${p}")" --evidence "${run_ev}")
     [[ "${json}" == "1" ]] && jargs+=(--json)
+    [[ -z "${host}" ]] && jargs+=(--expect-model-path "$(_val_expect_model_path "${p}")")
     vfile="$(mktemp)"; jargs+=(--verdict-file "${vfile}")
     rf="$(mktemp)"; rfiles+=("${rf}"); jargs+=(--report-file "${rf}")
     # background + wait: bash runs a pending trap as soon as `wait` is interrupted (a foreground child would

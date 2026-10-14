@@ -651,6 +651,120 @@ def served_model_ids(endpoint, timeout):
         raise NoAnswer("malformed /v1/models response: %.200s" % json.dumps(d))
 
 
+# --- the PROCESS that answers (finding 6 of the 2026-10-14 review) --------------------------------------------------
+_LOOPBACK = ("127.0.0.1", "localhost", "::1")
+
+
+def _listening_pids(port):
+    """pids of THIS user's processes holding a LISTEN socket on TCP `port` (any address), from /proc/net/tcp{,6} and a
+    /proc/<pid>/fd scan. Processes of other users are never inspected (Constitution 11.4.174). Linux only; [] elsewhere."""
+    inodes = set()
+    for f in ("/proc/net/tcp", "/proc/net/tcp6"):
+        try:
+            with open(f) as fh:
+                rows = fh.read().splitlines()[1:]
+        except OSError:
+            continue
+        for row in rows:
+            parts = row.split()
+            if len(parts) < 10 or parts[3] != "0A":       # 0A = TCP_LISTEN
+                continue
+            try:
+                if int(parts[1].rsplit(":", 1)[1], 16) == port and parts[9] != "0":
+                    inodes.add("socket:[%s]" % parts[9])
+            except (ValueError, IndexError):
+                continue
+    if not inodes:
+        return []
+    uid, pids = os.getuid(), []
+    try:
+        entries = os.listdir("/proc")
+    except OSError:
+        return []
+    for d in entries:
+        if not d.isdigit():
+            continue
+        try:
+            if os.stat("/proc/" + d).st_uid != uid:
+                continue
+            for fd in os.listdir("/proc/%s/fd" % d):
+                try:
+                    if os.readlink("/proc/%s/fd/%s" % (d, fd)) in inodes:
+                        pids.append(int(d))
+                        break
+                except OSError:
+                    continue
+        except OSError:
+            continue
+    return pids
+
+
+def _cmdline_model(pid):
+    """The model path on a server's command line (--model/-m/--model-dir VALUE or --model=VALUE; a relative path is
+    resolved against the process's cwd), None when it names none."""
+    try:
+        with open("/proc/%d/cmdline" % pid, "rb") as fh:
+            argv = [x.decode("utf-8", "replace") for x in fh.read().split(b"\0") if x]
+        cwd = os.readlink("/proc/%d/cwd" % pid)
+    except OSError:
+        return None
+    for i, t in enumerate(argv):
+        for flag in ("--model", "-m", "--model-dir"):
+            if t == flag and i + 1 < len(argv) and argv[i + 1]:
+                return os.path.join(cwd, argv[i + 1])
+            if t.startswith(flag + "=") and len(t) > len(flag) + 1:
+                return os.path.join(cwd, t[len(flag) + 1:])
+    return None
+
+
+def served_model_info(endpoint, expected, ids, timeout):
+    """What the probed server really loads, from every source that can say it: the cmdline of the process listening on
+    the endpoint's loopback port, absolute-path ids of /v1/models, and /props model_path. Returns a dict with
+    confirmed (bool), sources, path/size/mtime_ns when confirmed, and `mismatch` (a message) when ANY source names a file
+    that is not `expected` (compared by realpath)."""
+    sp = urllib.parse.urlsplit(endpoint)
+    found = []
+    try:
+        port = sp.port
+    except ValueError:
+        port = None
+    if (sp.hostname or "").lower() in _LOOPBACK and port:
+        for pid in _listening_pids(port):
+            m = _cmdline_model(pid)
+            if m:
+                found.append(("cmdline", m, pid))
+    for i in ids:
+        if isinstance(i, str) and os.path.isabs(i):
+            found.append(("v1/models", i, None))
+    try:
+        props = http_json(endpoint.rstrip("/") + "/props", timeout=min(timeout, 10))
+        mp = props.get("model_path")
+        if isinstance(mp, str) and os.path.isabs(mp):
+            found.append(("props", mp, None))
+    except (NoAnswer, Rejected):
+        pass
+    exp = os.path.realpath(expected)
+    info = {"expected": expected, "confirmed": False, "sources": [], "path": None}
+    bad = [(src, path) for src, path, _ in found if os.path.realpath(path) != exp]
+    if bad:
+        info["mismatch"] = "the probed server loads %s, not the profile's model file %s" % (
+            "; ".join("%s (%s)" % (p, s) for s, p in bad), expected)
+        info["served"] = [{"source": s, "path": p} for s, p in bad]
+        return info
+    if found:
+        try:
+            st = os.stat(exp)
+            info.update({"size": st.st_size, "mtime_ns": st.st_mtime_ns})
+        except OSError:
+            pass
+        info.update({"confirmed": True, "path": expected, "sources": sorted({s for s, _, _ in found}),
+                     "pids": sorted({p for _, _, p in found if p})})
+    else:
+        info["note"] = ("the probed process's model file could not be established (no listening process of this user "
+                        "with a --model argument, no path in /v1/models or /props)")
+    return info
+
+
 def ask(endpoint, suite, prompt, image_path=None, timeout=180):
     req = dict(suite.get("request", {}))
     if image_path:
@@ -838,6 +952,19 @@ def run(args):
             counts["undetermined"] += 1
             return finish()
         out("model identity: endpoint serves %s" % ids)
+
+    # 3b. the model FILE of the probed process (local runs: --expect-model-path)
+    if args.expect_model_path:
+        sm = served_model_info(args.endpoint, args.expect_model_path, ids, timeout)
+        report["served_model"] = sm
+        if sm.get("mismatch"):
+            out("[UNDETERMINED] served model file: %s" % sm["mismatch"])
+            counts["undetermined"] += 1
+            return finish()
+        if sm["confirmed"]:
+            out("served model file: %s (confirmed by %s)" % (sm["path"], ", ".join(sm["sources"])))
+        else:
+            out("[NOTE] served model file UNCONFIRMED: %s" % sm["note"])
 
     # 4. probes
     if suite["kind"] == "embedding":
@@ -1413,6 +1540,7 @@ def main(argv=None):
     r.add_argument("--suite", required=True)
     r.add_argument("--endpoint", required=True)
     r.add_argument("--expect-model", default="")
+    r.add_argument("--expect-model-path", default="", help="the file/dir the probed process must load (local runs)")
     r.add_argument("--json", action="store_true")
     r.add_argument("--evidence", default="")
     r.add_argument("--verdict-file", default="", help="write the final verdict word (PASS/FAIL/UNDETERMINED) here")

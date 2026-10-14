@@ -10,7 +10,7 @@ decoded bytes -> fixture id via the suite's expectations.json; the prompt text s
 image's own probe with that prompt first, else any probe with that prompt). The answer table is keyed
 "<image fixture id>/<probe id>" (vision) or "<case id>" (chat/coder). Unknown key -> HTTP 500.
 
-Usage: fake_openai.py --suite DIR [--suite DIR2 ...] --answers FILE --port-file FILE [--model-id ID]
+Usage: fake_openai.py --suite DIR [--suite DIR2 ...] --answers FILE --port-file FILE [--model-id ID] [--model PATH] [--props-model-path PATH]
                       [--mode normal|reject-images|error500|nondeterministic|nondeterministic-third|slow|trickle|endless|redirect|malformed-message|malformed-choice|truncate|reasoning-budget|reasoning-empty-stop]
 """
 import argparse
@@ -32,6 +32,8 @@ def main():
     ap.add_argument("--redirect-to", default="http://127.0.0.1:9/v1/chat/completions")
     ap.add_argument("--record-auth", default="", help="append the Authorization header of every request to FILE ('-' when absent)")
     ap.add_argument("--max-seconds", type=int, default=900, help="self-terminate (a leaked fixture must not outlive its test)")
+    ap.add_argument("--model", default="", help="NEVER read: only shapes this process's cmdline like llama-server's (--model PATH)")
+    ap.add_argument("--props-model-path", default="", help="serve GET /props with this model_path (llama-server shape)")
     a = ap.parse_args()
     answers = json.load(open(a.answers))
     by_sha, prompts = {}, []          # image sha -> fixture id ; [(fixture_id or None, probe_id, prompt)]
@@ -105,6 +107,8 @@ def main():
                 return self.send(200, {"object": "list", "data": [{"id": a.model_id}]})
             if self.path == "/health":
                 return self.send(200, {"status": "ok"})
+            if self.path == "/props" and a.props_model_path:
+                return self.send(200, {"model_path": a.props_model_path, "total_slots": 1})
             self.send(404, {"error": "not found"})
 
         def do_POST(self):
