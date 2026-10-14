@@ -1076,7 +1076,7 @@ _sched_start_impl() {
         fi
       done
       rm -f "${plan_file}"
-      err "cannot start '${p}': needs ${ram} MiB RAM + ${vram} MiB VRAM, but only $(( ram_budget - used_ram )) MiB RAM + $(( vram_budget - used_vram )) MiB VRAM remain"
+      err "cannot start '${p}': needs ${ram} MiB RAM + ${vram} MiB VRAM, but only $(( ram_budget - used_ram )) MiB RAM + $(( vram_budget - used_vram )) MiB VRAM remain (RAM budget = the tighter of MemAvailable - 4 GiB and 60% of MemTotal minus what running llmctl profiles reserve: $(json_query "${plan_file}" 'd["budgets"].get("ram_cap_mb", "?")') MiB cap, Constitution 12.6)"
       [[ -n "${suggestion}" ]] && err "suggested alternative that fits now: llmctl start ${suggestion}"
       # Only suggest 'switch' when something else is ACTUALLY running to
       # free room from - a real, live-hit bug (2026-09-22) suggested

@@ -189,6 +189,18 @@ _dl_verify_file() {
   return 0
 }
 
+# _dl_warn_unpinned <profile> - a LOUD warning when the profile downloads from a moving revision (not a 40-hex commit):
+# the bytes are still checked against the catalog sha256 (or the HF API's, for an unpinned file), but what "main"
+# means can change upstream (review 2026-10-14 finding 10; list them all: llmctl models pins).
+_dl_warn_unpinned() {
+  local p="$1" rev
+  [[ -n "${p}" ]] && catalog_exists "${p}" 2>/dev/null || return 0
+  rev="$(catalog_field "${p}" hf_revision main)"
+  [[ "${rev}" =~ ^[0-9a-f]{40}$ ]] && return 0
+  warn "UNPINNED: '${p}' downloads from the moving revision '${rev}' of $(catalog_hf_repo "${p}") - pin hf_revision to a commit in models/catalog.json (llmctl models pins lists every unpinned entry)"
+  return 0
+}
+
 # --- per-file download -------------------------------------------------------
 _dl_download_file() {
   # _dl_download_file <profile> <dest_dir> <name> <size> <sha256>
@@ -778,6 +790,7 @@ _dl_validate_colibri() {
 # --- public entry points -----------------------------------------------------
 # download_profile <profile>
 download_profile() {
+  _dl_warn_unpinned "${1:-}"
   local profile="$1"
   catalog_exists "${profile}" || die "unknown profile: ${profile} (see: llmctl models list)"
   ensure_state_dirs

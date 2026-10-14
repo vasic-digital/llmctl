@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # test_planner.sh - deterministic planner tests against the hardware fixtures.
 # Expected values below are derived from the catalog sizes and the documented
-# memory model (RAM budget = avail - 4GiB, VRAM budget = 85% of REAL FREE
+# memory model (RAM budget = min(avail - 4GiB, 60% of total - reserved; the 60% cap since 2026-10-14, Constitution 12.6), VRAM budget = 85% of REAL FREE
 # VRAM when measured, else 85% of total as a fallback, KV = ctx * parallel /
 # 8 MiB). All fixtures here predate the free-VRAM field and so exercise the
 # fallback path; hw-vram-contended.json (below) is the one fixture that
@@ -24,7 +24,7 @@ plan_for() {
 # --- baseline: Ryzen 7 2700X / 32GB / RTX 3060 12GB / NVMe -------------------
 plan="$(plan_for baseline)"
 assert_eq "baseline" "$(printf '%s' "${plan}" | json_stdin 'd["tier"]')" "baseline tier"
-assert_eq "25904" "$(printf '%s' "${plan}" | json_stdin 'd["budgets"]["ram_mb"]')" "baseline RAM budget (30000-4096)"
+assert_eq "19660" "$(printf '%s' "${plan}" | json_stdin 'd["budgets"]["ram_mb"]')" "baseline RAM budget (min(30000-4096=25904, 32768*60%=19660): the 60% cap binds)"
 assert_eq "10444" "$(printf '%s' "${plan}" | json_stdin 'd["budgets"]["vram_mb"]')" "baseline VRAM budget (12288*0.85)"
 # decide-tiny (min_tier below-minimum, 1592 MiB GPU footprint), decide
 # (min_tier baseline, 3671 MiB), the onnx encoder decide-nli (min_tier
@@ -32,23 +32,23 @@ assert_eq "10444" "$(printf '%s' "${plan}" | json_stdin 'd["budgets"]["vram_mb"]
 # decide-2b (min_tier baseline, 3006 MiB) all fit a baseline host and join
 # the recommended set; decide-pro and decide-max stay tier-gated to
 # workstation.
-assert_eq "fast coder vision moe-fast small decide-tiny decide decide-nli decide-2b decide-julia decide-kev-08b decide-kev-4b decide-laya decide-lev" \
+assert_eq "fast vision moe-fast small decide-tiny decide decide-nli decide-2b decide-julia decide-kev-08b decide-kev-4b decide-laya decide-lev" \
   "$(printf '%s' "${plan}" | json_stdin '" ".join(d["recommended"])')" \
-  "baseline recommended set (decide-tiny/decide + iter2 decide-nli/decide-2b + the native decide-julia/kev-08b/kev-4b/laya/lev; decide-kev-9b tier-gated to workstation)"
+  "baseline recommended set (coder no longer fits: 21793 MiB RAM > the 19660 MiB 60% cap; decide-tiny/decide + iter2 decide-nli/decide-2b + the native decide-julia/kev-08b/kev-4b/laya/lev; decide-kev-9b tier-gated to workstation)"
 assert_eq "gpu"  "$(printf '%s' "${plan}" | json_stdin 'd["profiles"]["fast"]["mode"]')"  "baseline fast mode"
-assert_eq "cpu"  "$(printf '%s' "${plan}" | json_stdin 'd["profiles"]["coder"]["mode"]')" "baseline coder mode (17.7GiB > 10444MiB VRAM)"
+assert_eq "none" "$(printf '%s' "${plan}" | json_stdin 'd["profiles"]["coder"]["mode"]')" "baseline coder mode (17.7GiB > 10444MiB VRAM, and its 21793 MiB RAM > the 19660 MiB 60% cap)"
 assert_eq "5716" "$(printf '%s' "${plan}" | json_stdin 'd["profiles"]["fast"]["vram_mb"]')" "baseline fast VRAM footprint (4692 model + 1024 KV)"
 assert_eq "21793" "$(printf '%s' "${plan}" | json_stdin 'd["profiles"]["coder"]["ram_mb"]')" "baseline coder RAM footprint (17697 + 4096 KV)"
 assert_eq "False" "$(printf '%s' "${plan}" | json_stdin 'd["profiles"]["ws-dense-32b"]["tier_ok"]')" "baseline gates ws-dense-32b by tier"
-# Group 2 arithmetic (RAM budget 25904, VRAM budget 10444): moe-fast
+# Group 2 arithmetic (as of the avail-4GiB budget 25904; since 2026-10-14 the budget is the 19660 60% cap and the groups below are the measured planner output; VRAM budget 10444): moe-fast
 # (2048/3137) + small (2048/2950) + decide-tiny (2048/1592) + decide
 # (2048/3671) = VRAM 11350-2228=9122 (captured; weights footprints differ
 # per profile) still fits, and the CPU-only decide-nli (RAM 3006, VRAM 0)
 # joins on RAM alone (RAM 2048*4+3006 = 11198 <= 25904). decide-2b
 # (2048/3006) would push VRAM to 12128 > 10444 -> new group 3 of one.
-assert_eq "fast coder vision|moe-fast small decide-tiny decide decide-nli|decide-2b decide-julia decide-kev-08b|decide-kev-4b decide-laya|decide-lev" \
+assert_eq "fast vision|moe-fast small|decide-tiny decide decide-nli decide-2b decide-julia|decide-kev-08b decide-kev-4b|decide-laya decide-lev" \
   "$(printf '%s' "${plan}" | json_stdin '"|".join(" ".join(g["profiles"]) for g in d["coresidency_groups"])')" \
-  "baseline co-residency groups (decide-nli joins group 2 as VRAM-0; decide-2b spills to group 3 with decide-julia/decide-kev-08b, whose measured working-set overheads fill the VRAM budget; decide-kev-4b and decide-laya share group 4; decide-lev ends alone in group 5)"
+  "baseline co-residency groups under the 60% RAM cap (measured planner output 2026-10-14)"
 
 # --- onnx footprint branch (decide-nli) --------------------------------------
 # Catalog pins: files sum to 1744456292 B = 1663 MiB (1741985401 model.onnx
@@ -61,7 +61,7 @@ assert_eq "cpu"  "$(printf '%s' "${plan}" | json_stdin 'd["profiles"]["decide-nl
 assert_eq "3006" "$(printf '%s' "${plan}" | json_stdin 'd["profiles"]["decide-nli"]["ram_mb"]')" "decide-nli RAM reservation = 1663*3//2 + 512 = 3006 MiB"
 assert_eq "0"    "$(printf '%s' "${plan}" | json_stdin 'd["profiles"]["decide-nli"]["vram_mb"]')" "decide-nli VRAM need is 0 (CPU inference)"
 assert_eq "512"  "$(printf '%s' "${plan}" | json_stdin 'd["profiles"]["decide-nli"]["ctx"]')" "decide-nli ctx default 512 (encoder, not a generation ctx)"
-assert_eq "True" "$(printf '%s' "${plan}" | json_stdin 'd["profiles"]["decide-nli"]["fits"]')" "decide-nli fits baseline (3006 <= 25904)"
+assert_eq "True" "$(printf '%s' "${plan}" | json_stdin 'd["profiles"]["decide-nli"]["fits"]')" "decide-nli fits baseline (3006 <= 19660)"
 assert_eq "True" "$(printf '%s' "${plan}" | json_stdin 'd["profiles"]["decide-nli"]["recommended"]')" "decide-nli recommended on baseline (min_tier below-minimum)"
 # decide-2b / decide-max llama footprints (KV ceil(8192*2*0.53125/8)=1088):
 assert_eq "3006" "$(printf '%s' "${plan}" | json_stdin 'd["profiles"]["decide-2b"]["vram_mb"]')" "decide-2b GPU footprint (1918 weights + 1088 KV)"
@@ -183,55 +183,55 @@ assert_eq "cpu" "$(printf '%s' "${plan}" | json_stdin 'd["profiles"]["small"]["m
 #   decide-max:  size 9527501280 B = 9086 MiB; KV 1088
 #     -> gpu {ram 2048, vram 10174}, cpu {ram 10174}
 
-# baseline (RAM budget 25904, VRAM budget 10444, tier baseline):
-#   decide-tiny: gpu min(10444//1592=6, 25904//2048=12) = 6; cpu 25904//1592 = 16
-#   decide:      gpu min(10444//3671=2, 12) = 2;              cpu 25904//3671 = 7
+# baseline (RAM budget 19660 = the 60% cap, VRAM budget 10444, tier baseline):
+#   decide-tiny: gpu min(10444//1592=6, 19660//2048=9) = 6;  cpu 19660//1592 = 12
+#   decide:      gpu min(10444//3671=2, 9) = 2;               cpu 19660//3671 = 5
 #   decide-pro:  tier-gated (baseline < workstation) -> 0 with reason
-#   decide-nli:  gpu ALWAYS 0 (CPU-only engine);                cpu 25904//3006 = 8
-#   decide-2b:   gpu min(10444//3006=3, 12) = 3;               cpu 25904//3006 = 8
+#   decide-nli:  gpu ALWAYS 0 (CPU-only engine);                cpu 19660//3006 = 6
+#   decide-2b:   gpu min(10444//3006=3, 9) = 3;                cpu 19660//3006 = 6
 #   decide-max:  tier-gated (baseline < workstation) -> 0 with reason
 plan="$(plan_for baseline)"
 di() { printf '%s' "${plan}" | json_stdin "d[\"decision_instances\"][\"$1\"][\"$2\"]"; }
-assert_eq 6  "$(di decide-tiny instances_gpu)" "baseline decide-tiny gpu instances (min(10444//1592, 25904//2048)=6)"
-assert_eq 16 "$(di decide-tiny instances_cpu)" "baseline decide-tiny cpu instances (25904//1592=16)"
+assert_eq 6  "$(di decide-tiny instances_gpu)" "baseline decide-tiny gpu instances (min(10444//1592, 19660//2048)=6)"
+assert_eq 12 "$(di decide-tiny instances_cpu)" "baseline decide-tiny cpu instances (19660//1592=12)"
 assert_eq 4  "$(printf '%s' "${plan}" | json_stdin 'd["decision_instances"]["decide-tiny"]["per_instance"]["slots"]')" "baseline decide-tiny slots per instance (parallel=4)"
-assert_eq 64 "$(di decide-tiny total_decision_slots)" "baseline decide-tiny total slots (max(6,16)*4=64)"
+assert_eq 48 "$(di decide-tiny total_decision_slots)" "baseline decide-tiny total slots (max(6,12)*4=48)"
 assert_eq 2  "$(di decide instances_gpu)" "baseline decide gpu instances (min(10444//3671, 12)=2)"
-assert_eq 7  "$(di decide instances_cpu)" "baseline decide cpu instances (25904//3671=7)"
-assert_eq 14 "$(di decide total_decision_slots)" "baseline decide total slots (max(2,7)*2=14)"
+assert_eq 5  "$(di decide instances_cpu)" "baseline decide cpu instances (19660//3671=5)"
+assert_eq 10 "$(di decide total_decision_slots)" "baseline decide total slots (max(2,5)*2=10)"
 assert_eq 0  "$(di decide-pro instances_gpu)" "baseline decide-pro tier-gated to 0 gpu instances"
 assert_eq 0  "$(di decide-pro instances_cpu)" "baseline decide-pro tier-gated to 0 cpu instances"
 assert_contains "$(printf '%s' "${plan}" | json_stdin 'd["decision_instances"]["decide-pro"].get("reason", "")')" \
   "tier gate" "baseline decide-pro carries a tier-gate reason"
 # onnx fixture arithmetic #1 (baseline): decide-nli is CPU-only - GPU
 # instances are ALWAYS 0 (never the zero-cost divide-by-zero case); CPU
-# instances divide the SAME 25904 MiB RAM budget by the 3006 MiB onnx
+# instances divide the SAME 19660 MiB RAM budget by the 3006 MiB onnx
 # reservation; parallel=1 -> 1 slot per instance.
 assert_eq 0 "$(di decide-nli instances_gpu)" "baseline decide-nli gpu instances ALWAYS 0 (CPU-only onnx encoder)"
-assert_eq 8 "$(di decide-nli instances_cpu)" "baseline decide-nli cpu instances (25904//3006=8)"
+assert_eq 6 "$(di decide-nli instances_cpu)" "baseline decide-nli cpu instances (19660//3006=6)"
 assert_eq 0 "$(printf '%s' "${plan}" | json_stdin 'd["decision_instances"]["decide-nli"]["per_instance"]["vram_mb"]')" "baseline decide-nli per-instance VRAM 0"
 assert_eq 3006 "$(printf '%s' "${plan}" | json_stdin 'd["decision_instances"]["decide-nli"]["per_instance"]["ram_mb"]')" "baseline decide-nli per-instance RAM 3006 (1663*3//2+512)"
 assert_eq 1 "$(printf '%s' "${plan}" | json_stdin 'd["decision_instances"]["decide-nli"]["per_instance"]["slots"]')" "baseline decide-nli slots per instance (parallel=1: per-option forward passes)"
-assert_eq 8 "$(di decide-nli total_decision_slots)" "baseline decide-nli total slots (max(0,8)*1=8)"
+assert_eq 6 "$(di decide-nli total_decision_slots)" "baseline decide-nli total slots (max(0,6)*1=6)"
 assert_eq 3 "$(di decide-2b instances_gpu)" "baseline decide-2b gpu instances (min(10444//3006, 12)=3)"
-assert_eq 8 "$(di decide-2b instances_cpu)" "baseline decide-2b cpu instances (25904//3006=8)"
-assert_eq 16 "$(di decide-2b total_decision_slots)" "baseline decide-2b total slots (max(3,8)*2=16)"
+assert_eq 6 "$(di decide-2b instances_cpu)" "baseline decide-2b cpu instances (19660//3006=6)"
+assert_eq 12 "$(di decide-2b total_decision_slots)" "baseline decide-2b total slots (max(3,6)*2=12)"
 assert_eq 0 "$(di decide-max instances_gpu)" "baseline decide-max tier-gated to 0"
 assert_contains "$(printf '%s' "${plan}" | json_stdin 'd["decision_instances"]["decide-max"].get("reason", "")')" \
   "tier gate" "baseline decide-max carries a tier-gate reason"
 
-# workstation fixture (tier datacenter, RAM 235904, VRAM 27852):
-#   decide-tiny: gpu min(27852//1592=17, 235904//2048=115) = 17; cpu 235904//1592 = 148
-#   decide:      gpu min(27852//3671=7, 115) = 7;               cpu 235904//3671 = 64
-#   decide-pro:  gpu min(27852//5260=5, 115) = 5;               cpu 235904//5260 = 44
+# workstation fixture (tier datacenter, RAM budget min(235904, 262144*60%=157286) = 157286, VRAM 27852):
+#   decide-tiny: gpu min(27852//1592=17, 157286//2048=76) = 17; cpu 157286//1592 = 98
+#   decide:      gpu min(27852//3671=7, 76) = 7;                cpu 157286//3671 = 42
+#   decide-pro:  gpu min(27852//5260=5, 76) = 5;                cpu 157286//5260 = 29
 plan="$(plan_for workstation)"
-assert_eq 17 "$(di decide-tiny instances_gpu)" "workstation decide-tiny gpu instances (min(27852//1592, 235904//2048)=17)"
-assert_eq 148 "$(di decide-tiny instances_cpu)" "workstation decide-tiny cpu instances (235904//1592=148)"
-assert_eq 7  "$(di decide instances_gpu)" "workstation decide gpu instances (min(27852//3671, 115)=7)"
-assert_eq 64 "$(di decide instances_cpu)" "workstation decide cpu instances (235904//3671=64)"
-assert_eq 5  "$(di decide-pro instances_gpu)" "workstation decide-pro gpu instances (min(27852//5260, 115)=5)"
-assert_eq 44 "$(di decide-pro instances_cpu)" "workstation decide-pro cpu instances (235904//5260=44)"
-assert_eq 88 "$(di decide-pro total_decision_slots)" "workstation decide-pro total slots (max(5,44)*2=88)"
+assert_eq 17 "$(di decide-tiny instances_gpu)" "workstation decide-tiny gpu instances (min(27852//1592, 157286//2048)=17)"
+assert_eq 98 "$(di decide-tiny instances_cpu)" "workstation decide-tiny cpu instances (157286//1592=98)"
+assert_eq 7  "$(di decide instances_gpu)" "workstation decide gpu instances (min(27852//3671, 76)=7)"
+assert_eq 42 "$(di decide instances_cpu)" "workstation decide cpu instances (157286//3671=42)"
+assert_eq 5  "$(di decide-pro instances_gpu)" "workstation decide-pro gpu instances (min(27852//5260, 76)=5)"
+assert_eq 29 "$(di decide-pro instances_cpu)" "workstation decide-pro cpu instances (157286//5260=29)"
+assert_eq 58 "$(di decide-pro total_decision_slots)" "workstation decide-pro total slots (max(5,29)*2=58)"
 
 # tiny fixture (tier below-minimum, RAM budget max(0, 1500-4096)=0, no GPU):
 # everything is 0; decide/decide-pro carry a TIER-GATE reason, decide-tiny
@@ -261,11 +261,11 @@ assert_contains "$(printf '%s' "${plan}" | json_stdin 'd["decision_instances"]["
 # of their own budgets.
 plan="$(plan_for vram-contended)"
 assert_eq 1  "$(di decide-tiny instances_gpu)" "vram-contended decide-tiny gpu instances (min(2550//1592, 12)=1, down from 6 on baseline)"
-assert_eq 16 "$(di decide-tiny instances_cpu)" "vram-contended decide-tiny cpu instances UNCHANGED (25904//1592=16)"
+assert_eq 12 "$(di decide-tiny instances_cpu)" "vram-contended decide-tiny cpu instances UNCHANGED (19660//1592=12)"
 assert_eq 0  "$(di decide instances_gpu)" "vram-contended decide gpu instances (2550 < 3671 -> 0, down from 2 on baseline)"
-assert_eq 7  "$(di decide instances_cpu)" "vram-contended decide cpu instances UNCHANGED (25904//3671=7)"
+assert_eq 5  "$(di decide instances_cpu)" "vram-contended decide cpu instances UNCHANGED (19660//3671=5)"
 
-# constrained (RAM budget 25904, VRAM budget 6963):
+# constrained (RAM budget 19660 = the 60% cap of 32768, VRAM budget 6963):
 #   decide-tiny: gpu min(6963//1592=4, 12) = 4;  decide: gpu min(6963//3671=1, 12) = 1
 plan="$(plan_for constrained)"
 assert_eq 4  "$(di decide-tiny instances_gpu)" "constrained decide-tiny gpu instances (min(6963//1592, 12)=4)"
@@ -373,7 +373,7 @@ PYEOF
   # mutation: a chat profile silently dropped from the new recommended set is caught
   python3 - "${TEST_TMP}/now-baseline.json" "${TEST_TMP}/now-baseline-mut.json" <<'PYEOF'
 import json, sys
-d = json.load(open(sys.argv[1])); d["recommended"].remove("coder"); json.dump(d, open(sys.argv[2], "w"))
+d = json.load(open(sys.argv[1])); d["recommended"].remove("fast"); json.dump(d, open(sys.argv[2], "w"))
 PYEOF
   assert_eq "1" "$(python3 - "${TEST_TMP}/prev-baseline.json" "${TEST_TMP}/now-baseline-mut.json" <<'PYEOF'
 import json, sys
@@ -381,7 +381,7 @@ prev, now = json.load(open(sys.argv[1])), json.load(open(sys.argv[2]))
 removed = [n for n in prev["recommended"] if n not in now["recommended"]]
 print(1 if removed else 0)
 PYEOF
-)" "SC-012 mutation: removing 'coder' from the new recommended set is detected as a removal"
+)" "SC-012 mutation: removing 'fast' from the new recommended set is detected as a removal (coder no longer fits baseline under the 60% RAM cap)"
 else
   assert_skip "git tag v3.0.2 (previous release catalog) not available in this checkout" "SC-012 planner comparison vs previous release"
 fi

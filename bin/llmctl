@@ -71,6 +71,9 @@ MODELS
                               it names none - NOT validated; with --live exits 2)
                               and (when running or with --live) run that suite
 
+  models pins                 list every UNPINNED Hugging Face revision and file
+                              sha256 of the catalog (exit 1 while any remains)
+
 ENGINES
   build <llama|colibri|onnx|decide|all>   build engines (a target is required; decide = Go decision binary)
                               (backend auto-detect: CUDA / Metal / ROCm / CPU)
@@ -225,7 +228,9 @@ main() {
                   [[ "$#" -eq 1 || "$2" == "--live" ]] || die "usage: llmctl models verify <profile> [--live]"
                   verify_profile "$1"
                   models_verify_gate "$1" "${2:-}" ;;
-        *)        die "unknown models subcommand: ${sub} (list|download|verify)" ;;
+        pins)     # supply-chain gate: exit 1 while any revision / file sha256 is unpinned
+                  catalog_unpinned ;;
+        *)        die "unknown models subcommand: ${sub} (list|download|verify|pins)" ;;
       esac
       ;;
     build)

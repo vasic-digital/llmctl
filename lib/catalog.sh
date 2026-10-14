@@ -178,6 +178,28 @@ catalog_decision_protocol() {
   json_query "${LLMCTL_CATALOG}" 'd["profiles"][argv[0]].get("decision",{}).get("protocol") or ""' "$1" 2>/dev/null || true
 }
 
+# catalog_unpinned - the supply-chain gate (review 2026-10-14 finding 10): every profile whose Hugging Face revision is
+# not a 40-hex commit (a moving branch such as "main") and every file without a pinned sha256. One "UNPINNED ..." line
+# each; rc 1 when there is any, 0 when everything is pinned. Values are never invented: a revision or a sha256 is pinned
+# in models/catalog.json only when it was verified (see docs/validation.md "Supply chain").
+catalog_unpinned() {
+  catalog_check
+  python3 -I - "${LLMCTL_CATALOG}" <<'PY'
+import json, re, sys
+c = json.load(open(sys.argv[1]))["profiles"]
+n = 0
+for name, p in c.items():
+    rev = p.get("hf_revision")
+    if not (isinstance(rev, str) and re.fullmatch(r"[0-9a-f]{40}", rev)):
+        print("UNPINNED revision %s %s@%s" % (name, p.get("hf_repo"), rev)); n += 1
+    for f in p.get("files", []):
+        if not f.get("sha256"):
+            print("UNPINNED sha256 %s %s" % (name, f.get("name"))); n += 1
+print("unpinned: %d" % n)
+sys.exit(1 if n else 0)
+PY
+}
+
 catalog_capability() { catalog_check; valid_id "$1" || return 1; json_query "${LLMCTL_CATALOG}" "' '.join(d[\"profiles\"][argv[0]][\"capability\"])" "$1"; }
 
 catalog_default() {
@@ -260,7 +282,14 @@ catalog_plan_json() {
   local hw_doc tier
   hw_doc="$(cat)"
   tier="$(printf '%s' "${hw_doc}" | catalog_classify_tier)"
-  LLMCTL_HW_DOC="${hw_doc}" LLMCTL_TIER="${tier}" python3 - "${LLMCTL_CATALOG}" <<'PYEOF'
+  # RAM already reserved by running llmctl profiles (the 60%-of-MemTotal cap of Constitution 12.6 counts all of them)
+  local reserved=0 f v
+  for f in "${LLMCTL_RUNTIME_DIR:-/nonexistent}"/*.run; do
+    [[ -e "${f}" ]] || continue
+    v="$(sed -n 's/^ram_mb=//p' "${f}" | head -1)"
+    [[ "${v}" =~ ^[0-9]+$ ]] && reserved=$(( reserved + v ))
+  done
+  LLMCTL_PLAN_RESERVED_RAM_MB="${reserved}" LLMCTL_HW_DOC="${hw_doc}" LLMCTL_TIER="${tier}" python3 - "${LLMCTL_CATALOG}" <<'PYEOF'
 import json, math, os, sys
 
 with open(sys.argv[1], "r", encoding="utf-8") as fh:
@@ -279,7 +308,24 @@ storage_free = hw["storage"]["free_mb"]
 tier = os.environ["LLMCTL_TIER"]
 tier_rank = {"below-minimum": 0, "baseline": 1, "workstation": 2, "datacenter": 3}
 
-ram_budget = max(0, ram_avail - 4096)          # 4 GiB RAM headroom
+# RAM admission budget = the TIGHTER of two constraints (review 2026-10-14 finding 10, Constitution 12.6):
+#   * live headroom: MemAvailable - 4 GiB (what the host can give right now; unchanged), and
+#   * the 60% cap: at most 60% of MemTotal for ALL llmctl profiles together, minus the RAM the running ones already
+#     reserve (LLMCTL_PLAN_RESERVED_RAM_MB, summed by the bash wrapper from the reservations). LLMCTL_RAM_CAP_PCT may
+#     LOWER the cap (1..60); a higher or malformed value is ignored (the cap stays 60).
+try:
+    ram_cap_pct = int(os.environ.get("LLMCTL_RAM_CAP_PCT", "60"))
+except ValueError:
+    ram_cap_pct = 60
+if not 1 <= ram_cap_pct <= 60:
+    ram_cap_pct = 60
+try:
+    reserved_ram = max(0, int(os.environ.get("LLMCTL_PLAN_RESERVED_RAM_MB", "0") or 0))
+except ValueError:
+    reserved_ram = 0
+ram_cap = ram_total * ram_cap_pct // 100
+ram_avail_budget = max(0, ram_avail - 4096)    # 4 GiB RAM headroom
+ram_budget = max(0, min(ram_avail_budget, ram_cap - reserved_ram))
 # Root-caused 2026-10-03 (real repro, not guessed): a profile reported
 # "fits: true" here, computed from the card's STATIC TOTAL capacity, then
 # genuinely OOM'd (cudaMalloc failed) at launch because something else
@@ -781,7 +827,9 @@ for name in sorted(catalog["profiles"].keys()):
 out = {
     "tier": tier,
     "budgets": {"ram_mb": ram_budget, "vram_mb": vram_budget,
-                "vram_live": vram_live, "storage_free_mb": storage_free},
+                "vram_live": vram_live, "storage_free_mb": storage_free,
+                "ram_cap_mb": ram_cap, "ram_cap_pct": ram_cap_pct, "ram_reserved_mb": reserved_ram,
+                "ram_avail_budget_mb": ram_avail_budget},
     "profiles": profiles,
     "decision_instances": decision_instances,
     "decision_mode": decide_mode,
@@ -807,8 +855,9 @@ import json, os, sys
 plan = json.loads(os.environ["LLMCTL_PLAN_DOC"])
 b = plan["budgets"]
 print("Host tier:   %s" % plan["tier"])
-print("Budgets:     RAM %d MiB (avail - 4GiB), VRAM %d MiB (total - 15%%), storage %d MiB free"
-      % (b["ram_mb"], b["vram_mb"], b["storage_free_mb"]))
+print("Budgets:     RAM %d MiB (min of avail - 4GiB = %s and %s%% cap %s - %s reserved), VRAM %d MiB (total - 15%%), storage %d MiB free"
+      % (b["ram_mb"], b.get("ram_avail_budget_mb", "?"), b.get("ram_cap_pct", 60), b.get("ram_cap_mb", "?"),
+         b.get("ram_reserved_mb", 0), b["vram_mb"], b["storage_free_mb"]))
 print("")
 print("%-16s %-6s %-9s %-8s %-8s %-6s %-5s %-4s %s" %
       ("profile", "port", "verdict", "mode", "RAM MiB", "VRAM", "ctx", "ngl", "why"))

@@ -1,0 +1,20 @@
+# Unpinned catalog entries known on 2026-10-14 (review finding 10). None could be pinned without network access: no
+# manifest, download record or evidence file in this repository names their upstream commit, and a sha256 computed from
+# a local download would only restate what was downloaded (trust on first use), so none was invented. This file is a
+# RATCHET: tests/test_supply_chain_ramcap.sh fails on any unpinned entry NOT listed here. Remove a line when it is pinned.
+UNPINNED revision fast unsloth/Llama-3.1-8B-Instruct-GGUF@main
+UNPINNED revision coder unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF@main
+UNPINNED revision vision ggml-org/gemma-3-4b-it-GGUF@main
+UNPINNED revision vision-pro ggml-org/gemma-3-12b-it-GGUF@main
+UNPINNED revision moe-fast ggml-org/gpt-oss-20b-GGUF@main
+UNPINNED revision small unsloth/Llama-3.2-3B-Instruct-GGUF@main
+UNPINNED revision ws-dense-32b bartowski/Qwen2.5-32B-Instruct-GGUF@main
+UNPINNED revision ws-moe-30b unsloth/Qwen3-30B-A3B-Instruct-2507-GGUF@main
+UNPINNED revision colibri-qwen36 Kreuzzelg/qwen36-35b-a3b-colibri-i4@main
+UNPINNED revision colibri-glm mastouri/GLM-5.2-colibri-int4-g64-with-int8-mtp@main
+UNPINNED sha256 colibri-qwen36 config.hf.json
+UNPINNED sha256 colibri-qwen36 config.json
+UNPINNED sha256 colibri-qwen36 qwen36_meta.json
+UNPINNED sha256 colibri-glm config.json
+UNPINNED sha256 colibri-glm generation_config.json
+UNPINNED sha256 colibri-glm tokenizer_config.json

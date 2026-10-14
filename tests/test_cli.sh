@@ -50,7 +50,8 @@ assert_contains "${captured}" "NVIDIA GeForce RTX 3060" "hw human output shows G
 # plan end-to-end via CLI
 captured="$("${LLMCTL}" plan)"
 assert_contains "${captured}" "Host tier:   baseline" "plan tier line"
-assert_contains "${captured}" "group 1: fast, coder, vision" "plan co-residency group 1"
+# since 2026-10-14 the RAM budget is also capped at 60% of MemTotal (Constitution 12.6): coder no longer fits beside them
+assert_contains "${captured}" "group 1: fast, vision" "plan co-residency group 1 (60% RAM cap)"
 
 # unknown profile -> clear error, exit 1
 captured="$(LLMCTL_DRY_RUN=1 "${LLMCTL}" start nosuchprofile 2>&1)" && rc=0 || rc=$?

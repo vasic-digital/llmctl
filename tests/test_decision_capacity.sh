@@ -116,7 +116,7 @@ assert_eq 1 "${rc}" "mutation: report claiming one instance too few is detected 
 # --- refusal wording: exact numbers, instance ordinal, placement ---------------
 out="$(LLMCTL_FAKE_HW="${LLMCTL_ROOT}/tests/fixtures/hw-baseline.json" sched_decision_probe decide gpu)"
 assert_contains "${out}" "accepted=2" "baseline decide: 2 GPU instances accepted (3671 MiB VRAM each of 10444)"
-assert_contains "${out}" "refused=cannot start instance 3 of 'decide' (gpu placement): needs 2048 MiB RAM + 3671 MiB VRAM, but only 21808 MiB RAM + 3102 MiB VRAM remain" \
+assert_contains "${out}" "refused=cannot start instance 3 of 'decide' (gpu placement): needs 2048 MiB RAM + 3671 MiB VRAM, but only 15564 MiB RAM + 3102 MiB VRAM remain" \
   "refusal after the last fitting instance names the instance, placement and the exact remaining numbers"
 out="$(LLMCTL_FAKE_HW="${LLMCTL_ROOT}/tests/fixtures/hw-baseline.json" sched_decision_probe decide-pro gpu)"
 assert_contains "${out}" "accepted=0" "baseline decide-pro (tier-gated): admission accepts 0 instances, like the report"

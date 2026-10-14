@@ -6,7 +6,7 @@
 # stand-in for the llmctl-decide binary (unit tier; the real allocator has its own Go tests). The
 # admission arithmetic is NOT re-implemented here: the expected refusal numbers are the ones
 # tests/test_decision_capacity.sh pins for the same fixture (baseline: decide = 2048 MiB RAM +
-# 3671 MiB VRAM per instance, 2 instances fit, the 3rd is refused with 21808 MiB RAM + 3102 MiB VRAM left).
+# 3671 MiB VRAM per instance, 2 instances fit, the 3rd is refused with 15564 MiB RAM + 3102 MiB VRAM left: since 2026-10-14 the RAM budget is capped at 60% of MemTotal = 19660, minus 2 x 2048).
 set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/helpers.sh"
 test_setup_env
@@ -41,7 +41,7 @@ echo "== admission refusal: exit 3 with the exact numbers, nothing started =="
 run decide scale decide 3
 assert_eq 3 "${RC}" "scaling past the admission bound exits 3"
 assert_contains "${OUT}" "cannot scale 'decide' to 3" "refusal names the target"
-assert_contains "${OUT}" "instance 3 (decide.3) needs 2048 MiB RAM + 3671 MiB VRAM, but only 21808 MiB RAM + 3102 MiB VRAM remain" \
+assert_contains "${OUT}" "instance 3 (decide.3) needs 2048 MiB RAM + 3671 MiB VRAM, but only 15564 MiB RAM + 3102 MiB VRAM remain" \
   "refusal carries the instance key and the exact numbers"
 assert_eq "" "$(runs)" "a refused scale is all-or-nothing: no reservation was written"
 assert_eq "" "$(ls -A "${LLMCTL_SERVICES_DIR}" 2>/dev/null || true)" "a refused scale wrote no service env"
@@ -69,8 +69,8 @@ assert_contains "${OUT}" "already 2" "no-op is reported"
 assert_eq "decide.2.run decide.run" "$(runs)" "no-op changes nothing"
 run decide scale decide 3
 assert_eq 3 "${RC}" "with two instances running, a third is still refused (rc 3)"
-assert_contains "${OUT}" "instance 3 (decide.3) needs 2048 MiB RAM + 3671 MiB VRAM, but only 25904 MiB RAM + 3102 MiB VRAM remain" \
-  "the running instances' reservations are subtracted (VRAM 10444 - 2 x 3671 = 3102; RAM budget is the live figure)"
+assert_contains "${OUT}" "instance 3 (decide.3) needs 2048 MiB RAM + 3671 MiB VRAM, but only 15564 MiB RAM + 3102 MiB VRAM remain" \
+  "the running instances' reservations are subtracted (VRAM 10444 - 2 x 3671 = 3102; RAM: the 60% cap 19660 minus the 2 x 2048 the running instances reserve)"
 
 echo "== scale down stops the highest instance first =="
 run decide scale decide 1
