@@ -40,6 +40,26 @@ LLMCTL_VALIDATION_MAX_AGE="${LLMCTL_VALIDATION_MAX_AGE:-604800}"
 _val_judge() { python3 -I "${LLMCTL_ROOT}/lib/validate_judge.py" "$@"; }
 _val_state_dir() { echo "${LLMCTL_STATE_DIR}/validation"; }
 _val_state_file() { echo "$(_val_state_dir)/$1.json"; }
+# record signing key + model-file sha256 cache (both 0600, created by the judge on first use; docs/validation.md)
+_val_hmac_key() { echo "$(_val_state_dir)/.hmac.key"; }
+_val_hash_cache() { echo "$(_val_state_dir)/.hashcache.json"; }
+_val_ensure_state_dir() { [[ -d "$(_val_state_dir)" ]] || ( umask 077; mkdir -p "$(_val_state_dir)" ); }
+
+# _val_max_age - LLMCTL_VALIDATION_MAX_AGE as whole seconds >= 0 on stdout; anything else (nan, inf, -1, 1e9, abc) -> a
+# message and rc 2: a non-finite age would make every record "fresh" forever.
+_val_max_age() {
+  local a="${LLMCTL_VALIDATION_MAX_AGE}"
+  if [[ "${a}" =~ ^[0-9]{1,12}$ ]]; then echo "$(( 10#${a} ))"; return 0; fi
+  err "LLMCTL_VALIDATION_MAX_AGE='${a}' is not a whole number of seconds >= 0 (nan, inf, negative and exponent forms are refused) - cannot determine freshness"
+  return 2
+}
+
+# _val_check <profile> <key-file> - the judge's freshness + signature check of the profile's record (stdout: reasons).
+_val_check() {
+  local age
+  age="$(_val_max_age)" || return 2
+  _val_judge check --state "$(_val_state_file "$1")" --key "$2" --max-age "${age}" --hmac-key "$(_val_hmac_key)"
+}
 
 # _val_engine_tag <profile> - identity of the inference engine build that serves the profile.
 _val_engine_tag() {
@@ -66,9 +86,11 @@ _val_engine_tag() {
 _val_key() {
   local p="$1" out="$2" kind="${3:-}"
   local env_file="${LLMCTL_SERVICES_DIR}/${p}.env"
+  _val_ensure_state_dir
   _val_judge key --catalog "${LLMCTL_CATALOG}" --profile "${p}" --models-dir "${LLMCTL_MODELS_DIR}" \
     --suites-dir "${LLMCTL_VALIDATION_SUITES_DIR}" --engine-tag "$(_val_engine_tag "${p}")" \
-    --env-file "${env_file}" ${kind:+--only-kind "${kind}"} > "${out}"
+    --env-file "${env_file}" --hash-cache "$(_val_hash_cache)" --hmac-key "$(_val_hmac_key)" \
+    ${kind:+--only-kind "${kind}"} > "${out}"
 }
 
 # _val_suites <profile> [kind] - suites of the profile (one per line); none -> rc 1 + reason on stderr.
@@ -162,14 +184,29 @@ _val_restore_traps() {
 _val_pressure_gate() {
   local p="$1" mode="${2:-}" rc=0
   declare -F hw_pressure_gate >/dev/null 2>&1 || return 0
+  local act=start
+  [[ "${mode}" == "psi" ]] && act="send validation probes to"
   if declare -F _sched_pressure_gate >/dev/null 2>&1; then
-    _sched_pressure_gate "${p}" ${mode:+"${mode}"} >/dev/null || rc=$?
+    LLMCTL_GATE_ACTION="${act}" _sched_pressure_gate "${p}" ${mode:+"${mode}"} >/dev/null || rc=$?
   else
-    hw_pressure_gate 0 "${p}" >/dev/null || rc=$?
+    LLMCTL_GATE_ACTION="${act}" hw_pressure_gate 0 "${p}" >/dev/null || rc=$?
   fi
   [[ "${rc}" -eq 0 ]] && return 0
-  err "validation of '${p}' refused under memory pressure (hw_pressure_gate rc ${rc}): nothing was started or probed, nothing is recorded - UNDETERMINED (exit 2); retry when 'head -2 /proc/pressure/memory' is quiet"
+  if [[ "${mode}" == "psi" ]]; then
+    # the profile is ALREADY up at this point (a start may have just happened): only the probes are withheld. Whether the
+    # profile is then stopped is said by the caller's cleanup (finding 8 of the 2026-10-14 review: this used to claim
+    # "nothing was started" right after a start).
+    err "validation of '${p}' refused under memory pressure (hw_pressure_gate rc ${rc}): the probes were NOT sent, nothing is recorded - UNDETERMINED (exit 2); retry when 'head -2 /proc/pressure/memory' is quiet"
+  else
+    err "validation of '${p}' refused under memory pressure (hw_pressure_gate rc ${rc}): nothing was started or probed, nothing is recorded - UNDETERMINED (exit 2); retry when 'head -2 /proc/pressure/memory' is quiet"
+  fi
   return 75
+}
+
+# _val_start_for_validation <profile> - start a profile that is not running so it can be validated. Overridden by the
+# enforcement layer (lib/scheduler.sh sched_start_unpublished) when present: a validation-only start is never published.
+_val_start_for_validation() {
+  if declare -F sched_start_unpublished >/dev/null 2>&1; then sched_start_unpublished "$1"; else sched_start "$1"; fi
 }
 
 # validate_profile <profile> [--kind vision] [--host URL] [--json] [--keep]
@@ -192,14 +229,28 @@ validate_profile() {
   [[ -n "${p}" ]] || { err "usage: llmctl validate <profile> [--host URL] [--json]"; return 2; }
   catalog_exists "${p}" || { err "unknown profile: ${p} (see: llmctl models list)"; return 2; }
   ensure_state_dirs
-  ensure_dir "$(_val_state_dir)"
+  _val_ensure_state_dir
 
   local suites
   suites="$(_val_suites "${p}" "${kind}")" || return 2
 
   local endpoint started=0 starting=0 jpid="" key_file="" saved_traps
   saved_traps="$(trap -p INT TERM HUP)"      # the caller's traps (e.g. scheduler lock cleanup) are restored on every return
-  # Interrupt safety: SIGINT/SIGTERM/SIGHUP removes the temp key file, kills the judge child (by PID, never by
+  # _val_cleanup_started - the ONE stop path for a profile THIS call started (finding 4 of the 2026-10-14 review: two early
+  # `return 2`s after a start left the profile running). Every return after `started=1` goes through it; it stops the
+  # profile unless --keep, and says plainly when --keep leaves it running NOT validated. Idempotent.
+  _val_cleanup_started() {
+    if [[ "${started}" == "1" ]]; then
+      if [[ "${keep}" != "1" ]]; then
+        log "stopping '${p}' again (it was started only for validation; pass --keep to leave it running)"
+        sched_stop "${p}" >/dev/null 2>&1 || warn "could not stop '${p}' after validation - stop it by hand: llmctl stop ${p}"
+      else
+        warn "'${p}' keeps running (--keep) - it was started for this validation; use it only if 'llmctl require-validated ${p}' passes"
+      fi
+      started=0
+    fi
+  }
+  # Interrupt safety: SIGINT/SIGTERM/SIGHUP removes the temp files, kills the judge child (by PID, never by
   # process group) and stops a profile THIS call started (unless --keep). The handler reads this function's
   # locals, so it is only ever armed while validate_profile is on the stack.
   _val_on_signal() {
@@ -208,6 +259,8 @@ validate_profile() {
     [[ -n "${jpid}" ]] && kill "${jpid}" 2>/dev/null || true
     [[ -n "${key_file}" ]] && rm -f "${key_file}"
     [[ -n "${vfile:-}" ]] && rm -f "${vfile}"
+    [[ -n "${run_ev:-}" ]] && rm -f "${run_ev}"
+    [[ ${#rfiles[@]} -gt 0 ]] 2>/dev/null && rm -f "${rfiles[@]}"
     if [[ "${started}" == "1" || "${starting}" == "1" ]] && [[ "${keep}" != "1" ]]; then
       warn "interrupted: stopping '${p}' (it was started only for validation)"
       sched_stop "${p}" >/dev/null 2>&1 || true
@@ -232,49 +285,58 @@ validate_profile() {
         _val_restore_traps "${saved_traps}"
         return 2
       fi
-      log "profile '${p}' is not running - starting it through the scheduler (budget-checked) to validate it"
+      log "profile '${p}' is not running - starting it (unpublished, for validation only) to validate it"
       starting=1
-      if ! sched_start "${p}"; then
+      if ! _val_start_for_validation "${p}"; then
         starting=0
         err "could not start '${p}' (see above: insufficient RAM/VRAM or a start failure) - cannot validate: could not determine"
         _val_restore_traps "${saved_traps}"
         return 2
       fi
-      started=1
-      port="$(_val_port "${p}")" || { err "'${p}' started but has no port reservation"; _val_restore_traps "${saved_traps}"; return 2; }
+      starting=0; started=1
+      if ! port="$(_val_port "${p}")"; then
+        err "'${p}' started but has no port reservation - cannot validate: could not determine"
+        _val_cleanup_started
+        _val_restore_traps "${saved_traps}"
+        return 2
+      fi
     fi
     endpoint="http://127.0.0.1:${port}"
     # second gate: pressure may have risen while the model loaded; never hammer a model on a stalling host.
     if ! _val_pressure_gate "${p}" psi; then
-      if [[ "${started}" == "1" && "${keep}" != "1" ]]; then
-        warn "stopping '${p}' again (it was started only for validation)"
-        sched_stop "${p}" >/dev/null 2>&1 || warn "could not stop '${p}'"
-      fi
+      _val_cleanup_started
       _val_restore_traps "${saved_traps}"
       return 2
     fi
   fi
 
-  local evidence; evidence="${LLMCTL_VERIFY_DIR}/validate-${p}.log"
+  local evidence run_ev=""; evidence="${LLMCTL_VERIFY_DIR}/validate-${p}.log"
+  local -a rfiles=()
   key_file="$(mktemp)"
   if ! _val_key "${p}" "${key_file}" "${kind}"; then
     err "cannot compute the validation key of '${p}' - cannot validate: could not determine"
     rm -f "${key_file}"; key_file=""
+    _val_cleanup_started
     _val_restore_traps "${saved_traps}"
     return 2
   fi
-  # evidence may describe a protected endpoint: 0600, and the URL is logged without userinfo/query/fragment
+  # evidence may describe a protected endpoint: 0600, and the URL is logged without userinfo/query/fragment. This run's
+  # evidence goes to its own file first: a PASS/FAIL record binds that file's sha256 (finding 3); the cumulative log
+  # validate-<profile>.log still receives every run.
   ( umask 077; : >> "${evidence}" ); chmod 600 "${evidence}"
-  printf '\n==== %s llmctl validate %s endpoint=%s kind=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${p}" "$(_val_judge redact "${endpoint}")" "${kind:-all}" >> "${evidence}"
-  printf 'KEY %s\n' "$(cat "${key_file}")" >> "${evidence}"
+  run_ev="$(_val_state_dir)/${p}.evidence.$(date -u +%Y%m%dT%H%M%SZ).$$.log"
+  ( umask 077; : > "${run_ev}" ); chmod 600 "${run_ev}"
+  printf '\n==== %s llmctl validate %s endpoint=%s kind=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${p}" "$(_val_judge redact "${endpoint}")" "${kind:-all}" >> "${run_ev}"
+  printf 'KEY %s\n' "$(cat "${key_file}")" >> "${run_ev}"
 
-  local s rc=0 one worst=0 saw_undet=0 vfile=""
+  local s rc=0 one worst=0 saw_undet=0 vfile="" rf
   for s in ${suites}; do
     one=0
     local -a jargs=(run --suite "${LLMCTL_VALIDATION_SUITES_DIR}/${s}" --endpoint "${endpoint}"
-                    --expect-model "$(_val_expect_model "${p}")" --evidence "${evidence}")
+                    --expect-model "$(_val_expect_model "${p}")" --evidence "${run_ev}")
     [[ "${json}" == "1" ]] && jargs+=(--json)
     vfile="$(mktemp)"; jargs+=(--verdict-file "${vfile}")
+    rf="$(mktemp)"; rfiles+=("${rf}"); jargs+=(--report-file "${rf}")
     # background + wait: bash runs a pending trap as soon as `wait` is interrupted (a foreground child would
     # delay the handler until it exits); the judge is killed by the handler by PID.
     # (the interpreter itself is the background job - a shell function would fork a subshell whose python
@@ -296,29 +358,42 @@ validate_profile() {
     esac
   done
   if [[ "${worst}" == "1" ]]; then rc=1; elif [[ "${saw_undet}" == "1" ]]; then rc=2; else rc=0; fi
+  cat "${run_ev}" >> "${evidence}"
 
   if [[ -z "${host}" ]]; then
     local all_suites covered=1
     all_suites="$(_val_suites "${p}" 2>/dev/null || true)"
     [[ "${all_suites}" == "${suites}" ]] || covered=0
-    local status=undetermined
+    local status=undetermined rrc=0
     case "${rc}" in 0) status=pass ;; 1) status=fail ;; esac
     if [[ "${covered}" == "1" || "${status}" == "fail" ]]; then
-      if ! _val_judge record --key "${key_file}" --status "${status}" --evidence "${evidence}" --out "$(_val_state_file "${p}")"; then
-        err "could not record the validation state of '${p}' ($(_val_state_file "${p}")) - NOT validated"
-        (( rc == 0 )) && rc=2
-      fi
-      [[ "${json}" == "1" ]] || log "validation state for '${p}': ${status} -> $(_val_state_file "${p}")"
+      local -a rargs=()
+      for rf in ${rfiles[@]+"${rfiles[@]}"}; do rargs+=(--report "${rf}"); done
+      _val_judge record --key "${key_file}" --status "${status}" --evidence "${run_ev}" --out "$(_val_state_file "${p}")" \
+        --hmac-key "$(_val_hmac_key)" ${rargs[@]+"${rargs[@]}"} || rrc=$?
+      case "${rrc}" in
+        0) [[ "${json}" == "1" ]] || log "validation state for '${p}': ${status} -> $(_val_state_file "${p}")" ;;
+        4) warn "'${p}' PASSED in quick mode only (LLMCTL_VALIDATE_REPEAT < 3): NOT recorded, NOT validated for use - rerun without LLMCTL_VALIDATE_REPEAT"
+           (( rc == 0 )) && rc=2 ;;
+        5) err "'${p}' is NOT validated: its model files are not the bytes the catalog pins / the run validated (see above) - nothing recorded as PASS"
+           (( rc == 0 )) && rc=2 ;;
+        *) err "could not record the validation state of '${p}' ($(_val_state_file "${p}")) - NOT validated"
+           (( rc == 0 )) && rc=2 ;;
+      esac
     else
       [[ "${json}" == "1" ]] || log "only the '${kind}' suites ran; '${p}' also has $(tr '\n' ' ' <<<"${all_suites}")- run 'llmctl validate ${p}' to record its validation state"
     fi
   fi
-  rm -f "${key_file}"; key_file=""
-  [[ "${json}" == "1" ]] || log "evidence: ${evidence}"
-  if [[ "${started}" == "1" && "${keep}" != "1" ]]; then
-    log "stopping '${p}' again (it was started only for validation; pass --keep to leave it running)"
-    sched_stop "${p}" >/dev/null || warn "could not stop '${p}' after validation"
+  # the run's evidence file survives only as the evidence of the record that now names it
+  if [[ "$(python3 -I -c 'import json,sys
+try: print(json.load(open(sys.argv[1])).get("evidence_file") or "")
+except Exception: print("")' "$(_val_state_file "${p}")" 2>/dev/null)" != "${run_ev}" ]]; then
+    rm -f "${run_ev}"
   fi
+  run_ev=""
+  rm -f "${key_file}" ${rfiles[@]+"${rfiles[@]}"}; key_file=""; rfiles=()
+  [[ "${json}" == "1" ]] || log "evidence: ${evidence}"
+  _val_cleanup_started
   _val_restore_traps "${saved_traps}"
   return "${rc}"
 }
@@ -351,11 +426,15 @@ require_validated() {
     err "cannot compute the validation key of '${p}' - not validated (could not determine)"
     return 2
   fi
-  why="$(_val_judge check --state "$(_val_state_file "${p}")" --key "${key_file}" --max-age "${LLMCTL_VALIDATION_MAX_AGE}")" || rc=$?
+  why="$(_val_check "${p}" "${key_file}")" || rc=$?
   rm -f "${key_file}"
   if [[ "${rc}" == "0" ]]; then
     info "${p}: ${why}"
     return 0
+  fi
+  if [[ "${rc}" == "2" ]]; then
+    err "profile '${p}': validation state could not be determined${why:+: ${why}}"
+    return 2
   fi
   err "profile '${p}' is NOT validated for use:"
   printf '  - %s\n' "${why//$'\n'/$'\n'  - }" >&2
@@ -408,7 +487,7 @@ _val_after_start_one() {
     warn "validation: '${p}' has no computable validation key (not a catalog profile?) - UNDETERMINED; llmctl require-validated ${p} refuses"
     return 0
   fi
-  if _val_judge check --state "$(_val_state_file "${p}")" --key "${key_file}" --max-age "${LLMCTL_VALIDATION_MAX_AGE}" >/dev/null 2>&1; then
+  if _val_check "${p}" "${key_file}" >/dev/null 2>&1; then
     info "validation: '${p}' already has a fresh passing record for this model, engine, launch and suite"
     rm -f "${key_file}"
     return 0

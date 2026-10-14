@@ -188,6 +188,16 @@ FAKE_BIN="${TEST_TMP}/bin"; mkdir -p "${FAKE_BIN}"
 printf '#!/usr/bin/env bash\necho "version: 0.0.0 (build 4242, commit deadbeef)"\n' > "${FAKE_BIN}/llama-server"
 chmod +x "${FAKE_BIN}/llama-server"
 export LLMCTL_LLAMA_SERVER="${FAKE_BIN}/llama-server"
+# the catalog pins the REAL model bytes; these fixture files are empty, so a catalog copy re-pins them (the pin check
+# itself is exercised in tests/test_validation_record_integrity.sh)
+export LLMCTL_CATALOG="${TEST_TMP}/catalog.pinned.json"
+python3 -I - "${LLMCTL_ROOT}/models/catalog.json" "${LLMCTL_CATALOG}" <<'PY'
+import json, sys
+d = json.load(open(sys.argv[1]))
+for f in d["profiles"]["vision"]["files"]:
+    f["sha256"], f["size"] = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", 0
+json.dump(d, open(sys.argv[2], "w"))
+PY
 assert_eq 1 "$(run_rc "${LLMCTL}" require-validated vision)" "require-validated refuses a never-validated profile"
 assert_contains "$(cat "${TEST_TMP}/last.out")" "no validation record" "reason: no record"
 U="$(fake_start "${FIX}/answers_good.json" --model-id "${LLMCTL_MODELS_DIR}/vision/gemma-3-4b-it-Q4_K_M.gguf")"
@@ -205,10 +215,10 @@ assert_eq "$(python3 -c 'import socket; print(socket.gethostname())')" \
   "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("host"))' "${VREC}")" "record carries the host it was validated on"
 cp "${VREC}" "${TEST_TMP}/vision.json.orig"
 python3 -c 'import json,sys; p=sys.argv[1]; d=json.load(open(p)); d["host"]="other-host.example"; json.dump(d,open(p,"w"))' "${VREC}"
-assert_eq 1 "$(run_rc "${LLMCTL}" require-validated vision)" "a record from another host -> refused"
-assert_contains "$(cat "${TEST_TMP}/last.out")" "host changed" "stale reason names the host"
-python3 -c 'import json,sys; p=sys.argv[1]; d=json.load(open(p)); d.pop("host"); json.dump(d,open(p,"w"))' "${VREC}"
-assert_eq 1 "$(run_rc "${LLMCTL}" require-validated vision)" "a record without a host field -> refused"
+assert_eq 1 "$(run_rc "${LLMCTL}" require-validated vision)" "a record edited to name another host -> refused"
+assert_contains "$(cat "${TEST_TMP}/last.out")" "signature" "an edited record fails its signature (host identity itself: tests/test_validation_record_integrity.sh)"
+python3 -c 'import json,sys; p=sys.argv[1]; d=json.load(open(p)); d.pop("host_id"); json.dump(d,open(p,"w"))' "${VREC}"
+assert_eq 1 "$(run_rc "${LLMCTL}" require-validated vision)" "a record without a host id -> refused"
 cp "${TEST_TMP}/vision.json.orig" "${VREC}"
 assert_eq 0 "$(run_rc "${LLMCTL}" require-validated vision)" "original record restored -> accepted"
 # engine changed -> stale
@@ -221,8 +231,7 @@ assert_eq 0 "$(run_rc "${LLMCTL}" require-validated vision)" "engine restored ->
 printf 'x' > "${LLMCTL_MODELS_DIR}/vision/gemma-3-4b-it-Q4_K_M.gguf"
 assert_eq 1 "$(run_rc "${LLMCTL}" require-validated vision)" "model file changed on disk -> refused"
 : > "${LLMCTL_MODELS_DIR}/vision/gemma-3-4b-it-Q4_K_M.gguf"
-touch -d @"$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["model_files"][0]["mtime"])' "${LLMCTL_STATE_DIR}/validation/vision.json")" "${LLMCTL_MODELS_DIR}/vision/gemma-3-4b-it-Q4_K_M.gguf"
-assert_eq 0 "$(run_rc "${LLMCTL}" require-validated vision)" "same size+mtime restored -> accepted"
+assert_eq 0 "$(run_rc "${LLMCTL}" require-validated vision)" "the same bytes back (new mtime) -> accepted (the record binds the bytes, not the mtime)"
 assert_eq 1 "$(run_rc env LLMCTL_VALIDATION_MAX_AGE=0 "${LLMCTL}" require-validated vision)" "max age 0 -> too old -> refused"
 # a failing validation replaces the record and require-validated refuses
 U2="$(fake_start "$(answers_with "05_table/lookup" "PARIS")" --model-id "${LLMCTL_MODELS_DIR}/vision/gemma-3-4b-it-Q4_K_M.gguf")"

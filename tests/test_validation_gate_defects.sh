@@ -175,15 +175,31 @@ assert_eq False "$(jt '17 + 25')" "operands only: first number 17 fails"
 assert_eq False "$(jt 'The answer is 41.')" "wrong number fails"
 
 echo "== 8. a record from the future (or with a garbage epoch) is never fresh"
-CAT="${LLMCTL_ROOT}/models/catalog.json"
-python3 -I "${JUDGE}" key --catalog "${CAT}" --profile vision --models-dir "${LLMCTL_MODELS_DIR}" \
-  --suites-dir "${LLMCTL_ROOT}/validation/suites" --engine-tag t > "${TEST_TMP}/key.json"
-python3 -I "${JUDGE}" record --key "${TEST_TMP}/key.json" --status pass --out "${TEST_TMP}/state.json"
-chk() { run_rc python3 -I "${JUDGE}" check --state "${TEST_TMP}/state.json" --key "${TEST_TMP}/key.json" --max-age 604800; }
-assert_eq 0 "$(chk)" "a just-recorded pass is fresh"
-set_epoch() { python3 -I - "${TEST_TMP}/state.json" "$1" <<'PY'
+# a catalog copy whose vision pins match the (empty) fixture model files: the pin check is satisfied, so only the epoch decides
+mkdir -p "${LLMCTL_MODELS_DIR}/vision"; : > "${LLMCTL_MODELS_DIR}/vision/gemma-3-4b-it-Q4_K_M.gguf"; : > "${LLMCTL_MODELS_DIR}/vision/mmproj-model-f16.gguf"
+CAT="${TEST_TMP}/catalog.pinned.json"
+python3 -I - "${LLMCTL_ROOT}/models/catalog.json" "${CAT}" <<'PY'
 import json, sys
-d = json.load(open(sys.argv[1])); d["epoch"] = json.loads(sys.argv[2]); json.dump(d, open(sys.argv[1], "w"))
+d = json.load(open(sys.argv[1]))
+for f in d["profiles"]["vision"]["files"]:
+    f["sha256"], f["size"] = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", 0
+json.dump(d, open(sys.argv[2], "w"))
+PY
+export LLMCTL_CATALOG="${CAT}"   # every later local validation of `vision` in this file sees pins that match its fixture files
+HK="${TEST_TMP}/hmac.key"
+python3 -I "${JUDGE}" key --catalog "${CAT}" --profile vision --models-dir "${LLMCTL_MODELS_DIR}" \
+  --suites-dir "${LLMCTL_ROOT}/validation/suites" --engine-tag t --hmac-key "${HK}" > "${TEST_TMP}/key.json"
+printf '{"repeat": 3}\n' > "${TEST_TMP}/report.json"; printf 'evidence\n' > "${TEST_TMP}/ev.log"
+python3 -I "${JUDGE}" record --key "${TEST_TMP}/key.json" --status pass --out "${TEST_TMP}/state.json" --hmac-key "${HK}" \
+  --report "${TEST_TMP}/report.json" --evidence "${TEST_TMP}/ev.log"
+chk() { run_rc python3 -I "${JUDGE}" check --state "${TEST_TMP}/state.json" --key "${TEST_TMP}/key.json" --max-age 604800 --hmac-key "${HK}"; }
+assert_eq 0 "$(chk)" "a just-recorded pass is fresh"
+# set_epoch edits the epoch AND re-signs the record (as llmctl would): only the epoch rule may refuse it
+set_epoch() { python3 -I - "${TEST_TMP}/state.json" "$1" "${JUDGE}" "${HK}" <<'PY'
+import importlib.util, json, sys
+sp = importlib.util.spec_from_file_location("vj", sys.argv[3]); vj = importlib.util.module_from_spec(sp); sp.loader.exec_module(vj)
+d = json.load(open(sys.argv[1])); d["epoch"] = json.loads(sys.argv[2])
+d["signature"] = vj.sign_record(d, vj.load_hmac_key(sys.argv[4], create=False)); json.dump(d, open(sys.argv[1], "w"))
 PY
 }
 set_epoch "$(( $(date +%s) + 86400 ))"
@@ -197,7 +213,8 @@ assert_eq 1 "$(chk)" "null epoch -> not fresh"
 
 echo "== 9. an UNDETERMINED run never overwrites a prior PASS record"
 rm -f "${TEST_TMP}/state.json"
-rec() { python3 -I "${JUDGE}" record --key "${TEST_TMP}/key.json" --status "$1" --out "${TEST_TMP}/state.json" >"${TEST_TMP}/rec.out" 2>&1; }
+rec() { python3 -I "${JUDGE}" record --key "${TEST_TMP}/key.json" --status "$1" --out "${TEST_TMP}/state.json" --hmac-key "${HK}" \
+          --report "${TEST_TMP}/report.json" --evidence "${TEST_TMP}/ev.log" >"${TEST_TMP}/rec.out" 2>&1; }
 st() { python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["status"])' "${TEST_TMP}/state.json"; }
 rec pass
 assert_eq pass "$(st)" "pass recorded"
@@ -207,7 +224,7 @@ assert_eq 0 "$(chk)" "...so the still-matching pass stays fresh"
 rec fail
 assert_eq fail "$(st)" "a real FAIL does replace a pass"
 rec undetermined
-assert_eq undetermined "$(st)" "undetermined may replace a fail (the wrong-answer evidence stays in the evidence log)"
+assert_eq fail "$(st)" "undetermined never replaces a FAIL either (review 2026-10-14 finding 9)"
 rec pass
 assert_eq pass "$(st)" "a new pass replaces anything"
 # end to end through validate_profile: a running profile whose endpoint is down must not wipe its PASS
@@ -416,7 +433,8 @@ assert_contains "$(cat "${EVLOG}")" "127.0.0.1:9" "the host:port is still record
 rm -rf "${LLMCTL_STATE_DIR}/validation"; mkdir -p "${LLMCTL_STATE_DIR}/validation"
 python3 -I "${JUDGE}" key --catalog "${LLMCTL_ROOT}/models/catalog.json" --profile vision --models-dir "${LLMCTL_MODELS_DIR}" \
   --suites-dir "${LLMCTL_ROOT}/validation/suites" --engine-tag t > "${TEST_TMP}/key2.json"
-python3 -I "${JUDGE}" record --key "${TEST_TMP}/key2.json" --status pass --out "${LLMCTL_STATE_DIR}/validation/vision.json"
+python3 -I "${JUDGE}" record --key "${TEST_TMP}/key2.json" --status fail --out "${LLMCTL_STATE_DIR}/validation/vision.json" \
+  --hmac-key "${LLMCTL_STATE_DIR}/validation/.hmac.key"
 assert_eq 600 "$(stat -c %a "${LLMCTL_STATE_DIR}/validation/vision.json")" "state record mode is 0600"
 rm -f "${EVLOG}"
 U="$(fake_start "${FIX}/answers_good.json" --model-id "${CHATM}")"

@@ -1030,46 +1030,209 @@ def launch_fingerprint(env_file):
     return hashlib.sha256(("\0".join([exe] + kept)).encode()).hexdigest()
 
 
+# --- model bytes, host identity, record signing -------------------------------------------------------------
+# Finding 3 of the 2026-10-14 review: the record used to bind the catalog's "name:sha" STRINGS and the files' size+mtime,
+# so different bytes with a restored size+mtime still validated, and a hand-written JSON file was a "record". Now:
+#   * every model file is hashed for real (streaming sha256). The hash is cached in a 0600 file keyed by
+#     (size, mtime_ns, ctime_ns, inode, device) - ctime cannot be set back by a user, so ANY write re-hashes - and each
+#     cache entry carries an HMAC so an edited cache entry is ignored;
+#   * a PASS record is written only when every pinned file equals its catalog sha256, and the record step re-hashes
+#     every file whose hash came from the cache (the documented fast path verifies the pin once per record creation);
+#   * the record is signed with HMAC-SHA256 under a key kept 0600 in the state directory (created on first use) and
+#     binds the sha256 of its own evidence file. LIMIT (documented): this stops accidental and hand-made edits; a
+#     malicious process running as the SAME user can read the key and forge a record - it is not a defence against that.
+HASH_BLOCK = 1 << 20
+
+
+def stat_tuple(st):
+    return [st.st_size, st.st_mtime_ns, st.st_ctime_ns, st.st_ino, st.st_dev]
+
+
+class InsecureKey(Exception):
+    """The signing key file is not ours or is readable by group/other."""
+
+
+def load_hmac_key(path, create=True):
+    """The record-signing key (32 random bytes, hex) at `path`; created 0600 (directory 0700) on first use when
+    `create`. Raises FileNotFoundError (absent, not created) or InsecureKey."""
+    try:
+        st = os.stat(path)
+    except FileNotFoundError:
+        if not create:
+            raise
+        import secrets
+        d = os.path.dirname(path) or "."
+        os.makedirs(d, mode=0o700, exist_ok=True)
+        try:
+            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            with os.fdopen(fd, "w") as fh:
+                fh.write(secrets.token_hex(32) + "\n")
+        except FileExistsError:
+            pass    # another validator created it first: use theirs
+        st = os.stat(path)
+    if st.st_uid != os.getuid() or st.st_mode & 0o077:
+        raise InsecureKey("signing key %s must be owned by uid %d and mode 0600 (is uid %d, mode %o)" % (
+            path, os.getuid(), st.st_uid, st.st_mode & 0o777))
+    raw = open(path).read().strip()
+    if not re.fullmatch(r"[0-9a-f]{64}", raw):
+        raise InsecureKey("signing key %s is malformed" % path)
+    return bytes.fromhex(raw)
+
+
+def _canonical(obj):
+    return json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode()
+
+
+def sign_record(record, key):
+    import hmac
+    return hmac.new(key, _canonical({k: v for k, v in record.items() if k != "signature"}), hashlib.sha256).hexdigest()
+
+
+def signature_ok(record, key):
+    import hmac
+    sig = record.get("signature")
+    return isinstance(sig, str) and hmac.compare_digest(sig, sign_record(record, key))
+
+
+class HashCache:
+    """sha256 of model files, cached by (size, mtime_ns, ctime_ns, inode, device) in a 0600 JSON file. An entry whose HMAC
+    does not verify (edited by hand) is ignored and the file is re-hashed."""
+
+    def __init__(self, path, key):
+        self.path, self.key, self.data, self.dirty = path, key, {}, False
+        if path and os.path.isfile(path):
+            try:
+                with open(path) as fh:
+                    d = json.load(fh)
+                self.data = d if isinstance(d, dict) else {}
+            except (OSError, ValueError):
+                self.data = {}
+
+    def _mac(self, path, st, sha):
+        import hmac
+        return hmac.new(self.key, _canonical([path, st, sha]), hashlib.sha256).hexdigest()
+
+    def sha256(self, path):
+        """(sha256, 'cache'|'hashed', stat list)."""
+        st = stat_tuple(os.stat(path))
+        e = self.data.get(path)
+        import hmac
+        if isinstance(e, dict) and e.get("stat") == st and isinstance(e.get("sha256"), str) \
+                and hmac.compare_digest(str(e.get("mac", "")), self._mac(path, st, e["sha256"])):
+            return e["sha256"], "cache", st
+        sha = sha256_file(path)
+        st2 = stat_tuple(os.stat(path))
+        if st2 == st:   # unchanged while hashing: cacheable
+            self.data[path] = {"stat": st, "sha256": sha, "mac": self._mac(path, st, sha)}
+            self.dirty = True
+        return sha, "hashed", st2
+
+    def save(self):
+        if self.dirty and self.path:
+            tmp = self.path + ".tmp.%d" % os.getpid()
+            with open_private(tmp, "w") as fh:
+                json.dump(self.data, fh)
+            os.replace(tmp, self.path)
+
+
+def host_identity():
+    """(host_id, source, hostname). host_id = sha256 of a fixed prefix and the machine id (/etc/machine-id, else
+    /var/lib/dbus/machine-id); the raw machine id is never written anywhere. Documented fallback when neither is readable:
+    the hostname (source 'hostname' - weaker: a hostname can be set to anything). Hermetic tests may point
+    LLMCTL_MACHINE_ID_FILE / LLMCTL_TEST_HOSTNAME elsewhere ONLY with LLMCTL_VALIDATE_HERMETIC=1."""
+    import socket
+    hermetic = os.environ.get("LLMCTL_VALIDATE_HERMETIC") == "1"
+    hostname = (os.environ.get("LLMCTL_TEST_HOSTNAME") if hermetic else None) or socket.gethostname()
+    files = ["/etc/machine-id", "/var/lib/dbus/machine-id"]
+    if hermetic and os.environ.get("LLMCTL_MACHINE_ID_FILE"):
+        files = [os.environ["LLMCTL_MACHINE_ID_FILE"]]
+    for f in files:
+        try:
+            mid = open(f).read().strip().lower()
+        except OSError:
+            continue
+        if re.fullmatch(r"[0-9a-f]{32}", mid):
+            return hashlib.sha256(b"llmctl-validation-host:" + mid.encode()).hexdigest(), "machine-id", hostname
+    return hashlib.sha256(b"llmctl-validation-host:hostname:" + hostname.encode()).hexdigest(), "hostname", hostname
+
+
 def compute_key(a):
     with open(a.catalog) as fh:
         catalog = json.load(fh)
     if a.profile not in catalog["profiles"]:
         raise KeyError("unknown profile %s" % a.profile)
     p = catalog["profiles"][a.profile]
-    lines, files = [], []
+    hkey = load_hmac_key(a.hmac_key, create=True) if a.hmac_key else None
+    cache = HashCache(a.hash_cache, hkey) if (a.hash_cache and hkey) else HashCache("", b"\0" * 32)
+    lines, files, mismatch, unpinned = [], [], [], []
     for f in p.get("files", []):
-        lines.append("%s:%s" % (f["name"], f.get("sha256") or "none"))
-        path = os.path.join(a.models_dir, a.profile, f["name"])
-        st = os.stat(path) if os.path.isfile(path) else None
-        files.append({"name": f["name"], "size": st.st_size if st else None,
-                      "mtime": int(st.st_mtime) if st else None})
+        path = os.path.abspath(os.path.join(a.models_dir, a.profile, f["name"]))
+        pin = f.get("sha256") or None
+        if os.path.isfile(path):
+            sha, src, st = cache.sha256(path)
+            size = st[0]
+        else:
+            sha, src, st, size = None, "missing", None, None
+        if pin is None:
+            unpinned.append(f["name"])
+        elif sha != pin:
+            mismatch.append(f["name"])
+        lines.append("%s:%s" % (f["name"], sha or "missing"))
+        files.append({"name": f["name"], "path": path, "size": size, "sha256": sha, "catalog_sha256": pin,
+                      "role": f.get("role") or "model", "stat": st, "hash_source": src})
+    cache.save()
     suites, reason = profile_suites(catalog, a.profile)
     if a.only_kind:
         suites = [s for s in suites if load_suite(os.path.join(a.suites_dir, s)).get("kind") == a.only_kind]
-    import socket
-    return {"profile": a.profile, "host": socket.gethostname(),
+    host_id, host_src, hostname = host_identity()
+    return {"profile": a.profile, "host": hostname, "host_id": host_id, "host_id_source": host_src,
             "model_sha256": hashlib.sha256("\n".join(lines).encode()).hexdigest(),
-            "model_files": files, "engine_tag": a.engine_tag,
+            "model_files": files, "pin_mismatch": mismatch, "unpinned_files": unpinned,
+            "engine": p.get("engine"), "engine_tag": a.engine_tag,
             "launch_fingerprint": launch_fingerprint(a.env_file),
             "suites": {s: suite_hash(os.path.join(a.suites_dir, s)) for s in suites},
             "no_suite_reason": reason}
 
 
+def _files_identity(files):
+    return [{"name": f.get("name"), "size": f.get("size"), "sha256": f.get("sha256")} for f in (files or [])]
+
+
+MIN_DECISION_REPEAT = 3
+
+
 def check_state(state, key, max_age):
-    """Return list of reasons the record does not cover the current key (empty = fresh pass)."""
+    """Return list of reasons the record does not cover the current key (empty = fresh pass). The SIGNATURE is verified
+    by the caller (main 'check') before this runs."""
     why = []
     if state.get("status") != "pass":
         why.append("status=%s" % state.get("status"))
     # host: a record produced on another machine (copied state dir, shared home) never validates this one
-    for field in ("host", "model_sha256", "model_files", "engine_tag", "launch_fingerprint"):
+    for field in ("host_id", "model_sha256", "engine_tag", "launch_fingerprint"):
         if state.get(field) != key.get(field):
             why.append("%s changed (validated %s, now %s)" % (field, json.dumps(state.get(field)),
                                                                json.dumps(key.get(field))))
+    if _files_identity(state.get("model_files")) != _files_identity(key.get("model_files")):
+        why.append("model files changed on disk (validated %s, now %s)" % (
+            json.dumps(_files_identity(state.get("model_files"))), json.dumps(_files_identity(key.get("model_files")))))
+    if key.get("pin_mismatch"):
+        why.append("model file(s) %s do not match their catalog-pinned sha256 (not the model the catalog names)" %
+                   ", ".join(key["pin_mismatch"]))
     if not key.get("suites"):
         why.append("profile has no validation suite: %s" % key.get("no_suite_reason"))
     for s, h in key.get("suites", {}).items():
         if state.get("suites", {}).get(s) != h:
             why.append("suite %s not validated with its current content (hash %s)" % (s, h[:12]))
+    rep = state.get("repeat")
+    if not isinstance(rep, int) or isinstance(rep, bool) or rep < MIN_DECISION_REPEAT:
+        why.append("record is not from a decision-bearing run (repeat=%s, needs >= %d)" % (rep, MIN_DECISION_REPEAT))
+    ev, evsha = state.get("evidence_file"), state.get("evidence_sha256")
+    try:
+        cur = sha256_file(ev) if isinstance(ev, str) and ev else None
+    except OSError:
+        cur = None
+    if not cur or cur != evsha:
+        why.append("evidence file of the record is missing or changed (%s)" % (ev or "none"))
     now = time.time()
     try:
         epoch = float(state.get("epoch"))
@@ -1087,6 +1250,142 @@ def check_state(state, key, max_age):
     return why
 
 
+def parse_max_age(raw):
+    """LLMCTL_VALIDATION_MAX_AGE: a finite number of seconds >= 0; nan / inf / negative / garbage -> ValueError."""
+    v = float(raw)
+    if not math.isfinite(v) or v < 0:
+        raise ValueError("max age must be a finite number of seconds >= 0, got %r" % raw)
+    return v
+
+
+def do_record(a):
+    """The `record` subcommand. Exit 0 written (or a prior PASS/FAIL kept); 4 not recorded: quick-mode run; 5 refused:
+    the model is not the pinned / validated bytes; 2 cannot record (key / IO)."""
+    with open(a.key) as fh:
+        key = json.load(fh)
+    reports = []
+    for rf in a.report or []:
+        try:
+            with open(rf) as fh:
+                reports.append(json.load(fh))
+        except (OSError, ValueError):
+            reports.append({})
+    prior = {}
+    if os.path.isfile(a.out):
+        try:
+            with open(a.out) as fh:
+                prior = json.load(fh)
+        except (OSError, ValueError):
+            prior = {}
+    if a.status == "undetermined" and prior.get("status") in ("pass", "fail"):
+        # could-not-determine is not evidence against an earlier verdict (endpoint blip, OOM on start): a PASS or a FAIL
+        # record is kept. require-validated still compares the record to the CURRENT key, so a stale pass is refused.
+        print("kept prior %s record %s (this run was UNDETERMINED)" % (prior["status"], a.out))
+        return 0
+    repeat = min([r.get("repeat") or 0 for r in reports] or [0])
+    if a.status == "pass":
+        if repeat < MIN_DECISION_REPEAT:
+            print("quick mode run (repeat=%s): NOT recorded - only a run that asks every probe >= %d times "
+                  "(LLMCTL_VALIDATE_REPEAT) can validate a profile" % (repeat, MIN_DECISION_REPEAT))
+            return 4
+        if key.get("pin_mismatch"):
+            print("NOT recorded: model file(s) %s do not match their catalog-pinned sha256" % ", ".join(key["pin_mismatch"]))
+            return 5
+        for f in key.get("model_files", []):
+            path = f.get("path")
+            try:
+                st = stat_tuple(os.stat(path))
+            except (OSError, TypeError):
+                print("NOT recorded: model file %s disappeared during validation" % f.get("name"))
+                return 5
+            if st != f.get("stat"):
+                print("NOT recorded: model file %s changed during validation" % f.get("name"))
+                return 5
+            if f.get("hash_source") != "hashed":
+                # the fast path (hash cache) is verified once per record creation: the bytes are hashed now
+                if sha256_file(path) != f.get("sha256"):
+                    print("NOT recorded: model file %s does not hash to its cached sha256" % f.get("name"))
+                    return 5
+        for r in reports:
+            sm = r.get("served_model") or {}
+            if sm.get("mismatch"):
+                print("NOT recorded: %s" % sm["mismatch"])
+                return 5
+    try:
+        hkey = load_hmac_key(a.hmac_key, create=True)
+    except (OSError, InsecureKey) as e:
+        print("NOT recorded: %s" % e)
+        return 2
+    rec = {k: v for k, v in key.items() if k not in ("pin_mismatch",)}
+    rec["model_files"] = [{k: v for k, v in f.items() if k not in ("stat", "hash_source")} for f in key.get("model_files", [])]
+    served = [r.get("served_model") for r in reports if r.get("served_model")]
+    rec.update({"status": a.status, "epoch": int(time.time()),
+                "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "repeat": repeat,
+                "served_model": served[0] if served else None})
+    if a.evidence and os.path.isfile(a.evidence):
+        rec["evidence_file"] = os.path.abspath(a.evidence)
+        rec["evidence_sha256"] = sha256_file(a.evidence)
+    else:
+        rec["evidence_file"], rec["evidence_sha256"] = None, None
+    rec["signature"] = sign_record(rec, hkey)
+    tmp = a.out + ".tmp.%d" % os.getpid()
+    with open_private(tmp, "w") as fh:
+        json.dump(rec, fh, indent=1, sort_keys=True)
+    os.replace(tmp, a.out)
+    old_ev = prior.get("evidence_file")
+    if isinstance(old_ev, str) and old_ev != rec.get("evidence_file") and \
+            os.path.dirname(os.path.abspath(old_ev)) == os.path.dirname(os.path.abspath(a.out)) and \
+            os.path.basename(old_ev).startswith(os.path.basename(a.out)[:-len(".json")] + ".evidence."):
+        try:
+            os.remove(old_ev)   # the replaced record's evidence snapshot (only ours, only in the state dir)
+        except OSError:
+            pass
+    return 0
+
+
+def do_check(a):
+    """The `check` subcommand: 0 fresh, signed passing record; 1 not validated (reasons on stdout); 2 cannot determine
+    (bad --max-age, insecure key)."""
+    try:
+        max_age = parse_max_age(a.max_age)
+    except ValueError as e:
+        print("LLMCTL_VALIDATION_MAX_AGE refused: %s" % e)
+        return 2
+    if not os.path.isfile(a.state):
+        print("no validation record (%s)" % a.state)
+        return 1
+    try:
+        with open(a.state) as fh:
+            state = json.load(fh)
+        with open(a.key) as fh:
+            key = json.load(fh)
+    except (OSError, ValueError) as e:
+        print("unreadable validation record or key: %s" % e)
+        return 1
+    if not isinstance(state, dict):
+        print("validation record is not a JSON object")
+        return 1
+    try:
+        hkey = load_hmac_key(a.hmac_key, create=False) if a.hmac_key else None
+    except FileNotFoundError:
+        hkey = None
+    except InsecureKey as e:
+        print("cannot verify the record: %s" % e)
+        return 2
+    why = []
+    if hkey is None:
+        why.append("record signature cannot be verified: no signing key (%s)" % (a.hmac_key or "none given"))
+    elif not signature_ok(state, hkey):
+        why.append("record signature invalid: the record was written or edited by something other than llmctl validate")
+    why += check_state(state, key, max_age)
+    if why:
+        for w in why:
+            print(w)
+        return 1
+    print("fresh passing validation from %s (suites: %s)" % (state.get("timestamp"), ", ".join(sorted(state.get("suites", {})))))
+    return 0
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description="deterministic llmctl model validation")
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -1096,15 +1395,20 @@ def main(argv=None):
     k.add_argument("--engine-tag", default="unknown")
     k.add_argument("--env-file", default="")
     k.add_argument("--only-kind", default="")
+    k.add_argument("--hash-cache", default="", help="0600 sha256 cache of model files (state dir)")
+    k.add_argument("--hmac-key", default="", help="0600 signing key (state dir); created on first use")
     rec = sub.add_parser("record")
     rec.add_argument("--key", required=True)
     rec.add_argument("--status", required=True, choices=["pass", "fail", "undetermined"])
     rec.add_argument("--evidence", default="")
     rec.add_argument("--out", required=True)
+    rec.add_argument("--hmac-key", required=True)
+    rec.add_argument("--report", action="append", default=[], help="a run's --report-file (repeatable)")
     chk = sub.add_parser("check")
     chk.add_argument("--state", required=True)
     chk.add_argument("--key", required=True)
-    chk.add_argument("--max-age", type=float, default=604800)
+    chk.add_argument("--max-age", default="604800")
+    chk.add_argument("--hmac-key", default="")
     r = sub.add_parser("run")
     r.add_argument("--suite", required=True)
     r.add_argument("--endpoint", required=True)
@@ -1123,49 +1427,15 @@ def main(argv=None):
     if a.cmd == "key":
         try:
             print(json.dumps(compute_key(a), sort_keys=True))
-        except (KeyError, OSError, ValueError) as e:
+        except (KeyError, OSError, ValueError, InsecureKey) as e:
             # an unknown profile key (e.g. a scaled instance "decide.2") is "cannot determine", never a traceback
             print("[UNDETERMINED] cannot compute a validation key for %r: %s" % (a.profile, e), file=sys.stderr)
             return 2
         return 0
     if a.cmd == "record":
-        with open(a.key) as fh:
-            key = json.load(fh)
-        if a.status == "undetermined" and os.path.isfile(a.out):
-            # could-not-determine is not evidence against an earlier PASS (endpoint blip, OOM on start):
-            # keep it. require-validated still compares the record to the CURRENT key, so a stale pass
-            # for a changed model/engine/suite is refused regardless.
-            try:
-                with open(a.out) as fh:
-                    prior = json.load(fh)
-            except (OSError, ValueError):
-                prior = {}
-            if prior.get("status") == "pass":
-                print("kept prior pass record %s (this run was UNDETERMINED)" % a.out)
-                return 0
-        key.update({"status": a.status, "epoch": int(time.time()),
-                    "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "evidence": a.evidence})
-        tmp = a.out + ".tmp"
-        with open_private(tmp, "w") as fh:
-            json.dump(key, fh, indent=1, sort_keys=True)
-        os.replace(tmp, a.out)
-        return 0
+        return do_record(a)
     if a.cmd == "check":
-        if not os.path.isfile(a.state):
-            print("no validation record (%s)" % a.state)
-            return 1
-        with open(a.state) as fh:
-            state = json.load(fh)
-        with open(a.key) as fh:
-            key = json.load(fh)
-        why = check_state(state, key, a.max_age)
-        if why:
-            for w in why:
-                print(w)
-            return 1
-        print("fresh passing validation from %s (suites: %s)" % (state.get("timestamp"),
-                                                                 ", ".join(sorted(state.get("suites", {})))))
-        return 0
+        return do_check(a)
     if a.cmd == "redact":
         print(redact_url(a.url))
         return 0

@@ -417,8 +417,10 @@ PYEOF
 # Inputs (overridable for tests): LLMCTL_PSI_FILE (default /proc/pressure/memory), LLMCTL_MEMINFO_FILE (default
 # /proc/meminfo); thresholds LLMCTL_GATE_FULL_MAX (2), LLMCTL_GATE_SOME_MAX (10), LLMCTL_GATE_RESERVE_MB (4096).
 # A missing PSI file (macOS, old kernel) skips the PSI test only; a missing meminfo skips the memory test.
+# LLMCTL_GATE_ACTION (default "start") names what is refused: the validation layer's post-start check sets it to
+# "send validation probes to", because that profile is already running (review 2026-10-14 finding 8).
 hw_pressure_gate() {
-  local fp="${1:-0}" label="${2:-service}"
+  local fp="${1:-0}" label="${2:-service}" act="${LLMCTL_GATE_ACTION:-start}"
   local psi="${LLMCTL_PSI_FILE:-/proc/pressure/memory}" mi="${LLMCTL_MEMINFO_FILE:-/proc/meminfo}"
   local fmax="${LLMCTL_GATE_FULL_MAX:-2}" smax="${LLMCTL_GATE_SOME_MAX:-10}" reserve="${LLMCTL_GATE_RESERVE_MB:-4096}"
   [[ "${fp}" =~ ^[0-9]+$ ]] || fp=0
@@ -428,18 +430,18 @@ hw_pressure_gate() {
     full="$(awk '$1=="full"{for(i=2;i<=NF;i++) if($i ~ /^avg10=/){sub(/avg10=/,"",$i); print $i; exit}}' "${psi}" 2>/dev/null || true)"
   fi
   if [[ "${full}" =~ ^[0-9.]+$ ]] && awk -v v="${full}" -v m="${fmax}" 'BEGIN{exit !(v>m)}'; then
-    printf 'refusing to start %s: memory pressure is too high (PSI full avg10=%s > %s). Wait for it to drop, or free memory; this gate protects the host from a stall.\n' "${label}" "${full}" "${fmax}" >&2
+    printf 'refusing to %s %s: memory pressure is too high (PSI full avg10=%s > %s). Wait for it to drop, or free memory; this gate protects the host from a stall.\n' "${act}" "${label}" "${full}" "${fmax}" >&2
     return 75
   fi
   if [[ "${some}" =~ ^[0-9.]+$ ]] && awk -v v="${some}" -v m="${smax}" 'BEGIN{exit !(v>m)}'; then
-    printf 'refusing to start %s: memory pressure is too high (PSI some avg10=%s > %s). Wait for it to drop, or free memory; this gate protects the host from a stall.\n' "${label}" "${some}" "${smax}" >&2
+    printf 'refusing to %s %s: memory pressure is too high (PSI some avg10=%s > %s). Wait for it to drop, or free memory; this gate protects the host from a stall.\n' "${act}" "${label}" "${some}" "${smax}" >&2
     return 75
   fi
   if [[ -r "${mi}" ]]; then
     avail_kb="$(awk '/^MemAvailable:/{print $2; exit}' "${mi}" 2>/dev/null || true)"
     if [[ "${avail_kb}" =~ ^[0-9]+$ ]] && (( avail_kb / 1024 < fp + reserve )); then
-      printf 'refusing to start %s: only %s MiB memory available, need %s MiB footprint + %s MiB reserve (memory pressure gate)\n' \
-        "${label}" "$(( avail_kb / 1024 ))" "${fp}" "${reserve}" >&2
+      printf 'refusing to %s %s: only %s MiB memory available, need %s MiB footprint + %s MiB reserve (memory pressure gate)\n' \
+        "${act}" "${label}" "$(( avail_kb / 1024 ))" "${fp}" "${reserve}" >&2
       return 75
     fi
   fi
