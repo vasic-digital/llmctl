@@ -4,12 +4,15 @@
 #   install.sh [install] [--dry-run] [--no-guard] [--no-tracker]
 #   install.sh uninstall [--dry-run]
 #   install.sh verify            # read back effective cgroup values / unit state
+#   install.sh verify-persistence [--json FILE]   # does every setting survive a reboot? (persistence-check.sh; rc 0/1/2)
 #
 # What `install` changes (printed as it goes; nothing else is touched):
 #   ~/.config/systemd/user/{app,background,user}.slice.d/10-hostsafety.conf   slice limits
 #   ~/.local/bin/{bounded-run,agent-run,hostsafety-podman-audit,hostsafety-tracker-exclude}
 #   ~/.local/share/hostsafety/{lib.sh,guard.py}                               installed copies
 #   ~/.config/systemd/user/hostsafety-guard.{service,timer}                   guard (DRY-RUN by default)
+#   ~/.local/share/hostsafety/{root-steps.sh,persistence-check.sh,source-dir}  verification copies + where they came from
+#   ~/.config/systemd/user/hostsafety-selfcheck.service                       boot self-check (report only), enabled
 #   ~/.config/hostsafety/guard.env                                            only if absent (arming switch)
 #   gsettings org.freedesktop.Tracker3.Miner.Files ignored-directories (+ ~/go/pkg/mod/.trackerignore)
 # Any pre-existing file that would be overwritten is first copied to
@@ -33,7 +36,8 @@ STAMP="$(date +%Y%m%dT%H%M%S)"
 SLICES=(app background user)
 
 cmd="install"; dry=0; do_guard=1; do_tracker=1
-if [[ "${1:-}" =~ ^(install|uninstall|verify)$ ]]; then cmd="$1"; shift; fi
+if [[ "${1:-}" =~ ^(install|uninstall|verify|verify-persistence)$ ]]; then cmd="$1"; shift; fi
+if [[ "${cmd}" == verify-persistence ]]; then HOSTSAFETY_SOURCE_DIR="${HOSTSAFETY_SOURCE_DIR:-${src}}" exec bash "${src}/persistence-check.sh" "$@"; fi
 for a in "$@"; do
   case "${a}" in
     --dry-run) dry=1 ;; --no-guard) do_guard=0 ;; --no-tracker) do_tracker=0 ;;
@@ -104,6 +108,29 @@ StandardOutput=journal
 StandardError=journal
 UNIT
 }
+selfcheck_service() {
+  cat <<'UNIT'
+# Managed by hostsafety. Boot self-check: does every hostsafety setting survive a reboot?  Report only - it never
+# changes, stops or signals anything.  Result: ~/.local/state/hostsafety/boot-check.json + one journal line.
+[Unit]
+Description=hostsafety boot self-check (persistence of every hostsafety setting; report only)
+After=hostsafety-guard.timer
+
+[Service]
+Type=oneshot
+Nice=19
+IOSchedulingClass=idle
+CPUWeight=10
+MemoryMax=256M
+TimeoutStartSec=30
+ExecStart=/bin/bash %h/.local/share/hostsafety/persistence-check.sh --boot-check
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target
+UNIT
+}
 guard_timer() {
   cat <<'UNIT'
 # Managed by hostsafety.
@@ -152,9 +179,13 @@ do_install() {
   put_file "${BIN_DIR}/hostsafety-tracker-exclude" 755 <"${src}/tracker-exclude.sh"
   put_file "${SHARE}/lib.sh" 644 <"${src}/lib.sh"
   put_file "${SHARE}/guard.py" 755 <"${src}/guard.py"
+  put_file "${SHARE}/root-steps.sh" 755 <"${src}/root-steps.sh"
+  put_file "${SHARE}/persistence-check.sh" 755 <"${src}/persistence-check.sh"
+  put_file "${SHARE}/source-dir" 644 < <(printf '%s\n' "${src}")
   if (( do_guard )); then
     put_file "${UNIT_DIR}/hostsafety-guard.service" 644 < <(guard_service)
     put_file "${UNIT_DIR}/hostsafety-guard.timer" 644 < <(guard_timer)
+    put_file "${UNIT_DIR}/hostsafety-selfcheck.service" 644 < <(selfcheck_service)
     if [[ ! -e "${CONFIG_HOME}/hostsafety/guard.env" ]]; then
       put_file "${CONFIG_HOME}/hostsafety/guard.env" 600 keep < <(guard_env)
     else hs_log "kept       ${CONFIG_HOME}/hostsafety/guard.env (never overwritten)"; fi
@@ -168,6 +199,7 @@ do_install() {
   fi
   if (( do_guard )); then
     sysctl_user enable --now hostsafety-guard.timer 2>&1 | sed 's/^/hostsafety: /' || true
+    sysctl_user enable hostsafety-selfcheck.service 2>&1 | sed 's/^/hostsafety: /' || true
   fi
   if (( do_tracker )); then "${src}/tracker-exclude.sh" || hs_log "tracker exclusion skipped/failed (non-fatal)"; fi
   do_verify || true
@@ -219,6 +251,7 @@ do_uninstall() {
   [[ -f "${MANIFEST}" ]] || { hs_log "nothing to uninstall (no manifest at ${MANIFEST})"; return 0; }
   local f orig line
   sysctl_user disable --now hostsafety-guard.timer >/dev/null 2>&1 || true
+  sysctl_user disable hostsafety-selfcheck.service >/dev/null 2>&1 || true
   while IFS= read -r line; do
     [[ -n "${line}" ]] || continue
     f="${line%%"${TAB}"*}"; orig=""

@@ -70,6 +70,7 @@ DEF = {
     "ADV_APP_RATIO_BASIS": "pinned",   # pinned = (anon+shmem)/memory.high ; current = memory.current/memory.high (counts page cache)
     "TOP_WRITERS_TIMEOUT_S": 2.0,      # hard cap of the du scan attached to a tmpfs-high event (all directories together)
     "SCAN_DEADLINE_S": 10.0,           # the decision /proc walk gives up (visibly) before the unit's TimeoutStartSec=15
+    "SERIES_MAX_BYTES": 4194304,       # pressure-series.jsonl (one line per pass, ~0.6 KB) is moved to .1 past this (~1 day at 10 s)
 }
 
 ADV_SCHEMA = "hostsafety.pressure/1"
@@ -382,6 +383,13 @@ def psi(path):
     return out
 
 
+def mem_available_bytes(meminfo_path):
+    for line in read(meminfo_path).splitlines():
+        if line.startswith("MemAvailable:"):
+            return kb(line.partition(":")[2]) * 1024
+    return None
+
+
 def swap_free_pct(meminfo_path):
     d = {}
     for line in read(meminfo_path).splitlines():
@@ -420,9 +428,61 @@ def app_slice_memory(cg_root):
     st = {}
     for line in read(os.path.join(a, "memory.stat"), "").splitlines():
         k, _, v = line.partition(" ")
-        if k in ("anon", "shmem", "file"):
+        if k in ("anon", "shmem", "file", "inactive_file", "active_file"):
             st[k] = _int_or_none(v)
-    return {"current": cur, "high": high if high and high > 0 else None, "anon": st.get("anon"), "shmem": st.get("shmem")}
+    ev = {}
+    for line in read(os.path.join(a, "memory.events"), "").splitlines():
+        k, _, v = line.partition(" ")
+        if k in ("high", "sock_throttled", "oom_kill"):
+            ev[k] = _int_or_none(v)
+    return {"current": cur, "high": high if high and high > 0 else None, "anon": st.get("anon"), "shmem": st.get("shmem"),
+            "file": st.get("file"), "inactive_file": st.get("inactive_file"), "ev_high": ev.get("high"),
+            "ev_sock_throttled": ev.get("sock_throttled"), "ev_oom_kill": ev.get("oom_kill")}
+
+
+def boot_check_summary(state_dir):
+    """the last boot self-check (persistence-check.sh --boot-check) for the heartbeat; None when there is none."""
+    try:
+        with open(os.path.join(state_dir, "boot-check.json")) as f:
+            d = json.load(f)
+    except (OSError, ValueError):
+        return None
+    if not isinstance(d, dict):
+        return None
+    cur = read("/proc/sys/kernel/random/boot_id").strip()
+    return {"ts": d.get("ts"), "boot_id": d.get("boot_id"), "pass": d.get("pass"), "fail": d.get("fail"),
+            "undetermined": d.get("undetermined"), "current_boot": bool(cur) and d.get("boot_id") == cur}
+
+
+def counter_delta(prev, cur):
+    """delta of a monotonic kernel counter since the previous pass; None without a baseline or when it went backwards
+    (the cgroup was recreated: a reboot or a re-created slice)."""
+    if prev is None or cur is None or cur < prev:
+        return None
+    return cur - prev
+
+
+def append_series(path, rec, max_bytes):
+    """one compact JSON line per pass (a time series); moved to path.1 past max_bytes (one previous file kept).  Best effort."""
+    try:
+        os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+        try:
+            if os.path.getsize(path) > max_bytes:
+                os.replace(path, path + ".1")
+        except OSError:
+            pass
+        fd = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
+        with os.fdopen(fd, "a") as f:
+            os.fchmod(f.fileno(), 0o600)
+            f.write(json.dumps(_finite(rec), sort_keys=True, allow_nan=False, separators=(",", ":")) + "\n")
+    except (OSError, ValueError):
+        pass
+
+
+SERIES_KEYS = ("ts_epoch", "level", "psi_mem_some_avg10", "psi_mem_full_avg10", "mem_available_bytes", "tmpfs_used_pct",
+               "app_slice_current_bytes", "app_slice_high_bytes", "app_slice_anon_bytes", "app_slice_file_bytes",
+               "app_slice_inactive_file_bytes", "app_slice_shmem_bytes", "app_slice_events_high_delta",
+               "app_slice_sock_throttled_delta", "app_slice_oom_kill_total")
 
 
 def pressure_advisory(env, psi_ok, some10, full10, tmpp, tmp_dir, app):
@@ -466,7 +526,10 @@ def pressure_advisory(env, psi_ok, some10, full10, tmpp, tmp_dir, app):
             "tmpfs_used_pct": tmpp, "tmpfs_path": tmp_dir,
             "app_slice_current_bytes": app.get("current"), "app_slice_high_bytes": high, "app_slice_anon_bytes": app.get("anon"),
             "app_slice_shmem_bytes": app.get("shmem"), "app_slice_current_ratio": cur_ratio, "app_slice_pinned_ratio": pinned_ratio,
-            "app_slice_ratio_basis": basis, "thresholds": th}
+            "app_slice_ratio_basis": basis, "thresholds": th,
+            "app_slice_file_bytes": app.get("file"), "app_slice_inactive_file_bytes": app.get("inactive_file"),
+            "app_slice_events_high_total": app.get("ev_high"), "app_slice_sock_throttled_total": app.get("ev_sock_throttled"),
+            "app_slice_oom_kill_total": app.get("ev_oom_kill")}
 
 
 def write_json_atomic(path, doc):
@@ -828,8 +891,18 @@ def main(argv=None):
     status_extra = {"max_scope_tasks": top["pids"] if top else None, "max_scope_cg": top["cg"] if top else None}
     # pressure advisory: written on EVERY pass and BEFORE anything slow (du, the /proc walk), so it survives a guard that is
     # killed at TimeoutStartSec under thrash (fixture PA7).  Report-only: the guard never acts on the level.
-    adv = pressure_advisory(env, psi_ok, some10, full10, tmpp, a.tmp_dir, app_slice_memory(cg_root))
-    write_json_atomic(a.pressure_file or env.get("HOSTSAFETY_PRESSURE_FILE") or os.path.join(os.path.dirname(log_file) or ".", "pressure.json"), adv)
+    app_mem = app_slice_memory(cg_root)
+    adv = pressure_advisory(env, psi_ok, some10, full10, tmpp, a.tmp_dir, app_mem)
+    prev_ev = st.get("app_ev") or {}
+    adv["app_slice_events_high_delta"] = counter_delta(prev_ev.get("high"), app_mem.get("ev_high"))
+    adv["app_slice_sock_throttled_delta"] = counter_delta(prev_ev.get("sock_throttled"), app_mem.get("ev_sock_throttled"))
+    adv["app_slice_events_interval_s"] = round(now - float(prev_ev["ts"]), 1) if prev_ev.get("ts") and adv["app_slice_events_high_delta"] is not None else None
+    st["app_ev"] = {"high": app_mem.get("ev_high"), "sock_throttled": app_mem.get("ev_sock_throttled"), "ts": now}
+    adv["mem_available_bytes"] = mem_available_bytes(a.meminfo)
+    pressure_path = a.pressure_file or env.get("HOSTSAFETY_PRESSURE_FILE") or os.path.join(os.path.dirname(log_file) or ".", "pressure.json")
+    write_json_atomic(pressure_path, adv)
+    append_series(os.path.join(os.path.dirname(pressure_path) or ".", "pressure-series.jsonl"), {k: adv.get(k) for k in SERIES_KEYS},
+                  cfg("SERIES_MAX_BYTES", env))
     # report-only: a RAM-backed /tmp that is filling up charges its writers' cgroups (unreclaimable) - one event per crossing, never a kill
     if tmpp is not None and tmpp > cfg("TMPFS_WARN_PCT", env):
         if not st.get("tmpfs_high_logged"):
@@ -847,7 +920,8 @@ def main(argv=None):
     # heartbeat: a silent guard is indistinguishable from a dead one (11.4.201)
     _save(os.path.join(os.path.dirname(log_file), "guard.status") if log_file else state_file + ".status",
           {"last_run": time.strftime("%Y-%m-%dT%H:%M:%S%z"), "armed": armed, "streak": st["streak"],
-           "triggered": bool(why), "psi_available": psi_ok, **status_extra, **metrics})
+           "triggered": bool(why), "psi_available": psi_ok, **status_extra, **metrics,
+           "boot_check": boot_check_summary(os.path.dirname(log_file) or ".")})
     if not psi_ok and not st.get("psi_missing_logged"):
         log(log_file, {"event": "psi-unavailable", "psi_file": a.psi_file,
                        "note": "memory pressure cannot be read: no PSI rule can fire, the guard is blind until the file is readable"})

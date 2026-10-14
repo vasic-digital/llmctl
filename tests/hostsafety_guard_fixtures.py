@@ -825,5 +825,69 @@ else:
     check("SD1 scan() past its deadline raises ScanDeadline (partial table is never returned)", False, "no g.ScanDeadline")
     check("SD2 a decision walk past the deadline logs scan-deadline-exceeded with counts and decides NOTHING", False, "no g.ScanDeadline")
 
+# ---------------------------------------------------------------- per-pass time series (2026-10-14 15:37: app.slice at MemoryHigh with
+# 8.1G file cache, events high 702583, sock_throttled 36685, PSI full 34 while 16 GB were available host-wide)
+def ts_pass(d, cg, ev_high, sock, extra_env=None, inactive=6 * GiB):
+    open(os.path.join(cg, "app.slice", "memory.events"), "w").write("low 0\nhigh %d\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled %d\n" % (ev_high, sock))
+    open(os.path.join(cg, "app.slice", "memory.stat"), "w").write("anon %d\nfile %d\nshmem %d\ninactive_file %d\nactive_file %d\n" % (10 * GiB, 8 * GiB, 0, inactive, 2 * GiB))
+    open(os.path.join(d, "psi"), "w").write("some avg10=36.00 avg60=32.00 avg300=10.00 total=1\nfull avg10=34.00 avg60=31.00 avg300=13.00 total=1\n")
+    open(os.path.join(d, "mi"), "w").write("MemTotal: 31717516 kB\nMemAvailable: 16777216 kB\nSwapTotal: 8388604 kB\nSwapFree: 8388604 kB\n")
+    _envb = dict(os.environ)
+    try:
+        os.environ["XDG_RUNTIME_DIR"] = d
+        for k in [k for k in os.environ if k.startswith("HOSTSAFETY_")]:
+            del os.environ[k]
+        os.environ.update(extra_env or {})
+        g.main(["--psi-file", os.path.join(d, "psi"), "--meminfo", os.path.join(d, "mi"), "--log-file", os.path.join(d, "log", "guard.log"),
+                "--state-file", os.path.join(d, "st"), "--uid", str(ME), "--self-pid", str(GUARD_PID), "--tmpfs-used-pct-fixture", "1",
+                "--cgroup-root", cg, "--proc-root", os.path.join(d, "noproc")])
+    finally:
+        os.environ.clear(); os.environ.update(_envb)
+    try:
+        doc = _json.load(open(os.path.join(d, "log", "pressure.json")))
+    except (OSError, ValueError):
+        doc = {}
+    return doc if isinstance(doc, dict) else {}
+
+
+with tempfile.TemporaryDirectory() as dts:
+    cgt = mk_app(os.path.join(dts, "cg"), int(20.8 * GiB), int(21.2 * GiB), 10 * GiB, 0, 8 * GiB)
+    p1 = ts_pass(dts, cgt, 702583, 36685)
+    p2 = ts_pass(dts, cgt, 703583, 36700)
+    check("PA8 every pass records app.slice file/inactive_file, global MemAvailable and PSI (time-series fields)",
+          p2.get("app_slice_file_bytes") == 8 * GiB and p2.get("app_slice_inactive_file_bytes") == 6 * GiB and p2.get("mem_available_bytes") == 16 * GiB
+          and p2.get("psi_mem_full_avg10") == 34.0, repr({k: p2.get(k) for k in ("app_slice_file_bytes", "app_slice_inactive_file_bytes", "mem_available_bytes")}))
+    check("PA8b memory.events high / sock_throttled deltas since the previous pass (first pass: null, no baseline)",
+          p1.get("app_slice_events_high_delta") is None and p2.get("app_slice_events_high_delta") == 1000 and p2.get("app_slice_sock_throttled_delta") == 15
+          and p2.get("app_slice_events_high_total") == 703583, repr({k: (p1.get(k), p2.get(k)) for k in ("app_slice_events_high_delta", "app_slice_sock_throttled_delta")}))
+    p3 = ts_pass(dts, cgt, 5, 0)       # counter went backwards: the cgroup was recreated (reboot / re-created slice)
+    check("PA8c a counter that went backwards (cgroup recreated) gives a null delta, never a negative or huge one",
+          p3.get("app_slice_events_high_delta") is None, repr(p3.get("app_slice_events_high_delta")))
+    ser = os.path.join(dts, "log", "pressure-series.jsonl")
+    lines_ = open(ser).read().splitlines() if os.path.exists(ser) else []
+    check("PA9 each pass appends one compact JSON line to pressure-series.jsonl (a time series, mode 0600)",
+          len(lines_) == 3 and all(_json.loads(x).get("ts_epoch") for x in lines_) and (os.stat(ser).st_mode & 0o777) == 0o600
+          and _json.loads(lines_[1]).get("app_slice_events_high_delta") == 1000, repr(len(lines_)))
+    for _ in range(30):
+        ts_pass(dts, cgt, 703583, 36700, extra_env={"HOSTSAFETY_SERIES_MAX_BYTES": "2000"})
+    sz = os.path.getsize(ser) if os.path.exists(ser) else -1
+    check("PA9b the series is size-bounded: rotated to .1 past HOSTSAFETY_SERIES_MAX_BYTES (one previous file kept)",
+          0 <= sz <= 2000 + 2048 and os.path.exists(ser + ".1") and not os.path.exists(ser + ".2"), repr((sz, os.listdir(os.path.dirname(ser)))))
+
+# PA10: the guard heartbeat carries the last boot self-check result (so a FAIL at boot stays visible in guard.status)
+with tempfile.TemporaryDirectory() as d10:
+    real_bid = open("/proc/sys/kernel/random/boot_id").read().strip()
+    os.makedirs(os.path.join(d10, "log"))
+    def bc_status(bid):
+        open(os.path.join(d10, "log", "boot-check.json"), "w").write(_json.dumps({"schema": "hostsafety.bootcheck/1", "boot_id": bid, "ts": "x", "pass": 27, "fail": 2, "undetermined": 0, "rows": []}))
+        ts_pass(d10, mk_app(os.path.join(d10, "cg"), GiB, 20 * GiB, GiB, 0), 1, 1)
+        try:
+            return _json.load(open(os.path.join(d10, "log", "guard.status"))).get("boot_check") or {}
+        except (OSError, ValueError):
+            return {}
+    b_now, b_old = bc_status(real_bid), bc_status("some-older-boot")
+    check("PA10 guard.status carries the last boot-check (pass/fail/undetermined) and whether it is from THIS boot",
+          b_now.get("fail") == 2 and b_now.get("pass") == 27 and b_now.get("current_boot") is True and b_old.get("current_boot") is False, repr((b_now, b_old)))
+
 print("RESULT: %d failed" % len(fails))
 sys.exit(1 if fails else 0)

@@ -17,7 +17,7 @@ export HOSTSAFETY_NO_SYSTEMCTL=1
 if command -v shellcheck >/dev/null 2>&1; then
   assert_rc 0 "shellcheck -x clean on every hostsafety shell script" \
     shellcheck -S warning -x -P SCRIPTDIR "${HS}"/lib.sh "${HS}"/bounded-run "${HS}"/agent-run "${HS}"/install.sh "${HS}"/podman-audit.sh \
-      "${HS}"/tracker-exclude.sh "${HS}"/root-steps.sh "${LLMCTL_ROOT}/tests/test_hostsafety.sh"
+      "${HS}"/tracker-exclude.sh "${HS}"/root-steps.sh "${HS}"/persistence-check.sh "${LLMCTL_ROOT}/tests/test_hostsafety.sh"
 else
   assert_skip "shellcheck not installed" "shellcheck on hostsafety scripts"
 fi
@@ -109,6 +109,96 @@ INST_MEMINFO="${TEST_TMP}/meminfo8" inst_env "${HS}/install.sh" >/dev/null   # r
 assert_eq "yes" "$([[ "$(cat "${TEST_TMP}/c/systemd/user/app.slice.d/10-hostsafety.conf")" != "${gen1}" ]] && echo yes || echo no)" "re-install re-sized the drop-in (a second generated version exists)"
 inst_env "${HS}/install.sh" uninstall >/dev/null
 assert_file_contains "${TEST_TMP}/c/systemd/user/app.slice.d/10-hostsafety.conf" "# pre-existing operator file" "uninstall restores the file that existed BEFORE the first install, not hostsafety's earlier generation"
+
+# --- 2c. persistence: does every setting survive a reboot? (persistence-check.sh / install.sh verify-persistence) ---
+# Everything is re-rooted: a fixture install, a fixture root tree, fake systemctl/loginctl answering from the fixture files.
+pc="${TEST_TMP}/pc"; pcs="${pc}/shim"; mkdir -p "${pcs}" "${pc}/state/hostsafety"
+env HOSTSAFETY_CONFIG_HOME="${pc}/c" HOSTSAFETY_DATA_HOME="${pc}/d" HOSTSAFETY_BIN_DIR="${pc}/b" HOSTSAFETY_BACKUP_DIR="${pc}/bk" \
+  HOSTSAFETY_NO_TRACKER=1 HOSTSAFETY_NO_SYSTEMCTL=1 HOSTSAFETY_MEMINFO="${TEST_TMP}/meminfo16" HOSTSAFETY_NPROC=8 "${HS}/install.sh" >"${pc}/inst.out" 2>&1
+assert_file_exists "${pc}/c/systemd/user/hostsafety-selfcheck.service" "install writes the boot self-check unit"
+assert_file_contains "${pc}/c/systemd/user/hostsafety-selfcheck.service" "WantedBy=default.target" "self-check unit is wanted by default.target (runs at every boot with linger)"
+for kv in "Nice=19" "TimeoutStartSec=30" "Type=oneshot" "persistence-check.sh --boot-check"; do
+  assert_file_contains "${pc}/c/systemd/user/hostsafety-selfcheck.service" "${kv}" "self-check unit carries ${kv}"
+done
+assert_eq "0" "$(grep -vE '^[[:space:]]*#' "${HS}/persistence-check.sh" | grep -cE '(^|[^a-z_-])(kill|pkill|killall)([^a-z_]|$)|uctl (stop|kill|restart|start)|systemctl[^|]*(stop|kill|restart)' || true)" "persistence-check.sh never stops, restarts or signals anything (no kill/stop/restart call)"
+assert_file_contains "${pc}/d/hostsafety/source-dir" "${HS}" "install records the source tree its copies came from"
+# fixture root tree in which every root row passes
+RP="${pc}/root"; mkdir -p "${RP}/usr/lib/systemd/system" "${RP}/proc/sys/vm" "${RP}/etc/default"
+printf '[Mount]\nOptions=mode=1777,strictatime,nosuid,nodev,size=50%%%%,nr_inodes=1m,x-systemd.graceful-option=usrquota\n' >"${RP}/usr/lib/systemd/system/tmp.mount"
+echo 20 >"${RP}/proc/sys/vm/swappiness"; printf 'EARLYOOM_ARGS="-r 3600"\n' >"${RP}/etc/default/earlyoom"
+HOSTSAFETY_ROOT_PREFIX="${RP}" HOSTSAFETY_TMP_USED_BYTES=0 bash "${HS}/root-steps.sh" --apply >/dev/null 2>&1
+PC_EO="/usr/bin/earlyoom $(sed -n 's/^EARLYOOM_ARGS="\(.*\)"$/\1/p' "${RP}/etc/default/earlyoom")"; export PC_EO
+cat >"${pcs}/systemctl" <<'S'
+#!/usr/bin/env bash
+# fake: show answers from the installed drop-in unless PC_OVERRIDE=<unit>:<Key>:<value>; is-enabled from PC_DISABLED
+[[ "$1" == "--user" ]] && shift
+case "$1" in
+  show) unit="$2"; key="$4"
+        if [[ "${PC_OVERRIDE:-}" == "${unit}:${key}:"* ]]; then echo "${PC_OVERRIDE##*:}"; exit 0; fi
+        sed -n "s/^${key}=//p" "${PC_CFG}/systemd/user/${unit}.d/10-hostsafety.conf" 2>/dev/null | head -1 ;;
+  is-enabled) if [[ " ${PC_DISABLED:-} " == *" $2 "* ]]; then echo disabled; exit 1; fi; echo enabled ;;
+  is-active) echo active ;;
+  *) exit 0 ;;
+esac
+S
+printf '#!/usr/bin/env bash\necho "${PC_LINGER:-yes}"\n' >"${pcs}/loginctl"
+chmod +x "${pcs}/systemctl" "${pcs}/loginctl"
+printf '{"schema": "hostsafety.pressure/1", "ts_epoch": 1000.5}\n' >"${pc}/state/hostsafety/pressure.json"
+PCSCRIPT="${HS}/persistence-check.sh"
+pcrun() { env PATH="${pcs}:${PATH}" PC_CFG="${pc}/c" HOSTSAFETY_CONFIG_HOME="${pc}/c" HOSTSAFETY_DATA_HOME="${pc}/d" HOSTSAFETY_BIN_DIR="${pc}/b" \
+  HOSTSAFETY_STATE_HOME="${pc}/state" HOSTSAFETY_SOURCE_DIR="${HS}" HOSTSAFETY_ROOT_PREFIX="${RP}" HOSTSAFETY_MEMINFO="${TEST_TMP}/meminfo16" \
+  LIVE_TMP_OPTIONS='rw,nosuid,nodev,size=4194304k,nr_inodes=1048576,inode64,usrquota' LIVE_EARLYOOM="${PC_EO}" LIVE_EARLYOOM_ENABLED=enabled \
+  LIVE_USER_SLICE="MemoryHigh=$((16777216 * 1024 * 90 / 100)) MemoryMax=infinity TasksMax=40000" \
+  HOSTSAFETY_NOW="${PC_NOW:-1010}" HOSTSAFETY_BOOT_EPOCH="${PC_BOOT:-900}" HOSTSAFETY_BOOT_ID=fixture-boot-1 HOSTSAFETY_BOOTCHECK_WAIT_S=0 \
+  bash "${PCSCRIPT}" "$@" 2>&1; }
+pcv() { local out; out="$(pcrun "$@"; echo "rc=$?")"; printf '%s' "${out}"; }
+ok_out="$(pcv --json "${pc}/pc.json")"
+assert_contains "${ok_out}" "persistence: 29 PASS 0 FAIL 0 UNDETERMINED" "every setting persistent and in effect: 29 rows PASS (23 user + 6 root)"
+assert_contains "${ok_out}" "rc=0" "verify-persistence rc 0 when everything persists"
+for want in "app.slice MemorySwapMax" "hostsafety-guard.timer" "hostsafety-selfcheck.service" "linger" "guard.env" "installed guard.py" "installed bounded-run" "pressure advisory" "root: tmp.mount size" "root: earlyoom enabled" "root: vm.swappiness"; do
+  assert_contains "${ok_out}" "$(printf 'ROW\t%s\tPASS' "${want}")" "persistence row present and PASS: ${want}"
+done
+assert_eq "29" "$(python3 -I -c 'import json,sys; d=json.load(open(sys.argv[1])); print(len(d["rows"]) if d["schema"]=="hostsafety.bootcheck/1" and d["boot_id"]=="fixture-boot-1" else -1)' "${pc}/pc.json")" "--json writes every row with schema and boot id"
+# named negatives: each one must turn its own row FAIL (rc 1)
+case_fail() { # <label> <row> <env...>
+  local label="$1" rowname="$2"; shift 2
+  local out; out="$(env "$@" bash -c "$(declare -f pcrun pcv); PCSCRIPT='${PCSCRIPT}'; pc='${pc}'; pcs='${pcs}'; RP='${RP}'; HS='${HS}'; TEST_TMP='${TEST_TMP}'; PC_EO='${PC_EO}'; pcv")"
+  assert_contains "${out}" "$(printf 'ROW\t%s\tFAIL' "${rowname}")" "${label}: row '${rowname}' FAILs"
+  assert_contains "${out}" "rc=1" "${label}: verify-persistence rc 1"
+}
+case_fail "guard timer not enabled (would not start at boot)" "hostsafety-guard.timer" PC_DISABLED=hostsafety-guard.timer
+case_fail "self-check unit not enabled" "hostsafety-selfcheck.service" PC_DISABLED=hostsafety-selfcheck.service
+case_fail "runtime-only value drifted from the persistent one (systemctl set-property --runtime)" "app.slice MemorySwapMax" PC_OVERRIDE=app.slice:MemorySwapMax:1073741824
+case_fail "linger off: user units wait for a login" "linger" PC_LINGER=no
+case_fail "pressure advisory stale (guard dead or timing out)" "pressure advisory" PC_NOW=2000
+mv "${pc}/c/systemd/user/app.slice.d/10-hostsafety.conf" "${pc}/app.bak"
+assert_contains "$(pcv)" "$(printf 'ROW\tapp.slice MemoryHigh\tFAIL')" "drop-in removed: the app.slice rows FAIL (no persistent definition)"
+mv "${pc}/app.bak" "${pc}/c/systemd/user/app.slice.d/10-hostsafety.conf"
+printf '\n# drift\n' >>"${pc}/d/hostsafety/guard.py"
+assert_contains "$(pcv)" "$(printf 'ROW\tinstalled guard.py\tFAIL')" "installed guard.py differs from the source tree: FAIL"
+cp "${HS}/guard.py" "${pc}/d/hostsafety/guard.py"
+rm -f "${RP}/etc/systemd/system/tmp.mount.d/50-hostsafety.conf"
+assert_contains "$(pcv)" "$(printf 'ROW\troot: tmp.mount size\tFAIL')" "root drop-in removed: the root tmp.mount row FAILs"
+HOSTSAFETY_ROOT_PREFIX="${RP}" HOSTSAFETY_TMP_USED_BYTES=0 bash "${HS}/root-steps.sh" --apply >/dev/null 2>&1
+assert_contains "$(PC_BOOT=1001 pcv)" "$(printf 'ROW\tpressure advisory\tUNDETERMINED')" "pressure.json from a previous boot: UNDETERMINED, never PASS"
+bc="$(pcv --boot-check)"
+assert_contains "${bc}" "hostsafety: boot-check 29 PASS 0 FAIL 0 UNDETERMINED" "--boot-check logs the one-line journal summary"
+assert_file_exists "${pc}/state/hostsafety/boot-check.json" "--boot-check writes boot-check.json"
+# mutation proofs: a neutered check in a scratch copy must flip its named case
+mutate_pc() { # <label> <old> <new> <env for the case> <row>
+  local mp="${TEST_TMP}/pcm.sh" out
+  OLD="$2" python3 -I -c 'import os,sys; print(open(sys.argv[1]).read().count(os.environ["OLD"]))' "${HS}/persistence-check.sh" | grep -qx 1 \
+    || { echo "  FAIL: mutation [$1]: text not found exactly once" >&2; TEST_FAILS=$((TEST_FAILS+1)); return; }
+  OLD="$2" NEW="$3" python3 -I -c 'import os,sys; s=open(sys.argv[1]).read(); open(sys.argv[2],"w").write(s.replace(os.environ["OLD"], os.environ["NEW"]))' "${HS}/persistence-check.sh" "${mp}"
+  out="$(env $4 bash -c "$(declare -f pcrun pcv); PCSCRIPT='${mp}'; pc='${pc}'; pcs='${pcs}'; RP='${RP}'; HS='${HS}'; TEST_TMP='${TEST_TMP}'; PC_EO='${PC_EO}'; pcv")"
+  assert_eq "no" "$(grep -qF "$(printf 'ROW\t%s\tFAIL' "$5")" <<<"${out}" && echo yes || echo no)" "mutation [$1] is CAUGHT: the named case no longer FAILs '$5' on the mutant"
+}
+mutate_pc "m25 is-enabled check neutered" 'elif [[ "${en}" != enabled ]]; then row "${u}" FAIL' 'elif false; then row "${u}" FAIL' PC_DISABLED=hostsafety-guard.timer hostsafety-guard.timer
+mutate_pc "m26 runtime-vs-boot drift check removed" 'elif [[ "${lv}" != "${bv}" ]]; then' 'elif false; then' PC_OVERRIDE=app.slice:MemorySwapMax:1073741824 "app.slice MemorySwapMax"
+printf '\n# drift\n' >>"${pc}/d/hostsafety/guard.py"
+mutate_pc "m27 installed-copy sha256 compare removed" 'elif [[ "${is}" != "${ss}" ]]; then' 'elif false; then' PC_UNUSED=1 "installed guard.py"
+cp "${HS}/guard.py" "${pc}/d/hostsafety/guard.py"
+mutate_pc "m28 linger check neutered" 'if [[ "${lg}" == yes ]]; then' 'if true; then' PC_LINGER=no "linger"
 
 # --- 3. guard: victim selection on synthetic /proc ----------------------------------------
 UID_ME=1000
@@ -240,13 +330,26 @@ assert_eq "0" "${fx_rc}" "guard fixture suite passes on the real guard.py ($(pri
 assert_contains "${fx_out}" "ok: T1 a storm sharing claude's group never loses to an idle 5 MB group" "T1: 40x200MB git in claude's pgid + idle 5 MB pane shell => the 5 MB group is NOT selected"
 # mutation proof: each mutation of guard.py (applied to a scratch copy) must make a NAMED fixture fail.
 # mutate <label> <expected failing fixture prefix> <old text> <new text>
+# The fixture suite runs once per mutant; mutants run 4 at a time (each in its own scratch files) and are judged in
+# mutate_collect, so the suite stays inside its bounded-run timeout.
+MUT_N=0; MUT_LABELS=(); MUT_WANTS=()
 mutate() {
-  local label="$1" want="$2" old="$3" new="$4" mg="${TEST_TMP}/mut_guard.py" cnt out rc=0
+  local label="$1" want="$2" old="$3" new="$4" cnt mg
+  MUT_N=$((MUT_N + 1)); mg="${TEST_TMP}/mut_guard_${MUT_N}.py"
   cnt="$(OLD="${old}" python3 -I -c 'import os,sys; print(open(sys.argv[1]).read().count(os.environ["OLD"]))' "${GUARD}")"
   assert_eq "1" "${cnt}" "mutation [${label}]: the text to mutate occurs exactly once in guard.py (the mutation is real)"
   OLD="${old}" NEW="${new}" python3 -I -c 'import os,sys; s=open(sys.argv[1]).read(); open(sys.argv[2],"w").write(s.replace(os.environ["OLD"], os.environ["NEW"]))' "${GUARD}" "${mg}"
-  out="$(python3 -I "${FIX}" "${mg}" 2>&1)" || rc=$?
-  assert_eq "yes" "$([[ ${rc} -ne 0 && "${out}" == *"FAIL: ${want}"* ]] && echo yes || echo no)" "mutation [${label}] is CAUGHT by fixture ${want}"
+  MUT_LABELS+=("${label}"); MUT_WANTS+=("${want}")
+  while (( $(jobs -rp | wc -l) >= 4 )); do wait -n || true; done
+  ( rc=0; python3 -I "${FIX}" "${mg}" >"${mg}.out" 2>&1 || rc=$?; echo "${rc}" >"${mg}.rc" ) &
+}
+mutate_collect() {
+  local i out rc
+  wait || true
+  for (( i = 1; i <= MUT_N; i++ )); do
+    out="$(cat "${TEST_TMP}/mut_guard_${i}.py.out" 2>/dev/null)"; rc="$(cat "${TEST_TMP}/mut_guard_${i}.py.rc" 2>/dev/null || echo 0)"
+    assert_eq "yes" "$([[ ${rc} -ne 0 && "${out}" == *"FAIL: ${MUT_WANTS[i-1]}"* ]] && echo yes || echo no)" "mutation [${MUT_LABELS[i-1]}] is CAUGHT by fixture ${MUT_WANTS[i-1]}"
+  done
 }
 mutate "A pgid<=1 check removed" "A " 'if pgrp is None or pgrp <= 1:' 'if False:'
 mutate "B cgroup-protected check removed (group spans a protected cgroup)" "B2" 'if PROTECTED_CG.search(cg):
@@ -275,16 +378,19 @@ mutate "m11 rotation shifts/deletes archives before the new one is written" "R7"
     try:'
 mutate "m12 storm loop stops at the first rejected scope" "TS11" '                rejected.append({"cgroup": sg["cg"], "storm_cost_kb": sv["cost_kb"], "psi_cost_kb": pv["cost_kb"], "min_cost_frac": frac})' '                rejected.append({"cgroup": sg["cg"], "storm_cost_kb": sv["cost_kb"], "psi_cost_kb": pv["cost_kb"], "min_cost_frac": frac}); break'
 mutate "m13 archive verified by length only" "R9" '        if not _same_content(tmp, path):' '        if os.path.getsize(path) > 0 and False:'
-mutate "m15 pressure advisory never written" "PA1" '    write_json_atomic(a.pressure_file' '    (lambda *x: None)(a.pressure_file'
+mutate "m15 pressure advisory never written" "PA1" '    write_json_atomic(pressure_path, adv)' '    (lambda *x: None)(pressure_path, adv)'
 mutate "m16 app.slice ratio counts reclaimable page cache (current/high instead of pinned)" "PA4b" '    ratio = pinned_ratio if basis == "pinned" else cur_ratio' '    ratio = cur_ratio'
 mutate "m17 critical tmpfs threshold never reached (warn only)" "PA2" '    elif tmpp >= th["crit_tmpfs_pct"]:' '    elif tmpp >= th["crit_tmpfs_pct"] * 10:'
 mutate "m18 du scan not skipped when PSI is already critical" "TW2" '            if psi_ok and full10 >= cfg("ADV_CRIT_PSI_FULL", env):' '            if False:'
 mutate "m19 du scan has no time cap" "TW3" '            txt, _ = p.communicate(timeout=max(0.0, deadline - time.monotonic()))' '            txt, _ = p.communicate(timeout=60)'
 mutate "m20 /proc walk deadline ignored" "SD1" '        if deadline is not None and i % 32 == 0 and time.monotonic() > deadline:' '        if False:'
-mutate "m21 advisory written only after the decision walk (ordering)" "PA7" '    adv = pressure_advisory(env, psi_ok, some10, full10, tmpp, a.tmp_dir, app_slice_memory(cg_root))' '    adv = pressure_advisory(env, psi_ok, some10, full10, tmpp, a.tmp_dir, app_slice_memory(cg_root)) if not why else None'
+mutate "m21 advisory not written before the decision walk (ordering)" "PA7" '    write_json_atomic(pressure_path, adv)' '    write_json_atomic(pressure_path, adv) if not why else None'
+mutate "m23 counter delta allowed to go negative (recreated cgroup)" "PA8c" '    if prev is None or cur is None or cur < prev:' '    if prev is None or cur is None:'
+mutate "m24 time series never appended" "PA9" '    append_series(os.path.join(' '    (lambda *x: None)(os.path.join('
 mutate "m14 no rotation flock" "R10" '            fcntl.flock(lockf, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except OSError:' '            pass
         except OSError:'
+mutate_collect
 
 # --- 5. podman audit (fake podman) ---------------------------------------------------------
 cat >"${TEST_TMP}/fakepodman" <<'FP'

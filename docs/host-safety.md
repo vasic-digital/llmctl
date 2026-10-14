@@ -417,6 +417,64 @@ The decision `/proc` walk has a deadline, `HOSTSAFETY_SCAN_DEADLINE_S` (10 s, be
 logs `scan-deadline-exceeded` (entries read / total) and decides nothing (a partial table is never used: an unread member of a group could
 be protected). Before this change a slow walk ended as a silent unit timeout.
 
+**Time series.** Every pass also records `app_slice_file_bytes`, `app_slice_inactive_file_bytes`, `mem_available_bytes`,
+`app_slice_events_high_total` / `app_slice_sock_throttled_total` / `app_slice_oom_kill_total` and the deltas since the previous
+pass (`app_slice_events_high_delta`, `app_slice_sock_throttled_delta`, `app_slice_events_interval_s`; `null` without a baseline or
+when a counter went backwards because the cgroup was recreated), and appends one compact line per pass to
+`pressure-series.jsonl` beside it (0600; moved to `.1` past `HOSTSAFETY_SERIES_MAX_BYTES`, default 4 MiB, about a day at 10 s).
+Note: `app.slice` `memory.events` is **hierarchical**: `high` also counts child scopes (a `bounded-run` scope) hitting their
+OWN `MemoryHigh`.
+
+## Persistence: what survives a reboot
+
+Rule: every setting has a **persistent** form (a file a boot applies) written first; the live application only follows it.
+Nothing here relies on a runtime-only mechanism (`systemctl set-property --runtime`, `sysctl -w`, a bare `mount -o remount`,
+writes to `/sys`).
+
+| Setting | Persistent form | Live twin |
+|---|---|---|
+| `app`/`background`/`user` slice limits | `~/.config/systemd/user/<slice>.slice.d/10-hostsafety.conf` | `systemctl --user daemon-reload` |
+| guard timer, boot self-check | unit files in `~/.config/systemd/user/`, **enabled** (`is-enabled` = `enabled`) | `enable --now` (timer) |
+| user manager at boot | `loginctl` **Linger=yes** (without it no user timer runs before a login) | - |
+| guard arming / tuning | `~/.config/hostsafety/guard.env` (0600) | read at every pass |
+| installed `bounded-run`, `agent-run`, `guard.py`, `lib.sh`, `root-steps.sh`, `persistence-check.sh` | copies under `~/.local/{bin,share/hostsafety}`; `source-dir` records the tree they came from | - |
+| pressure advisory | written by every guard pass | - |
+| `/tmp` size (root) | `/etc/systemd/system/tmp.mount.d/50-hostsafety.conf` | `mount -o remount,size=4G /tmp` (only below 3 GiB used) |
+| swappiness, journald, `user-1000.slice`, earlyoom (root) | `/etc/sysctl.d/90-hostsafety.conf`, `/etc/systemd/journald.conf.d/50-hostsafety.conf`, `/etc/systemd/system/user-1000.slice.d/50-hostsafety.conf`, `/etc/default/earlyoom` + `earlyoom` enabled | `sysctl --system`, daemon-reload, restarts |
+
+**Check it without rebooting:** `scripts/hostsafety/install.sh verify-persistence [--json FILE]` (no root): one `ROW` per
+setting with the persistent definition, the **boot-effective** value (computed from the unit fragment and drop-ins in systemd's
+order, from `sysctl.d` in `sysctl --system` order), the **live** value and the enabled state; `PASS`, `FAIL` (missing persistent
+form, a later drop-in winning at boot, unit not enabled, linger off, installed copy differing from the source tree, stale
+advisory, or **DRIFT**: live differs from what a boot applies) or `UNDETERMINED` (a value could not be read: never a pass);
+rc 0/1/2. Root rows come from `root-steps.sh --verify` and are prefixed `root: `.
+
+**Boot self-check.** `hostsafety-selfcheck.service` (user oneshot, `WantedBy=default.target`, installed and enabled by
+`install.sh`; `Nice=19`, `TimeoutStartSec=30`; report only, it never changes, stops or signals anything) runs the same check at
+every start of the user manager (at boot, with linger). It waits up to 20 s for the guard's first `pressure.json` of this boot
+(the guard timer fires 30 s after boot), writes `~/.local/state/hostsafety/boot-check.json` (`schema hostsafety.bootcheck/1`:
+`boot_id`, `ts`, `pass`/`fail`/`undetermined`, every row) and logs `hostsafety: boot-check N PASS M FAIL K UNDETERMINED`.
+The guard heartbeat (`guard.status`) carries the last result as `boot_check` with `current_boot` true/false. The unit exits 1 when
+any row FAILs (2 when only UNDETERMINED), so it shows in `systemctl --user --failed`: that is the signal, not a malfunction.
+Measured on `anton` 2026-10-14 16:00 (one manual `systemctl --user start hostsafety-selfcheck`): `26 PASS 3 FAIL 0 UNDETERMINED`;
+the 3 FAILs are the root rows (`tmp.mount size`, `user-1000.slice`, `earlyoom args`) that wait for
+`sudo bash scripts/hostsafety/root-steps.sh --apply`. After the next reboot, read it with:
+
+```bash
+jq . ~/.local/state/hostsafety/boot-check.json
+journalctl --user -u hostsafety-selfcheck -b
+jq .boot_check ~/.local/state/hostsafety/guard.status
+```
+
+**Proven now vs. only at the next real boot (no reboot was done, by rule).** Proven now: the files exist with the intended
+values; the boot-effective value computed from them equals the intended value; the live value equals it (or the drift is
+reported); units are enabled and linger is on; the checker catches each named failure (fixture section 2c: timer/self-check not
+enabled, runtime-only drift, drop-in removed, installed copy differing, linger off, stale advisory, a previous boot's advisory;
+mutations m25-m28 prove each check is live). **Only the next boot proves** that systemd really applies the computed
+boot-effective values (the parser follows the documented order; a systemd behaviour it does not model would show up as a
+FAIL/DRIFT row in `boot-check.json`), that the self-check runs from `default.target` under linger, and the `/tmp` size if the
+live remount was refused.
+
 ## 2026-10-14 hang (host `anton`)
 
 The host stalled from about 14:22 CEST. The previous boot's journal ends at 14:37:02 (a hard power cut followed). Evidence: sar/atop
@@ -469,7 +527,7 @@ reclaim storm (`pgscand` 356k/s, sys CPU 1108%), memory PSI `full` 53-92% for mo
 **Operator decisions (not taken by this change):**
 
 1. **Arm the guard** (`HOSTSAFETY_GUARD_ARM=1` in `~/.config/hostsafety/guard.env`). It would not have prevented this hang (it cannot
-   free tmpfs); see the review of all past decisions in the commit that adds it.
+   free tmpfs). Recommendation: NO-GO for now, see *Arming review (2026-10-14)*.
 2. **Shrink `/tmp`** from 16 GB to 4 GB (root): `sudo bash scripts/hostsafety/root-steps.sh --apply` (tmp.mount drop-in, then a
    live remount only while `/tmp` holds < 3 GiB). Check first with `bash scripts/hostsafety/root-steps.sh` (no root).
 3. **`app.slice` `MemorySwapMax`**: raised from 1 G to SwapTotal/2 (4 GiB here) by the installer's formula (user-level, applied on
@@ -478,6 +536,51 @@ reclaim storm (`pgscand` 356k/s, sys CPU 1108%), memory PSI `full` 53-92% for mo
 4. **earlyoom thresholds**: `root-steps.sh` now writes `-m 10,5 -s 100,100` (see *earlyoom thresholds*); the same `--apply`
    restores the protection list that the 2026-10-09 dpkg prompt replaced. No setting of earlyoom 1.9.0 reacts to PSI.
 5. **`systemd-oomd` `ManagedOOMMemoryPressureLimit`** (vendor 50% / 20 s on `user@.service`): unchanged; changing it is `/etc` (root).
+
+### Memory stalls at 15:3x on 2026-10-14 (after the reboot): measured, not tuned
+
+Observation (coordinator, 15:37): `app.slice` near its `MemoryHigh` (20.8 of 21.2 G, file cache 8.1 G), PSI `full avg10` 34
+while ~16 GB were available host-wide. Hypothesis to test: "file cache counts toward `MemoryHigh`, so app.slice throttles".
+
+Evidence (read-only samplers under `bounded-run`, Nice 19; 5 s period; nothing signalled):
+
+| Window | What | Result |
+|---|---|---|
+| 15:39:03-15:48:58 (119 intervals) | host + app.slice PSI, `memory.events` (hierarchical), memory.stat, vmstat | stall (host PSI full >= 10%) in 57 intervals, **all between 15:39:03 and 15:43:48**, p90 54%; r(PSI full, `high` events/s) = 0.97, r(PSI full, app anon) = 0.97, r(PSI full, file refaults/s) = 0.97, r(PSI full, app file cache) = **-0.71**; global direct reclaim (`pgscan_direct`) **0**; MemAvailable >= 16.5 GiB; app.slice headroom to its own `MemoryHigh` **>= 1.36 GiB** throughout; app.slice swap reached 2.02 GiB |
+| same window, journal + guard.log | which scope | `bounded-run-986843.scope` (`bounded-run -m 4G -T 580`: another agent's Go mutation challenge, `go` + `llm.test`; its own `MemoryHigh` 3 GiB, `SwapMax` 2 GiB) ran 15:34:05-**15:43:45** and was stopped by its own timeout; the stall ended 3 s later. The (dry-run) guard chose this scope 53 times (15:35:04-15:43:45, PSI full up to 39) |
+| 15:5x (59 intervals) | per-child `memory.events.local`, `memory.pressure` | no stall; **0** app.slice-local `high` events with app.slice at 18 G of 21.2 G (mostly page cache) |
+
+Conclusion: the stall was a **child scope throttled at its OWN `MemoryHigh`** (a Go build/test needing more than its 4G cap; its
+anon grew ~3 GiB, it used up its 2 GiB swap allowance and then refaulted its working set), not `app.slice` throttling on page
+cache. `app.slice` `memory.events` counts descendants, which is what made it look slice-wide. **No change to app.slice
+`MemoryHigh` (70%)**: the data does not support one (a raise would not have touched this stall). What the data supports: give
+Go builds/tests `-m 6G` or more (this table already says builds need 6G+), and do not read a host PSI spike as host danger
+without checking where the throttled tasks are. UNCONFIRMED: whether app.slice itself crossed its `MemoryHigh` at 15:37 (the
+first sampler started at 15:39 and recorded hierarchical events only); `sock_throttled` 36685 did not move in either window (its
+origin is UNCONFIRMED). The guard's series (`pressure-series.jsonl`) now records these counters per pass for the next one.
+
+### Arming review (2026-10-14): NO-GO for now
+
+All decisions in `guard.log.1.gz` + `guard.log` (2026-10-09 12:41 to 15:49 on 10-14; read with a script, aggregate only):
+
+| Victim (kind, comm, cgroup) | Decisions | Judgement |
+|---|---|---|
+| group `bash p1.sh` (6,182 processes), `tmx-notes-8580.scope` | 628 | correct: the 2026-10-13 fork storm |
+| group `python`, `llmctl-onnx@decide-nli.service` | 392 | plausible (largest killable consumer during the 2026-10-12 pressure); cause UNCONFIRMED; the unit would stay down (`RestartPreventExitStatus=SIGTERM SIGKILL`) |
+| group `python`, `llmctl-llama@decide-nli.service` | 99 | same as above |
+| single `lumen-linux-amd` (319 MB), member of a 68-process group holding `claude` | 158 | wrong lever: frees 319 MB; on 10-14 it could not touch the 8 GB of tmpfs |
+| group `opencode`, `tmx-notes-2106.scope` | 92 | another agent CLI: a kill loses that session's work; cause UNCONFIRMED |
+| group `git push origin main` (16 processes, 1.9 GB), `tmx-vasic-6017.scope` | 25 | 10-14 14:22-14:27: not the cause (tmpfs) |
+| others (python test runners, a mutation-test scope) | 13 | test jobs |
+| group `bash` in `bounded-run-986843.scope` (new guard, 15:35-15:43) | 53 | **false positive**: a capped test scope throttled at its own `MemoryHigh` while 16 GB were available |
+
+No decision ever named a protected process or cgroup (`claude`, `tmux*`, `gnome*`, podman/conmon/libpod, `Xwayland`, `pipewire`,
+`dbus`, `sshd`: 0 of 1,460). Recommendation: **keep `HOSTSAFETY_GUARD_ARM=0`** until the trigger tells host danger from a scope
+that is already contained by its own cap (for example: act only while `app.slice` itself is over its `MemoryHigh`, i.e. its
+`memory.events.local` `high` grows, or MemAvailable is low, and never pick a victim whose own scope is at its `MemoryHigh`/`MemoryMax`).
+Armed today it would have killed the 15:35 test run 9 minutes before its own timeout, and on 10-14 14:22 it would have freed at
+most ~2.2 GB of anon and no tmpfs. When the operator decides GO, the change is exactly one line:
+`sed -i 's/^HOSTSAFETY_GUARD_ARM=0$/HOSTSAFETY_GUARD_ARM=1/' ~/.config/hostsafety/guard.env` (picked up on the next tick).
 
 ## Limits of this approach (read before trusting it)
 

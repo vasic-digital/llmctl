@@ -25,6 +25,13 @@ repository as an honest record of that process.
 
 ## Unreleased
 
+* **feat(hostsafety): persistence check, boot self-check, pressure time series.** `install.sh verify-persistence`
+  (`persistence-check.sh`) prints, per setting, the persistent definition, the boot-effective value, the live value and the
+  enabled state with PASS/FAIL/UNDETERMINED (rc 0/1/2): slice limits, guard timer, self-check unit, linger, `guard.env`, installed
+  copies vs. the source tree (sha256), advisory freshness, and the root rows of `root-steps.sh --verify`. New
+  `hostsafety-selfcheck.service` (user oneshot, `WantedBy=default.target`, report only) writes `boot-check.json` and a journal
+  line at every boot; `guard.status` carries the last result. Each guard pass now records app.slice file / inactive file,
+  `memory.events` high and sock_throttled deltas and global MemAvailable, and appends to `pressure-series.jsonl` (size-bounded).
 * **feat(hostsafety): root-steps caps `/tmp` at 4G, earlyoom acts on available memory alone, `--verify`.** A persistent
   `tmp.mount` drop-in (vendor options, only `size=` changed) and a live `mount -o remount` only while `/tmp` holds < 3 GiB
   (never deletes anything); earlyoom `-m 10,5 -s 100,100` (1.9.0 has no PSI trigger; `-s 10` is unreachable under the slice
