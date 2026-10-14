@@ -156,16 +156,25 @@ including a raw `/v1/chat/completions` call you can try directly with
 ### Check that the model answers correctly before you rely on it
 
 `llmctl start` already ran the profile's deterministic validation suite
-(known-answer prompts judged by code, never by another model). Ask for the
-verdict the way a script would:
+(known-answer prompts judged by code, never by another model): a profile
+without a passing record is first started unpublished (loopback, a private
+port), validated, and only then published on its documented port - a wrong
+or undetermined answer stops it. Ask for the verdict the way a script would,
+or ask for the endpoint, which is printed only for a validated profile:
 
 ```bash
 ./bin/llmctl require-validated coder && echo "coder is validated on this host"
+URL="$(./bin/llmctl endpoint coder)" || exit 1   # e.g. http://127.0.0.1:8081
 ```
 
-Exit 0 means a fresh passing record exists for exactly this model file,
-engine build and launch flags. Anything else prints why (no record, wrong
-answer, stale record) and the fix (`llmctl validate coder`). For a vision
+Exit 0 means a fresh, signed passing record on this machine matches what
+would run now: the sha256 of the model files actually on disk (and their
+catalog pins), the engine build, the launch flags and the suite content; the
+model file of the process that answered the probes was checked when it could
+be established. It does not prove the record was produced against the
+process serving right now beyond those checks. Anything else prints why (no
+record, wrong answer, stale or edited record) and the fix
+(`llmctl validate coder`). For a vision
 profile, `llmctl vision validate` shows the model's raw answer to every golden
 screenshot - see [validation](validation.md#model-validation-gate).
 

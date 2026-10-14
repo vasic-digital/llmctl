@@ -7,7 +7,7 @@
 | Host | `anton` (one host; every number below is about this machine on this day) |
 | Profile | `vision` (Gemma 3 4B instruct Q4_K_M + mmproj f16), llama-server build 11379 (commit 1537a0a8b), port 8082, systemd user unit |
 | Driver | `llmctl vision validate` directly (NOT the guarded driver `scripts/livetest/vision_live_test.sh`; no watchdog ran) |
-| Code | llmctl at `f6add5b` (the commit that added `host` to the validation record) |
+| Code | llmctl at `f6add5b` (a docs commit; the `host` field of the validation record was added by `347d7e6`, an ancestor of it - corrected 2026-10-14, the earlier wording credited `f6add5b`) |
 | Verdict | **PASS**, `VERDICT: PASS pass=21 fail=0 undetermined=0`, exit 0 (`04_vision_validate.txt`) |
 | Companions | [2026-10-13 run 1](../vision-live-2026-10-13/README.md), [2026-10-13 run 2](../vision-live-2026-10-13-run2/README.md) |
 
@@ -16,7 +16,7 @@
 | File | What happened |
 |---|---|
 | `00_resources.txt` | Before: 16263 / 30974 MiB used (52 %; the 60 % cap is 18584 MiB), MemAvailable 14710 MiB, memory PSI full avg10 0.00, 11140 MiB VRAM free, 1.1 TB disk free. `vision` already downloaded, so nothing was downloaded. `require-validated vision` exit **1**: `host changed (validated null, now "anton")`. The record from 2026-10-12 predates the `host` field and is refused, as intended. |
-| `01_vision_validate.txt` | First attempt, exit **2** (UNDETERMINED): the profile started, then the host-pressure gate refused before any probe (`PSI full avg10=4.03 > 2`), stopped the profile again and recorded nothing. Correct gate behaviour. (Its message says "nothing was started or probed", although this call had started the profile and then stopped it - wording inaccuracy, open item below.) |
+| `01_vision_validate.txt` | First attempt, exit **2** (UNDETERMINED): the profile started, then the host-pressure gate refused before any probe (`PSI full avg10=4.03 > 2`), stopped the profile again and recorded nothing. Correct gate behaviour. (Its message says "nothing was started or probed", although this call had started the profile and then stopped it - wording inaccuracy; fixed in the 2026-10-14 fix round: the post-start refusal now says "the probes were NOT sent".) |
 | `02_psi_idle.txt` | With nothing of ours running, full avg10 decayed 1.48 -> 0.01 within 55 s. |
 | `03a_psi_ambient_45s.txt` | 45 s ambient sample: full avg10 0.00 throughout. |
 | `03_start.txt`, `03b_psi_during_load.txt` | `LLMCTL_VALIDATE_ON_START=0 llmctl start vision` while sampling PSI every second: full avg10 **0.00 for all 50 samples** (the model files were in page cache by then). |

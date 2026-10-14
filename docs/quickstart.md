@@ -106,8 +106,11 @@ enumerate available models before connecting — see `docs/integrations.md`).
 
 `validate` prints every known-answer prompt with the model's raw answer and a
 PASS/FAIL verdict, then `VERDICT: ...`; exit `0` all pass, `1` a wrong answer,
-`2` could not determine. `require-validated` exits 0 only for a fresh passing
-record on this host. A vision profile has its own golden-screenshot suite:
+`2` could not determine. `require-validated` exits 0 only for a fresh, signed
+passing record on this machine for the model files actually on disk;
+`./bin/llmctl endpoint fast` prints the URL only then. Starting a profile
+without such a record validates it first (unpublished) and serves it only on
+PASS. A vision profile has its own golden-screenshot suite:
 `./bin/llmctl vision validate`. See [validation](validation.md#model-validation-gate).
 
 ### 2.5 Clean up

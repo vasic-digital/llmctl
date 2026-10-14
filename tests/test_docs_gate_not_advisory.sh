@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# test_docs_gate_not_advisory.sh - the validation gate is ENFORCED (docs/validation.md, "Enforcement of the gate"):
+# test_docs_gate_not_advisory.sh - the validation gate is ENFORCED (docs/validation.md, "Enforcement (strict by default)"):
 # every path that brings a profile up runs the hook, FAIL stops the profile, UNDETERMINED never stops/passes (strict: stops).
 # Shipped prose must not still call it advisory, say a wrong answer keeps serving, or say systemd-started units skip the hook.
 # The scanner is proven first: each stale shape planted in a temp file MUST be flagged, an allowed sentence MUST NOT be.

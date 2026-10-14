@@ -208,6 +208,12 @@ A separate, much smaller golden set validates vision models
 * **896x896** matches Gemma 3's SigLIP input size, so the vision encoder does not resample the images.
 * **Golden-bad controls** are answered with a golden probe's prompt and must FAIL that probe's checks; a
   validator that passes them is reported as broken (exit 1).
+* **Canned judge controls for every probe** (2026-10-14): each of the 16 golden probes (and both control-bad probes) carries
+  at least one canned PASS and one canned FAIL answer - including the hedged (`3 or 4`), negated (`There is no ORANGE TIGER 42
+  here`) and repeated-item (`Red, green, blue, red`) shapes - and the judge self-test proves them before every real run; a probe
+  without both is a suite defect.
+* **Typed decisions** have their own known-answer suite, `validation/suites/decide-v1` (five choice questions asked through
+  the production decide driver); it is not part of the decision golden set above and has never run against a real model yet.
 
 ## Licence
 

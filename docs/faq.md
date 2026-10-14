@@ -595,9 +595,13 @@ Whether this systemd applies `RestartPreventExitStatus` to a failing `ExecStartP
 
 ### How do I validate a model?
 
-`llmctl validate <profile>` runs every known-answer suite the catalog names for the profile (`validation.suites`) against the running endpoint; if the profile is downloaded but idle it starts it (through the scheduler, so budget and pressure gate apply) and stops it again unless you pass `--keep`.
+`llmctl validate <profile>` runs every known-answer suite the catalog names for the profile (`validation.suites`) against the running endpoint; if the profile is downloaded but idle it starts it UNPUBLISHED (loopback, a private port, through the scheduler, so budget and pressure gate apply) and stops it again unless you pass `--keep`.
 `llmctl vision validate [--profile vision|vision-pro]` runs the golden-screenshot suite only, `llmctl validate-all` covers every running profile, and `llmctl require-validated <profile>` is the check a consumer script uses (exit 0 only for a fresh passing record).
-Exit codes: **0** every check passed, **1** a wrong result, **2** could not determine. A model that was never run through this is **not validated**, and `llmctl models verify <profile>` says so. Reference: [validation](validation.md#model-validation-gate). The gate is enforced: every start path (including systemd-started units) runs it once after the profile is ready, and a wrong answer stops the profile and exits non-zero; an undetermined result neither stops nor passes it (`LLMCTL_VALIDATE_STRICT=1` stops it).
+Exit codes: **0** every check passed, **1** a wrong result, **2** could not determine. A model that was never run through this is **not validated**, and `llmctl models verify <profile>` and `llmctl validate-all` say so. Reference: [validation](validation.md#model-validation-gate). The gate is enforced and strict by default: a profile without a fresh, signed PASS record is started unpublished (127.0.0.1, a private port, no registry row), validated, and published on its documented port only on PASS; a wrong **or** undetermined result stops it and the command exits non-zero; a systemd unit without a fresh record is skipped at boot/restart. `LLMCTL_VALIDATE_STRICT=0` (serve an undetermined profile, marked UNVALIDATED) is refused for consumer-facing profiles. Projects should ask `llmctl endpoint <profile>` for the URL: it prints one only for a validated profile.
+
+### Why does the first start of a profile take twice as long now?
+
+Because it has no validation record yet: llmctl loads the model once unpublished to validate it, and again on its public port after it passed. Later starts with a fresh record (same model bytes, engine, flags, suites; younger than `LLMCTL_VALIDATION_MAX_AGE`) load it once.
 
 ### What does UNDETERMINED mean?
 

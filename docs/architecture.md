@@ -327,7 +327,7 @@ stateDiagram-v2
 
 ### Start path (gate, admission, start, readiness, validation)
 
-What `llmctl start`, `switch` and `auto` do, in order, in this release. A refusal at any step starts nothing; a `switch` refuses before it stops anything. The validation step is enforced: a wrong answer stops the profile (see [validation](validation.md#enforcement-of-the-gate-wired-settled-decisions)).
+What `llmctl start`, `switch` and `auto` do, in order, in this release. A refusal at any step starts nothing; a `switch` refuses before it stops anything. The validation step is enforced and strict by default: a profile without a fresh record is started unpublished, validated, and published only on PASS; a wrong or undetermined answer stops it (see [validation](validation.md#enforcement-strict-by-default)).
 
 ```mermaid
 flowchart TD

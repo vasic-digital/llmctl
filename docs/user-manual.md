@@ -246,7 +246,7 @@ wrong-content image). Each answer is printed next to its verdict, e.g.
 [PASS] 02_shapes_count/red_circles (0.88s, finish=stop)
        answer: "3"
 [PASS] control 90_bad_blank vs 01_text_large/read: golden checks correctly FAIL on the control image (...)
-VERDICT: PASS pass=21 fail=0 undetermined=0
+VERDICT: PASS pass=38 fail=0 undetermined=0
 ```
 
 Exit codes: `0` every check passed, `1` any wrong answer, `2` could not
@@ -254,14 +254,27 @@ determine (not downloaded, not served, endpoint down, wrong model served,
 memory pressure, no suite). `--host URL` validates an explicit endpoint; the
 result is evidence only and is never recorded as local state.
 
-`validate-all` validates every running profile (exit 2 when nothing runs).
-`require-validated <profile>` exits 0 only when the profile has a fresh
-passing record on this host for the same model sha256, engine build, launch
-flags and suite content, younger than `LLMCTL_VALIDATION_MAX_AGE` (default 7
-days) - the check a project or service runs before it uses the model.
-`start`, `switch`, `auto`, `enable` and `restart` run the suites after the
-profile is up. Details, judge rules and enforcement:
-[validation](validation.md#model-validation-gate).
+`validate-all` validates every running profile (exit 2 when nothing runs) and
+then lists EVERY catalog profile without a signed, unexpired PASS record as
+`NOT VALIDATED` (profiles whose suite never ran against their real model say
+so). `require-validated <profile>` exits 0 only when the profile has a fresh,
+signed passing record on this machine that matches the sha256 of the model
+files on disk (and their catalog pins), the engine build, the launch flags and
+the suite content, younger than `LLMCTL_VALIDATION_MAX_AGE` (whole seconds,
+default 7 days). `llmctl endpoint <profile>` prints the URL only for a running,
+published, validated profile - the call a project or service makes before it
+uses a model.
+
+**Enforced, strict by default.** `start`, `switch`, `auto`, `enable`,
+`restart` and `decide scale` never serve a profile without a fresh record: it
+is started unpublished (127.0.0.1, a private port, no registry row), validated,
+and published only on PASS; FAIL **and** UNDETERMINED stop it. A systemd unit
+without a fresh record is skipped at boot/restart (exit 77). The opt-out
+`LLMCTL_VALIDATE_STRICT=0` (serve an UNDETERMINED profile marked UNVALIDATED)
+is refused for consumer-facing profiles - every shipped profile is one.
+`LLMCTL_VALIDATE_REPEAT` (default 3) asks every probe that many times;
+`1` is a quick mode that is never recorded. Details, judge rules and
+enforcement: [validation](validation.md#model-validation-gate).
 
 ## build [all|llama|colibri|onnx]
 

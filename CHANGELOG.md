@@ -25,6 +25,35 @@ repository as an honest record of that process.
 
 ## Unreleased
 
+* **feat(validate): the model validation gate is ENFORCED, strict by default (independent review 2026-10-14, NO-GO findings 1-12).**
+  - **(1) Enforcement.** A profile without a fresh, signed PASS record is started in QUARANTINE (127.0.0.1, a private ephemeral port, no
+    registry row, `quarantine=1`), validated, and published on its documented port only on PASS (`sched_publish`); FAIL **and** UNDETERMINED
+    stop it (strict is the default). `enable` validates BEFORE any unit is enabled; `restart` never restarts an unvalidated profile in place;
+    `decide scale` needs a fresh base record; a failed `switch` target brings the previous set back through the gate. Units carry
+    `ExecCondition=svc_hook.sh validated %i` (exit 77 = skipped) and the registration waiter validates BEFORE it registers (its former
+    `kind == llm` test matched no env record, so it never ran in production). `LLMCTL_VALIDATE_STRICT=0` / `LLMCTL_VALIDATE_ON_START=0` are
+    loud opt-outs, refused for consumer-facing profiles (catalog `validation.consumer_facing`, default true). `status` shows a `validation:`
+    state per profile; new `llmctl endpoint <profile>` prints the URL only for a running, published, validated profile.
+  - **(2)** decide-* profiles get `decide-v1` (known-answer choice questions through the production Go driver: new
+    `llmctl-decide smoke --question-file`); colibri profiles name their served id (`validation.expect_model_id`); never-executed profiles are
+    marked `validation.executed: false` and `validate-all` lists every catalog profile without a signed PASS record as NOT VALIDATED.
+  - **(3)** records hash the REAL model bytes (cached by size/mtime_ns/ctime_ns/inode/dev), require the catalog pins, bind their evidence
+    file's sha256 and are HMAC-signed (key 0600 in the state dir; same-user limit documented); `LLMCTL_VALIDATION_MAX_AGE=nan|inf|-1` exits 2.
+  - **(4)** one cleanup path stops a profile the validator started on every return; **(5)** host identity from `/etc/machine-id` (hashed);
+    **(6)** the record names the model file of the PROCESS that answered (cmdline / `/v1/models` path / `/props`), a mismatch is refused.
+  - **(7)** judge soundness: one stated number (`3 or 4` FAILs), exact order, negation-aware claims, code judged without comments, empty
+    checks are a suite defect, type-exact JSON, canned PASS+FAIL controls for every probe (all 16 golden vision probes), every probe asked
+    `LLMCTL_VALIDATE_REPEAT=3` times (1 = quick mode, never recorded). The 26 real answers recorded in docs/qa keep their verdicts.
+  - **(8)** pressure-gate wording; **(9)** an UNDETERMINED run never replaces a FAIL record either; **(10)** `llmctl models pins` gate
+    (10 moving revisions + 6 config files without sha256 remain UNPINNED - nothing verifiable offline; ratchet in
+    `tests/fixtures/catalog_unpinned_allowlist.txt`) and the RAM budget is the tighter of MemAvailable - 4 GiB and 60% of MemTotal minus what
+    running llmctl profiles reserve (Constitution 12.6); **(11-12)** docs and the nezha evidence page corrected.
+  - **Operational consequence:** every suite changed, so no profile has a current record; after `llmctl install` a unit without a fresh
+    record is skipped at boot/restart until `llmctl start <profile>` (which validates first) succeeds. Nothing live was started or stopped
+    by this change; colibri, decide-* and the enforcement itself are proven against fixtures only (UNCONFIRMED live). Tests:
+    `test_validation_{judge_soundness,record_integrity,served_identity,cleanup,decide_colibri,enforcement,mutants}.sh`,
+    `test_supply_chain_ramcap.sh`.
+
 * **fix(hostsafety): bounded-run no longer reports a finished command as a timeout (spurious rc 124).** Cleanup ran
   `pkill -P <watchdog>` before `kill <watchdog>`, so the watchdog could write `timeout` after its `sleep` was killed. Measured
   before: 2/200 quick runs under 4-way concurrency (reviewer: ~3/60), 20/20 with a 0.3 s delaying `pkill` shim; after: 0/200 and
