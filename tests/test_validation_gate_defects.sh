@@ -474,6 +474,7 @@ out="$(bash -c '
 if sigint_ignored; then
   assert_skip "SIGINT is ignored at shell entry; a leftover INT trap is unobservable (trap -p INT shows the inherited ignore)" "with no caller traps none remain"
   assert_eq $'rc=0\ntrap -- \'\' SIGINT' "${out}" "weaker true property: only the inherited INT ignore remains, no TERM/HUP trap left behind"
+  assert_skip "SIGINT is ignored at shell entry; the section-23b negative control (mutant leaves traps) cannot observe a leftover INT trap" "23b negative control of the trap check"
 else
   assert_eq "rc=0" "${out}" "with no caller traps none remain"
 
@@ -493,8 +494,8 @@ PYEOF
     source "$1/lib/common.sh"; source "$1/lib/catalog.sh"; source "$1/lib/validate.sh"
     validate_profile fast --host "$2" >/dev/null 2>&1; echo "rc=$?"; trap -p INT TERM HUP
   ' _ "${MUT}" "${U}" 2>&1)" || true
-  if [[ "${mut_out}" == "rc=0" ]]; then
-    TEST_FAILS=$((TEST_FAILS + 1)); echo "  FAIL: negative control - mutant left traps behind yet the section-23 check saw none"
+  if [[ "${mut_out}" == "rc=0" ]] || ! grep -q "^rc=0$" <<<"${mut_out}" || ! grep -q "trap -- .* SIGINT" <<<"${mut_out}" || ! grep -q "trap -- .* SIGTERM" <<<"${mut_out}"; then
+    TEST_FAILS=$((TEST_FAILS + 1)); echo "  FAIL: negative control - the mutant was not detected as leaving INT and TERM traps behind (got: $(printf '%s' "${mut_out}" | tr '\n' ' '))"
   else
     echo "  PASS: negative control - mutant detected (leftover traps: $(printf '%s' "${mut_out}" | tr '\n' ' '))"
   fi

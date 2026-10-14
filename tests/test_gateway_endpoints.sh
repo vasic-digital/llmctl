@@ -289,29 +289,36 @@ held = []
 for _ in range(3):
     s = socket.create_connection(("127.0.0.1", port), timeout=3); held.append(s)
 time.sleep(0.3)
-# The deliberate RST of connection shedding can arrive during connect() itself (race), or on the
-# first read: both mean "shed". Data, a hang, or a successful TLS-less answer would be a failure.
-# The cap evicts the oldest unauthenticated connection of the source and admits the newcomer, which
-# is then reset by the 3 s pre-auth/handshake timeout (gateway B keeps the defaults). The client wait
-# MUST therefore exceed that timeout by a wide margin: a 3 s wait raced it by ~1 ms (RST at 3.001 s)
-# and failed under load. 10 s still fails a connection that is never shed.
-try:
-    extra = socket.create_connection(("127.0.0.1", port), timeout=3)
-    extra.settimeout(10)
-    data = extra.recv(1)
-    closed = (data == b"")
-except ConnectionResetError:
-    closed = True
-except socket.timeout:
-    closed = False
-assert closed, "surplus connection from the same source was not shed"
+# The cap (slots.go admitInto) admits the newcomer and evicts the OLDEST unauthenticated connection
+# of the same source (held[0]) at once. Every pre-handshake connection is also reset by the 3 s
+# pre-auth/handshake timeout (gateway B keeps the defaults), so "something got closed" proves nothing.
+# What only the cap does: held[0] is closed within ~1 s of the 4th connect while held[1] and held[2]
+# (same age class, 3 s deadline not yet reached) are still open. A cap-less server would leave all
+# four open until ~3 s, so held[0] would still be open at the check below.
+extra = socket.create_connection(("127.0.0.1", port), timeout=3)
+t0 = time.time()
+def state(s, wait):
+    s.settimeout(wait)
+    try:
+        d = s.recv(1)
+        return "closed" if d == b"" else "data"
+    except ConnectionResetError:
+        return "closed"
+    except socket.timeout:
+        return "open"
+st0 = state(held[0], 1.5)
+elapsed = time.time() - t0
+st1 = state(held[1], 0.2); st2 = state(held[2], 0.2)
+print("EP-026 timing: held[0]=%s after %.2fs, held[1]=%s, held[2]=%s" % (st0, elapsed, st1, st2), file=sys.stderr)
+assert st0 == "closed" and elapsed < 2.5, "oldest same-source connection was not evicted by the cap (held[0]=%s after %.2fs)" % (st0, elapsed)
+assert st1 == "open" and st2 == "open", "cap evicted more than the oldest connection"
 ctx = ssl.create_default_context(cafile=ca)
 raw = socket.socket(); raw.bind(("127.0.0.2", 0)); raw.settimeout(5); raw.connect(("127.0.0.1", port))
 tls = ctx.wrap_socket(raw, server_hostname="127.0.0.1")
 tls.sendall(("GET /healthz HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n").encode())
 resp = tls.recv(200)
 assert resp.startswith(b"HTTP/1.1 200"), resp
-for s in held: s.close()
+for s in held + [extra]: s.close()
 PY
 
 echo "== EP-024: slow client is cut at the read deadline, others unaffected =="

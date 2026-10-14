@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Unit test for run_profiles.sh ev_path: the evidence directory a driver names in its evpath file is
-# STRICT-EXEMPT: asserts that rejected paths yield empty output
 # accepted only when it really resolves (symlinks and '..' followed) to a directory under the
 # evidence root that the user owns. Each mutation of the check (accept anything, drop the realpath
 # step, drop the owner test) must turn one of these assertions red. Hermetic: temp dirs only.
+# STRICT-EXEMPT: counts failures itself with ok/bad so no -e
 set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 RUN="$ROOT/scripts/livetest/run_profiles.sh"
@@ -34,6 +34,8 @@ try "an empty line"                             "" reject
 # owner test in isolation: a root-owned directory that IS under the (re-pointed) root, so only the ownership check can reject it
 if [ "$(stat -c %u /usr/share)" != "$(id -u)" ] && [ -d /usr/share/doc ]; then
   EVROOT=/usr/share try "a directory under the root owned by another user" "/usr/share/doc" reject
+else
+  echo "  SKIP: ownership case (needs /usr/share/doc owned by another user than $(id -un)); the -O check is NOT exercised in this environment"
 fi
 printf '\nRESULT: %d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -ne 0 ] || echo "  ok: all $PASS ev_path assertions passed"
