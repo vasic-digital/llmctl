@@ -401,6 +401,7 @@ run_main "$E" fast
 check "instance reserved but NOT healthy (dead port): not ok, exit 6" "$RC" "6"
 has "  reservation present, health not verified" "$EVD/restore.txt" '^decide\.2 +.*reservation present, health not verified'
 has "  RESTORE_STATE=manual" "$EVD/verdict.txt" '^RESTORE_STATE=manual$'
+has "  RESTORE_MANUAL.txt names the unverified instance (F5)" "$EVD/RESTORE_MANUAL.txt" '^instance decide\.2 has a reservation but its health was NOT verified'
 
 echo "== S21 (F3a). the runner takes the evidence path from a file the driver writes, not from scraped stdout =="
 E="$(mkenv fast)"; cp "$JD/chat-v1.json" "$E/fake/validate_file.fast"

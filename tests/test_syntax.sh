@@ -19,7 +19,7 @@ done
 strict_ok() {
   grep -q 'set -euo pipefail' "$2" && return 0
   case "$1" in
-    tests/test_livetest_watchdog.sh|tests/test_livetest_profiles.sh|tests/test_livetest_runner.sh|tests/test_livetest_switch.sh)
+    tests/test_livetest_watchdog.sh|tests/test_livetest_profiles.sh|tests/test_livetest_runner.sh|tests/test_livetest_switch.sh|tests/test_livetest_evpath.sh)
       [[ "$(grep -m1 '^# STRICT-EXEMPT: ' "$2" | sed 's/^# STRICT-EXEMPT: //' | wc -w)" -ge 3 ]] && grep -q '^set -uo pipefail' "$2" && return 0 ;;
   esac
   return 1

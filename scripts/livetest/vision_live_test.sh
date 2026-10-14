@@ -444,6 +444,10 @@ restore_manual_note() {   # restore_manual_note <names...>: loud, exact, in the 
   : >"$EV/RESTORE_MANUAL.txt"
   [ "$#" -eq 0 ] || { echo "$cmd" >>"$EV/RESTORE_MANUAL.txt"; log "RESTORE MANUALLY (the host is not touched any further by this tool): $cmd"; }
   for i in ${ABORT_HINTS[@]+"${ABORT_HINTS[@]}"}; do echo "restore start still running when we stopped waiting (abort path; or SIGKILL its pid): $i" >>"$EV/RESTORE_MANUAL.txt"; done
+  for i in ${INST_UNVERIFIED[@]+"${INST_UNVERIFIED[@]}"}; do
+    echo "instance $i has a reservation but its health was NOT verified: check $LLMCTL status and $LLMCTL logs ${i%%.*}" >>"$EV/RESTORE_MANUAL.txt"
+    log "RESTORE MANUALLY: instance $i reserved, health not verified: $LLMCTL status"
+  done
   for i in ${INST_OPEN[@]+"${INST_OPEN[@]}"}; do
     echo "scaled instance $i was running: nice -n 19 ionice -c 3 $LLMCTL decide scale ${i%%.*} $(inst_count "${i%%.*}")   # 'llmctl start' brings back ONE instance only" >>"$EV/RESTORE_MANUAL.txt"
     log "RESTORE MANUALLY: scaled instance $i: $LLMCTL decide scale ${i%%.*} $(inst_count "${i%%.*}")"
