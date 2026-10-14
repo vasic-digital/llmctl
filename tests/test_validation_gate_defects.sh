@@ -4,6 +4,23 @@
 # written RED first (see the commit messages) and is hermetic: fixture OpenAI server only, no model, no
 # systemd, no real service.
 set -euo pipefail
+
+# SIGINT-ignored-at-entry guard. A shell started with SIGINT ignored (a background job `cmd &` of a
+# non-interactive bash, nohup'd launch, some agent harnesses) can NEVER trap or reset INT - bash keeps the
+# inherited ignore ("Signals ignored upon entry to the shell cannot be trapped or reset"), so `trap -p INT`
+# reports `trap -- '' SIGINT` and section 23's INT assertions cannot hold there (not a validate_profile defect).
+# Remedy: re-exec ONCE through python3 with SIGINT restored to SIG_DFL (exec preserves it). If that is
+# impossible the INT-specific assertions are SKIPPED loudly (see section 23), never silently passed.
+sigint_ignored() {
+  local mask
+  mask="$(awk '/^SigIgn:/ {print $2}' /proc/$$/status 2>/dev/null)" || return 1
+  [[ -n "${mask}" ]] && (( (0x${mask} & 2) != 0 ))
+}
+if sigint_ignored && [[ -z "${LLMCTL_TEST_SIGINT_REEXEC:-}" ]] && command -v python3 >/dev/null 2>&1; then
+  export LLMCTL_TEST_SIGINT_REEXEC=1
+  echo "NOTE: SIGINT was ignored at entry (background launch); re-executing with SIGINT restored to default" >&2
+  exec python3 -c 'import os, signal, sys; signal.signal(signal.SIGINT, signal.SIG_DFL); os.execv("/bin/bash", ["bash"] + sys.argv[1:])' "${BASH_SOURCE[0]}" "$@"
+fi
 source "$(dirname "${BASH_SOURCE[0]}")/helpers.sh"
 test_setup_env
 
@@ -441,7 +458,12 @@ out="$(bash -c '
   trap -p INT TERM HUP EXIT
 ' _ "${LLMCTL_ROOT}" "${U}" 2>&1)"
 assert_contains "${out}" "rc=0" "validation ran"
-assert_contains "${out}" "trap -- 'echo CALLER-INT' SIGINT" "the caller's INT trap is back after validate_profile"
+if sigint_ignored; then
+  assert_skip "SIGINT is ignored at shell entry (re-exec unavailable or ineffective); bash cannot trap/reset it, so the caller's INT trap cannot exist" "the caller's INT trap is back after validate_profile"
+  assert_contains "${out}" "trap -- '' SIGINT" "weaker true property: INT stays in its inherited ignored state across validate_profile"
+else
+  assert_contains "${out}" "trap -- 'echo CALLER-INT' SIGINT" "the caller's INT trap is back after validate_profile"
+fi
 assert_contains "${out}" "trap -- 'echo CALLER-TERM' SIGTERM" "the caller's TERM trap is back"
 assert_contains "${out}" "CALLER-EXIT" "the caller's EXIT trap still fires"
 # no caller trap -> none left behind either
@@ -449,7 +471,34 @@ out="$(bash -c '
   source "$1/lib/common.sh"; source "$1/lib/catalog.sh"; source "$1/lib/validate.sh"
   validate_profile fast --host "$2" >/dev/null 2>&1; echo "rc=$?"; trap -p INT TERM HUP
 ' _ "${LLMCTL_ROOT}" "${U}" 2>&1)"
-assert_eq "rc=0" "${out}" "with no caller traps none remain"
+if sigint_ignored; then
+  assert_skip "SIGINT is ignored at shell entry; a leftover INT trap is unobservable (trap -p INT shows the inherited ignore)" "with no caller traps none remain"
+  assert_eq $'rc=0\ntrap -- \'\' SIGINT' "${out}" "weaker true property: only the inherited INT ignore remains, no TERM/HUP trap left behind"
+else
+  assert_eq "rc=0" "${out}" "with no caller traps none remain"
+
+  echo "== 23b. negative control: the section-23 assertions FAIL when validate_profile really leaves its traps behind"
+  MUT="${TEST_TMP}/mutant_root"; mkdir -p "${MUT}"
+  cp -r "${LLMCTL_ROOT}/lib" "${MUT}/lib"
+  # mutate the restore helper into a no-op: the function's own INT/TERM/HUP traps stay installed on return
+  python3 - "${MUT}/lib/validate.sh" <<'PYEOF'
+import sys
+p = sys.argv[1]; s = open(p).read()
+i = s.index("_val_restore_traps() {"); j = s.index("\n}\n", i)
+m = s[:i] + "_val_restore_traps() {\n  :" + s[j:]
+if m == s: sys.exit("mutation did not apply")
+open(p, "w").write(m)
+PYEOF
+  mut_out="$(bash -c '
+    source "$1/lib/common.sh"; source "$1/lib/catalog.sh"; source "$1/lib/validate.sh"
+    validate_profile fast --host "$2" >/dev/null 2>&1; echo "rc=$?"; trap -p INT TERM HUP
+  ' _ "${MUT}" "${U}" 2>&1)" || true
+  if [[ "${mut_out}" == "rc=0" ]]; then
+    TEST_FAILS=$((TEST_FAILS + 1)); echo "  FAIL: negative control - mutant left traps behind yet the section-23 check saw none"
+  else
+    echo "  PASS: negative control - mutant detected (leftover traps: $(printf '%s' "${mut_out}" | tr '\n' ' '))"
+  fi
+fi
 
 echo "== 24. LLMCTL_VALIDATION_SUITES_DIR is ignored unless LLMCTL_VALIDATE_HERMETIC=1 (suite regexes are code-adjacent input)"
 EMPTYS="${TEST_TMP}/empty_suites"; mkdir -p "${EMPTYS}"
