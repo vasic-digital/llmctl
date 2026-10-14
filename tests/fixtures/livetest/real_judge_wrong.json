@@ -1,8 +1,8 @@
 {
  "suite": "vision-golden-v1",
  "kind": "vision",
- "suite_hash": "9a897414915ef2d8bc7d83b2a82e209f7fe2da3c09e8a9ae7c22579ccc18320f",
- "endpoint": "http://127.0.0.1:41811",
+ "suite_hash": "261543e3023819585a1ae25c6f6a3e7541244b8cc6cabae11623f4913c88f790",
+ "endpoint": "http://127.0.0.1:44593",
  "expect_model": "gemma-3-4b-it-Q4_K_M.gguf",
  "results": [
   {
@@ -14,7 +14,7 @@
    "finish_reason": "stop",
    "seconds": 0.001,
    "reasons": [
-    "contains_all: missing ['ORANGE', 'TIGER', '42']",
+    "contains_all: missing (or only negated) ['ORANGE', 'TIGER', '42']",
     "forbidden: answer claims ['PURPLE']"
    ]
   },
@@ -195,7 +195,7 @@
    "verdict": "PASS",
    "answer": "NO TEXT",
    "golden_reasons": [
-    "contains_all: missing ['ORANGE', 'TIGER', '42']",
+    "contains_all: missing (or only negated) ['ORANGE', 'TIGER', '42']",
     "forbidden: answer claims ['NO TEXT']"
    ]
   },
@@ -204,7 +204,7 @@
    "verdict": "PASS",
    "answer": "PURPLE HORSE\n17",
    "golden_reasons": [
-    "contains_all: missing ['ORANGE', 'TIGER', '42']",
+    "contains_all: missing (or only negated) ['ORANGE', 'TIGER', '42']",
     "forbidden: answer claims ['PURPLE', 'HORSE', '17']"
    ]
   }
@@ -212,7 +212,93 @@
  "determinism": [
   {
    "key": "01_text_large/read",
-   "identical": true
+   "identical": true,
+   "repeat": 3
+  },
+  {
+   "key": "02_shapes_count/red_circles",
+   "identical": true,
+   "repeat": 3
+  },
+  {
+   "key": "02_shapes_count/blue_squares",
+   "identical": true,
+   "repeat": 3
+  },
+  {
+   "key": "03_login_form/transcribe",
+   "identical": true,
+   "repeat": 3
+  },
+  {
+   "key": "03_login_form/screen_type",
+   "identical": true,
+   "repeat": 3
+  },
+  {
+   "key": "04_list_view/items",
+   "identical": true,
+   "repeat": 3
+  },
+  {
+   "key": "04_list_view/count",
+   "identical": true,
+   "repeat": 3
+  },
+  {
+   "key": "05_table/transcribe",
+   "identical": true,
+   "repeat": 3
+  },
+  {
+   "key": "05_table/lookup",
+   "identical": true,
+   "repeat": 3
+  },
+  {
+   "key": "06_dialog/transcribe",
+   "identical": true,
+   "repeat": 3
+  },
+  {
+   "key": "06_dialog/buttons",
+   "identical": true,
+   "repeat": 3
+  },
+  {
+   "key": "07_dark_theme/transcribe",
+   "identical": true,
+   "repeat": 3
+  },
+  {
+   "key": "07_dark_theme/theme",
+   "identical": true,
+   "repeat": 3
+  },
+  {
+   "key": "08_small_text/invoice",
+   "identical": true,
+   "repeat": 3
+  },
+  {
+   "key": "08_small_text/total",
+   "identical": true,
+   "repeat": 3
+  },
+  {
+   "key": "09_color_blocks/colors",
+   "identical": true,
+   "repeat": 3
+  },
+  {
+   "key": "90_bad_blank/read",
+   "identical": true,
+   "repeat": 3
+  },
+  {
+   "key": "91_bad_wrong_content/read",
+   "identical": true,
+   "repeat": 3
   }
  ],
  "judge_selftest": [
@@ -232,13 +318,13 @@
    "probe": "01_text_large/read",
    "answer": "PURPLE HORSE 17",
    "ok": true,
-   "detail": "judged FAIL (want FAIL) contains_all: missing ['ORANGE', 'TIGER', '42']; forbidden: answer claims ['PURPLE', 'HORSE', '17']"
+   "detail": "judged FAIL (want FAIL) contains_all: missing (or only negated) ['ORANGE', 'TIGER', '42']; forbidden: answer claims ['PURPLE', 'HORSE', '17']"
   },
   {
    "probe": "01_text_large/read",
    "answer": "ORANGE TIGER 420",
    "ok": true,
-   "detail": "judged FAIL (want FAIL) contains_all: missing ['42']"
+   "detail": "judged FAIL (want FAIL) contains_all: missing (or only negated) ['42']"
   },
   {
    "probe": "01_text_large/read",
@@ -250,7 +336,13 @@
    "probe": "01_text_large/read",
    "answer": "NO TEXT",
    "ok": true,
-   "detail": "judged FAIL (want FAIL) contains_all: missing ['ORANGE', 'TIGER', '42']; forbidden: answer claims ['NO TEXT']"
+   "detail": "judged FAIL (want FAIL) contains_all: missing (or only negated) ['ORANGE', 'TIGER', '42']; forbidden: answer claims ['NO TEXT']"
+  },
+  {
+   "probe": "01_text_large/read",
+   "answer": "There is no ORANGE TIGER 42 here",
+   "ok": true,
+   "detail": "judged FAIL (want FAIL) contains_all: missing (or only negated) ['ORANGE', 'TIGER', '42']"
   },
   {
    "probe": "02_shapes_count/red_circles",
@@ -268,13 +360,55 @@
    "probe": "02_shapes_count/red_circles",
    "answer": "4",
    "ok": true,
-   "detail": "judged FAIL (want FAIL) number_equals: expected 3, first number in answer is 4.0"
+   "detail": "judged FAIL (want FAIL) number_equals: expected 3, the answer states 4"
   },
   {
    "probe": "02_shapes_count/red_circles",
    "answer": "I cannot count them.",
    "ok": true,
-   "detail": "judged FAIL (want FAIL) number_equals: expected 3, first number in answer is None"
+   "detail": "judged FAIL (want FAIL) number_equals: expected 3, no number in the answer"
+  },
+  {
+   "probe": "02_shapes_count/red_circles",
+   "answer": "3 or 4",
+   "ok": true,
+   "detail": "judged FAIL (want FAIL) number_equals: expected 3, the answer states several different numbers 3, 4 (hedged / ambiguous / self-corrected)"
+  },
+  {
+   "probe": "02_shapes_count/blue_squares",
+   "answer": "2",
+   "ok": true,
+   "detail": "judged PASS (want PASS) "
+  },
+  {
+   "probe": "02_shapes_count/blue_squares",
+   "answer": "3",
+   "ok": true,
+   "detail": "judged FAIL (want FAIL) number_equals: expected 2, the answer states 3"
+  },
+  {
+   "probe": "03_login_form/transcribe",
+   "answer": "SIGN IN\nUSERNAME\nPASSWORD\nLOGIN",
+   "ok": true,
+   "detail": "judged PASS (want PASS) "
+  },
+  {
+   "probe": "03_login_form/transcribe",
+   "answer": "SIGN IN\nUSERNAME",
+   "ok": true,
+   "detail": "judged FAIL (want FAIL) contains_all: missing (or only negated) ['PASSWORD', 'LOGIN']"
+  },
+  {
+   "probe": "03_login_form/screen_type",
+   "answer": "A login screen.",
+   "ok": true,
+   "detail": "judged PASS (want PASS) "
+  },
+  {
+   "probe": "03_login_form/screen_type",
+   "answer": "A settings page.",
+   "ok": true,
+   "detail": "judged FAIL (want FAIL) contains_any: none of ['LOGIN', 'LOG IN', 'SIGN IN', 'SIGN-IN', 'SIGNIN'] asserted"
   },
   {
    "probe": "04_list_view/items",
@@ -286,19 +420,103 @@
    "probe": "04_list_view/items",
    "answer": "BANANA\nAPPLE\nCHERRY\nGRAPE",
    "ok": true,
-   "detail": "judged FAIL (want FAIL) ordered: 'BANANA' not found after the previous item (expected order ['APPLE', 'BANANA', 'CHERRY', 'GRAPE'])"
+   "detail": "judged FAIL (want FAIL) ordered: the items occur as ['BANANA', 'APPLE', 'CHERRY', 'GRAPE'], not exactly once each in the order ['APPLE', 'BANANA', 'CHERRY', 'GRAPE']"
+  },
+  {
+   "probe": "04_list_view/count",
+   "answer": "4",
+   "ok": true,
+   "detail": "judged PASS (want PASS) "
+  },
+  {
+   "probe": "04_list_view/count",
+   "answer": "5",
+   "ok": true,
+   "detail": "judged FAIL (want FAIL) number_equals: expected 4, the answer states 5"
+  },
+  {
+   "probe": "05_table/transcribe",
+   "answer": "NAME AGE CITY\nANNA 31 PARIS\nBORIS 45 OSLO\nCLARA 27 ROME",
+   "ok": true,
+   "detail": "judged PASS (want PASS) "
+  },
+  {
+   "probe": "05_table/transcribe",
+   "answer": "NAME AGE CITY\nBORIS 45 OSLO\nANNA 31 PARIS\nCLARA 27 ROME",
+   "ok": true,
+   "detail": "judged FAIL (want FAIL) ordered: the items occur as ['NAME', 'AGE', 'CITY', 'BORIS', '45', 'OSLO', 'ANNA', '31', 'PARIS', 'CLARA', '27', 'ROME'], not exactly once each in the order ['NAME', 'AGE', 'CITY', 'ANNA', '31', 'PARIS', 'BORIS', '45', 'OSLO', 'CLARA', '27', 'ROME']"
   },
   {
    "probe": "05_table/lookup",
    "answer": "PARIS",
    "ok": true,
-   "detail": "judged FAIL (want FAIL) contains_all: missing ['OSLO']; forbidden: answer claims ['PARIS']"
+   "detail": "judged FAIL (want FAIL) contains_all: missing (or only negated) ['OSLO']; forbidden: answer claims ['PARIS']"
+  },
+  {
+   "probe": "05_table/lookup",
+   "answer": "OSLO",
+   "ok": true,
+   "detail": "judged PASS (want PASS) "
+  },
+  {
+   "probe": "06_dialog/transcribe",
+   "answer": "WARNING\nDELETE FILE?\nCANCEL\nDELETE",
+   "ok": true,
+   "detail": "judged PASS (want PASS) "
+  },
+  {
+   "probe": "06_dialog/transcribe",
+   "answer": "WARNING\nCANCEL",
+   "ok": true,
+   "detail": "judged FAIL (want FAIL) contains_all: missing (or only negated) ['DELETE FILE']"
+  },
+  {
+   "probe": "06_dialog/buttons",
+   "answer": "CANCEL, DELETE",
+   "ok": true,
+   "detail": "judged PASS (want PASS) "
+  },
+  {
+   "probe": "06_dialog/buttons",
+   "answer": "OK, CANCEL",
+   "ok": true,
+   "detail": "judged FAIL (want FAIL) contains_all: missing (or only negated) ['DELETE']"
+  },
+  {
+   "probe": "07_dark_theme/transcribe",
+   "answer": "SETTINGS\nDARK MODE\nVOLUME 75",
+   "ok": true,
+   "detail": "judged PASS (want PASS) "
+  },
+  {
+   "probe": "07_dark_theme/transcribe",
+   "answer": "SETTINGS\nDARK MODE\nVOLUME 57",
+   "ok": true,
+   "detail": "judged FAIL (want FAIL) contains_all: missing (or only negated) ['75']"
   },
   {
    "probe": "07_dark_theme/theme",
    "answer": "Light",
    "ok": true,
-   "detail": "judged FAIL (want FAIL) contains_any: none of ['DARK', 'BLACK'] present; forbidden: answer claims ['LIGHT']"
+   "detail": "judged FAIL (want FAIL) contains_any: none of ['DARK', 'BLACK'] asserted; forbidden: answer claims ['LIGHT']"
+  },
+  {
+   "probe": "07_dark_theme/theme",
+   "answer": "Dark",
+   "ok": true,
+   "detail": "judged PASS (want PASS) "
+  },
+  {
+   "probe": "08_small_text/invoice",
+   "answer": "7731",
+   "ok": true,
+   "detail": "judged PASS (want PASS) "
+  },
+  {
+   "probe": "08_small_text/invoice",
+   "answer": "7781",
+   "ok": true,
+   "detail": "judged FAIL (want FAIL) number_equals: expected 7731, the answer states 7781"
   },
   {
    "probe": "08_small_text/total",
@@ -310,13 +528,25 @@
    "probe": "08_small_text/total",
    "answer": "58.04",
    "ok": true,
-   "detail": "judged FAIL (want FAIL) number_equals: expected 58.4, first number in answer is 58.04"
+   "detail": "judged FAIL (want FAIL) number_equals: expected 58.4, the answer states 58.04"
   },
   {
    "probe": "09_color_blocks/colors",
    "answer": "Blue, green, red",
    "ok": true,
-   "detail": "judged FAIL (want FAIL) ordered: 'GREEN' not found after the previous item (expected order ['RED', 'GREEN', 'BLUE'])"
+   "detail": "judged FAIL (want FAIL) ordered: the items occur as ['BLUE', 'GREEN', 'RED'], not exactly once each in the order ['RED', 'GREEN', 'BLUE']"
+  },
+  {
+   "probe": "09_color_blocks/colors",
+   "answer": "Red, Green, Blue",
+   "ok": true,
+   "detail": "judged PASS (want PASS) "
+  },
+  {
+   "probe": "09_color_blocks/colors",
+   "answer": "Red, green, blue, red",
+   "ok": true,
+   "detail": "judged FAIL (want FAIL) ordered: the items occur as ['RED', 'GREEN', 'BLUE', 'RED'], not exactly once each in the order ['RED', 'GREEN', 'BLUE']"
   },
   {
    "probe": "90_bad_blank/read",
@@ -328,17 +558,31 @@
    "probe": "90_bad_blank/read",
    "answer": "ORANGE TIGER 42",
    "ok": true,
-   "detail": "judged FAIL (want FAIL) contains_all: missing ['NO TEXT']; forbidden: answer claims ['ORANGE', 'TIGER', '42']"
+   "detail": "judged FAIL (want FAIL) contains_all: missing (or only negated) ['NO TEXT']; forbidden: answer claims ['ORANGE', 'TIGER', '42']"
+  },
+  {
+   "probe": "91_bad_wrong_content/read",
+   "answer": "PURPLE HORSE\n17",
+   "ok": true,
+   "detail": "judged PASS (want PASS) "
+  },
+  {
+   "probe": "91_bad_wrong_content/read",
+   "answer": "ORANGE TIGER 42",
+   "ok": true,
+   "detail": "judged FAIL (want FAIL) contains_all: missing (or only negated) ['PURPLE', 'HORSE', '17']; forbidden: answer claims ['ORANGE', 'TIGER', '42']"
   }
  ],
  "notes": [],
+ "repeat": 3,
+ "quick": false,
  "served_models": [
   "/m/vision/gemma-3-4b-it-Q4_K_M.gguf"
  ],
  "verdict": "FAIL",
  "exit_code": 1,
  "counts": {
-  "pass": 20,
+  "pass": 37,
   "fail": 1,
   "undetermined": 0
  }

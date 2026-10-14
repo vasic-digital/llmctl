@@ -57,7 +57,7 @@ mkenv() {
   # suites: the REAL suite files (vision = the fixture copy of the golden expectations, as before); $E/suite is the legacy alias
   mkdir -p "$E/suites/vision-golden-v1"
   cp "$ROOT/tests/fixtures/livetest/vision-golden-v1/expectations.json" "$E/suites/vision-golden-v1/expectations.json"
-  for sp in chat-v1 coder-v1 embedding-v1; do mkdir -p "$E/suites/$sp"; cp "$ROOT/validation/suites/$sp/suite.json" "$E/suites/$sp/suite.json"; done
+  for sp in chat-v1 coder-v1 embedding-v1 decide-v1; do mkdir -p "$E/suites/$sp"; cp "$ROOT/validation/suites/$sp/suite.json" "$E/suites/$sp/suite.json"; done
   ln -s "$E/suites/vision-golden-v1" "$E/suite"
   # catalog = the real catalog + one embedding profile (the real catalog has none); plan = every profile fits, sized from its files
   python3 -I - "$ROOT/models/catalog.json" "$E/catalog.json" "$E/fake/plan.json" <<'PY'

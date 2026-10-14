@@ -101,6 +101,9 @@ def static_refusal(cat, name, root, overrides):
         d, spec, kind, _ = suite_spec(root, s, overrides)
         if spec is None:
             return "validation suite '%s' of profile '%s' is missing or unreadable under %s" % (s, name, d)
+        if kind == "decide":
+            return ("profile '%s' is validated by the typed-decision suite %s: the live test drives OpenAI-compatible "
+                    "suites only (validate it with: llmctl validate %s)" % (name, s, name))
     return None
 
 
@@ -222,30 +225,40 @@ def parse_reports(raw):
     return reps
 
 
-def expected_counts(spec):
+MIN_DECISION_REPEAT = 3   # lib/validate_judge.py: a decision-bearing run asks every probe >= 3 times
+
+
+def expected_counts(spec, repeat=MIN_DECISION_REPEAT):
     """(probes, controls, determinism) the real judge emits for a fully correct run of this suite
     (lib/validate_judge.py run(): one result per probe, one control per `discriminates` entry (vision only),
-    one determinism entry per determinism_repeat key that names an asked probe; counts.pass is their SUM)."""
+    one determinism entry per asked probe when every probe is repeated (repeat >= 2), else - quick mode, repeat 1 -
+    one per determinism_repeat key that names an asked probe; counts.pass is their SUM)."""
     kind = spec.get("kind")
     if kind == "vision":
         fx = spec["fixtures"]
         probes = sum(len(f.get("probes", [])) for f in fx)
         ctl = sum(len(f.get("discriminates", [])) for f in fx)
         keys = {"%s/%s" % (f["id"], p["id"]) for f in fx for p in f.get("probes", [])}
-        det = len([k for k in spec.get("determinism_repeat", []) if k in keys])
+        det = probes if repeat >= 2 else len([k for k in spec.get("determinism_repeat", []) if k in keys])
         return probes, ctl, det
     if kind in ("chat", "coder"):
         ids = {c["id"] for c in spec["cases"]}
-        return len(spec["cases"]), 0, len([k for k in spec.get("determinism_repeat", []) if k in ids])
+        det = len(ids) if repeat >= 2 else len([k for k in spec.get("determinism_repeat", []) if k in ids])
+        return len(spec["cases"]), 0, det
     if kind == "embedding":
         return len(spec["cases"]), 0, 0
     raise ValueError("unknown suite kind %r" % kind)
 
 
 def judge_one(rep, name, spec):
-    exp_p, exp_c, exp_d = expected_counts(spec)
-    res, c, ctl, det = rep.get("results"), rep.get("counts") or {}, rep.get("controls"), rep.get("determinism")
     tag = "suite %s: " % name
+    repeat = rep.get("repeat")
+    if spec.get("kind") != "embedding" and (not isinstance(repeat, int) or isinstance(repeat, bool)
+                                            or repeat < MIN_DECISION_REPEAT):
+        return tag + "validate output is not a decision-bearing run (repeat=%r, needs >= %d; quick mode is never a PASS)" % (
+            repeat, MIN_DECISION_REPEAT)
+    exp_p, exp_c, exp_d = expected_counts(spec, repeat if isinstance(repeat, int) else MIN_DECISION_REPEAT)
+    res, c, ctl, det = rep.get("results"), rep.get("counts") or {}, rep.get("controls"), rep.get("determinism")
     if not isinstance(res, list) or not res:
         return tag + "validate output has no probe results"
     if not isinstance(ctl, list) or not isinstance(det, list):

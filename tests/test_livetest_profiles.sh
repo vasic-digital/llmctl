@@ -55,8 +55,9 @@ for s in chat-v1 coder-v1 embedding-v1 vision-golden-v1; do
   derived="$(python3 -I -B - "$LTP" "$sf" "$JD/$s.json" <<'PY'
 import importlib.util, json, sys
 spec = importlib.util.spec_from_file_location("ltp", sys.argv[1]); m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
-p, c, d = m.expected_counts(json.load(open(sys.argv[2])))
-real = json.load(open(sys.argv[3]))["counts"]["pass"]
+rep = json.load(open(sys.argv[3]))
+p, c, d = m.expected_counts(json.load(open(sys.argv[2])), rep.get("repeat", 1))
+real = rep["counts"]["pass"]
 print("derived=%d real_judge_counts_pass=%d" % (p + c + d, real))
 PY
 )"
@@ -105,7 +106,7 @@ for pr in nosuch Vision 'fast;x' '../fast' decide colibri-glm; do
   check "profile '$pr' refused (not in catalog / bad id / no suite / unsupported engine): exit 3" "$RC" "3"
   [ ! -s "$E/fake/calls.args" ] && ok "  '$pr': no llmctl call at all" || bad "  '$pr': llmctl was called: $(cat "$E/fake/calls.args")"
 done
-E="$(mkenv)"; run_main "$E" decide; has "  no-suite profile: the reason names the missing validation suite" "$E/err.txt" 'no validation suite'
+E="$(mkenv)"; run_main "$E" decide; has "  decide profile: refused, the live test drives OpenAI-compatible suites only (decide-v1 is a typed-decision suite)" "$E/err.txt" 'OpenAI-compatible suites only'
 E="$(mkenv)"; run_main "$E" colibri-glm; has "  colibri engine: the reason names the engine" "$E/err.txt" "engine 'colibri'"
 E="$(mkenv)"; rm -f "$E/suites/chat-v1/suite.json"; run_main "$E" fast
 check "profile whose suite file is missing: exit 3" "$RC" "3"; has "  reason names the suite" "$E/err.txt" "suite 'chat-v1'"
