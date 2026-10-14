@@ -192,6 +192,18 @@ rec="$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print(d["sta
 assert_eq "pass build 4242, commit deadbeef 64 ['vision-golden-v1']" "${rec}" "record carries status, engine tag, model sha, suite"
 assert_eq 0 "$(run_rc "${LLMCTL}" require-validated vision)" "require-validated accepts the fresh passing record"
 assert_eq 1 "$(run_rc "${LLMCTL}" require-validated vision-pro)" "...but not for a different profile"
+# the record names the host it was produced on; a record from another host never validates this one
+VREC="${LLMCTL_STATE_DIR}/validation/vision.json"
+assert_eq "$(python3 -c 'import socket; print(socket.gethostname())')" \
+  "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("host"))' "${VREC}")" "record carries the host it was validated on"
+cp "${VREC}" "${TEST_TMP}/vision.json.orig"
+python3 -c 'import json,sys; p=sys.argv[1]; d=json.load(open(p)); d["host"]="other-host.example"; json.dump(d,open(p,"w"))' "${VREC}"
+assert_eq 1 "$(run_rc "${LLMCTL}" require-validated vision)" "a record from another host -> refused"
+assert_contains "$(cat "${TEST_TMP}/last.out")" "host changed" "stale reason names the host"
+python3 -c 'import json,sys; p=sys.argv[1]; d=json.load(open(p)); d.pop("host"); json.dump(d,open(p,"w"))' "${VREC}"
+assert_eq 1 "$(run_rc "${LLMCTL}" require-validated vision)" "a record without a host field -> refused"
+cp "${TEST_TMP}/vision.json.orig" "${VREC}"
+assert_eq 0 "$(run_rc "${LLMCTL}" require-validated vision)" "original record restored -> accepted"
 # engine changed -> stale
 printf '#!/usr/bin/env bash\necho "version: 0.0.0 (build 4243, commit cafef00d)"\n' > "${FAKE_BIN}/llama-server"
 assert_eq 1 "$(run_rc "${LLMCTL}" require-validated vision)" "engine build changed -> record stale -> refused"

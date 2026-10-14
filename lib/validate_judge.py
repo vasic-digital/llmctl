@@ -743,7 +743,8 @@ def compute_key(a):
     suites, reason = profile_suites(catalog, a.profile)
     if a.only_kind:
         suites = [s for s in suites if load_suite(os.path.join(a.suites_dir, s)).get("kind") == a.only_kind]
-    return {"profile": a.profile,
+    import socket
+    return {"profile": a.profile, "host": socket.gethostname(),
             "model_sha256": hashlib.sha256("\n".join(lines).encode()).hexdigest(),
             "model_files": files, "engine_tag": a.engine_tag,
             "launch_fingerprint": launch_fingerprint(a.env_file),
@@ -756,7 +757,8 @@ def check_state(state, key, max_age):
     why = []
     if state.get("status") != "pass":
         why.append("status=%s" % state.get("status"))
-    for field in ("model_sha256", "model_files", "engine_tag", "launch_fingerprint"):
+    # host: a record produced on another machine (copied state dir, shared home) never validates this one
+    for field in ("host", "model_sha256", "model_files", "engine_tag", "launch_fingerprint"):
         if state.get(field) != key.get(field):
             why.append("%s changed (validated %s, now %s)" % (field, json.dumps(state.get(field)),
                                                                json.dumps(key.get(field))))
