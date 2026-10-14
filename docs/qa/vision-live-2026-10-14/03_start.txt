@@ -1,0 +1,3 @@
+[llmctl] wrote /home/milosvasic/.local/state/llmctl/services/vision.env
+started vision (mode=gpu, port=8082, reserved 2048 MiB RAM + 4030 MiB VRAM)
+WARN: validation on start disabled (LLMCTL_VALIDATE_ON_START=0): vision NOT validated - 'llmctl require-validated' will refuse until 'llmctl validate' passes

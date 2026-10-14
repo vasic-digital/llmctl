@@ -1,0 +1,11 @@
+MainPID=669035
+MemoryCurrent=1070665728
+MemoryPeak=1071599616
+MemoryMax=6442450944
+Mem:           30974       16288        5169        1735       11644       14685
+4128 MiB
+$ llmctl stop vision
+stopped vision
+EXIT: 0
+no llmctl services running
+WARN: llmctl-onnx@decide-nli.service is enabled but inactive (it is down; a SIGKILLed unit is not restarted by design. Cause: journalctl --user -u llmctl-onnx@decide-nli.service; start it with: llmctl start <profile>)

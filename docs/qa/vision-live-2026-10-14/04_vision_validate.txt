@@ -1,0 +1,58 @@
+$ head -2 /proc/pressure/memory
+some avg10=0.00 avg60=0.02 avg300=0.11 total=414369267
+full avg10=0.00 avg60=0.02 avg300=0.09 total=377489746
+$ llmctl vision validate
+suite vision-golden-v1 (vision) hash 9a897414915ef2d8bc7d83b2a82e209f7fe2da3c09e8a9ae7c22579ccc18320f
+endpoint http://127.0.0.1:8082
+judge self-test: 19/19 canned controls judged as required
+model identity: endpoint serves ['/home/milosvasic/.local/share/llmctl/models/vision/gemma-3-4b-it-Q4_K_M.gguf', '/home/milosvasic/.local/share/llmctl/models/vision/gemma-3-4b-it-Q4_K_M.gguf']
+[PASS] 01_text_large/read (1.12s, finish=stop)
+       answer: "ORANGE TIGER\n42"
+[PASS] 02_shapes_count/red_circles (0.86s, finish=stop)
+       answer: "3"
+[PASS] 02_shapes_count/blue_squares (0.85s, finish=stop)
+       answer: "2"
+[PASS] 03_login_form/transcribe (0.94s, finish=stop)
+       answer: "SIGN IN\nUSERNAME\nPASSWORD\nLOGIN"
+[PASS] 03_login_form/screen_type (1.07s, finish=stop)
+       answer: "This screenshot depicts a classic, pixelated login screen reminiscent of early 1980s computer systems."
+[PASS] 04_list_view/items (0.96s, finish=stop)
+       answer: "APPLE\nBANANA\nCHERRY\nGRAPE"
+[PASS] 04_list_view/count (0.83s, finish=stop)
+       answer: "4"
+[PASS] 05_table/transcribe (1.19s, finish=stop)
+       answer: "NAME   AGE   CITY\nANNA   31   PARIS\nBORIS  45   OSLO\nCLARA  27   ROME"
+[PASS] 05_table/lookup (0.86s, finish=stop)
+       answer: "OSLO"
+[PASS] 06_dialog/transcribe (0.94s, finish=stop)
+       answer: "WARNING\nDELETE FILE?\nCANCEL\nDELETE"
+[PASS] 06_dialog/buttons (0.87s, finish=stop)
+       answer: "CANCEL, DELETE"
+[PASS] 07_dark_theme/transcribe (0.93s, finish=stop)
+       answer: "SETTINGS\nDARK MODE\nVOLUME 75"
+[PASS] 07_dark_theme/theme (0.84s, finish=stop)
+       answer: "Dark"
+[PASS] 08_small_text/invoice (0.89s, finish=stop)
+       answer: "7731"
+[PASS] 08_small_text/total (0.86s, finish=stop)
+       answer: "58.40"
+[PASS] 09_color_blocks/colors (0.88s, finish=stop)
+       answer: "Red, Green, Blue"
+[PASS] 90_bad_blank/read (0.85s, finish=stop)
+       answer: "NO TEXT"
+[PASS] 91_bad_wrong_content/read (0.91s, finish=stop)
+       answer: "PURPLE HORSE\n17"
+[PASS] control 90_bad_blank vs 01_text_large/read: golden checks correctly FAIL on the control image (contains_all: missing ['ORANGE', 'TIGER', '42']; forbidden: answer claims ['NO TEXT'])
+       answer: "NO TEXT"
+[PASS] control 91_bad_wrong_content vs 01_text_large/read: golden checks correctly FAIL on the control image (contains_all: missing ['ORANGE', 'TIGER', '42']; forbidden: answer claims ['PURPLE', 'HORSE', '17'])
+       answer: "PURPLE HORSE\n17"
+[PASS] determinism 01_text_large/read: repeated request byte-identical
+VERDICT: PASS pass=21 fail=0 undetermined=0
+[llmctl] validation state for 'vision': pass -> /home/milosvasic/.local/state/llmctl/validation/vision.json
+[llmctl] evidence: /home/milosvasic/.local/state/llmctl/verify/validate-vision.log
+EXIT: 0
+$ llmctl require-validated vision
+vision: fresh passing validation from 2026-10-14T11:52:37Z (suites: vision-golden-v1)
+EXIT: 0
+{'status': 'pass', 'host': 'anton', 'engine_tag': 'build 11379, commit 1537a0a8b', 'timestamp': '2026-10-14T11:52:37Z', 'model_sha256': '56e033052a1381fc1ddc1069f9fd49a171fc47edb09a2340259d21abcc8f3084'}
+{'vision-golden-v1': '9a897414915ef2d8bc7d83b2a82e209f7fe2da3c09e8a9ae7c22579ccc18320f'}

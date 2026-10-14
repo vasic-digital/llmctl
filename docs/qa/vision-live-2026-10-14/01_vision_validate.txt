@@ -1,0 +1,8 @@
+$ llmctl vision validate
+[llmctl] profile 'vision' is not running - starting it through the scheduler (budget-checked) to validate it
+[llmctl] wrote /home/milosvasic/.local/state/llmctl/services/vision.env
+started vision (mode=gpu, port=8082, reserved 2048 MiB RAM + 4030 MiB VRAM)
+refusing to start vision: memory pressure is too high (PSI full avg10=4.03 > 2). Wait for it to drop, or free memory; this gate protects the host from a stall.
+ERROR: validation of 'vision' refused under memory pressure (hw_pressure_gate rc 75): nothing was started or probed, nothing is recorded - UNDETERMINED (exit 2); retry when 'head -2 /proc/pressure/memory' is quiet
+WARN: stopping 'vision' again (it was started only for validation)
+EXIT: 2
