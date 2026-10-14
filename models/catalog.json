@@ -576,7 +576,11 @@
         "suites": [
           "coder-v1",
           "chat-v1"
-        ]
+        ],
+        "expect_model_id": "qwen3.6-colibri",
+        "expect_model_id_source": "colibri /v1/models reports family.default_model_id (submodules/colibri/c/openai_server.py:4552, :3761-3763); the downloaded config.json has model_type qwen3_5_moe_text -> family qwen36 (family_registry.py:1209) -> default_model_id qwen3.6-colibri (:1218). Read from source + the local download; a live colibri run did not happen: UNCONFIRMED",
+        "executed": false,
+        "unexecuted_reason": "no colibri run is possible on the authoring host: the suites have never been executed against this model, so llmctl validate-all reports it NOT VALIDATED until a live PASS record exists"
       }
     },
     "colibri-glm": {
@@ -1473,7 +1477,11 @@
         "suites": [
           "coder-v1",
           "chat-v1"
-        ]
+        ],
+        "expect_model_id": "glm-5.2-colibri",
+        "expect_model_id_source": "colibri /v1/models reports family.default_model_id (submodules/colibri/c/openai_server.py:4552, :3761-3763); GLM-5.2 -> family glm (model_types glm_moe_dsa, glm5_moe, glm: family_registry.py:1065) -> default_model_id glm-5.2-colibri (:1093). The profile's config.json is not on the authoring host: UNCONFIRMED",
+        "executed": false,
+        "unexecuted_reason": "no colibri run is possible on the authoring host: the suites have never been executed against this model, so llmctl validate-all reports it NOT VALIDATED until a live PASS record exists"
       }
     },
     "decide-tiny": {
@@ -1543,8 +1551,12 @@
         }
       },
       "validation": {
-        "suites": [],
-        "reason": "typed-decision profiles are validated by the decision smoke test run at download (llmctl models download) and by the hash-pinned golden question set (docs/golden-set.md, scripts/golden/run_golden.py) through the decide gateway; they are not wired into llmctl validate yet (open item), so llmctl validate / require-validated report them as UNDETERMINED, never as validated"
+        "suites": [
+          "decide-v1"
+        ],
+        "executed": false,
+        "unexecuted_reason": "no decision-model run is possible on the authoring host (live operator services, host safety): decide-v1 has never been executed against this model, so llmctl validate-all reports it NOT VALIDATED until a live PASS record exists",
+        "note": "also exercised by the decision smoke at download (llmctl models download) and the hash-pinned golden question set (docs/golden-set.md, scripts/golden/run_golden.py); neither of those is a validation record; protocol jev-verdict is implemented by no decide driver, so llmctl validate is UNDETERMINED for this profile by design until one is"
       }
     },
     "decide": {
@@ -1622,8 +1634,12 @@
         }
       },
       "validation": {
-        "suites": [],
-        "reason": "typed-decision profiles are validated by the decision smoke test run at download (llmctl models download) and by the hash-pinned golden question set (docs/golden-set.md, scripts/golden/run_golden.py) through the decide gateway; they are not wired into llmctl validate yet (open item), so llmctl validate / require-validated report them as UNDETERMINED, never as validated"
+        "suites": [
+          "decide-v1"
+        ],
+        "executed": false,
+        "unexecuted_reason": "no decision-model run is possible on the authoring host (live operator services, host safety): decide-v1 has never been executed against this model, so llmctl validate-all reports it NOT VALIDATED until a live PASS record exists",
+        "note": "also exercised by the decision smoke at download (llmctl models download) and the hash-pinned golden question set (docs/golden-set.md, scripts/golden/run_golden.py); neither of those is a validation record"
       }
     },
     "decide-pro": {
@@ -1701,8 +1717,12 @@
         }
       },
       "validation": {
-        "suites": [],
-        "reason": "typed-decision profiles are validated by the decision smoke test run at download (llmctl models download) and by the hash-pinned golden question set (docs/golden-set.md, scripts/golden/run_golden.py) through the decide gateway; they are not wired into llmctl validate yet (open item), so llmctl validate / require-validated report them as UNDETERMINED, never as validated"
+        "suites": [
+          "decide-v1"
+        ],
+        "executed": false,
+        "unexecuted_reason": "no decision-model run is possible on the authoring host (live operator services, host safety): decide-v1 has never been executed against this model, so llmctl validate-all reports it NOT VALIDATED until a live PASS record exists",
+        "note": "also exercised by the decision smoke at download (llmctl models download) and the hash-pinned golden question set (docs/golden-set.md, scripts/golden/run_golden.py); neither of those is a validation record"
       }
     },
     "decide-nli": {
@@ -1793,8 +1813,12 @@
         }
       },
       "validation": {
-        "suites": [],
-        "reason": "typed-decision profiles are validated by the decision smoke test run at download (llmctl models download) and by the hash-pinned golden question set (docs/golden-set.md, scripts/golden/run_golden.py) through the decide gateway; they are not wired into llmctl validate yet (open item), so llmctl validate / require-validated report them as UNDETERMINED, never as validated"
+        "suites": [
+          "decide-v1"
+        ],
+        "executed": false,
+        "unexecuted_reason": "no decision-model run is possible on the authoring host (live operator services, host safety): decide-v1 has never been executed against this model, so llmctl validate-all reports it NOT VALIDATED until a live PASS record exists",
+        "note": "also exercised by the decision smoke at download (llmctl models download) and the hash-pinned golden question set (docs/golden-set.md, scripts/golden/run_golden.py); neither of those is a validation record"
       }
     },
     "decide-2b": {
@@ -1872,8 +1896,12 @@
         }
       },
       "validation": {
-        "suites": [],
-        "reason": "typed-decision profiles are validated by the decision smoke test run at download (llmctl models download) and by the hash-pinned golden question set (docs/golden-set.md, scripts/golden/run_golden.py) through the decide gateway; they are not wired into llmctl validate yet (open item), so llmctl validate / require-validated report them as UNDETERMINED, never as validated"
+        "suites": [
+          "decide-v1"
+        ],
+        "executed": false,
+        "unexecuted_reason": "no decision-model run is possible on the authoring host (live operator services, host safety): decide-v1 has never been executed against this model, so llmctl validate-all reports it NOT VALIDATED until a live PASS record exists",
+        "note": "also exercised by the decision smoke at download (llmctl models download) and the hash-pinned golden question set (docs/golden-set.md, scripts/golden/run_golden.py); neither of those is a validation record"
       }
     },
     "decide-max": {
@@ -1951,8 +1979,12 @@
         }
       },
       "validation": {
-        "suites": [],
-        "reason": "typed-decision profiles are validated by the decision smoke test run at download (llmctl models download) and by the hash-pinned golden question set (docs/golden-set.md, scripts/golden/run_golden.py) through the decide gateway; they are not wired into llmctl validate yet (open item), so llmctl validate / require-validated report them as UNDETERMINED, never as validated"
+        "suites": [
+          "decide-v1"
+        ],
+        "executed": false,
+        "unexecuted_reason": "no decision-model run is possible on the authoring host (live operator services, host safety): decide-v1 has never been executed against this model, so llmctl validate-all reports it NOT VALIDATED until a live PASS record exists",
+        "note": "also exercised by the decision smoke at download (llmctl models download) and the hash-pinned golden question set (docs/golden-set.md, scripts/golden/run_golden.py); neither of those is a validation record"
       }
     },
     "decide-julia": {
@@ -2051,8 +2083,12 @@
         }
       },
       "validation": {
-        "suites": [],
-        "reason": "typed-decision profiles are validated by the decision smoke test run at download (llmctl models download) and by the hash-pinned golden question set (docs/golden-set.md, scripts/golden/run_golden.py) through the decide gateway; they are not wired into llmctl validate yet (open item), so llmctl validate / require-validated report them as UNDETERMINED, never as validated"
+        "suites": [
+          "decide-v1"
+        ],
+        "executed": false,
+        "unexecuted_reason": "no decision-model run is possible on the authoring host (live operator services, host safety): decide-v1 has never been executed against this model, so llmctl validate-all reports it NOT VALIDATED until a live PASS record exists",
+        "note": "also exercised by the decision smoke at download (llmctl models download) and the hash-pinned golden question set (docs/golden-set.md, scripts/golden/run_golden.py); neither of those is a validation record"
       }
     },
     "decide-kev-08b": {
@@ -2150,8 +2186,12 @@
         }
       },
       "validation": {
-        "suites": [],
-        "reason": "typed-decision profiles are validated by the decision smoke test run at download (llmctl models download) and by the hash-pinned golden question set (docs/golden-set.md, scripts/golden/run_golden.py) through the decide gateway; they are not wired into llmctl validate yet (open item), so llmctl validate / require-validated report them as UNDETERMINED, never as validated"
+        "suites": [
+          "decide-v1"
+        ],
+        "executed": false,
+        "unexecuted_reason": "no decision-model run is possible on the authoring host (live operator services, host safety): decide-v1 has never been executed against this model, so llmctl validate-all reports it NOT VALIDATED until a live PASS record exists",
+        "note": "also exercised by the decision smoke at download (llmctl models download) and the hash-pinned golden question set (docs/golden-set.md, scripts/golden/run_golden.py); neither of those is a validation record"
       }
     },
     "decide-kev-4b": {
@@ -2243,8 +2283,12 @@
         }
       },
       "validation": {
-        "suites": [],
-        "reason": "typed-decision profiles are validated by the decision smoke test run at download (llmctl models download) and by the hash-pinned golden question set (docs/golden-set.md, scripts/golden/run_golden.py) through the decide gateway; they are not wired into llmctl validate yet (open item), so llmctl validate / require-validated report them as UNDETERMINED, never as validated"
+        "suites": [
+          "decide-v1"
+        ],
+        "executed": false,
+        "unexecuted_reason": "no decision-model run is possible on the authoring host (live operator services, host safety): decide-v1 has never been executed against this model, so llmctl validate-all reports it NOT VALIDATED until a live PASS record exists",
+        "note": "also exercised by the decision smoke at download (llmctl models download) and the hash-pinned golden question set (docs/golden-set.md, scripts/golden/run_golden.py); neither of those is a validation record"
       }
     },
     "decide-kev-9b": {
@@ -2322,8 +2366,12 @@
         }
       },
       "validation": {
-        "suites": [],
-        "reason": "typed-decision profiles are validated by the decision smoke test run at download (llmctl models download) and by the hash-pinned golden question set (docs/golden-set.md, scripts/golden/run_golden.py) through the decide gateway; they are not wired into llmctl validate yet (open item), so llmctl validate / require-validated report them as UNDETERMINED, never as validated"
+        "suites": [
+          "decide-v1"
+        ],
+        "executed": false,
+        "unexecuted_reason": "no decision-model run is possible on the authoring host (live operator services, host safety): decide-v1 has never been executed against this model, so llmctl validate-all reports it NOT VALIDATED until a live PASS record exists",
+        "note": "also exercised by the decision smoke at download (llmctl models download) and the hash-pinned golden question set (docs/golden-set.md, scripts/golden/run_golden.py); neither of those is a validation record"
       }
     },
     "decide-laya": {
@@ -2422,8 +2470,12 @@
         }
       },
       "validation": {
-        "suites": [],
-        "reason": "typed-decision profiles are validated by the decision smoke test run at download (llmctl models download) and by the hash-pinned golden question set (docs/golden-set.md, scripts/golden/run_golden.py) through the decide gateway; they are not wired into llmctl validate yet (open item), so llmctl validate / require-validated report them as UNDETERMINED, never as validated"
+        "suites": [
+          "decide-v1"
+        ],
+        "executed": false,
+        "unexecuted_reason": "no decision-model run is possible on the authoring host (live operator services, host safety): decide-v1 has never been executed against this model, so llmctl validate-all reports it NOT VALIDATED until a live PASS record exists",
+        "note": "also exercised by the decision smoke at download (llmctl models download) and the hash-pinned golden question set (docs/golden-set.md, scripts/golden/run_golden.py); neither of those is a validation record"
       }
     },
     "decide-lev": {
@@ -2517,8 +2569,12 @@
         }
       },
       "validation": {
-        "suites": [],
-        "reason": "typed-decision profiles are validated by the decision smoke test run at download (llmctl models download) and by the hash-pinned golden question set (docs/golden-set.md, scripts/golden/run_golden.py) through the decide gateway; they are not wired into llmctl validate yet (open item), so llmctl validate / require-validated report them as UNDETERMINED, never as validated"
+        "suites": [
+          "decide-v1"
+        ],
+        "executed": false,
+        "unexecuted_reason": "no decision-model run is possible on the authoring host (live operator services, host safety): decide-v1 has never been executed against this model, so llmctl validate-all reports it NOT VALIDATED until a live PASS record exists",
+        "note": "also exercised by the decision smoke at download (llmctl models download) and the hash-pinned golden question set (docs/golden-set.md, scripts/golden/run_golden.py); neither of those is a validation record"
       }
     }
   }

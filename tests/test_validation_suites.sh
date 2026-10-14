@@ -44,7 +44,7 @@ echo "== 1. structure of every suite"
 report="$(python3 -I - "${SUITES}" <<'PY'
 import hashlib, json, os, sys
 sdir = sys.argv[1]
-KNOWN = {"contains_all", "contains_any", "ordered", "forbidden", "number_equals", "regex_all", "regex_none", "json_subset"}
+KNOWN = {"contains_all", "contains_any", "ordered", "forbidden", "number_equals", "regex_all", "regex_none", "json_subset", "choice_equals"}
 errs, gaps, names = [], [], sorted(os.listdir(sdir))
 for name in names:
     d = os.path.join(sdir, name)
@@ -55,7 +55,20 @@ for name in names:
     kind = s.get("kind")
     if s.get("schema") != 1: errs.append("%s: schema != 1" % name)
     if s.get("suite") != name: errs.append("%s: suite field is %r" % (name, s.get("suite")))
-    if kind not in ("vision", "chat", "coder", "embedding"): errs.append("%s: unknown kind %r" % (name, kind)); continue
+    if kind not in ("vision", "chat", "coder", "embedding", "decide"): errs.append("%s: unknown kind %r" % (name, kind)); continue
+    if kind == "decide":
+        # typed decisions go through the Go driver (deterministic mode is the driver's); the checks are exact choices
+        ids = [c["id"] for c in s["cases"]]
+        for c in s["cases"]:
+            q = c.get("question") or {}
+            if set(c["checks"]) != {"choice_equals"} or c["checks"]["choice_equals"] not in (q.get("criteria") or {}):
+                errs.append("%s: case %s must check choice_equals with one of its criteria" % (name, c["id"]))
+        if s.get("execution_status") not in ("executed", "unexecuted"):
+            errs.append("%s: execution_status must say whether the suite ever ran against a real model" % name)
+        for pr in ids:
+            if {c["expect"] for c in s.get("judge_controls", []) if c["probe"] == pr} != {"pass", "fail"}:
+                errs.append("%s: probe %s needs a canned PASS and a canned FAIL judge control" % (name, pr))
+        continue
     if kind == "embedding":
         for c in s["cases"]:
             for k in ("id", "anchor", "positive", "negative"):
@@ -90,7 +103,7 @@ for name in names:
     for pr in probes:
         want = {c["expect"] for c in ctl if c["probe"] == pr}
         if want != {"pass", "fail"}:
-            (gaps if kind == "vision" else errs).append("%s: probe %s needs a canned PASS and a canned FAIL judge control (has %s)" % (name, pr, sorted(want)))
+            errs.append("%s: probe %s needs a canned PASS and a canned FAIL judge control (has %s)" % (name, pr, sorted(want)))
 for e in errs: print("ERROR:", e)
 for g in gaps: print("GAP:", g)
 print("suites:", ",".join(names))
@@ -107,9 +120,10 @@ assert_contains "${report}" "chat-v1" "chat-v1 present"
 assert_contains "${report}" "coder-v1" "coder-v1 present"
 assert_contains "${report}" "embedding-v1" "embedding-v1 present"
 assert_contains "${report}" "vision-golden-v1" "vision-golden-v1 present"
+assert_contains "${report}" "decide-v1" "decide-v1 present"
 
 echo "== 2. judge self-test of every judged suite"
-for s in chat-v1 coder-v1 vision-golden-v1; do
+for s in chat-v1 coder-v1 vision-golden-v1 decide-v1; do
   assert_eq 0 "$(run_rc python3 -I "${JUDGE}" selftest --suite "${SUITES}/${s}")" "self-test green: ${s}"
 done
 

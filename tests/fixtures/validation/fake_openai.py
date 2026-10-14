@@ -34,6 +34,7 @@ def main():
     ap.add_argument("--max-seconds", type=int, default=900, help="self-terminate (a leaked fixture must not outlive its test)")
     ap.add_argument("--model", default="", help="NEVER read: only shapes this process's cmdline like llama-server's (--model PATH)")
     ap.add_argument("--props-model-path", default="", help="serve GET /props with this model_path (llama-server shape)")
+    ap.add_argument("--owned-by", default="", help="serve /v1/models in the full model_object shape with this owned_by (colibri: 'colibri')")
     a = ap.parse_args()
     answers = json.load(open(a.answers))
     by_sha, prompts = {}, []          # image sha -> fixture id ; [(fixture_id or None, probe_id, prompt)]
@@ -104,6 +105,9 @@ def main():
             if a.mode == "trickle":
                 return self.trickle()
             if self.path == "/v1/models":
+                if a.owned_by:   # colibri openai_server.py model_object(): id, object, created, owned_by
+                    return self.send(200, {"object": "list", "data": [{"id": a.model_id, "object": "model",
+                                                                       "created": 1700000000, "owned_by": a.owned_by}]})
                 return self.send(200, {"object": "list", "data": [{"id": a.model_id}]})
             if self.path == "/health":
                 return self.send(200, {"status": "ok"})

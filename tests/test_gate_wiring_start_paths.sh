@@ -106,7 +106,7 @@ else
   assert_eq 0 "$(gw_count '^svc_stop ')" "auto UNDETERMINED: nothing is stopped"
 fi
 
-echo "== (b) a catalog profile WITHOUT a validation suite (decide-tiny): warn loudly by default, strict mode stops it"
+echo "== (b) a catalog profile that CANNOT be validated (decide-tiny: jev-verdict has no driver): warn loudly by default, strict mode stops it"
 gw_touch_model decide-tiny
 reset_world
 export GW_REAL_VALIDATE=1   # the REAL validate_profile: it reports 'no llmctl validation suite' (exit 2)
@@ -116,14 +116,16 @@ if ! gw_is_running decide-tiny; then
 else
   assert_eq 1 "$(b2i out_has 'NOT validated|could not be validated|no llmctl validation suite')" "no-suite default: loud warning, never a silent pass"
   assert_eq 0 "$(gw_count '^svc_stop ')" "no-suite default: the profile is NOT stopped"
-  assert_file_absent "${LLMCTL_STATE_DIR}/validation/decide-tiny.json" "no-suite default: nothing records a PASS"
+  assert_eq 0 "$(python3 -I -c 'import json,sys
+try: print(1 if json.load(open(sys.argv[1])).get("status") == "pass" else 0)
+except OSError: print(0)' "${LLMCTL_STATE_DIR}/validation/decide-tiny.json")" "no-suite default: nothing records a PASS"
   assert_eq 1 "$(gw_run "${L}" require-validated decide-tiny)" "no-suite default: require-validated refuses"
   reset_world
   export GW_REAL_VALIDATE=1
   rc="$(gw_run env LLMCTL_VALIDATE_STRICT=1 "${L}" start decide-tiny)"
   assert_eq 1 "$(gw_count '^svc_stop decide-tiny$')" "no-suite STRICT (LLMCTL_VALIDATE_STRICT=1): the profile is stopped (RED: no strict mode today)"
   assert_eq 1 "$(( rc != 0 ? 1 : 0 ))" "no-suite STRICT: exit non-zero (rc=${rc})"
-  assert_eq 1 "$(b2i out_has 'no (llmctl )?validation suite')" "no-suite STRICT: the message names the missing suite"
+  assert_eq 1 "$(b2i out_has 'no (llmctl )?validation suite|implemented by no decide driver')" "no-suite STRICT: the message names why it cannot be validated (no suite / jev-verdict has no driver)"
 fi
 unset GW_REAL_VALIDATE
 

@@ -86,7 +86,15 @@ assert_eq 0 "$(run_rc env LLMCTL_VALIDATE_ON_START=1 "${LLMCTL}" validate-after-
 rm -f "${LLMCTL_RUNTIME_DIR}"/decide*.run
 
 echo "== 5. models verify: a profile with no suite is reported as NOT validated and the usage text says exactly that"
-gate() { bash -c 'source "$1/lib/common.sh"; source "$1/lib/catalog.sh"; source "$1/lib/validate.sh"; shift; models_verify_gate "$@"' _ "${LLMCTL_ROOT}" "$@"; }
+# no catalog profile names an empty suite list any more (review 2026-10-14 finding 2): the no-suite contract is exercised on a
+# FIXTURE catalog in which the profile `decide` names none
+NOSUITE_CAT="${TEST_TMP}/catalog.nosuite.json"
+python3 -I - "${LLMCTL_CATALOG:-${LLMCTL_ROOT}/models/catalog.json}" "${NOSUITE_CAT}" <<'PY'
+import json, sys
+d = json.load(open(sys.argv[1])); d["profiles"]["decide"]["validation"] = {"suites": [], "reason": "fixture: this profile names no llmctl validation suite"}
+json.dump(d, open(sys.argv[2], "w"))
+PY
+gate() { LLMCTL_CATALOG="${NOSUITE_CAT}" bash -c 'source "$1/lib/common.sh"; source "$1/lib/catalog.sh"; source "$1/lib/validate.sh"; shift; models_verify_gate "$@"' _ "${LLMCTL_ROOT}" "$@"; }
 assert_eq 0 "$(run_rc gate decide)" "no-suite profile: exit 0 (checksum verification is the exit-code contract)"
 assert_contains "$(cat "${TEST_TMP}/last.out")" "NOT validated" "...but the output states in words that the profile is NOT validated"
 assert_eq 2 "$(run_rc gate decide --live)" "no-suite profile with --live: exit 2"

@@ -86,3 +86,43 @@ func TestSmokeCmdExitCodes(t *testing.T) {
 		t.Errorf("backend failure rc=%d want 1", rc)
 	}
 }
+
+// --question-file: the validator's decide suites ask their own known-answer question through the production driver.
+func TestSmokeCmdQuestionFile(t *testing.T) {
+	var body string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b := new(bytes.Buffer)
+		_, _ = b.ReadFrom(r.Body)
+		body = b.String()
+		_, _ = w.Write([]byte(smokeLlama))
+	}))
+	defer srv.Close()
+	qf := filepath.Join(t.TempDir(), "q.json")
+	q := `{"model":"smoke","state":"Contracts arrive at the front desk.","questions":{"q":{"type":"choice","instructions":"Which team reviews contracts?","criteria":{"legal":"reviews contracts","billing":"handles invoices"}}}}`
+	if err := os.WriteFile(qf, []byte(q), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	rc, out, errb := runSmoke("--url", srv.URL, "--protocol", "letter-logit", "--question-file", qf, "--json")
+	if rc != 0 {
+		t.Fatalf("rc=%d out=%s err=%s", rc, out, errb)
+	}
+	if !strings.Contains(body, "Which team reviews contracts?") || strings.Contains(body, "Which team handles invoices?") {
+		t.Fatalf("the engine did not receive the question file's question: %s", body)
+	}
+	var d struct {
+		Choice string `json:"choice"`
+	}
+	if err := json.Unmarshal([]byte(out), &d); err != nil || d.Choice != "legal" {
+		t.Fatalf("choice %q (%v) out=%s", d.Choice, err, out)
+	}
+	for _, bad := range []string{"", "not json", `{"model":"smoke","state":"s","questions":{}}`} {
+		f := filepath.Join(t.TempDir(), "bad.json")
+		_ = os.WriteFile(f, []byte(bad), 0o600)
+		if rc, _, _ := runSmoke("--url", srv.URL, "--protocol", "letter-logit", "--question-file", f); rc != 2 {
+			t.Errorf("question file %q: rc=%d want 2 (usage)", bad, rc)
+		}
+	}
+	if rc, _, _ := runSmoke("--url", srv.URL, "--protocol", "letter-logit", "--question-file", "/nonexistent/q.json"); rc != 2 {
+		t.Errorf("missing question file: rc=%d want 2", rc)
+	}
+}

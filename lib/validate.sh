@@ -138,12 +138,33 @@ _val_instance_base() {
   printf '%s\n' "${base}"
 }
 
-# _val_expect_model <profile> - the catalog model file name the endpoint must report.
+# _val_expect_model <profile> - the model id the endpoint must report: the catalog's validation.expect_model_id when set
+# (colibri reports its family's default_model_id, not a file name - review 2026-10-14 finding 2), else the first
+# non-mmproj catalog file name (llama-server reports the model path; its basename must be this).
 _val_expect_model() {
-  local name role
-  while IFS='|' read -r name _ _ role; do
-    [[ "${role}" != "mmproj" ]] && { echo "${name}"; return 0; }
-  done < <(catalog_files "$1")
+  local id
+  id="$(json_query "${LLMCTL_CATALOG}" '(d["profiles"][argv[0]].get("validation") or {}).get("expect_model_id") or ""' "$1" 2>/dev/null || true)"
+  if [[ -n "${id}" ]]; then echo "${id}"; return 0; fi
+  _val_expect_model_file "$1"
+}
+
+# _val_decide_args <profile> <local:0|1> - the judge's decide-driver arguments (decision profiles only): protocol, the
+# llmctl-decide binary (never built here) and - for a local run - the engine key FILE from the profile's env record.
+_val_decide_args() {
+  local p="$1" local_run="$2" proto bin kf=""
+  proto="$(catalog_decision_protocol "${p}")"
+  [[ -n "${proto}" ]] || return 0
+  if declare -F _decide_bin_path >/dev/null 2>&1; then bin="$(_decide_bin_path)"; else bin="${LLMCTL_DECIDE_BIN:-${LLMCTL_ROOT}/build/llmctl-decide}"; fi
+  if [[ "${local_run}" == "1" ]]; then
+    # parsed like lib/svc_hook.sh _hk_get (the env record is never sourced); the path is passed on, the key never read
+    kf="$(sed -n 's/^LLMCTL_KEY_FILE=//p' "${LLMCTL_SERVICES_DIR}/${p}.env" 2>/dev/null | head -1 \
+          | sed -e 's/\\\(.\)/\1/g' -e "s/^'\\(.*\\)'\$/\\1/")"
+  else
+    kf="${LLMCTL_VALIDATE_DECIDE_KEY_FILE:-}"
+  fi
+  printf '%s\n' --decide-protocol "${proto}" --decide-bin "${bin}"
+  [[ -n "${kf}" ]] && printf '%s\n' --decide-key-file "${kf}"
+  return 0
 }
 
 # _val_expect_model_path <profile> - what a server of the profile loads: the profile directory (colibri, onnx) or the
@@ -353,6 +374,8 @@ validate_profile() {
                     --expect-model "$(_val_expect_model "${p}")" --evidence "${run_ev}")
     [[ "${json}" == "1" ]] && jargs+=(--json)
     [[ -z "${host}" ]] && jargs+=(--expect-model-path "$(_val_expect_model_path "${p}")")
+    local da
+    while IFS= read -r da; do [[ -n "${da}" ]] && jargs+=("${da}"); done < <(_val_decide_args "${p}" "$([[ -z "${host}" ]] && echo 1 || echo 0)")
     vfile="$(mktemp)"; jargs+=(--verdict-file "${vfile}")
     rf="$(mktemp)"; rfiles+=("${rf}"); jargs+=(--report-file "${rf}")
     # background + wait: bash runs a pending trap as soon as `wait` is interrupted (a foreground child would
@@ -481,12 +504,25 @@ validate_all() {
   done
   if [[ "${n}" == "0" ]]; then
     err "validate-all: no running profile to validate (start one first) - could not determine"
+    _val_coverage || true
     return 2
   fi
   bold "validate-all summary"
   printf '  %s\n' "${verdicts[@]}"
+  _val_coverage || true
   if [[ "${worst}" == "1" ]]; then rc=1; elif [[ "${undet}" == "1" ]]; then rc=2; fi
   return "${rc}"
+}
+
+# _val_coverage - every catalog profile and whether it has a signed, unexpired PASS record (review 2026-10-14 finding 2):
+# a profile that cannot be or never was validated is listed as NOT VALIDATED, never left out. Cheap: the record's
+# signature and age are checked here; the model BYTES are re-checked by require-validated, not by this listing.
+_val_coverage() {
+  local age
+  age="$(_val_max_age 2>/dev/null)" || age=0
+  bold "validation coverage (every catalog profile)"
+  _val_judge coverage --catalog "${LLMCTL_CATALOG}" --state-dir "$(_val_state_dir)" \
+    --suites-dir "${LLMCTL_VALIDATION_SUITES_DIR}" --hmac-key "$(_val_hmac_key)" --max-age "${age}"
 }
 
 # _val_after_start_one <profile> - one profile of validate_after_start (called under the per-profile validation lock):

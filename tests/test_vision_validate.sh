@@ -263,9 +263,17 @@ sed -i "s/^port=.*/port=${port}/" "${LLMCTL_RUNTIME_DIR}/vision.run"
 gate() { bash -c 'source "$1/lib/common.sh"; source "$1/lib/catalog.sh"; source "$1/lib/validate.sh"; shift; models_verify_gate "$@"' _ "${LLMCTL_ROOT}" "$@"; }
 assert_eq 0 "$(run_rc gate vision)" "models verify gate: running vision -> suite run -> 0"
 assert_contains "$(cat "${TEST_TMP}/last.out")" "VERDICT: PASS" "models verify gate really ran the suite"
-assert_eq 0 "$(run_rc gate decide)" "models verify gate: decide (no suite, not --live) -> warning only"
+# no catalog profile names an empty suite list any more (review 2026-10-14 finding 2): the no-suite contract is exercised on a
+# FIXTURE catalog in which the profile `decide` names none
+NOSUITE_CAT="${TEST_TMP}/catalog.nosuite.json"
+python3 -I - "${LLMCTL_CATALOG:-${LLMCTL_ROOT}/models/catalog.json}" "${NOSUITE_CAT}" <<'PY'
+import json, sys
+d = json.load(open(sys.argv[1])); d["profiles"]["decide"]["validation"] = {"suites": [], "reason": "fixture: this profile names no llmctl validation suite"}
+json.dump(d, open(sys.argv[2], "w"))
+PY
+assert_eq 0 "$(LLMCTL_CATALOG="${NOSUITE_CAT}" run_rc gate decide)" "models verify gate: a no-suite profile (not --live) -> warning only"
 assert_contains "$(cat "${TEST_TMP}/last.out")" "no llmctl validation suite" "...with the documented reason"
-assert_eq 2 "$(run_rc gate decide --live)" "models verify gate: decide --live -> 2 (cannot validate)"
+assert_eq 2 "$(LLMCTL_CATALOG="${NOSUITE_CAT}" run_rc gate decide --live)" "models verify gate: a no-suite profile --live -> 2 (cannot validate)"
 assert_eq 0 "$(run_rc gate fast)" "models verify gate: fast not running -> suite named, live run NOT claimed"
 assert_contains "$(cat "${TEST_TMP}/last.out")" "live validation NOT run" "...and says so"
 rm -f "${LLMCTL_RUNTIME_DIR}/vision.run"
@@ -273,7 +281,7 @@ assert_eq 2 "$(run_rc "${LLMCTL}" validate-all)" "validate-all with nothing runn
 assert_eq 2 "$(run_rc "${LLMCTL}" vision validate --profile vision-pro)" "vision-pro not downloaded, not running -> exit 2"
 assert_contains "$(cat "${TEST_TMP}/last.out")" "not downloaded" "reason: not downloaded"
 assert_eq 2 "$(run_rc "${LLMCTL}" vision validate --profile fast)" "fast has no vision suite -> exit 2"
-assert_eq 2 "$(run_rc "${LLMCTL}" validate decide --host http://127.0.0.1:9)" "decide profile has no llmctl suite -> exit 2"
+assert_eq 2 "$(LLMCTL_CATALOG="${NOSUITE_CAT}" run_rc "${LLMCTL}" validate decide --host http://127.0.0.1:9)" "a profile with no llmctl suite -> exit 2"
 assert_contains "$(cat "${TEST_TMP}/last.out")" "no llmctl validation suite" "no-suite reason printed"
 assert_eq 2 "$(run_rc "${LLMCTL}" vision validate --bogus)" "unknown flag -> usage error (exit 2)"
 out="$(LLMCTL_DRY_RUN=1 LLMCTL_VALIDATE_ON_START=1 "${LLMCTL}" validate-after-start vision 2>&1 || true)"

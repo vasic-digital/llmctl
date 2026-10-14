@@ -28,6 +28,10 @@ type SmokeConfig struct {
 	// (the invoice question has one defensible answer, "billing").
 	ExpectChoice string
 	Timeout      time.Duration
+	// Body, when set, replaces the fixed invoice question with a caller-supplied request of the same /v1/systemone
+	// shape (ONE choice question). Used by `llmctl validate` (lib/validate_judge.py, decide suites): the known-answer
+	// questions of validation/suites/decide-v1 go through the production driver of the profile's protocol.
+	Body string
 }
 
 // SmokeResult is the typed answer of a successful smoke.
@@ -62,7 +66,7 @@ func Smoke(ctx context.Context, cfg SmokeConfig) (*SmokeResult, error) {
 	if cfg.Options == 0 {
 		cfg.Options = 2
 	}
-	if cfg.Options < 2 || cfg.Options > 26 {
+	if cfg.Body == "" && (cfg.Options < 2 || cfg.Options > 26) {
 		return nil, smokeUsage("--options must be 2..26, got %d", cfg.Options)
 	}
 	switch cfg.Protocol {
@@ -96,8 +100,15 @@ func Smoke(ctx context.Context, cfg SmokeConfig) (*SmokeResult, error) {
 	if err != nil {
 		return nil, err
 	}
-	req, err := contract.ParseRequest([]byte(smokeBody(cfg.Options)), lim, profiles)
+	body := smokeBody(cfg.Options)
+	if cfg.Body != "" {
+		body = cfg.Body
+	}
+	req, err := contract.ParseRequest([]byte(body), lim, profiles)
 	if err != nil {
+		if cfg.Body != "" {
+			return nil, smokeUsage("question file refused: %v", err)
+		}
 		return nil, fmt.Errorf("smoke: fixture request refused: %w", err)
 	}
 	ctx, cancel := context.WithTimeout(ctx, cfg.Timeout)

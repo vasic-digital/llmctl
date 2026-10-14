@@ -10,6 +10,8 @@ Suite kinds:
   vision     validation/suites/<suite>/expectations.json + PNG fixtures (image + prompt -> answer)
   chat|coder validation/suites/<suite>/suite.json (text prompt -> answer)
   embedding  validation/suites/<suite>/suite.json (anchor/positive/negative cosine ordering)
+  decide     validation/suites/<suite>/suite.json (typed choice question -> exact choice, asked through the production
+             Go driver: `llmctl-decide smoke --question-file`)
 
 Anti-bluff structure of every run (any one of these failing makes the run non-PASS):
   1. suite integrity: every fixture file's sha256 equals the value recorded in the suite file
@@ -459,9 +461,14 @@ def validate_suite(suite):
             raise SuiteDefect("duplicate probe id %r" % key)
         seen.add(key)
         if kind == "decide":
-            for k in ("question",):
-                if not isinstance(pr.get(k), dict) or not pr.get(k):
-                    raise SuiteDefect("decide case %r needs a non-empty question object" % key)
+            q = pr.get("question")
+            if not isinstance(q, dict) or q.get("type") != "choice" or not isinstance(q.get("state"), str) \
+                    or not q.get("state") or not isinstance(q.get("instructions"), str) or not q.get("instructions") \
+                    or not isinstance(q.get("criteria"), dict) or len(q["criteria"]) < 2:
+                raise SuiteDefect("decide case %r needs a question {type: choice, state, instructions, criteria (>= 2)}"
+                                  % key)
+            if set(pr.get("checks") or {}) != {"choice_equals"} or pr["checks"]["choice_equals"] not in q["criteria"]:
+                raise SuiteDefect("decide case %r must check choice_equals with one of its criteria keys" % key)
         elif not isinstance(pr.get("prompt"), str) or not pr["prompt"].strip():
             raise SuiteDefect("probe %r has no prompt" % key)
         validate_checks(pr.get("checks"))
@@ -830,6 +837,133 @@ def cosine(a, b):
     return sum(x * y for x, y in zip(a, b)) / (na * nb)
 
 
+# --- decide suites: known-answer typed decisions through the production Go driver ---------------------------------
+DECIDE_PROTOCOLS = ("letter-logit", "nli-onnx", "systemone-native")
+
+
+def decide_ask(args, case, timeout):
+    """Ask ONE decide case through `llmctl-decide smoke --question-file` (the production driver of the protocol) and
+    return {content: choice, raw: canonical answer for the determinism check, ...}. Driver exit 6 / 2 / other -> NoAnswer
+    (UNDETERMINED); a flagged readout (the model does not answer in this protocol) -> Rejected (FAIL)."""
+    import subprocess
+    import tempfile
+    q = case["question"]
+    body = {"model": "validate", "state": q["state"],
+            "questions": {"q": {"type": q["type"], "instructions": q["instructions"], "criteria": q["criteria"]}}}
+    fd, path = tempfile.mkstemp(prefix="llmctl-validate-q.", suffix=".json")
+    t0 = time.monotonic()
+    try:
+        with os.fdopen(fd, "w") as fh:
+            json.dump(body, fh)
+        cmd = [args.decide_bin, "smoke", "--url", args.endpoint.rstrip("/"), "--protocol", args.decide_protocol,
+               "--question-file", path, "--json", "--timeout", "%ds" % max(1, int(timeout))]
+        if args.decide_key_file:
+            cmd += ["--key-file", args.decide_key_file]
+        try:
+            p = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout + 15)
+        except subprocess.TimeoutExpired:
+            raise NoAnswer("the decide driver did not finish within %ss" % timeout)
+        except OSError as e:
+            raise NoAnswer("cannot run the decide driver: %s" % e)
+    finally:
+        try:
+            os.unlink(path)
+        except OSError:
+            pass
+    err = (p.stderr or "").strip()[-400:]
+    if p.returncode == 6:
+        raise NoAnswer("engine unreachable: %s" % err)
+    if p.returncode == 2:
+        raise NoAnswer("the decide driver refused the question (exit 2; an llmctl-decide without --question-file? "
+                       "rebuild with: llmctl build decide): %s" % err)
+    if p.returncode != 0:
+        if "readout is flagged" in err:
+            raise Rejected(err)
+        raise NoAnswer("decide driver exit %d: %s" % (p.returncode, err))
+    try:
+        d = json.loads(p.stdout)
+    except ValueError:
+        raise NoAnswer("the decide driver printed no JSON answer")
+    choice = d.get("choice") if isinstance(d, dict) else None
+    if not isinstance(choice, str) or not choice:
+        raise NoAnswer("the decide driver returned no typed choice")
+    raw = json.dumps({"choice": choice, "confidence": d.get("confidence"), "probabilities": d.get("probabilities")},
+                     sort_keys=True)
+    return {"content": choice, "raw": raw, "finish_reason": "stop", "seconds": round(time.monotonic() - t0, 3)}
+
+
+def run_decide(args, suite, report, counts, out, finish, timeout, repeat):
+    proto = args.decide_protocol or ""
+    if proto not in DECIDE_PROTOCOLS:
+        out("[UNDETERMINED] decision protocol %r is implemented by no decide driver (%s) - this profile cannot be "
+            "validated" % (proto or "none", ", ".join(DECIDE_PROTOCOLS)))
+        counts["undetermined"] += 1
+        return finish()
+    if not args.decide_bin or not (os.path.isfile(args.decide_bin) and os.access(args.decide_bin, os.X_OK)):
+        out("[UNDETERMINED] the decide driver binary %r is missing (build it: llmctl build decide)" % args.decide_bin)
+        counts["undetermined"] += 1
+        return finish()
+    if args.expect_model_path:
+        # a decide engine has no unauthenticated /v1/models: the model file of the probed process IS the identity check
+        sm = served_model_info(args.endpoint, args.expect_model_path, [], timeout)
+        report["served_model"] = sm
+        if sm.get("mismatch") or not sm["confirmed"]:
+            out("[UNDETERMINED] served model file: %s" % (sm.get("mismatch") or sm.get("note")))
+            counts["undetermined"] += 1
+            return finish()
+        out("served model file: %s (confirmed by %s)" % (sm["path"], ", ".join(sm["sources"])))
+    else:
+        out("model identity: NOT checked (--host: a decide engine has no unauthenticated /v1/models; evidence only)")
+    asks = repeat if repeat >= 2 else 2 if repeat == 1 else 1
+    if repeat == 1:
+        out("quick mode (LLMCTL_VALIDATE_REPEAT=1): every decision asked twice - NOT a decision-bearing run, never recorded")
+    for key, _, case in probes_of(suite):
+        got, why_und, rej = [], None, None
+        for _ in range(asks):
+            try:
+                got.append(decide_ask(args, case, timeout))
+            except Rejected as e:
+                rej = str(e)
+                break
+            except NoAnswer as e:
+                why_und = str(e)
+                break
+        rec = {"key": key, "role": "golden", "question": case["question"]}
+        if rej:
+            counts["fail"] += 1
+            rec.update(verdict="FAIL", reasons=["the engine readout is flagged: " + rej])
+            out("[FAIL] %s: %s" % (key, rej))
+            report["results"].append(rec)
+            continue
+        if not got:
+            counts["undetermined"] += 1
+            rec.update(verdict="UNDETERMINED", reasons=["no answer: %s" % why_und])
+            out("[UNDETERMINED] %s: no answer: %s" % (key, why_und))
+            report["results"].append(rec)
+            continue
+        ok, reasons = judge_probe(case, got[0]["content"])
+        counts["pass" if ok else "fail"] += 1
+        rec.update(verdict="PASS" if ok else "FAIL", answer=got[0]["content"], reasons=reasons)
+        report["results"].append(rec)
+        out("[%s] %s (%.2fs) choice=%s" % ("PASS" if ok else "FAIL", key, got[0]["seconds"], got[0]["content"]))
+        if reasons:
+            out("       wrong:  %s" % "; ".join(reasons))
+        if why_und:
+            counts["undetermined"] += 1
+            out("[UNDETERMINED] determinism %s: %s" % (key, why_und))
+            continue
+        if len(got) > 1:
+            same = all(g["raw"] == got[0]["raw"] for g in got)
+            counts["pass" if same else "fail"] += 1
+            out("[%s] determinism %s: repeat=%d %s" % ("PASS" if same else "FAIL", key, len(got),
+                                                       "byte-identical" if same else "the choice/probabilities DIFFER"))
+            if not same:
+                for i, g in enumerate(got):
+                    out("       #%d: %s" % (i + 1, g["raw"]))
+            report["determinism"].append({"key": key, "identical": same, "repeat": len(got)})
+    return finish()
+
+
 # --- run --------------------------------------------------------------------------------------------------
 DEFAULT_REPEAT = 3   # Constitution 11.4.50: a decision-bearing run asks every probe 3 times; all answers must be identical
 
@@ -936,6 +1070,9 @@ def run(args):
     if counts["fail"]:
         out("the judge itself is broken - refusing to judge a model with it")
         return finish()
+
+    if suite["kind"] == "decide":
+        return run_decide(args, suite, report, counts, out, finish, timeout, repeat)
 
     # 3. model identity
     try:
@@ -1513,6 +1650,66 @@ def do_check(a):
     return 0
 
 
+def do_coverage(a):
+    """`coverage`: one line per catalog profile - a signed, unexpired PASS record, or NOT VALIDATED with the reason;
+    profiles/suites never executed against their real model say so."""
+    with open(a.catalog) as fh:
+        cat = json.load(fh)["profiles"]
+    try:
+        hkey = load_hmac_key(a.hmac_key, create=False)
+    except (FileNotFoundError, InsecureKey):
+        hkey = None
+    try:
+        max_age = parse_max_age(a.max_age)
+    except ValueError:
+        max_age = 0
+    bad = 0
+    for name, prof in cat.items():
+        v = prof.get("validation") if isinstance(prof.get("validation"), dict) else {}
+        suites = v.get("suites") or []
+        unexec = []
+        if v.get("executed") is False:
+            unexec.append(v.get("unexecuted_reason") or "catalog marks this profile's validation as never executed")
+        for sname in suites:
+            try:
+                if load_suite(os.path.join(a.suites_dir, sname)).get("execution_status") == "unexecuted":
+                    unexec.append("suite %s was never executed against a real model" % sname)
+            except (OSError, ValueError):
+                unexec.append("suite %s is missing" % sname)
+        note = ("; never executed against its real model: " + " | ".join(unexec)) if unexec else ""
+        rec_path = os.path.join(a.state_dir, name + ".json")
+        why = None
+        if not suites:
+            why = "no validation suite"
+        elif not os.path.isfile(rec_path):
+            why = "no validation record"
+        else:
+            try:
+                with open(rec_path) as fh:
+                    rec = json.load(fh)
+            except (OSError, ValueError):
+                rec = {}
+            if hkey is None or not signature_ok(rec, hkey):
+                why = "record signature invalid or unverifiable"
+            elif rec.get("status") != "pass":
+                why = "last recorded verdict: %s" % rec.get("status")
+            else:
+                try:
+                    age = time.time() - float(rec.get("epoch"))
+                except (TypeError, ValueError):
+                    age = float("inf")
+                if not math.isfinite(age) or age > max_age or age < -CLOCK_SKEW_SECONDS:
+                    why = "PASS record expired or undated"
+        if why:
+            bad += 1
+            print("  %s: NOT VALIDATED - %s%s" % (name, why, note))
+        else:
+            print("  %s: validated (signed PASS record %s; model bytes re-checked by require-validated)%s" % (
+                name, rec.get("timestamp"), note))
+    print("NOT VALIDATED: %d of %d catalog profiles" % (bad, len(cat)))
+    return 0
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description="deterministic llmctl model validation")
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -1536,11 +1733,20 @@ def main(argv=None):
     chk.add_argument("--key", required=True)
     chk.add_argument("--max-age", default="604800")
     chk.add_argument("--hmac-key", default="")
+    cv = sub.add_parser("coverage")
+    cv.add_argument("--catalog", required=True)
+    cv.add_argument("--state-dir", required=True)
+    cv.add_argument("--suites-dir", required=True)
+    cv.add_argument("--hmac-key", default="")
+    cv.add_argument("--max-age", default="604800")
     r = sub.add_parser("run")
     r.add_argument("--suite", required=True)
     r.add_argument("--endpoint", required=True)
     r.add_argument("--expect-model", default="")
     r.add_argument("--expect-model-path", default="", help="the file/dir the probed process must load (local runs)")
+    r.add_argument("--decide-bin", default="", help="llmctl-decide binary (decide suites)")
+    r.add_argument("--decide-protocol", default="", help="the profile's decision protocol (decide suites)")
+    r.add_argument("--decide-key-file", default="", help="0600 engine key file passed to the driver (never read here)")
     r.add_argument("--json", action="store_true")
     r.add_argument("--evidence", default="")
     r.add_argument("--verdict-file", default="", help="write the final verdict word (PASS/FAIL/UNDETERMINED) here")
@@ -1564,6 +1770,8 @@ def main(argv=None):
         return do_record(a)
     if a.cmd == "check":
         return do_check(a)
+    if a.cmd == "coverage":
+        return do_coverage(a)
     if a.cmd == "redact":
         print(redact_url(a.url))
         return 0

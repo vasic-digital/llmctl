@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"os"
 	"time"
 
 	"github.com/vasic-digital/llmctl/internal/gateway"
@@ -15,7 +16,7 @@ import (
 func init() { register("smoke", cmdSmoke) }
 
 // cmdSmoke implements `llmctl-decide smoke --url URL [--key-file F] --protocol P [--options N]
-// [--expect-choice KEY] [--json]`: one deterministic choice question through the production driver
+// [--expect-choice KEY] [--question-file F] [--json]`: one deterministic choice question through the production driver
 // of the protocol, against ONE engine (used by `llmctl download` to prove a fresh decision model
 // answers). Exit codes: 0 valid typed answer, 1 backend failure, 2 usage, 6 engine unreachable.
 func cmdSmoke(args []string, stdout, stderr io.Writer) int {
@@ -28,11 +29,12 @@ func cmdSmoke(args []string, stdout, stderr io.Writer) int {
 	expect := fs.String("expect-choice", "", "the option key the answer must pick (model sanity)")
 	asJSON := fs.Bool("json", false, "print the answer as JSON")
 	timeout := fs.Duration("timeout", 30*time.Second, "overall deadline")
+	qfile := fs.String("question-file", "", "a /v1/systemone request with ONE choice question to ask instead of the fixed invoice question")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
 	if fs.NArg() != 0 || *url == "" || *proto == "" {
-		fmt.Fprintln(stderr, "usage: llmctl-decide smoke --url URL --protocol letter-logit|nli-onnx|systemone-native [--key-file F] [--options N] [--expect-choice KEY] [--json]")
+		fmt.Fprintln(stderr, "usage: llmctl-decide smoke --url URL --protocol letter-logit|nli-onnx|systemone-native [--key-file F] [--options N] [--expect-choice KEY] [--question-file F] [--json]")
 		return 2
 	}
 	key := ""
@@ -44,8 +46,17 @@ func cmdSmoke(args []string, stdout, stderr io.Writer) int {
 		}
 		key = k
 	}
+	body := ""
+	if *qfile != "" {
+		b, err := os.ReadFile(*qfile)
+		if err != nil || len(b) == 0 {
+			fmt.Fprintf(stderr, "llmctl-decide smoke: cannot read --question-file: %v\n", err)
+			return 2
+		}
+		body = string(b)
+	}
 	res, err := gateway.Smoke(context.Background(), gateway.SmokeConfig{
-		URL: *url, Key: key, Protocol: *proto, Options: *opts, ExpectChoice: *expect, Timeout: *timeout,
+		URL: *url, Key: key, Protocol: *proto, Options: *opts, ExpectChoice: *expect, Timeout: *timeout, Body: body,
 	})
 	switch {
 	case errors.Is(err, gateway.ErrSmokeUsage):

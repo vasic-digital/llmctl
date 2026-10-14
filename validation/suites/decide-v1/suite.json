@@ -1,0 +1,26 @@
+{
+ "suite": "decide-v1",
+ "kind": "decide",
+ "schema": 1,
+ "execution_status": "unexecuted",
+ "notes": "Known-answer typed-decision questions for decide-* profiles, asked through the PRODUCTION Go driver of the profile's protocol (`llmctl-decide smoke --question-file`, letter-logit / nli-onnx / systemone-native) against the profile's own engine; the judge compares the returned choice key exactly (choice_equals) and repeats every question (LLMCTL_VALIDATE_REPEAT, default 3): the choice AND the probabilities must be byte-identical. How the expectations were derived: every question has exactly one defensible answer BY CONSTRUCTION - the state or the option text states it literally (invoice_team is the exact question of the post-download decision smoke, internal/gateway/smoke.go smokeBody); the right answer is the first option in two questions and the second in three, so a model that always picks one position fails. EXECUTION STATUS: unexecuted - no decision model can be run on the authoring host (live operator services, host safety), so these expectations have never been confirmed against a real decide-* engine; until a live PASS is recorded under docs/qa a profile on this suite is reported by `llmctl validate-all` as NOT VALIDATED. jev-verdict (decide-tiny) is implemented by no driver: its validation is UNDETERMINED by design.",
+ "cases": [
+  {"id": "invoice_team", "question": {"state": "Routing.", "type": "choice", "instructions": "Which team handles invoices?", "criteria": {"billing": "handles invoices", "legal": "contracts"}}, "checks": {"choice_equals": "billing"}},
+  {"id": "contract_team", "question": {"state": "Routing.", "type": "choice", "instructions": "Which team reviews contracts?", "criteria": {"billing": "handles invoices", "legal": "reviews contracts"}}, "checks": {"choice_equals": "legal"}},
+  {"id": "weather_rain", "question": {"state": "It is raining heavily and the streets are wet.", "type": "choice", "instructions": "What is the weather right now?", "criteria": {"sunny": "the sun is shining and it is dry", "rainy": "it is raining"}}, "checks": {"choice_equals": "rainy"}},
+  {"id": "number_even", "question": {"state": "The number is 8.", "type": "choice", "instructions": "Is the number even or odd?", "criteria": {"odd": "the number is odd", "even": "the number is even"}}, "checks": {"choice_equals": "even"}},
+  {"id": "door_open", "question": {"state": "The door is open.", "type": "choice", "instructions": "Is the door open or closed?", "criteria": {"open": "the door is open", "closed": "the door is closed"}}, "checks": {"choice_equals": "open"}}
+ ],
+ "judge_controls": [
+  {"probe": "invoice_team", "answer": "billing", "expect": "pass"},
+  {"probe": "invoice_team", "answer": "legal", "expect": "fail"},
+  {"probe": "contract_team", "answer": "legal", "expect": "pass"},
+  {"probe": "contract_team", "answer": "billing", "expect": "fail"},
+  {"probe": "weather_rain", "answer": "rainy", "expect": "pass"},
+  {"probe": "weather_rain", "answer": "sunny", "expect": "fail"},
+  {"probe": "number_even", "answer": "even", "expect": "pass"},
+  {"probe": "number_even", "answer": "odd", "expect": "fail"},
+  {"probe": "door_open", "answer": "open", "expect": "pass"},
+  {"probe": "door_open", "answer": "closed", "expect": "fail"}
+ ]
+}
