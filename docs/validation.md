@@ -86,6 +86,29 @@ relies on it. This is the *model* gate; the harness above verifies *llmctl*. Imp
 against a fixture OpenAI-compatible server (`tests/fixtures/validation/fake_openai.py`, an answer table - not a model). What a real run still has to
 show is tracked in [vision-validate-live-2026-10-12](qa/vision-validate-live-2026-10-12.md) (remaining questions UNKNOWN).
 
+### Flow
+
+```mermaid
+flowchart TB
+  A["llmctl validate / vision validate / start hook"] --> B{"suite files match the sha256 in the suite?"}
+  B -- no --> U["UNDETERMINED exit 2"]
+  B -- yes --> C{"judge self-test: canned controls judged as required?"}
+  C -- no --> F["FAIL exit 1: the judge is broken"]
+  C -- yes --> D{"endpoint serves the catalog model file?"}
+  D -- "no / unreachable" --> U
+  D -- yes --> E["every probe: prompt (+ golden image), temperature 0, seed 42, top_k 1"]
+  E --> G["deterministic judge: substring / ordered / forbidden / number / regex / JSON"]
+  G --> H["golden-bad controls must FAIL the golden checks"]
+  H --> I["determinism repeat must be byte-identical"]
+  I --> V{"any wrong answer?"}
+  V -- yes --> W["FAIL exit 1: a wrong answer (never excused)"]
+  V -- "no, but no answer somewhere" --> U
+  V -- no --> P["PASS exit 0"]
+  P --> R["record: status, host, model sha, engine tag, launch fingerprint, suite hash, time"]
+  W --> R
+  R --> Q["llmctl require-validated profile: 0 only for a fresh PASS on this host"]
+```
+
 ### Commands and exit codes
 
 | Command | Meaning |
@@ -125,8 +148,9 @@ forbidden substring, number, regex and JSON-subset checks taken from the suite f
 
 ### State, freshness and the start hook
 
-`$LLMCTL_STATE_DIR/validation/<profile>.json` records status, catalog model sha256, model file size/mtime, engine tag, launch fingerprint, per-suite
-content hash and timestamp. `require-validated` accepts it only when every one of those still matches **and** the record is younger than
+`$LLMCTL_STATE_DIR/validation/<profile>.json` records status, host (`socket.gethostname()`), catalog model sha256, model file size/mtime, engine tag,
+launch fingerprint, per-suite content hash and timestamp. `require-validated` accepts it only when every one of those still matches (a record
+produced on another host, or one without a `host` field, never validates this host) **and** the record is younger than
 `LLMCTL_VALIDATION_MAX_AGE` seconds (default 604800) **and** its epoch is not in the future (more than 60 s ahead, or null/non-numeric, is rejected).
 An UNDETERMINED run never replaces a prior PASS record (a FAIL does). A `--host` run is evidence only and is never recorded as local state.
 

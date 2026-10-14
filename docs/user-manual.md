@@ -35,6 +35,7 @@ running profile see `docs/integrations.md`.
 | [`models list`](#models-list) | list catalog profiles |
 | [`models download`](#models-download-profile) | verified model download |
 | [`models verify`](#models-verify-profile) | re-verify a downloaded profile's checksums |
+| [`validate`, `vision validate`, `validate-all`, `require-validated`](#validate--vision-validate--validate-all--require-validated) | deterministic known-answer validation of a served model, and the consumer check |
 | [`build`](#build-allllamacolibrionnx) | build the inference engines from source (`onnx` has no build step) |
 | [`install`](#install) | install/refresh persistent-service unit templates |
 | [`enable`](#enable-profile) | enable a profile at login + start it now |
@@ -220,6 +221,46 @@ profiles) prints a warning that it is **NOT validated** and the command still
 exits 0, because the exit code is the checksum verdict; with `--live` the same
 profile exits 2 (cannot validate). When the profile is running (or with
 `--live`) its suite is also run against the live endpoint. See
+[validation](validation.md#model-validation-gate).
+
+## validate | vision validate | validate-all | require-validated
+
+```
+llmctl validate <profile> [--host URL] [--json] [--keep]
+llmctl vision validate [--profile vision|vision-pro] [--host URL] [--json] [--keep]
+llmctl validate-all
+llmctl require-validated <profile>
+```
+
+`validate` runs every validation suite the catalog names for the profile
+(`validation.suites` in `models/catalog.json`) against its running
+llama-server; a downloaded but idle profile is started through the
+scheduler first (budget-checked) and stopped again unless `--keep`.
+`vision validate` runs only the golden-screenshot suite
+(`validation/suites/vision-golden-v1/`): 9 screenshots with known content
+(large text, shape counts, login form, list, table, dialog, dark theme,
+small text, colour order) plus 2 golden-bad controls (blank image,
+wrong-content image). Each answer is printed next to its verdict, e.g.
+
+```
+[PASS] 02_shapes_count/red_circles (0.88s, finish=stop)
+       answer: "3"
+[PASS] control 90_bad_blank vs 01_text_large/read: golden checks correctly FAIL on the control image (...)
+VERDICT: PASS pass=21 fail=0 undetermined=0
+```
+
+Exit codes: `0` every check passed, `1` any wrong answer, `2` could not
+determine (not downloaded, not served, endpoint down, wrong model served,
+memory pressure, no suite). `--host URL` validates an explicit endpoint; the
+result is evidence only and is never recorded as local state.
+
+`validate-all` validates every running profile (exit 2 when nothing runs).
+`require-validated <profile>` exits 0 only when the profile has a fresh
+passing record on this host for the same model sha256, engine build, launch
+flags and suite content, younger than `LLMCTL_VALIDATION_MAX_AGE` (default 7
+days) - the check a project or service runs before it uses the model.
+`start`, `switch`, `auto`, `enable` and `restart` run the suites after the
+profile is up. Details, judge rules and enforcement:
 [validation](validation.md#model-validation-gate).
 
 ## build [all|llama|colibri|onnx]

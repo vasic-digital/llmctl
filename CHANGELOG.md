@@ -23,6 +23,18 @@ where `scripts/release/preflight_submodules.sh` reports a fully clean
 35-file test suite is green. Both `v3.0.0` and `v3.0.1` tags remain in the
 repository as an honest record of that process.
 
+## Unreleased
+
+* **fix(validate): a validation record names its host.** `$LLMCTL_STATE_DIR/validation/<profile>.json` now carries
+  `host` (`socket.gethostname()`); `require-validated` and the start hook refuse a record from another host or one
+  without the field (copied state directory, shared home). Existing records written before this change lack `host`
+  and are therefore refused once; `llmctl validate <profile>` writes a new one. Test-first: 5 new assertions in
+  `tests/test_vision_validate.sh` (RED 4 FAIL, then GREEN).
+* **docs:** `validate` / `vision validate` / `validate-all` / `require-validated` section in the user manual, a
+  validation step in the tutorial and quickstart, "Vision golden screenshots" in `docs/golden-set.md` (generator,
+  byte reproducibility, font handling, measured tesseract limits), and a gate flow diagram in `docs/validation.md`.
+  `scripts/vision/make_golden.py` pointed at a non-existent `docs/vision-golden.md`; it now points at the real section.
+
 ## 3.2.2 (2026-10-13)
 
 A **patch release: duplicate-engine-unit robustness, host-safety verification, governance-test and documentation corrections.** Scope since `v3.2.1`: `lib/onnx_server.py`, `lib/portreg.sh`, `lib/svc_hook.sh`, `scripts/hostsafety/` (`install.sh`, `guard.py`, `bounded-run`, new `agent-run`), comments in `lib/scheduler.sh` and `lib/service_linux.sh`, tests, carrier files (`CLAUDE.md`, `AGENTS.md`, `QWEN.md`, `GEMINI.md`), the `constitution` submodule pin, `config/covenant_propagation_exclusions.tsv`, `docs/`, and the version pins. No catalog, unit-template or CLI command-surface change.

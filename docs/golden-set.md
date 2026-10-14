@@ -186,6 +186,29 @@ Current reference values (recorded, not typed by hand elsewhere): see `MANIFEST.
 pairwise similarity at the time of writing is 0.890 overall (an intentional contrast pair) and 0.213
 among pairs sharing a label.
 
+## Vision golden screenshots
+
+A separate, much smaller golden set validates vision models
+(`llmctl vision validate`, [validation](validation.md#model-validation-gate)).
+
+| File | Content |
+|---|---|
+| `validation/suites/vision-golden-v1/*.png` | 9 golden screenshots + 2 golden-bad controls (blank, wrong content), 896x896 |
+| `validation/suites/vision-golden-v1/expectations.json` | per image: sha256, prompt(s), deterministic checks, golden-bad `discriminates` links, canned judge controls |
+| `scripts/vision/make_golden.py` | the generator (`--out DIR`, `--check DIR`, `--list`) |
+
+* **Byte-reproducible by construction.** The generator is stdlib-only: an embedded 5x7 bitmap font scaled by
+  integer factors (no PIL, ImageMagick or system font), and its own fixed-Huffman DEFLATE encoder (no
+  `zlib.compress`, whose output differs between zlib builds). `python3 scripts/vision/make_golden.py --check
+  validation/suites/vision-golden-v1` regenerates every image and compares byte for byte.
+* **Font handling, honestly.** The text is blocky uppercase without anti-aliasing; there is no lowercase. That is
+  the price of reproducibility. Measured 2026-10-12: tesseract 5.5 misreads this font (N as H, "42" as "43"), so it
+  is NOT used as a text oracle; `tests/test_vision_golden_fixtures.sh` instead checks the images with its own PNG
+  decoder (glyph component counts, shape counts, colour order, dark-theme luminance).
+* **896x896** matches Gemma 3's SigLIP input size, so the vision encoder does not resample the images.
+* **Golden-bad controls** are answered with a golden probe's prompt and must FAIL that probe's checks; a
+  validator that passes them is reported as broken (exit 1).
+
 ## Licence
 
 CC0-1.0 / the project licence, as stated in every item.

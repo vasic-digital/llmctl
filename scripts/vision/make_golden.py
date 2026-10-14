@@ -9,7 +9,7 @@ Byte reproducibility (why this file is stdlib-only and carries its own font and 
   * No PIL / ImageMagick / system font. Text is drawn from the 5x7 bitmap font embedded below, scaled by
     an integer factor, so the pixels never depend on a FreeType build, a hinting setting or an installed
     font file. Honest consequence: the text is blocky "LCD-style" uppercase; there is no lowercase and no
-    anti-aliasing. That is a deliberate trade-off for reproducibility, documented in docs/vision-golden.md.
+    anti-aliasing. That is a deliberate trade-off for reproducibility, documented in docs/golden-set.md (section "Vision golden screenshots").
   * No zlib.compress(). Different zlib builds (zlib, zlib-ng, cloudflare-zlib) may emit different but
     equally valid DEFLATE streams, which would change the file bytes. This module writes its own DEFLATE
     stream (one final block, fixed Huffman codes, greedy LZ77 over distance 1 and distance = one row), so

@@ -153,6 +153,22 @@ is up and ready for requests — this is the same live check
 including a raw `/v1/chat/completions` call you can try directly with
 `curl` if you want to see the model answer before wiring in an agent.
 
+### Check that the model answers correctly before you rely on it
+
+`llmctl start` already ran the profile's deterministic validation suite
+(known-answer prompts judged by code, never by another model). Ask for the
+verdict the way a script would:
+
+```bash
+./bin/llmctl require-validated coder && echo "coder is validated on this host"
+```
+
+Exit 0 means a fresh passing record exists for exactly this model file,
+engine build and launch flags. Anything else prints why (no record, wrong
+answer, stale record) and the fix (`llmctl validate coder`). For a vision
+profile, `llmctl vision validate` shows the model's raw answer to every golden
+screenshot - see [validation](validation.md#model-validation-gate).
+
 ## 5. Configure aider against it
 
 We'll use [`aider`](https://aider.chat) for this tutorial — one of the

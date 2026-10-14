@@ -97,6 +97,19 @@ Expected: a JSON object listing the loaded model, confirming the
 OpenAI-compatible `/v1/models` surface is live (used by CLI agents that
 enumerate available models before connecting — see `docs/integrations.md`).
 
+### 2.4b Run the deterministic validation suite
+
+```bash
+./bin/llmctl validate fast; echo "exit $?"
+./bin/llmctl require-validated fast; echo "exit $?"
+```
+
+`validate` prints every known-answer prompt with the model's raw answer and a
+PASS/FAIL verdict, then `VERDICT: ...`; exit `0` all pass, `1` a wrong answer,
+`2` could not determine. `require-validated` exits 0 only for a fresh passing
+record on this host. A vision profile has its own golden-screenshot suite:
+`./bin/llmctl vision validate`. See [validation](validation.md#model-validation-gate).
+
 ### 2.5 Clean up
 
 ```bash
