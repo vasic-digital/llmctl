@@ -173,10 +173,11 @@ assert_file_contains "${TEST_TMP}/glog/guard.status" '"triggered": false' "heart
 # tmpfs_used_pct: heartbeat metric + report-only event above 60% (no kill, once per crossing)
 printf 'MemTotal: 16777216 kB\nSwapTotal: 8388608 kB\nSwapFree: 8388608 kB\n' >"${TEST_TMP}/mi_t"
 printf 'some avg10=0.00 avg60=0.00 avg300=0.00 total=0\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0\n' >"${TEST_TMP}/psi_t"
-gt() { XDG_RUNTIME_DIR="${TEST_TMP}/xdg_t" python3 -I "${GUARD}" --psi-file "${TEST_TMP}/psi_t" --meminfo "${TEST_TMP}/mi_t" --log-file "${TEST_TMP}/tlog/guard.log" --state-file "${TEST_TMP}/t.state" --tmpfs-used-pct-fixture "$1"; }
-mkdir -p "${TEST_TMP}/xdg_t" "${TEST_TMP}/tlog"
+gt() { XDG_RUNTIME_DIR="${TEST_TMP}/xdg_t" python3 -I "${GUARD}" --psi-file "${TEST_TMP}/psi_t" --meminfo "${TEST_TMP}/mi_t" --log-file "${TEST_TMP}/tlog/guard.log" --state-file "${TEST_TMP}/t.state" --tmp-dir "${TEST_TMP}/tmpdir_t" --tmpfs-used-pct-fixture "$1"; }
+mkdir -p "${TEST_TMP}/xdg_t" "${TEST_TMP}/tlog" "${TEST_TMP}/tmpdir_t"
 gt 10 >/dev/null
 assert_file_contains "${TEST_TMP}/tlog/guard.status" '"tmpfs_used_pct": 10.0' "heartbeat carries tmpfs_used_pct"
+assert_file_contains "${TEST_TMP}/tlog/pressure.json" '"schema": "hostsafety.pressure/1"' "pressure advisory written beside the log on every pass (agent admission control reads it)"
 assert_eq "0" "$(cat "${TEST_TMP}/tlog/guard.log" 2>/dev/null | grep -c tmpfs-high || true)" "no tmpfs-high event at 10% /tmp"
 gt 75 >/dev/null; gt 80 >/dev/null
 assert_eq "1" "$(grep -c tmpfs-high "${TEST_TMP}/tlog/guard.log")" "tmpfs-high logged once per crossing (75% then 80% = one event)"
@@ -254,6 +255,13 @@ mutate "m11 rotation shifts/deletes archives before the new one is written" "R7"
     try:'
 mutate "m12 storm loop stops at the first rejected scope" "TS11" '                rejected.append({"cgroup": sg["cg"], "storm_cost_kb": sv["cost_kb"], "psi_cost_kb": pv["cost_kb"], "min_cost_frac": frac})' '                rejected.append({"cgroup": sg["cg"], "storm_cost_kb": sv["cost_kb"], "psi_cost_kb": pv["cost_kb"], "min_cost_frac": frac}); break'
 mutate "m13 archive verified by length only" "R9" '        if not _same_content(tmp, path):' '        if os.path.getsize(path) > 0 and False:'
+mutate "m15 pressure advisory never written" "PA1" '    write_json_atomic(a.pressure_file' '    (lambda *x: None)(a.pressure_file'
+mutate "m16 app.slice ratio counts reclaimable page cache (current/high instead of pinned)" "PA4b" '    ratio = pinned_ratio if basis == "pinned" else cur_ratio' '    ratio = cur_ratio'
+mutate "m17 critical tmpfs threshold never reached (warn only)" "PA2" '    elif tmpp >= th["crit_tmpfs_pct"]:' '    elif tmpp >= th["crit_tmpfs_pct"] * 10:'
+mutate "m18 du scan not skipped when PSI is already critical" "TW2" '            if psi_ok and full10 >= cfg("ADV_CRIT_PSI_FULL", env):' '            if False:'
+mutate "m19 du scan has no time cap" "TW3" '            txt, _ = p.communicate(timeout=max(0.0, deadline - time.monotonic()))' '            txt, _ = p.communicate(timeout=60)'
+mutate "m20 /proc walk deadline ignored" "SD1" '        if deadline is not None and i % 32 == 0 and time.monotonic() > deadline:' '        if False:'
+mutate "m21 advisory written only after the decision walk (ordering)" "PA7" '    adv = pressure_advisory(env, psi_ok, some10, full10, tmpp, a.tmp_dir, app_slice_memory(cg_root))' '    adv = pressure_advisory(env, psi_ok, some10, full10, tmpp, a.tmp_dir, app_slice_memory(cg_root)) if not why else None'
 mutate "m14 no rotation flock" "R10" '            fcntl.flock(lockf, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except OSError:' '            pass
         except OSError:'

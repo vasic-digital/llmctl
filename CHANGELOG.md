@@ -25,6 +25,13 @@ repository as an honest record of that process.
 
 ## Unreleased
 
+* **feat(hostsafety): pressure advisory and 2026-10-14 hang analysis.** Every guard pass writes `pressure.json`
+  (`schema hostsafety.pressure/1`: PSI, `/tmp` fullness, `app.slice` current/pinned ratio vs `MemoryHigh`, level
+  `ok|warn|critical`, env-tunable thresholds) atomically and before any slow step, for agent admission control; the app.slice level
+  uses `(anon+shmem)/memory.high` by default because page cache at `MemoryHigh` read 0.968 on a healthy host. `tmpfs-high` names the
+  5 largest children of `/tmp` and `$XDG_RUNTIME_DIR` (du, 2 s cap, skipped under critical PSI). The decision `/proc` walk has a 10 s
+  deadline (`scan-deadline-exceeded`, no decision on a partial table). Report-only: nothing new kills anything; the guard stays
+  dry-run. Fixtures PA1-PA7, TW1-TW3b, SD1-SD2; mutations m15-m21. `docs/host-safety.md`: *Pressure advisory*, *2026-10-14 hang*.
 * **fix(validate): a validation record names its host.** `$LLMCTL_STATE_DIR/validation/<profile>.json` now carries
   `host` (`socket.gethostname()`); `require-validated` and the start hook refuse a record from another host or one
   without the field (copied state directory, shared home). Existing records written before this change lack `host`

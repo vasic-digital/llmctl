@@ -2,7 +2,7 @@
 
 | Field | Value |
 |---|---|
-| Revision | 5 |
+| Revision | 6 |
 | Created | 2026-10-09 |
 | Status | active (guard ships in DRY-RUN) |
 | Code | `scripts/hostsafety/` |
@@ -263,7 +263,12 @@ was forced to stop."* although the machine had gigabytes free.
 5. **The fix, in `bounded-run`** (not in the desktop): TMPDIR on disk by default; `MemoryHigh` = 75% of Max; a little
    swap allowed (shmem *is* swappable, unlike with `MemorySwapMax=0`); caps under 1 GiB refused without `--tiny`. The
    guard heartbeat additionally reports `tmpfs_used_pct` and logs a report-only `tmpfs-high` event when `/tmp` is > 60% full
-   (`HOSTSAFETY_TMPFS_WARN_PCT`), once per crossing, never killing anything.
+   (`HOSTSAFETY_TMPFS_WARN_PCT`), once per crossing, never killing anything. Since 2026-10-14 the event also carries
+   `top_writers`: the 5 largest children of `/tmp` and `$XDG_RUNTIME_DIR` (`du -x -a -d 1 -B1`, all directories together capped at
+   `HOSTSAFETY_TOP_WRITERS_TIMEOUT_S` = 2 s, entries marked `timed_out` when cut off; skipped with `top_writers_skipped` when memory PSI
+   `full avg10` is already >= the advisory's critical value, because a du adds IO to a stalling host). These are **file sizes**, not
+   processes: a tmpfs page is charged to the cgroup that first touched it and outlives its writer, so per-process attribution of shmem
+   does not exist. **Killing a process does not free tmpfs pages; only deleting the files does.**
 
 ### Do / don't for agents
 
@@ -319,12 +324,113 @@ which was a 10 s oneshot at default priority:
 
 Tunables (`~/.config/hostsafety/guard.env`): `HOSTSAFETY_PSI_FULL`, `HOSTSAFETY_PSI_SOME`, `HOSTSAFETY_SWAP_FREE_PCT`,
 `HOSTSAFETY_CONSECUTIVE`, `HOSTSAFETY_COOLDOWN_S`, `HOSTSAFETY_TASKS_STORM`, `HOSTSAFETY_STORM_MIN_COST_FRAC`, `HOSTSAFETY_LOG_MAX_BYTES`, `HOSTSAFETY_LOG_KEEP`,
-`HOSTSAFETY_VICTIM_FILE_MAX_BYTES`.
+`HOSTSAFETY_VICTIM_FILE_MAX_BYTES`, `HOSTSAFETY_SCAN_DEADLINE_S`, `HOSTSAFETY_TOP_WRITERS_TIMEOUT_S`, and the `HOSTSAFETY_ADV_*` advisory
+thresholds (see *Pressure advisory*).
 
 **Not measured / unknown**: the CPU saving on the real host is an estimate. On a synthetic 6,950-process `/proc` tree (tmpfs files,
 not kernel-generated `/proc`) a healthy-run took ~0.44 s before and ~0.06 s after; real `/proc` reads cost more (0.8 s observed), so
-the live gain should be larger but is unconfirmed until measured on `anton`. `guard.log`, its archives and `guard.status` are mode 0600; records are strict JSON (non-finite floats are written as `null`). With a fixture `--proc-root` the armed guard refuses to signal anything unless `HOSTSAFETY_TEST_ALLOW_FIXTURE_PROC=1` (tests only). Installing the new unit is an operator step
-(`scripts/hostsafety/install.sh`); nothing here was installed or armed.
+the live gain should be larger but is unconfirmed until measured on `anton`. `guard.log`, its archives and `guard.status` are mode 0600; records are strict JSON (non-finite floats are written as `null`). With a fixture `--proc-root` the armed guard refuses to signal anything unless `HOSTSAFETY_TEST_ALLOW_FIXTURE_PROC=1` (tests only). The new unit and
+guard were installed on `anton` on 2026-10-14 (see *2026-10-14 hang*); the guard is still not armed.
+
+## Pressure advisory (`pressure.json`)
+
+Every guard pass writes `~/.local/state/hostsafety/pressure.json` (beside `guard.log`; override `--pressure-file` or
+`HOSTSAFETY_PRESSURE_FILE`). It is **report-only**: the guard never acts on it. Agent admission control (`scripts/agent-admit.sh` in
+the umbrella repository) reads it. It is written **before** anything slow (the du scan, the `/proc` walk) and atomically (tmp file 0600
+in the same directory, fsync, rename), so a reader sees the old or the new document, never a torn one, and the file survives a guard
+that is killed at `TimeoutStartSec` (fixture PA7: the walk is made to hang on a FIFO; the advisory and heartbeat are already there).
+
+Format (`"schema": "hostsafety.pressure/1"`; keys are only ever added, never renamed or removed, within `/1`):
+
+| Key | Meaning |
+|---|---|
+| `schema` | `hostsafety.pressure/1` |
+| `ts`, `ts_epoch` | time of the pass (local ISO 8601, epoch seconds). **Readers must treat a file older than ~30 s as UNKNOWN** (the timer fires every 10 s; an old file means the guard is dead or timing out) |
+| `level` | `ok` / `warn` / `critical`: critical if ANY critical rule holds, else warn if ANY warn rule holds |
+| `reasons` | the rules that fired, e.g. `tmpfs_used_pct=65.0>=60` |
+| `unknown` | signals that could not be read (`psi`, `tmpfs_used_pct`, `app_slice_ratio`); the level is computed from the rest - an unreadable signal is never evidence of health |
+| `psi_available`, `psi_mem_some_avg10`, `psi_mem_full_avg10` | host memory PSI (`null` when unreadable) |
+| `tmpfs_used_pct`, `tmpfs_path` | fullness of `/tmp` (df semantics) |
+| `app_slice_current_bytes`, `app_slice_high_bytes`, `app_slice_anon_bytes`, `app_slice_shmem_bytes` | `app.slice` `memory.current`, `memory.high` (`null` for `max`), `memory.stat` anon/shmem |
+| `app_slice_current_ratio` | `memory.current / memory.high` (includes reclaimable page cache) |
+| `app_slice_pinned_ratio` | `(anon + shmem) / memory.high` (memory that only swap can free) |
+| `app_slice_ratio_basis` | which ratio the level uses: `pinned` (default) or `current` |
+| `thresholds` | the effective thresholds of this pass |
+
+Rules and tunables (`~/.config/hostsafety/guard.env`; a non-finite value falls back to the default):
+
+| Level | Rule (any one) | Variables (default) |
+|---|---|---|
+| warn | `/tmp` >= 40%, app.slice ratio >= 0.85, PSI `some avg10` >= 15 | `HOSTSAFETY_ADV_WARN_TMPFS_PCT` (40), `HOSTSAFETY_ADV_WARN_APP_RATIO` (0.85), `HOSTSAFETY_ADV_WARN_PSI_SOME` (15) |
+| critical | `/tmp` >= 60%, app.slice ratio >= 0.95, PSI `full avg10` >= 10 | `HOSTSAFETY_ADV_CRIT_TMPFS_PCT` (60), `HOSTSAFETY_ADV_CRIT_APP_RATIO` (0.95), `HOSTSAFETY_ADV_CRIT_PSI_FULL` (10) |
+
+**Why the app.slice ratio defaults to `pinned`, not `memory.current / memory.high`.** Measured live on 2026-10-14 at 15:00 on a
+healthy host (PSI 0): `memory.current` 22.01 GB of `memory.high` 22.74 GB (**0.968**), of which anon 11.2 GB and file cache 9.1 GB
+(pinned ratio **0.46**). Page cache sitting at `MemoryHigh` is normal reclaim, so a current/high basis would report `critical`
+permanently and block every agent. What hurt on 2026-10-14 was shmem and anon (which only swap can free, and `MemorySwapMax` capped
+swap). `HOSTSAFETY_ADV_APP_RATIO_BASIS=current` selects the literal current/high basis (fixture PA4c).
+
+The decision `/proc` walk has a deadline, `HOSTSAFETY_SCAN_DEADLINE_S` (10 s, below the unit's `TimeoutStartSec=15`). Past it the guard
+logs `scan-deadline-exceeded` (entries read / total) and decides nothing (a partial table is never used: an unread member of a group could
+be protected). Before this change a slow walk ended as a silent unit timeout.
+
+## 2026-10-14 hang (host `anton`)
+
+The host stalled from about 14:22 CEST. The previous boot's journal ends at 14:37:02 (a hard power cut followed). Evidence: sar/atop
+(operator), `guard.log` (now `guard.log.1.gz`), the user journal of boot -1.
+
+| Time | tmpfs shmem (sar) | Other evidence |
+|---|---|---|
+| 13:20 | 0.33 G | healthy |
+| 13:40 | 1.8 G | |
+| 14:00 | 3.1 G | |
+| 14:10 | 4.9 G | |
+| 14:16:20 | | guard `tmpfs-high`: `/tmp` **70.6%** full (of 15.9 GB) |
+| 14:20 | 5.2 G | |
+| 14:22:37 | | guard `pressure-building`: PSI `full avg10` 32.3 |
+| 14:22:47 - 14:28:04 | | 30 dry-run `would-kill` records (below) |
+| 14:28:35 - 14:36:52 | | **25 consecutive guard runs `Failed with result 'timeout'`** (old unit, `TimeoutStartSec=20`) |
+| 14:30 | 8.1 G | PSI `full` 53% (later 92%), load 430, 385 blocked tasks, `pgscand` 356k/s, sys CPU 1108% |
+| 14:37:02 | | last journal line; power cut |
+
+UNCONFIRMED: the guard's own `/tmp` reading at 14:16 (70.6% of 15.9 GB, about 11 GB used) is larger than sar's shmem at 14:20
+(5.2 G). The two are not the same measure (`statvfs` of `/tmp` vs. the kernel's `Shmem`; swapped-out tmpfs pages leave `Shmem`), and the
+gap was not resolved: the tmpfs content was lost at the power cut. **UNCONFIRMED as well: the per-agent split of the 8.1 G.**
+
+**Mechanism.** Files written to the RAM-backed `/tmp` (a 16 GB tmpfs, half of RAM) are shmem charged to the writers' cgroups in
+`app.slice`. `app.slice` has `MemoryHigh` 21.2 G (70%) and `MemorySwapMax` 1 G: once shmem plus anon passed `MemoryHigh`, the kernel
+throttled every task in `app.slice` into direct reclaim, and with swap capped at 1 G for the slice, shmem could not be moved out. Result:
+reclaim storm (`pgscand` 356k/s, sys CPU 1108%), memory PSI `full` 53-92% for more than 8 minutes, load 430.
+
+**Defences that did not act, and why:**
+
+| Defence | Why it did nothing |
+|---|---|
+| `systemd-oomd` | monitors `user@1000.service` at 50% for 20 s; it kills cgroups, and killing processes cannot free tmpfs pages (the files stay) |
+| `earlyoom` | running with the package default `-r 3600` (this repository's `root-steps.sh` has never been applied on this host); it acts only when memory AND swap are both below its minimums, and swap stayed ~75% free because `app.slice` could not use more than 1 G of it |
+| hostsafety guard | dry-run (`HOSTSAFETY_GUARD_ARM=0`). The installed copy was the old 2026-10-09 guard (no lazy walk, no unit cost caps): it walked `/proc` on every run and from 14:28:35 timed out 25 times in a row. Its decisions: 25 x the `git push origin main` group (16 processes, 1.9 GB) in `tmx-vasic-6017.scope`, then a 319 MB `lumen-linux-amd` process (pid 26965) as the best single member of a 68-process group that also holds `claude`. Even armed it would have freed ~2.2 GB of anon at most and **not one tmpfs page** |
+
+**What changed (this repository):**
+
+- The repository guard (10-13 fixes: lazy `/proc` walk, `Nice=19`, `IOSchedulingClass=idle`, `CPUWeight=10`, `MemoryMax=256M`,
+  `TimeoutStartSec=15`, `tasks_storm`, log rotation; and `bounded-run --agent`) is installed on `anton` (2026-10-14 14:51, previous files
+  backed up to `~/.local/share/hostsafety-backup/20261014T145138/`; still DRY-RUN).
+- `pressure.json` (above) and named `top_writers` on `tmpfs-high`.
+- The decision walk has a visible deadline (`scan-deadline-exceeded`).
+- Measured on `anton` (2026-10-14, unit properties reproduced with `systemd-run --user --slice=session.slice -p Nice=19
+  -p IOSchedulingClass=idle -p CPUWeight=10 -p MemoryMax=256M`): a cheap pass took 0.07 s idle and **0.10-0.12 s with all 16 CPUs
+  saturated** by 32 spinners in `app.slice` (40 runnable, 0% idle). `IOSchedulingClass=idle` is a no-op for the NVMe disks here
+  (scheduler `none`). **Not reproduced**: a memory reclaim storm (it cannot be produced safely); under one, every allocating task
+  stalls, the guard included, which is why the advisory is written first and the walk has a deadline.
+
+**Operator decisions (not taken by this change):**
+
+1. **Arm the guard** (`HOSTSAFETY_GUARD_ARM=1` in `~/.config/hostsafety/guard.env`). It would not have prevented this hang (it cannot
+   free tmpfs); see the review of all past decisions in the commit that adds it.
+2. **Shrink `/tmp`** from 16 GB to about 4 GB (root): `scripts/hostsafety/root-steps.sh` (tmp.mount drop-in).
+3. **`app.slice` `MemorySwapMax` 1 G** vs. shmem/anon swappability: the installer's swap cap formula.
+4. **earlyoom thresholds** (`-m`/`-s`): earlyoom 1.9.0 has no PSI trigger at all; see *earlyoom, exactly*.
+5. **`systemd-oomd` `ManagedOOMMemoryPressureLimit`** (vendor 50% / 20 s on `user@.service`): unchanged; changing it is `/etc` (root).
 
 ## Limits of this approach (read before trusting it)
 

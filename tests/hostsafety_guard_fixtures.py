@@ -290,7 +290,7 @@ def run_main(psi_text, procs, extra=None, env=None, pre_state=None, pre_log=None
         os.makedirs(os.path.join(d, "log")); open(os.path.join(d, "log", "guard.log"), "w").write(pre_log)
     calls = []
     real_scan = g.scan
-    g.scan = lambda root: (calls.append(root), procs)[1]
+    g.scan = lambda root, **kw: (calls.append(root), procs)[1]
     old_env = dict(os.environ)
     os.environ["XDG_RUNTIME_DIR"] = d
     for k in [k for k in os.environ if k.startswith("HOSTSAFETY_")]:
@@ -617,6 +617,213 @@ with tempfile.TemporaryDirectory() as d:
     except Exception:
         ok = False
     check("R11 three concurrent rotations leave only live log + <=3 valid archives, no tmp files", ok, repr(names))
+
+# ---------------------------------------------------------------- pressure advisory (2026-10-14 hang: tmpfs shmem 0.33G -> 8.1G)
+# report-only file for agent admission control; written on EVERY pass, BEFORE any /proc walk, atomically.
+ADV_KEYS = {"schema", "ts", "ts_epoch", "level", "reasons", "unknown", "psi_mem_some_avg10", "psi_mem_full_avg10", "psi_available",
+            "tmpfs_used_pct", "tmpfs_path", "app_slice_current_bytes", "app_slice_high_bytes", "app_slice_anon_bytes",
+            "app_slice_shmem_bytes", "app_slice_current_ratio", "app_slice_pinned_ratio", "app_slice_ratio_basis", "thresholds"}
+
+
+def mk_app(root, current, high, anon, shmem, file_=None):
+    """fixture user-manager cgroup root with app.slice memory files (bytes); high may be 'max'."""
+    a = os.path.join(root, "app.slice")
+    os.makedirs(a, exist_ok=True)
+    open(os.path.join(a, "memory.current"), "w").write("%d\n" % current)
+    open(os.path.join(a, "memory.high"), "w").write("%s\n" % high)
+    open(os.path.join(a, "memory.stat"), "w").write("anon %d\nfile %d\nshmem %d\n" % (anon, file_ if file_ is not None else max(current - anon, 0), shmem))
+    return root
+
+
+GiB = 1 << 30
+
+
+def adv_run(psi_text=CALM, tmpfs="1", app=(10 * GiB, 20 * GiB, 4 * GiB, 1 * GiB), env=None, pre=None, extra=None):
+    cg = tempfile.mkdtemp(prefix="hsadv")
+    if app is not None:
+        mk_app(cg, *app)
+    ex = ["--cgroup-root", cg] + (extra or [])
+    if tmpfs != "1":
+        ex = [x for x in ex] + ["--tmpfs-used-pct-fixture", tmpfs]
+    calls, lines, d = run_main(psi_text, storm_tbl, extra=ex, env=env, pre_state=pre)
+    pf = os.path.join(d, "log", "pressure.json")
+    try:
+        doc = _json.load(open(pf))
+    except (OSError, ValueError):
+        doc = {}
+    return (doc if isinstance(doc, dict) else {}), pf, d, lines
+
+
+doc, pf, d, _ = adv_run()
+check("PA1 calm pass writes pressure.json: level ok, every documented key, strict JSON, mode 0600, no tmp left",
+      doc.get("level") == "ok" and ADV_KEYS <= set(doc) and doc.get("schema") == "hostsafety.pressure/1"
+      and os.path.exists(pf) and (os.stat(pf).st_mode & 0o777) == 0o600 and not [f for f in os.listdir(os.path.dirname(pf)) if f.endswith(".tmp")],
+      repr((doc.get("level"), sorted(ADV_KEYS - set(doc)))))
+check("PA1b freshness: ts_epoch is the time of this pass (consumers detect a stale/dead guard by age)",
+      isinstance(doc.get("ts_epoch"), (int, float)) and abs(doc["ts_epoch"] - __import__("time").time()) < 30, repr(doc.get("ts_epoch")))
+doc45 = adv_run(tmpfs="45")[0]
+doc65 = adv_run(tmpfs="65")[0]
+check("PA2 tmpfs 45% -> warn, 65% -> critical, each with a named reason",
+      doc45.get("level") == "warn" and any(r.startswith("tmpfs_used_pct") for r in doc45.get("reasons", []))
+      and doc65.get("level") == "critical" and any(r.startswith("tmpfs_used_pct") for r in doc65.get("reasons", [])), repr((doc45.get("level"), doc65.get("level"), doc65.get("reasons"))))
+SOME20 = "some avg10=20.00 avg60=1.00 avg300=1.00 total=1\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=1\n"
+FULL12 = "some avg10=30.00 avg60=1.00 avg300=1.00 total=1\nfull avg10=12.00 avg60=0.00 avg300=0.00 total=1\n"
+ds, df_ = adv_run(psi_text=SOME20)[0], adv_run(psi_text=FULL12)[0]
+check("PA3 PSI some 20 -> warn; PSI full 12 -> critical",
+      ds.get("level") == "warn" and df_.get("level") == "critical" and ds.get("psi_mem_some_avg10") == 20.0 and df_.get("psi_mem_full_avg10") == 12.0, repr((ds.get("level"), df_.get("level"))))
+# app.slice: (anon+shmem)/high is the level input by default; page cache at MemoryHigh is normal reclaim, not pressure.
+# Live 2026-10-14 15:00: current 22.01G / high 22.74G = 0.968 with PSI 0 (anon 11.2G, file 9.1G) - a current/high basis is a false critical.
+dw = adv_run(app=(19 * GiB, 20 * GiB, 17 * GiB, 1 * GiB))[0]           # pinned 0.90
+dc = adv_run(app=(19.6 * GiB, 20 * GiB, 11 * GiB, 8.2 * GiB))[0]      # pinned 0.96 (the incident: shmem 8.1G)
+dcache = adv_run(app=(int(19.4 * GiB), 20 * GiB, 9 * GiB, int(0.06 * GiB)))[0]   # current 0.97, pinned 0.45: cache-full, healthy
+dcur = adv_run(app=(int(19.4 * GiB), 20 * GiB, 9 * GiB, int(0.06 * GiB)), env={"HOSTSAFETY_ADV_APP_RATIO_BASIS": "current"})[0]
+check("PA4 app.slice pinned ratio 0.90 -> warn, 0.96 -> critical", dw.get("level") == "warn" and dc.get("level") == "critical"
+      and abs((dc.get("app_slice_pinned_ratio") or 0) - 0.96) < 0.01, repr((dw.get("level"), dc.get("level"), dc.get("app_slice_pinned_ratio"))))
+check("PA4b golden-FALSE: app.slice full of reclaimable page cache (current 0.97, pinned 0.45) is ok, not critical",
+      dcache.get("level") == "ok" and (dcache.get("app_slice_current_ratio") or 0) > 0.95, repr((dcache.get("level"), dcache.get("app_slice_current_ratio"))))
+check("PA4c HOSTSAFETY_ADV_APP_RATIO_BASIS=current uses memory.current/memory.high (operator's literal basis)",
+      dcur.get("level") == "critical" and dcur.get("app_slice_ratio_basis") == "current", repr((dcur.get("level"), dcur.get("app_slice_ratio_basis"))))
+dt = adv_run(tmpfs="45", env={"HOSTSAFETY_ADV_WARN_TMPFS_PCT": "90", "HOSTSAFETY_ADV_CRIT_TMPFS_PCT": "95"})[0]
+dbad = adv_run(tmpfs="45", env={"HOSTSAFETY_ADV_WARN_TMPFS_PCT": "nan"})[0]
+check("PA5 thresholds are env-tunable (warn 90: 45% is ok); a non-finite value falls back to the default",
+      dt.get("level") == "ok" and dt.get("thresholds", {}).get("warn_tmpfs_pct") == 90.0 and dbad.get("level") == "warn", repr((dt.get("level"), dbad.get("level"))))
+dmax = adv_run(app=(10 * GiB, "max", 4 * GiB, 1 * GiB))[0]
+dnone = adv_run(app=None)[0]
+check("PA6 memory.high 'max' or no app.slice: ratio null, listed as unknown, level from the other signals (no crash)",
+      dmax.get("level") == "ok" and dmax.get("app_slice_pinned_ratio") is None and "app_slice_ratio" in dmax.get("unknown", [])
+      and dnone.get("level") == "ok" and "app_slice_ratio" in dnone.get("unknown", []), repr((dmax.get("unknown"), dnone.get("unknown"))))
+dpsi_missing = {}
+_cg = mk_app(tempfile.mkdtemp(prefix="hsadv"), 1 * GiB, 20 * GiB, 1 * GiB, 0)
+with tempfile.TemporaryDirectory() as dd:
+    _envb = dict(os.environ)
+    try:
+        os.environ["XDG_RUNTIME_DIR"] = dd
+        g.main(["--psi-file", os.path.join(dd, "nope"), "--meminfo", os.path.join(dd, "nope2"), "--log-file", os.path.join(dd, "log", "guard.log"),
+                "--state-file", os.path.join(dd, "st"), "--uid", str(ME), "--self-pid", str(GUARD_PID), "--tmpfs-used-pct-fixture", "1", "--cgroup-root", _cg])
+        dpsi_missing = _json.load(open(os.path.join(dd, "log", "pressure.json")))
+    except (OSError, ValueError, SystemExit) as e:
+        dpsi_missing = {"err": repr(e)}
+    finally:
+        os.environ.clear(); os.environ.update(_envb)
+check("PA6b PSI unreadable: psi values null, psi_available false, 'psi' in unknown (blind, not healthy)",
+      dpsi_missing.get("psi_available") is False and dpsi_missing.get("psi_mem_full_avg10") is None and "psi" in dpsi_missing.get("unknown", []), repr(dpsi_missing))
+
+# PA7: the advisory and heartbeat are written BEFORE the /proc walk, so they survive a walk that never finishes (the guard
+# killed at TimeoutStartSec under thrash, 2026-10-14 14:28).  The walk is made to hang deterministically: /proc/<pid>/status
+# is a FIFO with no writer, so open() blocks forever.  The child is our own Popen; it is killed after 3 s.
+import subprocess
+import time as _time
+with tempfile.TemporaryDirectory() as d7:
+    pr = os.path.join(d7, "proc", str(B + 1))
+    os.makedirs(pr)
+    os.mkfifo(os.path.join(pr, "status"))
+    open(os.path.join(d7, "psi"), "w").write(BAD)
+    open(os.path.join(d7, "mi"), "w").write("MemTotal: 32000000 kB\nSwapTotal: 8000000 kB\nSwapFree: 8000000 kB\n")
+    open(os.path.join(d7, "st"), "w").write('{"streak": 1}')
+    cg7 = mk_app(os.path.join(d7, "cg"), 1 * GiB, 20 * GiB, 1 * GiB, 0)
+    env7 = {k: v for k, v in os.environ.items() if not k.startswith("HOSTSAFETY_")}
+    env7["XDG_RUNTIME_DIR"] = d7
+    t0 = _time.time()
+    p7 = subprocess.Popen([sys.executable, "-I", path, "--proc-root", os.path.join(d7, "proc"), "--psi-file", os.path.join(d7, "psi"),
+                           "--meminfo", os.path.join(d7, "mi"), "--log-file", os.path.join(d7, "log", "guard.log"), "--state-file", os.path.join(d7, "st"),
+                           "--uid", str(ME), "--self-pid", str(GUARD_PID), "--tmpfs-used-pct-fixture", "1", "--cgroup-root", cg7],
+                          env=env7, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    pj7 = os.path.join(d7, "log", "pressure.json")
+    while not os.path.exists(pj7) and p7.poll() is None and _time.time() - t0 < 10:   # poll: deterministic and fast
+        _time.sleep(0.05)
+    _time.sleep(0.3)                    # past the advisory/heartbeat writes: the child must now be blocked in the walk
+    hung = p7.poll() is None
+    if hung:
+        p7.kill()
+    p7.wait(timeout=10)
+    try:
+        d7doc = _json.load(open(os.path.join(d7, "log", "pressure.json")))
+    except (OSError, ValueError):
+        d7doc = {}
+    d7doc = d7doc if isinstance(d7doc, dict) else {}
+    st7 = os.path.exists(os.path.join(d7, "log", "guard.status"))
+    check("PA7 a /proc walk that never returns (guard killed at its timeout): pressure.json (critical) and guard.status were already written",
+          hung and d7doc.get("level") == "critical" and d7doc.get("ts_epoch", 0) >= t0 - 1 and st7, repr((hung, d7doc.get("level"), st7)))
+
+# TW: the tmpfs-high event names the largest children of /tmp and $XDG_RUNTIME_DIR (du -sx semantics, <= 2 s total, skipped when
+# PSI is already critical).  Per-process attribution of shmem is impossible: a tmpfs page is charged to the cgroup that first
+# touched it and outlives the writer - only file sizes can be named.
+def tw_run(psi_text=CALM, du_argv=None, sizes=None, env=None):
+    tdir = tempfile.mkdtemp(prefix="hstw")
+    for name, n in (sizes or {"big.tar": 900000, "b": 500000, "c": 400000, "d": 300000, "e": 200000, "f": 100000, "g": 10}).items():
+        if name.endswith("/"):
+            os.makedirs(os.path.join(tdir, name), exist_ok=True)
+            open(os.path.join(tdir, name, "x"), "wb").write(b"\0" * n)
+        else:
+            open(os.path.join(tdir, name), "wb").write(b"\0" * n)
+    real = getattr(g, "DU_ARGV", None)
+    if du_argv is not None:
+        g.DU_ARGV = du_argv
+    t0 = _time.time()
+    try:
+        _, lines, _d = run_main(psi_text, storm_tbl, env=env, extra=["--tmpfs-used-pct-fixture", "70", "--tmp-dir", tdir, "--cgroup-root", mk_app(tempfile.mkdtemp(), GiB, 20 * GiB, GiB, 0)])
+    finally:
+        if real is not None:
+            g.DU_ARGV = real
+    ev_ = [_json.loads(l) for l in lines if '"tmpfs-high"' in l]
+    return (ev_[0] if ev_ else {}), tdir, _time.time() - t0
+
+
+e1, tdir, _ = tw_run(sizes={"big.tar": 900000, "sub/": 500000, "c": 400000, "d": 300000, "e": 200000, "f": 100000, "g": 10})
+tw = (e1.get("top_writers") or {}).get(tdir) or {}
+ents = tw.get("entries") or []
+check("TW1 tmpfs-high names the 5 largest children of the tmp dir, largest first, with byte sizes (report only)",
+      [os.path.basename(x.get("path", "")) for x in ents] == ["big.tar", "sub", "c", "d", "e"] and ents[0].get("bytes", 0) >= 900000 and "report only" in e1.get("note", ""),
+      repr((list(e1), ents)))
+e2, _, _ = tw_run(psi_text=FULL12)
+check("TW2 PSI already critical: the du scan is skipped (it would add IO to a stalling host) and the event says so",
+      e2.get("top_writers") is None and "psi" in str(e2.get("top_writers_skipped", "")), repr({k: e2.get(k) for k in ("top_writers", "top_writers_skipped")}))
+# the cap is exercised at 0.3 s (HOSTSAFETY_TOP_WRITERS_TIMEOUT_S) to keep the suite fast; the shipped default is checked separately
+e3, _, el = tw_run(du_argv=[sys.executable, "-I", "-c", "import time; time.sleep(5)"], env={"HOSTSAFETY_TOP_WRITERS_TIMEOUT_S": "0.3"})
+check("TW3 a du that does not finish is cut off at its cap (0.3 s here: whole pass < 2 s) and reported as timed_out, not hung",
+      el < 2 and any(v.get("timed_out") for v in (e3.get("top_writers") or {}).values()), repr((round(el, 2), e3.get("top_writers"))))
+check("TW3b shipped du cap is <= 2 s (spec: the whole top-writers scan costs at most 2 s)", 0 < g.DEF.get("TOP_WRITERS_TIMEOUT_S", 99) <= 2.0, repr(g.DEF.get("TOP_WRITERS_TIMEOUT_S")))
+
+# SD: the decision walk has a deadline below TimeoutStartSec: under thrash a timeout must be VISIBLE, never a silent kill.
+if hasattr(g, "ScanDeadline"):
+    with tempfile.TemporaryDirectory() as d8:
+        for i in range(50):
+            os.makedirs(os.path.join(d8, str(B + i)))
+            open(os.path.join(d8, str(B + i), "status"), "w").write("Name:\tx\nUid:\t1000\t1000\t1000\t1000\nPPid:\t1\n")
+        real_read = g.read
+        g.read = lambda p_, default="": (_time.sleep(0.001), real_read(p_, default))[1]
+        try:
+            g.scan(d8, deadline=_time.monotonic() + 0.01)
+            sd1 = False
+        except g.ScanDeadline as e:
+            sd1 = getattr(e, "read", None) is not None and e.read < 50
+        finally:
+            g.read = real_read
+    check("SD1 scan() past its deadline raises ScanDeadline (partial table is never returned)", sd1)
+
+    def _slow(root, **kw):
+        raise g.ScanDeadline(17, 6950)
+    real_scan = g.scan
+    g.scan = _slow
+    try:
+        d9 = tempfile.mkdtemp(prefix="hssd")
+        open(os.path.join(d9, "psi"), "w").write(BAD); open(os.path.join(d9, "mi"), "w").write("MemTotal: 32000000 kB\n")
+        open(os.path.join(d9, "st"), "w").write('{"streak": 1}')
+        _env = dict(os.environ); os.environ["XDG_RUNTIME_DIR"] = d9
+        for k in [k for k in os.environ if k.startswith("HOSTSAFETY_")]:
+            del os.environ[k]
+        g.main(["--psi-file", os.path.join(d9, "psi"), "--meminfo", os.path.join(d9, "mi"), "--log-file", os.path.join(d9, "log", "guard.log"),
+                "--state-file", os.path.join(d9, "st"), "--uid", str(ME), "--self-pid", str(GUARD_PID), "--tmpfs-used-pct-fixture", "1",
+                "--cgroup-root", mk_app(tempfile.mkdtemp(), GiB, 20 * GiB, GiB, 0)])
+    finally:
+        g.scan = real_scan
+        os.environ.clear(); os.environ.update(_env)
+    l9 = open(os.path.join(d9, "log", "guard.log")).read()
+    check("SD2 a decision walk past the deadline logs scan-deadline-exceeded with counts and decides NOTHING",
+          '"scan-deadline-exceeded"' in l9 and "would-kill" not in l9 and '"read": 17' in l9, l9[-300:])
+else:
+    check("SD1 scan() past its deadline raises ScanDeadline (partial table is never returned)", False, "no g.ScanDeadline")
+    check("SD2 a decision walk past the deadline logs scan-deadline-exceeded with counts and decides NOTHING", False, "no g.ScanDeadline")
 
 print("RESULT: %d failed" % len(fails))
 sys.exit(1 if fails else 0)

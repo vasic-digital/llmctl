@@ -42,6 +42,7 @@ import os
 import re
 import shutil
 import signal
+import subprocess
 import sys
 import time
 
@@ -58,7 +59,22 @@ DEF = {
     "LOG_KEEP": 3,           # number of gz archives kept: guard.log.1.gz (newest) .. guard.log.N.gz
     "VICTIM_FILE_MAX_BYTES": 1048576,  # cap of the ARM=1 forensic victim state file (guard-victim.json)
     "TMPFS_WARN_PCT": 60.0,  # /tmp (tmpfs = RAM) fuller than this: report-only event (docs/host-safety.md, GNOME "Application Stopped")
+    # pressure advisory (pressure.json, report-only, read by agent admission control; 2026-10-14 hang).  warn if ANY warn_* holds,
+    # critical if ANY crit_* holds.
+    "ADV_WARN_TMPFS_PCT": 40.0,
+    "ADV_CRIT_TMPFS_PCT": 60.0,
+    "ADV_WARN_APP_RATIO": 0.85,
+    "ADV_CRIT_APP_RATIO": 0.95,
+    "ADV_WARN_PSI_SOME": 15.0,
+    "ADV_CRIT_PSI_FULL": 10.0,
+    "ADV_APP_RATIO_BASIS": "pinned",   # pinned = (anon+shmem)/memory.high ; current = memory.current/memory.high (counts page cache)
+    "TOP_WRITERS_TIMEOUT_S": 2.0,      # hard cap of the du scan attached to a tmpfs-high event (all directories together)
+    "SCAN_DEADLINE_S": 10.0,           # the decision /proc walk gives up (visibly) before the unit's TimeoutStartSec=15
 }
+
+ADV_SCHEMA = "hostsafety.pressure/1"
+DU_ARGV = [shutil.which("du") or "/usr/bin/du"]     # replaced by the fixture suite (TW3) with a deliberately slow command
+TOP_WRITERS_N = 5
 
 PROTECTED_COMM = re.compile(
     r"^(systemd|\(sd-pam\)|gnome-shell.*|gnome-session.*|gnome-keyring.*|gnome-terminal.*|ptyxis.*|Xwayland|gjs|"
@@ -128,13 +144,25 @@ def cg_rel(cgroup_txt):
     return None
 
 
-def scan(proc_root):
+class ScanDeadline(Exception):
+    """the /proc walk passed its deadline; a partial process table is never returned (an unread member of a group could be
+    protected, so no decision may be based on it)."""
+
+    def __init__(self, read, total):
+        super().__init__("scan deadline exceeded after %d of %d entries" % (read, total))
+        self.read, self.total = read, total
+
+
+def scan(proc_root, deadline=None):
+    """read every /proc/<pid>.  deadline: time.monotonic() value after which ScanDeadline is raised (checked every 32 entries)."""
     procs = {}
     try:
         names = os.listdir(proc_root)
     except OSError:
         return procs
-    for n in names:
+    for i, n in enumerate(names):
+        if deadline is not None and i % 32 == 0 and time.monotonic() > deadline:
+            raise ScanDeadline(i, len(names))
         if not n.isdigit():
             continue
         base = os.path.join(proc_root, n)
@@ -374,6 +402,123 @@ def tmpfs_used_pct(path="/tmp", fixture=None):
     used = (st.f_blocks - st.f_bfree) * st.f_frsize
     avail = st.f_bavail * st.f_frsize
     return None if used + avail <= 0 else round(100.0 * used / (used + avail), 1)
+
+
+def _int_or_none(txt):
+    try:
+        return int(txt.strip())
+    except (ValueError, AttributeError):
+        return None
+
+
+def app_slice_memory(cg_root):
+    """app.slice memory of the user manager: current/high bytes (high None when 'max' or unreadable), anon and shmem from
+    memory.stat.  O(1): three small cgroup files, no /proc walk."""
+    a = os.path.join(cg_root, "app.slice")
+    cur = _int_or_none(read(os.path.join(a, "memory.current"), ""))
+    high = _int_or_none(read(os.path.join(a, "memory.high"), ""))           # 'max' -> None
+    st = {}
+    for line in read(os.path.join(a, "memory.stat"), "").splitlines():
+        k, _, v = line.partition(" ")
+        if k in ("anon", "shmem", "file"):
+            st[k] = _int_or_none(v)
+    return {"current": cur, "high": high if high and high > 0 else None, "anon": st.get("anon"), "shmem": st.get("shmem")}
+
+
+def pressure_advisory(env, psi_ok, some10, full10, tmpp, tmp_dir, app):
+    """level ok|warn|critical from PSI, /tmp fullness and app.slice memory vs its MemoryHigh.  Report-only: nothing in the guard
+    acts on it; agent admission control reads the file.  Signals that cannot be read are listed in "unknown" and never count
+    as healthy evidence - the level is then computed from the remaining signals only."""
+    th = {"warn_tmpfs_pct": cfg("ADV_WARN_TMPFS_PCT", env), "crit_tmpfs_pct": cfg("ADV_CRIT_TMPFS_PCT", env),
+          "warn_app_ratio": cfg("ADV_WARN_APP_RATIO", env), "crit_app_ratio": cfg("ADV_CRIT_APP_RATIO", env),
+          "warn_psi_some_avg10": cfg("ADV_WARN_PSI_SOME", env), "crit_psi_full_avg10": cfg("ADV_CRIT_PSI_FULL", env)}
+    basis = cfg("ADV_APP_RATIO_BASIS", env)
+    if basis not in ("pinned", "current"):
+        basis = DEF["ADV_APP_RATIO_BASIS"]
+    high = app.get("high")
+    cur_ratio = round(app["current"] / high, 4) if high and app.get("current") is not None else None
+    pinned_ratio = round((app["anon"] + app["shmem"]) / high, 4) if high and app.get("anon") is not None and app.get("shmem") is not None else None
+    ratio = pinned_ratio if basis == "pinned" else cur_ratio
+    crit, warn, unknown = [], [], []
+    if psi_ok:
+        if full10 >= th["crit_psi_full_avg10"]:
+            crit.append("psi_mem_full_avg10=%.2f>=%g" % (full10, th["crit_psi_full_avg10"]))
+        if some10 >= th["warn_psi_some_avg10"]:
+            warn.append("psi_mem_some_avg10=%.2f>=%g" % (some10, th["warn_psi_some_avg10"]))
+    else:
+        unknown.append("psi")
+    if tmpp is None:
+        unknown.append("tmpfs_used_pct")
+    elif tmpp >= th["crit_tmpfs_pct"]:
+        crit.append("tmpfs_used_pct=%.1f>=%g" % (tmpp, th["crit_tmpfs_pct"]))
+    elif tmpp >= th["warn_tmpfs_pct"]:
+        warn.append("tmpfs_used_pct=%.1f>=%g" % (tmpp, th["warn_tmpfs_pct"]))
+    if ratio is None:
+        unknown.append("app_slice_ratio")
+    elif ratio >= th["crit_app_ratio"]:
+        crit.append("app_slice_%s_ratio=%.3f>=%g" % (basis, ratio, th["crit_app_ratio"]))
+    elif ratio >= th["warn_app_ratio"]:
+        warn.append("app_slice_%s_ratio=%.3f>=%g" % (basis, ratio, th["warn_app_ratio"]))
+    now = time.time()
+    return {"schema": ADV_SCHEMA, "ts": time.strftime("%Y-%m-%dT%H:%M:%S%z", time.localtime(now)), "ts_epoch": round(now, 3),
+            "level": "critical" if crit else ("warn" if warn else "ok"), "reasons": crit + warn, "unknown": unknown,
+            "psi_available": psi_ok, "psi_mem_some_avg10": some10 if psi_ok else None, "psi_mem_full_avg10": full10 if psi_ok else None,
+            "tmpfs_used_pct": tmpp, "tmpfs_path": tmp_dir,
+            "app_slice_current_bytes": app.get("current"), "app_slice_high_bytes": high, "app_slice_anon_bytes": app.get("anon"),
+            "app_slice_shmem_bytes": app.get("shmem"), "app_slice_current_ratio": cur_ratio, "app_slice_pinned_ratio": pinned_ratio,
+            "app_slice_ratio_basis": basis, "thresholds": th}
+
+
+def write_json_atomic(path, doc):
+    """tmp file (0600) in the same directory, fsync, rename: a reader sees the old or the new document, never a torn one."""
+    tmp = "%s.%d.tmp" % (path, os.getpid())
+    try:
+        os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w") as f:
+            f.write(json.dumps(_finite(doc), sort_keys=True, allow_nan=False) + "\n")
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, path)
+    except (OSError, ValueError):
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+
+
+def top_writers(dirs, timeout_s, n=TOP_WRITERS_N):
+    """largest children of each directory by allocated bytes: `du -x -a -d 1 -B1 DIR` (du -sx of each child), all directories
+    in parallel, killed at the shared deadline.  Our own child processes only (Popen.kill on the child we started).
+    shmem is charged to the cgroup that first touched a page and outlives the writer: no per-process attribution exists."""
+    procs, out, deadline = {}, {}, time.monotonic() + max(0.1, timeout_s)
+    for d in dirs:
+        if not d or d in procs or not os.path.isdir(d):
+            continue
+        try:
+            procs[d] = subprocess.Popen(DU_ARGV + ["-x", "-a", "-d", "1", "-B1", d], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                                        stdin=subprocess.DEVNULL, text=True)
+        except OSError as e:
+            out[d] = {"error": str(e)[:200]}
+    for d, p in procs.items():
+        timed_out = False
+        try:
+            txt, _ = p.communicate(timeout=max(0.0, deadline - time.monotonic()))
+        except subprocess.TimeoutExpired:
+            timed_out = True
+            p.kill()
+            try:
+                txt, _ = p.communicate(timeout=1)
+            except subprocess.TimeoutExpired:
+                txt = ""
+        ents = []
+        for line in (txt or "").splitlines():
+            sz, _, pth = line.partition("\t")
+            if pth and pth.rstrip("/") != d.rstrip("/") and sz.isdigit():
+                ents.append({"path": pth, "bytes": int(sz)})
+        ents.sort(key=lambda e: (-e["bytes"], e["path"]))
+        out[d] = {"entries": ents[:n], "timed_out": timed_out}
+    return out
 
 
 def cfg(name, env):
@@ -625,6 +770,7 @@ def main(argv=None):
     ap.add_argument("--force-trigger", action="store_true", help="treat the host as under pressure (tests)")
     ap.add_argument("--tmp-dir", default="/tmp", help="directory whose filesystem fullness is reported (tmpfs_used_pct)")
     ap.add_argument("--tmpfs-used-pct-fixture", default=None, help=argparse.SUPPRESS)
+    ap.add_argument("--pressure-file", default=None, help="pressure advisory (default: pressure.json beside the log; env HOSTSAFETY_PRESSURE_FILE)")
     ap.add_argument("--uid", type=int, default=os.getuid())
     ap.add_argument("--self-pid", type=int, default=os.getpid())
     a = ap.parse_args(argv)
@@ -680,11 +826,21 @@ def main(argv=None):
     metrics = {"psi_full_avg10": full10, "psi_some_avg10": some10, "swap_free_pct": swapf, "tmpfs_used_pct": tmpp}
     # observability only: the largest scope above the storm threshold (None when no scope exceeds it)
     status_extra = {"max_scope_tasks": top["pids"] if top else None, "max_scope_cg": top["cg"] if top else None}
+    # pressure advisory: written on EVERY pass and BEFORE anything slow (du, the /proc walk), so it survives a guard that is
+    # killed at TimeoutStartSec under thrash (fixture PA7).  Report-only: the guard never acts on the level.
+    adv = pressure_advisory(env, psi_ok, some10, full10, tmpp, a.tmp_dir, app_slice_memory(cg_root))
+    write_json_atomic(a.pressure_file or env.get("HOSTSAFETY_PRESSURE_FILE") or os.path.join(os.path.dirname(log_file) or ".", "pressure.json"), adv)
     # report-only: a RAM-backed /tmp that is filling up charges its writers' cgroups (unreclaimable) - one event per crossing, never a kill
     if tmpp is not None and tmpp > cfg("TMPFS_WARN_PCT", env):
         if not st.get("tmpfs_high_logged"):
-            log(log_file, {"event": "tmpfs-high", "tmpfs_used_pct": tmpp, "threshold_pct": cfg("TMPFS_WARN_PCT", env), "tmp_dir": a.tmp_dir,
-                           "note": "report only: no action taken; /tmp is RAM-backed - move big artifacts to disk-backed TMPDIR (bounded-run does this by default)"})
+            ev_t = {"event": "tmpfs-high", "tmpfs_used_pct": tmpp, "threshold_pct": cfg("TMPFS_WARN_PCT", env), "tmp_dir": a.tmp_dir,
+                    "note": "report only: no action taken; /tmp is RAM-backed - move big artifacts to disk-backed TMPDIR (bounded-run does this by "
+                            "default). Killing a process does NOT free tmpfs pages: only deleting the files does."}
+            if psi_ok and full10 >= cfg("ADV_CRIT_PSI_FULL", env):
+                ev_t["top_writers_skipped"] = "psi_mem_full_avg10=%.2f>=%g: no du on a stalling host" % (full10, cfg("ADV_CRIT_PSI_FULL", env))
+            else:
+                ev_t["top_writers"] = top_writers([a.tmp_dir, env.get("XDG_RUNTIME_DIR")], cfg("TOP_WRITERS_TIMEOUT_S", env))
+            log(log_file, ev_t)
             st["tmpfs_high_logged"] = True
     else:
         st.pop("tmpfs_high_logged", None)
@@ -710,7 +866,15 @@ def main(argv=None):
         return 0
     # the /proc walk (~0.8 s with ~7,000 processes) happens ONLY here: PSI said "sustained pressure" and no cooldown is running.
     # Every healthy / building / cooldown run returns above without touching /proc/<pid> (incident 2026-10-13).
-    procs = scan(a.proc_root)
+    try:
+        procs = scan(a.proc_root, deadline=time.monotonic() + cfg("SCAN_DEADLINE_S", env))
+    except ScanDeadline as e:
+        # under thrash the walk can outlast TimeoutStartSec; a deadline below it makes the miss VISIBLE (it used to be a silent
+        # unit timeout, 2026-10-14 14:28).  No decision on a partial table: an unread group member could be protected.
+        log(log_file, {"event": "scan-deadline-exceeded", "reasons": why, "read": e.read, "total": e.total,
+                       "deadline_s": cfg("SCAN_DEADLINE_S", env), "note": "no decision: a partial process table is never used", **metrics})
+        _save(state_file, st)
+        return 0
     v, ev, rule, rejected = None, {}, "psi", []
     pv, pev = select_victim(procs, a.uid, a.self_pid, only, cfg("PROC_WEIGHT_KB", env), own_pgrp=own_pgrp)   # the PSI-ranked pick
     v, ev = pv, pev
