@@ -163,8 +163,12 @@ current script has not been applied (agents cannot run sudo; this is the operato
 `x-systemd.graceful-option=usrquota`, so the live option string keeps both). That file is what every boot applies. `--apply`
 then runs `systemctl daemon-reload` and, as the live twin, `mount -o remount,size=4G /tmp` **only if `/tmp` holds less than
 3 GiB** (`HOSTSAFETY_TMP_REMOUNT_MAX_USED`); otherwise it prints `REFUSED live remount ... nothing is truncated or deleted` and
-the 4G size takes effect at the next boot. `--revert` removes the drop-in and grows the live mount back to the remaining boot
-value (vendor 50%). The boot-effective value is computed from the unit fragment and its drop-ins in systemd's order (a later
+the 4G size takes effect at the next boot. `--revert` removes the drop-in and returns the live mount to the remaining boot value
+(vendor 50%): a grow is always done; if another drop-in leaves a SMALLER size, that is a shrink and the same refusal rule applies.
+A failed `mount` is reported and leaves the boot value to the next boot. A percent `HOSTSAFETY_TMP_SIZE` (e.g. `25%`) is written as
+`25%%`: `%` is a unit-file specifier and an unescaped one makes systemd drop the whole `Options=` line. The test hooks
+(`HOSTSAFETY_MEMINFO`, `HOSTSAFETY_TMP_USED_BYTES`, `LIVE_*`) work only under `HOSTSAFETY_ROOT_PREFIX`: no environment variable can
+bypass the 3 GiB refusal or move a production `--verify` verdict. The boot-effective value is computed from the unit fragment and its drop-ins in systemd's order (a later
 drop-in such as `90-operator.conf` wins and is reported), because `systemctl show tmp.mount -p Options` shows the LIVE mount
 options of an active mount unit, not what the next boot applies.
 
@@ -444,15 +448,18 @@ writes to `/sys`).
 
 **Check it without rebooting:** `scripts/hostsafety/install.sh verify-persistence [--json FILE]` (no root): one `ROW` per
 setting with the persistent definition, the **boot-effective** value (computed from the unit fragment and drop-ins in systemd's
-order, from `sysctl.d` in `sysctl --system` order), the **live** value and the enabled state; `PASS`, `FAIL` (missing persistent
+order, from `sysctl.d` in the order `systemd-sysctl` applies at boot: `/usr/lib`, `/usr/local/lib`, `/run`, `/etc` `sysctl.d` by file
+name, `/etc` winning a name; `/etc/sysctl.conf` itself is not read at boot, Ubuntu's `/etc/sysctl.d/99-sysctl.conf` link covers it), the **live** value and the enabled state; `PASS`, `FAIL` (missing persistent
 form, a later drop-in winning at boot, unit not enabled, linger off, installed copy differing from the source tree, stale
-advisory, or **DRIFT**: live differs from what a boot applies) or `UNDETERMINED` (a value could not be read: never a pass);
+advisory older than 30 s, or **DRIFT**: live differs from what a boot applies) or `UNDETERMINED` (a value could not be read, or
+`root-steps.sh --verify` aborted / returned fewer than its 6 rows: never a pass);
 rc 0/1/2. Root rows come from `root-steps.sh --verify` and are prefixed `root: `.
 
 **Boot self-check.** `hostsafety-selfcheck.service` (user oneshot, `WantedBy=default.target`, installed and enabled by
-`install.sh`; `Nice=19`, `TimeoutStartSec=30`; report only, it never changes, stops or signals anything) runs the same check at
-every start of the user manager (at boot, with linger). It waits up to 20 s for the guard's first `pressure.json` of this boot
-(the guard timer fires 30 s after boot), writes `~/.local/state/hostsafety/boot-check.json` (`schema hostsafety.bootcheck/1`:
+`install.sh`; `Nice=19`, `TimeoutStartSec=60`; report only, it never changes, stops or signals anything) runs the same check at
+every start of the user manager (at boot, with linger). It waits up to 45 s (`HOSTSAFETY_BOOTCHECK_WAIT_S`) for the guard's first
+`pressure.json` of this boot (the guard timer fires 30 s after MACHINE boot while this unit starts with the user manager, so a
+shorter wait would leave no margin; the coordinator's original 30 s timeout was raised for that reason after review), writes `~/.local/state/hostsafety/boot-check.json` (`schema hostsafety.bootcheck/1`:
 `boot_id`, `ts`, `pass`/`fail`/`undetermined`, every row) and logs `hostsafety: boot-check N PASS M FAIL K UNDETERMINED`.
 The guard heartbeat (`guard.status`) carries the last result as `boot_check` with `current_boot` true/false. The unit exits 1 when
 any row FAILs (2 when only UNDETERMINED), so it shows in `systemctl --user --failed`: that is the signal, not a malfunction.

@@ -8,7 +8,7 @@
 #
 #   persistence-check.sh [--json FILE] [--boot-check]
 #     --json FILE    also write the rows as JSON (schema hostsafety.bootcheck/1), atomically
-#     --boot-check   the boot self-check (hostsafety-selfcheck.service): waits up to HOSTSAFETY_BOOTCHECK_WAIT_S (20) for the
+#     --boot-check   the boot self-check (hostsafety-selfcheck.service): waits up to HOSTSAFETY_BOOTCHECK_WAIT_S (45) for the
 #                    guard's first pressure.json of this boot, writes $STATE/boot-check.json and logs one summary line
 #
 # Env (tests): HOSTSAFETY_CONFIG_HOME HOSTSAFETY_DATA_HOME HOSTSAFETY_BIN_DIR HOSTSAFETY_STATE_HOME HOSTSAFETY_SOURCE_DIR
@@ -115,7 +115,7 @@ except Exception:
     print("? 0")' "${pj}"; }
 if (( boot )); then   # at boot the guard's first pass (timer OnBootSec=30s) may still be due: wait for one from THIS boot
   waited=0
-  while (( waited < ${HOSTSAFETY_BOOTCHECK_WAIT_S:-20} )); do
+  while (( waited < ${HOSTSAFETY_BOOTCHECK_WAIT_S:-45} )); do
     read -r _sch _ts <<<"$(pts)"; (( _ts >= ${bt:-0} )) && break
     sleep 1; waited=$((waited + 1)); now="$(date +%s)"
   done
@@ -125,16 +125,23 @@ age=$(( now - ts ))
 if [[ ! -f "${pj}" ]]; then row "pressure advisory" FAIL "${pj} missing" "written by every guard pass" "-" - "the guard has not run"
 elif [[ "${sch}" != hostsafety.pressure/1 ]]; then row "pressure advisory" FAIL "${pj}" "-" "schema ${sch}" - "unreadable or wrong schema"
 elif [[ -n "${bt}" ]] && (( ts < bt )); then row "pressure advisory" UNDETERMINED "${pj}" "guard timer" "from a previous boot" - "no guard pass yet in this boot"
-elif (( age > 60 )); then row "pressure advisory" FAIL "${pj}" "guard timer" "stale ${age}s" - "the guard is dead or timing out"
+elif (( age > 30 )); then row "pressure advisory" FAIL "${pj}" "guard timer" "stale ${age}s" - "older than 30 s: the guard is dead or timing out"
 else row "pressure advisory" PASS "${pj}" "guard timer" "age ${age}s" - ""; fi
 
 # 7. root-level settings (no root needed to read them)
 rs="${here}/root-steps.sh"; [[ -f "${rs}" ]] || rs="${SHARE}/root-steps.sh"
 if [[ -f "${rs}" ]]; then
+  # rc must be 0/1/2 and exactly 6 rows must come back; an abort that drops rows is UNDETERMINED, never a silent pass.
+  # Empty fields become "-" first: `IFS=$'\t' read` would collapse two adjacent tabs and shift the columns.
+  rout="$(bash "${rs}" --verify 2>/dev/null)"; rrc=$?
+  nrows=0
   while IFS=$'\t' read -r tag a b c d e f g; do
     [[ "${tag}" == ROW ]] || continue
-    row "root: ${a}" "${b}" "${c}" "${d}" "${e}" "${f}" "${g}"
-  done < <(bash "${rs}" --verify 2>/dev/null)
+    nrows=$((nrows + 1)); row "root: ${a}" "${b}" "${c}" "${d}" "${e}" "${f}" "${g}"
+  done < <(awk -F'\t' -v OFS='\t' '{for (i = 1; i <= NF; i++) if ($i == "") $i = "-"; print}' <<<"${rout}")
+  if (( rrc > 2 || nrows != 6 )); then
+    row "root: root-steps.sh --verify" UNDETERMINED "${rs}" "-" "rc ${rrc}, ${nrows} of 6 rows" - "the root check aborted; its rows are incomplete"
+  fi
 else row "root: root-steps.sh" UNDETERMINED "root-steps.sh not found" "-" "-" - "cannot check root-level settings"; fi
 
 summary="${NPASS} PASS ${NFAIL} FAIL ${NUND} UNDETERMINED"

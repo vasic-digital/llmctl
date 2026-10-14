@@ -122,7 +122,9 @@ Nice=19
 IOSchedulingClass=idle
 CPUWeight=10
 MemoryMax=256M
-TimeoutStartSec=30
+# waits up to 45 s for the guard's first pass of this boot (guard timer OnBootSec=30s counts from MACHINE boot; this unit
+# starts with the user manager): 30 s would leave no margin (review 2026-10-14)
+TimeoutStartSec=60
 ExecStart=/bin/bash %h/.local/share/hostsafety/persistence-check.sh --boot-check
 StandardOutput=journal
 StandardError=journal

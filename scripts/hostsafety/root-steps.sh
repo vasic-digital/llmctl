@@ -26,7 +26,10 @@ fi
 BK="${ROOT_PREFIX}/var/backups/hostsafety/$(date +%Y%m%dT%H%M%S)"
 ORIG="${ROOT_PREFIX}/var/backups/hostsafety/orig"
 MARK='# hostsafety-managed'
-MEMINFO="${HOSTSAFETY_MEMINFO:-/proc/meminfo}"
+# test hooks (HOSTSAFETY_MEMINFO, HOSTSAFETY_TMP_USED_BYTES, LIVE_*) are honoured ONLY under HOSTSAFETY_ROOT_PREFIX: in production
+# no environment variable can move a verdict or bypass the /tmp refusal (review 2026-10-14)
+MEMINFO=/proc/meminfo
+[[ -n "${ROOT_PREFIX}" && -n "${HOSTSAFETY_MEMINFO:-}" ]] && MEMINFO="${HOSTSAFETY_MEMINFO}"
 
 TMP_SIZE="${HOSTSAFETY_TMP_SIZE:-4G}"
 [[ "${TMP_SIZE}" =~ ^[1-9][0-9]*[kKmMgG]?$ || "${TMP_SIZE}" =~ ^[1-9][0-9]?%$ ]] || { echo "root-steps.sh: HOSTSAFETY_TMP_SIZE='${TMP_SIZE}' must be N, Nk, NM, NG or N%" >&2; exit 2; }
@@ -52,7 +55,8 @@ EOOM_PREFER='^(git|post-commit|make|go|cc1|cc1plus|rustc|cargo|ld|collect2|ninja
 EOOM_ARGS="-r 60 ${EOOM_THRESH} --ignore-root-user --ignore ${EOOM_IGNORE} --prefer ${EOOM_PREFER}"
 # the vendor tmp.mount options (systemd 259) with ONLY size= changed; inode64 is the kernel default for tmpfs on 64-bit
 # and usrquota comes from the graceful option, exactly as today (findmnt: ...,nr_inodes=1048576,inode64,usrquota)
-TMP_OPTIONS="mode=1777,strictatime,nosuid,nodev,size=${TMP_SIZE},nr_inodes=1m,x-systemd.graceful-option=usrquota"
+# '%' is a unit-file specifier: a percent size is written as %% (as the vendor unit does) or systemd drops the whole line
+TMP_OPTIONS="mode=1777,strictatime,nosuid,nodev,size=${TMP_SIZE//%/%%},nr_inodes=1m,x-systemd.graceful-option=usrquota"
 TMP_DROPIN=/etc/systemd/system/tmp.mount.d/50-hostsafety.conf
 
 declare -A FILES
@@ -112,7 +116,7 @@ size_bytes() {
   return 0
 }
 size_of_options() { tr ',' '\n' <<<"$1" | sed -n 's/^size=//p' | tail -1 | sed 's/%%/%/'; }
-within_1pct() { local a="$1" b="$2"; [[ -n "${a}" && -n "${b}" ]] && (( (a > b ? a - b : b - a) * 100 <= b )); }
+within_1pct() { local a="$1" b="$2"; [[ "${a}" =~ ^[0-9]+$ && "${b}" =~ ^[0-9]+$ ]] && (( (a > b ? a - b : b - a) * 100 <= b )); }
 
 # unit_files <unit>: the fragment plus its drop-ins in the order systemd applies them (drop-ins sorted by file name;
 # for the same name /etc beats /run beats /usr/lib)
@@ -137,23 +141,25 @@ boot_value() {
   done < <(unit_files "$1")
   printf '%s' "${v}"
 }
-# boot_sysctl <key>: sysctl --system order (files by name over /usr/lib, /run, /etc sysctl.d; /etc wins; /etc/sysctl.conf last)
+# boot_sysctl <key>: the order systemd-sysctl applies at boot: *.conf by file name over /usr/lib, /usr/local/lib, /run and /etc
+# sysctl.d (for the same name /etc beats /run beats /usr/local/lib beats /usr/lib).  systemd-sysctl does NOT read
+# /etc/sysctl.conf itself; Debian/Ubuntu ship /etc/sysctl.d/99-sysctl.conf -> ../sysctl.conf, which this order covers.
 boot_sysctl() {
   local k="$1" d f v=""
   declare -A seen=()
-  for d in /usr/lib/sysctl.d /lib/sysctl.d /run/sysctl.d /etc/sysctl.d; do
+  for d in /usr/lib/sysctl.d /lib/sysctl.d /usr/local/lib/sysctl.d /run/sysctl.d /etc/sysctl.d; do
     for f in "$(path_of "${d}")"/*.conf; do [[ -f "${f}" ]] && seen["$(basename "${f}")"]="${f}"; done
   done
-  for f in $(printf '%s\n' "${!seen[@]}" | sort) /etc/sysctl.conf; do
+  for f in $(printf '%s\n' "${!seen[@]}" | sort); do
     [[ -n "${f}" ]] || continue
-    if [[ "${f}" == /etc/sysctl.conf ]]; then f="$(path_of /etc/sysctl.conf)"; else f="${seen[${f}]}"; fi
+    f="${seen[${f}]}"
     [[ -f "${f}" ]] || continue
     v="$(awk -F= -v k="${k}" -v cur="${v}" 'BEGIN{val=cur} {gsub(/[ \t]/, "", $1)} $1==k {x=$2; gsub(/^[ \t]+|[ \t]+$/, "", x); val=x} END{print val}' "${f}")"
   done
   printf '%s' "${v}"
 }
 tmp_used_bytes() {
-  if [[ -n "${HOSTSAFETY_TMP_USED_BYTES:-}" ]]; then echo "${HOSTSAFETY_TMP_USED_BYTES}"; return; fi
+  if [[ -n "${ROOT_PREFIX}" && -n "${HOSTSAFETY_TMP_USED_BYTES:-}" ]]; then echo "${HOSTSAFETY_TMP_USED_BYTES}"; return; fi
   df -B1 --output=used /tmp 2>/dev/null | tail -1 | tr -d ' '
 }
 live_tmp_options() { if [[ -n "${ROOT_PREFIX}" ]]; then fixture LIVE_TMP_OPTIONS; else findmnt -no OPTIONS /tmp 2>/dev/null || true; fi; }
@@ -178,7 +184,8 @@ remount_tmp() {
   case "${mode}" in
     plan) echo "live: would remount /tmp to size=${want} (used ${used} < ${TMP_MAX_USED} bytes)" ;;
     *) if [[ -n "${ROOT_PREFIX}" ]]; then echo "live: remount /tmp size=${want} skipped (test root)"
-       else mount -o remount,size="${want}" /tmp && echo "live: remounted /tmp size=${want}"; fi ;;
+       elif mount -o remount,size="${want}" /tmp; then echo "live: remounted /tmp size=${want}"
+       else echo "live: remount /tmp size=${want} FAILED (see mount's message); the boot value applies at the next boot"; fi ;;
   esac
 }
 
@@ -297,7 +304,11 @@ case "${mode}" in
     fi
     # the live /tmp size follows whatever boot definition remains (the vendor 50% when ours was the only drop-in)
     bs="$(size_of_options "$(boot_value tmp.mount Options)")"
-    if [[ -n "${bs}" ]]; then remount_tmp "${bs}" grow; fi
+    # a grow (live smaller than the remaining boot size) is always safe; anything else is a shrink and follows the refusal rules
+    if [[ -n "${bs}" ]]; then
+      bb="$(size_bytes "${bs}")"; lb="$(size_bytes "$(size_of_options "$(live_tmp_options)")")"
+      if [[ "${bb}" =~ ^[0-9]+$ && "${lb}" =~ ^[0-9]+$ ]] && (( bb >= lb )); then remount_tmp "${bs}" grow; else remount_tmp "${bs}"; fi
+    fi
     ;;
   verify)
     do_verify; exit $?

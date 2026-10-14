@@ -117,7 +117,7 @@ env HOSTSAFETY_CONFIG_HOME="${pc}/c" HOSTSAFETY_DATA_HOME="${pc}/d" HOSTSAFETY_B
   HOSTSAFETY_NO_TRACKER=1 HOSTSAFETY_NO_SYSTEMCTL=1 HOSTSAFETY_MEMINFO="${TEST_TMP}/meminfo16" HOSTSAFETY_NPROC=8 "${HS}/install.sh" >"${pc}/inst.out" 2>&1
 assert_file_exists "${pc}/c/systemd/user/hostsafety-selfcheck.service" "install writes the boot self-check unit"
 assert_file_contains "${pc}/c/systemd/user/hostsafety-selfcheck.service" "WantedBy=default.target" "self-check unit is wanted by default.target (runs at every boot with linger)"
-for kv in "Nice=19" "TimeoutStartSec=30" "Type=oneshot" "persistence-check.sh --boot-check"; do
+for kv in "Nice=19" "TimeoutStartSec=60" "Type=oneshot" "persistence-check.sh --boot-check"; do
   assert_file_contains "${pc}/c/systemd/user/hostsafety-selfcheck.service" "${kv}" "self-check unit carries ${kv}"
 done
 assert_eq "0" "$(grep -vE '^[[:space:]]*#' "${HS}/persistence-check.sh" | grep -cE '(^|[^a-z_-])(kill|pkill|killall)([^a-z_]|$)|uctl (stop|kill|restart|start)|systemctl[^|]*(stop|kill|restart)' || true)" "persistence-check.sh never stops, restarts or signals anything (no kill/stop/restart call)"
@@ -171,6 +171,7 @@ case_fail "self-check unit not enabled" "hostsafety-selfcheck.service" PC_DISABL
 case_fail "runtime-only value drifted from the persistent one (systemctl set-property --runtime)" "app.slice MemorySwapMax" PC_OVERRIDE=app.slice:MemorySwapMax:1073741824
 case_fail "linger off: user units wait for a login" "linger" PC_LINGER=no
 case_fail "pressure advisory stale (guard dead or timing out)" "pressure advisory" PC_NOW=2000
+case_fail "pressure advisory older than 30 s (readers treat it as UNKNOWN; one number with the docs)" "pressure advisory" PC_NOW=1035
 mv "${pc}/c/systemd/user/app.slice.d/10-hostsafety.conf" "${pc}/app.bak"
 assert_contains "$(pcv)" "$(printf 'ROW\tapp.slice MemoryHigh\tFAIL')" "drop-in removed: the app.slice rows FAIL (no persistent definition)"
 mv "${pc}/app.bak" "${pc}/c/systemd/user/app.slice.d/10-hostsafety.conf"
@@ -184,6 +185,14 @@ assert_contains "$(PC_BOOT=1001 pcv)" "$(printf 'ROW\tpressure advisory\tUNDETER
 bc="$(pcv --boot-check)"
 assert_contains "${bc}" "hostsafety: boot-check 29 PASS 0 FAIL 0 UNDETERMINED" "--boot-check logs the one-line journal summary"
 assert_file_exists "${pc}/state/hostsafety/boot-check.json" "--boot-check writes boot-check.json"
+# review finding 2: root-steps.sh --verify that aborts (unexpected rc or missing rows) => root rows UNDETERMINED, never rc 0
+pcb="${TEST_TMP}/pcbroken"; mkdir -p "${pcb}"; cp "${HS}/persistence-check.sh" "${pcb}/"
+printf '#!/usr/bin/env bash\nprintf "ROW\\tvm.swappiness\\tPASS\\ta\\tb\\tc\\t-\\t-\\n"\nexit 5\n' >"${pcb}/root-steps.sh"
+bro="$(PCSCRIPT="${pcb}/persistence-check.sh"; out="$(env PATH="${pcs}:${PATH}" PC_CFG="${pc}/c" HOSTSAFETY_CONFIG_HOME="${pc}/c" HOSTSAFETY_DATA_HOME="${pc}/d" \
+  HOSTSAFETY_BIN_DIR="${pc}/b" HOSTSAFETY_STATE_HOME="${pc}/state" HOSTSAFETY_SOURCE_DIR="${HS}" HOSTSAFETY_NOW=1010 HOSTSAFETY_BOOT_EPOCH=900 \
+  bash "${PCSCRIPT}" 2>&1; echo "rc=$?")"; printf '%s' "${out}")"
+assert_contains "${bro}" "$(printf 'ROW\troot: root-steps.sh --verify\tUNDETERMINED')" "a root-steps --verify that aborts (rc 5, 1 of 6 rows) is UNDETERMINED"
+assert_eq "0" "$(grep -c 'rc=0' <<<"${bro}" || true)" "an aborted root verify can never give rc 0"
 # mutation proofs: a neutered check in a scratch copy must flip its named case
 mutate_pc() { # <label> <old> <new> <env for the case> <row>
   local mp="${TEST_TMP}/pcm.sh" out
@@ -507,6 +516,9 @@ assert_contains "${big}" "nothing is truncated or deleted" "refusal says nothing
 assert_rc 2 "HOSTSAFETY_TMP_SIZE garbage is refused" env HOSTSAFETY_TMP_SIZE='4G,mode=0777' HOSTSAFETY_ROOT_PREFIX="${RT}" bash "${HS}/root-steps.sh"
 assert_rc 2 "HOSTSAFETY_EARLYOOM_THRESHOLDS with anything but -m/-s/-M/-S numbers is refused" env HOSTSAFETY_EARLYOOM_THRESHOLDS='-m 5 --ignore x' HOSTSAFETY_ROOT_PREFIX="${RT}" bash "${HS}/root-steps.sh"
 assert_contains "$(HOSTSAFETY_EARLYOOM_THRESHOLDS='-m 5 -s 10' rst 2>&1)" 'EARLYOOM_ARGS="-r 60 -m 5 -s 10 ' "HOSTSAFETY_EARLYOOM_THRESHOLDS selects the previous design (-m 5 -s 10)"
+# review finding 1: '%' is a unit-file specifier: a percent size must be written as %% or systemd drops the whole Options= line
+assert_contains "$(HOSTSAFETY_TMP_SIZE=25% rst 2>&1)" "Options=mode=1777,strictatime,nosuid,nodev,size=25%%,nr_inodes=1m" "a percent /tmp size is escaped as %% in the drop-in (systemd specifier)"
+assert_contains "$(HOSTSAFETY_TMP_SIZE=25% HOSTSAFETY_TMP_USED_BYTES=1 rst 2>&1)" "live: would remount /tmp to size=25% " "the live remount uses the raw percent (mount takes size=25%)"
 # --verify BEFORE apply: the drop-in is missing, the legacy user-1000 file still has MemoryMax => FAIL rows, rc 1
 vb="$(rst --verify 2>&1; echo "rc=$?")"
 assert_contains "${vb}" "rc=1" "--verify before apply fails (rc 1)"
@@ -527,6 +539,12 @@ va="$(LIVE_TMP_OPTIONS='rw,nosuid,nodev,size=4194304k,nr_inodes=1048576,inode64,
       LIVE_USER_SLICE='MemoryHigh=29230862336 MemoryMax=infinity TasksMax=40000' rst --verify 2>&1; echo "rc=$?")"
 assert_contains "${va}" "rc=0" "--verify after apply with matching live values passes (rc 0)"
 assert_eq "0" "$(grep -c "$(printf '\t')FAIL$(printf '\t')" <<<"${va}" || true)" "--verify after apply: no FAIL row"
+# review finding 2: a non-numeric live value (MemoryHigh=infinity) must be a FAIL row, never an abort that drops later rows
+vinf="$(LIVE_TMP_OPTIONS='rw,nosuid,nodev,size=4194304k,nr_inodes=1048576,inode64,usrquota' LIVE_EARLYOOM="${EO_NOW}" \
+      LIVE_USER_SLICE='MemoryHigh=infinity MemoryMax=infinity TasksMax=40000' rst --verify 2>&1; echo "rc=$?")"
+assert_eq "6" "$(grep -c "^ROW$(printf '\t')" <<<"${vinf}")" "--verify with MemoryHigh=infinity still prints all 6 rows (no set -u abort)"
+assert_contains "${vinf}" "$(printf 'ROW\tuser-1000.slice\tFAIL')" "--verify: MemoryHigh=infinity is a user-1000.slice FAIL"
+assert_eq "0" "$(grep -c 'unbound variable' <<<"${vinf}" || true)" "--verify: no unbound-variable abort"
 # drift: persistent says 4G, the live mount is still 16 GB (remount refused / not done) => FAIL naming the drift
 vd="$(LIVE_EARLYOOM="${EO_NOW}" LIVE_USER_SLICE='MemoryHigh=29230862336 MemoryMax=infinity TasksMax=40000' rst --verify 2>&1; echo "rc=$?")"
 assert_contains "${vd}" "DRIFT live size=15858760k" "--verify flags runtime-vs-boot DRIFT on /tmp (a boot would apply 4G, the live mount is 16 GB)"
@@ -547,7 +565,17 @@ assert_rc 2 "--verify with an unreadable live /tmp option string is UNDETERMINED
   LIVE_TMP_OPTIONS='garbage' LIVE_EARLYOOM="${EO_NOW}" LIVE_EARLYOOM_ENABLED=enabled LIVE_USER_SLICE='MemoryHigh=29230862336 MemoryMax=infinity TasksMax=40000' bash "${HS}/root-steps.sh" --verify
 # LIVE_* fakes are honoured ONLY under a test root: in production they must not be able to make --verify pass
 assert_contains "$(LIVE_TMP_OPTIONS='rw,size=4194304k' bash "${HS}/root-steps.sh" --verify 2>&1)" "tmp.mount size" "--verify runs without root (production paths) and prints the tmp.mount row"
-assert_eq "0" "$(LIVE_TMP_OPTIONS='rw,size=4194304k' bash "${HS}/root-steps.sh" --verify 2>&1 | grep -c 'live size=4194304k' || true)" "production --verify ignores LIVE_TMP_OPTIONS (a gate cannot be faked by env)"
+assert_eq "0" "$(LIVE_TMP_OPTIONS='rw,size=123457k' bash "${HS}/root-steps.sh" --verify 2>&1 | grep -c 'size=123457k' || true)" "production --verify ignores LIVE_TMP_OPTIONS (a gate cannot be faked by env; impossible value 123457k)"
+# review finding 3: the other test hooks are honoured only under a test root as well
+assert_eq "0" "$(HOSTSAFETY_TMP_USED_BYTES=1 bash "${HS}/root-steps.sh" 2>&1 | grep -c '(used 1 <' || true)" "production plan ignores HOSTSAFETY_TMP_USED_BYTES (the 3 GiB refusal cannot be bypassed by env)"
+printf 'MemTotal:       1000 kB\n' >"${TEST_TMP}/meminfo_tiny"
+assert_eq "0" "$(HOSTSAFETY_MEMINFO="${TEST_TMP}/meminfo_tiny" bash "${HS}/root-steps.sh" 2>&1 | grep -c 'size=50% (512000 bytes)' || true)" "production root-steps ignores HOSTSAFETY_MEMINFO (verdicts cannot be steered by env)"
+# review finding 5: an operator drop-in that stays after revert with a SMALLER size is a shrink, not a grow: refusal rules apply
+printf '[Mount]\nOptions=mode=1777,size=1G\n' >"${RT}/etc/systemd/system/tmp.mount.d/90-operator.conf"
+HOSTSAFETY_TMP_USED_BYTES=3500000000 LIVE_TMP_OPTIONS='rw,size=4194304k' rst --revert >"${TEST_TMP}/rst_revert0.out" 2>&1 || true
+assert_contains "$(cat "${TEST_TMP}/rst_revert0.out")" "REFUSED live remount" "--revert that would shrink /tmp (remaining boot size 1G < live 4G) is refused while /tmp is full"
+rm -f "${RT}/etc/systemd/system/tmp.mount.d/90-operator.conf"
+HOSTSAFETY_TMP_USED_BYTES=1073741824 rst --apply >/dev/null 2>&1
 rst --revert >"${TEST_TMP}/rst_revert.out" 2>&1
 assert_eq "no" "$([[ -e ${RT}${TD} ]] && echo yes || echo no)" "--revert removes the tmp.mount drop-in"
 assert_contains "$(cat "${TEST_TMP}/rst_revert.out")" "live: remount /tmp size=50% skipped (test root)" "--revert restores the live size from the boot definition that remains (vendor 50%)"
