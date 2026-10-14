@@ -865,7 +865,8 @@ PY
   "${BR}" -q -T 30 -n "hslive$$" -- sleep 8 >/dev/null 2>&1 &
   livepid=$!
   ownerdir() { local d; for d in "${BOUNDED_RUN_STATE_ROOT}"/run.*; do [[ "$(cat "${d}/owner" 2>/dev/null)" == "$1" ]] && echo "${d}"; done; return 0; }
-  livedir=""; for _ in $(seq 1 50); do livedir="$(ownerdir "${livepid}")"; [[ -n "${livedir}" ]] && break; sleep 0.1; done
+  livedir=""; for _ in $(seq 1 50); do livedir="$(ownerdir "${livepid}")"; [[ -n "${livedir}" && -s "${livedir}/started" ]] && break; sleep 0.1; done
+  [[ -n "${livedir}" ]] && rm -f -- "${livedir}/unit"   # no scope record (as in a pre-round-6 dir): the OWNER check alone must keep it
   touch -d '2 days ago' "${BOUNDED_RUN_STATE_ROOT}/run.old1" "${BOUNDED_RUN_STATE_ROOT}/run.old3" ${livedir:+"${livedir}"}
   staleprobe() { # <bounded-run> -> "old1 old3 tmp new1 live" each 1 = still present
     "$1" -q -T 30 -n "hsstl$$-${RANDOM}" -- true >/dev/null 2>&1 || true
@@ -877,10 +878,53 @@ PY
     echo "${x}"
   }
   read -r o1 o3 tmpd n1 lv <<<"$(staleprobe "${BR}")"
-  assert_eq "0 0 0" "${o1} ${o3} ${tmpd}" "stale: run.* dirs older than a day with a dead or no owner are removed, with the TMPDIR they recorded"
+  assert_eq "0 0" "${o1} ${tmpd}" "stale: a run.* dir older than a day with a dead owner is removed, with the TMPDIR it recorded"
+  assert_eq "1" "${o3}" "stale: a run.* dir WITHOUT this tool's owner marker is kept (not ours to delete; review r5 #6)"
   assert_eq "1" "${n1}" "stale: a RECENT dir with a dead owner is kept (a run starting right now)"
   assert_eq "1" "${lv}" "stale: an OLD dir whose owner is a live bounded-run is kept (${livedir:-no live dir found})"
   wait "${livepid}" 2>/dev/null || true
+
+  # --- round 6 (review of round 5, #5/#6/#8): the sweep must not reach outside its roots or into a live scope, and is quiet.
+  # (a) a recorded TMPDIR whose path runs through a symlinked component that points OUTSIDE the tmp root is not removed;
+  # (b) a dead wrapper whose SCOPE is still active (wrapper SIGKILLed, command running) keeps its state and TMPDIR;
+  # (c) the sweep prints nothing for a dead owner (it used to print "/proc/N/cmdline: No such file or directory").
+  mkdir -p "${TEST_TMP}/brstale-out/victim"; echo keep >"${TEST_TMP}/brstale-out/victim/precious.txt"
+  ln -s "${TEST_TMP}/brstale-out" "${BOUNDED_RUN_TMP_ROOT}/lnk"
+  mkdir "${BOUNDED_RUN_STATE_ROOT}/run.sym1"; echo "${deadpid}" >"${BOUNDED_RUN_STATE_ROOT}/run.sym1/owner"
+  echo "${BOUNDED_RUN_TMP_ROOT}/lnk/victim" >"${BOUNDED_RUN_STATE_ROOT}/run.sym1/tmp"
+  "${BR}" -q -n "hsact$$" -- bash -c "exec -a hsmarka-${mark} sleep 60" >/dev/null 2>&1 &
+  actpid=$!
+  for _ in $(seq 1 100); do pgrep -f "^hsmarka-${mark} 60" >/dev/null 2>&1 && break; sleep 0.1; done
+  actdir=""; for _ in $(seq 1 50); do actdir="$(ownerdir "${actpid}")"; [[ -n "${actdir}" && -s "${actdir}/started" ]] && break; sleep 0.1; done
+  acttmp="$(cat "${actdir}/tmp" 2>/dev/null)"; [[ -n "${acttmp}" ]] && echo inuse >"${acttmp}/inuse.txt"
+  [[ "${actpid}" -gt 1 ]] && kill -9 "${actpid}"; wait "${actpid}" 2>/dev/null || true   # our own child: the wrapper dies, its scope lives
+  touch -d '2 days ago' "${BOUNDED_RUN_STATE_ROOT}/run.sym1" ${actdir:+"${actdir}"}
+  mkdir "${BOUNDED_RUN_STATE_ROOT}/run.old4"; echo "${deadpid}" >"${BOUNDED_RUN_STATE_ROOT}/run.old4/owner"; touch -d '2 days ago' "${BOUNDED_RUN_STATE_ROOT}/run.old4"
+  sweep6() { # <bounded-run> -> "victim act-state act-tmp stderr-bytes"
+    local e
+    e="$("$1" -q -T 30 -n "hssw6$$-${RANDOM}" -- true 2>&1 >/dev/null)" || true
+    echo "$([[ -e ${TEST_TMP}/brstale-out/victim/precious.txt ]] && echo 1 || echo 0) $([[ -n ${actdir} && -e ${actdir} ]] && echo 1 || echo 0) $([[ -n ${acttmp} && -e ${acttmp}/inuse.txt ]] && echo 1 || echo 0) ${#e}"
+  }
+  read -r sv sa st se <<<"$(sweep6 "${BR}")"
+  assert_eq "1" "${sv}" "sweep: a TMPDIR recorded through a symlinked component pointing outside the tmp root is NOT removed (realpath)"
+  assert_eq "1 1" "${sa} ${st}" "sweep: a dead wrapper whose scope is still ACTIVE keeps its state dir and TMPDIR (${actdir:-none})"
+  assert_eq "0" "${se}" "sweep: a run that sweeps a dead owner's dir prints nothing on stderr with -q"
+
+  # --- round 6 (#1, CRITICAL): systemd 254+ systemd-run expanded ${VAR} and $$ in the command line CLIENT-side (unset =>
+  # empty, $$ => $): `bounded-run -- bash -c 'D=$HOME/x; echo rm -rf "${D}"/*'` printed `rm -rf /bin /boot ...`. The
+  # command must reach bash verbatim; a systemd-run without --expand-environment refuses a command containing '$'.
+  eout="$("${BR}" -q -T 30 -n "hsexp$$" -- bash -c 'X=hi; printf "[%s] " "$X" "${X}" "$$"' 2>&1)" || true
+  ere='^\[hi\] \[hi\] \[[0-9]+\] $'
+  assert_eq "yes" "$([[ ${eout} =~ ${ere} ]] && echo yes || echo no)" "expansion: the command line reaches bash verbatim (got '${eout}', want '[hi] [hi] [<pid>] ')"
+  real_srun="$(command -v systemd-run)"
+  mkdir -p "${TEST_TMP}/noexp"
+  printf '#!/usr/bin/env bash\nif [[ " $* " == *" --help "* ]]; then "%s" --help | grep -v -- --expand-environment; exit 0; fi\nexec "%s" "$@"\n' \
+    "${real_srun}" "${real_srun}" >"${TEST_TMP}/noexp/systemd-run"
+  chmod +x "${TEST_TMP}/noexp/systemd-run"
+  rc=0; nout="$(PATH="${TEST_TMP}/noexp:${PATH}" "${BR}" -q -T 30 -n "hsexp2$$" -- bash -c 'echo "$HOME"' 2>&1)" || rc=$?
+  assert_eq "125" "${rc}" "expansion: a systemd-run without --expand-environment refuses a command with '\$' (fail closed)"
+  assert_contains "${nout}" "expand-environment" "expansion: the refusal says why"
+  assert_rc 0 "expansion: without '\$' the command still runs on such a systemd-run" env PATH="${TEST_TMP}/noexp:${PATH}" "${BR}" -q -T 30 -n "hsexp3$$" -- true
 
   # --- review B3 (2026-10-14): the verdict files lived next to a mktemp file in ${XDG_RUNTIME_DIR:-/tmp}; with
   # XDG_RUNTIME_DIR unset another user could pre-create the predictable "<flag>.claim" in /tmp and steal the verdict.
@@ -918,6 +962,12 @@ M = {
     "sigint": rep(src, '-- env --default-signal=INT,QUIT bash -c', '-- bash -c'),
     "staleage": rep(src, '-mmin +1440', '-mmin -999999'),
     "staleowner": rep(src, '[[ "${_c}" == *bounded-run* ]] && continue', ':'),
+    "noexpand": rep(src, '  expand_args=(--expand-environment=no)  # MUTANT-ANCHOR:noexpand', '  expand_args=()'),
+    "expfailopen": rep(src, '      exit 125  # MUTANT-ANCHOR:expand-fail-closed', '      :'),
+    "stalerealpath": rep(src, '[[ -n "${_rt}" && -n "${_rroot}" && "${_rt}" == "${_rroot}/"* && -d "${_rt}" ]] && rm -rf -- "${_rt}"',
+                         '[[ -n "${_t}" && -d "${_t}" ]] && rm -rf -- "${_t}"'),
+    "staleunit": rep(src, 'active|activating|deactivating|reloading|refreshing) continue ;;', 'zz-never) continue ;;'),
+    "stalemarker": rep(src, '[[ -f "${_d}/owner" && ! -L "${_d}/owner" ]] || continue  # MUTANT-ANCHOR:stale-marker', ':'),
 }
 for k, v in M.items():
     os.makedirs(os.path.join(out, k), exist_ok=True)
@@ -932,13 +982,29 @@ PY
   export BOUNDED_RUN_STATE_ROOT="${TEST_TMP}/brstale" BOUNDED_RUN_TMP_ROOT="${TEST_TMP}/brstale-tmp"
   "${BR}" -q -T 30 -n "hslive2$$" -- sleep 8 >/dev/null 2>&1 &
   livepid=$!
-  livedir=""; for _ in $(seq 1 50); do livedir="$(ownerdir "${livepid}")"; [[ -n "${livedir}" ]] && break; sleep 0.1; done
+  livedir=""; for _ in $(seq 1 50); do livedir="$(ownerdir "${livepid}")"; [[ -n "${livedir}" && -s "${livedir}/started" ]] && break; sleep 0.1; done
+  [[ -n "${livedir}" ]] && rm -f -- "${livedir}/unit"   # isolate the owner check from the active-scope check
   touch -d '2 days ago' ${livedir:+"${livedir}"}
   read -r _ _ _ _ lv <<<"$(staleprobe "${TEST_TMP}/mut/staleowner/bounded-run")"
   assert_eq "0" "${lv}" "mutation [stale cleanup ignores a live owner]: the proof catches it (a live run's dir was removed)"
   wait "${livepid}" 2>/dev/null || true
   read -r _ _ _ n1 _ <<<"$(staleprobe "${TEST_TMP}/mut/staleage/bounded-run")"
   assert_eq "0" "${n1}" "mutation [stale cleanup ignores the age]: the proof catches it (a recent dir was removed)"
+  eout="$("${TEST_TMP}/mut/noexpand/bounded-run" -q -T 30 -n "hsmexp$$" -- bash -c 'X=hi; printf "[%s] " "$X" "${X}" "$$"' 2>/dev/null)" || true
+  assert_eq "yes" "$([[ ${eout} =~ ${ere} ]] && echo no || echo yes)" "mutation [--expand-environment=no dropped]: the verbatim proof catches it (got '${eout}')"
+  rc=0; PATH="${TEST_TMP}/noexp:${PATH}" "${TEST_TMP}/mut/expfailopen/bounded-run" -q -T 30 -n "hsmexp2$$" -- bash -c 'echo "$HOME"' >/dev/null 2>&1 || rc=$?
+  assert_eq "yes" "$([[ ${rc} -ne 125 ]] && echo yes || echo no)" "mutation [fail-open without the option]: the fail-closed proof catches it (rc ${rc})"
+  echo keep >"${TEST_TMP}/brstale-out/victim/precious.txt" 2>/dev/null || true
+  mkdir -p "${BOUNDED_RUN_STATE_ROOT}/run.sym2"; echo "${deadpid}" >"${BOUNDED_RUN_STATE_ROOT}/run.sym2/owner"
+  echo "${BOUNDED_RUN_TMP_ROOT}/lnk/victim" >"${BOUNDED_RUN_STATE_ROOT}/run.sym2/tmp"; touch -d '2 days ago' "${BOUNDED_RUN_STATE_ROOT}/run.sym2"
+  read -r sv _ _ _ <<<"$(sweep6 "${TEST_TMP}/mut/stalerealpath/bounded-run")"
+  assert_eq "0" "${sv}" "mutation [lexical-only TMPDIR containment]: the symlink proof catches it (outside victim removed)"
+  read -r _ sa _ _ <<<"$(sweep6 "${TEST_TMP}/mut/staleunit/bounded-run")"
+  assert_eq "0" "${sa}" "mutation [active scope ignored]: the live-scope proof catches it (state of an active scope removed)"
+  mkdir -p "${BOUNDED_RUN_STATE_ROOT}/run.nomark"; touch -d '2 days ago' "${BOUNDED_RUN_STATE_ROOT}/run.nomark"
+  "${TEST_TMP}/mut/stalemarker/bounded-run" -q -T 30 -n "hsmmk$$" -- true >/dev/null 2>&1 || true
+  assert_eq "no" "$([[ -e ${BOUNDED_RUN_STATE_ROOT}/run.nomark ]] && echo yes || echo no)" "mutation [owner marker not required]: the marker proof catches it (an unmarked dir removed)"
+  systemctl --user stop "bounded-run-hsact$$.scope" 2>/dev/null || true
   unset BOUNDED_RUN_STATE_ROOT BOUNDED_RUN_TMP_ROOT
   export BOUNDED_RUN_STATE_ROOT="${TEST_TMP}/brstate-m"
   for i in 1 2; do "${TEST_TMP}/mut/leak/bounded-run" -q -T 30 -n "hsml$$-${i}" -- true >/dev/null 2>&1 || true; done

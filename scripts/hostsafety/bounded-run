@@ -13,9 +13,15 @@
 #          systemd-run failing to start the scope exits 125.
 #          Ctrl-C works: the command starts with SIGINT/SIGQUIT at their DEFAULT action (systemd-run runs as a background
 #          job of this script, which would otherwise hand it both signals ignored), and INT/QUIT/TERM sent to bounded-run
-#          are forwarded to the scope; a run ended by SIGINT exits 130.
+#          are forwarded to the scope; a run ended by SIGINT exits 130. LIMIT (waived, review round 5 #7): a bounded-run
+#          that is ITSELF started as a background job of a script inherits SIGINT/SIGQUIT ignored and cannot trap them,
+#          so INT/QUIT sent to its pid alone do nothing (SIGTERM still works); Ctrl-C at a terminal reaches the command.
+#          The command line is passed VERBATIM: systemd 254+ systemd-run would expand ${VAR} and $$ in it client-side
+#          (unset => empty), so --expand-environment=no is passed; a systemd-run without that option makes a command that
+#          contains '$' fail closed (exit 125: put it in a script file) rather than run expanded.
 #          A run killed by SIGKILL cannot clean up: the next run removes its leftover state dir (and the disk TMPDIR it
-#          recorded) once it is older than one day and its owner is no live bounded-run.
+#          recorded) once it is older than one day, carries this tool's owner marker, its owner is no live bounded-run and
+#          its scope is not active; the TMPDIR is removed only when its REAL path is inside the real tmp root.
 #   --agent  profile for agent / test probes: TasksMax=200, MemoryMax=1G, timeout 300 s (scripts/hostsafety/agent-run = bounded-run --agent).
 #            The scope is never ManagedOOMPreference=avoid (oomd may pick a runaway probe before containers or the desktop);
 #            on timeout ONLY this run's own scope is killed and stopped.
@@ -95,7 +101,7 @@ while getopts ':m:t:c:s:T:n:qh' o; do
   case "${o}" in
     m) mem="${OPTARG}" ;; t) tasks="${OPTARG}" ;; c) cpu="${OPTARG}" ;;
     s) swap="${OPTARG}" ;; T) timeout_s="${OPTARG}" ;; n) name="${OPTARG}" ;; q) quiet=1 ;;
-    h) sed -n '2,43p' "${BASH_SOURCE[0]}"; exit 0 ;;
+    h) sed -n '2,49p' "${BASH_SOURCE[0]}"; exit 0 ;;
     *) echo "bounded-run: bad option -${OPTARG:-?}" >&2; exit 125 ;;
   esac
 done
@@ -130,6 +136,20 @@ if [[ -n "${_ls}" && "${_ls}" != not-found ]]; then
   exit 125
 fi
 
+# systemd 254+ expands ${VAR} and $$ in the command line itself (unset => empty: `D=$HOME/x; rm -rf "${D}"/*` became
+# `rm -rf /*`). Pass the command verbatim; without the option, refuse a command that contains '$' instead of running it.
+expand_args=()
+if [[ "$(systemd-run --help 2>/dev/null)" == *--expand-environment* ]]; then
+  expand_args=(--expand-environment=no)  # MUTANT-ANCHOR:noexpand
+else
+  for _a in "$@"; do
+    if [[ "${_a}" == *'$'* ]]; then
+      echo "bounded-run: this systemd-run has no --expand-environment=no, so it could expand \${VAR} and \$\$ in the command line (unset => empty); refusing a command that contains '\$' - put it in a script file" >&2
+      exit 125  # MUTANT-ANCHOR:expand-fail-closed
+    fi
+  done
+fi
+
 run_tmp=""
 tmp_root="${BOUNDED_RUN_TMP_ROOT:-${XDG_CACHE_HOME:-${HOME}/.cache}/bounded-run/tmp}"
 if (( disk_tmp )); then
@@ -157,18 +177,26 @@ mkdir -p "${state_root}" 2>/dev/null && chmod 0700 "${state_root}" 2>/dev/null \
   && state="$(mktemp -d "${state_root}/run.XXXXXX" 2>/dev/null)" && [[ -n "${state}" ]] \
   || { echo "bounded-run: cannot create a private state dir under ${state_root}" >&2; exit 125; }
 echo "$$" >"${state}/owner"                                  # who owns this dir (the stale sweep below never takes a live one)
+echo "${unit}" >"${state}/unit"                              # its scope: never swept while that scope is still active
 [[ -n "${run_tmp}" ]] && printf '%s\n' "${run_tmp}" >"${state}/tmp"   # the disk TMPDIR to remove if this run is SIGKILLed
 # A run killed by SIGKILL never runs its EXIT trap: its state dir (and the TMPDIR it recorded) would stay forever. Remove
-# leftovers older than one day whose owner is not a live bounded-run; a recent dir, a live run's dir and anything outside
-# the state / tmp roots are never touched.
+# leftovers older than one day that carry this tool's owner marker, whose owner is not a live bounded-run and whose scope
+# is not active; the recorded TMPDIR only when its REAL path lies inside the REAL tmp root (no symlinked component).
+_rroot="$(realpath -e -- "${tmp_root}" 2>/dev/null)"
 for _d in "${state_root}"/run.*; do
   [[ -d "${_d}" && ! -L "${_d}" && "${_d}" != "${state}" ]] || continue
+  [[ -f "${_d}/owner" && ! -L "${_d}/owner" ]] || continue  # MUTANT-ANCHOR:stale-marker
   [[ -n "$(find "${_d}" -maxdepth 0 -mmin +1440 2>/dev/null)" ]] || continue
   _o="$(cat "${_d}/owner" 2>/dev/null)"; _c=""
-  [[ "${_o}" =~ ^[0-9]+$ ]] && _c="$(tr '\0' ' ' <"/proc/${_o}/cmdline" 2>/dev/null)"
+  [[ "${_o}" =~ ^[0-9]+$ ]] && _c="$(tr '\0' ' ' 2>/dev/null <"/proc/${_o}/cmdline")"
   [[ "${_c}" == *bounded-run* ]] && continue
-  _t="$(cat "${_d}/tmp" 2>/dev/null)"
-  [[ -n "${_t}" && "${_t}" == "${tmp_root}/"* && "${_t}" != *"/.."* && -d "${_t}" && ! -L "${_t}" ]] && rm -rf -- "${_t}"
+  _u="$(cat "${_d}/unit" 2>/dev/null)"
+  if [[ "${_u}" =~ ^bounded-run-[A-Za-z0-9_.-]+\.scope$ ]]; then
+    case "$(systemctl --user is-active "${_u}" 2>/dev/null)" in active|activating|deactivating|reloading|refreshing) continue ;; esac  # MUTANT-ANCHOR:stale-unit
+  fi
+  _t="$(cat "${_d}/tmp" 2>/dev/null)"; _rt=""
+  [[ -n "${_t}" ]] && _rt="$(realpath -e -- "${_t}" 2>/dev/null)"
+  [[ -n "${_rt}" && -n "${_rroot}" && "${_rt}" == "${_rroot}/"* && -d "${_rt}" ]] && rm -rf -- "${_rt}"  # MUTANT-ANCHOR:stale-realpath
   rm -rf -- "${_d}"
 done
 started="${state}/started"   # written by the wrapper INSIDE the scope we created: proof that the scope is ours
@@ -184,7 +212,7 @@ trap cleanup EXIT
 # second line of defence, independent of this wrapper and its watchdog (both plain processes): the SCOPE itself ends at timeout+10 s
 rms_args=()
 (( timeout_s > 0 )) && rms_args=(-p RuntimeMaxSec="$((timeout_s + 10))" -p TimeoutStopSec=5)
-systemd-run --user --scope --quiet --collect --unit="${unit}" \
+systemd-run --user --scope --quiet --collect "${expand_args[@]}" --unit="${unit}" \
   -p MemoryMax="${mem_bytes}" -p MemoryHigh="${high}" -p MemorySwapMax="${swap}" \
   -p TasksMax="${tasks}" -p CPUQuota="${cpu}%" -p OOMPolicy=kill "${rms_args[@]}" \
   -- env --default-signal=INT,QUIT bash -c 'echo "$$" >"$1"; shift; exec "$@"' bounded-run-wrap "${started}" "$@" &
