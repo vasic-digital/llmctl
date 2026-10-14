@@ -43,7 +43,7 @@ overwrites to `~/.local/share/hostsafety-backup/<timestamp>/`):
 
    | Slice | Holds | MemoryHigh | MemoryMax | MemorySwapMax | TasksMax |
    |---|---|---|---|---|---|
-   | `app.slice` | agent/test fleet (`tmx-*.scope`, `app-*.scope`, user services such as `helixcode-server`) | 70% | 80% | 1 GiB | clamp(CPU*1024, 4096, 32768) |
+   | `app.slice` | agent/test fleet (`tmx-*.scope`, `app-*.scope`, user services such as `helixcode-server`) | 70% | 80% | SwapTotal x `HOSTSAFETY_APP_SWAP_PCT`/100 (default 50%: 4 GiB of 8 GiB; was 1 GiB until 2026-10-14) | clamp(CPU*1024, 4096, 32768) |
    | `background.slice` | low-priority jobs | 40% | 50% | 512 MiB | clamp(CPU*256, 1024, 8192) |
    | `user.slice` (in the user manager) | rootless podman `libpod-*.scope` / conmon | 60% | 75% | 2 GiB | clamp(CPU*512, 2048, 16384) |
 
@@ -58,7 +58,11 @@ overwrites to `~/.local/share/hostsafety-backup/<timestamp>/`):
    `user-1000.slice` and **drops `MemoryMax`**; the live file keeps the old `MemoryMax=95%` until the operator
    re-runs `sudo bash scripts/hostsafety/root-steps.sh --apply` (the installer cannot touch `/etc`). Hard limits
    belong on `app`/`background`/`user` slices and on `bounded-run` scopes, where a kill stays inside the fleet.
-   Swap caps never exceed 1/4 of the swap device. `MemoryHigh` makes the kernel throttle/reclaim a slice
+   The `background` and `user` swap caps never exceed 1/4 of the swap device. The `app.slice` cap is half of it by default
+   (`HOSTSAFETY_APP_SWAP_PCT`, integer 1..100; an invalid value makes the installer refuse before it writes anything): tmpfs
+   shmem and anonymous memory of the agent fleet can only leave RAM through swap, and on 2026-10-14 the old 1 GiB cap kept 8.1 G
+   of `/tmp` shmem resident under `MemoryHigh` while swap stayed 75% free (see *2026-10-14 hang*). `install.sh verify` re-derives
+   the expected sizes from the environment, so export the same `HOSTSAFETY_APP_SWAP_PCT` when verifying a non-default install. `MemoryHigh` makes the kernel throttle/reclaim a slice
    before it can starve the host; `MemoryMax` is the hard ceiling (a cgroup OOM inside that slice only).
 2. **`bounded-run`** (`~/.local/bin/bounded-run`) - run any command in a transient scope
    (`bounded-run [-m MEM] [-t TASKS] [-c CPU%] [-s SWAP] [-T SECONDS] [-n NAME] [--tiny] [--no-disk-tmp] -- CMD...`).
@@ -428,7 +432,9 @@ reclaim storm (`pgscand` 356k/s, sys CPU 1108%), memory PSI `full` 53-92% for mo
 1. **Arm the guard** (`HOSTSAFETY_GUARD_ARM=1` in `~/.config/hostsafety/guard.env`). It would not have prevented this hang (it cannot
    free tmpfs); see the review of all past decisions in the commit that adds it.
 2. **Shrink `/tmp`** from 16 GB to about 4 GB (root): `scripts/hostsafety/root-steps.sh` (tmp.mount drop-in).
-3. **`app.slice` `MemorySwapMax` 1 G** vs. shmem/anon swappability: the installer's swap cap formula.
+3. **`app.slice` `MemorySwapMax`**: raised from 1 G to SwapTotal/2 (4 GiB here) by the installer's formula (user-level, applied on
+   `anton` on 2026-10-14; see *What is installed*). Whether 4 GiB is enough for a repeat of 8 GB of shmem is UNCONFIRMED: swapping
+   shmem out costs IO, and a 4 GB `/tmp` (decision 2) is the bound that actually limits it.
 4. **earlyoom thresholds** (`-m`/`-s`): earlyoom 1.9.0 has no PSI trigger at all; see *earlyoom, exactly*.
 5. **`systemd-oomd` `ManagedOOMMemoryPressureLimit`** (vendor 50% / 20 s on `user@.service`): unchanged; changing it is `/etc` (root).
 

@@ -29,16 +29,36 @@ assert_rc 0 "assert_skip with the (reason, name) pair works under set -u" bash -
 printf 'MemTotal:       16777216 kB\nSwapTotal:       8388608 kB\n' >"${TEST_TMP}/meminfo16"
 lim() { HOSTSAFETY_MEMINFO="${TEST_TMP}/meminfo16" HOSTSAFETY_NPROC="$2" bash -c "source '${HS}/lib.sh'; hs_limits $1"; }
 a16="$(lim app 8 | paste -sd' ')"
-assert_eq "MemoryHigh=12025908428 MemoryMax=13743895347 MemorySwapMax=1073741824 TasksMax=8192" "${a16}" "app limits for 16 GiB / 8 CPUs (High 70%, Max 80%)"
+# app.slice swap cap = SwapTotal * HOSTSAFETY_APP_SWAP_PCT / 100 (default 50): shmem and anon must be swappable under MemoryHigh
+# (2026-10-14: a 1 GiB cap kept 8.1 G of tmpfs shmem in RAM while swap stayed 75% free)
+assert_eq "MemoryHigh=12025908428 MemoryMax=13743895347 MemorySwapMax=4294967296 TasksMax=8192" "${a16}" "app limits for 16 GiB / 8 CPUs (High 70%, Max 80%, swap cap SwapTotal/2)"
 assert_eq "TasksMax=4096" "$(lim app 1 | grep Tasks)" "TasksMax floor"
 assert_eq "TasksMax=32768" "$(lim app 128 | grep Tasks)" "TasksMax ceiling"
 assert_eq "MemorySwapMax=536870912" "$(lim background 8 | grep Swap)" "background swap cap"
 printf 'MemTotal:       16777216 kB\nSwapTotal:       1048576 kB\n' >"${TEST_TMP}/meminfo_smallswap"
 assert_eq "MemorySwapMax=268435456" \
-  "$(HOSTSAFETY_MEMINFO="${TEST_TMP}/meminfo_smallswap" bash -c "source '${HS}/lib.sh'; hs_limits app" | grep Swap)" "swap cap never exceeds 1/4 of the swap device"
+  "$(HOSTSAFETY_MEMINFO="${TEST_TMP}/meminfo_smallswap" bash -c "source '${HS}/lib.sh'; hs_limits background" | grep Swap)" "background/user swap cap never exceeds 1/4 of the swap device"
+assert_eq "MemorySwapMax=536870912" \
+  "$(HOSTSAFETY_MEMINFO="${TEST_TMP}/meminfo_smallswap" bash -c "source '${HS}/lib.sh'; hs_limits app" | grep Swap)" "app swap cap is half of a small swap device too (no fixed 1 GiB cap)"
+assert_eq "MemorySwapMax=2147483648" "$(HOSTSAFETY_APP_SWAP_PCT=25 lim app 8 | grep Swap)" "HOSTSAFETY_APP_SWAP_PCT=25 sizes the app swap cap at a quarter of swap"
+for bad in 0 101 abc -5 ""; do
+  if [[ -z "${bad}" ]]; then continue; fi
+  assert_rc 1 "HOSTSAFETY_APP_SWAP_PCT=${bad} is refused (1..100)" env HOSTSAFETY_APP_SWAP_PCT="${bad}" HOSTSAFETY_MEMINFO="${TEST_TMP}/meminfo16" bash -c "source '${HS}/lib.sh'; hs_limits app"
+done
+printf 'MemTotal:       16777216 kB\nSwapTotal:       0 kB\n' >"${TEST_TMP}/meminfo_noswap"
+assert_eq "MemorySwapMax=0" "$(HOSTSAFETY_MEMINFO="${TEST_TMP}/meminfo_noswap" bash -c "source '${HS}/lib.sh'; hs_limits app" | grep Swap)" "no swap device: app swap cap 0"
+# mutation proof for the formula: the old cap (min(1 GiB, SwapTotal/4)) in a scratch copy of lib.sh must break the expected value
+mlib="${TEST_TMP}/mut_lib.sh"
+sed 's|^  \[\[ "${slice}" == app \]\] \&\& swap_cap=.*$|  :|' "${HS}/lib.sh" >"${mlib}"
+assert_eq "yes" "$(cmp -s "${mlib}" "${HS}/lib.sh" && echo no || echo yes)" "mutation [m22 app swap cap reverted to the 1/4 rule]: the mutation is real"
+assert_eq "yes" "$([[ "$(HOSTSAFETY_MEMINFO="${TEST_TMP}/meminfo16" HOSTSAFETY_NPROC=8 bash -c "source '${mlib}'; hs_limits app" | grep Swap)" != "MemorySwapMax=4294967296" ]] && echo yes || echo no)" "mutation [m22 app swap cap reverted to the 1/4 rule] is CAUGHT by the app sizing assertion"
 assert_rc 1 "unknown slice (session) refused" bash -c "source '${HS}/lib.sh'; hs_limits session"
 
 # --- 2. installer: dry-run / idempotent / backup / uninstall -------------------------------
+assert_rc 1 "install refuses a bad HOSTSAFETY_APP_SWAP_PCT before writing anything" env HOSTSAFETY_APP_SWAP_PCT=abc HOSTSAFETY_CONFIG_HOME="${TEST_TMP}/cbad" \
+  HOSTSAFETY_DATA_HOME="${TEST_TMP}/dbad" HOSTSAFETY_BIN_DIR="${TEST_TMP}/bbad" HOSTSAFETY_BACKUP_DIR="${TEST_TMP}/bkbad" HOSTSAFETY_NO_TRACKER=1 \
+  HOSTSAFETY_MEMINFO="${TEST_TMP}/meminfo16" HOSTSAFETY_NPROC=8 "${HS}/install.sh"
+assert_eq "0" "$(find "${TEST_TMP}/cbad" "${TEST_TMP}/dbad" "${TEST_TMP}/bbad" -type f 2>/dev/null | wc -l)" "refused install wrote no file (no header-only drop-in)"
 inst_env() { HOSTSAFETY_CONFIG_HOME="${TEST_TMP}/c" HOSTSAFETY_DATA_HOME="${TEST_TMP}/d" HOSTSAFETY_BIN_DIR="${TEST_TMP}/b" \
   HOSTSAFETY_BACKUP_DIR="${TEST_TMP}/bk" HOSTSAFETY_NO_TRACKER=1 HOSTSAFETY_MEMINFO="${INST_MEMINFO:-${TEST_TMP}/meminfo16}" HOSTSAFETY_NPROC=8 "$@"; }
 out="$(inst_env "${HS}/install.sh" --dry-run)"
@@ -591,9 +611,10 @@ cat >"${vf}/cfg/systemd/user/app.slice.d/10-hostsafety.conf" <<'D'
 [Slice]
 MemoryHigh=22735109734
 MemoryMax=25982982553
-MemorySwapMax=1073741824
+MemorySwapMax=4294967296
 TasksMax=16384
 D
+# (app MemorySwapMax: SwapTotal/2 since 2026-10-14; the 2026-10-13 capture carried the old 1 GiB cap - see the stale check below)
 cat >"${vf}/cfg/systemd/user/background.slice.d/10-hostsafety.conf" <<'D'
 [Slice]
 MemoryHigh=12991491276
@@ -626,6 +647,11 @@ vrun() { ( unset HOSTSAFETY_NO_SYSTEMCTL; PATH="${vf}/shim:${PATH}" VF_CFG="${vf
 vout="$(vrun "${vf}/meminfo_now"; echo "rc=$?")" || true
 assert_contains "${vout}" "rc=0" "verify passes when effective == installed and MemTotal drifted by 8 kB since install"
 assert_contains "${vout}" "verified   user.slice MemoryMax=24359046144" "verify reports the installed value as verified"
+sed -i 's/^MemorySwapMax=4294967296$/MemorySwapMax=1073741824/' "${vf}/cfg/systemd/user/app.slice.d/10-hostsafety.conf"
+vout="$(vrun "${vf}/meminfo_now"; echo "rc=$?")" || true
+assert_contains "${vout}" "rc=1" "NEGATIVE: an install still carrying the pre-2026-10-14 1 GiB app swap cap is reported (verify fails)"
+assert_contains "${vout}" "app.slice MemorySwapMax: installed 1073741824 is stale" "NEGATIVE: the old app swap cap is named stale, not silently accepted"
+sed -i 's/^MemorySwapMax=1073741824$/MemorySwapMax=4294967296/' "${vf}/cfg/systemd/user/app.slice.d/10-hostsafety.conf"
 vout="$(vrun "${vf}/meminfo_now" "user.slice:MemoryMax:24000000000"; echo "rc=$?")" || true
 assert_contains "${vout}" "rc=1" "NEGATIVE: verify still fails when the effective limit differs from the installed one"
 assert_contains "${vout}" "MISMATCH   user.slice MemoryMax" "NEGATIVE: the mismatch names the slice and key"

@@ -41,7 +41,7 @@ hs_min() { if (( $1 < $2 )); then echo "$1"; else echo "$2"; fi; }
 #   user       : the user-manager's nested user.slice (rootless podman: conmon, libpod scopes)
 # session.slice is deliberately NEVER limited (gnome-shell must stay safe).
 hs_limits() {
-  local slice="$1" mem swap cpus high_pct max_pct swap_cap tasks_per_cpu tmin tmax
+  local slice="$1" mem swap cpus high_pct max_pct swap_cap tasks_per_cpu tmin tmax pct
   mem="$(hs_memtotal_bytes)" || return 1
   swap="$(hs_swaptotal_bytes)"
   cpus="$(hs_nproc)"
@@ -51,7 +51,17 @@ hs_limits() {
     user)       high_pct=60; max_pct=75; swap_cap=$((2048 * 1024 * 1024)); tasks_per_cpu=512;  tmin=2048; tmax=16384 ;;
     *) echo "hostsafety: unknown slice '${slice}'" >&2; return 1 ;;
   esac
-  swap_cap="$(hs_min "${swap_cap}" $((swap / 4)))"   # never more than 1/4 of the swap device
+  swap_cap="$(hs_min "${swap_cap}" $((swap / 4)))"   # background/user: never more than 1/4 of the swap device
+  # app.slice: HOSTSAFETY_APP_SWAP_PCT of the swap device (default 50). tmpfs shmem and anon in the agent fleet can only leave RAM
+  # through swap; on 2026-10-14 a 1 GiB cap kept 8.1 G of /tmp shmem resident under MemoryHigh while swap stayed 75% free
+  # (docs/host-safety.md, "2026-10-14 hang").
+  if [[ "${slice}" == app ]]; then
+    pct="${HOSTSAFETY_APP_SWAP_PCT:-50}"
+    if ! [[ "${pct}" =~ ^[0-9]+$ ]] || (( pct < 1 || pct > 100 )); then
+      echo "hostsafety: HOSTSAFETY_APP_SWAP_PCT='${pct}' must be an integer 1..100" >&2; return 1
+    fi
+  fi
+  [[ "${slice}" == app ]] && swap_cap=$((swap * pct / 100))
   echo "MemoryHigh=$((mem * high_pct / 100))"
   echo "MemoryMax=$((mem * max_pct / 100))"
   echo "MemorySwapMax=${swap_cap}"

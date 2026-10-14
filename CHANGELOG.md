@@ -25,6 +25,11 @@ repository as an honest record of that process.
 
 ## Unreleased
 
+* **fix(hostsafety): app.slice swap cap is SwapTotal/2 (was min(1 GiB, SwapTotal/4)).** `HOSTSAFETY_APP_SWAP_PCT` (integer
+  1..100, default 50); background/user keep the 1/4 rule. Rationale: tmpfs shmem and anon of the agent fleet only leave RAM through
+  swap; on 2026-10-14 a 1 GiB cap kept 8.1 G of `/tmp` shmem resident while swap stayed 75% free. The installer now sizes every slice
+  before writing anything (a bad value used to be able to leave a header-only drop-in). Installed on `anton`: `app.slice`
+  `MemorySwapMax` 1073741824 -> 4294965248. Re-run `scripts/hostsafety/install.sh` on other hosts (`verify` reports the old cap as stale).
 * **feat(hostsafety): pressure advisory and 2026-10-14 hang analysis.** Every guard pass writes `pressure.json`
   (`schema hostsafety.pressure/1`: PSI, `/tmp` fullness, `app.slice` current/pinned ratio vs `MemoryHigh`, level
   `ok|warn|critical`, env-tunable thresholds) atomically and before any slow step, for agent admission control; the app.slice level

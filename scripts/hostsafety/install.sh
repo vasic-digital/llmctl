@@ -138,6 +138,10 @@ ENV
 do_install() {
   hs_log "host: MemTotal=$(hs_memtotal_bytes) bytes, $(hs_nproc) CPUs  (dry-run=${dry})"
   local s
+  # size every slice BEFORE writing anything: a failing hs_limits inside the drop-in pipe would leave a header-only drop-in
+  for s in "${SLICES[@]}"; do
+    hs_limits "${s}" >/dev/null || { hs_log "refusing to install: cannot size ${s}.slice (see the message above); nothing written"; return 1; }
+  done
   for s in "${SLICES[@]}"; do
     local unit="${s}.slice"
     put_file "${UNIT_DIR}/${unit}.d/10-hostsafety.conf" 644 < <(hs_slice_dropin "${s}")
