@@ -143,8 +143,13 @@ fi
 (( quiet )) || echo "bounded-run: ${unit} MemoryMax=${mem} MemoryHigh=${high} TasksMax=${tasks} CPUQuota=${cpu}% SwapMax=${swap}${run_tmp:+ TMPDIR=${run_tmp}} timeout=${timeout_s}s" >&2
 flag="$(mktemp "${XDG_RUNTIME_DIR:-/tmp}/bounded-run.XXXXXX")" || exit 125
 started="${flag}.started"   # written by the wrapper INSIDE the scope we created: proof that the scope is ours
+# The run's verdict (completed vs timed out) is decided ONCE, atomically: whoever mkdir()s ${claim} first owns it.  The
+# watchdog may write "timeout" / signal the scope only after winning the claim; the wrapper claims "completed" as soon as
+# the command has exited, BEFORE it stops the watchdog.  So stopping the watchdog (pkill/kill, in any order, with any
+# scheduling delay) can never turn a finished command into a 124 (measured: 2/200 spurious 124s before, 2026-10-14).
+claim="${flag}.claim"
 # shellcheck disable=SC2329  # invoked via trap
-cleanup() { rm -f "${flag}" "${started}"; [[ -n "${run_tmp}" && -d "${run_tmp}" ]] && rm -rf -- "${run_tmp}"; return 0; }
+cleanup() { rm -f "${flag}" "${started}"; rmdir "${claim}" 2>/dev/null; [[ -n "${run_tmp}" && -d "${run_tmp}" ]] && rm -rf -- "${run_tmp}"; return 0; }
 trap cleanup EXIT
 
 # second line of defence, independent of this wrapper and its watchdog (both plain processes): the SCOPE itself ends at timeout+10 s
@@ -160,8 +165,9 @@ watchdog=""
 if (( timeout_s > 0 )); then
   (
     # watchdog fds are detached from any $(...) capture (shell-instrument footgun I7)
-    sleep "${timeout_s}"
+    sleep "${timeout_s}" || exit 0       # sleep killed = the wrapper is stopping us: never fall through to "timeout"
     [[ -s "${started}" ]] || exit 0      # our scope never started (e.g. lost a name race): nothing of ours to kill
+    mkdir "${claim}" 2>/dev/null || exit 0   # the wrapper already claimed "completed": the command finished first
     echo timeout >"${flag}"
     systemctl --user kill --kill-whom=all --signal=SIGTERM "${unit}" 2>/dev/null
     sleep 3
@@ -178,22 +184,27 @@ trap 'forward SIGTERM' TERM
 trap 'forward SIGINT' INT
 
 wait "${runner}"; rc=$?
-while [[ ${rc} -ge 128 && -z "$(cat "${flag}" 2>/dev/null)" ]] && kill -0 "${runner}" 2>/dev/null; do wait "${runner}"; rc=$?; done
-# the scope never started (systemd-run failed: no user manager, bad property, ...): the command did not run - 125, not systemd-run's status
-if [[ ! -s "${started}" && ${rc} -ne 0 && "$(cat "${flag}" 2>/dev/null)" != timeout ]]; then
-  echo "bounded-run: systemd-run could not start ${unit} (status ${rc}); the command did not run" >&2
-  [[ -n "${watchdog}" ]] && { kill "${watchdog}" 2>/dev/null; wait "${watchdog}" 2>/dev/null; }
-  exit 125
-fi
-# the scope is the unit of containment: anything the command left behind dies with the run (only if it is OURS)
-if [[ -s "${started}" ]]; then systemctl --user kill --kill-whom=all --signal=SIGKILL "${unit}" >/dev/null 2>&1; fi
+while [[ ${rc} -ge 128 && ! -d "${claim}" ]] && kill -0 "${runner}" 2>/dev/null; do wait "${runner}"; rc=$?; done
+# decide the verdict FIRST (atomic claim), only then stop the watchdog: no stop ordering can flip it afterwards
+we_claimed=0
+mkdir "${claim}" 2>/dev/null && we_claimed=1
 if [[ -n "${watchdog}" ]]; then
-  # stop the sleeping watchdog subshell and its sleep child without signalling a group
+  # stop the sleeping watchdog subshell and its sleep child without signalling a group.  The watchdog is an un-reaped
+  # child until the wait below, so its pid cannot have been reused; pkill -P first so its sleep is not orphaned.
   pkill -P "${watchdog}" 2>/dev/null
   kill "${watchdog}" 2>/dev/null
   wait "${watchdog}" 2>/dev/null
 fi
-if [[ "$(cat "${flag}" 2>/dev/null)" == "timeout" ]]; then
+timed_out=0
+(( ! we_claimed )) && [[ -d "${claim}" ]] && timed_out=1   # the watchdog won the claim: a real deadline expiry
+# the scope never started (systemd-run failed: no user manager, bad property, ...): the command did not run - 125, not systemd-run's status
+if [[ ! -s "${started}" && ${rc} -ne 0 ]] && (( ! timed_out )); then
+  echo "bounded-run: systemd-run could not start ${unit} (status ${rc}); the command did not run" >&2
+  exit 125
+fi
+# the scope is the unit of containment: anything the command left behind dies with the run (only if it is OURS)
+if [[ -s "${started}" ]]; then systemctl --user kill --kill-whom=all --signal=SIGKILL "${unit}" >/dev/null 2>&1; fi
+if (( timed_out )); then
   (( quiet )) || echo "bounded-run: TIMEOUT after ${timeout_s}s - scope ${unit} terminated" >&2
   exit 124
 fi

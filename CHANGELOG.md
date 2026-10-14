@@ -25,6 +25,12 @@ repository as an honest record of that process.
 
 ## Unreleased
 
+* **fix(hostsafety): bounded-run no longer reports a finished command as a timeout (spurious rc 124).** Cleanup ran
+  `pkill -P <watchdog>` before `kill <watchdog>`, so the watchdog could write `timeout` after its `sleep` was killed. Measured
+  before: 2/200 quick runs under 4-way concurrency (reviewer: ~3/60), 20/20 with a 0.3 s delaying `pkill` shim; after: 0/200 and
+  0/20. The verdict is now an atomic `mkdir` claim taken by the wrapper before it stops the watchdog; the watchdog times out only
+  after winning that claim, and exits if its `sleep` is killed. Real timeouts still return 124 and kill only their own scope.
+  Regression proof plus a stop-then-decide mutation in `tests/test_hostsafety.sh`; details in `docs/host-safety.md`.
 * **feat(hostsafety): persistence check, boot self-check, pressure time series.** `install.sh verify-persistence`
   (`persistence-check.sh`) prints, per setting, the persistent definition, the boot-effective value, the live value and the
   enabled state with PASS/FAIL/UNDETERMINED (rc 0/1/2): slice limits, guard timer, self-check unit, linger, `guard.env`, installed

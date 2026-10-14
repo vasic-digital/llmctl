@@ -748,6 +748,56 @@ PY
   sleep 1
   assert_eq "0" "$(count_procs "^hsmarkb-${mark} 300")" "timed-out command tree is gone"
 
+  # --- spurious-124 race (2026-10-14): a command that SUCCEEDED was reported as a timeout (rc 124) in 2 of 200 runs at zero
+  # memory pressure.  Cause: cleanup ran `pkill -P <watchdog>` (killing its sleep) BEFORE `kill <watchdog>`, so the watchdog
+  # fell through to `echo timeout >flag` in between.  Fix: an atomic mkdir claim decides the verdict before the watchdog is
+  # stopped.  The window is microseconds, so a pkill shim that delays 0.3 s after the real pkill widens it deterministically
+  # (what scheduler latency does under load); the unfixed code then reports 124 on every run (20/20 measured).
+  real_pkill="$(command -v pkill)"
+  mkdir -p "${TEST_TMP}/pkshim"
+  printf '#!/usr/bin/env bash\n"%s" "$@"; rc=$?; sleep 0.3; exit $rc\n' "${real_pkill}" >"${TEST_TMP}/pkshim/pkill"
+  chmod +x "${TEST_TMP}/pkshim/pkill"
+  quick124() { # <bounded-run> <N> <tag> [shim] -> number of rc-124 results for N quick successful commands
+    local br="$1" n="$2" tag="$3" path="${PATH}" c=0 i r
+    [[ "${4:-}" == shim ]] && path="${TEST_TMP}/pkshim:${PATH}"
+    for i in $(seq 1 "${n}"); do
+      r=0; PATH="${path}" "${br}" -q -T 30 -n "${tag}$$-${i}" -- true >/dev/null 2>&1 || r=$?
+      [[ ${r} -eq 124 ]] && c=$((c + 1))
+    done
+    echo "${c}"
+  }
+  assert_eq "0" "$(quick124 "${BR}" 40 hsq)" "40 quick successful commands under -T 30: ZERO spurious rc 124"
+  assert_eq "0" "$(quick124 "${BR}" 20 hsqs shim)" "20 quick commands with a delayed pkill (widened race window): ZERO spurious rc 124"
+  # a REAL timeout still yields 124 under the same shim, and kills only its own scope (a sibling run survives)
+  "${BR}" -q -T 60 -n "hssib$$" -- bash -c "(exec -a hsmarke-${mark} sleep 120) & wait" >/dev/null 2>&1 &
+  sibpid=$!
+  for _ in $(seq 1 50); do systemctl --user is-active "bounded-run-hssib$$.scope" >/dev/null 2>&1 && break; sleep 0.1; done
+  start=$SECONDS; rc=0
+  PATH="${TEST_TMP}/pkshim:${PATH}" "${BR}" -q -T 2 -n "hsrto$$" -- bash -c "(exec -a hsmarkf-${mark} sleep 300) & wait" >/dev/null 2>&1 || rc=$?
+  took=$((SECONDS - start))
+  assert_eq "124" "${rc}" "a real timeout still returns 124 with the delayed pkill (took ${took}s)"
+  sleep 1
+  assert_eq "0" "$(count_procs "^hsmarkf-${mark} 300")" "the timed-out run's own tree is gone"
+  assert_eq "active" "$(systemctl --user is-active "bounded-run-hssib$$.scope" 2>&1 | head -1)" "a sibling run's scope is untouched by the timeout"
+  assert_eq "1" "$(count_procs "^hsmarke-${mark} 120")" "a sibling run's process survived the timeout"
+  systemctl --user kill --signal=SIGKILL "bounded-run-hssib$$.scope" 2>/dev/null; wait "${sibpid}" 2>/dev/null || true
+  # mutation: restore the old order (stop the watchdog first, decide the verdict after; sleep's failure not checked) => the proof fails
+  python3 -I - "${BR}" "${TEST_TMP}/bounded-run.mut" <<'PY'
+import sys
+s = open(sys.argv[1]).read()
+claim = 'we_claimed=0\nmkdir "${claim}" 2>/dev/null && we_claimed=1\n'
+stop_end = '  wait "${watchdog}" 2>/dev/null\nfi\n'
+sleep_ok = 'sleep "${timeout_s}" || exit 0'
+for needle in (claim, stop_end, sleep_ok):
+    if s.count(needle) != 1:
+        sys.exit("mutation needle not found exactly once: %r" % needle)
+s = s.replace(claim, "").replace(stop_end, stop_end + claim).replace(sleep_ok, 'sleep "${timeout_s}"')
+open(sys.argv[2], "w").write(s)
+PY
+  chmod +x "${TEST_TMP}/bounded-run.mut"
+  mut124="$(quick124 "${TEST_TMP}/bounded-run.mut" 10 hsqm shim)"
+  assert_eq "yes" "$([[ ${mut124} -ge 1 ]] && echo yes || echo no)" "mutation [old stop-then-decide order]: the proof catches it (spurious 124 in ${mut124}/10)"
+
   # name collision: a second run with the SAME -n must neither start nor touch the first run's scope
   cn="hscol$$"
   "${BR}" -q -T 15 -n "${cn}" -- bash -c "(exec -a hsmarkd-${mark} sleep 200) & wait" >/dev/null 2>&1 &

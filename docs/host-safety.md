@@ -2,7 +2,7 @@
 
 | Field | Value |
 |---|---|
-| Revision | 6 |
+| Revision | 7 |
 | Created | 2026-10-09 |
 | Status | active (guard ships in DRY-RUN) |
 | Code | `scripts/hostsafety/` |
@@ -245,6 +245,23 @@ afterwards         : scope gone, 0 processes left in the scope, pids.events max 
 * The timeout watchdog is a plain child of the wrapper. As an independent backstop the scope itself carries `RuntimeMaxSec=timeout+10`
   and `TimeoutStopSec=5` (probed: `systemd-run --scope -p RuntimeMaxSec=3` ends the command after 3 s on this host, systemd 259), so the
   command still ends if the wrapper and its watchdog are both killed (tested: both killed, scope gone 13 s later).
+* **Spurious 124 fixed (2026-10-14).** Before the fix, a command that had already **succeeded** could be reported as a timeout:
+  cleanup ran `pkill -P <watchdog>` (killing its `sleep`) and only then `kill <watchdog>`, so the watchdog subshell could fall
+  through to `echo timeout >flag` in between and `bounded-run` exited 124. An independent reviewer measured it at about 3 of 60
+  runs of `bounded-run -T 30 -- echo`; this fix reproduced it at **2 of 200** (4 parallel loops of 50, zero memory pressure;
+  0 of 100 sequential), and **20 of 20** with a `pkill` shim that delays 0.3 s after the real `pkill` (the same window,
+  widened as scheduler latency widens it under load). Since `agent-admit.sh --verdict3` maps 124 to rc 2, heavy admitted runs
+  (pre-push gates, zero-gap-verify, content-boundary) reported "cannot determine" for no reason. Fix: the verdict is decided
+  **once, atomically** - whoever `mkdir`s `<flag>.claim` first owns it. The wrapper claims "completed" as soon as the command
+  has exited and **before** it stops the watchdog; the watchdog writes `timeout` and signals the scope only after winning the
+  claim, and a killed `sleep` makes it exit (`sleep || exit 0`). After the fix: 0 of 200 (same 4x50 parallel run), 0 of 20 with
+  the delaying shim, and a real `-T 2 -- sleep 6` still returns 124 in 2 s. Regression proof in `tests/test_hostsafety.sh`
+  (40 plain + 20 shimmed quick runs must give zero 124s; a real timeout under the shim returns 124 and leaves a sibling run's
+  scope and process alive; a mutation restoring stop-then-decide makes the proof fail, 10 of 10).
+  Honest limits: a command that finishes in the same instant its deadline expires may still be reported 124 if the watchdog wins
+  the claim - that is a real deadline expiry, not a spurious one. The plain 40-run loop alone is not a reliable detector of the
+  old race (0 of 100 sequential before the fix); the shimmed loop is the deterministic one. `agent-run` is `exec bounded-run
+  --agent` and inherits the fix; no other wrapper in `scripts/hostsafety/` has a watchdog + `pkill` pattern.
 * A scope that systemd could not start (no user manager, bad property) exits **125** with the command not run; invalid `-m`/`-s` values and
   unknown long options also exit 125.
 * UNKNOWN: whether tearing down a whole enclosing session cgroup also ends a capped scope (they are siblings under the same slice, not nested).
