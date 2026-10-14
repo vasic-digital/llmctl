@@ -188,7 +188,8 @@ Evidence that the cap now holds (`tests/test_agent_containment.sh`, `TasksMax=40
 ```
 fork-bomb fixture  : spawned=39 failed=261 max_events=261 peak=40
 recursive tr shim  : max_events=5 peak=40
-afterwards         : scope gone, 0 leftover processes, host fork rate back to baseline
+afterwards         : scope gone, 0 processes left in the scope, pids.events max > 0, pids.peak <= cap, bystander scope still active
+                     (the host-wide fork rate is deliberately NOT a gate: it moves with unrelated load)
 ```
 
 ### Limits of the containment (read before relying on it)

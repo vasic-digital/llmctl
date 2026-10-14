@@ -73,7 +73,8 @@ loadp=$!
 sleep 1; loaded=$(fork_rate max); wait "${loadp}" 2>/dev/null || true
 old_verdict=$([[ ${loaded} -le $((idle * 2 + 200)) ]] && echo pass || echo FAIL)
 printf '  evidence: old predicate under synthetic load: %s/s vs threshold %s/s (idle %s/s) -> %s\n' "${loaded}" "$((idle * 2 + 200))" "${idle}" "${old_verdict}"
-assert_eq "yes" "$([[ ${loaded} -gt ${idle} ]] && echo yes || echo no)" "control: the host-wide fork rate moves with UNRELATED load (loaded max ${loaded}/s > idle min ${idle}/s; old predicate would ${old_verdict}), so it must not (and does not) gate"
+# INFORMATIONAL only (no assertion): whether unrelated load moves the host-wide fork rate itself depends on host load.
+printf '  info: host-wide fork rate under unrelated load: loaded max %s/s, idle min %s/s (old predicate would %s); not asserted, not a gate\n' "${loaded}" "${idle}" "${old_verdict}"
 
 # bystander scope started BEFORE the bomb: must still be active after it (hermetic isolation signal)
 "${BR}" -q --tasks 40 --mem 1G --timeout 200 -n "acbefore$$" -- /usr/bin/sleep 150 >/dev/null 2>&1 &
