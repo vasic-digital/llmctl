@@ -2,7 +2,8 @@
 # test_agent_containment.sh - containment of agent / test jobs (docs/host-safety.md "Containing agent and test jobs").
 # Incident 2026-10-13: a PATH shim named `tr` whose body called `tr` by bare name re-executed itself, ~6,000 processes in an
 # UNCAPPED session scope.  Here the same shape runs inside a TasksMax=40 scope and the cap must hold, the scope must be gone
-# afterwards, nothing may survive, and the host fork rate must return to baseline.  Live section: needs systemd --user.
+# afterwards and nothing may survive.  Only HERMETIC signals gate (the scope's own cgroup, /proc/*/cgroup membership, a bystander scope);
+# the host-wide fork rate is noisy (containers alone fork 60-500/s) and is shown ONLY as a negative control that it must not gate.  Live section: needs systemd --user.
 # Every fork-capable command runs inside a bounded scope with a wall-clock timeout; nothing signals a pid or a pgid.
 set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/helpers.sh"
@@ -23,6 +24,11 @@ forks_now() { awk '/^processes /{print $2}' /proc/stat; }
 # forks in 1 s, three samples: "max" (baseline: a busy host varies) or "min" (after: a lingering runaway cannot hide in the minimum)
 fork_rate() { local a b best="" v; for _ in 1 2 3; do a=$(forks_now); sleep 1; b=$(forks_now); v=$((b - a))
   if [[ -z "${best}" ]] || { [[ $1 == max ]] && (( v > best )); } || { [[ $1 == min ]] && (( v < best )); }; then best=${v}; fi; done; echo "${best}"; }
+procs_in_scope() { # <name> : processes whose cgroup is that bounded-run scope (read from /proc/*/cgroup, no patterns, no signals)
+  local n=0 p
+  for p in /proc/[0-9]*; do grep -qs "bounded-run-$1\.scope" "${p}/cgroup" 2>/dev/null && n=$((n + 1)); done
+  echo "${n}"
+}
 count_procs() { # live processes whose cmdline contains a fixed string (reads /proc directly: no pgrep self-match)
   local n=0 p c
   for p in /proc/[0-9]*; do
@@ -58,6 +64,22 @@ assert_contains "${out}" "timeout=9s" "bounded-run --timeout S"
 out="$("${BR}" --tasks=78 --mem=1G --timeout=8 -n "aceq$$" -- true 2>&1 || true)"
 assert_contains "${out}" "TasksMax=78" "bounded-run --tasks=N form"
 
+# --- 1b. NEGATIVE CONTROL: the host-wide fork rate is not a valid gate -------------------------
+# Under synthetic background load (a harmless fork loop, TasksMax=20, 9 s) the OLD predicate "fork rate <= 2x idle + 200" FAILS
+# although nothing is wrong with the code under test: that is the flake, reproduced on purpose.  It therefore does not gate below.
+idle=$(fork_rate min)
+"${BR}" -q --tasks 20 --mem 1G --timeout 15 -n "acload$$" -- bash -c 'for i in 1 2 3 4; do ( e=$((SECONDS+9)); while ((SECONDS<e)); do /usr/bin/true; done ) & done; wait' >/dev/null 2>&1 &
+loadp=$!
+sleep 1; loaded=$(fork_rate max); wait "${loadp}" 2>/dev/null || true
+old_verdict=$([[ ${loaded} -le $((idle * 2 + 200)) ]] && echo pass || echo FAIL)
+printf '  evidence: old predicate under synthetic load: %s/s vs threshold %s/s (idle %s/s) -> %s\n' "${loaded}" "$((idle * 2 + 200))" "${idle}" "${old_verdict}"
+assert_eq "yes" "$([[ ${loaded} -gt ${idle} ]] && echo yes || echo no)" "control: the host-wide fork rate moves with UNRELATED load (loaded max ${loaded}/s > idle min ${idle}/s; old predicate would ${old_verdict}), so it must not (and does not) gate"
+
+# bystander scope started BEFORE the bomb: must still be active after it (hermetic isolation signal)
+"${BR}" -q --tasks 40 --mem 1G --timeout 200 -n "acbefore$$" -- /usr/bin/sleep 150 >/dev/null 2>&1 &
+beforep=$!
+for _ in $(seq 1 50); do systemctl --user is-active "bounded-run-acbefore$$.scope" >/dev/null 2>&1 && break; sleep 0.1; done
+
 # --- 2. fork-bomb-shaped fixture under TasksMax=40 -----------------------------------------
 cat >"${TEST_TMP}/bomb.py" <<'PY'
 import subprocess, sys, time
@@ -72,9 +94,8 @@ ev = dict(l.split() for l in open(cg + "/pids.events"))
 print("spawned=%d failed=%d max_events=%s peak=%s" % (len(kids), fails, ev.get("max"), open(cg + "/pids.peak").read().strip()), flush=True)
 time.sleep(1)
 PY
-baseline=$(fork_rate max)
 res="$("${BR}" -q --tasks 40 --mem 1G --timeout 30 -n "acbomb$$" -- python3 -I "${TEST_TMP}/bomb.py" "${mark}" 2>&1 || true)"
-printf '  evidence: %s (baseline forks/s=%s)\n' "${res}" "${baseline}"
+printf '  evidence: %s\n' "${res}"
 ev_max="$(printf '%s' "${res}" | sed -n 's/.*max_events=\([0-9]*\).*/\1/p')"
 peak="$(printf '%s' "${res}" | sed -n 's/.*peak=\([0-9]*\).*/\1/p')"
 assert_eq "yes" "$([[ ${ev_max:-0} -gt 0 ]] && echo yes || echo no)" "bomb: pids.events max > 0 (the cap was hit: ${ev_max:-?})"
@@ -82,8 +103,8 @@ assert_eq "yes" "$([[ -n ${peak} && ${peak} -le 40 ]] && echo yes || echo no)" "
 sleep 1
 assert_eq "yes" "$(scope_gone "acbomb$$")" "bomb: the scope is gone afterwards"
 assert_eq "0" "$(count_procs "acmark-${mark} 300")" "bomb: leftover processes = 0"
-after=$(fork_rate min)
-assert_eq "yes" "$([[ ${after} -le $((baseline * 2 + 200)) ]] && echo yes || echo no)" "bomb: host fork rate back to baseline, <= 2x+200 of the measured idle rate; a runaway is thousands per second (${after}/s vs ${baseline}/s)"
+assert_eq "0" "$(procs_in_scope "acbomb$$")" "bomb: zero processes left in the bomb's cgroup (read from /proc/*/cgroup)"
+assert_eq "active" "$(systemctl --user is-active "bounded-run-acbefore$$.scope" 2>&1 | head -1)" "bomb: a bystander scope started before it is still active"
 
 # --- 3. the p1.sh failure: a PATH shim `tr` that calls `tr` by bare name --------------------
 SH="${TEST_TMP}/recshim-${mark}"; mkdir -p "${SH}"
@@ -97,9 +118,8 @@ PATH="$1:$PATH" tr x y </dev/null >/dev/null 2>&1 || true
 ev="$(awk '$1=="max"{print $2}' "${cg}/pids.events")"
 echo "max_events=${ev} peak=$(cat "${cg}/pids.peak")"
 EOS
-baseline=$(fork_rate max)
 res="$("${BR}" -q --tasks 40 --mem 1G --timeout 30 -n "acrec$$" -- bash "${TEST_TMP}/rec.sh" "${SH}" 2>&1 || true)"
-printf '  evidence: %s (baseline forks/s=%s)\n' "${res}" "${baseline}"
+printf '  evidence: %s\n' "${res}"
 ev_max="$(printf '%s' "${res}" | sed -n 's/.*max_events=\([0-9]*\).*/\1/p')"
 peak="$(printf '%s' "${res}" | sed -n 's/.*peak=\([0-9]*\).*/\1/p')"
 assert_eq "yes" "$([[ ${ev_max:-0} -gt 0 ]] && echo yes || echo no)" "recursive shim: pids.events max > 0 (${ev_max:-?})"
@@ -107,8 +127,10 @@ assert_eq "yes" "$([[ -n ${peak} && ${peak} -le 40 ]] && echo yes || echo no)" "
 sleep 1
 assert_eq "yes" "$(scope_gone "acrec$$")" "recursive shim: the scope is gone afterwards"
 assert_eq "0" "$(count_procs "${SH}/tr")" "recursive shim: leftover processes = 0"
-after=$(fork_rate min)
-assert_eq "yes" "$([[ ${after} -le $((baseline * 2 + 200)) ]] && echo yes || echo no)" "recursive shim: host fork rate back to baseline, <= 2x+200 of the measured idle rate; a runaway is thousands per second (${after}/s vs ${baseline}/s)"
+assert_eq "0" "$(procs_in_scope "acrec$$")" "recursive shim: zero processes left in its cgroup (read from /proc/*/cgroup)"
+assert_eq "active" "$(systemctl --user is-active "bounded-run-acbefore$$.scope" 2>&1 | head -1)" "recursive shim: the bystander scope is still active"
+systemctl --user kill --kill-whom=all --signal=SIGKILL "bounded-run-acbefore$$.scope" 2>/dev/null || true
+wait "${beforep}" 2>/dev/null || true
 
 # --- 4. timeout tears down ITS OWN scope only (guarded: a regression FAILS, it never hangs) ----
 # the fixture lives 30 s (not 300) and the run is wrapped in an outer hard limit, so a broken watchdog shows as rc!=124 / slow
