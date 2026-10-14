@@ -3,7 +3,7 @@
  "kind": "vision",
  "schema": 1,
  "generator": "scripts/vision/make_golden.py (stdlib-only, embedded 5x7 bitmap font, own fixed-Huffman DEFLATE; byte-reproducible)",
- "notes": "Every expectation is derived from what make_golden.py draws (content known by construction). Checks are deterministic: normalised (upper-case, non-alphanumerics collapsed to one space) boundary-aware substring matching, ordered substrings, forbidden substrings, first-number equality, regex. No LLM-as-judge.",
+ "notes": "Every expectation is derived from what make_golden.py draws (content known by construction). Checks are deterministic: normalised (upper-case, non-alphanumerics collapsed to one space) boundary-aware substring matching, ordered substrings, forbidden substrings, single-stated-number equality (an answer stating several different numbers fails), a negated mention is not a claim, ordered = the occurrence sequence is exactly the listed order, regex. No LLM-as-judge. Every probe carries canned PASS and FAIL judge controls; the self-test judges them before any request.",
  "request": {
   "temperature": 0,
   "seed": 42,
@@ -364,6 +364,11 @@
    "expect": "fail"
   },
   {
+   "probe": "01_text_large/read",
+   "answer": "There is no ORANGE TIGER 42 here",
+   "expect": "fail"
+  },
+  {
    "probe": "02_shapes_count/red_circles",
    "answer": "3",
    "expect": "pass"
@@ -384,6 +389,41 @@
    "expect": "fail"
   },
   {
+   "probe": "02_shapes_count/red_circles",
+   "answer": "3 or 4",
+   "expect": "fail"
+  },
+  {
+   "probe": "02_shapes_count/blue_squares",
+   "answer": "2",
+   "expect": "pass"
+  },
+  {
+   "probe": "02_shapes_count/blue_squares",
+   "answer": "3",
+   "expect": "fail"
+  },
+  {
+   "probe": "03_login_form/transcribe",
+   "answer": "SIGN IN\nUSERNAME\nPASSWORD\nLOGIN",
+   "expect": "pass"
+  },
+  {
+   "probe": "03_login_form/transcribe",
+   "answer": "SIGN IN\nUSERNAME",
+   "expect": "fail"
+  },
+  {
+   "probe": "03_login_form/screen_type",
+   "answer": "A login screen.",
+   "expect": "pass"
+  },
+  {
+   "probe": "03_login_form/screen_type",
+   "answer": "A settings page.",
+   "expect": "fail"
+  },
+  {
    "probe": "04_list_view/items",
    "answer": "APPLE\nBANANA\nCHERRY\nGRAPE",
    "expect": "pass"
@@ -394,13 +434,83 @@
    "expect": "fail"
   },
   {
+   "probe": "04_list_view/count",
+   "answer": "4",
+   "expect": "pass"
+  },
+  {
+   "probe": "04_list_view/count",
+   "answer": "5",
+   "expect": "fail"
+  },
+  {
+   "probe": "05_table/transcribe",
+   "answer": "NAME AGE CITY\nANNA 31 PARIS\nBORIS 45 OSLO\nCLARA 27 ROME",
+   "expect": "pass"
+  },
+  {
+   "probe": "05_table/transcribe",
+   "answer": "NAME AGE CITY\nBORIS 45 OSLO\nANNA 31 PARIS\nCLARA 27 ROME",
+   "expect": "fail"
+  },
+  {
    "probe": "05_table/lookup",
    "answer": "PARIS",
    "expect": "fail"
   },
   {
+   "probe": "05_table/lookup",
+   "answer": "OSLO",
+   "expect": "pass"
+  },
+  {
+   "probe": "06_dialog/transcribe",
+   "answer": "WARNING\nDELETE FILE?\nCANCEL\nDELETE",
+   "expect": "pass"
+  },
+  {
+   "probe": "06_dialog/transcribe",
+   "answer": "WARNING\nCANCEL",
+   "expect": "fail"
+  },
+  {
+   "probe": "06_dialog/buttons",
+   "answer": "CANCEL, DELETE",
+   "expect": "pass"
+  },
+  {
+   "probe": "06_dialog/buttons",
+   "answer": "OK, CANCEL",
+   "expect": "fail"
+  },
+  {
+   "probe": "07_dark_theme/transcribe",
+   "answer": "SETTINGS\nDARK MODE\nVOLUME 75",
+   "expect": "pass"
+  },
+  {
+   "probe": "07_dark_theme/transcribe",
+   "answer": "SETTINGS\nDARK MODE\nVOLUME 57",
+   "expect": "fail"
+  },
+  {
    "probe": "07_dark_theme/theme",
    "answer": "Light",
+   "expect": "fail"
+  },
+  {
+   "probe": "07_dark_theme/theme",
+   "answer": "Dark",
+   "expect": "pass"
+  },
+  {
+   "probe": "08_small_text/invoice",
+   "answer": "7731",
+   "expect": "pass"
+  },
+  {
+   "probe": "08_small_text/invoice",
+   "answer": "7781",
    "expect": "fail"
   },
   {
@@ -419,12 +529,32 @@
    "expect": "fail"
   },
   {
+   "probe": "09_color_blocks/colors",
+   "answer": "Red, Green, Blue",
+   "expect": "pass"
+  },
+  {
+   "probe": "09_color_blocks/colors",
+   "answer": "Red, green, blue, red",
+   "expect": "fail"
+  },
+  {
    "probe": "90_bad_blank/read",
    "answer": "NO TEXT",
    "expect": "pass"
   },
   {
    "probe": "90_bad_blank/read",
+   "answer": "ORANGE TIGER 42",
+   "expect": "fail"
+  },
+  {
+   "probe": "91_bad_wrong_content/read",
+   "answer": "PURPLE HORSE\n17",
+   "expect": "pass"
+  },
+  {
+   "probe": "91_bad_wrong_content/read",
    "answer": "ORANGE TIGER 42",
    "expect": "fail"
   }

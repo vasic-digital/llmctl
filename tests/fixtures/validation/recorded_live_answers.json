@@ -1,0 +1,282 @@
+{
+ "notes": "Real model answers copied VERBATIM from the captured live-run evidence under docs/qa/ (extracted mechanically; never edited). Every entry is a (probe key, answer, verdict the judge gave at the time, evidence files). tests/test_validation_judge_soundness.sh asserts the current judge still gives each recorded real answer the same verdict, so a stricter judge cannot silently turn a real correct answer into a false FAIL.",
+ "answers": [
+  {
+   "key": "01_text_large/read",
+   "answer": "ORANGE TIGER\n42",
+   "verdict": "PASS",
+   "sources": [
+    "docs/qa/vision-live-2026-10-13-run2/validate.out",
+    "docs/qa/vision-live-2026-10-13/validate.out",
+    "docs/qa/vision-live-2026-10-14/04_vision_validate.txt",
+    "docs/qa/vision-live-nezha-2026-10-14/validate-vision.log",
+    "docs/qa/vision-live-nezha-2026-10-14/vision_validate.txt"
+   ]
+  },
+  {
+   "key": "02_shapes_count/blue_squares",
+   "answer": "2",
+   "verdict": "PASS",
+   "sources": [
+    "docs/qa/vision-live-2026-10-13-run2/validate.out",
+    "docs/qa/vision-live-2026-10-13/validate.out",
+    "docs/qa/vision-live-2026-10-14/04_vision_validate.txt",
+    "docs/qa/vision-live-nezha-2026-10-14/validate-vision.log",
+    "docs/qa/vision-live-nezha-2026-10-14/vision_validate.txt"
+   ]
+  },
+  {
+   "key": "02_shapes_count/red_circles",
+   "answer": "3",
+   "verdict": "PASS",
+   "sources": [
+    "docs/qa/vision-live-2026-10-13-run2/validate.out",
+    "docs/qa/vision-live-2026-10-13/validate.out",
+    "docs/qa/vision-live-2026-10-14/04_vision_validate.txt",
+    "docs/qa/vision-live-nezha-2026-10-14/validate-vision.log",
+    "docs/qa/vision-live-nezha-2026-10-14/vision_validate.txt"
+   ]
+  },
+  {
+   "key": "03_login_form/screen_type",
+   "answer": "The screenshot depicts a classic, low-resolution login screen reminiscent of early personal computers like the Commodore 64 or Apple II.",
+   "verdict": "PASS",
+   "sources": [
+    "docs/qa/vision-live-nezha-2026-10-14/validate-vision.log",
+    "docs/qa/vision-live-nezha-2026-10-14/vision_validate.txt"
+   ]
+  },
+  {
+   "key": "03_login_form/screen_type",
+   "answer": "This screenshot depicts a classic, pixelated login screen reminiscent of early 1980s computer systems.",
+   "verdict": "PASS",
+   "sources": [
+    "docs/qa/vision-live-2026-10-13-run2/validate.out",
+    "docs/qa/vision-live-2026-10-13/validate.out",
+    "docs/qa/vision-live-2026-10-14/04_vision_validate.txt"
+   ]
+  },
+  {
+   "key": "03_login_form/transcribe",
+   "answer": "SIGN IN\nUSERNAME\nPASSWORD\nLOGIN",
+   "verdict": "PASS",
+   "sources": [
+    "docs/qa/vision-live-2026-10-13-run2/validate.out",
+    "docs/qa/vision-live-2026-10-13/validate.out",
+    "docs/qa/vision-live-2026-10-14/04_vision_validate.txt",
+    "docs/qa/vision-live-nezha-2026-10-14/validate-vision.log",
+    "docs/qa/vision-live-nezha-2026-10-14/vision_validate.txt"
+   ]
+  },
+  {
+   "key": "04_list_view/count",
+   "answer": "4",
+   "verdict": "PASS",
+   "sources": [
+    "docs/qa/vision-live-2026-10-13-run2/validate.out",
+    "docs/qa/vision-live-2026-10-13/validate.out",
+    "docs/qa/vision-live-2026-10-14/04_vision_validate.txt",
+    "docs/qa/vision-live-nezha-2026-10-14/validate-vision.log",
+    "docs/qa/vision-live-nezha-2026-10-14/vision_validate.txt"
+   ]
+  },
+  {
+   "key": "04_list_view/items",
+   "answer": "APPLE\nBANANA\nCHERRY\nGRAPE",
+   "verdict": "PASS",
+   "sources": [
+    "docs/qa/vision-live-2026-10-13-run2/validate.out",
+    "docs/qa/vision-live-2026-10-13/validate.out",
+    "docs/qa/vision-live-2026-10-14/04_vision_validate.txt",
+    "docs/qa/vision-live-nezha-2026-10-14/validate-vision.log",
+    "docs/qa/vision-live-nezha-2026-10-14/vision_validate.txt"
+   ]
+  },
+  {
+   "key": "05_table/lookup",
+   "answer": "OSLO",
+   "verdict": "PASS",
+   "sources": [
+    "docs/qa/vision-live-2026-10-13-run2/validate.out",
+    "docs/qa/vision-live-2026-10-13/validate.out",
+    "docs/qa/vision-live-2026-10-14/04_vision_validate.txt",
+    "docs/qa/vision-live-nezha-2026-10-14/validate-vision.log",
+    "docs/qa/vision-live-nezha-2026-10-14/vision_validate.txt"
+   ]
+  },
+  {
+   "key": "05_table/transcribe",
+   "answer": "NAME   AGE   CITY\nANNA   31   PARIS\nBORIS  45   OSLO\nCLARA  27   ROME",
+   "verdict": "PASS",
+   "sources": [
+    "docs/qa/vision-live-2026-10-13-run2/validate.out",
+    "docs/qa/vision-live-2026-10-13/validate.out",
+    "docs/qa/vision-live-2026-10-14/04_vision_validate.txt"
+   ]
+  },
+  {
+   "key": "05_table/transcribe",
+   "answer": "NAME AGE CITY\nANNA 31 PARIS\nBORIS 45 OSLO\nCLARA 27 ROME",
+   "verdict": "PASS",
+   "sources": [
+    "docs/qa/vision-live-nezha-2026-10-14/validate-vision.log",
+    "docs/qa/vision-live-nezha-2026-10-14/vision_validate.txt"
+   ]
+  },
+  {
+   "key": "06_dialog/buttons",
+   "answer": "CANCEL, DELETE",
+   "verdict": "PASS",
+   "sources": [
+    "docs/qa/vision-live-2026-10-13-run2/validate.out",
+    "docs/qa/vision-live-2026-10-13/validate.out",
+    "docs/qa/vision-live-2026-10-14/04_vision_validate.txt",
+    "docs/qa/vision-live-nezha-2026-10-14/validate-vision.log",
+    "docs/qa/vision-live-nezha-2026-10-14/vision_validate.txt"
+   ]
+  },
+  {
+   "key": "06_dialog/transcribe",
+   "answer": "WARNING\nDELETE FILE?\nCANCEL\nDELETE",
+   "verdict": "PASS",
+   "sources": [
+    "docs/qa/vision-live-2026-10-13-run2/validate.out",
+    "docs/qa/vision-live-2026-10-13/validate.out",
+    "docs/qa/vision-live-2026-10-14/04_vision_validate.txt",
+    "docs/qa/vision-live-nezha-2026-10-14/validate-vision.log",
+    "docs/qa/vision-live-nezha-2026-10-14/vision_validate.txt"
+   ]
+  },
+  {
+   "key": "07_dark_theme/theme",
+   "answer": "Dark",
+   "verdict": "PASS",
+   "sources": [
+    "docs/qa/vision-live-2026-10-13-run2/validate.out",
+    "docs/qa/vision-live-2026-10-13/validate.out",
+    "docs/qa/vision-live-2026-10-14/04_vision_validate.txt",
+    "docs/qa/vision-live-nezha-2026-10-14/validate-vision.log",
+    "docs/qa/vision-live-nezha-2026-10-14/vision_validate.txt"
+   ]
+  },
+  {
+   "key": "07_dark_theme/transcribe",
+   "answer": "SETTINGS\nDARK MODE\nVOLUME 75",
+   "verdict": "PASS",
+   "sources": [
+    "docs/qa/vision-live-2026-10-13-run2/validate.out",
+    "docs/qa/vision-live-2026-10-13/validate.out",
+    "docs/qa/vision-live-2026-10-14/04_vision_validate.txt",
+    "docs/qa/vision-live-nezha-2026-10-14/validate-vision.log",
+    "docs/qa/vision-live-nezha-2026-10-14/vision_validate.txt"
+   ]
+  },
+  {
+   "key": "08_small_text/invoice",
+   "answer": "7731",
+   "verdict": "PASS",
+   "sources": [
+    "docs/qa/vision-live-2026-10-13-run2/validate.out",
+    "docs/qa/vision-live-2026-10-13/validate.out",
+    "docs/qa/vision-live-2026-10-14/04_vision_validate.txt",
+    "docs/qa/vision-live-nezha-2026-10-14/validate-vision.log",
+    "docs/qa/vision-live-nezha-2026-10-14/vision_validate.txt"
+   ]
+  },
+  {
+   "key": "08_small_text/total",
+   "answer": "58.40",
+   "verdict": "PASS",
+   "sources": [
+    "docs/qa/vision-live-2026-10-13-run2/validate.out",
+    "docs/qa/vision-live-2026-10-13/validate.out",
+    "docs/qa/vision-live-2026-10-14/04_vision_validate.txt",
+    "docs/qa/vision-live-nezha-2026-10-14/validate-vision.log",
+    "docs/qa/vision-live-nezha-2026-10-14/vision_validate.txt"
+   ]
+  },
+  {
+   "key": "09_color_blocks/colors",
+   "answer": "Here's the breakdown of the colors from left to right:\n\n*   Red\n*   Green\n*   Blue",
+   "verdict": "PASS",
+   "sources": [
+    "docs/qa/vision-live-nezha-2026-10-14/validate-vision.log",
+    "docs/qa/vision-live-nezha-2026-10-14/vision_validate.txt"
+   ]
+  },
+  {
+   "key": "09_color_blocks/colors",
+   "answer": "Red, Green, Blue",
+   "verdict": "PASS",
+   "sources": [
+    "docs/qa/vision-live-2026-10-13-run2/validate.out",
+    "docs/qa/vision-live-2026-10-13/validate.out",
+    "docs/qa/vision-live-2026-10-14/04_vision_validate.txt"
+   ]
+  },
+  {
+   "key": "90_bad_blank/read",
+   "answer": "NO TEXT",
+   "verdict": "PASS",
+   "sources": [
+    "docs/qa/vision-live-2026-10-13-run2/validate.out",
+    "docs/qa/vision-live-2026-10-13/validate.out",
+    "docs/qa/vision-live-2026-10-14/04_vision_validate.txt",
+    "docs/qa/vision-live-nezha-2026-10-14/validate-vision.log",
+    "docs/qa/vision-live-nezha-2026-10-14/vision_validate.txt"
+   ]
+  },
+  {
+   "key": "91_bad_wrong_content/read",
+   "answer": "PURPLE HORSE\n17",
+   "verdict": "PASS",
+   "sources": [
+    "docs/qa/vision-live-2026-10-13-run2/validate.out",
+    "docs/qa/vision-live-2026-10-13/validate.out",
+    "docs/qa/vision-live-2026-10-14/04_vision_validate.txt",
+    "docs/qa/vision-live-nezha-2026-10-14/validate-vision.log",
+    "docs/qa/vision-live-nezha-2026-10-14/vision_validate.txt"
+   ]
+  },
+  {
+   "key": "arith",
+   "answer": "42",
+   "verdict": "PASS",
+   "sources": [
+    "docs/qa/small-live-2026-10-14/validate.out"
+   ]
+  },
+  {
+   "key": "capital",
+   "answer": "Paris.",
+   "verdict": "PASS",
+   "sources": [
+    "docs/qa/small-live-2026-10-14/validate.out"
+   ]
+  },
+  {
+   "key": "compare",
+   "answer": "9",
+   "verdict": "PASS",
+   "sources": [
+    "docs/qa/small-live-2026-10-14/validate.out"
+   ]
+  },
+  {
+   "key": "echo",
+   "answer": "ZX-4417",
+   "verdict": "PASS",
+   "sources": [
+    "docs/qa/small-live-2026-10-14/validate.out"
+   ]
+  },
+  {
+   "key": "json",
+   "answer": "{\"color\": \"blue\"}",
+   "verdict": "PASS",
+   "sources": [
+    "docs/qa/small-live-2026-10-14/validate.out"
+   ]
+  }
+ ]
+}

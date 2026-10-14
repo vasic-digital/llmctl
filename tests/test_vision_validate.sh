@@ -64,7 +64,10 @@ rc="$(run_rc "${LLMCTL}" vision validate --profile vision --host "${URL}")"
 out="$(cat "${TEST_TMP}/last.out")"
 printf '%s\n' "${out}" | sed 's/^/    | /' | head -60
 assert_eq 0 "${rc}" "vision validate exits 0 when every answer is right"
-assert_contains "${out}" "VERDICT: PASS pass=21 fail=0 undetermined=0" "21 checks pass (18 probes + 2 controls + 1 determinism)"
+assert_contains "${out}" "VERDICT: PASS pass=38 fail=0 undetermined=0" "38 checks pass (18 probes + 2 controls + 18 determinism checks: every probe asked 3 times)"
+assert_contains "${out}" "[PASS] determinism 05_table/lookup: repeat=3 byte-identical" "every probe is repeated (N=3), not only the suite's determinism probe"
+assert_contains "$(LLMCTL_VALIDATE_REPEAT=1 "${LLMCTL}" vision validate --profile vision --host "${URL}" 2>&1 || true)" \
+  "VERDICT: PASS pass=21 fail=0 undetermined=0" "quick mode (LLMCTL_VALIDATE_REPEAT=1): 18 probes + 2 controls + 1 determinism repeat"
 assert_contains "${out}" "[PASS] control 90_bad_blank vs 01_text_large/read" "blank control discriminated"
 assert_contains "${out}" "[PASS] control 91_bad_wrong_content vs 01_text_large/read" "wrong-content control discriminated"
 assert_contains "${out}" 'answer: "ORANGE TIGER\n42"' "the raw model answer is printed next to the verdict"
@@ -96,10 +99,11 @@ sed 's/    return (not reasons), reasons/    return True, reasons/' "${JUDGE}" >
 assert_eq 1 "$(grep -c 'return True, reasons' "${JM}/validate_judge.py")" "mutant judge really differs (always-PASS)"
 assert_eq 1 "$(run_rc python3 -I "${JM}/validate_judge.py" run --suite "${VSUITE}" --endpoint "${URL}")" "always-PASS judge -> exit 1"
 assert_contains "$(cat "${TEST_TMP}/last.out")" "the judge itself is broken" "always-PASS judge refused by its self-test"
-sed 's/    return n.strip() != "" and n in answer_norm/    return True/' "${JUDGE}" > "${JM}/validate_judge.py"
-assert_eq 1 "$(grep -c '^    return True$' "${JM}/validate_judge.py")" "mutant judge really differs (substring always matches)"
+sed 's/^    return any(not neg for _, neg in claim_occurrences(raw, needle))$/    return True/' "${JUDGE}" > "${JM}/validate_judge.py"
+assert_eq 1 "$(grep -c '^    return True$' "${JM}/validate_judge.py")" "mutant judge really differs (every needle counts as asserted)"
 assert_eq 1 "$(run_rc python3 -I "${JM}/validate_judge.py" run --suite "${VSUITE}" --endpoint "${URL}")" "always-match substring judge -> exit 1"
-sed 's/^    pos = k + len(norm(t)) - 1$/    pos = 0/; s/                pos = k + len(norm(t)) - 1/                pos = 0/' "${JUDGE}" > "${JM}/validate_judge.py"
+sed 's/^    occ.sort()$/    pass/' "${JUDGE}" > "${JM}/validate_judge.py"
+assert_eq 1 "$(grep -c '^    pass$' "${JM}/validate_judge.py")" "mutant judge really differs (occurrences no longer sorted by position: order-blind)"
 assert_eq 1 "$(run_rc python3 -I "${JM}/validate_judge.py" selftest --suite "${VSUITE}")" "order-blind judge fails its self-test"
 # Isolate the golden-bad discrimination layer: a LAX golden expectation (passes "NO TEXT" / "PURPLE ...")
 # with its canned judge controls removed. Only the control images can expose it.
@@ -108,7 +112,10 @@ python3 -I - "${LAX}/expectations.json" <<'PY'
 import json, sys
 p = sys.argv[1]; d = json.load(open(p))
 d["fixtures"][0]["probes"][0]["checks"] = {"contains_any": ["ORANGE", "PURPLE", "NO TEXT"]}
-d["judge_controls"] = [c for c in d["judge_controls"] if c["probe"] != "01_text_large/read"]
+# canned controls the LAX expectation satisfies (every probe must keep a PASS and a FAIL control, or the suite is a defect)
+d["judge_controls"] = [c for c in d["judge_controls"] if c["probe"] != "01_text_large/read"] + [
+    {"probe": "01_text_large/read", "answer": "ORANGE TIGER 42", "expect": "pass"},
+    {"probe": "01_text_large/read", "answer": "ELEPHANT", "expect": "fail"}]
 json.dump(d, open(p, "w"))
 PY
 assert_eq 1 "$(run_rc python3 -I "${JUDGE}" run --suite "${LAX}" --endpoint "${URL}")" "lax golden expectation exposed by the golden-bad controls -> exit 1"

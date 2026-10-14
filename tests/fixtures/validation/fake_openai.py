@@ -11,7 +11,7 @@ image's own probe with that prompt first, else any probe with that prompt). The 
 "<image fixture id>/<probe id>" (vision) or "<case id>" (chat/coder). Unknown key -> HTTP 500.
 
 Usage: fake_openai.py --suite DIR [--suite DIR2 ...] --answers FILE --port-file FILE [--model-id ID]
-                      [--mode normal|reject-images|error500|nondeterministic|slow|trickle|endless|redirect|malformed-message|malformed-choice|truncate|reasoning-budget|reasoning-empty-stop]
+                      [--mode normal|reject-images|error500|nondeterministic|nondeterministic-third|slow|trickle|endless|redirect|malformed-message|malformed-choice|truncate|reasoning-budget|reasoning-empty-stop]
 """
 import argparse
 import base64
@@ -155,6 +155,8 @@ def main():
             calls[key] = calls.get(key, 0) + 1
             if a.mode == "nondeterministic" and calls[key] > 1:
                 ans = ans + " (second call differs)"
+            if a.mode == "nondeterministic-third" and calls[key] > 2:
+                ans = ans + " (third call differs)"
             finish = "length" if a.mode == "truncate" else "stop"
             msg = {"role": "assistant", "content": ans}
             if a.mode == "malformed-message":

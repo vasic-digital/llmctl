@@ -59,6 +59,11 @@ NUMBER_WORDS = {
 
 
 # --- normalisation + checks (the deterministic judge) -----------------------------------------------------
+class SuiteDefect(ValueError):
+    """The suite itself is unusable (an empty / unknown / uncompilable check, a probe without a prompt, a probe without
+    canned PASS and FAIL controls ...). Never a verdict on a model: the run is UNDETERMINED (exit 2) before any request."""
+
+
 def norm(text):
     """Upper-case, every run of non-alphanumerics -> one space, padded so boundary matching is ' X '."""
     return " " + re.sub(r"[^A-Z0-9]+", " ", str(text).upper()).strip() + " "
@@ -67,6 +72,174 @@ def norm(text):
 def has_token(answer_norm, needle):
     n = norm(needle)
     return n.strip() != "" and n in answer_norm
+
+
+# Claims (finding 7 of the 2026-10-14 review): a needle only counts when the answer ASSERTS it. The answer is split into
+# word tokens and clause separators (newline ! ? ; : and a '.' that is not a decimal point); a needle occurrence is
+# NEGATED when one of the (at most) _NEG_WINDOW words before it, inside the same clause, is a negation word. "There is
+# no ORANGE TIGER 42 here" therefore does not claim ORANGE TIGER 42, while "No problem. ORANGE TIGER 42" does.
+_NEG_WORDS = {"NO", "NOT", "NONE", "NEVER", "NOR", "WITHOUT", "CANNOT", "NEITHER"}
+_NT_PREFIX = {"DON", "DOESN", "DIDN", "ISN", "AREN", "WASN", "WEREN", "CAN", "COULDN", "WON", "WOULDN", "SHOULDN",
+              "HASN", "HAVEN", "HADN", "AIN", "MUSTN"}
+_NEG_WINDOW = 4
+_TOKEN_RE = re.compile(r"[A-Z0-9]+|\n|[!?;:]|(?<!\d)\.|\.(?!\d)")
+
+
+def _tokens(raw):
+    """[(word, None) | (None, 'SEP')] of the upper-cased answer: words, and clause separators."""
+    out = []
+    for m in _TOKEN_RE.finditer(str(raw).upper()):
+        t = m.group(0)
+        out.append((t, None) if t[0].isalnum() else (None, "SEP"))
+    return out
+
+
+def _negated(toks, start):
+    """True when a negation word precedes position `start` within _NEG_WINDOW words of the same clause."""
+    seen, i = 0, start - 1
+    while i >= 0 and seen < _NEG_WINDOW:
+        w = toks[i][0]
+        if w is None:
+            return False          # clause boundary: a negation in another clause does not negate this one
+        if w in _NEG_WORDS or (w == "T" and i > 0 and toks[i - 1][0] in _NT_PREFIX):
+            return True
+        seen += 1
+        i -= 1
+    return False
+
+
+def claim_occurrences(raw, needle):
+    """[(word_index, negated)] of every occurrence of `needle` (its normalised words, consecutive; separators between
+    them are skipped like the normaliser does). word_index counts words only."""
+    want = norm(needle).split()
+    if not want:
+        return []
+    toks = _tokens(raw)
+    words = [(i, t[0]) for i, t in enumerate(toks) if t[0] is not None]
+    out = []
+    for k in range(len(words) - len(want) + 1):
+        if all(words[k + j][1] == want[j] for j in range(len(want))):
+            out.append((k, _negated(toks, words[k][0])))
+    return out
+
+
+def asserts(raw, needle):
+    """The answer asserts `needle`: at least one occurrence that is not negated."""
+    return any(not neg for _, neg in claim_occurrences(raw, needle))
+
+
+def _ordered_ok(raw, items):
+    """The sequence of ALL occurrences of the listed items, in answer order, must BE the listed order: an item missing,
+    repeated, extra or out of place is not that order ('Red, green, blue, red' is not RED GREEN BLUE)."""
+    occ = []
+    for idx, t in enumerate(items):
+        occ += [(pos, idx) for pos, _ in claim_occurrences(raw, t)]
+    occ.sort()
+    seq = [idx for _, idx in occ]
+    return seq == list(range(len(items))), seq
+
+
+def _json_eq(a, b):
+    """JSON equality WITHOUT Python's bool/int coercion: true is not 1, false is not 0, "1" is not 1; numbers compare
+    by value (1 == 1.0)."""
+    if isinstance(a, bool) or isinstance(b, bool):
+        return type(a) is type(b) and a == b
+    if isinstance(a, (int, float)) and isinstance(b, (int, float)):
+        return a == b
+    if isinstance(a, list) and isinstance(b, list):
+        return len(a) == len(b) and all(_json_eq(x, y) for x, y in zip(a, b))
+    if isinstance(a, dict) and isinstance(b, dict):
+        return set(a) == set(b) and all(_json_eq(a[k], b[k]) for k in a)
+    return type(a) is type(b) and a == b
+
+
+_LIST_CHECKS = ("contains_all", "contains_any", "ordered", "forbidden", "regex_all", "regex_none")
+_TOKEN_CHECKS = ("contains_all", "contains_any", "ordered", "forbidden")
+_KNOWN_CHECKS = set(_LIST_CHECKS) | {"number_equals", "json_subset", "choice_equals"}
+
+
+def validate_checks(checks):
+    """Raise SuiteDefect unless `checks` is a non-empty dict of known, non-empty, usable checks (a vacuous check would
+    PASS any answer)."""
+    if not isinstance(checks, dict) or not checks:
+        raise SuiteDefect("empty or non-object checks %r (a probe with no check passes any answer)" % (checks,))
+    for key, val in checks.items():
+        if key not in _KNOWN_CHECKS:
+            raise SuiteDefect("unknown check type %r" % key)
+        if key in _LIST_CHECKS:
+            if not isinstance(val, list) or not val or not all(isinstance(t, str) and t for t in val):
+                raise SuiteDefect("%s must be a non-empty list of non-empty strings, got %r" % (key, val))
+            if key in _TOKEN_CHECKS and any(not norm(t).strip() for t in val):
+                raise SuiteDefect("%s has an item with no letters or digits: %r" % (key, val))
+            if key.startswith("regex"):
+                for p in val:
+                    try:
+                        re.compile(p)
+                    except re.error as e:
+                        raise SuiteDefect("%s pattern %r does not compile: %s" % (key, p, e))
+        elif key == "number_equals":
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)):
+                raise SuiteDefect("number_equals must be a finite number, got %r" % (val,))
+        elif key == "json_subset":
+            if not isinstance(val, dict) or not val:
+                raise SuiteDefect("json_subset must be a non-empty object, got %r" % (val,))
+        elif key == "choice_equals":
+            if not isinstance(val, str) or not val:
+                raise SuiteDefect("choice_equals must be a non-empty string, got %r" % (val,))
+
+
+def _strip_python_comments(src):
+    """The code with every '#' comment blanked (tokenize; a '#' inside a string literal is not a comment). Text that
+    does not tokenize as Python is handled line by line with a small quote-aware scanner."""
+    import io
+    import tokenize
+    lines = src.splitlines(True)
+    try:
+        cuts = {}
+        for tok in tokenize.generate_tokens(io.StringIO(src).readline):
+            if tok.type == tokenize.COMMENT:
+                cuts[tok.start[0]] = tok.start[1]
+        return "".join((l[:cuts[i + 1]] + ("\n" if l.endswith("\n") else "")) if (i + 1) in cuts else l
+                       for i, l in enumerate(lines))
+    except (tokenize.TokenError, IndentationError, SyntaxError):
+        out = []
+        for l in lines:
+            q, cut = None, None
+            for j, ch in enumerate(l):
+                if q:
+                    if ch == q and (j == 0 or l[j - 1] != "\\"):
+                        q = None
+                elif ch in "'\"":
+                    q = ch
+                elif ch == "#":
+                    cut = j
+                    break
+            out.append(l if cut is None else l[:cut] + ("\n" if l.endswith("\n") else ""))
+        return "".join(out)
+
+
+def code_of(answer, language):
+    """The code a coding answer contains: the fenced blocks when there are any, else the whole answer; comments of
+    `language` removed (comments are not code: 'return a - b  # not: return a + b' is a subtraction)."""
+    raw = "" if answer is None else str(answer)
+    blocks = re.findall(r"```[^\n`]*\n(.*?)```", raw, re.S)
+    src = "\n".join(blocks) if blocks else raw
+    if language == "python":
+        return _strip_python_comments(src)
+    raise SuiteDefect("unsupported code_language %r" % language)
+
+
+def judge_probe(probe, answer):
+    """(passed, reasons) for one probe of a suite: its checks validated (SuiteDefect when unusable), applied to the
+    answer - or, for a probe with a code_language, to the code of the answer with comments removed."""
+    checks = probe.get("checks") if isinstance(probe, dict) else None
+    validate_checks(checks)
+    lang = probe.get("code_language")
+    if lang is not None:
+        if answer is None or not str(answer).strip():
+            return False, ["empty answer"]
+        answer = code_of(answer, lang)
+    return judge(checks, answer)
 
 
 # A number is digits with an optional '.' fraction. A ',' directly followed by a digit (a thousands separator:
@@ -87,21 +260,44 @@ def _number_at(raw, start):
     return best
 
 
-def first_number(raw):
-    """The number an answer states, None if absent. Rule (documented in docs/validation.md):
-    when the answer restates an equation ("17 + 25 = 42") it is the number right after the LAST '=';
-    otherwise it is the FIRST number in the answer (digits, or an English number word zero..twenty that is
-    not part of a hyphenated compound such as 'twenty-two')."""
+def _all_numbers(raw, start=0):
+    """[(pos, value)] of every number stated at or after `start` (digits, or a number word zero..twenty)."""
+    out, pos = [], start
+    while True:
+        b = _number_at(raw, pos)
+        if b is None:
+            return out
+        out.append(b)
+        m = re.compile(_NUM_RE).match(raw, b[0]) or _WORD_RE.match(raw, b[0])
+        pos = b[0] + max(1, len(m.group(0)) if m else 1)
+
+
+def stated_number(raw):
+    """(value, why): the ONE number an answer states, or (None, reason). Rule (documented in docs/validation.md):
+    when the answer restates an equation ("17 + 25 = 42") the answer is the number right after the LAST '=' that is
+    followed by a number (the operands before it are not answers); otherwise it is the number the answer states.
+    Every number stated AFTER that point must have the same value: '3 or 4', 'I count 3... no, 4' and
+    '= 42, or maybe 43' state several different numbers and state no single answer (digits, or an English number
+    word zero..twenty that is not part of a hyphenated compound such as 'twenty-two')."""
+    begin = 0
     eq = [m.end() for m in re.finditer(r"=\s*", raw)]
     for end in reversed(eq):
-        m = re.match(_NUM_RE, raw[end:])
-        if m:
-            return float(m.group(0).replace(",", "."))
-        w = _WORD_RE.match(raw, end)
-        if w:
-            return float(NUMBER_WORDS[w.group(1).lower()])
-    b = _number_at(raw, 0)
-    return None if b is None else b[1]
+        if re.match(_NUM_RE, raw[end:]) or _WORD_RE.match(raw, end):
+            begin = end
+            break
+    nums = _all_numbers(raw, begin)
+    if not nums:
+        return None, "no number in the answer"
+    vals = sorted({v for _, v in nums})
+    if len(vals) > 1:
+        return None, "the answer states several different numbers %s (hedged / ambiguous / self-corrected)" % (
+            ", ".join("%g" % v for v in vals))
+    return vals[0], ""
+
+
+def first_number(raw):
+    """Back-compat name: the single stated number (stated_number), None when there is none or several differ."""
+    return stated_number(raw)[0]
 
 
 def first_json_object(raw):
@@ -129,38 +325,36 @@ def first_json_object(raw):
 
 
 def judge(checks, answer):
-    """Return (passed: bool, reasons: [str]). Pure function of (checks, answer)."""
+    """Return (passed: bool, reasons: [str]). Pure function of (checks, answer). Unusable checks raise SuiteDefect."""
+    validate_checks(checks)
     raw = "" if answer is None else str(answer)
     reasons = []
     if not raw.strip():
         return False, ["empty answer"]
-    an = norm(raw)
     for key, val in checks.items():
         if key == "contains_all":
-            miss = [t for t in val if not has_token(an, t)]
+            miss = [t for t in val if not asserts(raw, t)]
             if miss:
-                reasons.append("contains_all: missing %s" % miss)
+                reasons.append("contains_all: missing (or only negated) %s" % miss)
         elif key == "contains_any":
-            if not any(has_token(an, t) for t in val):
-                reasons.append("contains_any: none of %s present" % val)
+            if not any(asserts(raw, t) for t in val):
+                reasons.append("contains_any: none of %s asserted" % val)
         elif key == "ordered":
-            pos, bad = 0, None
-            for t in val:
-                k = an.find(norm(t), pos)
-                if k < 0:
-                    bad = t
-                    break
-                pos = k + len(norm(t)) - 1
-            if bad is not None:
-                reasons.append("ordered: %r not found after the previous item (expected order %s)" % (bad, val))
+            ok, seq = _ordered_ok(raw, val)
+            if not ok:
+                reasons.append("ordered: the items occur as %s, not exactly once each in the order %s" % (
+                    [val[i] for i in seq], val))
         elif key == "forbidden":
-            hit = [t for t in val if has_token(an, t)]
+            hit = [t for t in val if asserts(raw, t)]
             if hit:
                 reasons.append("forbidden: answer claims %s" % hit)
         elif key == "number_equals":
-            got = first_number(raw)
+            got, why = stated_number(raw)
             if got is None or not math.isclose(got, float(val), rel_tol=0, abs_tol=1e-9):
-                reasons.append("number_equals: expected %s, first number in answer is %s" % (val, got))
+                reasons.append("number_equals: expected %s, %s" % (val, why or "the answer states %g" % got))
+        elif key == "choice_equals":
+            if raw.strip() != val:
+                reasons.append("choice_equals: expected choice %r, got %r" % (val, raw.strip()))
         elif key == "regex_all":
             miss = [p for p in val if not re.search(p, raw, re.I | re.S)]
             if miss:
@@ -174,11 +368,11 @@ def judge(checks, answer):
             if obj is None:
                 reasons.append("json_subset: no JSON object in answer")
             else:
-                diff = {k: obj.get(k) for k, v in val.items() if obj.get(k) != v}
+                diff = {k: obj.get(k) for k, v in val.items() if k not in obj or not _json_eq(obj[k], v)}
                 if diff:
                     reasons.append("json_subset: expected %s, got %s" % (val, diff))
-        else:
-            reasons.append("unknown check type %r (suite/judge mismatch)" % key)
+        else:   # unreachable: validate_checks refused it
+            raise SuiteDefect("unknown check type %r (suite/judge mismatch)" % key)
     return (not reasons), reasons
 
 
@@ -236,6 +430,57 @@ def integrity_errors(suite, suite_dir):
     return errs
 
 
+def validate_suite(suite):
+    """Raise SuiteDefect unless the suite is usable: a known kind; probes with an id, a non-empty prompt and valid,
+    non-empty checks; and - for every judged kind - at least one canned PASS and one canned FAIL judge control per
+    probe, so the self-test that runs before any request proves the judge on every probe it will judge."""
+    if not isinstance(suite, dict):
+        raise SuiteDefect("suite file is not a JSON object")
+    kind = suite.get("kind")
+    if kind not in ("vision", "chat", "coder", "embedding", "decide"):
+        raise SuiteDefect("unknown suite kind %r" % kind)
+    if kind == "embedding":
+        cases = suite.get("cases")
+        if not isinstance(cases, list) or not cases:
+            raise SuiteDefect("embedding suite has no cases")
+        for c in cases:
+            if not all(isinstance(c.get(k), str) and c.get(k) for k in ("id", "anchor", "positive", "negative")):
+                raise SuiteDefect("embedding case %r needs non-empty id/anchor/positive/negative" % c.get("id"))
+        return
+    try:
+        probes = probes_of(suite)
+    except (KeyError, TypeError) as e:
+        raise SuiteDefect("malformed suite structure: %s" % e)
+    if not probes:
+        raise SuiteDefect("suite has no probes")
+    seen = set()
+    for key, _, pr in probes:
+        if key in seen:
+            raise SuiteDefect("duplicate probe id %r" % key)
+        seen.add(key)
+        if kind == "decide":
+            for k in ("question",):
+                if not isinstance(pr.get(k), dict) or not pr.get(k):
+                    raise SuiteDefect("decide case %r needs a non-empty question object" % key)
+        elif not isinstance(pr.get("prompt"), str) or not pr["prompt"].strip():
+            raise SuiteDefect("probe %r has no prompt" % key)
+        validate_checks(pr.get("checks"))
+        if pr.get("code_language") not in (None, "python"):
+            raise SuiteDefect("probe %r: unsupported code_language %r" % (key, pr.get("code_language")))
+    ctls = suite.get("judge_controls", [])
+    if not isinstance(ctls, list):
+        raise SuiteDefect("judge_controls must be a list")
+    for c in ctls:
+        if not isinstance(c, dict) or c.get("probe") not in seen or c.get("expect") not in ("pass", "fail") \
+                or not isinstance(c.get("answer"), str):
+            raise SuiteDefect("malformed judge control %r" % (c,))
+    for key in seen:
+        have = {c["expect"] for c in ctls if c["probe"] == key}
+        if have != {"pass", "fail"}:
+            raise SuiteDefect("probe %r lacks a canned %s judge control (every probe needs at least one PASS and "
+                              "one FAIL control)" % (key, " and ".join(sorted({"pass", "fail"} - have))))
+
+
 def judge_selftest(suite):
     """Judge the canned judge_controls. Returns list of (control, ok, detail)."""
     index = {k: pr for k, _, pr in probes_of(suite)}
@@ -245,7 +490,7 @@ def judge_selftest(suite):
         if pr is None:
             res.append((ctl, False, "judge control names unknown probe %r" % ctl["probe"]))
             continue
-        passed, reasons = judge(pr["checks"], ctl["answer"])
+        passed, reasons = judge_probe(pr, ctl["answer"])
         want = ctl["expect"] == "pass"
         res.append((ctl, passed == want, "judged %s (want %s) %s" % (
             "PASS" if passed else "FAIL", ctl["expect"].upper(), "; ".join(reasons))))
@@ -430,12 +675,12 @@ def ask(endpoint, suite, prompt, image_path=None, timeout=180):
         raise NoAnswer("malformed completion response: %s" % json.dumps(d)[:300])
 
 
-def undetermined_reason(a, checks=None):
+def undetermined_reason(a, probe=None):
     """None when the completion may be judged as it stands. Otherwise the reason it cannot be judged (UNDETERMINED,
     exit 2 - never PASS, never FAIL):
       * finish_reason=length WITH reasoning content: the budget went into the reasoning channel, the final answer
         never came;
-      * finish_reason=length, no reasoning content, and the (truncated) content PASSES `checks` (or no checks are
+      * finish_reason=length, no reasoning content, and the (truncated) content PASSES the probe (or no probe is
         given): the pass cannot be trusted to be a complete answer;
       * empty content with reasoning content (finish_reason=stop).
     A truncated answer that is WRONG is a FAIL (judged normally), as is an empty answer with no reasoning content."""
@@ -444,9 +689,9 @@ def undetermined_reason(a, checks=None):
         hint = ("answer truncated (finish_reason=length, max_tokens=%s, reasoning_chars=%s): the model did not "
                 "finish within the request budget - raise request.max_tokens in the suite; this is not a verdict "
                 "on the answer" % (a.get("max_tokens"), rc))
-        if rc > 0 or checks is None:
+        if rc > 0 or probe is None:
             return hint
-        if judge(checks, a.get("content", ""))[0]:
+        if judge_probe(probe, a.get("content", ""))[0]:
             return hint + " (the truncated content would pass, but a cut-off pass is not trusted)"
         return None
     if not str(a.get("content", "")).strip() and rc > 0:
@@ -472,10 +717,30 @@ def cosine(a, b):
 
 
 # --- run --------------------------------------------------------------------------------------------------
+DEFAULT_REPEAT = 3   # Constitution 11.4.50: a decision-bearing run asks every probe 3 times; all answers must be identical
+
+
+def repeat_count():
+    """How many times every probe is asked (LLMCTL_VALIDATE_REPEAT, default 3). 1 is the documented QUICK mode: only
+    the suite's determinism_repeat probes are asked once more, and the run is never recorded (not decision-bearing)."""
+    raw = os.environ.get("LLMCTL_VALIDATE_REPEAT", str(DEFAULT_REPEAT)).strip()
+    if not re.fullmatch(r"[1-9][0-9]?", raw):
+        raise ValueError("LLMCTL_VALIDATE_REPEAT must be an integer 1..99, got %r" % raw)
+    return int(raw)
+
+
+def request_timeout():
+    """LLMCTL_VALIDATE_TIMEOUT seconds (default 180); nan / inf / <= 0 are refused (ValueError)."""
+    raw = os.environ.get("LLMCTL_VALIDATE_TIMEOUT", "180")
+    t = float(raw)
+    if not math.isfinite(t) or t <= 0:
+        raise ValueError("LLMCTL_VALIDATE_TIMEOUT must be a finite number > 0, got %r" % raw)
+    return t
+
+
 def run(args):
     suite_dir = os.path.abspath(args.suite)
     suite = load_suite(suite_dir)
-    timeout = float(os.environ.get("LLMCTL_VALIDATE_TIMEOUT", "180"))
     report = {"suite": suite.get("suite"), "kind": suite.get("kind"), "suite_hash": suite_hash(suite_dir),
               "endpoint": redact_url(args.endpoint), "expect_model": args.expect_model, "results": [],
               "controls": [], "determinism": [], "judge_selftest": [], "notes": []}
@@ -489,6 +754,14 @@ def run(args):
 
     out("suite %s (%s) hash %s" % (suite.get("suite"), suite.get("kind"), report["suite_hash"]))
     out("endpoint %s" % redact_url(args.endpoint))
+    try:
+        timeout = request_timeout()
+        repeat = repeat_count()
+    except ValueError as e:
+        out("[UNDETERMINED] %s" % e)
+        counts["undetermined"] += 1
+        timeout, repeat = 0, 0
+    report.update({"repeat": repeat, "quick": repeat == 1})
 
     def finish():
         if counts["fail"]:
@@ -498,6 +771,10 @@ def run(args):
         else:
             verdict, rc = "PASS", 0
         report.update({"verdict": verdict, "exit_code": rc, "counts": counts})
+        if args.report_file:
+            with open_private(args.report_file, "w") as fh:
+                json.dump({k: report.get(k) for k in ("verdict", "exit_code", "counts", "repeat", "quick", "suite",
+                                                       "suite_hash", "served_model", "served_models")}, fh)
         out("VERDICT: %s pass=%d fail=%d undetermined=%d" % (verdict, counts["pass"], counts["fail"],
                                                               counts["undetermined"]))
         if args.json:
@@ -511,6 +788,18 @@ def run(args):
                 fh.write("\n".join(lines) + "\n")
                 fh.write("JSON " + json.dumps(report) + "\n")
         return rc
+
+    if counts["undetermined"]:
+        return finish()
+
+    # 0. suite schema: a vacuous / unusable suite is a defect of the suite, never a verdict on the model
+    try:
+        validate_suite(suite)
+    except SuiteDefect as e:
+        out("[UNDETERMINED] suite defect: %s" % e)
+        report["notes"].append("suite defect: %s" % e)
+        counts["undetermined"] += 1
+        return finish()
 
     # 1. integrity
     errs = integrity_errors(suite, suite_dir)
@@ -555,7 +844,7 @@ def run(args):
         for case in suite.get("cases", []):
             try:
                 a, p, n = (embed(args.endpoint, case[k], timeout) for k in ("anchor", "positive", "negative"))
-                a2 = embed(args.endpoint, case["anchor"], timeout)
+                again = [embed(args.endpoint, case["anchor"], timeout) for _ in range(max(1, repeat - 1))]
             except Rejected as e:
                 counts["fail"] += 1
                 out("[FAIL] %s: endpoint rejected the request: %s" % (case["id"], e))
@@ -566,7 +855,8 @@ def run(args):
                 continue
             sp, sn = cosine(a, p), cosine(a, n)
             margin = float(case.get("margin", 0.0))
-            same = max(abs(x - y) for x, y in zip(a, a2)) if len(a) == len(a2) else float("inf")
+            same = max((max(abs(x - y) for x, y in zip(a, a2)) if len(a) == len(a2) and a else float("inf"))
+                       for a2 in again)
             reasons = []
             if not sp > sn + margin:
                 reasons.append("cos(anchor,positive)=%.4f not > cos(anchor,negative)=%.4f + %.4f" % (sp, sn, margin))
@@ -611,7 +901,7 @@ def run(args):
                 out("[UNDETERMINED] %s: no answer: %s" % (key, msg))
             report["results"].append(rec)
             continue
-        why = undetermined_reason(a, pr["checks"])
+        why = undetermined_reason(a, pr)
         if why:
             counts["undetermined"] += 1
             rec.update(verdict="UNDETERMINED", reasons=[why], answer=a["content"], finish_reason=a["finish_reason"])
@@ -619,7 +909,7 @@ def run(args):
             out("[UNDETERMINED] %s (%.2fs, finish=%s): %s" % (key, a["seconds"], a["finish_reason"], why))
             continue
         answers[key] = a
-        ok, reasons = judge(pr["checks"], a["content"])
+        ok, reasons = judge_probe(pr, a["content"])
         counts["pass" if ok else "fail"] += 1
         rec.update(verdict="PASS" if ok else "FAIL", answer=a["content"], finish_reason=a["finish_reason"],
                    seconds=a["seconds"], reasons=reasons)
@@ -642,13 +932,13 @@ def run(args):
                     out("[UNDETERMINED] control %s: no answer: %s" % (key, err[1]))
                     report["controls"].append({"key": key, "verdict": "UNDETERMINED", "reasons": [err[1]]})
                     continue
-                why = undetermined_reason(a, gpr["checks"])
+                why = undetermined_reason(a, gpr)
                 if why:
                     counts["undetermined"] += 1
                     out("[UNDETERMINED] control %s: %s" % (key, why))
                     report["controls"].append({"key": key, "verdict": "UNDETERMINED", "reasons": [why]})
                     continue
-                golden_ok, golden_reasons = judge(gpr["checks"], a["content"])
+                golden_ok, golden_reasons = judge_probe(gpr, a["content"])
                 if golden_ok:
                     counts["fail"] += 1
                     out("[FAIL] control %s: the golden checks PASSED on a golden-bad image - the validator "
@@ -663,30 +953,43 @@ def run(args):
                 report["controls"].append({"key": key, "verdict": verdict, "answer": a["content"],
                                            "golden_reasons": golden_reasons})
 
-    # 6. determinism
+    # 6. determinism (Constitution 11.4.50): every judged probe is asked `repeat` times in total and every answer must be
+    # byte-identical. repeat=1 is the QUICK mode: only the suite's determinism_repeat probes are asked once more.
     index = {k: (fx, pr) for k, fx, pr in probes_of(suite)}
-    for key in suite.get("determinism_repeat", []):
-        if key not in answers:
-            continue
+    if repeat == 1:
+        plan = [(k, 1) for k in suite.get("determinism_repeat", []) if k in answers]
+        out("quick mode (LLMCTL_VALIDATE_REPEAT=1): only %s asked once more - NOT a decision-bearing run, never "
+            "recorded" % ([k for k, _ in plan] or "no probe"))
+    else:
+        plan = [(k, repeat - 1) for k, _, _ in probes_of(suite) if k in answers]
+    for key, extra in plan:
         fx, pr = index[key]
-        a, err = do_probe(key, fx, pr)
-        if err:
+        diff, und = None, None
+        for i in range(extra):
+            a, err = do_probe(key, fx, pr)
+            if err:
+                und = "no answer: %s" % err[1]
+                break
+            why = undetermined_reason(a)
+            if why:
+                und = why
+                break
+            if a["content"] != answers[key]["content"]:
+                diff = (i + 2, a["content"])
+                break
+        if und:
             counts["undetermined"] += 1
-            out("[UNDETERMINED] determinism %s: no answer: %s" % (key, err[1]))
+            out("[UNDETERMINED] determinism %s: %s" % (key, und))
+            report["determinism"].append({"key": key, "identical": None, "repeat": extra + 1})
             continue
-        why = undetermined_reason(a)
-        if why:
-            counts["undetermined"] += 1
-            out("[UNDETERMINED] determinism %s: %s" % (key, why))
-            continue
-        same = a["content"] == answers[key]["content"]
+        same = diff is None
         counts["pass" if same else "fail"] += 1
-        out("[%s] determinism %s: repeated request %s" % ("PASS" if same else "FAIL", key,
-                                                         "byte-identical" if same else "DIFFERS"))
+        out("[%s] determinism %s: repeat=%d %s" % ("PASS" if same else "FAIL", key, extra + 1,
+                                                   "byte-identical" if same else "answer #%d DIFFERS" % diff[0]))
         if not same:
             out("       first:  %s" % json.dumps(answers[key]["content"]))
-            out("       second: %s" % json.dumps(a["content"]))
-        report["determinism"].append({"key": key, "identical": same})
+            out("       #%d:     %s" % (diff[0], json.dumps(diff[1])))
+        report["determinism"].append({"key": key, "identical": same, "repeat": extra + 1})
     return finish()
 
 
@@ -809,6 +1112,7 @@ def main(argv=None):
     r.add_argument("--json", action="store_true")
     r.add_argument("--evidence", default="")
     r.add_argument("--verdict-file", default="", help="write the final verdict word (PASS/FAIL/UNDETERMINED) here")
+    r.add_argument("--report-file", default="", help="write a small JSON summary (verdict, repeat, served model) here")
     s = sub.add_parser("selftest")
     s.add_argument("--suite", required=True)
     rd = sub.add_parser("redact")
@@ -870,6 +1174,12 @@ def main(argv=None):
         return 0
     if a.cmd == "selftest":
         suite = load_suite(a.suite)
+        try:
+            validate_suite(suite)
+        except SuiteDefect as e:
+            print("BROKEN suite defect: %s" % e)
+            print("judge self-test: refused (the suite itself is unusable)")
+            return 1
         res = judge_selftest(suite)
         bad = [r for r in res if not r[1]]
         for ctl, ok, detail in res:
