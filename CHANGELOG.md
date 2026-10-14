@@ -25,6 +25,12 @@ repository as an honest record of that process.
 
 ## Unreleased
 
+* **feat(hostsafety): root-steps caps `/tmp` at 4G, earlyoom acts on available memory alone, `--verify`.** A persistent
+  `tmp.mount` drop-in (vendor options, only `size=` changed) and a live `mount -o remount` only while `/tmp` holds < 3 GiB
+  (never deletes anything); earlyoom `-m 10,5 -s 100,100` (1.9.0 has no PSI trigger; `-s 10` is unreachable under the slice
+  swap caps); `--verify` prints persistent / boot-effective / live / enabled per setting (rc 0/1/2, `LIVE_*` fakes only
+  under a test root); legacy 2026-10-09 files are recognised as ours. `bounded-run` warns when the temp dir is a tmpfs.
+  Not applied on `anton` (root): run `sudo bash scripts/hostsafety/root-steps.sh --apply`.
 * **fix(hostsafety): app.slice swap cap is SwapTotal/2 (was min(1 GiB, SwapTotal/4)).** `HOSTSAFETY_APP_SWAP_PCT` (integer
   1..100, default 50); background/user keep the 1/4 rule. Rationale: tmpfs shmem and anon of the agent fleet only leave RAM through
   swap; on 2026-10-14 a 1 GiB cap kept 8.1 G of `/tmp` shmem resident while swap stayed 75% free. The installer now sizes every slice

@@ -25,6 +25,8 @@
 #   --tiny         allow MemoryMax < 1 GiB (deliberate tiny containment tests only)
 #   --no-disk-tmp  do NOT redirect TMPDIR (default: a per-run 0700 dir on DISK, removed on exit; /tmp is RAM-backed tmpfs and its
 #                  pages are charged, unreclaimably, to the writing cgroup -> memcg OOM -> GNOME "Application Stopped")
+#                  When the temp dir is a tmpfs (--no-disk-tmp, or BOUNDED_RUN_TMP_ROOT on tmpfs) a WARNING with its size and
+#                  fullness is printed (even with -q): /tmp may be capped at a few GB (root-steps.sh tmp.mount drop-in).
 # env: BOUNDED_RUN_MEM / _TASKS / _CPU / _SWAP / _TIMEOUT supply the defaults; BOUNDED_RUN_TMP_ROOT moves the TMPDIR root.
 # exit: the command's status; 124 on timeout; 125 on bounded-run's own error.
 # Processes the command leaves behind (orphans) are killed when it exits - the scope is the unit.
@@ -128,6 +130,15 @@ if (( disk_tmp )); then
     || { echo "bounded-run: cannot create a disk-backed TMPDIR under ${tmp_root} (use --no-disk-tmp to skip)" >&2; exit 125; }
   chmod 0700 "${run_tmp}"
   export TMPDIR="${run_tmp}" TEMP="${run_tmp}" TMP="${run_tmp}" GOTMPDIR="${run_tmp}"   # inherited by the scope's command
+fi
+# /tmp (and /dev/shm, $XDG_RUNTIME_DIR) are RAM.  Whenever the command's temp dir ends up on a tmpfs - --no-disk-tmp, or a
+# BOUNDED_RUN_TMP_ROOT on tmpfs - say so with its size and fullness, even with -q: files there pin memory that killing a
+# process cannot free, and /tmp may be only a few GB (docs/host-safety.md, 2026-10-14 hang).  A warning, never a refusal.
+_eff_tmp="${run_tmp:-${TMPDIR:-/tmp}}"
+if [[ "$(stat -f -c %T "${_eff_tmp}" 2>/dev/null)" == tmpfs ]]; then
+  _df="$(df -B1 --output=size,used "${_eff_tmp}" 2>/dev/null | tail -1)"
+  read -r _tsz _tused <<<"${_df}"
+  echo "bounded-run: WARNING: the command's temp dir ${_eff_tmp} is tmpfs (RAM): size $(numfmt --to=iec "${_tsz:-0}" 2>/dev/null || echo ?), used $(numfmt --to=iec "${_tused:-0}" 2>/dev/null || echo ?). Files there pin memory (killing a process frees none of it); put big artifacts on disk (${XDG_CACHE_HOME:-${HOME}/.cache}/...)." >&2
 fi
 (( quiet )) || echo "bounded-run: ${unit} MemoryMax=${mem} MemoryHigh=${high} TasksMax=${tasks} CPUQuota=${cpu}% SwapMax=${swap}${run_tmp:+ TMPDIR=${run_tmp}} timeout=${timeout_s}s" >&2
 flag="$(mktemp "${XDG_RUNTIME_DIR:-/tmp}/bounded-run.XXXXXX")" || exit 125

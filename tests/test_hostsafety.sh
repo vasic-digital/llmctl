@@ -363,6 +363,91 @@ rsr --apply >/dev/null                                           # second apply:
 rsr --revert >/dev/null
 assert_eq "yes" "$(cmp -s "${EF}" "${TEST_TMP}/earlyoom.orig" && echo yes || echo no)" "--revert restores the backed-up /etc/default/earlyoom (does not delete it)"
 assert_eq "no" "$([[ -e ${UF} ]] && echo yes || echo no)" "--revert removes files that had no original"
+# --- 7a. root-steps: /tmp tmpfs size (tmp.mount drop-in), earlyoom thresholds, legacy files, --verify (2026-10-14) ---
+RT="${TEST_TMP}/rootfs_tmp"; mkdir -p "${RT}/usr/lib/systemd/system" "${RT}/etc/default" "${RT}/proc/sys/vm"
+# the vendor unit exactly as shipped on anton (systemd 259, /usr/lib/systemd/system/tmp.mount)
+cat >"${RT}/usr/lib/systemd/system/tmp.mount" <<'U'
+[Unit]
+Description=Temporary Directory /tmp
+ConditionPathIsSymbolicLink=!/tmp
+[Mount]
+What=tmpfs
+Where=/tmp
+Type=tmpfs
+Options=mode=1777,strictatime,nosuid,nodev,size=50%%,nr_inodes=1m,x-systemd.graceful-option=usrquota
+U
+printf '# package default\nEARLYOOM_ARGS="-r 3600"\n' >"${RT}/etc/default/earlyoom"
+echo 60 >"${RT}/proc/sys/vm/swappiness"
+printf 'MemTotal:       31717516 kB\nSwapTotal:       8388604 kB\n' >"${TEST_TMP}/meminfo_anton"
+# legacy (2026-10-09, pre-marker) hostsafety files exactly as found on anton
+mkdir -p "${RT}/etc/sysctl.d" "${RT}/etc/systemd/system/user-1000.slice.d"
+printf '# hostsafety: prefer reclaiming page cache over swapping anonymous memory.\nvm.swappiness = 20\n' >"${RT}/etc/sysctl.d/90-hostsafety.conf"
+printf '# hostsafety: last-resort ceiling for everything user 1000 runs (31 GB host).\n[Slice]\nMemoryHigh=90%%\nMemoryMax=95%%\nTasksMax=40000\n' >"${RT}/etc/systemd/system/user-1000.slice.d/50-hostsafety.conf"
+LIVE_ANTON='rw,nosuid,nodev,size=15858760k,nr_inodes=1048576,inode64,usrquota'
+rst() { HOSTSAFETY_ROOT_PREFIX="${RT}" HOSTSAFETY_MEMINFO="${TEST_TMP}/meminfo_anton" LIVE_TMP_OPTIONS="${LIVE_TMP_OPTIONS:-${LIVE_ANTON}}" \
+  LIVE_EARLYOOM="${LIVE_EARLYOOM:-/usr/bin/earlyoom -r 3600}" LIVE_EARLYOOM_ENABLED="${LIVE_EARLYOOM_ENABLED:-enabled}" \
+  LIVE_USER_SLICE="${LIVE_USER_SLICE:-MemoryHigh=29230862336 MemoryMax=30854799360 TasksMax=40000}" bash "${HS}/root-steps.sh" "$@"; }
+pl="$(rst 2>&1)"
+TD=/etc/systemd/system/tmp.mount.d/50-hostsafety.conf
+assert_contains "${pl}" "=== would write ${TD} ===" "plan writes the PERSISTENT tmp.mount drop-in"
+assert_contains "${pl}" "Options=mode=1777,strictatime,nosuid,nodev,size=4G,nr_inodes=1m,x-systemd.graceful-option=usrquota" "drop-in keeps every vendor option and changes only size= (4G)"
+assert_contains "${pl}" "tmp.mount boot-effective size=50% (16239368192 bytes); live size=15858760k (16239370240 bytes)" "plan shows the BOOT-effective value next to the LIVE value"
+assert_contains "${pl}" "-m 10,5 -s 100,100" "earlyoom thresholds: SIGTERM at 10% / SIGKILL at 5% available, swap condition always true (100,100)"
+# the remount decision (live part only; the persistent drop-in is written regardless)
+assert_contains "$(HOSTSAFETY_TMP_USED_BYTES=1073741824 rst 2>&1)" "live: would remount /tmp to size=4G (used 1073741824 < 3221225472 bytes)" "plan: small /tmp => live remount planned"
+big="$(HOSTSAFETY_TMP_USED_BYTES=3500000000 rst 2>&1)"
+assert_contains "${big}" "REFUSED live remount: /tmp holds 3500000000 bytes >= 3221225472" "plan: big /tmp => live remount refused with a clear message"
+assert_contains "${big}" "nothing is truncated or deleted" "refusal says nothing is deleted"
+assert_rc 2 "HOSTSAFETY_TMP_SIZE garbage is refused" env HOSTSAFETY_TMP_SIZE='4G,mode=0777' HOSTSAFETY_ROOT_PREFIX="${RT}" bash "${HS}/root-steps.sh"
+assert_rc 2 "HOSTSAFETY_EARLYOOM_THRESHOLDS with anything but -m/-s/-M/-S numbers is refused" env HOSTSAFETY_EARLYOOM_THRESHOLDS='-m 5 --ignore x' HOSTSAFETY_ROOT_PREFIX="${RT}" bash "${HS}/root-steps.sh"
+assert_contains "$(HOSTSAFETY_EARLYOOM_THRESHOLDS='-m 5 -s 10' rst 2>&1)" 'EARLYOOM_ARGS="-r 60 -m 5 -s 10 ' "HOSTSAFETY_EARLYOOM_THRESHOLDS selects the previous design (-m 5 -s 10)"
+# --verify BEFORE apply: the drop-in is missing, the legacy user-1000 file still has MemoryMax => FAIL rows, rc 1
+vb="$(rst --verify 2>&1; echo "rc=$?")"
+assert_contains "${vb}" "rc=1" "--verify before apply fails (rc 1)"
+assert_contains "${vb}" "$(printf 'ROW\ttmp.mount size\tFAIL')" "--verify: tmp.mount size row FAILs without the persistent drop-in"
+assert_contains "${vb}" "$(printf 'ROW\tearlyoom args\tFAIL')" "--verify: earlyoom args row FAILs with the package default"
+assert_contains "${vb}" "$(printf 'ROW\tuser-1000.slice\tFAIL')" "--verify: user-1000.slice row FAILs while the legacy MemoryMax=95% is in place"
+assert_contains "${vb}" "$(printf 'ROW\tvm.swappiness\tFAIL')" "--verify: swappiness row FAILs when live (60) differs from the boot value (20)"
+HOSTSAFETY_TMP_USED_BYTES=1073741824 rst --apply >"${TEST_TMP}/rst_apply.out" 2>&1
+assert_file_contains "${RT}${TD}" "# hostsafety-managed" "apply wrote the tmp.mount drop-in with the marker"
+assert_contains "$(cat "${TEST_TMP}/rst_apply.out")" "live: remount /tmp size=4G skipped (test root)" "apply: live remount is decided (and only simulated under a test root)"
+assert_eq "no" "$([[ -e ${RT}/var/backups/hostsafety/orig/etc/sysctl.d/90-hostsafety.conf ]] && echo yes || echo no)" "a legacy (2026-10-09, unmarked) hostsafety file is recognised as ours, never saved as 'the original'"
+assert_file_exists "${RT}/var/backups/hostsafety/orig/etc/default/earlyoom" "the package-default earlyoom file IS saved as the original"
+assert_file_exists "$(find "${RT}/var/backups/hostsafety" -path '*2*/etc/sysctl.d/90-hostsafety.conf' | head -1)" "the legacy file still gets a timestamped backup copy"
+# --verify AFTER apply with live == boot (simulated): every row PASS, rc 0
+echo 20 >"${RT}/proc/sys/vm/swappiness"
+EO_NOW="/usr/bin/earlyoom $(sed -n 's/^EARLYOOM_ARGS="\(.*\)"$/\1/p' "${RT}/etc/default/earlyoom")"
+va="$(LIVE_TMP_OPTIONS='rw,nosuid,nodev,size=4194304k,nr_inodes=1048576,inode64,usrquota' LIVE_EARLYOOM="${EO_NOW}" \
+      LIVE_USER_SLICE='MemoryHigh=29230862336 MemoryMax=infinity TasksMax=40000' rst --verify 2>&1; echo "rc=$?")"
+assert_contains "${va}" "rc=0" "--verify after apply with matching live values passes (rc 0)"
+assert_eq "0" "$(grep -c "$(printf '\t')FAIL$(printf '\t')" <<<"${va}" || true)" "--verify after apply: no FAIL row"
+# drift: persistent says 4G, the live mount is still 16 GB (remount refused / not done) => FAIL naming the drift
+vd="$(LIVE_EARLYOOM="${EO_NOW}" LIVE_USER_SLICE='MemoryHigh=29230862336 MemoryMax=infinity TasksMax=40000' rst --verify 2>&1; echo "rc=$?")"
+assert_contains "${vd}" "DRIFT live size=15858760k" "--verify flags runtime-vs-boot DRIFT on /tmp (a boot would apply 4G, the live mount is 16 GB)"
+assert_contains "${vd}" "rc=1" "--verify with drift fails"
+# runtime-only earlyoom (file says new args, process still runs the old ones) => FAIL
+vr="$(LIVE_TMP_OPTIONS='rw,nosuid,nodev,size=4194304k,nr_inodes=1048576,inode64,usrquota' LIVE_USER_SLICE='MemoryHigh=29230862336 MemoryMax=infinity TasksMax=40000' rst --verify 2>&1; echo "rc=$?")"
+assert_contains "${vr}" "$(printf 'ROW\tearlyoom args\tFAIL')" "--verify: running earlyoom args differ from the persistent file => FAIL (restart needed)"
+# earlyoom not enabled => it would not start at boot => FAIL
+ve="$(LIVE_EARLYOOM_ENABLED=disabled LIVE_TMP_OPTIONS='rw,nosuid,nodev,size=4194304k,nr_inodes=1048576,inode64,usrquota' LIVE_EARLYOOM="${EO_NOW}" LIVE_USER_SLICE='MemoryHigh=29230862336 MemoryMax=infinity TasksMax=40000' rst --verify 2>&1; echo "rc=$?")"
+assert_contains "${ve}" "$(printf 'ROW\tearlyoom enabled\tFAIL')" "--verify: earlyoom not enabled => FAIL (would not start at the next boot)"
+# a later drop-in overriding ours changes the BOOT value: the parser must see it (precedence = lexical basename order)
+printf '[Mount]\nOptions=mode=1777,size=12G\n' >"${RT}/etc/systemd/system/tmp.mount.d/90-operator.conf"
+vo="$(LIVE_TMP_OPTIONS='rw,nosuid,nodev,size=4194304k,nr_inodes=1048576,inode64,usrquota' LIVE_EARLYOOM="${EO_NOW}" LIVE_USER_SLICE='MemoryHigh=29230862336 MemoryMax=infinity TasksMax=40000' rst --verify 2>&1; echo "rc=$?")"
+assert_contains "${vo}" "boot size=12G" "--verify: a later drop-in (90-operator.conf) wins at boot and is reported"
+assert_contains "${vo}" "$(printf 'ROW\ttmp.mount size\tFAIL')" "--verify: boot value differs from the hostsafety size => FAIL"
+rm -f "${RT}/etc/systemd/system/tmp.mount.d/90-operator.conf"
+assert_rc 2 "--verify with an unreadable live /tmp option string is UNDETERMINED (rc 2), never a pass" env HOSTSAFETY_ROOT_PREFIX="${RT}" HOSTSAFETY_MEMINFO="${TEST_TMP}/meminfo_anton" \
+  LIVE_TMP_OPTIONS='garbage' LIVE_EARLYOOM="${EO_NOW}" LIVE_EARLYOOM_ENABLED=enabled LIVE_USER_SLICE='MemoryHigh=29230862336 MemoryMax=infinity TasksMax=40000' bash "${HS}/root-steps.sh" --verify
+# LIVE_* fakes are honoured ONLY under a test root: in production they must not be able to make --verify pass
+assert_contains "$(LIVE_TMP_OPTIONS='rw,size=4194304k' bash "${HS}/root-steps.sh" --verify 2>&1)" "tmp.mount size" "--verify runs without root (production paths) and prints the tmp.mount row"
+assert_eq "0" "$(LIVE_TMP_OPTIONS='rw,size=4194304k' bash "${HS}/root-steps.sh" --verify 2>&1 | grep -c 'live size=4194304k' || true)" "production --verify ignores LIVE_TMP_OPTIONS (a gate cannot be faked by env)"
+rst --revert >"${TEST_TMP}/rst_revert.out" 2>&1
+assert_eq "no" "$([[ -e ${RT}${TD} ]] && echo yes || echo no)" "--revert removes the tmp.mount drop-in"
+assert_contains "$(cat "${TEST_TMP}/rst_revert.out")" "live: remount /tmp size=50% skipped (test root)" "--revert restores the live size from the boot definition that remains (vendor 50%)"
+assert_eq "no" "$([[ -e ${RT}/etc/sysctl.d/90-hostsafety.conf ]] && echo yes || echo no)" "--revert removes the legacy hostsafety file too (there was no pre-hostsafety original)"
+assert_eq "yes" "$(grep -q 'EARLYOOM_ARGS="-r 3600"' "${RT}/etc/default/earlyoom" && echo yes || echo no)" "--revert restores the package-default earlyoom file"
+
 # earlyoom proven against the real binary + systemd's own EnvironmentFile/$EARLYOOM_ARGS expansion
 if command -v earlyoom >/dev/null 2>&1 && command -v systemd-run >/dev/null 2>&1 && systemctl --user show -p Version >/dev/null 2>&1; then
   rsr --apply >/dev/null; cp "${EF}" "${TEST_TMP}/eo.env"
@@ -422,6 +507,15 @@ EOS
   assert_eq "yes" "$([[ -n "$(pid_of git)" && -n "$(pid_of gnome-terminal-)" ]] && echo yes || echo no)" "earlyoom test: decoys started"
   assert_contains "$(cat "${TEST_TMP}/eo.out")" "Will ignore process names that match regex '^(systemd" "earlyoom parsed the --ignore regex through systemd's EnvironmentFile"
   assert_contains "$(cat "${TEST_TMP}/eo.out")" "Preferring to kill process names that match regex '^(git" "earlyoom parsed the --prefer regex"
+  # thresholds through systemd's own EnvironmentFile/$EARLYOOM_ARGS expansion (earlyoom prints its parsed limits at start)
+  eo_limits() { timeout 30 systemd-run --user --pipe --wait -q -p EnvironmentFile="$1" -p TasksMax=20 -p MemoryMax=256M \
+    timeout 2 /usr/bin/earlyoom '$EARLYOOM_ARGS' --dryrun 2>&1 | grep -E 'when mem avail' || true; }
+  lim_out="$(eo_limits "${TEST_TMP}/eo.env")"
+  assert_contains "${lim_out}" "sending SIGTERM when mem avail <= 10.00% and swap free <= 100.00%" "earlyoom (real binary, systemd expansion): SIGTERM at 10% available, swap condition always true"
+  assert_contains "${lim_out}" "SIGKILL when mem avail <=  5.00% and swap free <= 100.00%" "earlyoom: SIGKILL at 5% available, swap condition always true (needs -s 100,100)"
+  # paired mutation: '-s 100' without the kill value => earlyoom halves it for SIGKILL (50%), so SIGKILL would need swap <= 50% free
+  sed 's/-s 100,100/-s 100/' "${TEST_TMP}/eo.env" >"${TEST_TMP}/eo_s100.env"
+  assert_contains "$(eo_limits "${TEST_TMP}/eo_s100.env")" "SIGKILL when mem avail <=  5.00% and swap free <= 50.00%" "mutation [-s 100 without ,100] is CAUGHT: the SIGKILL swap condition becomes 50%, not always true"
   if [[ ${dominated} -eq 1 ]]; then
     vict="$(awk '/<--- new victim/ {print $1}' "${TEST_TMP}/eo.out" | sort -u)"
     leaked=""
@@ -574,6 +668,15 @@ SH
   assert_eq "no" "$([[ -e $(printf '%s\n' "${tout}" | sed -n 1p) ]] && echo yes || echo no)" "per-run TMPDIR removed after a failing run"
   tout="$("${BR}" -q -m 1G --no-disk-tmp -n "hstmp3$$" -- bash -c 'echo "${TMPDIR:-unset}"' 2>&1)"
   assert_eq "yes" "$([[ ${tout} != *"${TEST_TMP}/brtmp"* ]] && echo yes || echo no)" "--no-disk-tmp leaves TMPDIR alone"
+  # /tmp is RAM (and capped small by root-steps.sh): a tmpfs temp dir is announced with size and fullness, even with -q
+  if [[ "$(stat -f -c %T /tmp)" == tmpfs ]]; then
+    wout="$(TMPDIR=/tmp "${BR}" -q -m 1G --no-disk-tmp -n "hstmp4$$" -- true 2>&1)"
+    assert_contains "${wout}" "WARNING: the command's temp dir /tmp is tmpfs (RAM): size " "--no-disk-tmp with TMPDIR on tmpfs warns with size and fullness (even with -q)"
+    wout="$("${BR}" -q -m 1G -n "hstmp5$$" -- true 2>&1)"
+    assert_eq "0" "$(grep -c 'is tmpfs (RAM)' <<<"${wout}" || true)" "the default disk-backed TMPDIR prints no tmpfs warning (golden-FALSE)"
+  else
+    assert_skip "/tmp is not tmpfs on this host" "bounded-run tmpfs temp-dir warning"
+  fi
   unset BOUNDED_RUN_TMP_ROOT
   # the default root is on a real disk filesystem, NOT tmpfs (the whole point)
   dtout="$("${BR}" -q -m 1G -n "hstmp4$$" -- bash -c 'df --output=fstype "$TMPDIR" | tail -1' 2>&1)"

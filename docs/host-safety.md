@@ -139,11 +139,49 @@ tail -f ~/.local/state/hostsafety/guard.log; cat ~/.local/state/hostsafety/guard
 systemctl --user show app.slice -p MemoryHigh,MemoryMax,TasksMax,MemorySwapMax
 ```
 
-Root-level pieces (journald rate limit, swappiness, `user-1000.slice` throttle + task cap, earlyoom) are **not**
-applied by the installer: `sudo bash scripts/hostsafety/root-steps.sh` prints the plan **and the earlyoom
-command line that is running right now**, `--apply` applies it and prints the running command line again as a
-post-check (it fails if `--ignore` is missing), `--revert` restores the pre-hostsafety originals kept under
-`/var/backups/hostsafety/orig/` (or removes our files if there was none).
+Root-level pieces (journald rate limit, swappiness, `user-1000.slice` throttle + task cap, earlyoom, the `/tmp` size) are
+**not** applied by the installer: `sudo bash scripts/hostsafety/root-steps.sh` prints the plan, **the `/tmp` size a boot would
+apply next to the live one**, and **the earlyoom command line that is running right now**; `--apply` writes every persistent
+file first, then applies it live and prints the running earlyoom command line as a post-check (it fails if `--ignore` is
+missing) followed by `--verify`; `--revert` restores the pre-hostsafety originals kept under `/var/backups/hostsafety/orig/`
+(or removes our files if there was none). `bash scripts/hostsafety/root-steps.sh --verify` needs no root: one `ROW` per
+setting with the persistent definition, the boot-effective value, the live value and the enabled state, `PASS`/`FAIL`/
+`UNDETERMINED`, rc 0/1/2. Files written by the first (2026-10-09, pre-marker) version start with `# hostsafety: ` and are
+recognised as ours (removed by `--revert`, never kept as "the original").
+
+**State on `anton` (measured 2026-10-14, `root-steps.sh --verify`: 3 PASS / 3 FAIL).** The FIRST version of this script was
+applied on 2026-10-09 at 11:13:30 (`/etc/sysctl.d/90-hostsafety.conf`, `/etc/systemd/journald.conf.d/50-hostsafety.conf`,
+`/etc/systemd/system/user-1000.slice.d/50-hostsafety.conf`, all dated then; swappiness 20 and the journald limit are live).
+Two parts are not in effect: `user-1000.slice` still carries the old `MemoryMax=95%` (live 30854799360), and the dpkg
+conffile prompt of that run installed the package's `/etc/default/earlyoom` (`/var/log/dpkg.log` 2026-10-09 11:13:36
+`conffile /etc/default/earlyoom install`), so earlyoom runs as `/usr/bin/earlyoom -r 3600` with no protection list. The
+current script has not been applied (agents cannot run sudo; this is the operator's step).
+
+**`/tmp` size (2026-10-14).** `/tmp` is the static `tmp.mount` (vendor `Options=...,size=50%%,...`: 16 GB on this 31 GB host).
+`root-steps.sh` writes `/etc/systemd/system/tmp.mount.d/50-hostsafety.conf` with the vendor options and only `size=` changed
+(`HOSTSAFETY_TMP_SIZE`, default `4G`; `inode64` is the tmpfs default and `usrquota` still comes from
+`x-systemd.graceful-option=usrquota`, so the live option string keeps both). That file is what every boot applies. `--apply`
+then runs `systemctl daemon-reload` and, as the live twin, `mount -o remount,size=4G /tmp` **only if `/tmp` holds less than
+3 GiB** (`HOSTSAFETY_TMP_REMOUNT_MAX_USED`); otherwise it prints `REFUSED live remount ... nothing is truncated or deleted` and
+the 4G size takes effect at the next boot. `--revert` removes the drop-in and grows the live mount back to the remaining boot
+value (vendor 50%). The boot-effective value is computed from the unit fragment and its drop-ins in systemd's order (a later
+drop-in such as `90-operator.conf` wins and is reported), because `systemctl show tmp.mount -p Options` shows the LIVE mount
+options of an active mount unit, not what the next boot applies.
+
+**earlyoom thresholds (2026-10-14).** earlyoom 1.9.0 has **no pressure (PSI) trigger**: only `-m`/`-s` (percent) and
+`-M`/`-S` (KiB), and it acts only when available memory **and** free swap are **both** at or below their minimums. On
+2026-10-14 at the collapse MemAvailable was about 20% (sar: 6.45 GB of 31.7 GB at 14:30) and swap ~75% free, so **no earlyoom
+setting could have fired** short of one that would also fire in normal operation. The designed `-m 5 -s 10` has a structural
+hole on this host: the slice swap caps (`app` 4 GiB + `user` 2 GiB + `background` 0.5 GiB of 8 GiB) keep global swap at least
+~19% free while a slice thrashes, so `-s 10` is practically unreachable and earlyoom stays inert. The default is therefore
+`-m 10,5 -s 100,100` (`HOSTSAFETY_EARLYOOM_THRESHOLDS`, only `-m/-s/-M/-S` with numbers accepted): the swap half is always
+true and earlyoom acts on available memory alone, SIGTERM at 10% (3.2 GB here), SIGKILL at 5%. `-s 100` alone is not enough:
+earlyoom halves the kill value, so SIGKILL would still need swap <= 50% free (proved against the real binary through
+systemd's `EnvironmentFile` expansion, with that mutation). Evidence against false triggers: the daily minimum of `kbavail`
+(sar, 10-minute samples, 2026-10-07..14) was below 10% only on 2026-10-08 (1.24 GB, 3.9%: the fork-bomb hang, where the old
+setting also fired); every other day stayed >= 14.7%. Samples are 10 minutes apart, so shorter dips are UNCONFIRMED. The
+protection list (`--ignore`, `--prefer`) is unchanged; earlyoom still picks host-wide by `oom_score` among unprotected
+processes, so a large browser in `session.slice` can be its victim.
 
 **earlyoom, exactly:** `--ignore` is a *hard* exclusion; `--avoid` only subtracts 300 from `oom_score` and could not
 keep a large gnome-shell/claude from being picked, so it is not used. The regexes match the kernel `comm`
@@ -283,6 +321,7 @@ was forced to stop."* although the machine had gigabytes free.
 | Copy a cap you saw elsewhere | Use the minimums: `go test -race` 4G; builds/archives 6G+ with TMPDIR on disk; `llama-server` = model size + 3G |
 | Pass `--tiny` to "be safe" | `--tiny` only for deliberate containment tests of a runaway (the test suite uses it) |
 | Leave temp bundles/tarballs behind | Remove them when the step finishes (`bounded-run` removes its own TMPDIR) |
+| Use `/tmp` as agent scratch (it is RAM, and capped at 4 GB once `root-steps.sh` is applied) | `~/.cache/agent-scratch/<task>/` (create it 0700); `bounded-run` warns, even with `-q`, when the command's temp dir is a tmpfs |
 
 ### What remains by design
 
@@ -431,11 +470,13 @@ reclaim storm (`pgscand` 356k/s, sys CPU 1108%), memory PSI `full` 53-92% for mo
 
 1. **Arm the guard** (`HOSTSAFETY_GUARD_ARM=1` in `~/.config/hostsafety/guard.env`). It would not have prevented this hang (it cannot
    free tmpfs); see the review of all past decisions in the commit that adds it.
-2. **Shrink `/tmp`** from 16 GB to about 4 GB (root): `scripts/hostsafety/root-steps.sh` (tmp.mount drop-in).
+2. **Shrink `/tmp`** from 16 GB to 4 GB (root): `sudo bash scripts/hostsafety/root-steps.sh --apply` (tmp.mount drop-in, then a
+   live remount only while `/tmp` holds < 3 GiB). Check first with `bash scripts/hostsafety/root-steps.sh` (no root).
 3. **`app.slice` `MemorySwapMax`**: raised from 1 G to SwapTotal/2 (4 GiB here) by the installer's formula (user-level, applied on
    `anton` on 2026-10-14; see *What is installed*). Whether 4 GiB is enough for a repeat of 8 GB of shmem is UNCONFIRMED: swapping
    shmem out costs IO, and a 4 GB `/tmp` (decision 2) is the bound that actually limits it.
-4. **earlyoom thresholds** (`-m`/`-s`): earlyoom 1.9.0 has no PSI trigger at all; see *earlyoom, exactly*.
+4. **earlyoom thresholds**: `root-steps.sh` now writes `-m 10,5 -s 100,100` (see *earlyoom thresholds*); the same `--apply`
+   restores the protection list that the 2026-10-09 dpkg prompt replaced. No setting of earlyoom 1.9.0 reacts to PSI.
 5. **`systemd-oomd` `ManagedOOMMemoryPressureLimit`** (vendor 50% / 20 s on `user@.service`): unchanged; changing it is `/etc` (root).
 
 ## Limits of this approach (read before trusting it)
