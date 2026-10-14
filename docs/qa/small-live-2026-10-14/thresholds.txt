@@ -1,0 +1,11 @@
+profile=small
+suites=chat-v1
+allow_large=0
+footprint_mb=1926
+vram_need_mb=3859
+gate_min_mem_mb=12000
+gate_min_free_vram_mb=4883
+gpu_total_mb=12288
+wd_min_mem_mb=5000
+wd_max_gpu_mb=11500
+catalog=$HOME/Projects/llmctl/scripts/livetest/../../models/catalog.json

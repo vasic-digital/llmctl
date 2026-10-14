@@ -1,0 +1,3 @@
+profile 'small' passed checksum verification
+validation suites for 'small': chat-v1 
+[llmctl] live validation NOT run ('small' is not running; run 'llmctl validate small' or 'llmctl models verify small --live')

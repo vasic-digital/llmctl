@@ -1,0 +1,7 @@
+profile=small
+gpu_peak_mb=4335
+gpu_baseline_mb=296
+gpu_final_mb=296
+unit_memory_peak_mb=925
+unit_memory_high_mb=5120
+unit_memory_max_mb=6144

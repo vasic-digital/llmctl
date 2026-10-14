@@ -1,0 +1,3 @@
+2026-10-14T09:19:37Z $ nice -n 19 ionice -c 3 llmctl models verify small -> rc=0
+2026-10-14T09:19:39Z $ LLMCTL_VALIDATE_ON_START=0 LLMCTL_READY_TIMEOUT=0 nice -n 19 ionice -c 3 llmctl switch small (background; stops: none)
+2026-10-14T09:19:47Z $ nice -n 19 ionice -c 3 llmctl validate small --host http://127.0.0.1:8085 --json --keep

@@ -1,0 +1,3 @@
+2026-10-14T09:19:38Z watchdog start profile=small parent=2889176 interval=2s limits: mem<5000MiB psi>20 gpu>11500MiB wall>600s
+2026-10-14T09:19:51Z llmctl stop small rc=0 (bound 20s)
+2026-10-14T09:19:51Z watchdog terminated by parent (clean exit, no action)

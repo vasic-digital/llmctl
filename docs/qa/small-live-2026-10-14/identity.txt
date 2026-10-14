@@ -1,0 +1,4 @@
+model_sha256=6c99cc00ae910f6a532a80022cb4bc1939094527a089c29294b841c0bd87f74d
+mmproj_sha256=N/A
+llama_server_version=load_backend: loaded CPU backend from /usr/lib/x86_64-linux-gnu/ggml/backends0/libggml-cpu-haswell.so version: 8681 (Debian) built with GNU 15.2.0 for Linux x86_64 
+gpu_baseline_mb=296 gpu_final_mb=296

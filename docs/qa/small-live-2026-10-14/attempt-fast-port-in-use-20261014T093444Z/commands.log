@@ -1,0 +1,2 @@
+2026-10-14T09:35:01Z $ nice -n 19 ionice -c 3 llmctl models verify fast -> rc=0
+2026-10-14T09:35:03Z $ LLMCTL_VALIDATE_ON_START=0 LLMCTL_READY_TIMEOUT=0 nice -n 19 ionice -c 3 llmctl switch fast (background; stops: none)

@@ -1,0 +1,3 @@
+resident_set=none reserved_ram_MiB=0 reserved_vram_MiB=0 measured_mem_MiB=20801 measured_gpu_used_MiB=395 (effective values below add/subtract the reservations)
+MemAvailable_MiB=20801 psi_some=1.02 psi_full=1.02 gpu_used_MiB=395 io_some=0.00 io_full=0.00
+gate REFUSED: PSI full avg10 1.02 not < 1

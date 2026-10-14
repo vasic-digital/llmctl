@@ -579,7 +579,7 @@ Certificates, keys and models are untouched. See [runbooks](runbooks.md#upgrade-
 
 ## Host safety and the model validation gate (release 3.2.0)
 
-Apart from one guarded live run on this host ([evidence](qa/vision-live-2026-10-13/README.md): PASS, 21 pass / 0 fail / 0 undetermined, run 1 did not capture `MemoryPeak`, [run 2](qa/vision-live-2026-10-13-run2/README.md) did: 3005 MiB on this host; `VmHWM` UNKNOWN; the profile tested was the vision one only), none of the entries below has been exercised against a real model or a real systemd user manager under real memory pressure; they describe what the code and the hermetic tests do. No other profile has been validated.
+Apart from the guarded live runs on this host (`small`, once, 2026-10-14: [evidence](qa/small-live-2026-10-14/README.md), PASS, `chat-v1` 6/0/0, `MemoryPeak` 925 MiB; and `vision`: [evidence](qa/vision-live-2026-10-13/README.md): PASS, 21 pass / 0 fail / 0 undetermined, run 1 did not capture `MemoryPeak`, [run 2](qa/vision-live-2026-10-13-run2/README.md) did: 3005 MiB on this host; `VmHWM` UNKNOWN; the profiles tested were `vision` and `small` only), none of the entries below has been exercised against a real model or a real systemd user manager under real memory pressure; they describe what the code and the hermetic tests do. No other profile has been validated (`fast` has not run live).
 
 ### Why was my `start` / `enable` / `switch` refused with exit 75?
 
@@ -608,7 +608,7 @@ An UNDETERMINED run never replaces an earlier PASS record. Remedy: fix the cause
 ### How do I run the safe live test?
 
 Only with the operator's explicit go-ahead, on a quiet host, and once: `scripts/livetest/vision_live_test.sh [--allow-large] [<profile>]` (default `vision`; the profile must be in the catalog, listed as fitting by `llmctl plan --json`, checksum-verified and have a validation suite; large profiles such as `vision-pro` also need `--allow-large`), or `scripts/livetest/run_profiles.sh` for an ordered list, one at a time. It refuses with exit 3 when the profile is not allowed or memory, PSI, VRAM or the running set is not quiet, starts a watchdog that stops the profile through `llmctl stop <profile>` when a limit is crossed (exit 4), runs the profile's validation (`llmctl vision validate` or `llmctl validate`), always stops the profile and checks the VRAM baseline.
-Evidence goes to `~/.cache/llmctl-livetest/<UTC timestamp>-<profile>/`. Do not wrap it in retries and do not set `LT_HERMETIC` for a live run. Protocol and exit codes: [live-test-protocol](live-test-protocol.md). It has run live twice, for `vision` on 2026-10-13 (PASS both times; no other profile has run live yet; [evidence](qa/vision-live-2026-10-13/README.md)).
+Evidence goes to `~/.cache/llmctl-livetest/<UTC timestamp>-<profile>/`. Do not wrap it in retries and do not set `LT_HERMETIC` for a live run. Protocol and exit codes: [live-test-protocol](live-test-protocol.md). It has run live for `vision` twice on 2026-10-13 ([evidence](qa/vision-live-2026-10-13/README.md)) and for `small` once on 2026-10-14 ([evidence](qa/small-live-2026-10-14/README.md)); PASS every time, one host; no other profile has run live yet.
 
 ### Where is the systemd-oomd 50% rule?
 

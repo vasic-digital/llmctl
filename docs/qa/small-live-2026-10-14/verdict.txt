@@ -1,0 +1,21 @@
+
+CHECK                        RESULT
+profile                      small
+pre-gate                     PASS
+watchdog trigger             none
+readiness                    up
+validate rc                  0
+vram base/final MiB          296/296
+vram peak MiB                4335
+unit MemoryPeak MiB          925
+unit MemoryHigh MiB          5120
+unit MemoryMax MiB           6144
+profile stopped+vram ok      YES
+resident set switched off    none
+prior set restored           NONE (no other llmctl profile was running)
+model sha256                 6c99cc00ae910f6a532a80022cb4bc1939094527a089c29294b841c0bd87f74d
+mmproj sha256                N/A
+llama-server                 load_backend: loaded CPU backend from /usr/lib/x86_64-linux-gnu/ggml/backends0/libggml-cpu-haswell.so version: 8681 (Debian) built with GNU 15.2.0 for Linux x86_64 
+evidence                     $HOME/.cache/llmctl-livetest/20261014T091929Z-small
+VERDICT                      PASS (exit 0) - all known-answer probes matched; evidence captured; VRAM back to baseline
+RESTORE_STATE=none

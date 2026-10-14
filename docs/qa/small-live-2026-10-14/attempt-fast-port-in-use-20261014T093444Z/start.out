@@ -1,0 +1,4 @@
+error: port 8080 for "fast" is already in use by another program; set LLMCTL_PORT_FAST=<free port> (or LLMCTL_PORT_FAST=auto) to choose another, or LLMCTL_PORT_STRATEGY=dynamic
+ERROR: cannot start 'fast': no usable port
+ERROR: switch to 'fast' failed - restoring the previously-running set: <none>
+start rc=1

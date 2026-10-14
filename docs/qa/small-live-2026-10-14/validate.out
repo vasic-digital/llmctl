@@ -1,0 +1,182 @@
+{
+ "suite": "chat-v1",
+ "kind": "chat",
+ "suite_hash": "d158958d41bf433699f0902869d837b80f518d347f42e17db3d9e1772d37202c",
+ "endpoint": "http://127.0.0.1:8085",
+ "expect_model": "Llama-3.2-3B-Instruct-Q4_K_M.gguf",
+ "results": [
+  {
+   "key": "arith",
+   "role": "golden",
+   "prompt": "What is 17 + 25? Answer with only the number.",
+   "verdict": "PASS",
+   "answer": "42",
+   "finish_reason": "stop",
+   "seconds": 0.076,
+   "reasons": []
+  },
+  {
+   "key": "compare",
+   "role": "golden",
+   "prompt": "Which number is larger, 9 or 4? Answer with only the number.",
+   "verdict": "PASS",
+   "answer": "9",
+   "finish_reason": "stop",
+   "seconds": 0.039,
+   "reasons": []
+  },
+  {
+   "key": "capital",
+   "role": "golden",
+   "prompt": "What is the capital city of France? Answer with one word.",
+   "verdict": "PASS",
+   "answer": "Paris.",
+   "finish_reason": "stop",
+   "seconds": 0.051,
+   "reasons": []
+  },
+  {
+   "key": "echo",
+   "role": "golden",
+   "prompt": "Repeat exactly this code and nothing else: ZX-4417",
+   "verdict": "PASS",
+   "answer": "ZX-4417",
+   "finish_reason": "stop",
+   "seconds": 0.064,
+   "reasons": []
+  },
+  {
+   "key": "json",
+   "role": "golden",
+   "prompt": "Return a JSON object with exactly one key \"color\" whose value is the string \"blue\". Output only the JSON.",
+   "verdict": "PASS",
+   "answer": "{\"color\": \"blue\"}",
+   "finish_reason": "stop",
+   "seconds": 0.082,
+   "reasons": []
+  }
+ ],
+ "controls": [],
+ "determinism": [
+  {
+   "key": "arith",
+   "identical": true
+  }
+ ],
+ "judge_selftest": [
+  {
+   "probe": "arith",
+   "answer": "42",
+   "ok": true,
+   "detail": "judged PASS (want PASS) "
+  },
+  {
+   "probe": "arith",
+   "answer": "The answer is 41.",
+   "ok": true,
+   "detail": "judged FAIL (want FAIL) number_equals: expected 42, first number in answer is 41.0"
+  },
+  {
+   "probe": "arith",
+   "answer": "",
+   "ok": true,
+   "detail": "judged FAIL (want FAIL) empty answer"
+  },
+  {
+   "probe": "arith",
+   "answer": "17 + 25 = 42",
+   "ok": true,
+   "detail": "judged PASS (want PASS) "
+  },
+  {
+   "probe": "arith",
+   "answer": "17 + 25 = 41",
+   "ok": true,
+   "detail": "judged FAIL (want FAIL) number_equals: expected 42, first number in answer is 41.0"
+  },
+  {
+   "probe": "arith",
+   "answer": "17 + 25",
+   "ok": true,
+   "detail": "judged FAIL (want FAIL) number_equals: expected 42, first number in answer is 17.0"
+  },
+  {
+   "probe": "arith",
+   "answer": "42,000",
+   "ok": true,
+   "detail": "judged FAIL (want FAIL) number_equals: expected 42, first number in answer is None"
+  },
+  {
+   "probe": "arith",
+   "answer": ".42",
+   "ok": true,
+   "detail": "judged FAIL (want FAIL) number_equals: expected 42, first number in answer is None"
+  },
+  {
+   "probe": "compare",
+   "answer": "9",
+   "ok": true,
+   "detail": "judged PASS (want PASS) "
+  },
+  {
+   "probe": "compare",
+   "answer": "4",
+   "ok": true,
+   "detail": "judged FAIL (want FAIL) number_equals: expected 9, first number in answer is 4.0"
+  },
+  {
+   "probe": "capital",
+   "answer": "Paris.",
+   "ok": true,
+   "detail": "judged PASS (want PASS) "
+  },
+  {
+   "probe": "capital",
+   "answer": "London",
+   "ok": true,
+   "detail": "judged FAIL (want FAIL) contains_all: missing ['PARIS']; forbidden: answer claims ['LONDON']"
+  },
+  {
+   "probe": "echo",
+   "answer": "ZX-4417",
+   "ok": true,
+   "detail": "judged PASS (want PASS) "
+  },
+  {
+   "probe": "echo",
+   "answer": "ZX-4471",
+   "ok": true,
+   "detail": "judged FAIL (want FAIL) contains_all: missing ['ZX 4417']"
+  },
+  {
+   "probe": "json",
+   "answer": "```json\n{\"color\": \"blue\"}\n```",
+   "ok": true,
+   "detail": "judged PASS (want PASS) "
+  },
+  {
+   "probe": "json",
+   "answer": "{\"color\": \"red\"}",
+   "ok": true,
+   "detail": "judged FAIL (want FAIL) json_subset: expected {'color': 'blue'}, got {'color': 'red'}"
+  },
+  {
+   "probe": "json",
+   "answer": "color: blue",
+   "ok": true,
+   "detail": "judged FAIL (want FAIL) json_subset: no JSON object in answer"
+  }
+ ],
+ "notes": [],
+ "served_models": [
+  "$HOME/.local/share/llmctl/models/small/Llama-3.2-3B-Instruct-Q4_K_M.gguf",
+  "$HOME/.local/share/llmctl/models/small/Llama-3.2-3B-Instruct-Q4_K_M.gguf"
+ ],
+ "verdict": "PASS",
+ "exit_code": 0,
+ "counts": {
+  "pass": 6,
+  "fail": 0,
+  "undetermined": 0
+ }
+}

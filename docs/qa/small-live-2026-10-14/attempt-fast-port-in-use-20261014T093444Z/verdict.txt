@@ -1,0 +1,21 @@
+
+CHECK                        RESULT
+profile                      fast
+pre-gate                     PASS
+watchdog trigger             none
+readiness                    no
+validate rc                  NA
+vram base/final MiB          296/
+vram peak MiB                296
+unit MemoryPeak MiB          UNKNOWN
+unit MemoryHigh MiB          UNKNOWN
+unit MemoryMax MiB           UNKNOWN
+profile stopped+vram ok      NO
+resident set switched off    none
+prior set restored           NONE (no other llmctl profile was running)
+model sha256                 UNKNOWN
+mmproj sha256                UNKNOWN
+llama-server                 UNKNOWN
+evidence                     $HOME/.cache/llmctl-livetest/20261014T093444Z-fast
+VERDICT                      UNDETERMINED (exit 2) - llmctl start rc=1
+RESTORE_STATE=none

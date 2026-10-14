@@ -9,7 +9,7 @@ allow-list and the pass criteria; read-only), `scripts/livetest/run_profiles.sh`
 Which profiles may be live-tested is NOT a fixed list: it is derived at run time, per host, from `models/catalog.json`,
 `llmctl plan --json` and the validation suites (next section). The operator decided (recorded) to live-test, one at a time
 under this same watchdog, `vision`, `vision-pro`, the fitting chat/coder profiles and the embedding profile. Only `vision`
-has ever run live (2026-10-13, PASS); everything else below is covered by hermetic tests only until it has run.
+(twice) and `small` (once) have ever run live (PASS each time, one host, 2026-10-13 and 2026-10-14); everything else below is covered by hermetic tests only until it has run.
 
 Background: the host was force-powered-off after a memory/IO stall. This protocol exists so a live model test can
 never repeat that: it refuses to start on a stressed host, and a watchdog stops the profile the moment any limit is
@@ -303,7 +303,7 @@ Cleanup ignores further Ctrl-C / TERM / HUP while it runs, so a second Ctrl-C ca
 - If this tool is killed hard (SIGKILL, power loss) between the switch and the restore, nothing restores the set: the recorded
   `RESTORE_MANUAL.txt` in the evidence dir is the recovery.
 
-- Nothing but `vision` has run live. Whether `llmctl validate <profile> --host ... --json --keep` of a chat/coder/embedding profile
+- Nothing but `vision` and `small` has run live. Whether `llmctl validate <profile> --host ... --json --keep` of a chat/coder/embedding profile
   behaves on a live llama-server as in the hermetic runs (several JSON objects for a multi-suite profile; `--embeddings` needed for
   an embedding profile) is UNKNOWN until it has run. The shipped catalog has NO embedding profile (the embedding-v1 suite is
   exercised by tests/test_validation_suites.sh and, here, by a fixture profile), so "the embedding profile" does not exist on this

@@ -1,0 +1,6 @@
+resident_set=none reserved_ram_MiB=0 reserved_vram_MiB=0 measured_mem_MiB=20765 measured_gpu_used_MiB=296 (effective values below add/subtract the reservations)
+MemAvailable_MiB=20765 psi_some=0.51 psi_full=0.51 gpu_used_MiB=296 io_some=0.14 io_full=0.14
+llmctl tree check: $HOME/Projects/llmctl/bin/llmctl inside $HOME/Projects/llmctl
+scheduler lock /run/user/1000/llmctl/.scheduler.lock: free
+status check: OK
+gate: PASS

@@ -1,0 +1,7 @@
+2026-10-14T09:19:37Z recorded the running llmctl set: <none> (reserved RAM 0 MiB, VRAM 0 MiB)
+2026-10-14T09:19:38Z gate PASS (mem=20469MiB psi=0.00/0.00 gpu=296MiB)
+2026-10-14T09:19:39Z watchdog running (pid 2891427)
+2026-10-14T09:19:39Z starting: LLMCTL_VALIDATE_ON_START=0 nice -n 19 ionice -c 3 llmctl switch small (llmctl stops the resident set: none)
+2026-10-14T09:19:44Z waiting for http://127.0.0.1:8085/health (every 3s, max 180s)
+2026-10-14T09:19:47Z ready: {"status":"ok"}
+2026-10-14T09:19:49Z final: llmctl stop small

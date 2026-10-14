@@ -1,0 +1,5 @@
+git_head=1f1529c9c7ba5e16777c3b14dfb03fd94485b4c4
+git_dirty_files=1
+llmctl_version=llmctl 3.2.2
+llmctl_path=$HOME/.local/bin/llmctl
+harness_utc=2026-10-14T09:19:29Z
