@@ -1555,7 +1555,7 @@
           "decide-v1"
         ],
         "executed": false,
-        "unexecuted_reason": "no decision-model run is possible on the authoring host (live operator services, host safety): decide-v1 has never been executed against this model, so llmctl validate-all reports it NOT VALIDATED until a live PASS record exists",
+        "unexecuted_reason": "decide-tiny CANNOT be validated (no driver): its protocol jev-verdict is implemented by no llmctl-decide driver, so llmctl validate is UNDETERMINED by design and validate-all reports it NOT VALIDATED; it is never served while the gate is strict",
         "note": "also exercised by the decision smoke at download (llmctl models download) and the hash-pinned golden question set (docs/golden-set.md, scripts/golden/run_golden.py); neither of those is a validation record; protocol jev-verdict is implemented by no decide driver, so llmctl validate is UNDETERMINED for this profile by design until one is"
       }
     },

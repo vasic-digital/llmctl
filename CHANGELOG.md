@@ -33,6 +33,19 @@ repository as an honest record of that process.
   (`exact_text`, `exact_words`, `json_equals`, `max_words`) and an AST check for the code probe (`python_function_sum`, never executed);
   canned FAIL controls for every class in the suites (suite hashes change: existing records no longer match and must be re-validated).
   `tests/test_validation_judge_adversarial.sh` (84 rows, RED 42 false PASS / 4 false FAIL, GREEN 0 / 0), 7 new mutants.
+* **fix(validate): a manual `llmctl validate` of a served profile applies the verdict; a validation of a stopped profile restores its env
+  record (findings 6, 8).** FAIL stops it and withdraws its registry row; UNDETERMINED keeps it running NOT validated and says so. A
+  validation-only start no longer leaves the quarantine env record behind (an enabled unit then booted into ExecCondition exit 77).
+* **fix(gateway): auto mode does not route an unregistered profile under the strict gate (finding 7).** Only an operator-declared
+  `LLMCTL_DECIDE_ENDPOINT_<P>` is a static fallback; `LLMCTL_VALIDATE_STRICT=0` restores the catalog-port fallback.
+* **fix(plan): running llmctl units without a reservation count against the 60% RAM cap (finding 10)** - systemd `MemoryCurrent`,
+  `ram_units_unreserved_mb` in `llmctl plan --json`.
+* **fix(validate): small items of finding 11.** `LLMCTL_VALIDATION_MAX_AGE` capped at 400 days; the validation directory tightened to
+  0700; `status` says `validated` only when `require-validated` would accept it now; served-model identity also checks `--mmproj`, the
+  mapped inode (a replaced model file) and the running launch against the env record; launchd agents restart only an unsuccessful exit and
+  a refused start exits 0 (no respawn loop); decide-tiny's coverage text says it cannot be validated (no driver); the machine-id clone
+  caveat is documented.
+
 * **fix(validate): the gate decides on the launch about to run, counts a fresh record first, and the harness relaxation needs the harness
   (independent review 2026-10-15, findings 3, 5, 9).** (5) `start`/`enable` used to check the PREVIOUS launch's env record, so
   `LLMCTL_SEED=7 llmctl start vision` was published unvalidated on a record for another launch, and the publish step forced "public"; the gate

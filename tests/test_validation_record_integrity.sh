@@ -17,6 +17,11 @@ source "$(dirname "${BASH_SOURCE[0]}")/validation_local_lib.sh"
 trap 'vl_cleanup; test_teardown_env' EXIT
 vl_setup
 L="${VL_LLMCTL}"
+# a FAIL of a served profile now stops it (review 2026-10-15 finding 6): through a RECORDING service manager, never the
+# host's real `systemctl --user stop llmctl-llama@vision.service`
+export LLMCTL_SERVICE_BACKEND_FILE="${LLMCTL_ROOT}/tests/fixtures/svc_backend_recording.sh"
+export GW_CALLS="${TEST_TMP}/svc.calls" GW_ACTIVE_DIR="${TEST_TMP}/svc.active"
+: > "${GW_CALLS}"; mkdir -p "${GW_ACTIVE_DIR}"
 REC="${LLMCTL_STATE_DIR}/validation/vision.json"
 GOOD="${VL_FIX}/answers_good.json"
 

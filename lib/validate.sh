@@ -52,14 +52,21 @@ _val_state_file() { echo "$(_val_state_dir)/$1.json"; }
 # record signing key + model-file sha256 cache (both 0600, created by the judge on first use; docs/validation.md)
 _val_hmac_key() { echo "$(_val_state_dir)/.hmac.key"; }
 _val_hash_cache() { echo "$(_val_state_dir)/.hashcache.json"; }
-_val_ensure_state_dir() { [[ -d "$(_val_state_dir)" ]] || ( umask 077; mkdir -p "$(_val_state_dir)" ); }
+# 0700 also for a directory created by an older llmctl (finding 11 of the 2026-10-15 review): records, evidence and the signing key
+_val_ensure_state_dir() {
+  [[ -d "$(_val_state_dir)" ]] || ( umask 077; mkdir -p "$(_val_state_dir)" )
+  [[ -O "$(_val_state_dir)" ]] && chmod 700 "$(_val_state_dir)" 2>/dev/null
+  return 0
+}
 
 # _val_max_age - LLMCTL_VALIDATION_MAX_AGE as whole seconds >= 0 on stdout; anything else (nan, inf, -1, 1e9, abc) -> a
 # message and rc 2: a non-finite age would make every record "fresh" forever.
+# The maximum is 400 days (34560000 s; finding 11 of the 2026-10-15 review: a 12-digit value made every record "fresh" for
+# millennia).
 _val_max_age() {
   local a="${LLMCTL_VALIDATION_MAX_AGE}"
-  if [[ "${a}" =~ ^[0-9]{1,12}$ ]]; then echo "$(( 10#${a} ))"; return 0; fi
-  err "LLMCTL_VALIDATION_MAX_AGE='${a}' is not a whole number of seconds >= 0 (nan, inf, negative and exponent forms are refused) - cannot determine freshness"
+  if [[ "${a}" =~ ^[0-9]{1,8}$ ]] && (( 10#${a} <= 34560000 )); then echo "$(( 10#${a} ))"; return 0; fi
+  err "LLMCTL_VALIDATION_MAX_AGE='${a}' is not a whole number of seconds between 0 and 34560000 (400 days; nan, inf, negative, exponent and larger values are refused) - cannot determine freshness"
   return 2
 }
 
@@ -287,17 +294,38 @@ validate_profile() {
   # `set -u` the handler aborted on the then-undeclared rfiles and never stopped the profile it had started)
   local evidence="" run_ev="" vfile=""
   local -a rfiles=()
+  local env_bak="" env_had=0      # the profile's env record before a validation-only start (finding 8 of the 2026-10-15 review)
   saved_traps="$(trap -p INT TERM HUP)"      # the caller's traps (e.g. scheduler lock cleanup) are restored on every return
   # _val_cleanup_started - the ONE stop path for a profile THIS call started (finding 4 of the 2026-10-14 review: two early
   # `return 2`s after a start left the profile running). Every return after `started=1` goes through it; it stops the
   # profile unless --keep, and says plainly when --keep leaves it running NOT validated. Idempotent.
+  # _val_restore_env - after the validation-only start was stopped: the profile's env record is put back as it was (an
+  # enabled unit otherwise boots from the quarantine record and its ExecCondition refuses it once the deadline passed -
+  # finding 8 of the 2026-10-15 review); a quarantine record this call created where there was none is removed.
+  _val_restore_env() {
+    local envf="${LLMCTL_SERVICES_DIR}/${p}.env"
+    if [[ "${env_had}" == "1" && -n "${env_bak}" && -f "${env_bak}" ]]; then
+      if cp -p -- "${env_bak}" "${envf}.restore.$$" && mv -f -- "${envf}.restore.$$" "${envf}"; then
+        log "restored the env record of '${p}' (the validation-only start had replaced it)"
+      else
+        warn "could not restore ${envf} (its previous content: ${env_bak}) - restore it by hand before the unit is started"
+        return 0
+      fi
+    elif [[ "${env_had}" == "0" ]] && grep -q '^LLMCTL_QUARANTINE_UNTIL=' "${envf}" 2>/dev/null; then
+      rm -f -- "${envf:?}"
+    fi
+    [[ -z "${env_bak}" ]] || rm -f -- "${env_bak:?}"
+    env_bak=""
+  }
   _val_cleanup_started() {
     if [[ "${started}" == "1" ]]; then
       if [[ "${keep}" != "1" ]]; then
         log "stopping '${p}' again (it was started only for validation; pass --keep to leave it running)"
         sched_stop "${p}" >/dev/null 2>&1 || warn "could not stop '${p}' after validation - stop it by hand: llmctl stop ${p}"
+        _val_restore_env
       else
         warn "'${p}' keeps running (--keep) - it was started for this validation; use it only if 'llmctl require-validated ${p}' passes"
+        [[ -z "${env_bak}" ]] || rm -f -- "${env_bak:?}"
       fi
       started=0
     fi
@@ -316,6 +344,7 @@ validate_profile() {
     if [[ "${started}" == "1" || "${starting}" == "1" ]] && [[ "${keep}" != "1" ]]; then
       warn "interrupted: stopping '${p}' (it was started only for validation)"
       sched_stop "${p}" >/dev/null 2>&1 || true
+      _val_restore_env
     elif [[ -z "${host}" ]] && _val_is_quarantined "${p}"; then
       # a QUARANTINED profile exists only to be validated: an interrupted validation never leaves it behind (finding 2c)
       warn "interrupted: stopping the quarantined '${p}' (unpublished, never validated)"
@@ -343,9 +372,14 @@ validate_profile() {
         return 2
       fi
       log "profile '${p}' is not running - starting it (unpublished, for validation only) to validate it"
+      if [[ -f "${LLMCTL_SERVICES_DIR}/${p}.env" ]]; then
+        env_bak="$(mktemp)"; env_had=1
+        cp -p -- "${LLMCTL_SERVICES_DIR}/${p}.env" "${env_bak}"
+      fi
       starting=1
       if ! _val_start_for_validation "${p}"; then
         starting=0
+        _val_restore_env
         err "could not start '${p}' (see above: insufficient RAM/VRAM or a start failure) - cannot validate: could not determine"
         _val_restore_traps "${saved_traps}"
         return 2
@@ -392,6 +426,7 @@ validate_profile() {
                     --expect-model "$(_val_expect_model "${p}")" --evidence "${run_ev}")
     [[ "${json}" == "1" ]] && jargs+=(--json)
     [[ -z "${host}" ]] && jargs+=(--expect-model-path "$(_val_expect_model_path "${p}")")
+    [[ -z "${host}" && -f "${LLMCTL_SERVICES_DIR}/${p}.env" ]] && jargs+=(--expect-launch-env "${LLMCTL_SERVICES_DIR}/${p}.env")
     local da
     while IFS= read -r da; do [[ -n "${da}" ]] && jargs+=("${da}"); done < <(_val_decide_args "${p}" "$([[ -z "${host}" ]] && echo 1 || echo 0)")
     vfile="$(mktemp)"; jargs+=(--verdict-file "${vfile}")
@@ -468,10 +503,40 @@ _validate_cli() {
   validate_profile "$@" || rc=$?
   _val_cli_done=1
   trap - EXIT
+  _val_cli_policy "${rc}" "$@" || true
   # a caller that STOPS a model on a wrong answer (the systemd waiter) asks for a private FAIL code: a plain exit 1 of
   # the llmctl process (startup crash, set -e) is then not mistaken for a verdict
   if [[ "${rc}" == "1" && "${LLMCTL_VALIDATE_FAIL_RC:-}" =~ ^[0-9]+$ ]]; then rc="${LLMCTL_VALIDATE_FAIL_RC}"; fi
   return "${rc}"
+}
+
+# _val_cli_policy <rc> <validate args...> - finding 6 of the 2026-10-15 review: a manual `llmctl validate <p>` of a profile
+# that is SERVED (running, published: not quarantined) applies the verdict policy. FAIL (wrong answers) -> stopped through
+# the normal stop path, its registry row withdrawn (sched_stop). UNDETERMINED -> it keeps running NOT validated: `llmctl
+# status`, `require-validated` and `endpoint` say so / refuse (documented in docs/validation.md). Not applied to --host
+# (an external endpoint) and not to the unit waiter's own call (LLMCTL_VALIDATE_ATTACH_PROFILE), which applies its own.
+_val_cli_policy() {
+  local rc="$1" p="" host=0 a
+  shift
+  [[ -z "${LLMCTL_VALIDATE_ATTACH_PROFILE:-}" ]] || return 0
+  while [[ "$#" -gt 0 ]]; do
+    case "$1" in
+      --host) host=1; shift 2 || shift ;;
+      --kind|--profile) [[ "$1" == --profile ]] && p="${2:-}"; shift 2 || shift ;;
+      -*) shift ;;
+      *) [[ -n "${p}" ]] || p="$1"; shift ;;
+    esac
+  done
+  [[ "${host}" == "0" && -n "${p}" ]] || return 0
+  [[ -f "${LLMCTL_RUNTIME_DIR}/${p}.run" ]] || return 0
+  _val_is_quarantined "${p}" && return 0
+  case "${rc}" in
+    1) err "validation: the SERVED profile '${p}' gave WRONG answers - stopping it through the normal stop path and withdrawing it from the registry"
+       sched_stop "${p}" || warn "validation: could not stop '${p}' - stop it by hand: llmctl stop ${p}" ;;
+    0) ;;
+    *) warn "validation: '${p}' could not be validated (UNDETERMINED); it keeps running NOT validated - 'llmctl status' says so, 'llmctl require-validated ${p}' and 'llmctl endpoint ${p}' refuse" ;;
+  esac
+  return 0
 }
 
 # require_validated <profile> - 0 only when the profile has a FRESH passing validation record.
@@ -795,8 +860,14 @@ validation_state() {
   line="$(_val_judge coverage --catalog "${LLMCTL_CATALOG}" --state-dir "$(_val_state_dir)" --suites-dir "${LLMCTL_VALIDATION_SUITES_DIR}" \
           --hmac-key "$(_val_hmac_key)" --max-age "${age}" --profile "${p}" 2>/dev/null | head -1)"
   line="${line#*: }"
+  # "validated" only when require-validated would accept it NOW (finding 11 of the 2026-10-15 review: the label used to show a
+  # signed record whose model bytes or launch no longer matched): the same key + check, with the cached hashes
+  if [[ "${line}" == validated* ]] && ! _val_fresh "${p}"; then
+    echo "NOT VALIDATED (a signed PASS record exists, but not for the bytes / engine / launch running now: llmctl require-validated ${p})"
+    return 0
+  fi
   case "${line}" in
-    validated*) echo "validated (signed PASS record; bytes re-checked by require-validated)" ;;
+    validated*) echo "validated (signed PASS record for the running model bytes, engine and launch)" ;;
     "NOT VALIDATED - "*) echo "NOT VALIDATED (${line#NOT VALIDATED - })" ;;
     *) echo "NOT VALIDATED (state could not be determined)" ;;
   esac

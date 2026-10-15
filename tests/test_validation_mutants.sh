@@ -50,7 +50,7 @@ tree() {
   printf '%s\n' "${d}"
 }
 run_suite() { local rc=0; env "$@" >"${TEST_TMP}/suite.out" 2>&1 || rc=$?; echo "${rc}"; }
-# MUTANT_GROUPS (space-separated: judge record served cleanup enforcement marker interrupt gate judge2 ramcap; default all) lets a bounded runner split the work
+# MUTANT_GROUPS (space-separated: judge record served cleanup enforcement marker interrupt gate judge2 policy ramunits ramcap; default all) lets a bounded runner split the work
 want() { [[ -z "${MUTANT_GROUPS:-}" || " ${MUTANT_GROUPS} " == *" $1 "* ]]; }
 
 if want judge; then
@@ -190,6 +190,26 @@ gm external-gets-validated validate.sh '  if [[ "${LLMCTL_VALIDATE_ON_START:-1}"
     local _x'
 
 fi
+if want policy; then
+echo "== validate-policy mutants (review 2026-10-15 findings 6, 8; each must turn tests/test_validate_policy.sh RED)"
+pm() { # pm <name> <lib-file> <old> <new>
+  mutate "${LLMCTL_ROOT}/lib/$2" "${TEST_TMP}/pm.check" "$3" "$4"
+  caught "policy/$1" "$(run_suite POL_MUT_FILE="$2" POL_MUT_OLD="$3" POL_MUT_NEW="$4" bash "${T}/test_validate_policy.sh")" nonzero
+  assert_contains "$(cat "${TEST_TMP}/suite.out")" "MUTANT applied to $2" "policy/$1: the mutant was really applied"
+}
+pm fail-keeps-serving validate.sh '       sched_stop "${p}" || warn "validation: could not stop '"'"'${p}'"'"' - stop it by hand: llmctl stop ${p}" ;;' '       : ;;'
+pm env-not-restored validate.sh '        _val_restore_env
+      else' '        :
+      else'
+
+fi
+if want ramunits; then
+echo "== unit-RAM mutant (review 2026-10-15 finding 10; must turn tests/test_ramcap_units.sh RED)"
+d="$(tree units catalog.sh)"
+mutate "${LLMCTL_ROOT}/lib/catalog.sh" "${d}/lib/catalog.sh" '  reserved=$(( reserved + units ))' '  :'
+caught "ramunits/units-ignored" "$(run_suite RAMCAP_ROOT_UNDER_TEST="${d}" bash "${T}/test_ramcap_units.sh")" nonzero
+
+fi
 if want ramcap; then
 echo "== supply-chain / RAM-cap mutant (must turn tests/test_supply_chain_ramcap.sh RED)"
 d="$(tree cap catalog.sh)"
@@ -199,5 +219,5 @@ caught "ramcap/cap-ignored" "$(run_suite SUPPLY_ROOT_UNDER_TEST="${d}" bash "${T
 fi
 echo "== summary: ${CAUGHT} of ${TOTAL} mutants caught"
 assert_eq "${TOTAL}" "${CAUGHT}" "every mutant of the new branches is caught by an assertion"
-[[ -n "${MUTANT_GROUPS:-}" ]] || assert_eq 40 "${TOTAL}" "all 40 mutants were run"
+[[ -n "${MUTANT_GROUPS:-}" ]] || assert_eq 43 "${TOTAL}" "all 43 mutants were run"
 test_finish

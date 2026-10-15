@@ -1041,22 +1041,116 @@ def _cmdline_model(pid):
     return None
 
 
-def served_model_info(endpoint, expected, ids, timeout):
+def _cmdline_argv(pid):
+    try:
+        with open("/proc/%d/cmdline" % pid, "rb") as fh:
+            return [x.decode("utf-8", "replace") for x in fh.read().split(b"\0") if x]
+    except OSError:
+        return None
+
+
+def _cmdline_value(argv, flag):
+    for i, t in enumerate(argv):
+        if t == flag and i + 1 < len(argv):
+            return argv[i + 1]
+        if t.startswith(flag + "="):
+            return t[len(flag) + 1:]
+    return None
+
+
+def _argv_fingerprint(argv):
+    """launch_fingerprint() of a RUNNING process: its argv (exec + arguments) without --host/--port."""
+    kept, skip = [], False
+    for t in argv[1:]:
+        if skip:
+            skip = False
+            continue
+        if t in ("--host", "--port"):
+            skip = True
+            continue
+        kept.append(t)
+    return hashlib.sha256(("\0".join([argv[0]] + kept)).encode()).hexdigest()
+
+
+def _env_launch(env_file):
+    """[exec] + args of an env record, shell-unquoted (as the unit's ExecStart runs them)."""
+    import shlex
+    exe, args = "", []
+    with open(env_file) as fh:
+        for line in fh:
+            if line.startswith("LLMCTL_EXEC="):
+                v = shlex.split(line.split("=", 1)[1])
+                exe = v[0] if v else ""
+            elif line.startswith("LLMCTL_ARGS="):
+                args = shlex.split(line.split("=", 1)[1])
+    return [exe] + args
+
+
+def _mapped_mismatch(pid, expected):
+    """A message when process `pid` maps a file at the expected path that is NOT the file on disk now (a replaced or
+    deleted file: the served bytes are not the validated ones), else None. A process that does not map it (no mmap) says
+    nothing either way."""
+    try:
+        st = os.stat(expected)
+        with open("/proc/%d/maps" % pid) as fh:
+            for line in fh:
+                parts = line.split(None, 5)
+                if len(parts) < 6:
+                    continue
+                path = parts[5].rstrip("\n")
+                if path == expected + " (deleted)":
+                    return "the process maps a DELETED file at %s (the model was replaced after it was loaded)" % expected
+                if path == expected and int(parts[4]) != st.st_ino:
+                    return "the process maps another inode at %s (the model was replaced after it was loaded)" % expected
+    except (OSError, ValueError):
+        return None
+    return None
+
+
+def served_model_info(endpoint, expected, ids, timeout, launch_env=None):
     """What the probed server really loads, from every source that can say it: the cmdline of the process listening on
     the endpoint's loopback port, absolute-path ids of /v1/models, and /props model_path. Returns a dict with
     confirmed (bool), sources, path/size/mtime_ns when confirmed, and `mismatch` (a message) when ANY source names a file
-    that is not `expected` (compared by realpath)."""
+    that is not `expected` (compared by realpath). For a listening process that names a model on its command line
+    (finding 11 of the 2026-10-15 review) also: its --mmproj must lie next to the model file, the model file it MAPS must
+    be the file on disk now (inode; a replaced file is a mismatch), and - with `launch_env` - its command line must be
+    the launch of that env record (the record binds that launch: --host/--port excluded)."""
     sp = urllib.parse.urlsplit(endpoint)
     found = []
+    extra = []
     try:
         port = sp.port
     except ValueError:
         port = None
+    exp_real = os.path.realpath(expected)
     if (sp.hostname or "").lower() in _LOOPBACK and port:
         for pid in _listening_pids(port):
             m = _cmdline_model(pid)
             if m:
                 found.append(("cmdline", m, pid))
+                argv = _cmdline_argv(pid) or []
+                mm = _cmdline_value(argv, "--mmproj")
+                if mm:
+                    try:
+                        mm_real = os.path.realpath(os.path.join(os.readlink("/proc/%d/cwd" % pid), mm))
+                    except OSError:
+                        mm_real = os.path.realpath(mm)
+                    if os.path.dirname(mm_real) != os.path.dirname(exp_real):
+                        extra.append("its --mmproj %s is not the profile's projector (not next to %s)" % (mm, expected))
+                why = _mapped_mismatch(pid, exp_real)
+                if why:
+                    extra.append(why)
+                if launch_env and os.path.isfile(launch_env) and argv:
+                    # compared when the listening process IS the env record's engine binary (a fixture or another program
+                    # on the port is judged by the model-file sources above)
+                    try:
+                        env_argv = _env_launch(launch_env)
+                        if env_argv[0] and os.path.realpath(argv[0]) == os.path.realpath(env_argv[0]) \
+                                and _argv_fingerprint(argv) != _argv_fingerprint(env_argv):
+                            extra.append("its command line is not the launch of %s (the record would vouch for another "
+                                         "launch)" % launch_env)
+                    except (OSError, ValueError):
+                        extra.append("its launch could not be compared with %s" % launch_env)
     for i in ids:
         if isinstance(i, str) and os.path.isabs(i):
             found.append(("v1/models", i, None))
@@ -1067,13 +1161,16 @@ def served_model_info(endpoint, expected, ids, timeout):
             found.append(("props", mp, None))
     except (NoAnswer, Rejected):
         pass
-    exp = os.path.realpath(expected)
+    exp = exp_real
     info = {"expected": expected, "confirmed": False, "sources": [], "path": None}
     bad = [(src, path) for src, path, _ in found if os.path.realpath(path) != exp]
     if bad:
         info["mismatch"] = "the probed server loads %s, not the profile's model file %s" % (
             "; ".join("%s (%s)" % (p, s) for s, p in bad), expected)
         info["served"] = [{"source": s, "path": p} for s, p in bad]
+        return info
+    if extra:
+        info["mismatch"] = "the probed server: " + "; ".join(extra)
         return info
     if found:
         try:
@@ -1222,7 +1319,7 @@ def run_decide(args, suite, report, counts, out, finish, timeout, repeat):
         return finish()
     if args.expect_model_path:
         # a decide engine has no unauthenticated /v1/models: the model file of the probed process IS the identity check
-        sm = served_model_info(args.endpoint, args.expect_model_path, [], timeout)
+        sm = served_model_info(args.endpoint, args.expect_model_path, [], timeout, args.expect_launch_env or None)
         report["served_model"] = sm
         if sm.get("mismatch") or not sm["confirmed"]:
             out("[UNDETERMINED] served model file: %s" % (sm.get("mismatch") or sm.get("note")))
@@ -1409,7 +1506,7 @@ def run(args):
 
     # 3b. the model FILE of the probed process (local runs: --expect-model-path)
     if args.expect_model_path:
-        sm = served_model_info(args.endpoint, args.expect_model_path, ids, timeout)
+        sm = served_model_info(args.endpoint, args.expect_model_path, ids, timeout, args.expect_launch_env or None)
         report["served_model"] = sm
         if sm.get("mismatch"):
             out("[UNDETERMINED] served model file: %s" % sm["mismatch"])
@@ -2064,6 +2161,7 @@ def main(argv=None):
     r.add_argument("--endpoint", required=True)
     r.add_argument("--expect-model", default="")
     r.add_argument("--expect-model-path", default="", help="the file/dir the probed process must load (local runs)")
+    r.add_argument("--expect-launch-env", default="", help="the env record whose launch the probed process must run (local runs)")
     r.add_argument("--decide-bin", default="", help="llmctl-decide binary (decide suites)")
     r.add_argument("--decide-protocol", default="", help="the profile's decision protocol (decide suites)")
     r.add_argument("--decide-key-file", default="", help="0600 engine key file passed to the driver (never read here)")

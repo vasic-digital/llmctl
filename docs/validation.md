@@ -217,7 +217,9 @@ hash; host id; the model file of the probed process (`served_model`: path, size,
 this run's own evidence file**; timestamp; and an **HMAC-SHA256 signature** under `$LLMCTL_STATE_DIR/validation/.hmac.key` (0600, created on first
 use). `require-validated` exits 0 only when the signature verifies, the status is pass, every file hashes to what was recorded AND to its catalog
 pin, engine/launch/suites/host id match, `repeat >= 3`, the evidence file still hashes to the recorded value, and the record is younger than
-`LLMCTL_VALIDATION_MAX_AGE` (whole seconds >= 0, default 604800; `nan`, `inf`, negative or exponent forms exit 2) and not from the future.
+`LLMCTL_VALIDATION_MAX_AGE` (whole seconds from 0 to 34560000 = 400 days, default 604800; `nan`, `inf`, negative, exponent and larger values
+exit 2 - a 12-digit value used to make every record fresh for millennia) and not from the future. An older `validation/` directory with looser
+permissions is tightened to 0700 on use.
 
 * **Hashing.** Model files are hashed by streaming sha256; the result is cached in `.hashcache.json` (0600) keyed by size, mtime_ns,
   **ctime_ns**, inode and device, each entry HMAC'd - any write changes ctime, so different bytes with a restored size and mtime are re-hashed and
@@ -226,6 +228,14 @@ pin, engine/launch/suites/host id match, `repeat >= 3`, the evidence file still 
   key computation and the record step each read the files once.
 * **Host identity.** `host_id` = sha256 of a fixed prefix and `/etc/machine-id` (fallback `/var/lib/dbus/machine-id`; last resort the hostname,
   `host_id_source: hostname`, weaker). The raw machine id is never written; the hostname is informational only - a spoofed hostname changes nothing.
+  **Clone caveat:** a disk image or VM cloned WITH its `/etc/machine-id` (and the state directory) carries valid records to the clone - the host id
+  cannot tell them apart. Regenerate the machine id of a clone (`systemd-machine-id-setup` after removing it) or delete
+  `$LLMCTL_STATE_DIR/validation/` on it; the served-model identity checks (below) still run on every validation.
+* **Served model (local runs).** The probed process's model file must be the profile's (command line, `/v1/models`, `/props`); since 2026-10-15
+  (finding 11) also: its `--mmproj` must lie next to the model file, the model file it MAPS must be the file on disk now (a model replaced after
+  it was loaded is a mismatch), and when the listening process is the env record's engine binary its command line must be the launch of that env
+  record (the record binds that launch). Any mismatch is UNDETERMINED, never a PASS record. A process that does not mmap its model cannot be
+  checked by inode; another program on the port is judged by the model-file sources only.
 * **Same-user limit (stated plainly).** The signature stops accidental edits, copied state and hand-written records. A malicious process running
   as the SAME user can read the key and forge a record; that is out of scope for a file-based gate.
 * **Verdict precedence.** A FAIL replaces anything; an UNDETERMINED run never replaces a PASS or a FAIL record (it writes an `undetermined`
@@ -243,8 +253,9 @@ an enabled unit - only with a fresh, signed PASS record for what would run. Othe
 | `enable` | validated (in quarantine) BEFORE any unit is enabled; FAIL/UNDETERMINED -> nothing enabled |
 | `restart` | with a fresh record: `systemctl restart`; without: stopped, started in quarantine, validated, published or stopped - never restarted in place on its public port |
 | `decide scale` | adding instances needs a fresh record of the base profile (validate it first); scaling down is never blocked |
-| systemd unit (boot, `Restart=`, `systemctl start`) - **only after `llmctl install`** (see "Upgrading installed units") | `ExecCondition=svc_hook.sh validated %i`: skipped with exit 77 (not failed, not restarted) without a fresh record; a live quarantine start and an opt-out marker pass. The registration waiter validates BEFORE it registers and stops the unit on FAIL/UNDETERMINED; a quarantine unit is never registered. launchd: the same gate in `svc_hook.sh run-engine` |
-| `status` / `status --json` | a `validation:` line / field per running profile: `validated`, `QUARANTINE (...)`, `UNVALIDATED (<opt-out>)`, `NOT VALIDATED (<reason>)`; opt-outs in effect are printed as WARN lines |
+| systemd unit (boot, `Restart=`, `systemctl start`) - **only after `llmctl install`** (see "Upgrading installed units") | `ExecCondition=svc_hook.sh validated %i`: skipped with exit 77 (not failed, not restarted) without a fresh record; a live quarantine start and an opt-out marker pass. The registration waiter validates BEFORE it registers and stops the unit on FAIL/UNDETERMINED; a quarantine unit is never registered. launchd: the same gate in `svc_hook.sh run-engine`, which exits 0 on a refusal and the agent's `KeepAlive` restarts only an unsuccessful exit (`SuccessfulExit=false`; agents written before 2026-10-15 keep `KeepAlive=true` and retry a refused start every 60 s until they are re-written by `llmctl enable`) |
+| `status` / `status --json` | a `validation:` line / field per running profile: `validated` (only when `require-validated` would accept it now: the record's bytes, engine and launch match), `QUARANTINE (...)`, `UNVALIDATED (<opt-out>)`, `NOT VALIDATED (<reason>)`; opt-outs in effect are printed as WARN lines |
+| `validate` (by hand) | of a SERVED profile (finding 6): FAIL -> stopped, registry row withdrawn; UNDETERMINED -> keeps running NOT validated (status / `require-validated` / `endpoint` refuse). Of a STOPPED profile: started in quarantine, validated, stopped again, and its previous env record restored (finding 8: an enabled unit used to boot from the quarantine record and was refused). `--host` and the unit waiter's own call never stop anything |
 | `endpoint`, `require-validated` | refuse everything but a running, published, validated profile |
 | llmctld model routes | dispatch to `bin/llmctl start/stop/status`, so the same gate applies |
 
@@ -309,7 +320,9 @@ its next boot or restart is skipped (exit 77) until `llmctl start <profile>` val
   UNDETERMINED (exit 2), never a FAIL.
 * **RAM budget (finding 10, Constitution 12.6).** Admission uses the tighter of `MemAvailable - 4 GiB` and **60% of MemTotal minus the RAM the
   running llmctl profiles reserve** (`llmctl plan --json` shows `ram_cap_mb`, `ram_reserved_mb`, `ram_avail_budget_mb`); `LLMCTL_RAM_CAP_PCT` may
-  lower the cap, never raise it.
+  lower the cap, never raise it. A running llmctl engine unit WITHOUT a reservation (started by systemd itself: boot, `Restart=`, the unit
+  waiter) is counted with its cgroup memory (systemd `MemoryCurrent`; `ram_units_unreserved_mb`) - review 2026-10-15 finding 10. launchd has
+  no per-job cgroup: on macOS only reservations count.
 * `LLMCTL_VALIDATE_API_KEY` is sent only to loopback hosts or hosts listed exactly in `LLMCTL_VALIDATE_API_KEY_HOSTS`; redirects are never
   followed; proxies are ignored; only `http`/`https`; a response is limited to 8 MiB; every request has a wall-clock deadline
   (`LLMCTL_VALIDATE_TIMEOUT`, finite and > 0); evidence and records are 0600 with userinfo, query and fragment removed from logged URLs.

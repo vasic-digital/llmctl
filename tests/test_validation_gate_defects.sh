@@ -469,16 +469,18 @@ mkdir -p "${LLMCTL_MODELS_DIR}/vision"; : > "${LLMCTL_MODELS_DIR}/vision/gemma-3
 U="$(fake_start "${FIX}/answers_good.json" --model-id "${LLMCTL_MODELS_DIR}/vision/gemma-3-4b-it-Q4_K_M.gguf")"
 write_run vision "${U##*:}"
 rm -rf "${TEST_TMP}/tmpk"; mkdir -p "${TEST_TMP}/tmpk" "${LLMCTL_STATE_DIR}/validation"
-chmod 500 "${LLMCTL_STATE_DIR}/validation"           # `judge record` cannot create its state file
+# `judge record` cannot write its state file: a DIRECTORY stands where the record goes (a read-only validation/ no longer
+# works as the trigger - llmctl tightens that directory to 0700 on use, review 2026-10-15 finding 11)
+rm -f "${LLMCTL_STATE_DIR}/validation/vision.json"; mkdir -p "${LLMCTL_STATE_DIR}/validation/vision.json"
 rc="$(run_rc env TMPDIR="${TEST_TMP}/tmpk" "${LLMCTL}" vision validate)"
-chmod 700 "${LLMCTL_STATE_DIR}/validation"
+rmdir "${LLMCTL_STATE_DIR}/validation/vision.json"
 assert_eq 2 "${rc}" "a state write failure is exit 2 (could not determine / not recorded), never 0"
 if [[ "${rc}" != "0" ]]; then printf '  ok: a state write failure is not a PASS (exit %s)\n' "${rc}"; else printf '  FAIL: exit 0 although the state could not be recorded\n' >&2; TEST_FAILS=$((TEST_FAILS+1)); fi
 assert_eq "" "$(ls -A "${TEST_TMP}/tmpk")" "validate_profile left no temp key file"
 rm -f "${LLMCTL_STATE_DIR}/validation/vision.json"; rm -rf "${TEST_TMP}/tmpk"/*
-chmod 500 "${LLMCTL_STATE_DIR}/validation"
+mkdir -p "${LLMCTL_STATE_DIR}/validation/vision.json"
 rc="$(run_rc env TMPDIR="${TEST_TMP}/tmpk" LLMCTL_VALIDATE_ON_START=1 "${LLMCTL}" validate-after-start vision)"
-chmod 700 "${LLMCTL_STATE_DIR}/validation"
+rmdir "${LLMCTL_STATE_DIR}/validation/vision.json"
 assert_eq "" "$(ls -A "${TEST_TMP}/tmpk")" "validate_after_start left no temp key file"
 rm -f "${LLMCTL_RUNTIME_DIR}/vision.run"
 
