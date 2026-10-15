@@ -25,6 +25,14 @@ repository as an honest record of that process.
 
 ## Unreleased
 
+* **fix(validate): the judge no longer passes wrong answers of the reviewer's adversarial table (independent review 2026-10-15, finding 4).**
+  42 of 77 adversarial answers PASSED (negated / hedged / comparative / ordinal / percent numbers, retractions, alternatives, negated
+  order, Unicode look-alikes, code that only looked right, nested or negated JSON literals, extra / duplicate JSON keys, self-corrections,
+  mangled echoes, re-ordered transcriptions) and 4 right ones FAILED. Unicode is folded before case mapping; negation also covers denials
+  after a claim, `-less` compounds and retraction clauses; `number_equals` requires the answer to BE the number; new exact checks
+  (`exact_text`, `exact_words`, `json_equals`, `max_words`) and an AST check for the code probe (`python_function_sum`, never executed);
+  canned FAIL controls for every class in the suites (suite hashes change: existing records no longer match and must be re-validated).
+  `tests/test_validation_judge_adversarial.sh` (84 rows, RED 42 false PASS / 4 false FAIL, GREEN 0 / 0), 7 new mutants.
 * **fix(validate): the gate decides on the launch about to run, counts a fresh record first, and the harness relaxation needs the harness
   (independent review 2026-10-15, findings 3, 5, 9).** (5) `start`/`enable` used to check the PREVIOUS launch's env record, so
   `LLMCTL_SEED=7 llmctl start vision` was published unvalidated on a record for another launch, and the publish step forced "public"; the gate

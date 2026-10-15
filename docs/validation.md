@@ -155,22 +155,41 @@ fail the golden checks), `embedding-v1` (cosine ordering plus byte-stable repeat
 Sampling is deterministic (temperature 0, fixed seed, top_k 1, no prompt cache). The judge is plain code, never an LLM. Rules (2026-10-14 review,
 finding 7 - every one has a canned FAIL control in the suites, so the self-test proves it before every real run):
 
-* **A claim must be asserted.** `contains_all` / `contains_any` / `forbidden` count a needle only when an occurrence is NOT negated: a negation word
-  (`no`, `not`, `none`, `never`, `without`, `cannot`, `n't` ...) within the 4 words before it, in the same clause (clauses end at a newline, `!`,
-  `?`, `;`, `:` and a `.` that is not a decimal point). `There is no ORANGE TIGER 42 here` does not claim the text; `No problem. ORANGE TIGER 42`
-  does; `OSLO (not PARIS)` does not claim PARIS. Trade-off: an answer that negates something just before stating the right value in the same
-  clause FAILs - the prompts ask for the value only.
-* **One stated number.** `number_equals` needs the answer to state ONE number: after the last `=` that is followed by a number when the answer
-  restates an equation (the operands before it are not answers), else anywhere in the answer. Every number stated after that point must have the
-  same value: `3 or 4`, `I count 3... no, 4`, `three or four`, `17 + 25 = 42, or maybe 43`, `9 is larger than 4` FAIL; `There are three red
-  circles.`, `17 + 25 = 42. The answer is 42.` PASS. Digits with an optional `.` fraction or a number word `zero`..`twenty` (not inside
-  `twenty-two`); `10,000` and `.42` are not numbers. **Trade-offs, stated plainly:** `41 because 17+25=42` PASSES (the numbers before the
-  last `=` are operands) and `42 = 17+25` FAILS (after the `=` it states 17 and 25); the rule is mechanical, the prompts ask for the number only.
-* **Exact order.** `ordered` takes every occurrence of every listed item in answer order; that sequence must BE the list: `Red, green, blue, red`
-  is not RED GREEN BLUE, an item read twice or missing FAILs.
-* **Comments are not code.** A probe with `code_language: python` is judged on the code of the answer (the fenced blocks when there are any) with
-  every comment removed (`tokenize`; a `#` inside a string is not a comment): `return a - b  # not: return a + b` is a subtraction.
-* **Typed JSON.** `json_subset` compares JSON values by type: `1` is not `true`, `0` is not `false`, `"1"` is not `1` (`1.0` is `1`).
+Rules of 2026-10-15 (review finding 4: 42 of 77 adversarial answers were judged wrongly; the reviewer's table is
+`tests/fixtures/validation/adversarial_answers.json`, 84 rows, judged by `tests/test_validation_judge_adversarial.sh` - 0 wrong verdicts):
+
+* **Unicode is folded before any case mapping.** NFKC per character for fullwidth ASCII, every Unicode decimal digit to its ASCII digit (`٣` is 3),
+  typographic apostrophes to `'`, and every OTHER non-ASCII letter becomes a separator - `str.upper()` used to turn the dotless `Parıs` and the
+  long-s `Pariſ` into PARIS; a Cyrillic `а` was already not an `a`.
+* **A claim must be asserted.** `contains_all` / `contains_any` / `forbidden` / `ordered` count a needle only when an occurrence is NOT negated:
+  a negation word (`no`, `not`, `none`, `never`, `without`, `cannot`, `rather`, `instead`, `n't` ...) within the 4 words before it in the same
+  clause (clauses end at a newline, `!`, `?`, `;`, `:` and a `.` that is not a decimal point; `not sure` / `not certain` is a hedge, not a
+  negation of what follows); a denial right after it (`Paris is incorrect`, `Delete is not there`, `X isn't`); a `-less` / `-free` compound
+  (`login-less`); or a later clause that RETRACTS (`Paris? No, Lyon.`, `Three. Wait - four.`, `Actually, ...`: `no` / `wait` / `actually` /
+  `sorry` ... followed by `,` `.` `!` `:` `;` or `-`). `No problem. ORANGE TIGER 42` still claims the text (the retraction comes before it);
+  `OSLO (not PARIS)` and `Paris, not London.` do not claim the second city. `ordered` FAILs when any occurrence is negated (`Not red, green,
+  blue.`).
+* **Short answers.** `max_words: N` (the "answer with one word" probes): more than N words, or naming alternatives (`or`), FAILs - `Paris or Rome`,
+  `The capital is Lyon (Paris is the largest city).`
+* **Only the number.** Every `number_equals` prompt asks for the number only, so the answer must BE a number: every sentence must be `N`
+  (`42`, `42.0`, `58,40`, `$58.40`, `forty-two`, `Three`, `**3**`, a fenced `3`), `N (N')` with the same value (`3 (three)`), `<arithmetic> = N`
+  (`17 + 25 = 42`), `<lead-in> N [up to 4 plain nouns]` (`There are three red circles`, `The answer is 42`) or `N <nouns>`, and all sentences
+  state the same value. Not a stated number: `Not 3`, `There are not 3`, `More than 3`, `At least 3`, `3 or more`, `About 3`, `Maybe 3?`, `3rd`,
+  `3%`, `3/4`, `4.2e1`, `7,731`, `10.000` (three fraction digits: an ambiguous thousands separator), `.42`, `Three. No wait - four.`, `3. 4.`. A
+  suite may declare words that may stand next to the number (`number_allow`: `NOT FOUND` for HTTP 404, `INV` / `INVOICE NO` for the invoice).
+  **Trade-off, stated plainly:** a right number wrapped in other prose (`The answer is 42, not 41.`) FAILs - the prompts ask for the number only.
+* **Exact answers.** `exact_text` (the echo probe): the answer, outside one optional fence / quote pair and one trailing `.`, with whitespace
+  collapsed, must equal the value case- and punctuation-exactly (`ZX-4417-B`, `zx_4417` FAIL). `exact_words` (the transcription of a known text):
+  the normalised words must be exactly the expected ones, in order (`TIGER ORANGE 42`, `ORANGE TIGER 42 ZEBRA` FAIL).
+* **JSON as a document.** `json_equals`: the whole answer (one optional ```` ```json ```` fence) must be exactly ONE JSON document equal to the value -
+  type-exact (`1` is not `true`, `0` is not `false`, `"1"` is not `1`; `1.0` is `1`), no extra key, no duplicate key, no trailing text (`{...} -- no
+  wait: {...}`), no NaN; a Python dict is not JSON. Also used for the empty-array literal (`[[]]` and `Not [], it is null.` FAIL, `[ ]` PASSES).
+  `json_subset` keeps its type-exact subset semantics for suites that want it.
+* **Code by its syntax tree.** `python_function_sum: add` parses the code of the answer (fenced blocks when present; never executed) and needs
+  exactly one top-level `def add` of two positional parameters whose only `return` is its last statement and returns `p1 + p2` (directly or
+  through one assigned name), with no control flow or nested definition, no re-bound parameter and no other binding of `add`. A docstring or
+  string literal saying `return a + b`, a dead branch, `return a + b + 1`, the sum in another function and a later `add = lambda ...` FAIL; a
+  comment is not code. **Trade-off:** a correct `return operator.add(a, b)` FAILs.
 * **No vacuous check.** Empty or unknown checks (`{}`, `contains_all: []`, an uncompilable regex, an item without letters or digits), a probe
   without a prompt, or a probe without at least one canned PASS **and** one canned FAIL judge control are a **suite defect**: the run is
   UNDETERMINED before any request and `selftest` exits 1.

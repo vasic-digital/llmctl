@@ -53,6 +53,7 @@ import signal
 import sys
 import threading
 import time
+import unicodedata
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -65,6 +66,7 @@ NUMBER_WORDS = {
     "nine": 9, "ten": 10, "eleven": 11, "twelve": 12, "thirteen": 13, "fourteen": 14, "fifteen": 15,
     "sixteen": 16, "seventeen": 17, "eighteen": 18, "nineteen": 19, "twenty": 20,
 }
+TENS_WORDS = {"twenty": 20, "thirty": 30, "forty": 40, "fifty": 50, "sixty": 60, "seventy": 70, "eighty": 80, "ninety": 90}
 
 
 # --- normalisation + checks (the deterministic judge) -----------------------------------------------------
@@ -73,9 +75,31 @@ class SuiteDefect(ValueError):
     canned PASS and FAIL controls ...). Never a verdict on a model: the run is UNDETERMINED (exit 2) before any request."""
 
 
+def fold(text):
+    """Unicode folding BEFORE any case mapping (finding 4 of the 2026-10-15 review: str.upper() turned the dotless 'Parıs'
+    and the long-s 'Pariſ' into PARIS). NFKC (fullwidth '３' -> '3'); every Unicode decimal digit -> its ASCII digit
+    ('٣' -> '3'); typographic apostrophes -> "'"; every remaining NON-ASCII letter -> a space, so it can never be read as
+    an ASCII letter. Other symbols are kept (they are separators for the checks)."""
+    out = []
+    for ch in "" if text is None else str(text):          # per character: NFKC must not map 'ſ' to 's' first
+        if ch.isascii():
+            out.append(ch)
+        elif unicodedata.category(ch) == "Nd":
+            out.append(str(unicodedata.digit(ch)))
+        elif ch in "\u2018\u2019\u02bc\u2032":
+            out.append("'")
+        elif "\uff01" <= ch <= "\uff5e":                    # fullwidth ASCII forms: the same characters, wider
+            out.append(unicodedata.normalize("NFKC", ch))
+        elif unicodedata.category(ch)[0] in "LM":
+            out.append(" ")
+        else:
+            out.append(unicodedata.normalize("NFKC", ch))
+    return "".join(out)
+
+
 def norm(text):
-    """Upper-case, every run of non-alphanumerics -> one space, padded so boundary matching is ' X '."""
-    return " " + re.sub(r"[^A-Z0-9]+", " ", str(text).upper()).strip() + " "
+    """Folded (fold), upper-case, every run of non-alphanumerics -> one space, padded so boundary matching is ' X '."""
+    return " " + re.sub(r"[^A-Z0-9]+", " ", fold(text).upper()).strip() + " "
 
 
 def has_token(answer_norm, needle):
@@ -87,7 +111,11 @@ def has_token(answer_norm, needle):
 # word tokens and clause separators (newline ! ? ; : and a '.' that is not a decimal point); a needle occurrence is
 # NEGATED when one of the (at most) _NEG_WINDOW words before it, inside the same clause, is a negation word. "There is
 # no ORANGE TIGER 42 here" therefore does not claim ORANGE TIGER 42, while "No problem. ORANGE TIGER 42" does.
-_NEG_WORDS = {"NO", "NOT", "NONE", "NEVER", "NOR", "WITHOUT", "CANNOT", "NEITHER"}
+_NEG_WORDS = {"NO", "NOT", "NONE", "NEVER", "NOR", "WITHOUT", "CANNOT", "NEITHER", "RATHER", "INSTEAD"}
+_HEDGE_AFTER_NEG = {"SURE", "CERTAIN"}          # 'Not sure, dark.' - a hedge about the speaker, not a negation of 'dark'
+_COPULA = {"IS", "ARE", "WAS", "WERE", "BE", "BEEN"}
+_WRONG_WORDS = {"INCORRECT", "WRONG", "FALSE", "MISTAKEN"}
+_RETRACT_RE = re.compile(r"\s*(NO|WAIT|ACTUALLY|CORRECTION|SORRY|OOPS|NOPE)\b\s*[,.!:;\-]")
 _NT_PREFIX = {"DON", "DOESN", "DIDN", "ISN", "AREN", "WASN", "WEREN", "CAN", "COULDN", "WON", "WOULDN", "SHOULDN",
               "HASN", "HAVEN", "HADN", "AIN", "MUSTN"}
 _NEG_WINDOW = 4
@@ -95,40 +123,73 @@ _TOKEN_RE = re.compile(r"[A-Z0-9]+|\n|[!?;:]|(?<!\d)\.|\.(?!\d)")
 
 
 def _tokens(raw):
-    """[(word, None) | (None, 'SEP')] of the upper-cased answer: words, and clause separators."""
-    out = []
-    for m in _TOKEN_RE.finditer(str(raw).upper()):
-        t = m.group(0)
-        out.append((t, None) if t[0].isalnum() else (None, "SEP"))
-    return out
+    """[(word | None, start, end)] of the folded, upper-cased answer: words, and clause separators (word None)."""
+    return [(m.group(0) if m.group(0)[0].isalnum() else None, m.start(), m.end())
+            for m in _TOKEN_RE.finditer(fold(raw).upper())]
 
 
 def _negated(toks, start):
-    """True when a negation word precedes position `start` within _NEG_WINDOW words of the same clause."""
+    """True when a negation word precedes position `start` within _NEG_WINDOW words of the same clause ('not sure' /
+    'not certain' is a hedge about the speaker, not a negation of what follows)."""
     seen, i = 0, start - 1
     while i >= 0 and seen < _NEG_WINDOW:
         w = toks[i][0]
         if w is None:
             return False          # clause boundary: a negation in another clause does not negate this one
         if w in _NEG_WORDS or (w == "T" and i > 0 and toks[i - 1][0] in _NT_PREFIX):
-            return True
+            nxt = toks[i + 1][0] if i + 1 < len(toks) else None
+            if not (nxt in _HEDGE_AFTER_NEG and i + 1 != start):
+                return True
         seen += 1
         i -= 1
     return False
 
 
+def _post_negated(toks, end):
+    """True when the words right after the occurrence (same clause) deny it: '<X> is not ...', '<X> isn't ...',
+    '<X> is incorrect / wrong'. A bare 'not' after it ('Paris, not London') denies the NEXT word, not <X>."""
+    w = [t[0] for t in toks[end + 1:end + 4]]
+    if not w or w[0] is None:
+        return False
+    if w[0] in _WRONG_WORDS:
+        return True
+    if w[0] in _COPULA and len(w) > 1 and w[1] is not None and (w[1] in _NEG_WORDS or w[1] in _WRONG_WORDS):
+        return True
+    if w[0] in _NT_PREFIX and len(w) > 1 and w[1] == "T":
+        return True
+    return False
+
+
+def _retracted_before(raw, toks):
+    """Character offset of the first clause that RETRACTS what came before it ('Paris? No, Lyon.', 'Three. Wait - four.',
+    'Actually, ...'); None when there is none. An occurrence before that offset is not a claim of the answer."""
+    up = fold(raw).upper()
+    starts = [0] + [t[2] for t in toks if t[0] is None]
+    for st in starts[1:]:
+        if _RETRACT_RE.match(up, st):
+            return st
+    return None
+
+
 def claim_occurrences(raw, needle):
     """[(word_index, negated)] of every occurrence of `needle` (its normalised words, consecutive; separators between
-    them are skipped like the normaliser does). word_index counts words only."""
+    them are skipped like the normaliser does). word_index counts words only. 'negated' covers a negation before it, a
+    denial after it ('X is not ...'), a '-less'/'-free' compound ('login-less'), and a later retraction clause."""
     want = norm(needle).split()
     if not want:
         return []
     toks = _tokens(raw)
+    up = fold(raw).upper()
     words = [(i, t[0]) for i, t in enumerate(toks) if t[0] is not None]
+    retract = _retracted_before(raw, toks)
     out = []
     for k in range(len(words) - len(want) + 1):
         if all(words[k + j][1] == want[j] for j in range(len(want))):
-            out.append((k, _negated(toks, words[k][0])))
+            first, last = words[k][0], words[k + len(want) - 1][0]
+            neg = _negated(toks, first) or _post_negated(toks, last) \
+                or bool(re.match(r"\s*-\s*(LESS|FREE)\b", up[toks[last][2]:])) \
+                or (retract is not None and toks[first][1] < retract)
+            out.append((k, neg))
     return out
 
 
@@ -139,13 +200,16 @@ def asserts(raw, needle):
 
 def _ordered_ok(raw, items):
     """The sequence of ALL occurrences of the listed items, in answer order, must BE the listed order: an item missing,
-    repeated, extra or out of place is not that order ('Red, green, blue, red' is not RED GREEN BLUE)."""
-    occ = []
+    repeated, extra or out of place is not that order ('Red, green, blue, red' is not RED GREEN BLUE); a NEGATED
+    occurrence ('Not red, green, blue.') makes the sequence no claim at all (finding 4 of the 2026-10-15 review)."""
+    occ, neg = [], False
     for idx, t in enumerate(items):
-        occ += [(pos, idx) for pos, _ in claim_occurrences(raw, t)]
+        for pos, n in claim_occurrences(raw, t):
+            occ.append((pos, idx))
+            neg = neg or n
     occ.sort()
     seq = [idx for _, idx in occ]
-    return seq == list(range(len(items))), seq
+    return (not neg) and seq == list(range(len(items))), seq
 
 
 def _json_eq(a, b):
@@ -162,9 +226,10 @@ def _json_eq(a, b):
     return type(a) is type(b) and a == b
 
 
-_LIST_CHECKS = ("contains_all", "contains_any", "ordered", "forbidden", "regex_all", "regex_none")
+_LIST_CHECKS = ("contains_all", "contains_any", "ordered", "forbidden", "regex_all", "regex_none", "number_allow")
 _TOKEN_CHECKS = ("contains_all", "contains_any", "ordered", "forbidden")
-_KNOWN_CHECKS = set(_LIST_CHECKS) | {"number_equals", "json_subset", "choice_equals"}
+_KNOWN_CHECKS = set(_LIST_CHECKS) | {"number_equals", "json_subset", "choice_equals", "json_equals", "exact_text",
+                                     "exact_words", "max_words", "python_function_sum"}
 
 
 def validate_checks(checks):
@@ -195,6 +260,25 @@ def validate_checks(checks):
         elif key == "choice_equals":
             if not isinstance(val, str) or not val:
                 raise SuiteDefect("choice_equals must be a non-empty string, got %r" % (val,))
+        elif key == "json_equals":
+            try:
+                json.dumps(val, allow_nan=False)
+            except (TypeError, ValueError):
+                raise SuiteDefect("json_equals must be a finite JSON value, got %r" % (val,))
+        elif key == "exact_text":
+            if not isinstance(val, str) or not val.strip():
+                raise SuiteDefect("exact_text must be a non-empty string, got %r" % (val,))
+        elif key == "exact_words":
+            if not isinstance(val, str) or not norm(val).strip():
+                raise SuiteDefect("exact_words must be a string with letters or digits, got %r" % (val,))
+        elif key == "max_words":
+            if isinstance(val, bool) or not isinstance(val, int) or val < 1:
+                raise SuiteDefect("max_words must be a positive integer, got %r" % (val,))
+        elif key == "python_function_sum":
+            if not isinstance(val, str) or not val.isidentifier():
+                raise SuiteDefect("python_function_sum must name a Python function, got %r" % (val,))
+    if "number_allow" in checks and "number_equals" not in checks:
+        raise SuiteDefect("number_allow is only meaningful next to number_equals")
 
 
 def _strip_python_comments(src):
@@ -240,7 +324,7 @@ def code_of(answer, language):
 
 def judge_probe(probe, answer):
     """(passed, reasons) for one probe of a suite: its checks validated (SuiteDefect when unusable), applied to the
-    answer - or, for a probe with a code_language, to the code of the answer with comments removed."""
+    answer - or, for a probe with a code_language, to the code of the answer (fenced blocks, comments removed)."""
     checks = probe.get("checks") if isinstance(probe, dict) else None
     validate_checks(checks)
     lang = probe.get("code_language")
@@ -281,26 +365,114 @@ def _all_numbers(raw, start=0):
         pos = b[0] + max(1, len(m.group(0)) if m else 1)
 
 
-def stated_number(raw):
-    """(value, why): the ONE number an answer states, or (None, reason). Rule (documented in docs/validation.md):
-    when the answer restates an equation ("17 + 25 = 42") the answer is the number right after the LAST '=' that is
-    followed by a number (the operands before it are not answers); otherwise it is the number the answer states.
-    Every number stated AFTER that point must have the same value: '3 or 4', 'I count 3... no, 4' and
-    '= 42, or maybe 43' state several different numbers and state no single answer (digits, or an English number
-    word zero..twenty that is not part of a hyphenated compound such as 'twenty-two')."""
-    begin = 0
-    eq = [m.end() for m in re.finditer(r"=\s*", raw)]
-    for end in reversed(eq):
-        if re.match(_NUM_RE, raw[end:]) or _WORD_RE.match(raw, end):
-            begin = end
+# Numbers (finding 4 of the 2026-10-15 review): every number_equals prompt asks for ONLY the number, so the answer must BE
+# a number - not merely mention one. The answer is split into sentences; EVERY sentence must be one of these forms and
+# state the same value (else FAIL):
+#   N                         '42', '42.0', '58,40', '$58.40', 'forty-two', 'Three', '**3**', a fenced '3'
+#   N (N')                    '3 (three)' - the same value twice
+#   <arithmetic> = N          '17 + 25 = 42' (operands and operators only before the '=')
+#   <lead-in> N [nouns]       'There are 3 red circles', 'The answer is 42' (fixed lead-ins; 1-4 plain nouns after)
+# N is digits with an optional '.' fraction (three fraction digits are refused as an ambiguous thousands separator:
+# '10.000'), a decimal comma with exactly two digits, an optional currency symbol, or an English number word
+# (zero..twenty, 'forty-two'). Anything else - 'Not 3', 'At least 3', 'About 3', '3 or more', '3rd', '3%', '3/4',
+# '4.2e1', '7,731', 'Three. No wait - four.' - is not a stated number. A suite may declare extra words that may stand
+# next to the number (number_allow: ['NOT FOUND'] for HTTP 404, ['INV'] for an invoice number).
+_N_DIGITS = re.compile(r"^[$€£]?\s*(\d+(?:\.\d{1,2}|\.\d{4,})?|\d+,\d{2})\s*[$€£]?$")
+_LEAD_INS = ("THE ANSWER IS", "ANSWER IS", "ANSWER", "IT IS", "IT'S", "THERE ARE", "THERE IS", "I COUNT", "I SEE",
+             "THE RESULT IS", "RESULT", "OUTPUT", "TOTAL", "THE TOTAL IS", "THE NUMBER IS", "THE STATUS CODE IS")
+_NUMBER_BLOCK = {"NOT", "NO", "NEVER", "NONE", "MORE", "LESS", "FEWER", "LEAST", "MOST", "ABOUT", "AROUND", "APPROXIMATELY",
+                 "ROUGHLY", "NEARLY", "ALMOST", "OVER", "UNDER", "ABOVE", "BELOW", "MAYBE", "PERHAPS", "PROBABLY",
+                 "POSSIBLY", "OR", "WAIT", "ACTUALLY", "THAN", "UP", "TO", "PLUS", "MINUS", "TIMES", "PERCENT", "ISN",
+                 "EXCEPT", "BUT", "IF", "GUESS", "ESTIMATE", "LIKELY", "UNSURE"}
+
+
+def _strip_markup(t):
+    t = t.strip()
+    m = re.match(r"^```[^\n`]*\n(.*?)\n?```$", t, re.S)
+    if m:
+        t = m.group(1)
+    return re.sub(r"[*_`]+", "", t).strip()
+
+
+def _num_value(tok):
+    """The value of ONE number token (see the rules above), else None."""
+    t = tok.strip().rstrip(".")
+    m = _N_DIGITS.match(t)
+    if m:
+        return float(m.group(1).replace(",", "."))
+    low = t.lower()
+    if low in NUMBER_WORDS:
+        return float(NUMBER_WORDS[low])
+    m = re.match(r"^(" + "|".join(TENS_WORDS) + r")[- ](one|two|three|four|five|six|seven|eight|nine)$", low)
+    if m:
+        return float(TENS_WORDS[m.group(1)] + NUMBER_WORDS[m.group(2)])
+    if low in TENS_WORDS:
+        return float(TENS_WORDS[low])
+    return None
+
+
+def _sentence_number(sent, allow):
+    """(value, None) when the sentence is one of the allowed number forms, else (None, why)."""
+    t = sent.strip().rstrip(".!").strip()
+    up = t.upper()
+    for a in sorted(allow, key=len, reverse=True):       # declared neighbours of the number: removed as whole words
+        A = a.upper()
+        if up.startswith(A) and (len(up) == len(A) or not up[len(A)].isalnum() or not A[-1].isalnum()):
+            t, up = t[len(A):].strip(" -#:"), up[len(A):].strip(" -#:")
+        if up.endswith(A) and (len(up) == len(A) or not up[-len(A) - 1].isalnum()):
+            t, up = t[:-len(A)].strip(" -#:,"), up[:-len(A)].strip(" -#:,")
+    v = _num_value(t)
+    if v is not None:
+        return v, None
+    m = re.match(r"^(.+?)\s*\((.+)\)$", t)                          # N (N')
+    if m:
+        a, b = _num_value(m.group(1)), _num_value(m.group(2))
+        if a is not None and a == b:
+            return a, None
+    m = re.match(r"^([0-9\s.+\-*/x×()]+?)\s*=\s*(.+)$", t)        # arithmetic = N
+    if m and re.search(r"[+\-*/x×]", m.group(1)):
+        v = _num_value(m.group(2))
+        if v is not None:
+            return v, None
+    for lead in _LEAD_INS:                                          # lead-in N [nouns]
+        if up.startswith(lead) and len(up) > len(lead) and not up[len(lead)].isalnum():
+            rest = t[len(lead):].strip(" :")
+            parts = rest.split(None, 1)
+            if not parts:
+                break
+            v = _num_value(parts[0])
+            if v is None:
+                break
+            nouns = parts[1].split() if len(parts) > 1 else []
+            if len(nouns) <= 4 and all(re.match(r"^[A-Za-z]+$", n) and n.upper() not in _NUMBER_BLOCK
+                                       and _num_value(n) is None for n in nouns):
+                return v, None
             break
-    nums = _all_numbers(raw, begin)
-    if not nums:
+    m = re.match(r"^(\S+)\s+([A-Za-z]+(?:\s+[A-Za-z]+){0,3})$", t)   # N nouns ('3 red circles')
+    if m:
+        v = _num_value(m.group(1))
+        nouns = m.group(2).split()
+        if v is not None and all(n.upper() not in _NUMBER_BLOCK and _num_value(n) is None for n in nouns):
+            return v, None
+    return None, "%r is not just a number (a hedge, comparison, negation, unit, ordinal, alternative or extra text)" % t
+
+
+def stated_number(raw, allow=()):
+    """(value, why): the ONE number the answer states when it states only that (rules above), or (None, reason)."""
+    t = _strip_markup(fold(raw))
+    if not t:
+        return None, "empty answer"
+    sents = [x for x in re.split(r"\.{2,}|\.(?=\s|$)|\n|;|!|\?", t) if x.strip()]
+    vals = []
+    for sent in sents:
+        v, why = _sentence_number(sent, allow)
+        if v is None:
+            return None, why
+        vals.append(v)
+    if not vals:
         return None, "no number in the answer"
-    vals = sorted({v for _, v in nums})
-    if len(vals) > 1:
-        return None, "the answer states several different numbers %s (hedged / ambiguous / self-corrected)" % (
-            ", ".join("%g" % v for v in vals))
+    if len(set(vals)) > 1:
+        return None, "the answer states several different numbers %s" % ", ".join("%g" % v for v in sorted(set(vals)))
     return vals[0], ""
 
 
@@ -333,6 +505,118 @@ def first_json_object(raw):
     return None
 
 
+class _DuplicateKey(ValueError):
+    """A JSON object of the answer repeats a key."""
+
+
+def _no_dup_pairs(pairs):
+    seen = {}
+    for k, v in pairs:
+        if k in seen:
+            raise _DuplicateKey(k)
+        seen[k] = v
+    return seen
+
+
+def _bad_constant(name):
+    raise ValueError("non-finite number %s" % name)
+
+
+def json_document(raw):
+    """(value, None) when the WHOLE answer (one optional ```json fence) is exactly one JSON document without duplicate
+    keys or NaN/Infinity, else (None, why): '{"a": 1} -- no wait: {...}', duplicate keys and a Python dict are not."""
+    t = str(raw).strip()
+    m = re.match(r"^```[A-Za-z]*\s*\n?(.*?)\n?```$", t, re.S)
+    if m:
+        t = m.group(1).strip()
+    try:
+        return json.loads(t, object_pairs_hook=_no_dup_pairs, parse_constant=_bad_constant), None
+    except _DuplicateKey as e:
+        return None, "duplicate JSON key %r" % str(e)
+    except ValueError as e:
+        return None, "the answer is not exactly one JSON document (%s)" % str(e)[:80]
+
+
+def _exact_text_of(raw):
+    t = str(raw).strip()
+    m = re.match(r"^```[^\n`]*\n(.*?)\n?```$", t, re.S)
+    if m:
+        t = m.group(1).strip()
+    if len(t) >= 2 and t[0] == t[-1] and t[0] in "`'\"":
+        t = t[1:-1].strip()
+    if t.endswith(".") and not t.endswith(".."):
+        t = t[:-1]
+    return re.sub(r"\s+", " ", unicodedata.normalize("NFKC", t)).strip()
+
+
+def _sum_of(e, a, b):
+    import ast
+    return (isinstance(e, ast.BinOp) and isinstance(e.op, ast.Add) and isinstance(e.left, ast.Name)
+            and isinstance(e.right, ast.Name) and {e.left.id, e.right.id} == {a, b} and a != b)
+
+
+def python_function_sum(code, name):
+    """None when `code` defines exactly one top-level function `name` of two positional parameters that ends in its ONLY
+    return, `return p1 + p2` (or `return t` after `t = p1 + p2`), has no control flow or nested definition, never
+    re-binds a parameter, and `name` is bound nowhere else; else why. Judged on the AST: a docstring or string literal
+    saying 'return a + b', a dead branch, a sum in another function or a later redefinition do not count (finding 4 of
+    the 2026-10-15 review). The code is parsed, never executed."""
+    import ast
+    try:
+        tree = ast.parse(code)
+    except (SyntaxError, ValueError) as e:
+        return "the code does not parse as Python (%s)" % str(e)[:60]
+    defs = [n for n in tree.body if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and n.name == name]
+    if len(defs) != 1 or not isinstance(defs[0], ast.FunctionDef):
+        return "expected exactly one top-level 'def %s', found %d" % (name, len(defs))
+    f = defs[0]
+    for n in ast.walk(tree):
+        if n is f:
+            continue
+        if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) and n.name == name:
+            return "%r is defined again" % name
+        if isinstance(n, ast.Name) and n.id == name and isinstance(n.ctx, (ast.Store, ast.Del)):
+            return "%r is re-bound" % name
+        if isinstance(n, ast.alias) and (n.asname or n.name) == name:
+            return "%r is re-bound by an import" % name
+    if f.decorator_list:
+        return "%r is decorated" % name
+    a = f.args
+    params = [x.arg for x in a.posonlyargs + a.args]
+    if len(params) != 2 or a.vararg or a.kwarg or a.kwonlyargs:
+        return "%r must take exactly two positional parameters" % name
+    body = list(f.body)
+    if body and isinstance(body[0], ast.Expr) and isinstance(getattr(body[0], "value", None), ast.Constant) \
+            and isinstance(body[0].value.value, str):
+        body = body[1:]
+    p1, p2 = params
+    if not body or not isinstance(body[-1], ast.Return):
+        return "%r does not end in a return" % name
+    for st in body[:-1]:
+        if not isinstance(st, (ast.Assign, ast.AnnAssign, ast.Expr, ast.Pass)):
+            return "%r contains %s (only plain statements before its return)" % (name, type(st).__name__)
+    for n in ast.walk(f):
+        if n is not f and isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda, ast.ClassDef)):
+            return "%r contains a nested definition" % name
+        if isinstance(n, ast.Return) and n is not body[-1]:
+            return "%r has more than one return" % name
+        if isinstance(n, ast.Name) and n.id in (p1, p2) and isinstance(n.ctx, (ast.Store, ast.Del)):
+            return "%r re-binds its parameter %r" % (name, n.id)
+        if isinstance(n, (ast.Global, ast.Nonlocal)):
+            return "%r declares global/nonlocal names" % name
+    ret = body[-1].value
+    if _sum_of(ret, p1, p2):
+        return None
+    if isinstance(ret, ast.Name):
+        sums = [st for st in body[:-1] if isinstance(st, ast.Assign) and len(st.targets) == 1
+                and isinstance(st.targets[0], ast.Name) and st.targets[0].id == ret.id]
+        others = [n for st in body[:-1] for n in ast.walk(st)
+                  if isinstance(n, ast.Name) and n.id == ret.id and isinstance(n.ctx, ast.Store)]
+        if len(sums) == 1 and len(others) == 1 and _sum_of(sums[0].value, p1, p2):
+            return None
+    return "%r does not return %s + %s" % (name, p1, p2)
+
+
 def judge(checks, answer):
     """Return (passed: bool, reasons: [str]). Pure function of (checks, answer). Unusable checks raise SuiteDefect."""
     validate_checks(checks)
@@ -358,9 +642,35 @@ def judge(checks, answer):
             if hit:
                 reasons.append("forbidden: answer claims %s" % hit)
         elif key == "number_equals":
-            got, why = stated_number(raw)
+            got, why = stated_number(raw, checks.get("number_allow") or ())
             if got is None or not math.isclose(got, float(val), rel_tol=0, abs_tol=1e-9):
                 reasons.append("number_equals: expected %s, %s" % (val, why or "the answer states %g" % got))
+        elif key == "number_allow":
+            pass    # a modifier of number_equals
+        elif key == "json_equals":
+            doc, why = json_document(raw)
+            if why is not None:
+                reasons.append("json_equals: %s" % why)
+            elif not _json_eq(doc, val):
+                reasons.append("json_equals: expected %s, got %s" % (json.dumps(val), json.dumps(doc)[:200]))
+        elif key == "exact_text":
+            got = _exact_text_of(raw)
+            if got != val:
+                reasons.append("exact_text: expected exactly %r, got %r" % (val, got[:200]))
+        elif key == "exact_words":
+            got = norm(_strip_markup(raw))
+            if got != norm(val):
+                reasons.append("exact_words: expected the words %r, got %r" % (norm(val).strip(), got.strip()[:200]))
+        elif key == "max_words":
+            ws = norm(raw).split()
+            if len(ws) > val:
+                reasons.append("max_words: %d words, at most %d asked" % (len(ws), val))
+            elif "OR" in ws:
+                reasons.append("max_words: a short answer naming alternatives ('or') states no single answer")
+        elif key == "python_function_sum":
+            why = python_function_sum(raw, val)
+            if why:
+                reasons.append("python_function_sum: %s" % why)
         elif key == "choice_equals":
             if raw.strip() != val:
                 reasons.append("choice_equals: expected choice %r, got %r" % (val, raw.strip()))

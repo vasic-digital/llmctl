@@ -27,11 +27,7 @@
      "id": "read",
      "prompt": "Read all the text in this image exactly as written. Reply with only the text, nothing else. If the image contains no text at all, reply exactly: NO TEXT",
      "checks": {
-      "contains_all": [
-       "ORANGE",
-       "TIGER",
-       "42"
-      ],
+      "exact_words": "ORANGE TIGER 42",
       "forbidden": [
        "NO TEXT",
        "PURPLE",
@@ -229,7 +225,8 @@
       "forbidden": [
        "LIGHT",
        "WHITE"
-      ]
+      ],
+      "max_words": 3
      }
     }
    ]
@@ -245,7 +242,15 @@
      "id": "invoice",
      "prompt": "What is the invoice number shown in this receipt? Answer with the number only.",
      "checks": {
-      "number_equals": 7731
+      "number_equals": 7731,
+      "number_allow": [
+       "INVOICE NO",
+       "INVOICE",
+       "NO",
+       "INV",
+       "#",
+       "NUMBER"
+      ]
      }
     },
     {
@@ -556,6 +561,151 @@
   {
    "probe": "91_bad_wrong_content/read",
    "answer": "ORANGE TIGER 42",
+   "expect": "fail"
+  },
+  {
+   "probe": "02_shapes_count/red_circles",
+   "answer": "Not 3.",
+   "expect": "fail"
+  },
+  {
+   "probe": "02_shapes_count/red_circles",
+   "answer": "There are not 3 red circles.",
+   "expect": "fail"
+  },
+  {
+   "probe": "02_shapes_count/red_circles",
+   "answer": "3 or more",
+   "expect": "fail"
+  },
+  {
+   "probe": "02_shapes_count/red_circles",
+   "answer": "At least 3",
+   "expect": "fail"
+  },
+  {
+   "probe": "02_shapes_count/red_circles",
+   "answer": "About 3",
+   "expect": "fail"
+  },
+  {
+   "probe": "02_shapes_count/red_circles",
+   "answer": "3rd",
+   "expect": "fail"
+  },
+  {
+   "probe": "02_shapes_count/red_circles",
+   "answer": "3%",
+   "expect": "fail"
+  },
+  {
+   "probe": "02_shapes_count/red_circles",
+   "answer": "3/4",
+   "expect": "fail"
+  },
+  {
+   "probe": "02_shapes_count/red_circles",
+   "answer": "Three. No wait - four.",
+   "expect": "fail"
+  },
+  {
+   "probe": "02_shapes_count/red_circles",
+   "answer": "3 (three)",
+   "expect": "pass"
+  },
+  {
+   "probe": "02_shapes_count/red_circles",
+   "answer": "\u0663",
+   "expect": "pass"
+  },
+  {
+   "probe": "02_shapes_count/red_circles",
+   "answer": "\uff13",
+   "expect": "pass"
+  },
+  {
+   "probe": "02_shapes_count/red_circles",
+   "answer": "**3**",
+   "expect": "pass"
+  },
+  {
+   "probe": "02_shapes_count/red_circles",
+   "answer": "Three.",
+   "expect": "pass"
+  },
+  {
+   "probe": "02_shapes_count/red_circles",
+   "answer": "```\n3\n```",
+   "expect": "pass"
+  },
+  {
+   "probe": "01_text_large/read",
+   "answer": "TIGER ORANGE 42",
+   "expect": "fail"
+  },
+  {
+   "probe": "01_text_large/read",
+   "answer": "ORANGE TIGER 42 ZEBRA",
+   "expect": "fail"
+  },
+  {
+   "probe": "06_dialog/buttons",
+   "answer": "Delete is not there, only Cancel.",
+   "expect": "fail"
+  },
+  {
+   "probe": "03_login_form/screen_type",
+   "answer": "A login-less dashboard.",
+   "expect": "fail"
+  },
+  {
+   "probe": "07_dark_theme/theme",
+   "answer": "Not sure, dark.",
+   "expect": "pass"
+  },
+  {
+   "probe": "07_dark_theme/theme",
+   "answer": "Dark. No, wait - light.",
+   "expect": "fail"
+  },
+  {
+   "probe": "09_color_blocks/colors",
+   "answer": "Not red, green, blue.",
+   "expect": "fail"
+  },
+  {
+   "probe": "04_list_view/items",
+   "answer": "The list is NOT apple, banana, cherry, grape.",
+   "expect": "fail"
+  },
+  {
+   "probe": "08_small_text/invoice",
+   "answer": "7,731",
+   "expect": "fail"
+  },
+  {
+   "probe": "08_small_text/invoice",
+   "answer": "INV-7731",
+   "expect": "pass"
+  },
+  {
+   "probe": "08_small_text/total",
+   "answer": "58.40 is not the total",
+   "expect": "fail"
+  },
+  {
+   "probe": "08_small_text/total",
+   "answer": "$58.40",
+   "expect": "pass"
+  },
+  {
+   "probe": "08_small_text/total",
+   "answer": "58,40",
+   "expect": "pass"
+  },
+  {
+   "probe": "06_dialog/buttons",
+   "answer": "Cancel. Delete is not there.",
    "expect": "fail"
   }
  ]

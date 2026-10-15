@@ -54,9 +54,10 @@ assert_eq FAIL "$(v vision-golden-v1 02_shapes_count/red_circles '3 or 4')" "'3 
 assert_eq FAIL "$(v vision-golden-v1 02_shapes_count/red_circles 'I count 3... no, 4')" "'I count 3... no, 4' -> FAIL"
 assert_eq FAIL "$(v vision-golden-v1 02_shapes_count/red_circles 'three or four')" "'three or four' (number words) -> FAIL"
 assert_eq FAIL "$(v chat-v1 arith '17 + 25 = 42, or maybe 43')" "an equation restated, then hedged after the '=' -> FAIL"
+assert_eq FAIL "$(v vision-golden-v1 02_shapes_count/red_circles $'3.\n4.')" "two sentences, each a number, but different -> FAIL"
 assert_eq PASS "$(v vision-golden-v1 02_shapes_count/red_circles '3')" "control: '3' -> PASS"
 assert_eq PASS "$(v vision-golden-v1 02_shapes_count/red_circles 'There are three red circles.')" "control: 'There are three red circles.' -> PASS"
-assert_eq PASS "$(v vision-golden-v1 02_shapes_count/red_circles '3 red circles - yes, 3.')" "control: the same number repeated -> PASS"
+assert_eq PASS "$(v vision-golden-v1 02_shapes_count/red_circles 'I count 3 red circles. 3.')" "control: the same number in two allowed sentences -> PASS"
 assert_eq PASS "$(v chat-v1 arith '17 + 25 = 42')" "control: operands before the last '=' are not answers -> PASS"
 assert_eq PASS "$(v chat-v1 arith '17 + 25 = 42. The answer is 42.')" "control: the answer restated after the equation -> PASS"
 
@@ -71,7 +72,8 @@ echo "== 3. negation: a negated mention is not a claim (contains_* must not pass
 assert_eq FAIL "$(v vision-golden-v1 01_text_large/read 'There is no ORANGE TIGER 42 here')" "'There is no ORANGE TIGER 42 here' -> FAIL"
 assert_eq FAIL "$(v vision-golden-v1 01_text_large/read "I don't see ORANGE TIGER 42 in this image")" "\"I don't see ORANGE TIGER 42\" -> FAIL"
 assert_eq FAIL "$(v vision-golden-v1 05_table/lookup 'It is not OSLO')" "'It is not OSLO' -> FAIL"
-assert_eq PASS "$(v vision-golden-v1 01_text_large/read 'No problem. ORANGE TIGER 42')" "control: a negation in ANOTHER sentence does not negate the claim -> PASS"
+# (the read probe itself now asks for the exact words - review 2026-10-15 finding 4 - so the clause rule is shown on a contains_all check)
+assert_eq PASS "$(c '{"contains_all": ["ORANGE", "TIGER", "42"]}' 'No problem. ORANGE TIGER 42')" "control: a negation in ANOTHER sentence does not negate the claim -> PASS"
 assert_eq PASS "$(v vision-golden-v1 05_table/lookup 'OSLO (not PARIS)')" "control: a negated forbidden word is not a claim -> PASS"
 assert_eq FAIL "$(v vision-golden-v1 05_table/lookup 'OSLO or PARIS')" "control: an asserted forbidden word still FAILs"
 assert_eq PASS "$(v vision-golden-v1 90_bad_blank/read 'NO TEXT')" "control: 'NO TEXT' (the needle itself starts with NO) -> PASS"
@@ -153,6 +155,14 @@ for (( i=0; i<100; i++ )); do [[ -s "${pf}" ]] && break; sleep 0.1; done
 U="http://127.0.0.1:$(cat "${pf}")"
 rc=0; python3 -I "${JUDGE}" run --suite "${SUITES}/chat-v1" --endpoint "${U}" > "${TEST_TMP}/nd3.out" 2>&1 || rc=$?
 assert_eq 1 "${rc}" "a model whose THIRD answer differs -> FAIL with the default N=3"
+# a FRESH server for the quick mode: this one now answers every probe with " (third call differs)" appended, which the strict
+# number/exact checks (finding 4 of the 2026-10-15 review) rightly judge wrong
+pf="${TEST_TMP}/port.nd3b"
+python3 -I "${FIX}/fake_openai.py" --suite "${SUITES}/chat-v1" --answers "${FIX}/answers_good.json" --port-file "${pf}" \
+  --model-id test-model --mode nondeterministic-third >/dev/null 2>&1 &
+echo "$!" >> "${FAKE_PIDS_FILE}"
+for (( i=0; i<100; i++ )); do [[ -s "${pf}" ]] && break; sleep 0.1; done
+U="http://127.0.0.1:$(cat "${pf}")"
 assert_contains "$(cat "${TEST_TMP}/nd3.out")" "[FAIL] determinism" "the non-deterministic probe is named"
 assert_contains "$(cat "${TEST_TMP}/nd3.out")" "repeat=3" "the repeat count is printed"
 rc=0; LLMCTL_VALIDATE_REPEAT=1 python3 -I "${JUDGE}" run --suite "${SUITES}/chat-v1" --endpoint "${U}" > "${TEST_TMP}/nd1.out" 2>&1 || rc=$?

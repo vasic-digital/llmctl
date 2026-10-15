@@ -1,8 +1,8 @@
 {
  "suite": "vision-golden-v1",
  "kind": "vision",
- "suite_hash": "261543e3023819585a1ae25c6f6a3e7541244b8cc6cabae11623f4913c88f790",
- "endpoint": "http://127.0.0.1:42931",
+ "suite_hash": "7e4de87eb6eaaca22c2e02c0296db41af2e0414022b6fa4590228ee94e28f6e7",
+ "endpoint": "http://127.0.0.1:43577",
  "expect_model": "gemma-3-4b-it-Q4_K_M.gguf",
  "results": [
   {
@@ -210,7 +210,7 @@
    "verdict": "PASS",
    "answer": "NO TEXT",
    "golden_reasons": [
-    "contains_all: missing (or only negated) ['ORANGE', 'TIGER', '42']",
+    "exact_words: expected the words 'ORANGE TIGER 42', got 'NO TEXT'",
     "forbidden: answer claims ['NO TEXT']"
    ]
   },
@@ -219,7 +219,7 @@
    "verdict": "PASS",
    "answer": "PURPLE HORSE\n17",
    "golden_reasons": [
-    "contains_all: missing (or only negated) ['ORANGE', 'TIGER', '42']",
+    "exact_words: expected the words 'ORANGE TIGER 42', got 'PURPLE HORSE 17'",
     "forbidden: answer claims ['PURPLE', 'HORSE', '17']"
    ]
   }
@@ -242,13 +242,13 @@
    "probe": "01_text_large/read",
    "answer": "PURPLE HORSE 17",
    "ok": true,
-   "detail": "judged FAIL (want FAIL) contains_all: missing (or only negated) ['ORANGE', 'TIGER', '42']; forbidden: answer claims ['PURPLE', 'HORSE', '17']"
+   "detail": "judged FAIL (want FAIL) exact_words: expected the words 'ORANGE TIGER 42', got 'PURPLE HORSE 17'; forbidden: answer claims ['PURPLE', 'HORSE', '17']"
   },
   {
    "probe": "01_text_large/read",
    "answer": "ORANGE TIGER 420",
    "ok": true,
-   "detail": "judged FAIL (want FAIL) contains_all: missing (or only negated) ['42']"
+   "detail": "judged FAIL (want FAIL) exact_words: expected the words 'ORANGE TIGER 42', got 'ORANGE TIGER 420'"
   },
   {
    "probe": "01_text_large/read",
@@ -260,13 +260,13 @@
    "probe": "01_text_large/read",
    "answer": "NO TEXT",
    "ok": true,
-   "detail": "judged FAIL (want FAIL) contains_all: missing (or only negated) ['ORANGE', 'TIGER', '42']; forbidden: answer claims ['NO TEXT']"
+   "detail": "judged FAIL (want FAIL) exact_words: expected the words 'ORANGE TIGER 42', got 'NO TEXT'; forbidden: answer claims ['NO TEXT']"
   },
   {
    "probe": "01_text_large/read",
    "answer": "There is no ORANGE TIGER 42 here",
    "ok": true,
-   "detail": "judged FAIL (want FAIL) contains_all: missing (or only negated) ['ORANGE', 'TIGER', '42']"
+   "detail": "judged FAIL (want FAIL) exact_words: expected the words 'ORANGE TIGER 42', got 'THERE IS NO ORANGE TIGER 42 HERE'"
   },
   {
    "probe": "02_shapes_count/red_circles",
@@ -290,13 +290,13 @@
    "probe": "02_shapes_count/red_circles",
    "answer": "I cannot count them.",
    "ok": true,
-   "detail": "judged FAIL (want FAIL) number_equals: expected 3, no number in the answer"
+   "detail": "judged FAIL (want FAIL) number_equals: expected 3, 'I cannot count them' is not just a number (a hedge, comparison, negation, unit, ordinal, alternative or extra text)"
   },
   {
    "probe": "02_shapes_count/red_circles",
    "answer": "3 or 4",
    "ok": true,
-   "detail": "judged FAIL (want FAIL) number_equals: expected 3, the answer states several different numbers 3, 4 (hedged / ambiguous / self-corrected)"
+   "detail": "judged FAIL (want FAIL) number_equals: expected 3, '3 or 4' is not just a number (a hedge, comparison, negation, unit, ordinal, alternative or extra text)"
   },
   {
    "probe": "02_shapes_count/blue_squares",
@@ -495,6 +495,180 @@
    "answer": "ORANGE TIGER 42",
    "ok": true,
    "detail": "judged FAIL (want FAIL) contains_all: missing (or only negated) ['PURPLE', 'HORSE', '17']; forbidden: answer claims ['ORANGE', 'TIGER', '42']"
+  },
+  {
+   "probe": "02_shapes_count/red_circles",
+   "answer": "Not 3.",
+   "ok": true,
+   "detail": "judged FAIL (want FAIL) number_equals: expected 3, 'Not 3' is not just a number (a hedge, comparison, negation, unit, ordinal, alternative or extra text)"
+  },
+  {
+   "probe": "02_shapes_count/red_circles",
+   "answer": "There are not 3 red circles.",
+   "ok": true,
+   "detail": "judged FAIL (want FAIL) number_equals: expected 3, 'There are not 3 red circles' is not just a number (a hedge, comparison, negation, unit, ordinal, alternative or extra text)"
+  },
+  {
+   "probe": "02_shapes_count/red_circles",
+   "answer": "3 or more",
+   "ok": true,
+   "detail": "judged FAIL (want FAIL) number_equals: expected 3, '3 or more' is not just a number (a hedge, comparison, negation, unit, ordinal, alternative or extra text)"
+  },
+  {
+   "probe": "02_shapes_count/red_circles",
+   "answer": "At least 3",
+   "ok": true,
+   "detail": "judged FAIL (want FAIL) number_equals: expected 3, 'At least 3' is not just a number (a hedge, comparison, negation, unit, ordinal, alternative or extra text)"
+  },
+  {
+   "probe": "02_shapes_count/red_circles",
+   "answer": "About 3",
+   "ok": true,
+   "detail": "judged FAIL (want FAIL) number_equals: expected 3, 'About 3' is not just a number (a hedge, comparison, negation, unit, ordinal, alternative or extra text)"
+  },
+  {
+   "probe": "02_shapes_count/red_circles",
+   "answer": "3rd",
+   "ok": true,
+   "detail": "judged FAIL (want FAIL) number_equals: expected 3, '3rd' is not just a number (a hedge, comparison, negation, unit, ordinal, alternative or extra text)"
+  },
+  {
+   "probe": "02_shapes_count/red_circles",
+   "answer": "3%",
+   "ok": true,
+   "detail": "judged FAIL (want FAIL) number_equals: expected 3, '3%' is not just a number (a hedge, comparison, negation, unit, ordinal, alternative or extra text)"
+  },
+  {
+   "probe": "02_shapes_count/red_circles",
+   "answer": "3/4",
+   "ok": true,
+   "detail": "judged FAIL (want FAIL) number_equals: expected 3, '3/4' is not just a number (a hedge, comparison, negation, unit, ordinal, alternative or extra text)"
+  },
+  {
+   "probe": "02_shapes_count/red_circles",
+   "answer": "Three. No wait - four.",
+   "ok": true,
+   "detail": "judged FAIL (want FAIL) number_equals: expected 3, 'No wait - four' is not just a number (a hedge, comparison, negation, unit, ordinal, alternative or extra text)"
+  },
+  {
+   "probe": "02_shapes_count/red_circles",
+   "answer": "3 (three)",
+   "ok": true,
+   "detail": "judged PASS (want PASS) "
+  },
+  {
+   "probe": "02_shapes_count/red_circles",
+   "answer": "\u0663",
+   "ok": true,
+   "detail": "judged PASS (want PASS) "
+  },
+  {
+   "probe": "02_shapes_count/red_circles",
+   "answer": "\uff13",
+   "ok": true,
+   "detail": "judged PASS (want PASS) "
+  },
+  {
+   "probe": "02_shapes_count/red_circles",
+   "answer": "**3**",
+   "ok": true,
+   "detail": "judged PASS (want PASS) "
+  },
+  {
+   "probe": "02_shapes_count/red_circles",
+   "answer": "Three.",
+   "ok": true,
+   "detail": "judged PASS (want PASS) "
+  },
+  {
+   "probe": "02_shapes_count/red_circles",
+   "answer": "```\n3\n```",
+   "ok": true,
+   "detail": "judged PASS (want PASS) "
+  },
+  {
+   "probe": "01_text_large/read",
+   "answer": "TIGER ORANGE 42",
+   "ok": true,
+   "detail": "judged FAIL (want FAIL) exact_words: expected the words 'ORANGE TIGER 42', got 'TIGER ORANGE 42'"
+  },
+  {
+   "probe": "01_text_large/read",
+   "answer": "ORANGE TIGER 42 ZEBRA",
+   "ok": true,
+   "detail": "judged FAIL (want FAIL) exact_words: expected the words 'ORANGE TIGER 42', got 'ORANGE TIGER 42 ZEBRA'"
+  },
+  {
+   "probe": "06_dialog/buttons",
+   "answer": "Delete is not there, only Cancel.",
+   "ok": true,
+   "detail": "judged FAIL (want FAIL) contains_all: missing (or only negated) ['CANCEL', 'DELETE']"
+  },
+  {
+   "probe": "03_login_form/screen_type",
+   "answer": "A login-less dashboard.",
+   "ok": true,
+   "detail": "judged FAIL (want FAIL) contains_any: none of ['LOGIN', 'LOG IN', 'SIGN IN', 'SIGN-IN', 'SIGNIN'] asserted"
+  },
+  {
+   "probe": "07_dark_theme/theme",
+   "answer": "Not sure, dark.",
+   "ok": true,
+   "detail": "judged PASS (want PASS) "
+  },
+  {
+   "probe": "07_dark_theme/theme",
+   "answer": "Dark. No, wait - light.",
+   "ok": true,
+   "detail": "judged FAIL (want FAIL) contains_any: none of ['DARK', 'BLACK'] asserted; max_words: 4 words, at most 3 asked"
+  },
+  {
+   "probe": "09_color_blocks/colors",
+   "answer": "Not red, green, blue.",
+   "ok": true,
+   "detail": "judged FAIL (want FAIL) ordered: the items occur as ['RED', 'GREEN', 'BLUE'], not exactly once each in the order ['RED', 'GREEN', 'BLUE']"
+  },
+  {
+   "probe": "04_list_view/items",
+   "answer": "The list is NOT apple, banana, cherry, grape.",
+   "ok": true,
+   "detail": "judged FAIL (want FAIL) ordered: the items occur as ['APPLE', 'BANANA', 'CHERRY', 'GRAPE'], not exactly once each in the order ['APPLE', 'BANANA', 'CHERRY', 'GRAPE']"
+  },
+  {
+   "probe": "08_small_text/invoice",
+   "answer": "7,731",
+   "ok": true,
+   "detail": "judged FAIL (want FAIL) number_equals: expected 7731, '7,731' is not just a number (a hedge, comparison, negation, unit, ordinal, alternative or extra text)"
+  },
+  {
+   "probe": "08_small_text/invoice",
+   "answer": "INV-7731",
+   "ok": true,
+   "detail": "judged PASS (want PASS) "
+  },
+  {
+   "probe": "08_small_text/total",
+   "answer": "58.40 is not the total",
+   "ok": true,
+   "detail": "judged FAIL (want FAIL) number_equals: expected 58.4, '58.40 is not the total' is not just a number (a hedge, comparison, negation, unit, ordinal, alternative or extra text)"
+  },
+  {
+   "probe": "08_small_text/total",
+   "answer": "$58.40",
+   "ok": true,
+   "detail": "judged PASS (want PASS) "
+  },
+  {
+   "probe": "08_small_text/total",
+   "answer": "58,40",
+   "ok": true,
+   "detail": "judged PASS (want PASS) "
+  },
+  {
+   "probe": "06_dialog/buttons",
+   "answer": "Cancel. Delete is not there.",
+   "ok": true,
+   "detail": "judged FAIL (want FAIL) contains_all: missing (or only negated) ['DELETE']"
   }
  ],
  "notes": [],

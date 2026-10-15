@@ -361,7 +361,7 @@ PY
 assert_eq False "$(jt10 '10,000')" "'10,000' is not 10 (coder-v1 py_output)"
 assert_eq True  "$(jt10 '10')" "'10' passes"
 assert_eq True  "$(jt10 '10.')" "'10.' (sentence period) passes"
-assert_eq True  "$(jt10 '10, then more')" "'10,' followed by a space passes"
+assert_eq False "$(jt10 '10, then more')" "'10, then more' is not only the number (review 2026-10-15 finding 4: the prompt asks for the number only)"
 assert_eq True  "$(jt '42.0')" "'42.0' equals 42"
 assert_eq False "$(jt '41.5')" "'41.5' is not 42"
 jt15() { python3 -I - "${JUDGE}" "$1" <<'PY'
@@ -413,11 +413,11 @@ if (( el <= 12 )); then printf '  ok: gave up after %ss (deadline 3s; per-socket
 else printf '  FAIL: took %ss, the per-request deadline did not fire\n' "${el}" >&2; TEST_FAILS=$((TEST_FAILS+1)); fi
 assert_contains "$(cat "${TEST_TMP}/last.out")" "deadline" "the output names the deadline"
 
-echo "== 18. documented '=' rule trade-offs are exactly the behaviour"
-assert_eq True  "$(jt '41 because 17+25=42')" "'41 because 17+25=42' passes (documented trade-off)"
-assert_eq False "$(jt '42 = 17+25')" "'42 = 17+25' fails (documented trade-off)"
-assert_contains "$(cat "${LLMCTL_ROOT}/docs/validation.md")" "41 because 17+25=42" "docs state the first trade-off"
-assert_contains "$(cat "${LLMCTL_ROOT}/docs/validation.md")" "42 = 17+25" "docs state the second trade-off"
+echo "== 18. documented number-rule trade-offs are exactly the behaviour (rules of review 2026-10-15 finding 4)"
+assert_eq False "$(jt '41 because 17+25=42')" "'41 because 17+25=42' fails (it states 41; the old '=' trade-off is gone)"
+assert_eq False "$(jt '42 = 17+25')" "'42 = 17+25' fails (not one of the number forms)"
+assert_eq False "$(jt 'The answer is 42, not 41.')" "a right number wrapped in other prose fails (documented trade-off)"
+assert_contains "$(cat "${LLMCTL_ROOT}/docs/validation.md")" "The answer is 42, not 41." "docs state the trade-off"
 
 echo "== 19. only http/https endpoints: file:, ftp:, data: and the fragment trick are refused before any open"
 echo '{"data":[{"id":"/m/x.gguf"}]}' > "${TEST_TMP}/models_reply.json"

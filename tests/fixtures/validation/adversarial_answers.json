@@ -1,0 +1,593 @@
+{
+ "source": "independent review 2026-10-15 (finding 4): adversarial answers against the REAL suite probes; truth = what a correct judge must say",
+ "rows": [
+  {
+   "suite": "vision-golden-v1",
+   "probe": "02_shapes_count/red_circles",
+   "answer": "3 or 4",
+   "truth": "fail",
+   "class": "orig"
+  },
+  {
+   "suite": "vision-golden-v1",
+   "probe": "02_shapes_count/red_circles",
+   "answer": "I count 3... no, 4",
+   "truth": "fail",
+   "class": "orig"
+  },
+  {
+   "suite": "vision-golden-v1",
+   "probe": "09_color_blocks/colors",
+   "answer": "Red, green, blue, red",
+   "truth": "fail",
+   "class": "orig"
+  },
+  {
+   "suite": "vision-golden-v1",
+   "probe": "09_color_blocks/colors",
+   "answer": "Blue, red, green, blue",
+   "truth": "fail",
+   "class": "orig"
+  },
+  {
+   "suite": "vision-golden-v1",
+   "probe": "01_text_large/read",
+   "answer": "There is no ORANGE TIGER 42 here",
+   "truth": "fail",
+   "class": "orig"
+  },
+  {
+   "suite": "coder-v1",
+   "probe": "def_add",
+   "answer": "def add(a, b):\n    return a - b  # not: return a + b",
+   "truth": "fail",
+   "class": "orig"
+  },
+  {
+   "suite": "chat-v1",
+   "probe": "json",
+   "answer": "{\"color\": true}",
+   "truth": "fail",
+   "class": "orig-json"
+  },
+  {
+   "suite": "vision-golden-v1",
+   "probe": "02_shapes_count/red_circles",
+   "answer": "Not 3.",
+   "truth": "fail",
+   "class": "neg-number"
+  },
+  {
+   "suite": "vision-golden-v1",
+   "probe": "02_shapes_count/red_circles",
+   "answer": "There are not 3 red circles.",
+   "truth": "fail",
+   "class": "neg-number"
+  },
+  {
+   "suite": "vision-golden-v1",
+   "probe": "02_shapes_count/red_circles",
+   "answer": "More than 3",
+   "truth": "fail",
+   "class": "comparative"
+  },
+  {
+   "suite": "vision-golden-v1",
+   "probe": "02_shapes_count/red_circles",
+   "answer": "At least 3",
+   "truth": "fail",
+   "class": "comparative"
+  },
+  {
+   "suite": "vision-golden-v1",
+   "probe": "02_shapes_count/red_circles",
+   "answer": "Fewer than 3",
+   "truth": "fail",
+   "class": "comparative"
+  },
+  {
+   "suite": "vision-golden-v1",
+   "probe": "02_shapes_count/red_circles",
+   "answer": "3 or more",
+   "truth": "fail",
+   "class": "comparative"
+  },
+  {
+   "suite": "vision-golden-v1",
+   "probe": "02_shapes_count/red_circles",
+   "answer": "About 3",
+   "truth": "fail",
+   "class": "hedge"
+  },
+  {
+   "suite": "vision-golden-v1",
+   "probe": "02_shapes_count/red_circles",
+   "answer": "Maybe 3?",
+   "truth": "fail",
+   "class": "hedge"
+  },
+  {
+   "suite": "vision-golden-v1",
+   "probe": "02_shapes_count/red_circles",
+   "answer": "3 (three)",
+   "truth": "pass",
+   "class": "words+digits"
+  },
+  {
+   "suite": "vision-golden-v1",
+   "probe": "02_shapes_count/red_circles",
+   "answer": "Three.",
+   "truth": "pass",
+   "class": "words"
+  },
+  {
+   "suite": "vision-golden-v1",
+   "probe": "02_shapes_count/red_circles",
+   "answer": "THREE",
+   "truth": "pass",
+   "class": "words"
+  },
+  {
+   "suite": "vision-golden-v1",
+   "probe": "02_shapes_count/red_circles",
+   "answer": "Three. No wait - four.",
+   "truth": "fail",
+   "class": "self-correct"
+  },
+  {
+   "suite": "vision-golden-v1",
+   "probe": "02_shapes_count/red_circles",
+   "answer": "3rd",
+   "truth": "fail",
+   "class": "ordinal"
+  },
+  {
+   "suite": "vision-golden-v1",
+   "probe": "02_shapes_count/red_circles",
+   "answer": "3%",
+   "truth": "fail",
+   "class": "unit"
+  },
+  {
+   "suite": "vision-golden-v1",
+   "probe": "02_shapes_count/red_circles",
+   "answer": "\u0663",
+   "truth": "pass",
+   "class": "unicode-digit (arabic-indic 3)"
+  },
+  {
+   "suite": "vision-golden-v1",
+   "probe": "02_shapes_count/red_circles",
+   "answer": "\uff13",
+   "truth": "pass",
+   "class": "unicode-digit (fullwidth 3)"
+  },
+  {
+   "suite": "vision-golden-v1",
+   "probe": "02_shapes_count/red_circles",
+   "answer": "3/4",
+   "truth": "fail",
+   "class": "fraction"
+  },
+  {
+   "suite": "vision-golden-v1",
+   "probe": "02_shapes_count/red_circles",
+   "answer": "```\n3\n```",
+   "truth": "pass",
+   "class": "fence"
+  },
+  {
+   "suite": "vision-golden-v1",
+   "probe": "02_shapes_count/red_circles",
+   "answer": "**3**",
+   "truth": "pass",
+   "class": "markdown"
+  },
+  {
+   "suite": "vision-golden-v1",
+   "probe": "08_small_text/invoice",
+   "answer": "INV-7731",
+   "truth": "pass",
+   "class": "hyphen-prefix"
+  },
+  {
+   "suite": "vision-golden-v1",
+   "probe": "08_small_text/invoice",
+   "answer": "7,731",
+   "truth": "fail",
+   "class": "thousands"
+  },
+  {
+   "suite": "vision-golden-v1",
+   "probe": "08_small_text/total",
+   "answer": "58,40",
+   "truth": "pass",
+   "class": "decimal-comma"
+  },
+  {
+   "suite": "vision-golden-v1",
+   "probe": "08_small_text/total",
+   "answer": "$58.40",
+   "truth": "pass",
+   "class": "currency"
+  },
+  {
+   "suite": "vision-golden-v1",
+   "probe": "08_small_text/total",
+   "answer": "58.40 is not the total",
+   "truth": "fail",
+   "class": "post-negation"
+  },
+  {
+   "suite": "chat-v1",
+   "probe": "arith",
+   "answer": "17 + 25 = 43, no wait, 42",
+   "truth": "fail",
+   "class": "self-correct"
+  },
+  {
+   "suite": "chat-v1",
+   "probe": "arith",
+   "answer": "It is definitely not 42.",
+   "truth": "fail",
+   "class": "neg-number"
+  },
+  {
+   "suite": "chat-v1",
+   "probe": "arith",
+   "answer": "4.2e1",
+   "truth": "fail",
+   "class": "exponent"
+  },
+  {
+   "suite": "chat-v1",
+   "probe": "arith",
+   "answer": "42.0",
+   "truth": "pass",
+   "class": "float"
+  },
+  {
+   "suite": "chat-v1",
+   "probe": "arith",
+   "answer": "forty-two",
+   "truth": "pass",
+   "class": "compound-word"
+  },
+  {
+   "suite": "chat-v1",
+   "probe": "compare",
+   "answer": "9 or 4",
+   "truth": "fail",
+   "class": "multi"
+  },
+  {
+   "suite": "chat-v1",
+   "probe": "compare",
+   "answer": "Not 9",
+   "truth": "fail",
+   "class": "neg-number"
+  },
+  {
+   "suite": "coder-v1",
+   "probe": "http_404",
+   "answer": "Not 404.",
+   "truth": "fail",
+   "class": "neg-number"
+  },
+  {
+   "suite": "coder-v1",
+   "probe": "http_404",
+   "answer": "404 Not Found",
+   "truth": "pass",
+   "class": "normal"
+  },
+  {
+   "suite": "coder-v1",
+   "probe": "py_output",
+   "answer": "10.000",
+   "truth": "fail",
+   "class": "thousands-dot"
+  },
+  {
+   "suite": "chat-v1",
+   "probe": "capital",
+   "answer": "Paris? No, Lyon.",
+   "truth": "fail",
+   "class": "question-retract"
+  },
+  {
+   "suite": "chat-v1",
+   "probe": "capital",
+   "answer": "The capital is Lyon (Paris is the largest city).",
+   "truth": "fail",
+   "class": "other-claim"
+  },
+  {
+   "suite": "chat-v1",
+   "probe": "capital",
+   "answer": "Paris is incorrect; it is Lyon.",
+   "truth": "fail",
+   "class": "post-negation"
+  },
+  {
+   "suite": "chat-v1",
+   "probe": "capital",
+   "answer": "Paris or Rome",
+   "truth": "fail",
+   "class": "multiple-answers"
+  },
+  {
+   "suite": "chat-v1",
+   "probe": "capital",
+   "answer": "Rather than Paris, Lyon.",
+   "truth": "fail",
+   "class": "not-X-but-Y"
+  },
+  {
+   "suite": "chat-v1",
+   "probe": "capital",
+   "answer": "Not Paris but Lyon.",
+   "truth": "fail",
+   "class": "not-X-but-Y"
+  },
+  {
+   "suite": "chat-v1",
+   "probe": "capital",
+   "answer": "It isn\u2019t Paris.",
+   "truth": "fail",
+   "class": "unicode-apostrophe"
+  },
+  {
+   "suite": "chat-v1",
+   "probe": "capital",
+   "answer": "Par\u0131s",
+   "truth": "fail",
+   "class": "unicode dotless-i"
+  },
+  {
+   "suite": "chat-v1",
+   "probe": "capital",
+   "answer": "Pari\u017f",
+   "truth": "fail",
+   "class": "unicode long-s"
+  },
+  {
+   "suite": "chat-v1",
+   "probe": "capital",
+   "answer": "P\u0430ris",
+   "truth": "fail",
+   "class": "cyrillic-a"
+  },
+  {
+   "suite": "chat-v1",
+   "probe": "capital",
+   "answer": "**Paris**",
+   "truth": "pass",
+   "class": "markdown"
+  },
+  {
+   "suite": "chat-v1",
+   "probe": "capital",
+   "answer": "Paris, not London.",
+   "truth": "pass",
+   "class": "neg-other"
+  },
+  {
+   "suite": "chat-v1",
+   "probe": "echo",
+   "answer": "ZX-4417-B",
+   "truth": "fail",
+   "class": "echo-extra"
+  },
+  {
+   "suite": "chat-v1",
+   "probe": "echo",
+   "answer": "zx_4417",
+   "truth": "fail",
+   "class": "echo-mangled"
+  },
+  {
+   "suite": "chat-v1",
+   "probe": "echo",
+   "answer": "ZX-4417? I cannot repeat that.",
+   "truth": "fail",
+   "class": "echo-refusal"
+  },
+  {
+   "suite": "vision-golden-v1",
+   "probe": "01_text_large/read",
+   "answer": "TIGER ORANGE 42",
+   "truth": "fail",
+   "class": "order"
+  },
+  {
+   "suite": "vision-golden-v1",
+   "probe": "01_text_large/read",
+   "answer": "ORANGE TIGER 42 ZEBRA",
+   "truth": "fail",
+   "class": "extra-word"
+  },
+  {
+   "suite": "vision-golden-v1",
+   "probe": "06_dialog/buttons",
+   "answer": "Delete is not there, only Cancel.",
+   "truth": "fail",
+   "class": "post-negation"
+  },
+  {
+   "suite": "vision-golden-v1",
+   "probe": "06_dialog/buttons",
+   "answer": "Cancel and Delete",
+   "truth": "pass",
+   "class": "normal"
+  },
+  {
+   "suite": "vision-golden-v1",
+   "probe": "03_login_form/screen_type",
+   "answer": "A login-less dashboard.",
+   "truth": "fail",
+   "class": "compound"
+  },
+  {
+   "suite": "vision-golden-v1",
+   "probe": "03_login_form/screen_type",
+   "answer": "It is not a login screen.",
+   "truth": "fail",
+   "class": "negation"
+  },
+  {
+   "suite": "vision-golden-v1",
+   "probe": "07_dark_theme/theme",
+   "answer": "Not light; dark.",
+   "truth": "pass",
+   "class": "neg-other-clause"
+  },
+  {
+   "suite": "vision-golden-v1",
+   "probe": "07_dark_theme/theme",
+   "answer": "Not sure, dark.",
+   "truth": "pass",
+   "class": "hedge-word"
+  },
+  {
+   "suite": "vision-golden-v1",
+   "probe": "09_color_blocks/colors",
+   "answer": "Not red, green, blue.",
+   "truth": "fail",
+   "class": "negated-order"
+  },
+  {
+   "suite": "vision-golden-v1",
+   "probe": "09_color_blocks/colors",
+   "answer": "The squares are not red, green and blue.",
+   "truth": "fail",
+   "class": "negated-order"
+  },
+  {
+   "suite": "vision-golden-v1",
+   "probe": "04_list_view/items",
+   "answer": "The list is NOT apple, banana, cherry, grape.",
+   "truth": "fail",
+   "class": "negated-order"
+  },
+  {
+   "suite": "vision-golden-v1",
+   "probe": "05_table/lookup",
+   "answer": "Boris lives in Oslo, not Paris.",
+   "truth": "pass",
+   "class": "neg-other"
+  },
+  {
+   "suite": "coder-v1",
+   "probe": "def_add",
+   "answer": "def add(a, b):\n    \"\"\"Return a + b.\"\"\"\n    return a - b",
+   "truth": "fail",
+   "class": "docstring"
+  },
+  {
+   "suite": "coder-v1",
+   "probe": "def_add",
+   "answer": "def add(a, b):\n    s = \"return a + b\"\n    return a - b",
+   "truth": "fail",
+   "class": "string-literal"
+  },
+  {
+   "suite": "coder-v1",
+   "probe": "def_add",
+   "answer": "def add(a, b):\n    return a + b + 1",
+   "truth": "fail",
+   "class": "wrong-expr"
+  },
+  {
+   "suite": "coder-v1",
+   "probe": "def_add",
+   "answer": "def add(a, b):\n    pass\n\ndef helper(x, y):\n    return x + y",
+   "truth": "fail",
+   "class": "other-function"
+  },
+  {
+   "suite": "coder-v1",
+   "probe": "def_add",
+   "answer": "def add(a, b):\n    if False:\n        return a + b\n    return a - b",
+   "truth": "fail",
+   "class": "dead-branch"
+  },
+  {
+   "suite": "coder-v1",
+   "probe": "def_add",
+   "answer": "def add(a, b):\n    return a + b\n\nadd = lambda a, b: a - b",
+   "truth": "fail",
+   "class": "redefinition"
+  },
+  {
+   "suite": "coder-v1",
+   "probe": "def_add",
+   "answer": "```python\ndef add(a, b):\n    return a + b\n```",
+   "truth": "pass",
+   "class": "fence"
+  },
+  {
+   "suite": "coder-v1",
+   "probe": "empty_array",
+   "answer": "[[]]",
+   "truth": "fail",
+   "class": "nested"
+  },
+  {
+   "suite": "coder-v1",
+   "probe": "empty_array",
+   "answer": "Not [], it is null.",
+   "truth": "fail",
+   "class": "negation"
+  },
+  {
+   "suite": "coder-v1",
+   "probe": "empty_array",
+   "answer": "[]",
+   "truth": "pass",
+   "class": "normal"
+  },
+  {
+   "suite": "chat-v1",
+   "probe": "json",
+   "answer": "{\"color\": \"blue\", \"extra\": 1}",
+   "truth": "fail",
+   "class": "extra-key (prompt: exactly one key)"
+  },
+  {
+   "suite": "chat-v1",
+   "probe": "json",
+   "answer": "{\"color\": \"blue\"} -- no wait: {\"color\": \"red\"}",
+   "truth": "fail",
+   "class": "self-correct"
+  },
+  {
+   "suite": "chat-v1",
+   "probe": "json",
+   "answer": "{\"color\": \"red\", \"color\": \"blue\"}",
+   "truth": "fail",
+   "class": "duplicate-key"
+  },
+  {
+   "suite": "chat-v1",
+   "probe": "json",
+   "answer": "{\"color\": 1}",
+   "truth": "fail",
+   "class": "type"
+  },
+  {
+   "suite": "chat-v1",
+   "probe": "json",
+   "answer": "```json\n{\"color\": \"blue\"}\n```",
+   "truth": "pass",
+   "class": "fence"
+  },
+  {
+   "suite": "chat-v1",
+   "probe": "json",
+   "answer": "{'color': 'blue'}",
+   "truth": "fail",
+   "class": "python-dict"
+  }
+ ]
+}

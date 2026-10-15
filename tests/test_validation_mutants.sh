@@ -50,7 +50,7 @@ tree() {
   printf '%s\n' "${d}"
 }
 run_suite() { local rc=0; env "$@" >"${TEST_TMP}/suite.out" 2>&1 || rc=$?; echo "${rc}"; }
-# MUTANT_GROUPS (space-separated: judge record served cleanup enforcement marker interrupt gate ramcap; default all) lets a bounded runner split the work
+# MUTANT_GROUPS (space-separated: judge record served cleanup enforcement marker interrupt gate judge2 ramcap; default all) lets a bounded runner split the work
 want() { [[ -z "${MUTANT_GROUPS:-}" || " ${MUTANT_GROUPS} " == *" $1 "* ]]; }
 
 if want judge; then
@@ -60,17 +60,37 @@ jm() { # jm <name> <old> <new>
   mutate "${J}" "${m}" "$2" "$3"
   caught "judge/$1" "$(run_suite JUDGE_UNDER_TEST="${m}" bash "${T}/test_validation_judge_soundness.sh")" nonzero
 }
-jm hedged-number '    if len(vals) > 1:' '    if False:'
-jm order-subsequence '    return seq == list(range(len(items))), seq' '    return sorted(set(seq)) == list(range(len(items))), seq'
-jm negation-ignored '        if w in _NEG_WORDS or (w == "T" and i > 0 and toks[i - 1][0] in _NT_PREFIX):
-            return True' '        if w in _NEG_WORDS or (w == "T" and i > 0 and toks[i - 1][0] in _NT_PREFIX):
-            return False'
-jm comments-kept '        return _strip_python_comments(src)' '        return src'
+jm hedged-number '    if len(set(vals)) > 1:' '    if False:'
+jm order-subsequence '    return (not neg) and seq == list(range(len(items))), seq' '    return (not neg) and sorted(set(seq)) == list(range(len(items))), seq'
+jm negation-ignored '            if not (nxt in _HEDGE_AFTER_NEG and i + 1 != start):
+                return True' '            if not (nxt in _HEDGE_AFTER_NEG and i + 1 != start):
+                return False'
+jm code-operator-ignored '    return (isinstance(e, ast.BinOp) and isinstance(e.op, ast.Add) and isinstance(e.left, ast.Name)' '    return (isinstance(e, ast.BinOp) and isinstance(e.left, ast.Name)'
 jm empty-checks-vacuous '    if not isinstance(checks, dict) or not checks:' '    if not isinstance(checks, dict):'
 jm json-bool-is-int '    if isinstance(a, bool) or isinstance(b, bool):
         return type(a) is type(b) and a == b' '    if isinstance(a, bool) or isinstance(b, bool):
         return a == b'
 jm repeat-once 'DEFAULT_REPEAT = 3' 'DEFAULT_REPEAT = 1'
+
+fi
+if want judge2; then
+echo "== adversarial-judge mutants (review 2026-10-15 finding 4; each must turn tests/test_validation_judge_adversarial.sh RED)"
+j2() { # j2 <name> <old> <new>
+  local m="${TEST_TMP}/j2.$1.py"
+  mutate "${J}" "${m}" "$2" "$3"
+  caught "judge2/$1" "$(run_suite JUDGE_UNDER_TEST="${m}" bash "${T}/test_validation_judge_adversarial.sh")" nonzero
+}
+j2 unicode-letters-uppercased '        elif unicodedata.category(ch)[0] in "LM":
+            out.append(" ")' '        elif unicodedata.category(ch)[0] in "LM":
+            out.append(ch.upper())'
+j2 post-negation-ignored '    w = [t[0] for t in toks[end + 1:end + 4]]' '    return False'
+j2 retraction-ignored '        if _RETRACT_RE.match(up, st):' '        if False:'
+j2 json-duplicate-keys '        return json.loads(t, object_pairs_hook=_no_dup_pairs, parse_constant=_bad_constant), None' '        return json.loads(t, parse_constant=_bad_constant), None'
+j2 exact-text-substring '            if got != val:
+                reasons.append("exact_text' '            if val not in got:
+                reasons.append("exact_text'
+j2 number-modifiers-ignored '        if v is not None and all(n.upper() not in _NUMBER_BLOCK and _num_value(n) is None for n in nouns):' '        if v is not None:'
+j2 alternatives-allowed '            elif "OR" in ws:' '            elif False:'
 
 fi
 if want record; then
@@ -179,5 +199,5 @@ caught "ramcap/cap-ignored" "$(run_suite SUPPLY_ROOT_UNDER_TEST="${d}" bash "${T
 fi
 echo "== summary: ${CAUGHT} of ${TOTAL} mutants caught"
 assert_eq "${TOTAL}" "${CAUGHT}" "every mutant of the new branches is caught by an assertion"
-[[ -n "${MUTANT_GROUPS:-}" ]] || assert_eq 33 "${TOTAL}" "all 33 mutants were run"
+[[ -n "${MUTANT_GROUPS:-}" ]] || assert_eq 40 "${TOTAL}" "all 40 mutants were run"
 test_finish
