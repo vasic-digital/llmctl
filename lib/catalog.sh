@@ -276,6 +276,26 @@ catalog_tier_rank() {
 
 # --- Planner ----------------------------------------------------------------
 # catalog_plan_json   (hardware JSON document on stdin)
+# _catalog_unit_mem_mb -> "<instance> <MiB>" for every ACTIVE llmctl engine unit (llmctl-{llama,onnx,colibri}@<instance>), from
+# systemd's MemoryCurrent (the unit's cgroup). Hermetic inputs: LLMCTL_FAKE_UNIT_MEM (a file of such lines; it can only ADD to
+# the reservation, never lower it); with LLMCTL_FAKE_HW and no fake unit list nothing is read (a fake host has no real units).
+# launchd has no per-job cgroup: macOS counts reservations only (documented).
+_catalog_unit_mem_mb() {
+  if [[ -n "${LLMCTL_FAKE_UNIT_MEM:-}" ]]; then
+    [[ -f "${LLMCTL_FAKE_UNIT_MEM}" ]] && cat -- "${LLMCTL_FAKE_UNIT_MEM}"
+    return 0
+  fi
+  [[ -z "${LLMCTL_FAKE_HW:-}" ]] || return 0
+  [[ "$(uname -s)" == "Linux" ]] && command -v systemctl >/dev/null 2>&1 || return 0
+  local u inst b
+  while read -r u _; do
+    [[ "${u}" =~ ^llmctl-(llama|onnx|colibri)@(.+)\.service$ ]] || continue
+    inst="${BASH_REMATCH[2]}"
+    b="$(timeout 5 systemctl --user show -p MemoryCurrent --value "${u}" 2>/dev/null || true)"
+    [[ "${b}" =~ ^[0-9]+$ ]] && printf '%s %s\n' "${inst}" "$(( b / 1048576 ))"
+  done < <(timeout 5 systemctl --user list-units --state=active --plain --no-legend 'llmctl-*@*.service' 2>/dev/null || true)
+}
+
 catalog_plan_json() {
   catalog_check
   need_cmd python3
@@ -283,13 +303,21 @@ catalog_plan_json() {
   hw_doc="$(cat)"
   tier="$(printf '%s' "${hw_doc}" | catalog_classify_tier)"
   # RAM already reserved by running llmctl profiles (the 60%-of-MemTotal cap of Constitution 12.6 counts all of them)
-  local reserved=0 f v
+  local reserved=0 f v units=0 inst mb
   for f in "${LLMCTL_RUNTIME_DIR:-/nonexistent}"/*.run; do
     [[ -e "${f}" ]] || continue
     v="$(sed -n 's/^ram_mb=//p' "${f}" | head -1)"
     [[ "${v}" =~ ^[0-9]+$ ]] && reserved=$(( reserved + v ))
   done
-  LLMCTL_PLAN_RESERVED_RAM_MB="${reserved}" LLMCTL_HW_DOC="${hw_doc}" LLMCTL_TIER="${tier}" python3 - "${LLMCTL_CATALOG}" <<'PYEOF'
+  # ...and running llmctl engine units WITHOUT a reservation (review 2026-10-15 finding 10): a unit started by systemd itself
+  # (boot, Restart=, the unit waiter) writes no .run, so it used to count 0. Counted with its cgroup memory.
+  while read -r inst mb; do
+    [[ -n "${inst}" && "${mb}" =~ ^[0-9]+$ ]] || continue
+    [[ -e "${LLMCTL_RUNTIME_DIR:-/nonexistent}/${inst}.run" ]] && continue
+    units=$(( units + mb ))
+  done < <(_catalog_unit_mem_mb)
+  reserved=$(( reserved + units ))
+  LLMCTL_PLAN_UNITS_RAM_MB="${units}" LLMCTL_PLAN_RESERVED_RAM_MB="${reserved}" LLMCTL_HW_DOC="${hw_doc}" LLMCTL_TIER="${tier}" python3 - "${LLMCTL_CATALOG}" <<'PYEOF'
 import json, math, os, sys
 
 with open(sys.argv[1], "r", encoding="utf-8") as fh:
@@ -321,8 +349,10 @@ if not 1 <= ram_cap_pct <= 60:
     ram_cap_pct = 60
 try:
     reserved_ram = max(0, int(os.environ.get("LLMCTL_PLAN_RESERVED_RAM_MB", "0") or 0))
+    units_ram = max(0, int(os.environ.get("LLMCTL_PLAN_UNITS_RAM_MB", "0") or 0))
 except ValueError:
     reserved_ram = 0
+    units_ram = 0
 ram_cap = ram_total * ram_cap_pct // 100
 ram_avail_budget = max(0, ram_avail - 4096)    # 4 GiB RAM headroom
 ram_budget = max(0, min(ram_avail_budget, ram_cap - reserved_ram))
@@ -829,6 +859,7 @@ out = {
     "budgets": {"ram_mb": ram_budget, "vram_mb": vram_budget,
                 "vram_live": vram_live, "storage_free_mb": storage_free,
                 "ram_cap_mb": ram_cap, "ram_cap_pct": ram_cap_pct, "ram_reserved_mb": reserved_ram,
+                "ram_units_unreserved_mb": units_ram,
                 "ram_avail_budget_mb": ram_avail_budget},
     "profiles": profiles,
     "decision_instances": decision_instances,

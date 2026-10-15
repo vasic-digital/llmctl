@@ -125,6 +125,8 @@ test_setup_env() {
     export LLMCTL_TEST_REAL_SYSTEMCTL
   fi
   export LLMCTL_TEST_GUARD_LOG="${TEST_TMP}/systemctl-guard.log"
+  # the planner counts the host's running llmctl units (lib/catalog.sh _catalog_unit_mem_mb): hermetic tests see none
+  : > "${TEST_TMP}/unit-mem.none"; export LLMCTL_FAKE_UNIT_MEM="${TEST_TMP}/unit-mem.none"
   if [[ -n "${LLMCTL_TEST_REAL_SYSTEMCTL}" ]]; then   # no systemctl on this host: nothing to guard, nothing shadowed
     case ":${PATH}:" in *":${TESTS_DIR}/fixtures/guard:"*) ;; *) export PATH="${TESTS_DIR}/fixtures/guard:${PATH}" ;; esac
   fi
