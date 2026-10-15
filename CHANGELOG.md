@@ -60,6 +60,25 @@ repository as an honest record of that process.
 * **test: the mutation harness is run per group (68 mutants, ~1180 s in total - more than one 580 s bounded run).** Measured group
   durations are in the test header and docs/validation.md ("Running the mutation harness"); the largest group (enforcement) takes 217 s.
   All 68 mutants caught, run group by group on 2026-10-15.
+* **Suites run for this round (2026-10-15, fix tree `fix/review3-findings`, one at a time under `bounded-run -m 6G -T 580`, a narrow
+  systemctl shim; the live `llmctl-onnx@decide-nli` MainPID 3445 unchanged before and after).** GREEN: test_validation_judge_adversarial_r3,
+  test_validation_quarantine_env, test_validation_judge_adversarial, test_validation_judge_soundness, test_validation_suites,
+  test_validation_enforcement, test_validate_policy, test_validate_policy_entrypoints, test_validation_record_integrity,
+  test_validation_gate_defects (with AND without nohup), test_vision_validate, test_vision_golden_fixtures, test_validation_decide_colibri,
+  test_validation_lock, test_validate_interrupt, test_validation_cleanup, test_validation_exit_mapping, test_validation_http_codes,
+  test_validation_identity, test_validation_r2_small, test_validation_served_identity, test_validation_served_launch,
+  test_enforcement_marker, test_gate_hook_tmp, test_gate_launch, test_gate_switch_enable, test_gate_waiter_stop, test_gate_wait,
+  test_gate_wiring_pressure, test_gate_wiring_restart_enable, test_gate_wiring_start_paths, test_gate_wiring_systemd_waiter,
+  test_ramcap_units, test_supply_chain_ramcap, test_planner, test_harness_systemctl_guard, test_macos_plist, test_decide_scale,
+  test_livetest_evpath, test_livetest_profiles, test_livetest_runner, test_livetest_switch, test_go_unit, test_docs_audit,
+  test_docs_gate_not_advisory, test_docs_no_literal_keys, test_docs_restart_policy, test_doc_reachability, test_services, test_scheduler,
+  test_scheduler_lock, test_scheduler_switch_safety, test_scheduler_reboot_reconciliation, test_syntax, test_no_pipe_grep_q,
+  test_task_coverage, test_run_tests_format, test_py_unit, test_env_file_modes, test_mem_dropin_lifecycle, test_start_gate,
+  test_regression_defects, test_gateway_mutation, every test_validation_mutants group, and `go test ./cmd/llmctl-decide ./internal/gateway`.
+  NOT GREEN: test_livetest_watchdog hits the 580 s bound (rc 124; 259 PASS / 0 FAIL lines before the cut-off; the same at 43ad7b1 in the
+  reviewer's sweep) - a duration problem, not an assertion failure, and not split in this round. NOT RUN in this round: every other suite
+  of tests/ (the reviewer's sweep at 43ad7b1 covers them; none of them reads the files this round changed beyond what the suites above
+  exercise - UNCONFIRMED for each individually).
 * **test: `test_validation_gate_defects.sh` states and skips its 'no caller traps' assertion when SIGHUP is ignored at entry (nohup)**
   and asserts the weaker true property instead (RED under nohup at 43ad7b1, GREEN with and without nohup).
 
