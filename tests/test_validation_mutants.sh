@@ -277,6 +277,18 @@ echo "== unit-RAM mutant (review 2026-10-15 finding 10; must turn tests/test_ram
 d="$(tree units catalog.sh)"
 mutate "${LLMCTL_ROOT}/lib/catalog.sh" "${d}/lib/catalog.sh" '  reserved=$(( reserved + units ))' '  :'
 caught "ramunits/units-ignored" "$(run_suite RAMCAP_ROOT_UNDER_TEST="${d}" bash "${T}/test_ramcap_units.sh")" nonzero
+ru() { # ru <name> <old> <new> - review 3 of 2026-10-15 finding 7
+  local d; d="$(tree "units.$1" catalog.sh)"
+  mutate "${LLMCTL_ROOT}/lib/catalog.sh" "${d}/lib/catalog.sh" "$2" "$3"
+  caught "ramunits/$1" "$(run_suite RAMCAP_ROOT_UNDER_TEST="${d}" bash "${T}/test_ramcap_units.sh")" nonzero
+}
+ru fake-honoured-outside-harness '    if validation_hermetic; then
+      local i c m h x' '    if true; then
+      local i c m h x'
+ru unknown-max-high-ignored '  for src in current:"$2" max:"$3" high:"$4"; do' '  for src in current:"$2"; do'
+ru unknown-counts-zero '  base="${inst}"
+  [[ "${inst}" =~' '  return 0
+  [[ "${inst}" =~'
 
 fi
 if want ramcap; then

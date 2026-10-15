@@ -276,24 +276,62 @@ catalog_tier_rank() {
 
 # --- Planner ----------------------------------------------------------------
 # catalog_plan_json   (hardware JSON document on stdin)
-# _catalog_unit_mem_mb -> "<instance> <MiB>" for every ACTIVE llmctl engine unit (llmctl-{llama,onnx,colibri}@<instance>), from
-# systemd's MemoryCurrent (the unit's cgroup). Hermetic inputs: LLMCTL_FAKE_UNIT_MEM (a file of such lines; it can only ADD to
-# the reservation, never lower it); with LLMCTL_FAKE_HW and no fake unit list nothing is read (a fake host has no real units).
-# launchd has no per-job cgroup: macOS counts reservations only (documented).
+# _catalog_unit_mem_mb -> "<instance> <MiB> <source>" for every ACTIVE llmctl engine unit (llmctl-{llama,onnx,colibri}@<instance>),
+# from systemd's MemoryCurrent (the unit's cgroup). Hermetic input: LLMCTL_FAKE_UNIT_MEM, a file of "<instance> <MiB>"
+# lines, or "<instance> <MemoryCurrent> <MemoryMax> <MemoryHigh>" lines (raw systemd byte values, judged exactly like the
+# real ones). It is honoured ONLY inside the test harness (lib/common.sh validation_hermetic - review 3 of 2026-10-15,
+# finding 7: an exported variable pointing at an empty file used to hide every real unit from the 60% cap); outside it
+# the variable is ignored and the real units are read. With LLMCTL_FAKE_HW and no honoured fake list nothing is read
+# (a fake host has no real units). launchd has no per-job cgroup: macOS counts reservations only (documented).
 _catalog_unit_mem_mb() {
   if [[ -n "${LLMCTL_FAKE_UNIT_MEM:-}" ]]; then
-    [[ -f "${LLMCTL_FAKE_UNIT_MEM}" ]] && cat -- "${LLMCTL_FAKE_UNIT_MEM}"
-    return 0
+    if validation_hermetic; then
+      local i c m h x
+      [[ -f "${LLMCTL_FAKE_UNIT_MEM}" ]] || return 0
+      while read -r i c m h x; do
+        [[ -n "${i}" && -n "${c}" && -z "${x}" ]] || continue
+        if [[ -z "${m}" ]]; then printf '%s %s current\n' "${i}" "${c}"           # "<instance> <MiB>"
+        elif [[ -n "${h}" ]]; then _catalog_unit_mb_of "${i}" "${c}" "${m}" "${h}"   # "<instance> <cur> <max> <high>"
+        fi                                                                          # anything else: malformed, ignored
+      done < "${LLMCTL_FAKE_UNIT_MEM}"
+      return 0
+    fi
+    warn "LLMCTL_FAKE_UNIT_MEM is a test-harness input and is ignored outside it - the real llmctl units are counted"
   fi
   [[ -z "${LLMCTL_FAKE_HW:-}" ]] || return 0
   [[ "$(uname -s)" == "Linux" ]] && command -v systemctl >/dev/null 2>&1 || return 0
-  local u inst b
+  local u inst
   while read -r u _; do
     [[ "${u}" =~ ^llmctl-(llama|onnx|colibri)@(.+)\.service$ ]] || continue
     inst="${BASH_REMATCH[2]}"
-    b="$(timeout 5 systemctl --user show -p MemoryCurrent --value "${u}" 2>/dev/null || true)"
-    [[ "${b}" =~ ^[0-9]+$ ]] && printf '%s %s\n' "${inst}" "$(( b / 1048576 ))"
+    _catalog_unit_mb_of "${inst}" \
+      "$(timeout 5 systemctl --user show -p MemoryCurrent --value "${u}" 2>/dev/null || true)" \
+      "$(timeout 5 systemctl --user show -p MemoryMax --value "${u}" 2>/dev/null || true)" \
+      "$(timeout 5 systemctl --user show -p MemoryHigh --value "${u}" 2>/dev/null || true)"
   done < <(timeout 5 systemctl --user list-units --state=active --plain --no-legend 'llmctl-*@*.service' 2>/dev/null || true)
+}
+
+# _catalog_unit_mb_of <instance> <MemoryCurrent> <MemoryMax> <MemoryHigh> -> "<instance> <MiB> <source>". systemd reports an
+# UNKNOWN value as 'infinity', '[not set]' or 2^64-1 (18446744073709551615): that is never 0 MiB (review 3 of 2026-10-15,
+# finding 7 - it used to count 0). Conservative order: MemoryCurrent; else the unit's configured MemoryMax, then MemoryHigh
+# (the most it may take); else the catalog size of the profile's model files (it holds at least those); else 4096 MiB.
+_catalog_unit_mb_of() {
+  local inst="$1" v src base mb=""
+  for src in current:"$2" max:"$3" high:"$4"; do
+    v="${src#*:}"
+    if [[ "${v}" =~ ^[0-9]+$ ]] && (( ${#v} <= 18 )) && (( v > 0 )); then
+      printf '%s %s %s\n' "${inst}" "$(( (v + 1048575) / 1048576 ))" "${src%%:*}"
+      return 0
+    fi
+  done
+  base="${inst}"
+  [[ "${inst}" =~ ^(.+)\.[0-9]+$ ]] && base="${BASH_REMATCH[1]}"
+  mb="$(json_query "${LLMCTL_CATALOG}" 'str(sum(int(f.get("size", 0) or 0) for f in d["profiles"][argv[0]].get("files", [])) // 1048576)' "${base}" 2>/dev/null || true)"
+  if [[ "${mb}" =~ ^[0-9]+$ ]] && (( mb > 0 )); then
+    printf '%s %s catalog-files\n' "${inst}" "${mb}"
+  else
+    printf '%s 4096 fixed-floor\n' "${inst}"
+  fi
 }
 
 catalog_plan_json() {
@@ -311,13 +349,15 @@ catalog_plan_json() {
   done
   # ...and running llmctl engine units WITHOUT a reservation (review 2026-10-15 finding 10): a unit started by systemd itself
   # (boot, Restart=, the unit waiter) writes no .run, so it used to count 0. Counted with its cgroup memory.
-  while read -r inst mb; do
+  local src est=""
+  while read -r inst mb src; do
     [[ -n "${inst}" && "${mb}" =~ ^[0-9]+$ ]] || continue
     [[ -e "${LLMCTL_RUNTIME_DIR:-/nonexistent}/${inst}.run" ]] && continue
     units=$(( units + mb ))
+    [[ "${src:-current}" == current ]] || est="${est:+${est} }${inst}:${src}"   # not measured: estimated (and said so)
   done < <(_catalog_unit_mem_mb)
   reserved=$(( reserved + units ))
-  LLMCTL_PLAN_UNITS_RAM_MB="${units}" LLMCTL_PLAN_RESERVED_RAM_MB="${reserved}" LLMCTL_HW_DOC="${hw_doc}" LLMCTL_TIER="${tier}" python3 - "${LLMCTL_CATALOG}" <<'PYEOF'
+  LLMCTL_PLAN_UNITS_ESTIMATED="${est}" LLMCTL_PLAN_UNITS_RAM_MB="${units}" LLMCTL_PLAN_RESERVED_RAM_MB="${reserved}" LLMCTL_HW_DOC="${hw_doc}" LLMCTL_TIER="${tier}" python3 - "${LLMCTL_CATALOG}" <<'PYEOF'
 import json, math, os, sys
 
 with open(sys.argv[1], "r", encoding="utf-8") as fh:
@@ -860,6 +900,9 @@ out = {
                 "vram_live": vram_live, "storage_free_mb": storage_free,
                 "ram_cap_mb": ram_cap, "ram_cap_pct": ram_cap_pct, "ram_reserved_mb": reserved_ram,
                 "ram_units_unreserved_mb": units_ram,
+                # units whose memory systemd could not report (MemoryCurrent unknown): counted at their MemoryMax /
+                # MemoryHigh / model-file size instead of 0 (review 3 of 2026-10-15, finding 7) - "<instance>:<source>"
+                "ram_units_estimated": os.environ.get("LLMCTL_PLAN_UNITS_ESTIMATED", "").split(),
                 "ram_avail_budget_mb": ram_avail_budget},
     "profiles": profiles,
     "decision_instances": decision_instances,
