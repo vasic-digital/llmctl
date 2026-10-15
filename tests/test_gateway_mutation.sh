@@ -157,4 +157,12 @@ mutate "deadline expiry no longer reported as deadline_exceeded" internal/server
 mutate "engine fault reported as deadline_exceeded" internal/server/handlers.go \
   '	h.Set("x-llmctl-decide-reason", "engine_error")' '	h.Set("x-llmctl-decide-reason", "deadline_exceeded")' ./internal/server
 
+# review 3 of 2026-10-15, finding 8: a blank LLMCTL_DECIDE_ENDPOINT_<P> is no declaration; static mode warns
+mutate "explicit resolver declares a profile for a blank endpoint value" internal/gateway/resolver.go \
+  '		if len(EndpointURLs(s.ID, get)) > 0 {' '		if strings.TrimSpace(get(EndpointVar(s.ID))) != "" {' ./internal/gateway ./cmd/llmctl-decide
+mutate "static resolver mode no longer warns that it bypasses the validation gate" cmd/llmctl-decide/serve_resolver.go \
+  '		if p.stderr != nil {
+			fmt.Fprintf(p.stderr, "llmctl serve: WARNING: %s=static' '		if false {
+			fmt.Fprintf(p.stderr, "llmctl serve: WARNING: %s=static' ./cmd/llmctl-decide
+
 test_finish

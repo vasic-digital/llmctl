@@ -127,6 +127,13 @@ func (p *prepared) buildResolver(specs []gateway.ProfileSpec) (gateway.Resolver,
 		}
 	}
 	if mode == "static" {
+		// review 3 of 2026-10-15, finding 8: static mode is the operator's explicit choice and stays available, but it
+		// routes to whatever listens on a catalog port - an engine llmctl never validated (or validated and withdrew).
+		if p.stderr != nil {
+			fmt.Fprintf(p.stderr, "llmctl serve: WARNING: %s=static routes to LLMCTL_DECIDE_ENDPOINT_<PROFILE> URLs and catalog ports "+
+				"WITHOUT the validation gate - an engine there is not validated by llmctl unless you made sure it is "+
+				"(llmctl require-validated <profile>); the default (auto) routes only registered, validated engines\n", resolverVar)
+		}
 		return static(), nil
 	}
 	if cerr != nil {

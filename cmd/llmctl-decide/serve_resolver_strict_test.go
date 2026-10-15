@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bytes"
+	"strings"
 	"testing"
 
 	"github.com/vasic-digital/llmctl/internal/gateway"
@@ -50,5 +52,56 @@ func TestF7StaticModeIsTheOperatorsChoice(t *testing.T) {
 	se.env[resolverVar] = "static"
 	if eps := resolveTiny(t, se); len(eps) != 1 {
 		t.Fatalf("mode=static keeps its full table, got %+v", eps)
+	}
+}
+
+// Review 3 of 2026-10-15, finding 8: a whitespace- or comma-only LLMCTL_DECIDE_ENDPOINT_<P> counted as "declared" but
+// yielded no URL, so the catalog-port fallback finding 7 removed came back through StaticResolverFromEnv. A profile is
+// declared only when at least one non-empty URL remains.
+func TestF7AutoStrictBlankDeclarationIsNotADeclaration(t *testing.T) {
+	for _, v := range []string{" ", ",", " , ,\t", ",,"} {
+		se := setupServeEnv(t)
+		se.env[gateway.EndpointVar("decide-tiny")] = v
+		if eps := resolveTiny(t, se); len(eps) != 0 {
+			t.Fatalf("strict: LLMCTL_DECIDE_ENDPOINT_DECIDE_TINY=%q declares no URL, yet the profile routes to %+v", v, eps)
+		}
+	}
+}
+
+func TestF7AutoStrictMixedDeclarationKeepsOnlyRealURLs(t *testing.T) {
+	se := setupServeEnv(t)
+	se.env[gateway.EndpointVar("decide-tiny")] = " , http://127.0.0.1:18124 ,"
+	eps := resolveTiny(t, se)
+	if len(eps) != 1 || eps[0].URL != "http://127.0.0.1:18124" {
+		t.Fatalf("only the declared URL is routable, got %+v", eps)
+	}
+}
+
+// Review 3 of 2026-10-15, finding 8: mode=static routes to catalog ports without the validation gate - it stays the
+// operator's choice, but it says so on stderr at startup.
+func TestF7StaticModeWarnsThatItBypassesTheGate(t *testing.T) {
+	se := setupServeEnv(t)
+	se.env[resolverVar] = "static"
+	var e bytes.Buffer
+	p, code := prepare(serveFlags{port: 9}, se.env, resolveDirs(se.env), &e)
+	if p == nil {
+		t.Fatalf("prepare rc=%d err=%s", code, e.String())
+	}
+	t.Cleanup(p.close)
+	if !strings.Contains(e.String(), "LLMCTL_DECIDE_RESOLVER=static") || !strings.Contains(e.String(), "not validated") {
+		t.Fatalf("static mode must warn that it routes to unvalidated engines on catalog ports; stderr: %q", e.String())
+	}
+}
+
+func TestF7AutoModeDoesNotWarnAboutStatic(t *testing.T) {
+	se := setupServeEnv(t)
+	var e bytes.Buffer
+	p, code := prepare(serveFlags{port: 9}, se.env, resolveDirs(se.env), &e)
+	if p == nil {
+		t.Fatalf("prepare rc=%d err=%s", code, e.String())
+	}
+	t.Cleanup(p.close)
+	if strings.Contains(e.String(), "LLMCTL_DECIDE_RESOLVER=static") {
+		t.Fatalf("control: the default mode prints no static-mode warning; stderr: %q", e.String())
 	}
 }

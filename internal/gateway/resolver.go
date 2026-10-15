@@ -75,12 +75,7 @@ func PortVar(profile string) string {
 func StaticResolverFromEnv(specs []ProfileSpec, get func(string) string) *StaticResolver {
 	r := NewStaticResolver()
 	for _, s := range specs {
-		var urls []string
-		for _, u := range strings.Split(get(EndpointVar(s.ID)), ",") {
-			if u = strings.TrimSpace(u); u != "" {
-				urls = append(urls, u)
-			}
-		}
+		urls := EndpointURLs(s.ID, get)
 		if len(urls) == 0 {
 			// LLMCTL_PORT_<PROFILE> (host-local rebind, honoured by the bash side) beats the catalog
 			// port; an invalid value (non-numeric, <1, >65535, "auto") is ignored.
@@ -110,14 +105,29 @@ func StaticResolverFromEnv(specs []ProfileSpec, get func(string) string) *Static
 // validation gate (review 2026-10-15 finding 7): a profile with no healthy registry row is NOT routed to whatever
 // listens on its catalog port - an unregistered engine (never validated by llmctl, or validated and withdrawn) is not
 // a backend.
+//
+// A profile counts as declared only when its variable names at least ONE non-empty URL (review 3 of 2026-10-15,
+// finding 8: a value of " , ," used to count as a declaration that named no URL, so StaticResolverFromEnv fell back to
+// the catalog port - the very fallback this resolver exists to remove).
 func StaticResolverExplicitFromEnv(specs []ProfileSpec, get func(string) string) *StaticResolver {
 	var declared []ProfileSpec
 	for _, s := range specs {
-		if strings.TrimSpace(get(EndpointVar(s.ID))) != "" {
+		if len(EndpointURLs(s.ID, get)) > 0 {
 			declared = append(declared, s)
 		}
 	}
 	return StaticResolverFromEnv(declared, get)
+}
+
+// EndpointURLs is the list of non-empty, trimmed instance URLs LLMCTL_DECIDE_ENDPOINT_<PROFILE> names (comma separated).
+func EndpointURLs(profile string, get func(string) string) []string {
+	var urls []string
+	for _, u := range strings.Split(get(EndpointVar(profile)), ",") {
+		if u = strings.TrimSpace(u); u != "" {
+			urls = append(urls, u)
+		}
+	}
+	return urls
 }
 
 func itoa(i int) string {
