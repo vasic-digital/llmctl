@@ -879,7 +879,22 @@ _sched_decision_scale_impl() {
 # _sched_gate_for <profile> -> public | quarantine | public-unvalidated:<why> | refuse:<why>. Without lib/validate.sh
 # (a caller that sources only the scheduler) there is no gate and every start is public, exactly as before.
 _sched_gate_for() {
-  if declare -F _val_gate_mode >/dev/null 2>&1; then _val_gate_mode "$1"; else echo public; fi
+  if declare -F _val_gate_mode >/dev/null 2>&1; then _val_gate_mode "$1" "${2:-}"; else echo public; fi
+}
+# _sched_launch_env <out> - the EXEC/ARGS lines of the launch in SCHED_EXEC/SCHED_ARGS, written exactly like svc_write_env
+# (the validation key fingerprints these two lines, --host/--port excluded): the gate decides on the launch ABOUT to run
+# (review 2026-10-15 finding 5), not on the previous launch's env record.
+_sched_launch_env() {
+  { printf 'LLMCTL_EXEC=%q\n' "${SCHED_EXEC}"; printf 'LLMCTL_ARGS='; printf '%q ' "${SCHED_ARGS[@]}"; printf '\n'; } > "$1"
+}
+# _sched_gate_launch <profile> -> the gate for the launch currently in SCHED_EXEC/SCHED_ARGS
+_sched_gate_launch() {
+  local cand g
+  cand="$(mktemp)"
+  _sched_launch_env "${cand}"
+  g="$(_sched_gate_for "$1" "${cand}")"
+  rm -f -- "${cand:?}"
+  printf '%s\n' "${g}"
 }
 # _sched_private_port -> a free TCP port on 127.0.0.1 (bind-tested), never a documented catalog port.
 _sched_private_port() {
@@ -1129,7 +1144,13 @@ _sched_start_impl() {
     # bytes / engine / launch / suites is started in QUARANTINE - loopback only, on a private ephemeral port, never
     # published in the registry - and is published only after `validate_after_start` saw it PASS (lib/validate.sh).
     local gate quarantine=0 unvalidated=""
-    gate="$(_sched_gate_for "${p}")"
+    # the launch about to run, at the documented port (--host/--port are not part of the validation key); rebuilt below
+    # for the port actually used
+    sched_build_launch "${p}" "${mode}" "${port}" "${ctx}" "${ngl}" "${parallel}" "${fa}" "${kv_type}"
+    gate="$(_sched_gate_launch "${p}")"
+    if [[ "${_sched_rollback_nogate:-0}" == 1 && "${gate}" == refuse:* ]]; then
+      gate=quarantine   # a rollback is never refused: the previous profile comes back unpublished and is validated by the caller
+    fi
     case "${gate}" in
       refuse:*) err "cannot start '${p}': ${gate#refuse:}"; rm -f "${plan_file}"; return 1 ;;
       quarantine) quarantine=1 ;;
@@ -1308,6 +1329,15 @@ _enable_impl() {
     allocated=1
   fi
   sched_build_launch "${profile}" "${mode}" "${port}" "${ctx}" "${ngl}" "${parallel}" "${fa}" "${kv_type}"
+  # re-check on the launch about to be enabled (finding 5): the record must describe THIS launch, not the previous one
+  egate="$(_sched_gate_launch "${profile}")"
+  case "${egate}" in
+    public) ;;
+    public-unvalidated:*) local -x LLMCTL_SVC_UNVALIDATED="${egate#public-unvalidated:}" ;;
+    refuse:*) err "cannot enable '${profile}': ${egate#refuse:}"; [[ "${allocated}" == 1 ]] && portreg_release "${reg_name}"; return 1 ;;
+    *) err "cannot enable '${profile}': it has no fresh validation record for the launch about to be enabled (its flags or environment differ from the validated one); run: llmctl enable ${profile} again (it validates first)"
+       [[ "${allocated}" == 1 ]] && portreg_release "${reg_name}"; return 1 ;;
+  esac
   _sched_svc_write_env "${profile}"
   touch "${LLMCTL_SERVICES_DIR}/${profile}.enabled"
   if ! svc_enable "${profile}"; then
@@ -1444,8 +1474,16 @@ _sched_switch_impl() {
     info "${target} is already the only running profile - nothing to switch"
     return 0
   fi
-  # Gate BEFORE anything is stopped: a refused switch must leave the running set untouched.
+  # Gate BEFORE anything is stopped: a refused switch must leave the running set untouched - the pressure gate and the
+  # validation gate (review 2026-10-15 finding 3: a target refused by the validation gate used to be discovered only
+  # after the resident set was gone).
   _sched_pressure_gate "${target}" psi || return $?
+  local tgate
+  tgate="$(_sched_gate_for "${target}")"
+  if [[ "${tgate}" == refuse:* ]]; then
+    err "cannot switch to '${target}': ${tgate#refuse:} - nothing was stopped"
+    return 1
+  fi
 
   _sched_stop_impl all
 
@@ -1710,6 +1748,9 @@ _sched_status_rows() {
 _sched_status_optout_banner() {
   [[ "${LLMCTL_VALIDATE_STRICT:-1}" == "0" ]] && printf 'WARN: LLMCTL_VALIDATE_STRICT=0 is set: an UNDETERMINED validation of a NON-consumer-facing profile is served UNVALIDATED (refused for consumer-facing profiles)\n'
   [[ "${LLMCTL_VALIDATE_ON_START:-1}" == "0" ]] && printf 'WARN: LLMCTL_VALIDATE_ON_START=0 is set: starts are NOT validated (refused for consumer-facing profiles outside the test harness)\n'
+  if declare -F validation_hermetic >/dev/null 2>&1 && validation_hermetic; then
+    printf 'WARN: TEST-HARNESS MODE (LLMCTL_VALIDATE_HERMETIC=1 with %s/.test-harness): validation relaxations of the test suite are in effect - never on a production host\n' "${LLMCTL_STATE_DIR}"
+  fi
   if declare -F enforcement_installed >/dev/null 2>&1 && ! enforcement_installed; then
     printf 'WARN: the unit-level validation gate is NOT installed (units predate it): a boot, crash or Restart= start is NOT validated; run "llmctl install" to enable it (validate decision profiles first: docs/validation.md "Upgrading installed units")\n'
   fi

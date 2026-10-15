@@ -50,7 +50,7 @@ tree() {
   printf '%s\n' "${d}"
 }
 run_suite() { local rc=0; env "$@" >"${TEST_TMP}/suite.out" 2>&1 || rc=$?; echo "${rc}"; }
-# MUTANT_GROUPS (space-separated: judge record served cleanup enforcement marker interrupt ramcap; default all) lets a bounded runner split the work
+# MUTANT_GROUPS (space-separated: judge record served cleanup enforcement marker interrupt gate ramcap; default all) lets a bounded runner split the work
 want() { [[ -z "${MUTANT_GROUPS:-}" || " ${MUTANT_GROUPS} " == *" $1 "* ]]; }
 
 if want judge; then
@@ -153,6 +153,23 @@ im after-start-handler-inert validate.sh '      if _val_is_quarantined "${q}"; t
         warn "interrupted: stopping the quarantined'
 
 fi
+if want gate; then
+echo "== gate-input mutants (review 2026-10-15 findings 3, 5, 9; each must turn tests/test_gate_launch.sh RED)"
+gm() { # gm <name> <lib-file> <old> <new>
+  mutate "${LLMCTL_ROOT}/lib/$2" "${TEST_TMP}/gm.check" "$3" "$4"
+  caught "gate/$1" "$(run_suite GATE_MUT_FILE="$2" GATE_MUT_OLD="$3" GATE_MUT_NEW="$4" bash "${T}/test_gate_launch.sh")" nonzero
+  assert_contains "$(cat "${TEST_TMP}/suite.out")" "MUTANT applied to $2" "gate/$1: the mutant was really applied"
+}
+gm fresh-ignored-before-onstart validate.sh '  if _val_fresh "${p}" "${envf}"; then echo public; return 0; fi' '  :'
+gm previous-launch-decides scheduler.sh '    gate="$(_sched_gate_launch "${p}")"' '    gate="$(_sched_gate_for "${p}")"'
+gm publish-not-rechecked validate.sh '    if [[ "${LLMCTL_DRY_RUN:-0}" == "1" ]] || _val_fresh "${p}" "${envf}"; then echo public; return 0; fi' '    echo public; return 0'
+gm hermetic-variable-alone common.sh '  [[ "${LLMCTL_VALIDATE_HERMETIC:-0}" == "1" && -f "${LLMCTL_STATE_DIR}/.test-harness" && -O "${LLMCTL_STATE_DIR}/.test-harness" ]]' '  [[ "${LLMCTL_VALIDATE_HERMETIC:-0}" == "1" ]]'
+gm switch-stops-before-gate scheduler.sh '  if [[ "${tgate}" == refuse:* ]]; then' '  if false; then'
+gm external-gets-validated validate.sh '  if [[ "${LLMCTL_VALIDATE_ON_START:-1}" == "external" ]]; then
+    local _x' '  if false; then
+    local _x'
+
+fi
 if want ramcap; then
 echo "== supply-chain / RAM-cap mutant (must turn tests/test_supply_chain_ramcap.sh RED)"
 d="$(tree cap catalog.sh)"
@@ -162,5 +179,5 @@ caught "ramcap/cap-ignored" "$(run_suite SUPPLY_ROOT_UNDER_TEST="${d}" bash "${T
 fi
 echo "== summary: ${CAUGHT} of ${TOTAL} mutants caught"
 assert_eq "${TOTAL}" "${CAUGHT}" "every mutant of the new branches is caught by an assertion"
-[[ -n "${MUTANT_GROUPS:-}" ]] || assert_eq 27 "${TOTAL}" "all 27 mutants were run"
+[[ -n "${MUTANT_GROUPS:-}" ]] || assert_eq 33 "${TOTAL}" "all 33 mutants were run"
 test_finish

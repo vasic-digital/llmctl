@@ -39,7 +39,7 @@ echo "== 1. happy path (also: start path, nice/ionice, env) =="
 E="$(mkenv)"; run_main "$E"
 check "all-good run exits 0 (PASS)" "$RC" "0"
 has "verdict table says PASS" "$E/out.txt" 'VERDICT +PASS \(exit 0\)'
-has "start called with LLMCTL_VALIDATE_ON_START=0" "$E/fake/calls" '^start env=0 '
+has "start called with LLMCTL_VALIDATE_ON_START=external (unpublished; this script validates)" "$E/fake/calls" '^start env=external '
 has "start ran at nice 19" "$E/fake/calls" 'nice=19 '
 has "start ran at ionice idle" "$E/fake/calls" 'ionice=idle'
 has "validate invoked with --profile vision --json" "$E/fake/calls" '^validate vision validate --profile vision .*--json'

@@ -56,7 +56,7 @@ run_main "$E" fast
 check "run with two resident profiles (decide-nli enabled service + small): exit 0 PASS" "$RC" "0"
 has "the profile under test was loaded through llmctl's own switch" "$E/fake/calls" '^switch fast$'
 hasnt "no plain start of the target (the scheduler path is switch)" "$E/fake/calls" '^start fast$'
-has "the switch ran with the same safe env (no validate-on-start, no ready wait, nice 19, ionice idle)" "$E/fake/calls" '^start env=0 ready_timeout=0 nice=19 ionice=idle'
+has "the switch ran with the same safe env (validation left to this script: ON_START=external, no ready wait, nice 19, ionice idle)" "$E/fake/calls" '^start env=external ready_timeout=0 nice=19 ionice=idle'
 has "evidence: prior status json holds the enabled service" "$EVD/prior_status.json" 'decide-nli'
 check "evidence: prior set file = the running profiles" "$(tr '\n' ' ' <"$EVD/prior_set.txt" | sed 's/ $//')" "decide-nli small"
 [ -f "$EVD/prior_units.txt" ] && ok "evidence: prior llmctl units recorded" || bad "prior_units.txt missing"

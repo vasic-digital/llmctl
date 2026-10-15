@@ -30,9 +30,16 @@ source "${_val_dir}/common.sh"
 # shellcheck source=catalog.sh
 source "${_val_dir}/catalog.sh"
 
+# LLMCTL_VALIDATE_HERMETIC counts only inside the test harness (lib/common.sh validation_hermetic; finding 9 of the
+# 2026-10-15 review): otherwise it is reset here, so neither this process nor the judge / llmctl children it starts
+# honour a test-only override or relaxation.
+if [[ "${LLMCTL_VALIDATE_HERMETIC:-0}" == "1" ]] && ! validation_hermetic; then
+  warn "LLMCTL_VALIDATE_HERMETIC=1 ignored: it is honoured only inside the llmctl test harness (no ${LLMCTL_STATE_DIR}/.test-harness)"
+  export LLMCTL_VALIDATE_HERMETIC=0
+fi
 # Suite files carry regexes (regex_all / regex_none) that the judge compiles, so the suites directory is trusted
-# input: the environment override is honoured ONLY when LLMCTL_VALIDATE_HERMETIC=1 (the test harness sets it).
-if [[ -n "${LLMCTL_VALIDATION_SUITES_DIR:-}" && "${LLMCTL_VALIDATE_HERMETIC:-0}" != "1" ]]; then
+# input: the environment override is honoured ONLY inside the test harness (validation_hermetic).
+if [[ -n "${LLMCTL_VALIDATION_SUITES_DIR:-}" ]] && ! validation_hermetic; then
   warn "LLMCTL_VALIDATION_SUITES_DIR ignored (set LLMCTL_VALIDATE_HERMETIC=1 to use a suites directory other than ${LLMCTL_ROOT}/validation/suites)"
   LLMCTL_VALIDATION_SUITES_DIR="${LLMCTL_ROOT}/validation/suites"
 fi
@@ -84,10 +91,11 @@ _val_engine_tag() {
   esac
 }
 
-# _val_key <profile> <out-file> [only-kind] - current validation key (JSON) of the profile.
+# _val_key <profile> <out-file> [only-kind] [env-file] - validation key (JSON) of the profile; the launch fingerprint
+# comes from <env-file> (default: the profile's service env record = the launch that runs / ran last).
 _val_key() {
   local p="$1" out="$2" kind="${3:-}"
-  local env_file="${LLMCTL_SERVICES_DIR}/${p}.env"
+  local env_file="${4:-${LLMCTL_SERVICES_DIR}/${p}.env}"
   _val_ensure_state_dir
   _val_judge key --catalog "${LLMCTL_CATALOG}" --profile "${p}" --models-dir "${LLMCTL_MODELS_DIR}" \
     --suites-dir "${LLMCTL_VALIDATION_SUITES_DIR}" --engine-tag "$(_val_engine_tag "${p}")" \
@@ -558,31 +566,45 @@ _val_strict() {
   return 1
 }
 
-# _val_fresh <profile> - rc 0 when the profile has a fresh, signed PASS record for what would run now (quiet).
+# _val_fresh <profile> [env-file] - rc 0 when the profile has a fresh, signed PASS record for the launch in <env-file>
+# (default: its env record). The scheduler passes the launch it is ABOUT to run (finding 5 of the 2026-10-15 review:
+# the previous launch's record used to decide a start whose flags had changed).
 _val_fresh() {
   local kf rc=0
   kf="$(mktemp)"
-  if _val_key "$1" "${kf}" 2>/dev/null; then _val_check "$1" "${kf}" >/dev/null 2>&1 || rc=1; else rc=1; fi
+  if _val_key "$1" "${kf}" "" "${2:-}" 2>/dev/null; then _val_check "$1" "${kf}" >/dev/null 2>&1 || rc=1; else rc=1; fi
   rm -f "${kf}"
   return "${rc}"
 }
 
-# _val_gate_mode <profile> -> public | quarantine | public-unvalidated:<why> | refuse:<why>  (lib/scheduler.sh _sched_gate_for)
+# _val_gate_mode <profile> [env-file] -> public | quarantine | public-unvalidated:<why> | refuse:<why>
+# (lib/scheduler.sh _sched_gate_for). <env-file>: the launch about to run (default: the profile's env record).
+#   * a fresh, signed PASS record for that launch -> public, whatever LLMCTL_VALIDATE_ON_START says (finding 3 of the
+#     2026-10-15 review: ON_START=0 used to refuse even a validated profile);
+#   * LLMCTL_VALIDATE_ON_START=external -> quarantine, and validate_after_start leaves it there unvalidated for an
+#     external validator (scripts/livetest): it is never published by that command;
+#   * LLMCTL_VALIDATE_ON_START=0 -> refused for a consumer-facing profile (served unvalidated only for a profile that is
+#     not consumer-facing, or inside the test harness: lib/common.sh validation_hermetic, finding 9);
+#   * the publish step (_sched_gate_pass) re-checks the record against the launch it publishes (finding 5).
 _val_gate_mode() {
-  local p="$1"
+  local p="$1" envf="${2:-}"
   if [[ "${_sched_force_quarantine:-0}" == "1" ]]; then echo quarantine; return 0; fi
   if [[ -n "${_sched_gate_pass:-}" && "${_sched_gate_pass}" == "${p}" ]]; then
-    if [[ -n "${_sched_gate_unvalidated:-}" ]]; then echo "public-unvalidated:${_sched_gate_unvalidated}"; else echo public; fi
+    if [[ -n "${_sched_gate_unvalidated:-}" ]]; then echo "public-unvalidated:${_sched_gate_unvalidated}"; return 0; fi
+    if [[ "${LLMCTL_DRY_RUN:-0}" == "1" ]] || _val_fresh "${p}" "${envf}"; then echo public; return 0; fi
+    echo "refuse:'${p}' passed its validation, but the launch about to be published is not the one that was validated (its flags or environment changed in between) - it is NOT published; run: llmctl start ${p}"
     return 0
   fi
   if [[ "${LLMCTL_DRY_RUN:-0}" == "1" ]]; then echo public; return 0; fi
-  if [[ "${LLMCTL_VALIDATE_ON_START:-1}" == "0" ]]; then
-    if [[ "${LLMCTL_VALIDATE_HERMETIC:-0}" == "1" ]]; then echo "public-unvalidated:LLMCTL_VALIDATE_ON_START=0 (hermetic test harness)"; return 0; fi
-    if ! _val_consumer_facing "${p}"; then echo "public-unvalidated:LLMCTL_VALIDATE_ON_START=0 (opt-out; '${p}' is not consumer-facing)"; return 0; fi
-    echo "refuse:LLMCTL_VALIDATE_ON_START=0 is refused for the consumer-facing profile '${p}': every model must pass its validation before it is used (unset it, or validate first: llmctl validate ${p})"
-    return 0
-  fi
-  if _val_fresh "${p}"; then echo public; else echo quarantine; fi
+  if _val_fresh "${p}" "${envf}"; then echo public; return 0; fi
+  case "${LLMCTL_VALIDATE_ON_START:-1}" in
+    0)
+      if validation_hermetic; then echo "public-unvalidated:LLMCTL_VALIDATE_ON_START=0 (hermetic test harness)"; return 0; fi
+      if ! _val_consumer_facing "${p}"; then echo "public-unvalidated:LLMCTL_VALIDATE_ON_START=0 (opt-out; '${p}' is not consumer-facing)"; return 0; fi
+      echo "refuse:LLMCTL_VALIDATE_ON_START=0 is refused for the consumer-facing profile '${p}', which has no fresh validation record for this launch: every model must pass its validation before it is used (unset it, validate first: llmctl validate ${p}, or start it unpublished for an external validator: LLMCTL_VALIDATE_ON_START=external)"
+      return 0 ;;
+  esac
+  echo quarantine
 }
 
 # _val_is_quarantined <profile> - rc 0 when the running reservation of the profile is a quarantine start.
@@ -667,6 +689,14 @@ validate_after_start() {
   fi
   if [[ "${LLMCTL_VALIDATE_ON_START:-1}" == "0" ]]; then
     warn "validation on start disabled (LLMCTL_VALIDATE_ON_START=0): $* NOT validated - 'llmctl require-validated' will refuse until 'llmctl validate' passes"
+    return 0
+  fi
+  if [[ "${LLMCTL_VALIDATE_ON_START:-1}" == "external" ]]; then
+    local _x
+    for _x in "$@"; do
+      _val_is_quarantined "${_x}" || continue
+      warn "LLMCTL_VALIDATE_ON_START=external: '${_x}' is left in QUARANTINE for an external validator (loopback 127.0.0.1:$(sed -n 's/^port=//p' "${LLMCTL_RUNTIME_DIR}/${_x}.run" | head -1), unpublished, NOT validated); this command never publishes it - stop it with: llmctl stop ${_x}"
+    done
     return 0
   fi
   local p rc=0 one lockfd lf

@@ -27,8 +27,10 @@ backend `decide-nli`); the operator has accepted that.**
    `llmctl start p` brings back ONE instance, so they are reported as a failed restore (exit 7) and named in `restore.txt`,
    `RESTORE_MANUAL.txt` and the runner summary, never silently dropped - also through the runner, whose `--restore-only` call reads the
    recorded `prior_status.json` next to the set file).
-2. The profile is loaded with llmctl's own `llmctl switch <profile>` (same env as before: `LLMCTL_VALIDATE_ON_START=0`,
-   `LLMCTL_READY_TIMEOUT=0`, nice 19, ionice idle, in the background under the watchdog): llmctl takes the scheduler lock, applies its
+2. The profile is loaded with llmctl's own `llmctl switch <profile>` (`LLMCTL_VALIDATE_ON_START=external` - without a fresh validation
+   record llmctl starts it UNPUBLISHED, loopback on a private port read from `llmctl status --json`, and leaves its validation to this
+   tool; `LLMCTL_VALIDATE_ON_START=0` is refused for consumer-facing profiles since 2026-10-15 - `LLMCTL_READY_TIMEOUT=0`, nice 19, ionice
+   idle, in the background under the watchdog): llmctl takes the scheduler lock, applies its
    pressure gate, stops EVERY running profile, starts exactly the target, and rolls back by itself if the start fails. This tool stops
    nothing but the profile under test (its own, with the bounded stop below), never signals a foreign process, never touches a unit
    llmctl does not own (the only `systemctl stop` that can ever happen is the bounded fallback on the test profile's own
@@ -43,7 +45,8 @@ backend `decide-nli`); the operator has accepted that.**
    post-stop VRAM check compares with the MEASURED pre-switch value when a set was switched off.
 4. After the run, on EVERY exit path (PASS, FAIL, abort, failed switch, signal; via the existing EXIT trap), once the test model is
    confirmed stopped and the watchdog is reaped, the recorded set is RESTORED with
-   `LLMCTL_VALIDATE_ON_START=0 nice -n 19 ionice -c 3 llmctl start <profile>`, one profile at a time, bounded (300 s each, never
+   `nice -n 19 ionice -c 3 llmctl start <profile>` (validated by llmctl: a profile without a fresh record is published only after its
+   validation PASSES, so a restore can fail on validation), one profile at a time, bounded (300 s each, never
    signalled), each preceded by a pressure check (memory PSI some < 5 / full < 1, IO PSI some < 10 / full < 2, MemAvailable >= the
    profile's reserved RAM + 2048 MiB; when a row's `ram_mb` is missing, zero or non-numeric the conservative default floor of 6144 MiB
    is used and the reason says so) and each followed by a health check (the unit env file's `LLMCTL_REG_HEALTH` path for ANY engine,
@@ -185,7 +188,7 @@ deadlines so a hung `nvidia-smi` cannot freeze it. The driver checks every wait 
 
 ## Start path and probes
 
-`LLMCTL_VALIDATE_ON_START=0 LLMCTL_READY_TIMEOUT=0 nice -n 19 ionice -c 3 llmctl start <profile>` runs in the background
+`LLMCTL_VALIDATE_ON_START=external LLMCTL_READY_TIMEOUT=0 nice -n 19 ionice -c 3 llmctl switch <profile>` runs in the background
 (`LLMCTL_READY_TIMEOUT=0` disables llmctl's own readiness wait, verified in `_sched_wait_ready`, so the lock is released
 right after `svc_start`); the driver polls `http://127.0.0.1:<port>/health` every 3 s for up to 180 s (start itself
 bounded to 120 s), each iteration also checking the watchdog. Probes:
@@ -297,7 +300,7 @@ Cleanup ignores further Ctrl-C / TERM / HUP while it runs, so a second Ctrl-C ca
 - The hermetic tree-check test forces `LT_LLMCTL_TREE` (hermetic sensors); the default-tree derivation (`readlink -f $HERE/../..`) is only exercised live.
 
 - The restore is verified only against the hermetic fake llmctl: how a real `llmctl start <profile>` behaves for an enabled service
-  whose unit llmctl stopped (it may want `llmctl enable`/the waiter), whether `LLMCTL_VALIDATE_ON_START=0` is right for a restart,
+  whose unit llmctl stopped (it may want `llmctl enable`/the waiter), how the validated restore (`llmctl start` without `LLMCTL_VALIDATE_ON_START`) behaves for a resident profile that has no fresh record,
   and the accuracy of the status json `ram_mb`/`vram_mb` reservations used for the effective-memory gate are UNKNOWN until a live run.
   `llmctl switch` itself restores the prior set when the target fails to start; this tool's restore is the second line.
 - If this tool is killed hard (SIGKILL, power loss) between the switch and the restore, nothing restores the set: the recorded

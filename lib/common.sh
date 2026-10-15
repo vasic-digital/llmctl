@@ -58,6 +58,14 @@ enforcement_installed() {
   [[ "${v}" =~ ^[0-9]+$ ]] && (( v >= 1 ))
 }
 
+# validation_hermetic -> rc 0 only inside the test harness (review 2026-10-15 finding 9): LLMCTL_VALIDATE_HERMETIC=1 AND
+# the harness file $LLMCTL_STATE_DIR/.test-harness (owned by this user; written by tests/helpers.sh test_setup_env). An
+# exported variable alone - leaked into a production shell - relaxes nothing: the gate relaxations and the test-only
+# overrides (suites dir, machine id) need both.
+validation_hermetic() {
+  [[ "${LLMCTL_VALIDATE_HERMETIC:-0}" == "1" && -f "${LLMCTL_STATE_DIR}/.test-harness" && -O "${LLMCTL_STATE_DIR}/.test-harness" ]]
+}
+
 # enforcement_mark_installed - written by svc_install (both backends) once the units carry the gate. Atomic, 0600.
 enforcement_mark_installed() {
   local tmp

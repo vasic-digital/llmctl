@@ -25,6 +25,16 @@ repository as an honest record of that process.
 
 ## Unreleased
 
+* **fix(validate): the gate decides on the launch about to run, counts a fresh record first, and the harness relaxation needs the harness
+  (independent review 2026-10-15, findings 3, 5, 9).** (5) `start`/`enable` used to check the PREVIOUS launch's env record, so
+  `LLMCTL_SEED=7 llmctl start vision` was published unvalidated on a record for another launch, and the publish step forced "public"; the gate
+  now fingerprints the launch it is about to run, and the publish step re-checks it. (3) a fresh record now counts before the
+  `LLMCTL_VALIDATE_ON_START=0` refusal; `switch` evaluates the target's refusal before it stops anything and a rollback is never refused;
+  `LLMCTL_VALIDATE_ON_START=external` starts a profile without a record unpublished for an external validator, which
+  `scripts/livetest/vision_live_test.sh` now uses (its restore runs the normal, validated `llmctl start`). (9) `LLMCTL_VALIDATE_HERMETIC=1` alone
+  relaxes nothing: the harness file `$LLMCTL_STATE_DIR/.test-harness` is required too (unit waiter included), and `llmctl status` prints
+  `TEST-HARNESS MODE` while it is active. `tests/test_gate_launch.sh` (RED 11 ok / 19 FAIL, GREEN 33/0), six mutants.
+
 * **fix(validate): interrupting a validation never leaves a model running (independent review 2026-10-15, finding 2).** The signal handler
   of `validate_profile` read `${#rfiles[@]}` before `rfiles` was declared, so under `set -u` it aborted and a profile started for validation
   was never stopped; `scheduler::with_lock` (no timeout, not re-entrant) would have deadlocked the handler's stop while the interrupted

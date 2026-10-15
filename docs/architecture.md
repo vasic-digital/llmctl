@@ -339,10 +339,10 @@ flowchart TD
     ST -- port already listening --> R98[exit 98, no restart]
     ST --> RD{readiness<br/>model answers its readiness probe}
     RD -- timeout --> RF[start fails, reported]
-    RD -- ready --> V{validation gate<br/>validate_after_start, unless LLMCTL_VALIDATE_ON_START=0}
+    RD -- ready --> V{validation gate<br/>validate_after_start; LLMCTL_VALIDATE_ON_START=0 is refused without a fresh record}
     V -- exit 0 --> OK[serving, record written]
     V -- exit 1 wrong answer --> BAD[profile stopped through the normal stop path, exit non-zero]
-    V -- exit 2 undetermined --> UND[kept running, no pass recorded, require-validated refuses; LLMCTL_VALIDATE_STRICT=1 stops it]
+    V -- exit 2 undetermined --> UND[stopped as well - strict default; LLMCTL_VALIDATE_STRICT=0 serves it UNVALIDATED only for a non-consumer-facing profile]
 ```
 
 Units started by systemd (boot, `Restart=`, `enable`, `restart`) pass the pressure gate as the unit's first `ExecStartPre`, and the detached registration waiter (`lib/svc_hook.sh`) runs the same validation hook once the health endpoint answers; on FAIL it stops the unit with `systemctl --user stop`. The waiter reads the unit's environment, not the operator's shell.

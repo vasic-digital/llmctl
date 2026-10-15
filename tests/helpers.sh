@@ -112,6 +112,9 @@ test_setup_env() {
   mkdir -p "${LLMCTL_STATE_DIR}" "${LLMCTL_RUNTIME_DIR}"
   # The hermetic world models an INSTALLED llmctl (`llmctl install` ran): the unit-level validation gate marker exists
   # (lib/common.sh enforcement_installed). tests/test_enforcement_marker.sh removes it to test the pre-gate units.
+  # the harness file that, with LLMCTL_VALIDATE_HERMETIC=1, makes lib/common.sh validation_hermetic true (finding 9 of the
+  # 2026-10-15 review: the variable alone relaxes nothing)
+  ( umask 077; printf 'llmctl test harness\n' > "${LLMCTL_STATE_DIR}/.test-harness" )
   printf 'validation-gate=1\ninstalled=test-harness\n' > "${LLMCTL_STATE_DIR}/unit-enforcement"
   chmod 600 "${LLMCTL_STATE_DIR}/unit-enforcement"
   # Real-unit guard (review 2026-10-15 finding 11): a test must never stop/disable/restart the host's REAL llmctl units

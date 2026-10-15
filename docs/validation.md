@@ -238,8 +238,19 @@ an enabled unit - only with a fresh, signed PASS record for what would run. Othe
 **Opt-outs (documented, loud, never for consumer-facing profiles).** `LLMCTL_VALIDATE_STRICT=0` serves an UNDETERMINED profile marked UNVALIDATED
 (reservation `unvalidated=...`, env record `LLMCTL_UNVALIDATED=...` for the unit gate, a WARN line in `status`) - **refused** for a profile whose
 catalog `validation.consumer_facing` is not `false` (the default is consumer-facing; every shipped profile is). `LLMCTL_VALIDATE_ON_START=0`
-(no validation at start) is refused for consumer-facing profiles too, except inside the test harness (`LLMCTL_VALIDATE_HERMETIC=1`, set by
-`tests/helpers.sh`). `LLMCTL_DRY_RUN=1` starts nothing and validates nothing.
+(no validation at start) is refused for a consumer-facing profile **that has no fresh record for the launch about to run** - with one it is
+simply started published (review 2026-10-15 finding 3) - and `switch` evaluates that refusal BEFORE it stops anything (a refused switch
+leaves the running set untouched; a rollback is never refused, it comes back in quarantine). `LLMCTL_VALIDATE_ON_START=external` starts a
+profile without a fresh record UNPUBLISHED (quarantine: loopback, private port, no registry row) and leaves its validation to the caller
+(`scripts/livetest/vision_live_test.sh` validates it with `--host` and stops it); that command never publishes it. Inside the test harness only,
+`LLMCTL_VALIDATE_ON_START=0` serves unvalidated: `LLMCTL_VALIDATE_HERMETIC=1` **and** the harness file `$LLMCTL_STATE_DIR/.test-harness` written by
+`tests/helpers.sh` (finding 9: the variable alone - leaked into a production shell - relaxes nothing, is reset with a warning, and `llmctl
+status` prints `TEST-HARNESS MODE` while the relaxation is active). `LLMCTL_DRY_RUN=1` starts nothing and validates nothing.
+
+**Which launch a record vouches for (finding 5).** The record binds the launch fingerprint (engine binary + arguments, `--host`/`--port`
+excluded). `start` and `enable` decide on the launch they are ABOUT to run (`LLMCTL_SEED=7 llmctl start vision` after a PASS without a seed is
+quarantined and validated again), and the publish step after a quarantine PASS re-checks the record against the launch it publishes (a change
+in between is refused, not published). `restart` reuses the unit's env record, so its record is checked against that.
 
 **Costs, stated plainly.** The first start of a profile without a record loads the model twice (quarantine, then published); later starts with a
 fresh record load it once. The decide-* profiles cannot be validated on a host without a working `llmctl-decide` that has `--question-file`
@@ -284,7 +295,7 @@ its next boot or restart is skipped (exit 77) until `llmctl start <profile>` val
   followed; proxies are ignored; only `http`/`https`; a response is limited to 8 MiB; every request has a wall-clock deadline
   (`LLMCTL_VALIDATE_TIMEOUT`, finite and > 0); evidence and records are 0600 with userinfo, query and fragment removed from logged URLs.
 * **Suites directory.** `LLMCTL_VALIDATION_SUITES_DIR` (and the test-only `LLMCTL_MACHINE_ID_FILE` / `LLMCTL_TEST_HOSTNAME`) are honoured only
-  with `LLMCTL_VALIDATE_HERMETIC=1`.
+  inside the test harness (`LLMCTL_VALIDATE_HERMETIC=1` and `$LLMCTL_STATE_DIR/.test-harness`).
 * Exit-code contract: exit 1 means exactly "the judge printed `VERDICT: FAIL`"; a crash, `die()` or `set -e` failure is UNDETERMINED (which strict
   mode also stops). Only HTTP 400/422 count as FAIL. The systemd waiter treats only the private FAIL code 64 as a wrong answer and removes the
   reservation before `systemctl --user stop`.

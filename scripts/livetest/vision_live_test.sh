@@ -25,7 +25,10 @@
 #    GPU free VRAM >= the plan's VRAM for the profile + 1 GiB (MemAvailable/GPU figures count the RAM/VRAM llmctl has reserved for
 #    the resident set as free, because the switch stops that set), no failed profile / failed-restarting unit for the profile;
 #  * watchdog.sh is started BEFORE the model and stops the profile on any breach;
-#  * the model is started ONLY via `LLMCTL_VALIDATE_ON_START=0 nice -n 19 ionice -c 3 llmctl switch <profile>`;
+#  * the model is started ONLY via `LLMCTL_VALIDATE_ON_START=external nice -n 19 ionice -c 3 llmctl switch <profile>`: llmctl's
+#    validation gate starts a profile without a fresh record UNPUBLISHED (loopback, private port - the port is read from
+#    `llmctl status --json`) and leaves its validation to THIS script; LLMCTL_VALIDATE_ON_START=0 is refused for consumer-facing
+#    profiles (review 2026-10-15 finding 3). The recorded set is restored with a plain `llmctl start` (validated by llmctl);
 #  * the only signal this script ever sends is to the watchdog PID it started (safe_kill); only llmctl starts/stops anything else;
 #  * trap on EXIT/INT/TERM/HUP always runs `llmctl stop <profile>`;
 #  * no retries, thresholds are constants (overridable only with LT_HERMETIC=1, used by tests).
@@ -389,7 +392,7 @@ plan_print() {   # --plan: what would happen; nothing is done
     echo "profile under test: $PROFILE (catalog footprint ${FOOTPRINT_MB} MiB; suites: ${SUITES_CSV}; the plan says it fits)"
     echo "llmctl currently runs: ${PRIOR_NAMES[*]:-nothing}${PRIOR_INSTANCES[*]:+ (+ scaled instances: ${PRIOR_INSTANCES[*]})}"
     echo "would stop (by llmctl's own switch; this interrupts those services, enabled ones such as a decision gateway backend included, for the duration of the run): ${PRIOR_NAMES[*]:-nothing}"
-    echo "would start: $PROFILE via: LLMCTL_VALIDATE_ON_START=0 LLMCTL_READY_TIMEOUT=0 nice -n 19 ionice -c 3 $LLMCTL switch $PROFILE (after the pre-gate, under the watchdog)"
+    echo "would start: $PROFILE via: LLMCTL_VALIDATE_ON_START=external LLMCTL_READY_TIMEOUT=0 nice -n 19 ionice -c 3 $LLMCTL switch $PROFILE (after the pre-gate, under the watchdog)"
     echo "would restore after the run (and after any abort/signal), one at a time, pressure-gated, health-checked: ${PRIOR_NAMES[*]:-nothing}"
     [ "${#PRIOR_NAMES[@]}" -eq 0 ] || echo "  via: nice -n 19 ionice -c 3 $LLMCTL start <profile>"
   } | tee "$EV/plan.txt"
@@ -494,8 +497,8 @@ restore_set() {
       continue
     fi
     if ! restore_gate "$ram"; then printf '%-18s SKIPPED (%s)\n' "$n" "$RESTORE_WHY" >>"$EV/restore.txt"; skipped+=("$n"); continue; fi
-    echo "$(date -u +%FT%TZ) \$ LLMCTL_VALIDATE_ON_START=0 nice -n 19 ionice -c 3 $LLMCTL start $n" >>"$CMDLOG"
-    rc=0; bounded_immune "$RESTORE_BOUND" "$EV/restore.$n.out" env LLMCTL_VALIDATE_ON_START=0 nice -n 19 ionice -c 3 "$LLMCTL" start "$n" || rc=$?
+    echo "$(date -u +%FT%TZ) \$ nice -n 19 ionice -c 3 $LLMCTL start $n" >>"$CMDLOG"
+    rc=0; bounded_immune "$RESTORE_BOUND" "$EV/restore.$n.out" env -u LLMCTL_VALIDATE_ON_START nice -n 19 ionice -c 3 "$LLMCTL" start "$n" || rc=$?
     if [ "$rc" = 124 ]; then
       local hint; hint="the start is NOT killed (we only stopped waiting); operator abort path: systemctl --user stop $(unit_name "$n")"
       printf '%-18s FAILED (llmctl start still running after %ss; %s)\n' "$n" "$RESTORE_BOUND" "$hint" >>"$EV/restore.txt"
@@ -711,14 +714,14 @@ if [ "${#PRIOR_NAMES[@]}" -gt 0 ] || [ "${#PRIOR_INSTANCES[@]}" -gt 0 ]; then
     fi
   else RESTORE_NEEDED=1; RESTORE_STATE="not yet (pending)"; fi
 fi
-log "starting: LLMCTL_VALIDATE_ON_START=0 nice -n 19 ionice -c 3 $LLMCTL switch $PROFILE (llmctl stops the resident set: ${PRIOR_NAMES[*]:-none})"
-echo "$(date -u +%FT%TZ) \$ LLMCTL_VALIDATE_ON_START=0 LLMCTL_READY_TIMEOUT=0 nice -n 19 ionice -c 3 $LLMCTL switch $PROFILE (background; stops: ${PRIOR_NAMES[*]:-none})" >>"$CMDLOG"
+log "starting: LLMCTL_VALIDATE_ON_START=external nice -n 19 ionice -c 3 $LLMCTL switch $PROFILE (llmctl stops the resident set: ${PRIOR_NAMES[*]:-none})"
+echo "$(date -u +%FT%TZ) \$ LLMCTL_VALIDATE_ON_START=external LLMCTL_READY_TIMEOUT=0 nice -n 19 ionice -c 3 $LLMCTL switch $PROFILE (background; stops: ${PRIOR_NAMES[*]:-none})" >>"$CMDLOG"
 # `llmctl start` holds the scheduler flock across svc_start (+ its own readiness wait). LLMCTL_READY_TIMEOUT=0
 # (verified in lib/scheduler.sh _sched_wait_ready: <=0 disables the wait) makes it return right after svc_start,
 # releasing the lock so a watchdog stop is never queued behind the model load; WE poll readiness below, with
 # watchdog checks, under our own deadline. The start runs in the background so a breach during it is seen at once.
 rm -f "$EV/start.rc"
-( LLMCTL_VALIDATE_ON_START=0 LLMCTL_READY_TIMEOUT=0 nice -n 19 ionice -c 3 "$LLMCTL" switch "$PROFILE" >"$EV/start.out" 2>&1; echo $? >"$EV/start.rc" ) &
+( LLMCTL_VALIDATE_ON_START=external LLMCTL_READY_TIMEOUT=0 nice -n 19 ionice -c 3 "$LLMCTL" switch "$PROFILE" >"$EV/start.out" 2>&1; echo $? >"$EV/start.rc" ) &
 START_SUB=$!; echo "$START_SUB" >"$EV/start.pid"
 t0=$(date +%s)
 while [ ! -s "$EV/start.rc" ]; do
