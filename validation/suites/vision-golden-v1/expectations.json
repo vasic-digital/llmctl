@@ -3,7 +3,7 @@
  "kind": "vision",
  "schema": 1,
  "generator": "scripts/vision/make_golden.py (stdlib-only, embedded 5x7 bitmap font, own fixed-Huffman DEFLATE; byte-reproducible)",
- "notes": "Every expectation is derived from what make_golden.py draws (content known by construction). Checks are deterministic: normalised (upper-case, non-alphanumerics collapsed to one space) boundary-aware substring matching, ordered substrings, forbidden substrings, single-stated-number equality (an answer stating several different numbers fails), a negated mention is not a claim, ordered = the occurrence sequence is exactly the listed order, regex. No LLM-as-judge. Every probe carries canned PASS and FAIL judge controls; the self-test judges them before any request.",
+ "notes": "Every expectation is derived from what make_golden.py draws (content known by construction). Checks are deterministic: normalised (upper-case, non-alphanumerics collapsed to one space) boundary-aware substring matching, ordered substrings, exact word sequences (exact_words, optionally with the probe's own filler words: words_allow), exact label sets (label_set), forbidden substrings, single-stated-number equality (an answer stating several different numbers fails), a negated mention is not a claim, a parenthetical aside is not the claim of contains_any, number answers allow only the probe's own words next to the number (number_allow), ordered = the occurrence sequence is exactly the listed order, regex. No LLM-as-judge. Every probe carries canned PASS and FAIL judge controls; the self-test judges them before any request.",
  "request": {
   "temperature": 0,
   "seed": 42,
@@ -49,14 +49,22 @@
      "id": "red_circles",
      "prompt": "How many red circles are in this image? Answer with a single number.",
      "checks": {
-      "number_equals": 3
+      "number_equals": 3,
+      "number_allow": [
+       "RED CIRCLES",
+       "CIRCLES"
+      ]
      }
     },
     {
      "id": "blue_squares",
      "prompt": "How many blue squares are in this image? Answer with a single number.",
      "checks": {
-      "number_equals": 2
+      "number_equals": 2,
+      "number_allow": [
+       "BLUE SQUARES",
+       "SQUARES"
+      ]
      }
     }
    ]
@@ -90,6 +98,16 @@
        "SIGN IN",
        "SIGN-IN",
        "SIGNIN"
+      ],
+      "forbidden": [
+       "DASHBOARD",
+       "REGISTRATION",
+       "SIGN UP",
+       "SIGNUP",
+       "SETTINGS",
+       "HOME SCREEN",
+       "HOME PAGE",
+       "CHECKOUT"
       ]
      }
     }
@@ -106,19 +124,18 @@
      "id": "items",
      "prompt": "Read the items of the list below the FRUITS header from top to bottom, one per line. Output only the items.",
      "checks": {
-      "ordered": [
-       "APPLE",
-       "BANANA",
-       "CHERRY",
-       "GRAPE"
-      ]
+      "exact_words": "APPLE BANANA CHERRY GRAPE"
      }
     },
     {
      "id": "count",
      "prompt": "How many items are in the list below the FRUITS header? Answer with a single number.",
      "checks": {
-      "number_equals": 4
+      "number_equals": 4,
+      "number_allow": [
+       "ITEMS",
+       "FRUITS"
+      ]
      }
     }
    ]
@@ -134,20 +151,7 @@
      "id": "transcribe",
      "prompt": "Transcribe this table row by row, separating the cells of a row with spaces. Output only the table text.",
      "checks": {
-      "ordered": [
-       "NAME",
-       "AGE",
-       "CITY",
-       "ANNA",
-       "31",
-       "PARIS",
-       "BORIS",
-       "45",
-       "OSLO",
-       "CLARA",
-       "27",
-       "ROME"
-      ]
+      "exact_words": "NAME AGE CITY ANNA 31 PARIS BORIS 45 OSLO CLARA 27 ROME"
      }
     },
     {
@@ -187,9 +191,14 @@
      "id": "buttons",
      "prompt": "What are the labels of the two buttons in this dialog? Answer with the two labels only.",
      "checks": {
-      "contains_all": [
+      "label_set": [
        "CANCEL",
        "DELETE"
+      ],
+      "words_allow": [
+       "AND",
+       "BUTTON",
+       "BUTTONS"
       ]
      }
     }
@@ -244,9 +253,12 @@
      "checks": {
       "number_equals": 7731,
       "number_allow": [
+       "INVOICE NO.",
        "INVOICE NO",
        "INVOICE",
+       "NO.",
        "NO",
+       "INV.",
        "INV",
        "#",
        "NUMBER"
@@ -257,7 +269,11 @@
      "id": "total",
      "prompt": "What is the TOTAL amount shown in this receipt? Answer with the number only.",
      "checks": {
-      "number_equals": 58.4
+      "number_equals": 58.4,
+      "number_allow": [
+       "USD",
+       "DOLLARS"
+      ]
      }
     }
    ]
@@ -273,10 +289,11 @@
      "id": "colors",
      "prompt": "Name the colors of the three squares from left to right, one word per color.",
      "checks": {
-      "ordered": [
-       "RED",
-       "GREEN",
-       "BLUE"
+      "exact_words": "RED GREEN BLUE",
+      "words_allow": [
+       "AND",
+       "FROM LEFT TO RIGHT",
+       "HERE S THE BREAKDOWN OF THE COLORS"
       ]
      }
     }
@@ -706,6 +723,176 @@
   {
    "probe": "06_dialog/buttons",
    "answer": "Cancel. Delete is not there.",
+   "expect": "fail"
+  },
+  {
+   "probe": "02_shapes_count/red_circles",
+   "answer": "There are 3 red circles",
+   "expect": "pass"
+  },
+  {
+   "probe": "02_shapes_count/red_circles",
+   "answer": "3 circles",
+   "expect": "pass"
+  },
+  {
+   "probe": "02_shapes_count/red_circles",
+   "answer": "3 million red circles",
+   "expect": "fail"
+  },
+  {
+   "probe": "02_shapes_count/red_circles",
+   "answer": "3 red circles I think",
+   "expect": "fail"
+  },
+  {
+   "probe": "02_shapes_count/red_circles",
+   "answer": "3 pairs",
+   "expect": "fail"
+  },
+  {
+   "probe": "02_shapes_count/blue_squares",
+   "answer": "2 blue squares",
+   "expect": "pass"
+  },
+  {
+   "probe": "02_shapes_count/blue_squares",
+   "answer": "2 squares apparently",
+   "expect": "fail"
+  },
+  {
+   "probe": "04_list_view/count",
+   "answer": "4 items",
+   "expect": "pass"
+  },
+  {
+   "probe": "04_list_view/count",
+   "answer": "4 hundred",
+   "expect": "fail"
+  },
+  {
+   "probe": "08_small_text/total",
+   "answer": "58.40 USD",
+   "expect": "pass"
+  },
+  {
+   "probe": "08_small_text/total",
+   "answer": "58.40 and a half",
+   "expect": "fail"
+  },
+  {
+   "probe": "08_small_text/invoice",
+   "answer": "Invoice No. 7731",
+   "expect": "pass"
+  },
+  {
+   "probe": "08_small_text/invoice",
+   "answer": "No. 7731",
+   "expect": "pass"
+  },
+  {
+   "probe": "08_small_text/invoice",
+   "answer": "Invoice No. 7731. No. 7732",
+   "expect": "fail"
+  },
+  {
+   "probe": "03_login_form/screen_type",
+   "answer": "A dashboard (login screen is next).",
+   "expect": "fail"
+  },
+  {
+   "probe": "03_login_form/screen_type",
+   "answer": "This is a dashboard; the login screen comes next.",
+   "expect": "fail"
+  },
+  {
+   "probe": "03_login_form/screen_type",
+   "answer": "This is a login screen (username and password).",
+   "expect": "pass"
+  },
+  {
+   "probe": "04_list_view/items",
+   "answer": "APPLE\nBANANA\nCHERRY\nGRAPE\nMANGO",
+   "expect": "fail"
+  },
+  {
+   "probe": "05_table/transcribe",
+   "answer": "NAME AGE CITY\nANNA 31 PARIS\nBORIS 45 OSLO\nCLARA 27 ROME\nDAVID 50 LIMA",
+   "expect": "fail"
+  },
+  {
+   "probe": "05_table/transcribe",
+   "answer": "| NAME | AGE | CITY |\n|---|---|---|\n| ANNA | 31 | PARIS |\n| BORIS | 45 | OSLO |\n| CLARA | 27 | ROME |",
+   "expect": "pass"
+  },
+  {
+   "probe": "06_dialog/buttons",
+   "answer": "Delete and Cancel",
+   "expect": "pass"
+  },
+  {
+   "probe": "06_dialog/buttons",
+   "answer": "Cancel, Delete - no OK button.",
+   "expect": "pass"
+  },
+  {
+   "probe": "06_dialog/buttons",
+   "answer": "Cancel, Delete, OK",
+   "expect": "fail"
+  },
+  {
+   "probe": "06_dialog/buttons",
+   "answer": "Neither Cancel nor Delete; Save and Close.",
+   "expect": "fail"
+  },
+  {
+   "probe": "06_dialog/buttons",
+   "answer": "Cancel, Delete, not OK but Save",
+   "expect": "fail"
+  },
+  {
+   "probe": "07_dark_theme/theme",
+   "answer": "light? no, dark",
+   "expect": "pass"
+  },
+  {
+   "probe": "09_color_blocks/colors",
+   "answer": "red, green, and blue",
+   "expect": "pass"
+  },
+  {
+   "probe": "09_color_blocks/colors",
+   "answer": "red green blue yellow",
+   "expect": "fail"
+  },
+  {
+   "probe": "09_color_blocks/colors",
+   "answer": "From right to left: red, green, blue",
+   "expect": "fail"
+  },
+  {
+   "probe": "09_color_blocks/colors",
+   "answer": "Here's the breakdown of the colors from left to right:\n\n*   Red\n*   Green\n*   Blue",
+   "expect": "pass"
+  },
+  {
+   "probe": "02_shapes_count/red_circles",
+   "answer": "I count 3 red circles. 4.",
+   "expect": "fail"
+  },
+  {
+   "probe": "03_login_form/screen_type",
+   "answer": "A file browser (the login screen is next).",
+   "expect": "fail"
+  },
+  {
+   "probe": "07_dark_theme/theme",
+   "answer": "(Dark)",
+   "expect": "pass"
+  },
+  {
+   "probe": "05_table/lookup",
+   "answer": "Oslo is incorrect.",
    "expect": "fail"
   }
  ]

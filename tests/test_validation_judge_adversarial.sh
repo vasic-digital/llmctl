@@ -45,6 +45,6 @@ code = "open(%r, 'w').write('x')\ndef add(a, b):\n    return a + b" % sys.argv[2
 print(vj.python_function_sum(code, "add") is None)
 PY
 )"
-assert_eq True "${res2}" "a module-level statement next to a correct add() does not make it wrong"
+assert_eq False "${res2}" "a module-level statement next to a correct add() is refused (review 3 finding 4: it could re-bind add)"
 assert_file_absent "${marker}" "...and the code was never executed"
 test_finish

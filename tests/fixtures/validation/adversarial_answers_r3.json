@@ -1,0 +1,1201 @@
+{
+ "notes": "Independent review 3 (2026-10-15) adversarial table: 144 answers judged against the REAL suite probes (copied from the reviewer's adv3.py). grade 'clear' = the truth is not debatable and the judge MUST agree; grade 'tradeoff' = a right (or debatable) answer the documented rules knowingly refuse: 'judged' pins the verdict the judge gives today and 'justification' states why (docs/validation.md 'Known trade-offs'). tests/test_validation_judge_adversarial_r3.sh asserts both.",
+ "rows": [
+  {
+   "suite": "chat-v1",
+   "probe": "arith",
+   "answer": "42 thousand",
+   "truth": "fail",
+   "grade": "clear",
+   "class": "unit-multiplier"
+  },
+  {
+   "suite": "chat-v1",
+   "probe": "arith",
+   "answer": "42 hundred",
+   "truth": "fail",
+   "grade": "clear",
+   "class": "unit-multiplier"
+  },
+  {
+   "suite": "chat-v1",
+   "probe": "arith",
+   "answer": "42 million",
+   "truth": "fail",
+   "grade": "clear",
+   "class": "unit-multiplier"
+  },
+  {
+   "suite": "chat-v1",
+   "probe": "arith",
+   "answer": "42 dozen",
+   "truth": "fail",
+   "grade": "clear",
+   "class": "unit-multiplier"
+  },
+  {
+   "suite": "chat-v1",
+   "probe": "arith",
+   "answer": "42 squared",
+   "truth": "fail",
+   "grade": "clear",
+   "class": "unit-operation"
+  },
+  {
+   "suite": "chat-v1",
+   "probe": "arith",
+   "answer": "42 doubled",
+   "truth": "fail",
+   "grade": "clear",
+   "class": "unit-operation"
+  },
+  {
+   "suite": "chat-v1",
+   "probe": "arith",
+   "answer": "42 halves",
+   "truth": "fail",
+   "grade": "clear",
+   "class": "unit-fraction"
+  },
+  {
+   "suite": "chat-v1",
+   "probe": "arith",
+   "answer": "42 and a half",
+   "truth": "fail",
+   "grade": "clear",
+   "class": "unit-fraction"
+  },
+  {
+   "suite": "vision-golden-v1",
+   "probe": "02_shapes_count/red_circles",
+   "answer": "3 pairs",
+   "truth": "fail",
+   "grade": "clear",
+   "class": "unit-multiplier"
+  },
+  {
+   "suite": "vision-golden-v1",
+   "probe": "02_shapes_count/red_circles",
+   "answer": "3 and a half",
+   "truth": "fail",
+   "grade": "clear",
+   "class": "unit-fraction"
+  },
+  {
+   "suite": "vision-golden-v1",
+   "probe": "02_shapes_count/red_circles",
+   "answer": "3 million red circles",
+   "truth": "fail",
+   "grade": "clear",
+   "class": "unit-multiplier"
+  },
+  {
+   "suite": "chat-v1",
+   "probe": "arith",
+   "answer": "The answer is 42 in hex",
+   "truth": "fail",
+   "grade": "clear",
+   "class": "unit-base"
+  },
+  {
+   "suite": "chat-v1",
+   "probe": "arith",
+   "answer": "The answer is 42 in octal",
+   "truth": "fail",
+   "grade": "clear",
+   "class": "unit-base"
+  },
+  {
+   "suite": "chat-v1",
+   "probe": "arith",
+   "answer": "42 %",
+   "truth": "fail",
+   "grade": "clear",
+   "class": "unit-percent-spaced"
+  },
+  {
+   "suite": "chat-v1",
+   "probe": "arith",
+   "answer": "42 kg",
+   "truth": "pass",
+   "grade": "tradeoff",
+   "class": "unit-harmless (N nouns accepted by rule)",
+   "judged": "fail",
+   "justification": "The open 'N <1-4 words>' form is gone (finding 1): only the probe's own number_allow words may stand next to the number, and 'kg' is not one for a sum. Refusing a harmless unit is the price of refusing '42 thousand' / '42 I think' without a list of blocked words."
+  },
+  {
+   "suite": "chat-v1",
+   "probe": "arith",
+   "answer": "42 I think",
+   "truth": "fail",
+   "grade": "clear",
+   "class": "hedge-trailing"
+  },
+  {
+   "suite": "chat-v1",
+   "probe": "arith",
+   "answer": "42 I believe",
+   "truth": "fail",
+   "grade": "clear",
+   "class": "hedge-trailing"
+  },
+  {
+   "suite": "chat-v1",
+   "probe": "arith",
+   "answer": "42 unless I miscounted",
+   "truth": "fail",
+   "grade": "clear",
+   "class": "hedge-trailing"
+  },
+  {
+   "suite": "chat-v1",
+   "probe": "arith",
+   "answer": "42 hopefully",
+   "truth": "fail",
+   "grade": "clear",
+   "class": "hedge-trailing"
+  },
+  {
+   "suite": "chat-v1",
+   "probe": "arith",
+   "answer": "42 ish",
+   "truth": "fail",
+   "grade": "clear",
+   "class": "hedge-trailing"
+  },
+  {
+   "suite": "vision-golden-v1",
+   "probe": "02_shapes_count/red_circles",
+   "answer": "3 I think",
+   "truth": "fail",
+   "grade": "clear",
+   "class": "hedge-trailing"
+  },
+  {
+   "suite": "vision-golden-v1",
+   "probe": "02_shapes_count/red_circles",
+   "answer": "3 red circles I think",
+   "truth": "fail",
+   "grade": "clear",
+   "class": "hedge-trailing"
+  },
+  {
+   "suite": "vision-golden-v1",
+   "probe": "02_shapes_count/red_circles",
+   "answer": "3 red circles presumably",
+   "truth": "fail",
+   "grade": "clear",
+   "class": "hedge-trailing"
+  },
+  {
+   "suite": "vision-golden-v1",
+   "probe": "02_shapes_count/red_circles",
+   "answer": "3 circles apparently",
+   "truth": "fail",
+   "grade": "clear",
+   "class": "hedge-trailing"
+  },
+  {
+   "suite": "vision-golden-v1",
+   "probe": "02_shapes_count/red_circles",
+   "answer": "I count 3 I think",
+   "truth": "fail",
+   "grade": "clear",
+   "class": "hedge-trailing-leadin"
+  },
+  {
+   "suite": "vision-golden-v1",
+   "probe": "02_shapes_count/red_circles",
+   "answer": "3 circles, 4 if you count the partial one",
+   "truth": "fail",
+   "grade": "clear",
+   "class": "hedge-alternative"
+  },
+  {
+   "suite": "chat-v1",
+   "probe": "arith",
+   "answer": "42, I think",
+   "truth": "fail",
+   "grade": "clear",
+   "class": "hedge-comma"
+  },
+  {
+   "suite": "chat-v1",
+   "probe": "arith",
+   "answer": "0042",
+   "truth": "pass",
+   "grade": "clear",
+   "class": "leading-zeros"
+  },
+  {
+   "suite": "chat-v1",
+   "probe": "arith",
+   "answer": "+42",
+   "truth": "pass",
+   "grade": "tradeoff",
+   "class": "plus-sign",
+   "judged": "fail",
+   "justification": "A signed number is not the bare number the prompt asks for; '+42' is refused as a strict-by-default form."
+  },
+  {
+   "suite": "chat-v1",
+   "probe": "arith",
+   "answer": "42,0",
+   "truth": "pass",
+   "grade": "tradeoff",
+   "class": "decimal-comma-one-digit",
+   "judged": "fail",
+   "justification": "A decimal comma is accepted only with exactly two digits ('58,40'); '42,0' / '58,4' stay refused because a one-digit comma group is ambiguous with a list ('42,0' = 42 and 0)."
+  },
+  {
+   "suite": "chat-v1",
+   "probe": "arith",
+   "answer": "42.00",
+   "truth": "pass",
+   "grade": "clear",
+   "class": "two-decimals"
+  },
+  {
+   "suite": "chat-v1",
+   "probe": "arith",
+   "answer": "41.99",
+   "truth": "fail",
+   "grade": "clear",
+   "class": "near-miss"
+  },
+  {
+   "suite": "chat-v1",
+   "probe": "arith",
+   "answer": "4 2",
+   "truth": "fail",
+   "grade": "clear",
+   "class": "split-digits"
+  },
+  {
+   "suite": "chat-v1",
+   "probe": "arith",
+   "answer": "forty two",
+   "truth": "pass",
+   "grade": "clear",
+   "class": "words-no-hyphen"
+  },
+  {
+   "suite": "chat-v1",
+   "probe": "arith",
+   "answer": "Forty-Two.",
+   "truth": "pass",
+   "grade": "clear",
+   "class": "words-capitalised"
+  },
+  {
+   "suite": "chat-v1",
+   "probe": "arith",
+   "answer": "42 (forty-two)",
+   "truth": "pass",
+   "grade": "clear",
+   "class": "digits+words"
+  },
+  {
+   "suite": "chat-v1",
+   "probe": "arith",
+   "answer": "forty-two (42)",
+   "truth": "pass",
+   "grade": "clear",
+   "class": "words+digits"
+  },
+  {
+   "suite": "chat-v1",
+   "probe": "arith",
+   "answer": "17+25=42",
+   "truth": "pass",
+   "grade": "clear",
+   "class": "arithmetic-nospace"
+  },
+  {
+   "suite": "chat-v1",
+   "probe": "arith",
+   "answer": "The sum is 42",
+   "truth": "pass",
+   "grade": "tradeoff",
+   "class": "lead-in-not-listed",
+   "judged": "pass"
+  },
+  {
+   "suite": "chat-v1",
+   "probe": "arith",
+   "answer": "42\n",
+   "truth": "pass",
+   "grade": "clear",
+   "class": "trailing-newline"
+  },
+  {
+   "suite": "vision-golden-v1",
+   "probe": "08_small_text/invoice",
+   "answer": "#7731",
+   "truth": "pass",
+   "grade": "clear",
+   "class": "hash-prefix"
+  },
+  {
+   "suite": "vision-golden-v1",
+   "probe": "08_small_text/invoice",
+   "answer": "Invoice No. 7731",
+   "truth": "pass",
+   "grade": "clear",
+   "class": "abbrev-period-splits-sentence"
+  },
+  {
+   "suite": "vision-golden-v1",
+   "probe": "08_small_text/invoice",
+   "answer": "No. 7731",
+   "truth": "pass",
+   "grade": "clear",
+   "class": "abbrev-period-splits-sentence"
+  },
+  {
+   "suite": "vision-golden-v1",
+   "probe": "08_small_text/invoice",
+   "answer": "Invoice 7731 total 58.40",
+   "truth": "fail",
+   "grade": "clear",
+   "class": "two-numbers"
+  },
+  {
+   "suite": "vision-golden-v1",
+   "probe": "08_small_text/total",
+   "answer": "58.4",
+   "truth": "pass",
+   "grade": "clear",
+   "class": "one-decimal"
+  },
+  {
+   "suite": "vision-golden-v1",
+   "probe": "08_small_text/total",
+   "answer": "58,4",
+   "truth": "pass",
+   "grade": "tradeoff",
+   "class": "decimal-comma-one-digit",
+   "judged": "fail",
+   "justification": "A decimal comma is accepted only with exactly two digits ('58,40'); '42,0' / '58,4' stay refused because a one-digit comma group is ambiguous with a list ('42,0' = 42 and 0)."
+  },
+  {
+   "suite": "vision-golden-v1",
+   "probe": "08_small_text/total",
+   "answer": "58.40 USD",
+   "truth": "pass",
+   "grade": "clear",
+   "class": "currency-code-suffix"
+  },
+  {
+   "suite": "vision-golden-v1",
+   "probe": "08_small_text/total",
+   "answer": "USD 58.40",
+   "truth": "pass",
+   "grade": "tradeoff",
+   "class": "currency-code-prefix",
+   "judged": "pass"
+  },
+  {
+   "suite": "vision-golden-v1",
+   "probe": "08_small_text/total",
+   "answer": "Total: 58.40",
+   "truth": "pass",
+   "grade": "clear",
+   "class": "lead-in-total"
+  },
+  {
+   "suite": "vision-golden-v1",
+   "probe": "08_small_text/total",
+   "answer": "5840",
+   "truth": "fail",
+   "grade": "clear",
+   "class": "missing-point"
+  },
+  {
+   "suite": "coder-v1",
+   "probe": "http_404",
+   "answer": "404 - Not Found",
+   "truth": "pass",
+   "grade": "clear",
+   "class": "allowed-suffix-dash"
+  },
+  {
+   "suite": "coder-v1",
+   "probe": "http_404",
+   "answer": "404 (Not Found)",
+   "truth": "pass",
+   "grade": "tradeoff",
+   "class": "allowed-suffix-parens",
+   "judged": "pass"
+  },
+  {
+   "suite": "coder-v1",
+   "probe": "http_404",
+   "answer": "Not Found (404)",
+   "truth": "pass",
+   "grade": "tradeoff",
+   "class": "allowed-prefix-parens",
+   "judged": "pass"
+  },
+  {
+   "suite": "coder-v1",
+   "probe": "http_404",
+   "answer": "HTTP 404",
+   "truth": "pass",
+   "grade": "tradeoff",
+   "class": "prefix-not-allowed",
+   "judged": "pass"
+  },
+  {
+   "suite": "coder-v1",
+   "probe": "py_output",
+   "answer": "Output: 10",
+   "truth": "pass",
+   "grade": "clear",
+   "class": "lead-in-output"
+  },
+  {
+   "suite": "coder-v1",
+   "probe": "py_output",
+   "answer": "0+1+2+3+4=10",
+   "truth": "pass",
+   "grade": "clear",
+   "class": "arithmetic"
+  },
+  {
+   "suite": "coder-v1",
+   "probe": "py_output",
+   "answer": "010",
+   "truth": "pass",
+   "grade": "tradeoff",
+   "class": "leading-zero",
+   "judged": "pass"
+  },
+  {
+   "suite": "coder-v1",
+   "probe": "py_output",
+   "answer": "0xA",
+   "truth": "fail",
+   "grade": "clear",
+   "class": "hex-not-printed-output"
+  },
+  {
+   "suite": "coder-v1",
+   "probe": "py_output",
+   "answer": "1e1",
+   "truth": "fail",
+   "grade": "clear",
+   "class": "exponent"
+  },
+  {
+   "suite": "chat-v1",
+   "probe": "capital",
+   "answer": "London. No, Paris.",
+   "truth": "pass",
+   "grade": "clear",
+   "class": "retract-to-right"
+  },
+  {
+   "suite": "chat-v1",
+   "probe": "capital",
+   "answer": "Lyon. Sorry, Paris.",
+   "truth": "pass",
+   "grade": "clear",
+   "class": "retract-to-right"
+  },
+  {
+   "suite": "chat-v1",
+   "probe": "capital",
+   "answer": "Lyon. Correction: Paris.",
+   "truth": "pass",
+   "grade": "clear",
+   "class": "retract-to-right"
+  },
+  {
+   "suite": "chat-v1",
+   "probe": "capital",
+   "answer": "Lyon, no, Paris.",
+   "truth": "pass",
+   "grade": "tradeoff",
+   "class": "retract-comma-clause",
+   "judged": "fail",
+   "justification": "A retraction is recognised only at a clause start after a clause separator (newline . ! ? ; :); 'Lyon, no, Paris.' has no separator, so LYON stays claimed. Widening ',' into a clause separator would let 'Paris, no' style answers retract claims mid-sentence."
+  },
+  {
+   "suite": "chat-v1",
+   "probe": "capital",
+   "answer": "Lyon. I mean Paris.",
+   "truth": "pass",
+   "grade": "tradeoff",
+   "class": "retract-i-mean",
+   "judged": "fail",
+   "justification": "'I mean' / 'Er' are not retraction words; the retraction vocabulary is the fixed list NO WAIT ACTUALLY CORRECTION SORRY OOPS NOPE. A self-correction outside it keeps the first claim, which FAILs the forbidden check."
+  },
+  {
+   "suite": "chat-v1",
+   "probe": "capital",
+   "answer": "Lyon. Er, Paris.",
+   "truth": "pass",
+   "grade": "tradeoff",
+   "class": "retract-er",
+   "judged": "fail",
+   "justification": "As retract-i-mean: 'Er,' is not a retraction word."
+  },
+  {
+   "suite": "chat-v1",
+   "probe": "capital",
+   "answer": "Paris. No, London.",
+   "truth": "fail",
+   "grade": "clear",
+   "class": "retract-to-wrong"
+  },
+  {
+   "suite": "chat-v1",
+   "probe": "capital",
+   "answer": "Paris and London",
+   "truth": "fail",
+   "grade": "clear",
+   "class": "two-answers-and"
+  },
+  {
+   "suite": "chat-v1",
+   "probe": "capital",
+   "answer": "Paris/Lyon",
+   "truth": "fail",
+   "grade": "clear",
+   "class": "two-answers-slash"
+  },
+  {
+   "suite": "chat-v1",
+   "probe": "capital",
+   "answer": "Paris... or was it Lyon?",
+   "truth": "fail",
+   "grade": "clear",
+   "class": "alternative-or"
+  },
+  {
+   "suite": "chat-v1",
+   "probe": "capital",
+   "answer": "Paris isn't Lyon.",
+   "truth": "pass",
+   "grade": "tradeoff",
+   "class": "post-negation-of-other",
+   "judged": "fail",
+   "justification": "\"Paris isn't Lyon\": the post-negation rule reads \"X isn't ...\" as denying X; a sentence that denies a different subject after the right one is refused (strict)."
+  },
+  {
+   "suite": "chat-v1",
+   "probe": "capital",
+   "answer": "Paris, France",
+   "truth": "pass",
+   "grade": "clear",
+   "class": "normal-with-country"
+  },
+  {
+   "suite": "chat-v1",
+   "probe": "capital",
+   "answer": "\uff30\uff41\uff52\uff49\uff53",
+   "truth": "pass",
+   "grade": "clear",
+   "class": "unicode-fullwidth-letters"
+  },
+  {
+   "suite": "chat-v1",
+   "probe": "capital",
+   "answer": "Pa\u200bris",
+   "truth": "pass",
+   "grade": "tradeoff",
+   "class": "unicode-zero-width-space",
+   "judged": "fail",
+   "justification": "A zero-width space inside or after the answer is a non-ASCII format character; the fold turns it into a separator, so 'Pa\\u200bris' is two words and '42\\u200b' is not a bare number. Refused by design (invisible characters are not normalised away)."
+  },
+  {
+   "suite": "vision-golden-v1",
+   "probe": "06_dialog/buttons",
+   "answer": "Cancel, Delete, OK",
+   "truth": "fail",
+   "grade": "clear",
+   "class": "extra-button (prompt: the two labels only)"
+  },
+  {
+   "suite": "vision-golden-v1",
+   "probe": "06_dialog/buttons",
+   "answer": "Delete and Cancel",
+   "truth": "pass",
+   "grade": "clear",
+   "class": "order-free"
+  },
+  {
+   "suite": "vision-golden-v1",
+   "probe": "06_dialog/buttons",
+   "answer": "Neither Cancel nor Delete; Save and Close.",
+   "truth": "fail",
+   "grade": "clear",
+   "class": "neither-nor"
+  },
+  {
+   "suite": "vision-golden-v1",
+   "probe": "06_dialog/buttons",
+   "answer": "Cancel, Delete - no OK button.",
+   "truth": "pass",
+   "grade": "clear",
+   "class": "neg-other-after"
+  },
+  {
+   "suite": "vision-golden-v1",
+   "probe": "03_login_form/screen_type",
+   "answer": "A dashboard (login screen is next).",
+   "truth": "fail",
+   "grade": "clear",
+   "class": "other-claim-mentions-login"
+  },
+  {
+   "suite": "vision-golden-v1",
+   "probe": "03_login_form/screen_type",
+   "answer": "A screen to log in.",
+   "truth": "pass",
+   "grade": "clear",
+   "class": "normal-two-words"
+  },
+  {
+   "suite": "vision-golden-v1",
+   "probe": "03_login_form/screen_type",
+   "answer": "A registration (sign up) screen.",
+   "truth": "fail",
+   "grade": "clear",
+   "class": "sign-up-not-sign-in"
+  },
+  {
+   "suite": "vision-golden-v1",
+   "probe": "07_dark_theme/theme",
+   "answer": "dark (not light)",
+   "truth": "pass",
+   "grade": "clear",
+   "class": "neg-other-parens"
+  },
+  {
+   "suite": "vision-golden-v1",
+   "probe": "07_dark_theme/theme",
+   "answer": "neither dark nor light",
+   "truth": "fail",
+   "grade": "clear",
+   "class": "neither-nor"
+  },
+  {
+   "suite": "vision-golden-v1",
+   "probe": "07_dark_theme/theme",
+   "answer": "dark or light",
+   "truth": "fail",
+   "grade": "clear",
+   "class": "alternative-or"
+  },
+  {
+   "suite": "vision-golden-v1",
+   "probe": "07_dark_theme/theme",
+   "answer": "light? no, dark",
+   "truth": "pass",
+   "grade": "clear",
+   "class": "retract-to-right"
+  },
+  {
+   "suite": "vision-golden-v1",
+   "probe": "05_table/lookup",
+   "answer": "Oslo or Paris",
+   "truth": "fail",
+   "grade": "clear",
+   "class": "alternative-or (no max_words on this probe)"
+  },
+  {
+   "suite": "vision-golden-v1",
+   "probe": "05_table/lookup",
+   "answer": "OSLO, Norway",
+   "truth": "pass",
+   "grade": "clear",
+   "class": "normal-with-country"
+  },
+  {
+   "suite": "chat-v1",
+   "probe": "arith",
+   "answer": "4\uff12",
+   "truth": "pass",
+   "grade": "clear",
+   "class": "unicode-fullwidth-digit-mixed"
+  },
+  {
+   "suite": "chat-v1",
+   "probe": "arith",
+   "answer": "\u0664\u0662",
+   "truth": "pass",
+   "grade": "clear",
+   "class": "unicode-arabic-indic"
+  },
+  {
+   "suite": "chat-v1",
+   "probe": "arith",
+   "answer": "\ud835\udfd2\ud835\udfd0",
+   "truth": "pass",
+   "grade": "clear",
+   "class": "unicode-math-bold-digits"
+  },
+  {
+   "suite": "chat-v1",
+   "probe": "arith",
+   "answer": "\u2074\u00b2",
+   "truth": "pass",
+   "grade": "tradeoff",
+   "class": "unicode-superscript",
+   "judged": "pass"
+  },
+  {
+   "suite": "chat-v1",
+   "probe": "arith",
+   "answer": "\u202e24",
+   "truth": "fail",
+   "grade": "clear",
+   "class": "unicode-rtl-override (renders as 42)"
+  },
+  {
+   "suite": "chat-v1",
+   "probe": "arith",
+   "answer": "42\u200b",
+   "truth": "pass",
+   "grade": "tradeoff",
+   "class": "unicode-trailing-zwsp",
+   "judged": "fail",
+   "justification": "As unicode-zero-width-space."
+  },
+  {
+   "suite": "vision-golden-v1",
+   "probe": "09_color_blocks/colors",
+   "answer": "red green blue yellow",
+   "truth": "fail",
+   "grade": "clear",
+   "class": "ordered-extra-item (three squares)"
+  },
+  {
+   "suite": "vision-golden-v1",
+   "probe": "09_color_blocks/colors",
+   "answer": "red, green, and blue",
+   "truth": "pass",
+   "grade": "clear",
+   "class": "ordered-normal"
+  },
+  {
+   "suite": "vision-golden-v1",
+   "probe": "09_color_blocks/colors",
+   "answer": "red\ngreen\nblue",
+   "truth": "pass",
+   "grade": "clear",
+   "class": "ordered-lines"
+  },
+  {
+   "suite": "vision-golden-v1",
+   "probe": "04_list_view/items",
+   "answer": "apple\nbanana\ncherry\ngrape\nmango",
+   "truth": "fail",
+   "grade": "clear",
+   "class": "ordered-extra-item (hallucinated row)"
+  },
+  {
+   "suite": "vision-golden-v1",
+   "probe": "05_table/transcribe",
+   "answer": "NAME AGE CITY\nANNA 31 PARIS\nBORIS 45 OSLO\nCLARA 27 ROME\nDAVID 50 LIMA",
+   "truth": "fail",
+   "grade": "clear",
+   "class": "ordered-extra-row (hallucinated)"
+  },
+  {
+   "suite": "vision-golden-v1",
+   "probe": "05_table/transcribe",
+   "answer": "NAME AGE CITY\nANNA 31 PARIS\nBORIS 45 OSLO\nCLARA 27 ROME",
+   "truth": "pass",
+   "grade": "clear",
+   "class": "ordered-normal"
+  },
+  {
+   "suite": "vision-golden-v1",
+   "probe": "01_text_large/read",
+   "answer": "orange tiger 42",
+   "truth": "pass",
+   "grade": "clear",
+   "class": "exact-words-lowercase"
+  },
+  {
+   "suite": "vision-golden-v1",
+   "probe": "01_text_large/read",
+   "answer": "ORANGE-TIGER-42",
+   "truth": "pass",
+   "grade": "clear",
+   "class": "exact-words-hyphens"
+  },
+  {
+   "suite": "vision-golden-v1",
+   "probe": "01_text_large/read",
+   "answer": "ORANGE TIGER 42 ORANGE TIGER 42",
+   "truth": "fail",
+   "grade": "clear",
+   "class": "exact-words-duplicated"
+  },
+  {
+   "suite": "vision-golden-v1",
+   "probe": "01_text_large/read",
+   "answer": "0RANGE TIGER 42",
+   "truth": "fail",
+   "grade": "clear",
+   "class": "exact-words-zero-for-O"
+  },
+  {
+   "suite": "vision-golden-v1",
+   "probe": "01_text_large/read",
+   "answer": "ORANGE TIGER FORTY-TWO",
+   "truth": "fail",
+   "grade": "clear",
+   "class": "exact-words-number-as-words (prompt: exactly as written)"
+  },
+  {
+   "suite": "vision-golden-v1",
+   "probe": "01_text_large/read",
+   "answer": "The text reads: ORANGE TIGER 42",
+   "truth": "fail",
+   "grade": "tradeoff",
+   "class": "exact-words-prose-prefix (prompt: only the text)",
+   "judged": "fail"
+  },
+  {
+   "suite": "chat-v1",
+   "probe": "json",
+   "answer": "{\"color\": \"Blue\"}",
+   "truth": "fail",
+   "grade": "clear",
+   "class": "json-value-case"
+  },
+  {
+   "suite": "chat-v1",
+   "probe": "json",
+   "answer": "{\"COLOR\": \"blue\"}",
+   "truth": "fail",
+   "grade": "clear",
+   "class": "json-key-case"
+  },
+  {
+   "suite": "chat-v1",
+   "probe": "json",
+   "answer": "{\"color\": \"blue \"}",
+   "truth": "fail",
+   "grade": "clear",
+   "class": "json-value-trailing-space"
+  },
+  {
+   "suite": "chat-v1",
+   "probe": "json",
+   "answer": "{\"color\": \"blue\", \"color\": \"blue\"}",
+   "truth": "fail",
+   "grade": "clear",
+   "class": "json-duplicate-key-same-value"
+  },
+  {
+   "suite": "chat-v1",
+   "probe": "json",
+   "answer": "{\"color\": \"bl\\u0075e\"}",
+   "truth": "pass",
+   "grade": "clear",
+   "class": "json-escape-in-value"
+  },
+  {
+   "suite": "chat-v1",
+   "probe": "json",
+   "answer": "{\"colo\\u0072\": \"blue\"}",
+   "truth": "pass",
+   "grade": "clear",
+   "class": "json-escape-in-key"
+  },
+  {
+   "suite": "chat-v1",
+   "probe": "json",
+   "answer": "[{\"color\": \"blue\"}]",
+   "truth": "fail",
+   "grade": "clear",
+   "class": "json-wrapped-in-array"
+  },
+  {
+   "suite": "chat-v1",
+   "probe": "json",
+   "answer": "{\"color\": \"blue\",}",
+   "truth": "fail",
+   "grade": "clear",
+   "class": "json-trailing-comma"
+  },
+  {
+   "suite": "chat-v1",
+   "probe": "json",
+   "answer": "{\"color\": \"blue\"}{\"color\": \"blue\"}",
+   "truth": "fail",
+   "grade": "clear",
+   "class": "json-two-documents"
+  },
+  {
+   "suite": "chat-v1",
+   "probe": "json",
+   "answer": "```\n{\"color\": \"blue\"}\n```",
+   "truth": "pass",
+   "grade": "clear",
+   "class": "json-fence-no-lang"
+  },
+  {
+   "suite": "chat-v1",
+   "probe": "json",
+   "answer": "`{\"color\": \"blue\"}`",
+   "truth": "pass",
+   "grade": "tradeoff",
+   "class": "json-inline-backticks",
+   "judged": "fail",
+   "justification": "Only a ``` fence is unwrapped; a single-backtick inline span is not one JSON document."
+  },
+  {
+   "suite": "chat-v1",
+   "probe": "json",
+   "answer": "\ufeff{\"color\": \"blue\"}",
+   "truth": "pass",
+   "grade": "tradeoff",
+   "class": "json-bom",
+   "judged": "fail",
+   "justification": "A byte-order mark is not part of a JSON document (RFC 8259 section 8.1: a parser MAY ignore it; this one does not)."
+  },
+  {
+   "suite": "coder-v1",
+   "probe": "empty_array",
+   "answer": "[ ]",
+   "truth": "pass",
+   "grade": "clear",
+   "class": "json-empty-array-space"
+  },
+  {
+   "suite": "coder-v1",
+   "probe": "empty_array",
+   "answer": "\"[]\"",
+   "truth": "fail",
+   "grade": "clear",
+   "class": "json-string-not-array"
+  },
+  {
+   "suite": "coder-v1",
+   "probe": "empty_array",
+   "answer": "[]\n[]",
+   "truth": "fail",
+   "grade": "clear",
+   "class": "json-two-documents"
+  },
+  {
+   "suite": "coder-v1",
+   "probe": "empty_array",
+   "answer": "`[]`",
+   "truth": "pass",
+   "grade": "tradeoff",
+   "class": "json-inline-backticks",
+   "judged": "fail",
+   "justification": "Only a ``` fence is unwrapped; a single-backtick inline span is not one JSON document."
+  },
+  {
+   "suite": "coder-v1",
+   "probe": "empty_array",
+   "answer": "[].",
+   "truth": "pass",
+   "grade": "tradeoff",
+   "class": "json-trailing-period",
+   "judged": "fail",
+   "justification": "'[].' is not exactly one JSON document."
+  },
+  {
+   "suite": "coder-v1",
+   "probe": "def_add",
+   "answer": "def add(a, b): return a + b",
+   "truth": "pass",
+   "grade": "clear",
+   "class": "code-one-line"
+  },
+  {
+   "suite": "coder-v1",
+   "probe": "def_add",
+   "answer": "def add(x, y):\n    return y + x",
+   "truth": "pass",
+   "grade": "clear",
+   "class": "code-commuted"
+  },
+  {
+   "suite": "coder-v1",
+   "probe": "def_add",
+   "answer": "def add(a, b):\n    result = a + b\n    return result",
+   "truth": "pass",
+   "grade": "clear",
+   "class": "code-assigned-name"
+  },
+  {
+   "suite": "coder-v1",
+   "probe": "def_add",
+   "answer": "def add(a, b):\n    return (a + b)",
+   "truth": "pass",
+   "grade": "clear",
+   "class": "code-parens"
+  },
+  {
+   "suite": "coder-v1",
+   "probe": "def_add",
+   "answer": "def add(a, b):\n    return a +\\\n b",
+   "truth": "pass",
+   "grade": "clear",
+   "class": "code-line-continuation"
+  },
+  {
+   "suite": "coder-v1",
+   "probe": "def_add",
+   "answer": "```py\ndef add(a, b):\n    return a + b\n```",
+   "truth": "pass",
+   "grade": "clear",
+   "class": "code-fence-py"
+  },
+  {
+   "suite": "coder-v1",
+   "probe": "def_add",
+   "answer": "Here is the code:\n```python\ndef add(a, b):\n    return a + b\n```",
+   "truth": "pass",
+   "grade": "clear",
+   "class": "code-prose-outside-fence"
+  },
+  {
+   "suite": "coder-v1",
+   "probe": "def_add",
+   "answer": "def add(a, b):\n    return a + b\n\n# add = lambda a, b: a - b",
+   "truth": "pass",
+   "grade": "clear",
+   "class": "code-comment-not-code"
+  },
+  {
+   "suite": "coder-v1",
+   "probe": "def_add",
+   "answer": "def add(a, b):\n    return a + b\nadd.__code__ = (lambda a, b: a - b).__code__",
+   "truth": "fail",
+   "grade": "clear",
+   "class": "code-attribute-rebinding"
+  },
+  {
+   "suite": "coder-v1",
+   "probe": "def_add",
+   "answer": "def add(a, b):\n    return a + b\nglobals()['add'] = lambda a, b: a - b",
+   "truth": "fail",
+   "grade": "clear",
+   "class": "code-globals-rebinding"
+  },
+  {
+   "suite": "coder-v1",
+   "probe": "def_add",
+   "answer": "def add(a, b):\n    result = a + b\n    result = a - b\n    return result",
+   "truth": "fail",
+   "grade": "clear",
+   "class": "code-reassigned-result"
+  },
+  {
+   "suite": "coder-v1",
+   "probe": "def_add",
+   "answer": "def add(a, b):\n    return a + b\n\ndef add(a, b):\n    return a - b",
+   "truth": "fail",
+   "grade": "clear",
+   "class": "code-redefined"
+  },
+  {
+   "suite": "coder-v1",
+   "probe": "def_add",
+   "answer": "def \u0430dd(a, b):\n    return a + b",
+   "truth": "fail",
+   "grade": "clear",
+   "class": "code-cyrillic-name"
+  },
+  {
+   "suite": "coder-v1",
+   "probe": "def_add",
+   "answer": "async def add(a, b):\n    return a + b",
+   "truth": "fail",
+   "grade": "clear",
+   "class": "code-async"
+  },
+  {
+   "suite": "coder-v1",
+   "probe": "def_add",
+   "answer": "def add(a, b):\n    exec('return a - b')",
+   "truth": "fail",
+   "grade": "clear",
+   "class": "code-no-return"
+  },
+  {
+   "suite": "coder-v1",
+   "probe": "def_add",
+   "answer": "def add(a, b):\n    return a + b\n\ndel add",
+   "truth": "fail",
+   "grade": "clear",
+   "class": "code-deleted"
+  },
+  {
+   "suite": "coder-v1",
+   "probe": "def_add",
+   "answer": "def add(a, b):\n    return sum([a, b])",
+   "truth": "pass",
+   "grade": "tradeoff",
+   "class": "code-sum-builtin (documented class)",
+   "judged": "fail",
+   "justification": "python_function_sum accepts only 'return p1 + p2' (or one assigned sum); since finding 4 the code may not call anything at all, so sum([a, b]) is refused."
+  },
+  {
+   "suite": "coder-v1",
+   "probe": "def_add",
+   "answer": "def add(a, b):\n    return a.__add__(b)",
+   "truth": "pass",
+   "grade": "tradeoff",
+   "class": "code-dunder (documented class)",
+   "judged": "fail",
+   "justification": "As code-sum-builtin: a call (a.__add__(b)) is refused."
+  },
+  {
+   "suite": "coder-v1",
+   "probe": "def_add",
+   "answer": "import functools\n@functools.cache\ndef add(a, b):\n    return a + b",
+   "truth": "pass",
+   "grade": "tradeoff",
+   "class": "code-decorated",
+   "judged": "fail",
+   "justification": "A decorator can replace the function; decorated definitions are refused."
+  },
+  {
+   "suite": "coder-v1",
+   "probe": "def_add",
+   "answer": "def add(a, b):\n    return a - -b",
+   "truth": "pass",
+   "grade": "tradeoff",
+   "class": "code-double-negative",
+   "judged": "fail",
+   "justification": "Only the literal sum of the two parameters is accepted; 'a - -b' is refused (no algebra on the AST)."
+  },
+  {
+   "suite": "decide-v1",
+   "probe": "invoice_team",
+   "answer": "billing\n",
+   "truth": "pass",
+   "grade": "clear",
+   "class": "choice-trailing-newline"
+  },
+  {
+   "suite": "decide-v1",
+   "probe": "invoice_team",
+   "answer": "Billing",
+   "truth": "fail",
+   "grade": "clear",
+   "class": "choice-case"
+  },
+  {
+   "suite": "decide-v1",
+   "probe": "invoice_team",
+   "answer": "billing legal",
+   "truth": "fail",
+   "grade": "clear",
+   "class": "choice-two"
+  }
+ ]
+}

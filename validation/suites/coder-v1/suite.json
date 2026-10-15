@@ -7,7 +7,7 @@
  "determinism_repeat": ["py_output"],
  "cases": [
   {"id": "py_output", "prompt": "What does this Python code print?\n\nprint(sum(range(5)))\n\nAnswer with only the printed output.", "checks": {"number_equals": 10}},
-  {"id": "http_404", "prompt": "What is the HTTP status code that means 'Not Found'? Answer with only the number.", "checks": {"number_equals": 404, "number_allow": ["NOT FOUND"]}},
+  {"id": "http_404", "prompt": "What is the HTTP status code that means 'Not Found'? Answer with only the number.", "checks": {"number_equals": 404, "number_allow": ["NOT FOUND", "HTTP"]}},
   {"id": "def_add", "prompt": "Write a Python function named add that takes two arguments and returns their sum. Output only the code.", "checks": {"python_function_sum": "add"}, "code_language": "python"},
   {"id": "empty_array", "prompt": "In JSON, what literal represents an empty array? Answer with only the literal.", "checks": {"json_equals": []}}
  ],
@@ -38,6 +38,18 @@
   {"probe": "def_add", "answer": "def add(x, y):\n    s = \"# not a comment\"\n    return x + y", "expect": "pass"},
   {"probe": "empty_array", "answer": "[[]]", "expect": "fail"},
   {"probe": "empty_array", "answer": "Not [], it is null.", "expect": "fail"},
-  {"probe": "empty_array", "answer": "[ ]", "expect": "pass"}
+  {"probe": "empty_array", "answer": "[ ]", "expect": "pass"},
+  {"probe": "py_output", "answer": "10 I think", "expect": "fail"},
+  {"probe": "py_output", "answer": "10 squared", "expect": "fail"},
+  {"probe": "http_404", "answer": "HTTP 404", "expect": "pass"},
+  {"probe": "http_404", "answer": "404 (Not Found)", "expect": "pass"},
+  {"probe": "http_404", "answer": "404 in hex", "expect": "fail"},
+  {"probe": "def_add", "answer": "def add(a, b):\n    return a + b\nadd.__code__ = (lambda a, b: a - b).__code__", "expect": "fail"},
+  {"probe": "def_add", "answer": "def add(a, b):\n    return a + b\nglobals()['add'] = lambda a, b: a - b", "expect": "fail"},
+  {"probe": "def_add", "answer": "def add(a, b):\n    return a + b\nprint(add(2, 3))", "expect": "fail"},
+  {"probe": "def_add", "answer": "\"\"\"Adds.\"\"\"\nimport math\n\ndef add(a, b):\n    \"\"\"Return the sum.\"\"\"\n    return a + b", "expect": "pass"},
+  {"probe": "def_add", "answer": "def add(a, b):\n    return a + b\nmatch 0:\n    case add:\n        pass", "expect": "fail"},
+  {"probe": "def_add", "answer": "def add(a, b):\n    globals().update(add=None)\n    return a + b", "expect": "fail"},
+  {"probe": "def_add", "answer": "def add(a, b):\n    add.__defaults__ = (0, 0)\n    return a + b", "expect": "fail"}
  ]
 }

@@ -89,8 +89,53 @@ j2 json-duplicate-keys '        return json.loads(t, object_pairs_hook=_no_dup_p
 j2 exact-text-substring '            if got != val:
                 reasons.append("exact_text' '            if val not in got:
                 reasons.append("exact_text'
-j2 number-modifiers-ignored '        if v is not None and all(n.upper() not in _NUMBER_BLOCK and _num_value(n) is None for n in nouns):' '        if v is not None:'
+j2 number-modifiers-ignored '    v = _num_value(t)
+    if v is not None:
+        return v, None
+    m = re.match(r"^(.+?)' '    v = _num_value(t.split()[0] if t.split() else t)
+    if v is not None:
+        return v, None
+    m = re.match(r"^(.+?)'
 j2 alternatives-allowed '            elif "OR" in ws:' '            elif False:'
+
+fi
+if want judge3; then
+echo "== review-3 judge mutants (third 2026-10-15 review findings 1-5; each must turn tests/test_validation_judge_adversarial_r3.sh RED)"
+j3() { # j3 <name> <old> <new>
+  local m="${TEST_TMP}/j3.$1.py"
+  mutate "${J}" "${m}" "$2" "$3"
+  caught "judge3/$1" "$(run_suite JUDGE_UNDER_TEST="${m}" bash "${T}/test_validation_judge_adversarial_r3.sh")" nonzero
+}
+j3 lead-in-trailing-words '            v = _num_value(t[len(lead):].strip(" :"))' '            v = _num_value((t[len(lead):].strip(" :").split() or [""])[0])'
+j3 retraction-word-negates '        if i in marks:
+            return False' '        if False:
+            return False'
+j3 abbreviation-period-splits '        if len(a) > 1 and a.endswith(".") and a[-2].isalnum():' '        if False:'
+j3 aside-counts-as-claim '    return any(not neg and depth[off] == 0 for' '    return any(not neg for'
+j3 extra-label-ignored '    if extra:
+        return "words other than the labels' '    if False:
+        return "words other than the labels'
+j3 denial-clause-unbounded '        if ws[0] in _DENIAL_WORDS and len(rest) <= 1 and' '        if ws[0] in _DENIAL_WORDS and len(rest) <= 9 and'
+j3 allow-phrase-as-loose-words '        hit = next((x for x in want if x and words[i:i + len(x)] == x), None)
+        if hit is None:
+            out.append(words[i])' '        hit = next(([words[i]] for x in want if words[i] in x), None)
+        if hit is None:
+            out.append(words[i])'
+j3 module-statements-allowed '    for i, st in enumerate(tree.body):
+        if st is f or' '    for i, st in enumerate([]):
+        if st is f or'
+j3 calls-allowed '        if isinstance(n, ast.Call):
+            return "the code calls' '        if False:
+            return "the code calls'
+j3 attribute-store-allowed '        if isinstance(n, (ast.Attribute, ast.Subscript)) and isinstance(n.ctx, (ast.Store, ast.Del)):' '        if False:'
+
+fi
+if want suites; then
+echo "== suite-structure mutant (third 2026-10-15 review finding 13; must turn tests/test_validation_suites.sh RED)"
+m="${TEST_TMP}/su.judge.py"
+mutate "${J}" "${m}" '                "label_set", "words_allow")' '                "label_set")'
+caught "suites/check-unknown-to-judge" "$(run_suite JUDGE_UNDER_TEST="${m}" bash "${T}/test_validation_suites.sh")" nonzero
+assert_contains "$(cat "${TEST_TMP}/suite.out")" "unknown check words_allow" "suites/check-unknown-to-judge: the structure check names the check the judge lacks"
 
 fi
 if want record; then
