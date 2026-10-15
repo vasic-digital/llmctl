@@ -460,7 +460,13 @@ hk_run_engine() {
   [[ "${1:-}" == "--" ]] || { echo "usage: svc_hook.sh run-engine <instance> -- <cmd...>" >&2; exit 2; }
   shift
   [[ "$#" -gt 0 ]] || { echo "svc_hook.sh run-engine: no command" >&2; exit 2; }
-  hk_validated "${inst}" || exit 77     # launchd parity of the systemd ExecCondition (validation gate)
+  # launchd parity of the systemd ExecCondition (validation gate). Exit 0 - "successful" - on a refusal: the agent's KeepAlive
+  # restarts only an UNSUCCESSFUL exit (SuccessfulExit=false), so a refused start is not respawned every ThrottleInterval
+  # forever (finding 11 of the 2026-10-15 review); an engine crash (non-zero, signal) is still restarted.
+  if ! hk_validated "${inst}"; then
+    _hk_log "${inst}: launchd start refused by the validation gate (not respawned: exit 0 under KeepAlive SuccessfulExit=false)"
+    exit 0
+  fi
   hk_prestart "${inst}" || exit 1
   hk_register "${inst}" "$$"
   hk_engine_libpath "$1"

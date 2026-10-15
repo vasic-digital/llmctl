@@ -150,7 +150,8 @@ rc=0; bash "${HK}" validated small >/dev/null 2>&1 || rc=$?
 assert_eq 77 "${rc}" "enforced: 'validated' refuses a profile without a record (exit 77)"
 write_env small llama llm "$(gw_free_port)"
 rc=0; out="$(bash "${HK}" run-engine small -- bash -c 'echo engine-ran' 2>/dev/null)" || rc=$?
-assert_eq "77 " "${rc} ${out}" "enforced: run-engine refuses before exec (exit 77)"
+# exit 0 (not 77) since review 2026-10-15 finding 11: the agent's KeepAlive restarts only an unsuccessful exit
+assert_eq "0 " "${rc} ${out}" "enforced: run-engine refuses before exec (the engine never ran; exit 0: not respawned)"
 write_env small llama llm "${P}"
 printf 'validation-gate=banana\n' > "${MARKER}"
 rc=0; bash "${HK}" validated small >/dev/null 2>&1 || rc=$?

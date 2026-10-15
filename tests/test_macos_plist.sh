@@ -73,7 +73,12 @@ sed -i '/^LLMCTL_QUARANTINE_UNTIL=/d' "${LLMCTL_SERVICES_DIR}/small.env"
 ( source "${LLMCTL_ROOT}/lib/common.sh"; source "${LLMCTL_ROOT}/lib/service_macos.sh"; svc_install ) >/dev/null 2>&1
 assert_file_contains "${LLMCTL_STATE_DIR}/unit-enforcement" "validation-gate=1" "launchd svc_install wrote the gate marker into the overridden state dir"
 echo OLD-KEY-CONTENT > "${KEYF}"
+: > "${LLMCTL_LOG_DIR}/svc_hook.log"
 rc=0; env -i HOME="${W}/home" PATH=/usr/bin:/bin "${envargs[@]}" "${args[@]}" >/dev/null 2>&1 || rc=$?
-assert_eq 77 "${rc}" "launchd: an unvalidated profile is refused by the run-engine wrapper (exit 77)"
+# exit 0, not 77 (review 2026-10-15 finding 11): KeepAlive {SuccessfulExit: false} restarts only an UNSUCCESSFUL exit, so a refused
+# start is not respawned every ThrottleInterval forever; the log line proves it was the refusal, not the engine
+assert_eq 0 "${rc}" "launchd: an unvalidated profile is refused by the run-engine wrapper (exit 0: not respawned)"
+assert_file_contains "${LLMCTL_LOG_DIR}/svc_hook.log" "refused by the validation gate" "launchd: ...the refusal is logged"
 assert_eq "OLD-KEY-CONTENT" "$(cat "${KEYF}")" "launchd: ...before the key is rotated"
+assert_eq "{'SuccessfulExit': False}" "$(python3 -I -c 'import plistlib,sys; print(plistlib.load(open(sys.argv[1],"rb"))["KeepAlive"])' "${ENG}")" "launchd: KeepAlive restarts only an unsuccessful exit (SuccessfulExit=false)"
 test_finish

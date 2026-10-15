@@ -143,7 +143,10 @@ PLISTARGS
     _svc_plist_env_dict "$(portreg_bin 2>/dev/null || true)"
     cat <<PLISTTAIL
   <key>KeepAlive</key>
-  <true/>
+  <dict>
+    <key>SuccessfulExit</key>
+    <false/>
+  </dict>
   <key>ThrottleInterval</key>
   <integer>60</integer>
   <key>RunAtLoad</key>
