@@ -25,6 +25,12 @@ _sched_wait_ready() { printf 'WAIT port=%s path=%s\n' "$1" "${2:-}" >> "${REC}";
 svc_start() { return 0; }
 svc_enable() { return 0; }
 svc_stop() { return 0; }
+# every service-manager verb is stubbed (review 2026-10-15 finding 11: the start/enable paths verify a start with
+# svc_started_ok and clean up with svc_disable - unstubbed, they reached the HOST's real systemd with real unit names)
+svc_started_ok() { return 0; }
+svc_disable() { return 0; }
+svc_restart() { return 0; }
+svc_is_failed() { return 1; }
 svc_main_pid() { printf '%s\n' "$$"; }
 svc_is_active() { return 1; }
 sched_build_launch() { SCHED_EXEC="/x/onnx_server.py"; SCHED_ARGS=(--port "$3"); return 0; }
@@ -58,5 +64,4 @@ echo "== site 4: enable wait =="
 : > "${REC}"; _enable_impl "${PROFILE}" >/dev/null 2>&1 || true
 assert_contains "$(cat "${REC}")" "path=${EXPECT}" "enable waits on the engine's health path"
 
-[[ "${TEST_FAILS}" -eq 0 ]] || { echo "FAILED: ${TEST_FAILS}" >&2; exit 1; }
-echo "OK"
+test_finish   # also fails the suite when the harness guard refused a real-unit systemctl call

@@ -250,7 +250,12 @@ assert_contains "$(cat "${TEST_TMP}/last.out")" "already has a fresh passing rec
 rm -f "${LLMCTL_STATE_DIR}/validation/vision.json"
 sed -i "s/^port=.*/port=${U2##*:}/" "${LLMCTL_RUNTIME_DIR}/vision.run"
 cp "${LLMCTL_RUNTIME_DIR}/vision.run" "${TEST_TMP}/vision.run.bak"
-assert_eq 1 "$(run_rc env LLMCTL_VALIDATE_ON_START=1 "${LLMCTL}" validate-after-start vision)" "start hook: wrong answer after start -> 1"
+# the stop goes to a RECORDING service manager (review 2026-10-15 finding 11: this step used to run the real
+# `systemctl --user stop llmctl-llama@vision.service` on the host)
+REC_ENV=(LLMCTL_SERVICE_BACKEND_FILE="${LLMCTL_ROOT}/tests/fixtures/svc_backend_recording.sh" GW_CALLS="${TEST_TMP}/svc.calls" GW_ACTIVE_DIR="${TEST_TMP}/svc.active")
+mkdir -p "${TEST_TMP}/svc.active"; : > "${TEST_TMP}/svc.active/vision"; : > "${TEST_TMP}/svc.calls"
+assert_eq 1 "$(run_rc env "${REC_ENV[@]}" LLMCTL_VALIDATE_ON_START=1 "${LLMCTL}" validate-after-start vision)" "start hook: wrong answer after start -> 1"
+assert_file_contains "${TEST_TMP}/svc.calls" "svc_stop vision" "start hook: the stop went through the (recording) service manager"
 assert_contains "$(cat "${TEST_TMP}/last.out")" "gave WRONG answers" "start hook names the wrong-answer verdict"
 # the gate is enforced (docs/validation.md "Enforcement (strict by default)"): a WRONG answer STOPS the profile through the normal stop path
 assert_contains "$(cat "${TEST_TMP}/last.out")" "stopping it through the normal stop path" "start hook says the profile is stopped"

@@ -114,6 +114,17 @@ test_setup_env() {
   # (lib/common.sh enforcement_installed). tests/test_enforcement_marker.sh removes it to test the pre-gate units.
   printf 'validation-gate=1\ninstalled=test-harness\n' > "${LLMCTL_STATE_DIR}/unit-enforcement"
   chmod 600 "${LLMCTL_STATE_DIR}/unit-enforcement"
+  # Real-unit guard (review 2026-10-15 finding 11): a test must never stop/disable/restart the host's REAL llmctl units
+  # (live operator services). tests/fixtures/guard/systemctl goes first on PATH; a refused call fails the suite in
+  # test_finish. The real binary is remembered once (a nested suite keeps its parent's).
+  if [[ -z "${LLMCTL_TEST_REAL_SYSTEMCTL:-}" ]]; then
+    LLMCTL_TEST_REAL_SYSTEMCTL="$(command -v systemctl 2>/dev/null || true)"
+    export LLMCTL_TEST_REAL_SYSTEMCTL
+  fi
+  export LLMCTL_TEST_GUARD_LOG="${TEST_TMP}/systemctl-guard.log"
+  if [[ -n "${LLMCTL_TEST_REAL_SYSTEMCTL}" ]]; then   # no systemctl on this host: nothing to guard, nothing shadowed
+    case ":${PATH}:" in *":${TESTS_DIR}/fixtures/guard:"*) ;; *) export PATH="${TESTS_DIR}/fixtures/guard:${PATH}" ;; esac
+  fi
 }
 
 test_teardown_env() {
@@ -268,6 +279,11 @@ llmctld_bootstrap() {
 
 # Finish a test file: exit non-zero when any assertion failed.
 test_finish() {
+  if [[ -n "${LLMCTL_TEST_GUARD_LOG:-}" && -s "${LLMCTL_TEST_GUARD_LOG}" ]]; then
+    printf '  FAIL: the test reached the REAL service manager with a real llmctl unit name (refused by the harness guard):\n' >&2
+    sed 's/^/    /' "${LLMCTL_TEST_GUARD_LOG}" >&2
+    TEST_FAILS=$((TEST_FAILS+1))
+  fi
   test_teardown_env
   if [[ "${TEST_FAILS}" -gt 0 ]]; then
     printf 'RESULT: FAIL (%d assertion failure(s))\n' "${TEST_FAILS}" >&2

@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# tests/fixtures/guard/systemctl - test-harness guard (tests/helpers.sh puts it first on PATH; review 2026-10-15
+# finding 11). The test suite runs on hosts that serve real llmctl units (an operator's live decision engine), and a
+# test that reaches the real service manager with a REAL unit name could stop, disable or restart it. Mutating verbs on
+# llmctl's real unit names are REFUSED (exit 1) and logged to $LLMCTL_TEST_GUARD_LOG, which test_finish turns into a
+# failure; everything else (reads, a test's own transient llmctl-test-* units) goes to the real systemctl.
+real="${LLMCTL_TEST_REAL_SYSTEMCTL:-}"
+verb="" hit=""
+for a in "$@"; do
+  case "${a}" in
+    -*) ;;
+    *) if [[ -z "${verb}" ]]; then verb="${a}"; else
+         case "${a}" in
+           llmctl-llama@*|llmctl-onnx@*|llmctl-colibri@*|llmctl-decide-gateway*|llmctl.slice|llmctl-tenant.slice) hit="${a}" ;;
+         esac
+       fi ;;
+  esac
+done
+case "${verb}" in
+  start|stop|restart|reload|enable|disable|kill|mask|unmask|set-property|edit|link|revert|preset|try-restart|\
+  reload-or-restart|try-reload-or-restart|reenable|freeze|thaw|clean|reset-failed)
+    if [[ -n "${hit}" ]]; then
+      printf 'systemctl %s\n' "$*" >> "${LLMCTL_TEST_GUARD_LOG:-/dev/null}" 2>/dev/null || true
+      printf 'test-harness guard: refused "systemctl %s" (a real llmctl unit name; tests must use a fake backend)\n' "$*" >&2
+      exit 1
+    fi ;;
+esac
+[[ -n "${real}" && -x "${real}" ]] || { printf 'test-harness guard: no real systemctl\n' >&2; exit 1; }
+exec "${real}" "$@"
