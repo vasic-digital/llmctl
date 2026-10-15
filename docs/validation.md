@@ -156,7 +156,11 @@ Sampling is deterministic (temperature 0, fixed seed, top_k 1, no prompt cache).
 finding 7 - every one has a canned FAIL control in the suites, so the self-test proves it before every real run):
 
 Rules of 2026-10-15 (review finding 4: 42 of 77 adversarial answers were judged wrongly; the reviewer's table is
-`tests/fixtures/validation/adversarial_answers.json`, 84 rows, judged by `tests/test_validation_judge_adversarial.sh` - 0 wrong verdicts):
+`tests/fixtures/validation/adversarial_answers.json`, 84 rows, judged by `tests/test_validation_judge_adversarial.sh` - 0 wrong verdicts), tightened
+by the third review of that day (findings 1-5: of 144 NEW adversarial answers 30 clearly wrong ones PASSED and 4 clearly right ones FAILED; the table
+is `tests/fixtures/validation/adversarial_answers_r3.json`, judged by `tests/test_validation_judge_adversarial_r3.sh` - 0 clear false PASS, 0 clear
+false FAIL, every refused right answer listed under "Known trade-offs" below). **Every rule is a positive allow-list of what may stand in an
+answer, never a list of blocked words (Constitution 11.4.250).**
 
 * **Unicode is folded before any case mapping.** NFKC per character for fullwidth ASCII, every Unicode decimal digit to its ASCII digit (`٣` is 3),
   typographic apostrophes to `'`, and every OTHER non-ASCII letter becomes a separator - `str.upper()` used to turn the dotless `Parıs` and the
@@ -168,19 +172,43 @@ Rules of 2026-10-15 (review finding 4: 42 of 77 adversarial answers were judged 
   (`login-less`); or a later clause that RETRACTS (`Paris? No, Lyon.`, `Three. Wait - four.`, `Actually, ...`: `no` / `wait` / `actually` /
   `sorry` ... followed by `,` `.` `!` `:` `;` or `-`). `No problem. ORANGE TIGER 42` still claims the text (the retraction comes before it);
   `OSLO (not PARIS)` and `Paris, not London.` do not claim the second city. `ordered` FAILs when any occurrence is negated (`Not red, green,
-  blue.`).
+  blue.`). **The word that opens a retraction clause retracts, it does not negate** (review 3, finding 5): in `London. No, Paris.` and
+  `light? no, dark` the `No` withdraws the first answer and the correction after it IS claimed (it used to be read as `no Paris` and FAILed a
+  right answer); `Paris. No, London.` still FAILs (London is claimed). Only a retraction word at the START of a clause after a separator counts:
+  `Lyon, no, Paris.` (`,` is not a clause separator) keeps LYON claimed - see the trade-offs.
+* **A parenthetical aside is not the claim** (review 3, finding 3) for `contains_any`: `A dashboard (login screen is next).` does not claim a
+  login screen; an answer that is one aside as a whole (`(Dark)`) is read without its brackets. The screen-type probe additionally `forbid`s the
+  other screen types (`DASHBOARD`, `REGISTRATION`, `SIGN UP`, `SETTINGS`, `HOME SCREEN` / `HOME PAGE`, `CHECKOUT`; negation-aware as always).
 * **Short answers.** `max_words: N` (the "answer with one word" probes): more than N words, or naming alternatives (`or`), FAILs - `Paris or Rome`,
   `The capital is Lyon (Paris is the largest city).`
 * **Only the number.** Every `number_equals` prompt asks for the number only, so the answer must BE a number: every sentence must be `N`
-  (`42`, `42.0`, `58,40`, `$58.40`, `forty-two`, `Three`, `**3**`, a fenced `3`), `N (N')` with the same value (`3 (three)`), `<arithmetic> = N`
-  (`17 + 25 = 42`), `<lead-in> N [up to 4 plain nouns]` (`There are three red circles`, `The answer is 42`) or `N <nouns>`, and all sentences
-  state the same value. Not a stated number: `Not 3`, `There are not 3`, `More than 3`, `At least 3`, `3 or more`, `About 3`, `Maybe 3?`, `3rd`,
-  `3%`, `3/4`, `4.2e1`, `7,731`, `10.000` (three fraction digits: an ambiguous thousands separator), `.42`, `Three. No wait - four.`, `3. 4.`. A
-  suite may declare words that may stand next to the number (`number_allow`: `NOT FOUND` for HTTP 404, `INV` / `INVOICE NO` for the invoice).
-  **Trade-off, stated plainly:** a right number wrapped in other prose (`The answer is 42, not 41.`) FAILs - the prompts ask for the number only.
+  (`42`, `42.0`, `58,40`, `$58.40`, `forty-two`, `Three`, `**3**`, a fenced `3`, `(404)`), `N (N')` with the same value (`3 (three)`) or with an
+  allowed word (`404 (Not Found)`), `<arithmetic> = N` (`17 + 25 = 42`) or `<fixed lead-in> N` (`The answer is 42`, `There are three`, `I count 3`,
+  `The sum is 42`; the lead-ins are a fixed list in `lib/validate_judge.py` `_LEAD_INS`), and all sentences state the same value. **Nothing else
+  may stand next to N except the probe's OWN declared words** (`number_allow`, removed as whole words at the start or end of a sentence): `RED
+  CIRCLES` / `CIRCLES` for the count of red circles (`There are 3 red circles` PASSES), `BLUE SQUARES` / `SQUARES`, `ITEMS` / `FRUITS` for the list
+  count, `USD` / `DOLLARS` for the total, `NOT FOUND` / `HTTP` for HTTP 404, `INVOICE NO` / `INVOICE` / `NO` / `INV` / `#` / `NUMBER` for the
+  invoice. The open `N <any 1-4 words>` form of 2026-10-15 is GONE (review 3, finding 1): `42 thousand`, `42 hundred`, `42 squared`, `42 doubled`,
+  `42 and a half`, `The answer is 42 in hex`, `3 pairs`, `3 million red circles`, `42 I think`, `42 hopefully`, `3 red circles presumably`, `I
+  count 3 I think` name no allowed word and FAIL. A `number_allow` entry ending in `.` declares an abbreviation (`NO.`, `INVOICE NO.`, `INV.`):
+  its period is not a sentence end, so `Invoice No. 7731` and `No. 7731` PASS (they FAILed: the period split the answer into `No` and `7731`),
+  while the period after any other word still ends a sentence (`I count 3 red circles. 4.` states two numbers and FAILs). Not a stated number
+  either: `Not 3`, `There are not 3`, `More than 3`, `At least 3`, `3 or more`, `About 3`, `Maybe 3?`, `3rd`, `3%`, `3/4`, `4.2e1`, `7,731`,
+  `10.000` (three fraction digits: an ambiguous thousands separator), `.42`, `Three. No wait - four.`, `3. 4.`. **Trade-off, stated plainly:**
+  a right number wrapped in other prose (`The answer is 42, not 41.`, `42 kg`, `I see 3 red circles in the image`) FAILs - the prompts ask for the
+  number only.
 * **Exact answers.** `exact_text` (the echo probe): the answer, outside one optional fence / quote pair and one trailing `.`, with whitespace
   collapsed, must equal the value case- and punctuation-exactly (`ZX-4417-B`, `zx_4417` FAIL). `exact_words` (the transcription of a known text):
-  the normalised words must be exactly the expected ones, in order (`TIGER ORANGE 42`, `ORANGE TIGER 42 ZEBRA` FAIL).
+  the normalised words must be exactly the expected ones, in order (`TIGER ORANGE 42`, `ORANGE TIGER 42 ZEBRA` FAIL). Since review 3 (finding 2)
+  the list, table and colour probes use it too - `ordered` ignored items that are NOT in its list, so `red green blue yellow`, a hallucinated fifth
+  list item and a hallucinated table row PASSED. A probe may name its own framing PHRASES in `words_allow` (removed only as a whole, contiguous
+  phrase): the colour probe allows `AND`, `FROM LEFT TO RIGHT` and `HERE S THE BREAKDOWN OF THE COLORS` (the latter verbatim from a recorded real
+  answer), so `red, green, and blue` PASSES while `From right to left: red, green, blue` FAILs. A `words_allow` entry may not contain an expected
+  word or a negation word (suite defect). `ordered` remains for suites that want "these in this order, other text allowed".
+* **Exact label sets.** `label_set` (review 3, finding 3; the dialog-buttons probe, which asks for "the two labels only"): the answer must name
+  EXACTLY the listed labels, each once, in any order, and nothing else but the probe's `words_allow` (`AND`, `BUTTON`, `BUTTONS`). `Cancel, Delete,
+  OK` (a third label) and `Neither Cancel nor Delete; Save and Close.` FAIL; `Delete and Cancel` PASSES. One clause that DENIES a single other label
+  is a remark, not a label: `Cancel, Delete - no OK button.` PASSES, `Cancel, Delete, not OK but Save` FAILs (more than one word after the denial).
 * **JSON as a document.** `json_equals`: the whole answer (one optional ```` ```json ```` fence) must be exactly ONE JSON document equal to the value -
   type-exact (`1` is not `true`, `0` is not `false`, `"1"` is not `1`; `1.0` is `1`), no extra key, no duplicate key, no trailing text (`{...} -- no
   wait: {...}`), no NaN; a Python dict is not JSON. Also used for the empty-array literal (`[[]]` and `Not [], it is null.` FAIL, `[ ]` PASSES).
@@ -189,7 +217,21 @@ Rules of 2026-10-15 (review finding 4: 42 of 77 adversarial answers were judged 
   exactly one top-level `def add` of two positional parameters whose only `return` is its last statement and returns `p1 + p2` (directly or
   through one assigned name), with no control flow or nested definition, no re-bound parameter and no other binding of `add`. A docstring or
   string literal saying `return a + b`, a dead branch, `return a + b + 1`, the sum in another function and a later `add = lambda ...` FAIL; a
-  comment is not code. **Trade-off:** a correct `return operator.add(a, b)` FAILs.
+  comment is not code. Since review 3 (finding 4): the module may hold ONLY the def, imports and a leading docstring, nothing anywhere may CALL
+  anything, and nothing may store through an attribute or a subscript - `add.__code__ = (lambda a, b: a - b).__code__`, `globals()['add'] = ...`,
+  `match 0: case add: ...`, `globals().update(add=None)` inside the body and a module-level `print(add(2, 3))` FAIL. **Trade-off:** a correct
+  `return operator.add(a, b)`, `return sum([a, b])` or `return a.__add__(b)` FAILs (a call), as does a usage example below the function.
+* **Known trade-offs (review 3, re-justified).** Right or debatable answers the rules knowingly refuse, each pinned in
+  `adversarial_answers_r3.json` with its justification so a changed verdict is noticed: `42 kg` (an undeclared word next to N); `+42` (a signed
+  number); `42,0` / `58,4` (a one-digit decimal comma is ambiguous with a list); `Lyon, no, Paris.` (a retraction needs a clause separator);
+  `Lyon. I mean Paris.` / `Lyon. Er, Paris.` (not retraction words); `Paris isn't Lyon.` (the post-negation rule reads `X isn't ...` as denying
+  the word before it); `Pa\u200bris` / `42\u200b` (an invisible character is not normalised away); `` `{"color": "blue"}` `` / `` `[]` ``
+  (only a ``` fence is unwrapped); a BOM before JSON; `[].`; `sum([a, b])`, `a.__add__(b)` (calls), a decorated `add`, `a - -b` (no algebra on the
+  AST). Four trade-offs of the round-2 table are resolved by the probe's own allow-lists instead: `USD 58.40`, `404 (Not Found)`, `Not Found
+  (404)` and `HTTP 404` now PASS.
+* **The suites changed, so their hashes changed.** The review-3 rules are expressed in the suite files (`number_allow`, `exact_words`,
+  `words_allow`, `label_set`, `forbidden`, new judge controls), so every suite content hash changed: every existing validation record is no longer
+  fresh and every model must be validated again (`llmctl validate <profile>`) before `require-validated` accepts it.
 * **No vacuous check.** Empty or unknown checks (`{}`, `contains_all: []`, an uncompilable regex, an item without letters or digits), a probe
   without a prompt, or a probe without at least one canned PASS **and** one canned FAIL judge control are a **suite defect**: the run is
   UNDETERMINED before any request and `selftest` exits 1.
@@ -249,11 +291,11 @@ an enabled unit - only with a fresh, signed PASS record for what would run. Othe
 
 | Path | What happens |
 |---|---|
-| `start`, `switch`, `auto` (all through `_sched_start_impl`) | started in **QUARANTINE**: `--host 127.0.0.1` on a private ephemeral port, no registry row, `quarantine=1` in the reservation, `LLMCTL_QUARANTINE_UNTIL` in the env record; `validate_after_start` validates it; PASS -> `sched_publish` stops it and starts it published; FAIL/UNDETERMINED -> stopped, exit non-zero. A `switch` whose target fails brings the previous set back through the same gate |
+| `start`, `switch`, `auto` (all through `_sched_start_impl`) | started in **QUARANTINE**: `--host 127.0.0.1` on a private ephemeral port, no registry row, `quarantine=1` in the reservation, `LLMCTL_QUARANTINE_UNTIL` and `LLMCTL_QUARANTINE_VALIDATOR` (the validating llmctl process: pid and start time) in the env record; `validate_after_start` validates it; PASS -> `sched_publish` stops it and starts it published; FAIL/UNDETERMINED -> stopped, exit non-zero. **Every stop of a quarantined instance puts the env record back as it was before the quarantine start** (kept beside it as `<profile>.env.prequarantine`; removed when there was none) - FAIL, UNDETERMINED, a signal, `llmctl stop`, an eviction, a start that never became ready, publication (review 3, finding 6: an ENABLED profile whose quarantine start failed used to keep the quarantine launch as the record its unit boots from). A `switch` whose target fails brings the previous set back through the same gate |
 | `enable` | validated (in quarantine) BEFORE any unit is enabled; FAIL/UNDETERMINED -> nothing enabled |
 | `restart` | with a fresh record: `systemctl restart`; without: stopped, started in quarantine, validated, published or stopped - never restarted in place on its public port |
 | `decide scale` | adding instances needs a fresh record of the base profile (validate it first); scaling down is never blocked |
-| systemd unit (boot, `Restart=`, `systemctl start`) - **only after `llmctl install`** (see "Upgrading installed units") | `ExecCondition=svc_hook.sh validated %i`: skipped with exit 77 (not failed, not restarted) without a fresh record; a live quarantine start and an opt-out marker pass. The registration waiter validates BEFORE it registers and stops the unit on FAIL/UNDETERMINED; a quarantine unit is never registered. launchd: the same gate in `svc_hook.sh run-engine`, which exits 0 on a refusal and the agent's `KeepAlive` restarts only an unsuccessful exit (`SuccessfulExit=false`; agents written before 2026-10-15 keep `KeepAlive=true` and retry a refused start every 60 s until they are re-written by `llmctl enable`) |
+| systemd unit (boot, `Restart=`, `systemctl start`) - **only after `llmctl install`** (see "Upgrading installed units") | `ExecCondition=svc_hook.sh validated %i`: skipped with exit 77 (not failed, not restarted) without a fresh record; a quarantine start passes only while it is unexpired AND its validator process (`LLMCTL_QUARANTINE_VALIDATOR`: same pid, same start time) is alive (review 3, finding 6); an opt-out marker (`LLMCTL_UNVALIDATED`) passes only when the CATALOG says the profile is not consumer-facing - re-read at every start (review 3, finding 9; an unknown profile counts as consumer-facing). The registration waiter validates BEFORE it registers and stops the unit on FAIL/UNDETERMINED; a quarantine unit is never registered. launchd: the same gate in `svc_hook.sh run-engine`, which exits 0 on a refusal and the agent's `KeepAlive` restarts only an unsuccessful exit (`SuccessfulExit=false`; agents written before 2026-10-15 keep `KeepAlive=true` and retry a refused start every 60 s until they are re-written by `llmctl enable`) |
 | `status` / `status --json` | a `validation:` line / field per running profile: `validated` (only when `require-validated` would accept it now: the record's bytes, engine and launch match), `QUARANTINE (...)`, `UNVALIDATED (<opt-out>)`, `NOT VALIDATED (<reason>)`; opt-outs in effect are printed as WARN lines |
 | `validate`, `vision validate`, `validate-all`, `models verify` (by hand) | of a SERVED profile (finding 6; every manual entry point): FAIL -> stopped, registry row withdrawn; UNDETERMINED -> keeps running NOT validated (status / `require-validated` / `endpoint` refuse). Of a STOPPED profile: started in quarantine, validated, stopped again, and its previous env record restored (finding 8: an enabled unit used to boot from the quarantine record and was refused). `--host` and the unit waiter's own call never stop anything |
 | `endpoint`, `require-validated` | refuse everything but a running, published, validated profile |
@@ -323,8 +365,11 @@ A decision profile needs a working `llmctl-decide` with
 * **RAM budget (finding 10, Constitution 12.6).** Admission uses the tighter of `MemAvailable - 4 GiB` and **60% of MemTotal minus the RAM the
   running llmctl profiles reserve** (`llmctl plan --json` shows `ram_cap_mb`, `ram_reserved_mb`, `ram_avail_budget_mb`); `LLMCTL_RAM_CAP_PCT` may
   lower the cap, never raise it. A running llmctl engine unit WITHOUT a reservation (started by systemd itself: boot, `Restart=`, the unit
-  waiter) is counted with its cgroup memory (systemd `MemoryCurrent`; `ram_units_unreserved_mb`) - review 2026-10-15 finding 10. launchd has
-  no per-job cgroup: on macOS only reservations count.
+  waiter) is counted with its cgroup memory (systemd `MemoryCurrent`; `ram_units_unreserved_mb`) - review 2026-10-15 finding 10. When systemd
+  cannot report it (`MemoryCurrent` = `infinity` / `[not set]` / 2^64-1, which used to count **0**), the unit is counted conservatively at its
+  `MemoryMax`, else `MemoryHigh`, else the catalog size of its model files, else a fixed 4096 MiB - never 0 - and `llmctl plan --json` lists it
+  under `budgets.ram_units_estimated` (review 3, finding 7). The hermetic unit list `LLMCTL_FAKE_UNIT_MEM` is honoured only inside the test
+  harness (`validation_hermetic`); outside it it is ignored with a warning. launchd has no per-job cgroup: on macOS only reservations count.
 * `LLMCTL_VALIDATE_API_KEY` is sent only to loopback hosts or hosts listed exactly in `LLMCTL_VALIDATE_API_KEY_HOSTS`; redirects are never
   followed; proxies are ignored; only `http`/`https`; a response is limited to 8 MiB; every request has a wall-clock deadline
   (`LLMCTL_VALIDATE_TIMEOUT`, finite and > 0); evidence and records are 0600 with userinfo, query and fragment removed from logged URLs.
@@ -333,7 +378,13 @@ A decision profile needs a working `llmctl-decide` with
 * Exit-code contract: exit 1 means exactly "the judge printed `VERDICT: FAIL`"; a crash, `die()` or `set -e` failure is UNDETERMINED (which strict
   mode also stops). Only HTTP 400/422 count as FAIL. The systemd waiter treats only the private FAIL code 64 as a wrong answer and removes the
   reservation before `systemctl --user stop`.
-* Concurrency: the CLI hook and the waiter serialise on `<runtime>/.validate-<profile>.lock` (`LLMCTL_VALIDATE_LOCK_WAIT`, default 900 s).
+* Concurrency: every validator of a local profile serialises on `<runtime>/.validate-<profile>.lock` (`LLMCTL_VALIDATE_LOCK_WAIT`, default
+  900 s): the start hook (`validate_after_start`), the systemd waiter, and - since review 3 (finding 10; they used to take no lock) - the manual
+  `llmctl validate`, `vision validate`, `validate-all` and `models verify`. A lock not obtained in time is UNDETERMINED (exit 2). The lock is
+  re-entrant like the scheduler lock: inline within the process that holds it, and for the waiter's own `llmctl validate` child, which inherits
+  the waiter's descriptor and is named by `LLMCTL_VALIDATE_LOCK_HELD=<profile>:<pid>` (honoured only when that pid is the process itself or an
+  ancestor and, on Linux, the lock file is really open in it - a forged value is ignored). Lock order everywhere: the validation lock, then the
+  scheduler lock. `--host` takes none (it never touches the local profile). Covered by `tests/test_validation_lock.sh`.
 * **The registration waiter needs the port registry.** The systemd-path validation runs in the waiter that `hk_register` spawns; it does
   nothing when there is no `MAINPID` or the port registry is inactive (`LLMCTL_PORTREG=0|off|no`, no portreg binary, `LLMCTL_DRY_RUN=1`).
   Such a unit is still gated before it starts by the `validated` ExecCondition (a fresh record is required), it is just not re-validated
@@ -368,13 +419,21 @@ into every validation record, so a changed byte invalidates the record.
 | decide-v1, colibri ids, coverage in validate-all, the real `--question-file` | `test_validation_decide_colibri.sh` |
 | enforcement: quarantine, publish, strict default, opt-outs, enable/restart/scale/switch, unit ExecCondition, waiter, endpoint, status | `test_validation_enforcement.sh` |
 | unpinned gate, 60% RAM cap | `test_supply_chain_ramcap.sh` |
-| mutants of the new branches, each caught | `test_validation_mutants.sh` |
+| mutants of the new branches, each caught (68; run it per `MUTANT_GROUPS` group - see below) | `test_validation_mutants.sh` |
 | judge, controls, mutations, state/freshness, start hook against the fixture server | `test_vision_validate.sh` |
 | golden fixture images and the expectation file | `test_vision_golden_fixtures.sh` |
 | every suite: structure, determinism, controls, per-probe discrimination | `test_validation_suites.sh` |
 | the wiring of the gate (start/switch/auto, restart/enable, systemd waiter, pressure) | `test_gate_wiring_start_paths.sh`, `test_gate_wiring_restart_enable.sh`, `test_gate_wiring_systemd_waiter.sh`, `test_gate_wiring_pressure.sh`, `test_gate_waiter_stop.sh` |
 | the defect register of the first independent review | `test_validation_gate_defects.sh`, `test_validation_exit_mapping.sh`, `test_validation_http_codes.sh`, `test_validation_identity.sh`, `test_validation_lock.sh` |
 | review 2026-10-15: verdict policy of every manual entry point, env record restored (6, 8), unit RAM (10), served launch / mmproj / inode, max age, status label (11) | `test_validate_policy.sh`, `test_validate_policy_entrypoints.sh`, `test_ramcap_units.sh`, `test_validation_served_launch.sh`, `test_validation_r2_small.sh` |
+
+**Running the mutation harness.** `tests/test_validation_mutants.sh` holds 68 mutants (review 3 of 2026-10-15 added 22) and takes ~1180 s
+in total (measured 2026-10-15), more than one bounded run (`bounded-run -T 580`): a full run is cut off by the bound (rc 124), which is a
+duration cut-off, not an assertion failure. Run it one group per bounded run - `MUTANT_GROUPS=<group> bash tests/test_validation_mutants.sh`
+for each of `judge judge2 judge3 suites record served cleanup enforcement qenv vlock marker interrupt gate policy ramunits ramcap`. Measured
+per group (s): judge 31, judge2 4, judge3 7, suites 10, record 178, served 14, cleanup 3, enforcement 217, qenv 149, vlock 45, marker 68,
+interrupt 166, gate 211, policy 57, ramunits 15, ramcap 7 - every group well inside the bound. The Go-side mutants of the gateway are in
+`tests/test_gateway_mutation.sh` (40 assertions, 408 s).
 
 ## Model download verification
 

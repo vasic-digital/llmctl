@@ -16,7 +16,7 @@ test_setup_env
 
 SUITES="${LLMCTL_ROOT}/validation/suites"
 FIX="${LLMCTL_ROOT}/tests/fixtures/validation"
-JUDGE="${LLMCTL_ROOT}/lib/validate_judge.py"
+JUDGE="${JUDGE_UNDER_TEST:-${LLMCTL_ROOT}/lib/validate_judge.py}"   # a mutant copy: tests/test_validation_mutants.sh "suites"
 export LLMCTL_VALIDATE_TIMEOUT=20
 
 FAKE_PIDS_FILE="$(mktemp)"
@@ -41,10 +41,16 @@ fake_start() {   # fake_start <answers.json> [extra args] -> base URL
 run_rc() { local rc=0; "$@" >"${TEST_TMP}/last.out" 2>&1 || rc=$?; echo "${rc}"; }
 
 echo "== 1. structure of every suite"
-report="$(python3 -I - "${SUITES}" <<'PY'
-import hashlib, json, os, sys
+# The known check names come FROM THE JUDGE (finding 13 of the third 2026-10-15 review: a hand-kept copy of the list here
+# went stale when max_words, exact_text, json_equals, exact_words, python_function_sum and number_allow were added, and
+# this suite was RED for every one of them). A check a suite names but the judge does not know is an ERROR.
+cat > "${TEST_TMP}/structure.py" <<'PY'
+import hashlib, importlib.util, json, os, sys
 sdir = sys.argv[1]
-KNOWN = {"contains_all", "contains_any", "ordered", "forbidden", "number_equals", "regex_all", "regex_none", "json_subset", "choice_equals"}
+spec = importlib.util.spec_from_file_location("vj", sys.argv[2]); vj = importlib.util.module_from_spec(spec); spec.loader.exec_module(vj)
+KNOWN = set(vj._KNOWN_CHECKS)
+if not {"contains_all", "number_equals", "exact_words", "choice_equals"} <= KNOWN:
+    sys.exit("ERROR: the judge's check list %s is implausibly small" % sorted(KNOWN))
 errs, gaps, names = [], [], sorted(os.listdir(sdir))
 for name in names:
     d = os.path.join(sdir, name)
@@ -109,9 +115,18 @@ for g in gaps: print("GAP:", g)
 print("suites:", ",".join(names))
 sys.exit(1 if errs else 0)
 PY
-)" && rc=0 || rc=$?
+report="$(python3 -I "${TEST_TMP}/structure.py" "${SUITES}" "${JUDGE}")" && rc=0 || rc=$?
 printf '%s\n' "${report}" | sed 's/^/    | /'
 assert_eq 0 "${rc}" "every suite is well-formed, deterministic, hash-pinned and fully controlled"
+# negative control: a check name a suite uses but the judge does not define must turn the structure check RED
+cp -r "${SUITES}" "${TEST_TMP}/suites_bogus"
+python3 -I - "${TEST_TMP}/suites_bogus/chat-v1/suite.json" <<'PY'
+import json, sys
+p = sys.argv[1]; d = json.load(open(p)); d["cases"][0]["checks"]["bogus_check"] = 1; json.dump(d, open(p, "w"))
+PY
+rep2="$(python3 -I "${TEST_TMP}/structure.py" "${TEST_TMP}/suites_bogus" "${JUDGE}")" && rc2=0 || rc2=$?
+assert_eq 1 "${rc2}" "a suite naming a check the judge does not know is refused"
+assert_contains "${rep2}" "chat-v1: unknown check bogus_check" "...and the unknown check is named"
 gaps="$(grep -c '^    | GAP:' <<<"$(printf '%s\n' "${report}" | sed 's/^/    | /')" || true)"
 if [[ "${gaps}" != "0" ]]; then
   assert_skip "vision-golden-v1 has ${gaps} probes without BOTH a canned PASS and a canned FAIL judge control (the text suites have full coverage); the vision probes are still proven to discriminate in section 3b" "per-probe judge-control completeness of the vision suite"

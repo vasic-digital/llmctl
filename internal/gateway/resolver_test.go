@@ -175,3 +175,27 @@ func TestProbeResolverPropagatesInnerError(t *testing.T) {
 type errResolver struct{}
 
 func (errResolver) Resolve(string, string) ([]Endpoint, error) { return nil, errors.New("boom") }
+
+// Review 3 of 2026-10-15, finding 8: the explicit resolver declares a profile only for a non-empty URL.
+func TestF7ExplicitResolverIgnoresBlankDeclarations(t *testing.T) {
+	specs := []ProfileSpec{{ID: "decide-tiny", Port: 18999}}
+	for _, v := range []string{"", " ", ",", " , ,\t"} {
+		get := func(k string) string {
+			if k == EndpointVar("decide-tiny") {
+				return v
+			}
+			return ""
+		}
+		eps, _ := StaticResolverExplicitFromEnv(specs, get).Resolve(KindDecide, "decide-tiny")
+		if len(eps) != 0 {
+			t.Fatalf("%q declares no URL, yet resolved %+v (the catalog port 18999 came back)", v, eps)
+		}
+	}
+	get := func(k string) string {
+		return map[string]string{EndpointVar("decide-tiny"): ", http://127.0.0.1:1 ,"}[k]
+	}
+	eps, _ := StaticResolverExplicitFromEnv(specs, get).Resolve(KindDecide, "decide-tiny")
+	if len(eps) != 1 || eps[0].URL != "http://127.0.0.1:1" {
+		t.Fatalf("control: the one real URL resolves, got %+v", eps)
+	}
+}

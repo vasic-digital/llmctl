@@ -109,6 +109,7 @@ svc_write_env() {
     # private port, never registered) carries its deadline; an opt-out start of a non-consumer-facing profile says why
     # it runs unvalidated. lib/svc_hook.sh `validated` (the unit's ExecCondition) reads both.
     [[ -n "${LLMCTL_SVC_QUARANTINE_UNTIL:-}" ]] && printf 'LLMCTL_QUARANTINE_UNTIL=%q\n' "${LLMCTL_SVC_QUARANTINE_UNTIL}"
+    [[ -n "${LLMCTL_SVC_QUARANTINE_VALIDATOR:-}" ]] && printf 'LLMCTL_QUARANTINE_VALIDATOR=%q\n' "${LLMCTL_SVC_QUARANTINE_VALIDATOR}"
     [[ -n "${LLMCTL_SVC_UNVALIDATED:-}" ]] && printf 'LLMCTL_UNVALIDATED=%q\n' "${LLMCTL_SVC_UNVALIDATED}"
   } > "${env_file}"
   chmod 600 "${env_file}"

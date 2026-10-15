@@ -119,6 +119,7 @@ _RETRACT_RE = re.compile(r"\s*(NO|WAIT|ACTUALLY|CORRECTION|SORRY|OOPS|NOPE)\b\s*
 _NT_PREFIX = {"DON", "DOESN", "DIDN", "ISN", "AREN", "WASN", "WEREN", "CAN", "COULDN", "WON", "WOULDN", "SHOULDN",
               "HASN", "HAVEN", "HADN", "AIN", "MUSTN"}
 _NEG_WINDOW = 4
+_DENIAL_WORDS = {"NO", "NOT"}   # label_set: 'no OK button' denies a label that is not there (never a label itself)
 _TOKEN_RE = re.compile(r"[A-Z0-9]+|\n|[!?;:]|(?<!\d)\.|\.(?!\d)")
 
 
@@ -128,14 +129,18 @@ def _tokens(raw):
             for m in _TOKEN_RE.finditer(fold(raw).upper())]
 
 
-def _negated(toks, start):
+def _negated(toks, start, marks=frozenset()):
     """True when a negation word precedes position `start` within _NEG_WINDOW words of the same clause ('not sure' /
-    'not certain' is a hedge about the speaker, not a negation of what follows)."""
+    'not certain' is a hedge about the speaker, not a negation of what follows). A word in `marks` (the word that opens a
+    RETRACTION clause: the 'No' of 'London. No, Paris.') is a clause boundary, not a negation: it withdraws what came
+    before it and asserts what follows (finding 5 of the third 2026-10-15 review)."""
     seen, i = 0, start - 1
     while i >= 0 and seen < _NEG_WINDOW:
         w = toks[i][0]
         if w is None:
             return False          # clause boundary: a negation in another clause does not negate this one
+        if i in marks:
+            return False          # the retraction word opens a clause: what follows it is the corrected claim
         if w in _NEG_WORDS or (w == "T" and i > 0 and toks[i - 1][0] in _NT_PREFIX):
             nxt = toks[i + 1][0] if i + 1 < len(toks) else None
             if not (nxt in _HEDGE_AFTER_NEG and i + 1 != start):
@@ -171,8 +176,22 @@ def _retracted_before(raw, toks):
     return None
 
 
-def claim_occurrences(raw, needle):
-    """[(word_index, negated)] of every occurrence of `needle` (its normalised words, consecutive; separators between
+def _retraction_marks(raw, toks):
+    """Token indices of the words that OPEN a retraction clause (the clause starts that _retracted_before recognises)."""
+    up = fold(raw).upper()
+    marks = set()
+    for i, t in enumerate(toks):
+        if t[0] is None and _RETRACT_RE.match(up, t[2]):
+            j = i + 1
+            while j < len(toks) and toks[j][0] is None:
+                j += 1
+            if j < len(toks):
+                marks.add(j)
+    return marks
+
+
+def claim_occurrences(raw, needle, offsets=False):
+    """[(word_index, negated)] (with offsets=True: [(word_index, negated, char_offset)]) of every occurrence of `needle` (its normalised words, consecutive; separators between
     them are skipped like the normaliser does). word_index counts words only. 'negated' covers a negation before it, a
     denial after it ('X is not ...'), a '-less'/'-free' compound ('login-less'), and a later retraction clause."""
     want = norm(needle).split()
@@ -182,20 +201,45 @@ def claim_occurrences(raw, needle):
     up = fold(raw).upper()
     words = [(i, t[0]) for i, t in enumerate(toks) if t[0] is not None]
     retract = _retracted_before(raw, toks)
+    marks = _retraction_marks(raw, toks)
     out = []
     for k in range(len(words) - len(want) + 1):
         if all(words[k + j][1] == want[j] for j in range(len(want))):
             first, last = words[k][0], words[k + len(want) - 1][0]
-            neg = _negated(toks, first) or _post_negated(toks, last) \
+            neg = _negated(toks, first, marks) or _post_negated(toks, last) \
                 or bool(re.match(r"\s*-\s*(LESS|FREE)\b", up[toks[last][2]:])) \
                 or (retract is not None and toks[first][1] < retract)
-            out.append((k, neg))
+            out.append((k, neg, toks[first][1]) if offsets else (k, neg))
     return out
 
 
 def asserts(raw, needle):
     """The answer asserts `needle`: at least one occurrence that is not negated."""
     return any(not neg for _, neg in claim_occurrences(raw, needle))
+
+
+def _aside_depths(up):
+    """Per character of `up`: how many ( ) / [ ] asides enclose it (an unbalanced closer never goes below 0)."""
+    depth, out = 0, []
+    for ch in up:
+        if ch in ")]":
+            depth = max(0, depth - 1)
+        out.append(depth)
+        if ch in "([":
+            depth += 1
+    return out
+
+
+def asserts_main(raw, needle):
+    """The answer asserts `needle` OUTSIDE every parenthetical aside: 'A dashboard (login screen is next).' does not claim
+    a login screen - the aside is a remark next to the claim, not the claim (finding 3 of the third 2026-10-15 review).
+    An answer that is ONE aside as a whole ('(Dark)') is read without its brackets."""
+    t = str(raw).strip()
+    m = re.match(r"^[(\[]([^()\[\]]*)[)\]]\.?$", t)
+    if m:
+        t = m.group(1)
+    depth = _aside_depths(fold(t).upper())
+    return any(not neg and depth[off] == 0 for _, neg, off in claim_occurrences(t, needle, offsets=True))
 
 
 def _ordered_ok(raw, items):
@@ -226,8 +270,9 @@ def _json_eq(a, b):
     return type(a) is type(b) and a == b
 
 
-_LIST_CHECKS = ("contains_all", "contains_any", "ordered", "forbidden", "regex_all", "regex_none", "number_allow")
-_TOKEN_CHECKS = ("contains_all", "contains_any", "ordered", "forbidden")
+_LIST_CHECKS = ("contains_all", "contains_any", "ordered", "forbidden", "regex_all", "regex_none", "number_allow",
+                "label_set", "words_allow")
+_TOKEN_CHECKS = ("contains_all", "contains_any", "ordered", "forbidden", "label_set", "words_allow")
 _KNOWN_CHECKS = set(_LIST_CHECKS) | {"number_equals", "json_subset", "choice_equals", "json_equals", "exact_text",
                                      "exact_words", "max_words", "python_function_sum"}
 
@@ -279,6 +324,18 @@ def validate_checks(checks):
                 raise SuiteDefect("python_function_sum must name a Python function, got %r" % (val,))
     if "number_allow" in checks and "number_equals" not in checks:
         raise SuiteDefect("number_allow is only meaningful next to number_equals")
+    if "words_allow" in checks:
+        if "exact_words" not in checks and "label_set" not in checks:
+            raise SuiteDefect("words_allow is only meaningful next to exact_words or label_set")
+        allow = {w for item in checks["words_allow"] for w in norm(item).split()}
+        expected = set(norm(checks.get("exact_words", "")).split())
+        for item in checks.get("label_set", []):
+            expected |= set(norm(item).split())
+        if allow & (expected | _NEG_WORDS | _DENIAL_WORDS):
+            raise SuiteDefect("words_allow may not contain an expected or a negation word: %s"
+                              % sorted(allow & (expected | _NEG_WORDS | _DENIAL_WORDS)))
+    if "label_set" in checks and len({norm(t) for t in checks["label_set"]}) != len(checks["label_set"]):
+        raise SuiteDefect("label_set items must be distinct, got %r" % (checks["label_set"],))
 
 
 def _strip_python_comments(src):
@@ -365,25 +422,28 @@ def _all_numbers(raw, start=0):
         pos = b[0] + max(1, len(m.group(0)) if m else 1)
 
 
-# Numbers (finding 4 of the 2026-10-15 review): every number_equals prompt asks for ONLY the number, so the answer must BE
-# a number - not merely mention one. The answer is split into sentences; EVERY sentence must be one of these forms and
-# state the same value (else FAIL):
+# Numbers (finding 4 of the 2026-10-15 review; finding 1 of the third review of that day): every number_equals prompt asks
+# for ONLY the number, so the answer must BE a number - not merely mention one. The answer is split into sentences; EVERY
+# sentence must be one of these forms and state the same value (else FAIL):
 #   N                         '42', '42.0', '58,40', '$58.40', 'forty-two', 'Three', '**3**', a fenced '3'
 #   N (N')                    '3 (three)' - the same value twice
 #   <arithmetic> = N          '17 + 25 = 42' (operands and operators only before the '=')
-#   <lead-in> N [nouns]       'There are 3 red circles', 'The answer is 42' (fixed lead-ins; 1-4 plain nouns after)
+#   <lead-in> N               'The answer is 42', 'There are 3' (a FIXED list of lead-ins, _LEAD_INS)
+# and nothing else may stand next to N except the probe's OWN declared words (number_allow, a positive allow-list per
+# probe: ['RED CIRCLES', 'CIRCLES'] for a count of red circles, ['NOT FOUND'] for HTTP 404, ['INVOICE NO', ...] for an
+# invoice number), removed as whole words at the start or end of a sentence ('There are 3 red circles' -> 'There are 3').
+# There is NO open 'N <any 1-4 words>' form any more: '42 thousand', '42 squared', '42 in hex', '3 pairs', '42 I think',
+# '3 red circles presumably' name no allowed word and FAIL - a positive allow-list, never a list of blocked words
+# (Constitution 11.4.250). A number_allow entry ending in '.' declares an abbreviation ('NO.'): its period is not a
+# sentence end ('Invoice No. 7731'), while the period after any other word still is ('3 red circles. 3.').
 # N is digits with an optional '.' fraction (three fraction digits are refused as an ambiguous thousands separator:
 # '10.000'), a decimal comma with exactly two digits, an optional currency symbol, or an English number word
 # (zero..twenty, 'forty-two'). Anything else - 'Not 3', 'At least 3', 'About 3', '3 or more', '3rd', '3%', '3/4',
-# '4.2e1', '7,731', 'Three. No wait - four.' - is not a stated number. A suite may declare extra words that may stand
-# next to the number (number_allow: ['NOT FOUND'] for HTTP 404, ['INV'] for an invoice number).
+# '4.2e1', '7,731', 'Three. No wait - four.' - is not a stated number.
 _N_DIGITS = re.compile(r"^[$€£]?\s*(\d+(?:\.\d{1,2}|\.\d{4,})?|\d+,\d{2})\s*[$€£]?$")
 _LEAD_INS = ("THE ANSWER IS", "ANSWER IS", "ANSWER", "IT IS", "IT'S", "THERE ARE", "THERE IS", "I COUNT", "I SEE",
-             "THE RESULT IS", "RESULT", "OUTPUT", "TOTAL", "THE TOTAL IS", "THE NUMBER IS", "THE STATUS CODE IS")
-_NUMBER_BLOCK = {"NOT", "NO", "NEVER", "NONE", "MORE", "LESS", "FEWER", "LEAST", "MOST", "ABOUT", "AROUND", "APPROXIMATELY",
-                 "ROUGHLY", "NEARLY", "ALMOST", "OVER", "UNDER", "ABOVE", "BELOW", "MAYBE", "PERHAPS", "PROBABLY",
-                 "POSSIBLY", "OR", "WAIT", "ACTUALLY", "THAN", "UP", "TO", "PLUS", "MINUS", "TIMES", "PERCENT", "ISN",
-                 "EXCEPT", "BUT", "IF", "GUESS", "ESTIMATE", "LIKELY", "UNSURE"}
+             "THE RESULT IS", "RESULT", "OUTPUT", "TOTAL", "THE TOTAL IS", "THE NUMBER IS", "THE STATUS CODE IS",
+             "THE SUM IS")
 
 
 def _strip_markup(t):
@@ -421,40 +481,30 @@ def _sentence_number(sent, allow):
             t, up = t[len(A):].strip(" -#:"), up[len(A):].strip(" -#:")
         if up.endswith(A) and (len(up) == len(A) or not up[-len(A) - 1].isalnum()):
             t, up = t[:-len(A)].strip(" -#:,"), up[:-len(A)].strip(" -#:,")
+    m = re.match(r"^\(([^()]*)\)$", t)                              # a number written as one aside: '(404)'
+    if m:
+        t = m.group(1).strip()
     v = _num_value(t)
     if v is not None:
         return v, None
-    m = re.match(r"^(.+?)\s*\((.+)\)$", t)                          # N (N')
+    m = re.match(r"^(.+?)\s*\((.+)\)$", t)                          # N (N')  /  N (<an allowed word>)
     if m:
         a, b = _num_value(m.group(1)), _num_value(m.group(2))
-        if a is not None and a == b:
+        if a is not None and (a == b or m.group(2).strip().upper() in {x.upper() for x in allow}):
             return a, None
     m = re.match(r"^([0-9\s.+\-*/x×()]+?)\s*=\s*(.+)$", t)        # arithmetic = N
     if m and re.search(r"[+\-*/x×]", m.group(1)):
         v = _num_value(m.group(2))
         if v is not None:
             return v, None
-    for lead in _LEAD_INS:                                          # lead-in N [nouns]
+    for lead in _LEAD_INS:                                          # lead-in N (nothing after N)
         if up.startswith(lead) and len(up) > len(lead) and not up[len(lead)].isalnum():
-            rest = t[len(lead):].strip(" :")
-            parts = rest.split(None, 1)
-            if not parts:
-                break
-            v = _num_value(parts[0])
-            if v is None:
-                break
-            nouns = parts[1].split() if len(parts) > 1 else []
-            if len(nouns) <= 4 and all(re.match(r"^[A-Za-z]+$", n) and n.upper() not in _NUMBER_BLOCK
-                                       and _num_value(n) is None for n in nouns):
+            v = _num_value(t[len(lead):].strip(" :"))
+            if v is not None:
                 return v, None
             break
-    m = re.match(r"^(\S+)\s+([A-Za-z]+(?:\s+[A-Za-z]+){0,3})$", t)   # N nouns ('3 red circles')
-    if m:
-        v = _num_value(m.group(1))
-        nouns = m.group(2).split()
-        if v is not None and all(n.upper() not in _NUMBER_BLOCK and _num_value(n) is None for n in nouns):
-            return v, None
-    return None, "%r is not just a number (a hedge, comparison, negation, unit, ordinal, alternative or extra text)" % t
+    return None, "%r is not just a number (a hedge, comparison, negation, unit, ordinal, alternative or a word the " \
+                 "probe does not allow)" % t
 
 
 def stated_number(raw, allow=()):
@@ -462,6 +512,9 @@ def stated_number(raw, allow=()):
     t = _strip_markup(fold(raw))
     if not t:
         return None, "empty answer"
+    for a in allow:              # a declared abbreviation ('NO.' -> 'Invoice No. 7731'): its period is no full stop
+        if len(a) > 1 and a.endswith(".") and a[-2].isalnum():
+            t = re.sub(r"(?i)(?<![A-Za-z0-9])" + re.escape(a), a[:-1] + " ", t)
     sents = [x for x in re.split(r"\.{2,}|\.(?=\s|$)|\n|;|!|\?", t) if x.strip()]
     vals = []
     for sent in sents:
@@ -570,6 +623,21 @@ def python_function_sum(code, name):
     if len(defs) != 1 or not isinstance(defs[0], ast.FunctionDef):
         return "expected exactly one top-level 'def %s', found %d" % (name, len(defs))
     f = defs[0]
+    # Finding 4 of the third 2026-10-15 review: 'add.__code__ = ...' and "globals()['add'] = ..." re-bind the function
+    # without naming it as a target. The module may hold ONLY the def, imports and a leading docstring; nothing anywhere
+    # may call anything (adding two numbers needs no call) or store through an attribute or a subscript.
+    for i, st in enumerate(tree.body):
+        if st is f or isinstance(st, (ast.Import, ast.ImportFrom)):
+            continue
+        if i == 0 and isinstance(st, ast.Expr) and isinstance(st.value, ast.Constant) and isinstance(st.value.value, str):
+            continue
+        return "the module holds a %s next to 'def %s' (only the function, imports and a docstring)" % (
+            type(st).__name__, name)
+    for n in ast.walk(tree):
+        if isinstance(n, ast.Call):
+            return "the code calls something (line %d); adding two numbers needs no call" % getattr(n, "lineno", 0)
+        if isinstance(n, (ast.Attribute, ast.Subscript)) and isinstance(n.ctx, (ast.Store, ast.Del)):
+            return "the code writes through an attribute or a subscript (line %d)" % getattr(n, "lineno", 0)
     for n in ast.walk(tree):
         if n is f:
             continue
@@ -617,6 +685,58 @@ def python_function_sum(code, name):
     return "%r does not return %s + %s" % (name, p1, p2)
 
 
+# A clause of a label answer ends at a newline, , ; : . ! ? ( ) [ ] an en/em dash or a free-standing hyphen run.
+_LABEL_CLAUSE = re.compile(r"[\n,;:.!?()\[\]\u2013\u2014]|\s-+\s|^-+\s|\s-+$")
+
+
+def _drop_phrases(words, phrases):
+    """`words` with every contiguous occurrence of an allowed phrase (words_allow; longest first) removed. A phrase is
+    removed only as a whole: 'FROM LEFT TO RIGHT' is allowed framing, 'from right to left' is not."""
+    want = sorted((norm(p).split() for p in phrases), key=len, reverse=True)
+    out, i = [], 0
+    while i < len(words):
+        hit = next((x for x in want if x and words[i:i + len(x)] == x), None)
+        if hit is None:
+            out.append(words[i])
+            i += 1
+        else:
+            i += len(hit)
+    return out
+
+
+def label_set_why(raw, items, allow=()):
+    """None when the answer names EXACTLY the labels of `items` - each once, in any order - and nothing else, else why.
+    Only the probe's words_allow may stand next to them ('Cancel and Delete', 'Delete button, Cancel button'); a clause
+    that DENIES one other label ('Cancel, Delete - no OK button') is a remark, not a label; any other word ('Cancel,
+    Delete, OK', 'Neither Cancel nor Delete') is an extra or a negated claim (finding 3 of the third 2026-10-15 review:
+    contains_all accepted a third, hallucinated label)."""
+    want = sorted((norm(t).split() for t in items), key=len, reverse=True)
+    itemwords = {w for x in want for w in x}
+    words = []
+    for clause in _LABEL_CLAUSE.split(_strip_markup(fold(raw))):
+        ws = norm(clause).split()
+        if not ws:
+            continue
+        rest = _drop_phrases(ws[1:], allow)
+        if ws[0] in _DENIAL_WORDS and len(rest) <= 1 and not set(ws) & itemwords:
+            continue
+        words.extend(_drop_phrases(ws, allow))
+    seen, extra, i = [], [], 0
+    while i < len(words):
+        hit = next((x for x in want if words[i:i + len(x)] == x), None)
+        if hit is None:
+            extra.append(words[i])
+            i += 1
+        else:
+            seen.append(" ".join(hit))
+            i += len(hit)
+    if extra:
+        return "words other than the labels: %s" % extra[:8]
+    if sorted(seen) != sorted(" ".join(x) for x in want):
+        return "the labels named are %s, not each of %s exactly once" % (seen, [" ".join(x) for x in want])
+    return None
+
+
 def judge(checks, answer):
     """Return (passed: bool, reasons: [str]). Pure function of (checks, answer). Unusable checks raise SuiteDefect."""
     validate_checks(checks)
@@ -630,8 +750,8 @@ def judge(checks, answer):
             if miss:
                 reasons.append("contains_all: missing (or only negated) %s" % miss)
         elif key == "contains_any":
-            if not any(asserts(raw, t) for t in val):
-                reasons.append("contains_any: none of %s asserted" % val)
+            if not any(asserts_main(raw, t) for t in val):
+                reasons.append("contains_any: none of %s asserted outside a parenthetical aside" % val)
         elif key == "ordered":
             ok, seq = _ordered_ok(raw, val)
             if not ok:
@@ -658,9 +778,15 @@ def judge(checks, answer):
             if got != val:
                 reasons.append("exact_text: expected exactly %r, got %r" % (val, got[:200]))
         elif key == "exact_words":
-            got = norm(_strip_markup(raw))
-            if got != norm(val):
-                reasons.append("exact_words: expected the words %r, got %r" % (norm(val).strip(), got.strip()[:200]))
+            got = " ".join(_drop_phrases(norm(_strip_markup(raw)).split(), checks.get("words_allow") or ()))
+            if got != norm(val).strip():
+                reasons.append("exact_words: expected the words %r, got %r" % (norm(val).strip(), got[:200]))
+        elif key == "label_set":
+            why = label_set_why(raw, val, checks.get("words_allow") or ())
+            if why:
+                reasons.append("label_set: %s" % why)
+        elif key == "words_allow":
+            pass    # a modifier of exact_words / label_set
         elif key == "max_words":
             ws = norm(raw).split()
             if len(ws) > val:

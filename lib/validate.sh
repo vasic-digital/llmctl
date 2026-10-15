@@ -492,6 +492,60 @@ except Exception: print("")' "$(_val_state_file "${p}")" 2>/dev/null)" != "${run
   return "${rc}"
 }
 
+# Per-profile validation lock for the MANUAL entry points (review 3 of 2026-10-15, finding 10: `llmctl validate` took no
+# lock although docs/validation.md said every validator serialises on it). <runtime>/.validate-<profile>.lock is the file
+# validate_after_start and the systemd waiter (lib/svc_hook.sh) already hold around their validation. Re-entrant, like the
+# scheduler lock: a process that holds it (_VAL_LOCK_HELD) runs inline, and the waiter's own `llmctl validate` child runs
+# inline when LLMCTL_VALIDATE_LOCK_HELD=<profile>:<pid> names a holder that is its ANCESTOR (a stale or foreign value is
+# ignored: the lock is then taken normally). Lock order everywhere: validation lock, then the scheduler lock.
+# LLMCTL_VALIDATE_LOCK_WAIT (default 900 s) bounds the wait; a timeout is UNDETERMINED (2). --host (an external
+# endpoint) takes no lock: it never touches the local profile.
+_VAL_LOCK_HELD=" "
+_val_lock_ancestor_holds() {
+  local p="$1" v="${LLMCTL_VALIDATE_LOCK_HELD:-}" want cur i f lf
+  [[ "${v%:*}" == "${p}" && "${v##*:}" =~ ^[0-9]+$ ]] || return 1
+  want="${v##*:}"; cur="$$"
+  if [[ -d "/proc/$$/fd" ]]; then     # Linux: the holder's descriptor of the lock file must really be inherited here
+    lf="$(cd "${LLMCTL_RUNTIME_DIR}" 2>/dev/null && pwd -P)/.validate-${p}.lock"
+    for f in /proc/$$/fd/*; do [[ "$(readlink "${f}" 2>/dev/null)" == "${lf}" ]] && { lf=ok; break; }; done
+    [[ "${lf}" == ok ]] || return 1
+  fi
+  [[ "${cur}" == "${want}" ]] && return 0       # the holder exec'd into this process (the last command of a subshell)
+  for (( i=0; i<16; i++ )); do
+    cur="$(ps -o ppid= -p "${cur}" 2>/dev/null | tr -d ' ')"
+    [[ "${cur}" =~ ^[0-9]+$ && "${cur}" -gt 1 ]] || return 1
+    [[ "${cur}" == "${want}" ]] && return 0
+  done
+  return 1
+}
+# _val_with_profile_lock <profile> <command...>
+_val_with_profile_lock() {
+  local p="$1" lockfd rc=0
+  shift
+  if [[ "${_VAL_LOCK_HELD}" == *" ${p} "* ]] || _val_lock_ancestor_holds "${p}"; then
+    "$@"; return
+  fi
+  ensure_dir "${LLMCTL_RUNTIME_DIR}"
+  exec {lockfd}>"${LLMCTL_RUNTIME_DIR}/.validate-${p}.lock"
+  if ! flock -w "${LLMCTL_VALIDATE_LOCK_WAIT:-900}" "${lockfd}"; then
+    exec {lockfd}>&-
+    err "validation: '${p}' is being validated by another process and did not finish within ${LLMCTL_VALIDATE_LOCK_WAIT:-900}s - could not determine"
+    return 2
+  fi
+  _VAL_LOCK_HELD="${_VAL_LOCK_HELD}${p} "
+  "$@" || rc=$?
+  _VAL_LOCK_HELD="${_VAL_LOCK_HELD/ ${p} / }"
+  flock -u "${lockfd}"; exec {lockfd}>&-
+  return "${rc}"
+}
+# _val_locked_profile_validate <profile> <validate_profile args...> - validate_profile under the profile's validation lock
+# (no lock for --host).
+_val_locked_profile_validate() {
+  local p="$1" a
+  for a in "${@:2}"; do [[ "${a}" == --host ]] && { validate_profile "${@:2}"; return; }; done
+  _val_with_profile_lock "${p}" validate_profile "${@:2}"
+}
+
 # _validate_cli <validate args...> - the `llmctl validate` entry. Exit 1 means exactly "the judge gave a wrong answer":
 # validate_profile returns 1 only from an explicit verdict, and an abnormal exit of the shell (die(), set -e, a failed
 # source) is mapped to 2 (UNDETERMINED) by an EXIT trap - callers (the systemd waiter) stop a model on exit 1.
@@ -500,7 +554,16 @@ _validate_cli() {
   local rc=0
   _val_cli_done=0
   trap '[[ "${_val_cli_done}" == "1" ]] || { trap - EXIT; exit 2; }' EXIT
-  validate_profile "$@" || rc=$?
+  local lp="" a skip=0
+  for a in "$@"; do
+    if (( skip )); then skip=0; continue; fi
+    case "${a}" in --host|--kind) skip=1 ;; -*) ;; *) [[ -n "${lp}" ]] || lp="${a}" ;; esac
+  done
+  if [[ -n "${lp}" ]] && valid_id "${lp}" 2>/dev/null; then
+    _val_locked_profile_validate "${lp}" "$@" || rc=$?
+  else
+    validate_profile "$@" || rc=$?       # usage errors / an invalid name: validate_profile reports them (no lock file named by it)
+  fi
   _val_cli_done=1
   trap - EXIT
   _val_cli_policy "${rc}" "$@" || true
@@ -579,7 +642,7 @@ validate_all() {
     fi
     n=$((n+1))
     one=0
-    validate_profile "${p}" "$@" || one=$?
+    _val_locked_profile_validate "${p}" "${p}" "$@" || one=$?
     _val_cli_policy "${one}" "${p}" "$@" || true     # a FAILING served profile is stopped (finding 6 of the 2026-10-15 review)
     case "${one}" in
       0) verdicts+=("${p}: PASS") ;;
@@ -806,7 +869,9 @@ validate_after_start() {
       continue
     fi
     one=0
+    _VAL_LOCK_HELD="${_VAL_LOCK_HELD}${p} "
     _val_after_start_one "${p}" || one=$?
+    _VAL_LOCK_HELD="${_VAL_LOCK_HELD/ ${p} / }"
     flock -u "${lockfd}"; exec {lockfd}>&-
     [[ "${one}" == "0" ]] || rc=1
   done
@@ -936,7 +1001,7 @@ models_verify_gate() {
   info "validation suites for '${p}': $(tr '\n' ' ' <<<"${suites}")"
   if [[ "${live}" == "--live" || -f "${LLMCTL_RUNTIME_DIR}/${p}.run" ]]; then
     local vrc=0
-    validate_profile "${p}" || vrc=$?
+    _val_locked_profile_validate "${p}" "${p}" || vrc=$?
     _val_cli_policy "${vrc}" "${p}" || true          # a FAILING served profile is stopped (finding 6 of the 2026-10-15 review)
     return "${vrc}"
   fi
@@ -961,7 +1026,7 @@ cmd_vision() {
         esac
       done
       local vrc=0
-      validate_profile "${p}" --kind vision ${rest[@]+"${rest[@]}"} || vrc=$?
+      _val_locked_profile_validate "${p}" "${p}" --kind vision ${rest[@]+"${rest[@]}"} || vrc=$?
       _val_cli_policy "${vrc}" "${p}" ${rest[@]+"${rest[@]}"} || true   # finding 6 of the 2026-10-15 review
       return "${vrc}"
       ;;

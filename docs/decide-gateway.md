@@ -386,8 +386,18 @@ unlisted spellings are not added), and an engine exposing more than three token 
 By default (`LLMCTL_DECIDE_RESOLVER=auto`) the gateway routes to the engines in the service registry when it lists any, else to the
 static `LLMCTL_DECIDE_ENDPOINT_<PROFILE>` - and, only with `LLMCTL_VALIDATE_STRICT=0`, to the `LLMCTL_PORT_<PROFILE>` / catalog port of a
 profile without a healthy registry row (review 2026-10-15 finding 7: under the strict validation gate an unregistered engine is not a
-backend). `LLMCTL_DECIDE_RESOLVER=static` is an explicit operator choice and keeps the full static table below. It publishes itself in the
-registry (`kind=gateway`) while serving.
+backend). A profile counts as declared only when `LLMCTL_DECIDE_ENDPOINT_<PROFILE>` names at least ONE non-empty URL: a value of `,` or
+`" , ,"` is no declaration (review 3 of 2026-10-15, finding 8 - it used to bring the catalog-port fallback back). `LLMCTL_DECIDE_RESOLVER=static`
+is an explicit operator choice and keeps the full static table below; since review 3 the gateway prints a startup WARNING that static mode routes
+to catalog ports / declared URLs WITHOUT the validation gate (an engine there is validated only if you made sure of it: `llmctl
+require-validated <profile>`). It publishes itself in the registry (`kind=gateway`) while serving.
+
+**The running gateway binary (review 3, finding 11 - documented, nothing was rebuilt or restarted).** Measured read-only on the review host
+on 2026-10-15: `build/llmctl-decide` is dated 2026-10-14 20:39, before `a745432` (finding 7 of the second review, committed 2026-10-15 12:50),
+and the live `llmctl-decide-gateway.service` process runs an executable that has since been replaced (`readlink /proc/<MainPID>/exe` ->
+`.../build/llmctl-decide (deleted)`). Neither the finding-7 strict fallback nor the finding-8 fix above is in effect in that process until the
+operator rebuilds (`llmctl build decide`) and restarts the gateway; this fix round deliberately did not touch live services. Check a host with
+`readlink /proc/$(systemctl --user show -p MainPID --value llmctl-decide-gateway.service)/exe` and compare the binary's build with `git log -1`.
 See `docs/registry-discovery.md`.
 
 The static endpoint of a profile is, in order: `LLMCTL_DECIDE_ENDPOINT_<PROFILE>` (comma separated loopback URLs) >

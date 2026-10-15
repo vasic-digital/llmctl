@@ -320,6 +320,36 @@ _sched_ensure_key_file() {
   chmod 600 "${keyfile}"
 }
 
+# Quarantine env record (review 3 of 2026-10-15, finding 6). A QUARANTINE start (validation only: loopback, private port,
+# unpublished) REPLACES the profile's env record - the one an ENABLED unit boots from. Before it does, the record as it
+# was is kept beside it (<profile>.env.prequarantine; an EMPTY file = there was none), and whenever the quarantined
+# instance is stopped - any path: FAIL, UNDETERMINED, a signal, a start that never became ready, publication - the
+# record is put back (or the quarantine record removed when there was none). An enabled unit therefore never boots the
+# quarantine launch. A quarantine record of an older llmctl (no saved copy) is removed on stop.
+_sched_quarantine_env_save() {
+  local envf="${LLMCTL_SERVICES_DIR}/$1.env" side="${LLMCTL_SERVICES_DIR}/$1.env.prequarantine" tmp
+  [[ "${LLMCTL_DRY_RUN:-0}" == "1" ]] && return 0
+  [[ -e "${side}" ]] && return 0      # an unfinished earlier quarantine start: the ORIGINAL record is the one kept
+  mkdir -p "${LLMCTL_SERVICES_DIR}" || return 1
+  tmp="$(umask 077; mktemp "${side}.XXXXXX")" || return 1
+  if [[ -f "${envf}" ]] && ! grep -q '^LLMCTL_QUARANTINE_UNTIL=' "${envf}" 2>/dev/null; then
+    cp -p -- "${envf}" "${tmp}" || { rm -f -- "${tmp:?}"; return 1; }
+  fi
+  chmod 600 "${tmp}" && mv -f -- "${tmp}" "${side}"
+}
+_sched_quarantine_env_restore() {
+  local p="$1" envf="${LLMCTL_SERVICES_DIR}/$1.env" side="${LLMCTL_SERVICES_DIR}/$1.env.prequarantine"
+  [[ "${LLMCTL_DRY_RUN:-0}" == "1" ]] && return 0
+  if grep -q '^LLMCTL_QUARANTINE_UNTIL=' "${envf}" 2>/dev/null; then
+    if [[ -s "${side}" ]]; then
+      mv -f -- "${side}" "${envf}" && log "restored the env record of '${p}' as it was before its quarantine start"
+    else
+      rm -f -- "${envf:?}" && log "removed the quarantine env record of '${p}' (there was none before its quarantine start)"
+    fi
+  fi
+  rm -f -- "${side:?}"
+}
+
 # _sched_svc_write_env <profile> - svc_write_env with the profile's registration
 # metadata (kind) passed through the environment of that one call.
 _sched_svc_write_env() {
@@ -1171,6 +1201,13 @@ _sched_start_impl() {
     if (( quarantine )); then
       _sched_args_loopback
       local -x LLMCTL_SVC_QUARANTINE_UNTIL=$(( $(date +%s) + ${LLMCTL_QUARANTINE_TTL:-3600} ))
+      # the llmctl process that validates this start: the unit's ExecCondition refuses the record once it is gone
+      local -x LLMCTL_SVC_QUARANTINE_VALIDATOR; LLMCTL_SVC_QUARANTINE_VALIDATOR="$(proc_identity "$$")" || LLMCTL_SVC_QUARANTINE_VALIDATOR=""
+      if ! _sched_quarantine_env_save "${p}"; then
+        err "cannot start '${p}' for validation: could not keep a copy of its env record ${LLMCTL_SERVICES_DIR}/${p}.env"
+        rm -f "${plan_file}"
+        return 1
+      fi
     fi
     [[ -n "${unvalidated}" ]] && local -x LLMCTL_SVC_UNVALIDATED="${unvalidated}"
     _sched_svc_write_env "${p}"
@@ -1193,12 +1230,14 @@ _sched_start_impl() {
     # reported honestly and NEVER reserved as running.
     if ! svc_start "${p}"; then
       err "failed to start '${p}': the service backend refused to start it (see: llmctl logs ${p}; on Linux, check 'llmctl install' has been run and 'systemctl --user status llmctl-$(catalog_engine "${p}")@${p}.service')"
+      (( quarantine )) && _sched_quarantine_env_restore "${p}"
       portreg_release "${reg_name}"
       rm -f "${plan_file}"
       return 1
     fi
     if ! _sched_unit_started_ok "${p}"; then
       err "failed to start '${p}': unit not active after start (skipped by the port check or exited); see: llmctl logs ${p}"
+      (( quarantine )) && _sched_quarantine_env_restore "${p}"
       portreg_release "${reg_name}"
       rm -f "${plan_file}"
       return 1
@@ -1221,6 +1260,7 @@ _sched_start_impl() {
         err "started '${p}' but it never answered http://127.0.0.1:${port}${ready_path} within ${LLMCTL_READY_TIMEOUT:-60}s (see: llmctl logs ${p})"
       fi
       svc_stop "${p}" || true
+      (( quarantine )) && _sched_quarantine_env_restore "${p}"
       (( quarantine )) || portreg_release "${reg_name}"
       rm -f "${plan_file}"
       return 1
@@ -1395,6 +1435,7 @@ _sched_stop_impl() {
     if svc_stop "${p}"; then
       sched_registry_withdraw "${p}"
     fi
+    _sched_quarantine_env_restore "${p}"
     rm -f "$(_sched_run_file "${p}")"
     info "stopped ${p}"
   done
@@ -1660,6 +1701,7 @@ _sched_auto_impl() {
     freed_vram="$(sed -n 's/^vram_mb=//p' "${lru_run}" | head -1)"
     if svc_stop "${lru}"; then
       sched_registry_withdraw "${lru}"
+      _sched_quarantine_env_restore "${lru}"
       _sched_auto_ram_credit=$(( _sched_auto_ram_credit + ${freed_ram:-0} ))
       [[ "${vram_live}" == "True" ]] && _sched_auto_vram_credit=$(( _sched_auto_vram_credit + ${freed_vram:-0} ))
       rm -f "${lru_run}"

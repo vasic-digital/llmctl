@@ -102,8 +102,10 @@ assert_contains "$(cat "${TEST_TMP}/last.out")" "the judge itself is broken" "al
 sed 's/^    return any(not neg for _, neg in claim_occurrences(raw, needle))$/    return True/' "${JUDGE}" > "${JM}/validate_judge.py"
 assert_eq 1 "$(grep -c '^    return True$' "${JM}/validate_judge.py")" "mutant judge really differs (every needle counts as asserted)"
 assert_eq 1 "$(run_rc python3 -I "${JM}/validate_judge.py" run --suite "${VSUITE}" --endpoint "${URL}")" "always-match substring judge -> exit 1"
-sed 's/^    occ.sort()$/    pass/' "${JUDGE}" > "${JM}/validate_judge.py"
-assert_eq 1 "$(grep -c '^    pass$' "${JM}/validate_judge.py")" "mutant judge really differs (occurrences no longer sorted by position: order-blind)"
+# (review 3 of 2026-10-15: the list / table / colour probes check exact_words now, no longer `ordered` - the order-blind
+# mutant is applied to the check the vision suite really uses; `ordered` keeps its own mutant in test_validation_mutants.sh)
+sed 's/^            if got != norm(val).strip():$/            if sorted(got.split()) != sorted(norm(val).split()):/' "${JUDGE}" > "${JM}/validate_judge.py"
+assert_eq 1 "$(grep -c '^            if sorted(got.split()) != sorted(norm(val).split()):$' "${JM}/validate_judge.py")" "mutant judge really differs (exact_words compares the words as a set: order-blind)"
 assert_eq 1 "$(run_rc python3 -I "${JM}/validate_judge.py" selftest --suite "${VSUITE}")" "order-blind judge fails its self-test"
 # Isolate the golden-bad discrimination layer: a LAX golden expectation (passes "NO TEXT" / "PURPLE ...")
 # with its canned judge controls removed. Only the control images can expose it.

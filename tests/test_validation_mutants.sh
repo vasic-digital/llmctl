@@ -50,7 +50,14 @@ tree() {
   printf '%s\n' "${d}"
 }
 run_suite() { local rc=0; env "$@" >"${TEST_TMP}/suite.out" 2>&1 || rc=$?; echo "${rc}"; }
-# MUTANT_GROUPS (space-separated: judge record served cleanup enforcement marker interrupt gate judge2 policy ramunits ramcap; default all) lets a bounded runner split the work
+# DURATION (measured 2026-10-15, review 3): all 68 mutants take ~1180 s - MORE than one bounded run (-T 580). Run it per group,
+# one bounded run each (the largest group, enforcement, took 217 s; none exceeds ~220 s):
+#   for g in judge judge2 judge3 suites record served cleanup enforcement qenv vlock marker interrupt gate policy ramunits ramcap; do
+#     MUTANT_GROUPS=$g ~/.local/bin/bounded-run -m 6G -T 580 -- bash tests/test_validation_mutants.sh; done
+# Measured per group (s): judge 31, judge2 4, judge3 7, suites 10, record 178, served 14, cleanup 3, enforcement 217, qenv 149,
+# vlock 45, marker 68, interrupt 166, gate 211, policy 57, ramunits 15, ramcap 7. The "all 68 were run" count is asserted only
+# when MUTANT_GROUPS is unset (a full, unbounded run).
+# MUTANT_GROUPS (space-separated: judge judge2 judge3 suites record served cleanup enforcement qenv vlock marker interrupt gate policy ramunits ramcap; default all) lets a bounded runner split the work
 want() { [[ -z "${MUTANT_GROUPS:-}" || " ${MUTANT_GROUPS} " == *" $1 "* ]]; }
 
 if want judge; then
@@ -89,8 +96,53 @@ j2 json-duplicate-keys '        return json.loads(t, object_pairs_hook=_no_dup_p
 j2 exact-text-substring '            if got != val:
                 reasons.append("exact_text' '            if val not in got:
                 reasons.append("exact_text'
-j2 number-modifiers-ignored '        if v is not None and all(n.upper() not in _NUMBER_BLOCK and _num_value(n) is None for n in nouns):' '        if v is not None:'
+j2 number-modifiers-ignored '    v = _num_value(t)
+    if v is not None:
+        return v, None
+    m = re.match(r"^(.+?)' '    v = _num_value(t.split()[0] if t.split() else t)
+    if v is not None:
+        return v, None
+    m = re.match(r"^(.+?)'
 j2 alternatives-allowed '            elif "OR" in ws:' '            elif False:'
+
+fi
+if want judge3; then
+echo "== review-3 judge mutants (third 2026-10-15 review findings 1-5; each must turn tests/test_validation_judge_adversarial_r3.sh RED)"
+j3() { # j3 <name> <old> <new>
+  local m="${TEST_TMP}/j3.$1.py"
+  mutate "${J}" "${m}" "$2" "$3"
+  caught "judge3/$1" "$(run_suite JUDGE_UNDER_TEST="${m}" bash "${T}/test_validation_judge_adversarial_r3.sh")" nonzero
+}
+j3 lead-in-trailing-words '            v = _num_value(t[len(lead):].strip(" :"))' '            v = _num_value((t[len(lead):].strip(" :").split() or [""])[0])'
+j3 retraction-word-negates '        if i in marks:
+            return False' '        if False:
+            return False'
+j3 abbreviation-period-splits '        if len(a) > 1 and a.endswith(".") and a[-2].isalnum():' '        if False:'
+j3 aside-counts-as-claim '    return any(not neg and depth[off] == 0 for' '    return any(not neg for'
+j3 extra-label-ignored '    if extra:
+        return "words other than the labels' '    if False:
+        return "words other than the labels'
+j3 denial-clause-unbounded '        if ws[0] in _DENIAL_WORDS and len(rest) <= 1 and' '        if ws[0] in _DENIAL_WORDS and len(rest) <= 9 and'
+j3 allow-phrase-as-loose-words '        hit = next((x for x in want if x and words[i:i + len(x)] == x), None)
+        if hit is None:
+            out.append(words[i])' '        hit = next(([words[i]] for x in want if words[i] in x), None)
+        if hit is None:
+            out.append(words[i])'
+j3 module-statements-allowed '    for i, st in enumerate(tree.body):
+        if st is f or' '    for i, st in enumerate([]):
+        if st is f or'
+j3 calls-allowed '        if isinstance(n, ast.Call):
+            return "the code calls' '        if False:
+            return "the code calls'
+j3 attribute-store-allowed '        if isinstance(n, (ast.Attribute, ast.Subscript)) and isinstance(n.ctx, (ast.Store, ast.Del)):' '        if False:'
+
+fi
+if want suites; then
+echo "== suite-structure mutant (third 2026-10-15 review finding 13; must turn tests/test_validation_suites.sh RED)"
+m="${TEST_TMP}/su.judge.py"
+mutate "${J}" "${m}" '                "label_set", "words_allow")' '                "label_set")'
+caught "suites/check-unknown-to-judge" "$(run_suite JUDGE_UNDER_TEST="${m}" bash "${T}/test_validation_suites.sh")" nonzero
+assert_contains "$(cat "${TEST_TMP}/suite.out")" "unknown check words_allow" "suites/check-unknown-to-judge: the structure check names the check the judge lacks"
 
 fi
 if want record; then
@@ -136,6 +188,33 @@ em unit-gate-open svc_hook.sh '  printf '"'"'llmctl: profile %s is not validated
   return 77' '  return 0'
 em consumer-facing-ignored validate.sh '  _val_consumer_facing "$1" && return 0
   return 1' '  return 1'
+em optout-consumer-facing-unchecked svc_hook.sh '    if [[ "${cf}" == "False" ]]; then' '    if true; then'
+
+fi
+if want qenv; then
+echo "== quarantine env-record mutants (third 2026-10-15 review finding 6; each must turn tests/test_validation_quarantine_env.sh RED)"
+qm() { # qm <name> <lib-file> <old> <new>
+  mutate "${LLMCTL_ROOT}/lib/$2" "${TEST_TMP}/qm.check" "$3" "$4"
+  caught "qenv/$1" "$(run_suite QE_MUT_FILE="$2" QE_MUT_OLD="$3" QE_MUT_NEW="$4" bash "${T}/test_validation_quarantine_env.sh")" nonzero
+  assert_contains "$(cat "${TEST_TMP}/suite.out")" "MUTANT applied to $2" "qenv/$1: the mutant was really applied"
+}
+qm stop-keeps-quarantine-record scheduler.sh '    _sched_quarantine_env_restore "${p}"
+    rm -f "$(_sched_run_file "${p}")"' '    rm -f "$(_sched_run_file "${p}")"'
+qm previous-record-not-saved scheduler.sh '      if ! _sched_quarantine_env_save "${p}"; then' '      if false; then'
+qm validator-not-recorded scheduler.sh 'LLMCTL_SVC_QUARANTINE_VALIDATOR="$(proc_identity "$$")"' 'LLMCTL_SVC_QUARANTINE_VALIDATOR=""'
+qm dead-validator-honoured svc_hook.sh '        && [[ "${vid}" =~ ^[0-9]+: ]] && [[ "$(proc_identity "${vid%%:*}" 2>/dev/null)" == "${vid}" ]]; then' '        ; then'
+
+fi
+if want vlock; then
+echo "== manual-validate lock mutants (third 2026-10-15 review finding 10; each must turn tests/test_validation_lock.sh RED)"
+vm() { # vm <name> <lib-file> <old> <new>
+  mutate "${LLMCTL_ROOT}/lib/$2" "${TEST_TMP}/vm.check" "$3" "$4"
+  caught "vlock/$1" "$(run_suite LOCK_MUT_FILE="$2" LOCK_MUT_OLD="$3" LOCK_MUT_NEW="$4" bash "${T}/test_validation_lock.sh")" nonzero
+  assert_contains "$(cat "${TEST_TMP}/suite.out")" "MUTANT applied to $2" "vlock/$1: the mutant was really applied"
+}
+vm manual-validate-unlocked validate.sh '    _val_locked_profile_validate "${lp}" "$@" || rc=$?' '    validate_profile "$@" || rc=$?'
+vm holder-child-not-reentrant validate.sh '  [[ "${cur}" == "${want}" ]] && return 0       # the holder exec'"'"'d' '  :       # the holder exec'"'"'d'
+vm forged-holder-trusted validate.sh '  want="${v##*:}"; cur="$$"' '  return 0'
 
 fi
 if want marker; then
@@ -217,6 +296,18 @@ echo "== unit-RAM mutant (review 2026-10-15 finding 10; must turn tests/test_ram
 d="$(tree units catalog.sh)"
 mutate "${LLMCTL_ROOT}/lib/catalog.sh" "${d}/lib/catalog.sh" '  reserved=$(( reserved + units ))' '  :'
 caught "ramunits/units-ignored" "$(run_suite RAMCAP_ROOT_UNDER_TEST="${d}" bash "${T}/test_ramcap_units.sh")" nonzero
+ru() { # ru <name> <old> <new> - review 3 of 2026-10-15 finding 7
+  local d; d="$(tree "units.$1" catalog.sh)"
+  mutate "${LLMCTL_ROOT}/lib/catalog.sh" "${d}/lib/catalog.sh" "$2" "$3"
+  caught "ramunits/$1" "$(run_suite RAMCAP_ROOT_UNDER_TEST="${d}" bash "${T}/test_ramcap_units.sh")" nonzero
+}
+ru fake-honoured-outside-harness '    if validation_hermetic; then
+      local i c m h x' '    if true; then
+      local i c m h x'
+ru unknown-max-high-ignored '  for src in current:"$2" max:"$3" high:"$4"; do' '  for src in current:"$2"; do'
+ru unknown-counts-zero '  base="${inst}"
+  [[ "${inst}" =~' '  return 0
+  [[ "${inst}" =~'
 
 fi
 if want ramcap; then
@@ -228,5 +319,5 @@ caught "ramcap/cap-ignored" "$(run_suite SUPPLY_ROOT_UNDER_TEST="${d}" bash "${T
 fi
 echo "== summary: ${CAUGHT} of ${TOTAL} mutants caught"
 assert_eq "${TOTAL}" "${CAUGHT}" "every mutant of the new branches is caught by an assertion"
-[[ -n "${MUTANT_GROUPS:-}" ]] || assert_eq 46 "${TOTAL}" "all 46 mutants were run"
+[[ -n "${MUTANT_GROUPS:-}" ]] || assert_eq 68 "${TOTAL}" "all 68 mutants were run"
 test_finish

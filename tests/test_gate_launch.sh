@@ -104,16 +104,16 @@ unset LLMCTL_VALIDATE_HERMETIC; export LLMCTL_VALIDATE_HERMETIC=1     # machine-
 export GW_REAL_VALIDATE=1
 GOOD="${VL_FIX}/answers_good.json"
 U="$(vl_fake_start "${GOOD}" --model "${VL_MODEL}")"; PORT="${U##*:}"
-# launch A: the quarantine start writes the env record of launch A (its own validation probes an empty private port ->
-# UNDETERMINED -> stopped; the env record survives the stop)
-gw_run env LLMCTL_VALIDATE_ON_START=1 "${L}" start vision >/dev/null
+# launch A: the quarantine start writes the env record of launch A (ON_START=external: left unvalidated in quarantine, so
+# the record stays - a STOPPED quarantine start puts the previous record back, review 3 of 2026-10-15 finding 6)
+gw_run env LLMCTL_VALIDATE_ON_START=external "${L}" start vision >/dev/null
 vl_mark_running "${PORT}"; : > "${GW_ACTIVE_DIR}/vision"
 assert_eq 0 "$(gw_run "${L}" validate vision)" "a real signed PASS record for launch A"
 assert_eq 0 "$(gw_run "${L}" require-validated vision)" "...require-validated accepts it"
 rm -f "${LLMCTL_RUNTIME_DIR}/vision.run" "${GW_ACTIVE_DIR}/vision"; gw_calls_reset
 rc="$(gw_run env LLMCTL_VALIDATE_ON_START=1 LLMCTL_SEED=7 "${L}" start vision)"
 assert_contains "$(gw_out)" "UNPUBLISHED" "a start with CHANGED flags (LLMCTL_SEED=7) is quarantined - the record is for another launch"
-assert_contains "$(sed -n 's/^LLMCTL_ARGS=//p' "${LLMCTL_SERVICES_DIR}/vision.env")" "--host 127.0.0.1" "...loopback, never the documented port"
+assert_contains "$(sed -n 's/^LLMCTL_ARGS=//p' "${GW_CALLS}.env_at_validate.vision")" "--host 127.0.0.1" "...loopback, never the documented port (the record it ran with while validated)"
 rm -f "${LLMCTL_RUNTIME_DIR}/vision.run" "${GW_ACTIVE_DIR}/vision"
 # the env record now holds the seed-7 quarantine launch: put launch A back (a start with the original flags)
 gw_run env LLMCTL_VALIDATE_ON_START=external "${L}" start vision >/dev/null

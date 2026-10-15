@@ -16,6 +16,13 @@ sigint_ignored() {
   mask="$(awk '/^SigIgn:/ {print $2}' /proc/$$/status 2>/dev/null)" || return 1
   [[ -n "${mask}" ]] && (( (0x${mask} & 2) != 0 ))
 }
+# sighup_ignored: SIGHUP (bit 1) ignored at entry - a run under `nohup` (review 3 of 2026-10-15). Like an ignored SIGINT,
+# bash can neither trap nor reset it, and `trap -p HUP` then shows the inherited ignore, not a leftover trap.
+sighup_ignored() {
+  local mask
+  mask="$(awk '/^SigIgn:/ {print $2}' /proc/$$/status 2>/dev/null)" || return 1
+  [[ -n "${mask}" ]] && (( (0x${mask} & 1) != 0 ))
+}
 if sigint_ignored && [[ -z "${LLMCTL_TEST_SIGINT_REEXEC:-}" ]] && command -v python3 >/dev/null 2>&1; then
   export LLMCTL_TEST_SIGINT_REEXEC=1
   echo "NOTE: SIGINT was ignored at entry (background launch); re-executing with SIGINT restored to default" >&2
@@ -508,12 +515,19 @@ out="$(bash -c '
   source "$1/lib/common.sh"; source "$1/lib/catalog.sh"; source "$1/lib/validate.sh"
   validate_profile fast --host "$2" >/dev/null 2>&1; echo "rc=$?"; trap -p INT TERM HUP
 ' _ "${LLMCTL_ROOT}" "${U}" 2>&1)"
-if sigint_ignored; then
-  assert_skip "SIGINT is ignored at shell entry; a leftover INT trap is unobservable (trap -p INT shows the inherited ignore)" "with no caller traps none remain"
-  assert_eq $'rc=0\ntrap -- \'\' SIGINT' "${out}" "weaker true property: only the inherited INT ignore remains, no TERM/HUP trap left behind"
-  assert_skip "SIGINT is ignored at shell entry; the section-23b negative control (mutant leaves traps) cannot observe a leftover INT trap" "23b negative control of the trap check"
+# the inherited ignores `trap -p INT TERM HUP` must print (in that order) - nothing else may remain
+inherited="rc=0"
+sigint_ignored && inherited+=$'\ntrap -- \'\' SIGINT'
+sighup_ignored && inherited+=$'\ntrap -- \'\' SIGHUP'
+if sigint_ignored || sighup_ignored; then
+  assert_skip "$(sigint_ignored && printf 'SIGINT ')$(sighup_ignored && printf 'SIGHUP ')ignored at shell entry (background launch / nohup): bash cannot trap or reset an inherited-ignored signal, so a leftover trap on it is unobservable" "with no caller traps none remain"
+  assert_eq "${inherited}" "${out}" "weaker true property: only the inherited ignore(s) remain, no other INT/TERM/HUP trap is left behind"
 else
   assert_eq "rc=0" "${out}" "with no caller traps none remain"
+fi
+if sigint_ignored; then
+  assert_skip "SIGINT is ignored at shell entry; the section-23b negative control (mutant leaves traps) cannot observe a leftover INT trap" "23b negative control of the trap check"
+else
 
   echo "== 23b. negative control: the section-23 assertions FAIL when validate_profile really leaves its traps behind"
   MUT="${TEST_TMP}/mutant_root"; mkdir -p "${MUT}"

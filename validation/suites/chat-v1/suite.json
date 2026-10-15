@@ -66,6 +66,14 @@
   {"probe": "json", "answer": "{\"color\": \"blue\"} -- no wait: {\"color\": \"red\"}", "expect": "fail"},
   {"probe": "json", "answer": "{\"color\": \"red\", \"color\": \"blue\"}", "expect": "fail"},
   {"probe": "json", "answer": "{'color': 'blue'}", "expect": "fail"},
-  {"probe": "json", "answer": "{\"color\": \"blue\"}", "expect": "pass"}
+  {"probe": "json", "answer": "{\"color\": \"blue\"}", "expect": "pass"},
+  {"probe": "arith", "answer": "42 thousand", "expect": "fail"},
+  {"probe": "arith", "answer": "42 I think", "expect": "fail"},
+  {"probe": "arith", "answer": "The answer is 42 in hex", "expect": "fail"},
+  {"probe": "arith", "answer": "The sum is 42", "expect": "pass"},
+  {"probe": "compare", "answer": "9 hopefully", "expect": "fail"},
+  {"probe": "capital", "answer": "London. No, Paris.", "expect": "pass"},
+  {"probe": "capital", "answer": "Paris. No, London.", "expect": "fail"},
+  {"probe": "capital", "answer": "Paris is not the capital.", "expect": "fail"}
  ]
 }
