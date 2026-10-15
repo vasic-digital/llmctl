@@ -25,6 +25,11 @@ source "$(dirname "${BASH_SOURCE[0]}")/helpers.sh"
 test_setup_env
 
 LLMCTL="${LLMCTL_ROOT}/bin/llmctl"
+# every stop goes to a RECORDING service manager (review 2026-10-15 finding 11: the strict post-start hook below stopped
+# `decide` / `vision` through the host's REAL `systemctl --user stop llmctl-llama@<p>.service`)
+export LLMCTL_SERVICE_BACKEND_FILE="${LLMCTL_ROOT}/tests/fixtures/svc_backend_recording.sh"
+export GW_CALLS="${TEST_TMP}/svc.calls" GW_ACTIVE_DIR="${TEST_TMP}/svc.active"
+: > "${GW_CALLS}"; mkdir -p "${GW_ACTIVE_DIR}"
 FIX="${LLMCTL_ROOT}/tests/fixtures/validation"
 VSUITE="${LLMCTL_ROOT}/validation/suites/vision-golden-v1"
 CSUITE="${LLMCTL_ROOT}/validation/suites/chat-v1"
