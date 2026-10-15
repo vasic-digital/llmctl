@@ -50,6 +50,13 @@ tree() {
   printf '%s\n' "${d}"
 }
 run_suite() { local rc=0; env "$@" >"${TEST_TMP}/suite.out" 2>&1 || rc=$?; echo "${rc}"; }
+# DURATION (measured 2026-10-15, review 3): all 68 mutants take ~1180 s - MORE than one bounded run (-T 580). Run it per group,
+# one bounded run each (the largest group, enforcement, took 217 s; none exceeds ~220 s):
+#   for g in judge judge2 judge3 suites record served cleanup enforcement qenv vlock marker interrupt gate policy ramunits ramcap; do
+#     MUTANT_GROUPS=$g ~/.local/bin/bounded-run -m 6G -T 580 -- bash tests/test_validation_mutants.sh; done
+# Measured per group (s): judge 31, judge2 4, judge3 7, suites 10, record 178, served 14, cleanup 3, enforcement 217, qenv 149,
+# vlock 45, marker 68, interrupt 166, gate 211, policy 57, ramunits 15, ramcap 7. The "all 68 were run" count is asserted only
+# when MUTANT_GROUPS is unset (a full, unbounded run).
 # MUTANT_GROUPS (space-separated: judge judge2 judge3 suites record served cleanup enforcement qenv vlock marker interrupt gate policy ramunits ramcap; default all) lets a bounded runner split the work
 want() { [[ -z "${MUTANT_GROUPS:-}" || " ${MUTANT_GROUPS} " == *" $1 "* ]]; }
 
@@ -312,5 +319,5 @@ caught "ramcap/cap-ignored" "$(run_suite SUPPLY_ROOT_UNDER_TEST="${d}" bash "${T
 fi
 echo "== summary: ${CAUGHT} of ${TOTAL} mutants caught"
 assert_eq "${TOTAL}" "${CAUGHT}" "every mutant of the new branches is caught by an assertion"
-[[ -n "${MUTANT_GROUPS:-}" ]] || assert_eq 46 "${TOTAL}" "all 46 mutants were run"
+[[ -n "${MUTANT_GROUPS:-}" ]] || assert_eq 68 "${TOTAL}" "all 68 mutants were run"
 test_finish

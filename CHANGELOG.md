@@ -25,6 +25,44 @@ repository as an honest record of that process.
 
 ## Unreleased
 
+* **fix(judge): positive allow-lists for numbers, exact transcriptions and label sets (independent review 3 of 2026-10-15, findings
+  1-5).** Of 144 new adversarial answers 30 clearly wrong ones PASSED and 4 clearly right ones FAILED. `number_equals` accepts next to
+  the number only the probe's own `number_allow` words (the open "N + up to 4 words" form is gone: `42 thousand`, `42 in hex`, `3 pairs`,
+  `42 I think` FAIL); a `number_allow` entry ending in `.` declares an abbreviation (`Invoice No. 7731` PASSES). The list, table and
+  colour probes use `exact_words` (+ the new `words_allow` framing phrases), so a hallucinated extra item FAILs; new `label_set` class for
+  the dialog buttons (`Cancel, Delete, OK` FAILs); `contains_any` ignores a parenthetical aside and the screen-type probe forbids the
+  other screen types; `python_function_sum` refuses any module statement but the def / imports / docstring, any call and any attribute /
+  subscript store; a word opening a retraction clause no longer negates the correction (`London. No, Paris.` PASSES).
+  `tests/test_validation_judge_adversarial_r3.sh` (table `tests/fixtures/validation/adversarial_answers_r3.json`, 144 rows): RED 30 false
+  PASS / 4 false FAIL -> GREEN 0 / 0; the 18 refused right answers are pinned trade-offs with a justification each (docs/validation.md
+  "Known trade-offs"); the 84-row table of round 2 stays 0 / 0. **Every suite hash changes** (the rules live in the suite files): existing
+  validation records are no longer fresh - validate every model again. 10 new mutants (group `judge3`).
+* **fix(test): `tests/test_validation_suites.sh` takes the known check names from the judge (review 3, finding 13).** Its hand-kept list
+  went stale when `max_words`, `exact_text`, `json_equals`, `exact_words`, `python_function_sum` and `number_allow` were added: the suite
+  was RED at 43ad7b1 (65 ok / 1 FAIL) and the previous round's report did not list it. A check unknown to the judge is now refused (in-test
+  negative control + mutant `suites/check-unknown-to-judge`).
+* **fix(validate): a stopped quarantine start puts the env record back (review 3, finding 6).** An ENABLED profile whose quarantine start
+  FAILED kept the quarantine launch as the env record its unit boots from. Every stop of a quarantined instance now restores the previous
+  record (or removes the quarantine one); the unit's ExecCondition honours a quarantine record only while its validator process lives
+  (`LLMCTL_QUARANTINE_VALIDATOR`). `tests/test_validation_quarantine_env.sh` RED 16 FAIL -> GREEN 46 ok; 4 new mutants (group `qenv`).
+* **fix(validate): the unit gate re-checks an opt-out against the catalog (review 3, finding 9)** - `LLMCTL_UNVALIDATED` in an env record
+  no longer starts a consumer-facing profile unvalidated (`test_validation_enforcement.sh` RED 2 FAIL -> GREEN; mutant
+  `enforcement/optout-consumer-facing-unchecked`).
+* **fix(plan): unknown unit memory is never 0; `LLMCTL_FAKE_UNIT_MEM` is a harness-only input (review 3, finding 7).** `MemoryCurrent` =
+  2^64-1 counts the unit's MemoryMax / MemoryHigh / model-file size / 4096 MiB instead of 0 (`budgets.ram_units_estimated`).
+  `test_ramcap_units.sh` RED 7 FAIL -> GREEN 11 ok; 3 new mutants.
+* **fix(gateway): a blank `LLMCTL_DECIDE_ENDPOINT_<P>` is no declaration; `LLMCTL_DECIDE_RESOLVER=static` warns (review 3, finding 8).**
+  `go test -run TestF7` RED 3 FAIL -> GREEN; 2 new mutants in `tests/test_gateway_mutation.sh`.
+* **fix(validate): the manual validate entry points take the per-profile validation lock (review 3, finding 10)**, re-entrant for the
+  systemd waiter's own `llmctl validate` child. `test_validation_lock.sh` RED 5 FAIL -> GREEN 10 ok; 3 new mutants (group `vlock`).
+* **docs: the live gateway runs a deleted pre-`a745432` binary (review 3, finding 11)** - measured read-only and documented in
+  `docs/decide-gateway.md`; nothing live was rebuilt or restarted.
+* **test: the mutation harness is run per group (68 mutants, ~1180 s in total - more than one 580 s bounded run).** Measured group
+  durations are in the test header and docs/validation.md ("Running the mutation harness"); the largest group (enforcement) takes 217 s.
+  All 68 mutants caught, run group by group on 2026-10-15.
+* **test: `test_validation_gate_defects.sh` states and skips its 'no caller traps' assertion when SIGHUP is ignored at entry (nohup)**
+  and asserts the weaker true property instead (RED under nohup at 43ad7b1, GREEN with and without nohup).
+
 * **fix(validate): the judge no longer passes wrong answers of the reviewer's adversarial table (independent review 2026-10-15, finding 4).**
   42 of 77 adversarial answers PASSED (negated / hedged / comparative / ordinal / percent numbers, retractions, alternatives, negated
   order, Unicode look-alikes, code that only looked right, nested or negated JSON literals, extra / duplicate JSON keys, self-corrections,
