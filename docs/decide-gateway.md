@@ -384,7 +384,10 @@ unlisted spellings are not added), and an engine exposing more than three token 
 ## Finding engines
 
 By default (`LLMCTL_DECIDE_RESOLVER=auto`) the gateway routes to the engines in the service registry when it lists any, else to the
-static `LLMCTL_DECIDE_ENDPOINT_<PROFILE>` / catalog ports. It publishes itself in the registry (`kind=gateway`) while serving.
+static `LLMCTL_DECIDE_ENDPOINT_<PROFILE>` - and, only with `LLMCTL_VALIDATE_STRICT=0`, to the `LLMCTL_PORT_<PROFILE>` / catalog port of a
+profile without a healthy registry row (review 2026-10-15 finding 7: under the strict validation gate an unregistered engine is not a
+backend). `LLMCTL_DECIDE_RESOLVER=static` is an explicit operator choice and keeps the full static table below. It publishes itself in the
+registry (`kind=gateway`) while serving.
 See `docs/registry-discovery.md`.
 
 The static endpoint of a profile is, in order: `LLMCTL_DECIDE_ENDPOINT_<PROFILE>` (comma separated loopback URLs) >

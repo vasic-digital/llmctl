@@ -105,6 +105,21 @@ func StaticResolverFromEnv(specs []ProfileSpec, get func(string) string) *Static
 	return r
 }
 
+// StaticResolverExplicitFromEnv is StaticResolverFromEnv WITHOUT the implicit port fallback: only the instance URLs an
+// operator declared in LLMCTL_DECIDE_ENDPOINT_<PROFILE>. It is the fallback of the auto resolver under the strict
+// validation gate (review 2026-10-15 finding 7): a profile with no healthy registry row is NOT routed to whatever
+// listens on its catalog port - an unregistered engine (never validated by llmctl, or validated and withdrawn) is not
+// a backend.
+func StaticResolverExplicitFromEnv(specs []ProfileSpec, get func(string) string) *StaticResolver {
+	var declared []ProfileSpec
+	for _, s := range specs {
+		if strings.TrimSpace(get(EndpointVar(s.ID))) != "" {
+			declared = append(declared, s)
+		}
+	}
+	return StaticResolverFromEnv(declared, get)
+}
+
 func itoa(i int) string {
 	if i == 0 {
 		return "0"

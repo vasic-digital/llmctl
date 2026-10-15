@@ -21,8 +21,13 @@ import (
 //	          from the registry; the gateway follows registry changes without a restart
 //	static    LLMCTL_DECIDE_ENDPOINT_<PROFILE> / catalog ports, probed with a TCP connect
 //	auto      (default) decided PER PROFILE on every request: the registry when it holds a healthy
-//	          entry for that profile, else the static endpoint (a mixed deployment keeps both)
+//	          entry for that profile, else - under the strict validation gate (the default) - only an
+//	          operator-declared LLMCTL_DECIDE_ENDPOINT_<PROFILE>; the catalog-port fallback of a profile
+//	          without a registry row applies only with LLMCTL_VALIDATE_STRICT=0 (review 2026-10-15 finding 7)
 const resolverVar = "LLMCTL_DECIDE_RESOLVER"
+
+// validateStrictVar: the strict validation gate (default on) - see buildResolver's auto fallback.
+const validateStrictVar = "LLMCTL_VALIDATE_STRICT"
 
 // registryIntervalVar is the poll interval at which the gateway follows registry changes.
 const registryIntervalVar = "LLMCTL_DECIDE_REGISTRY_INTERVAL"
@@ -112,6 +117,15 @@ func (p *prepared) buildResolver(specs []gateway.ProfileSpec) (gateway.Resolver,
 	static := func() gateway.Resolver {
 		return gateway.NewProbeResolver(gateway.StaticResolverFromEnv(specs, get), 300*time.Millisecond, time.Second)
 	}
+	// auto mode's fallback under the strict validation gate (the default; LLMCTL_VALIDATE_STRICT=0 restores the catalog-port
+	// fallback): only operator-declared LLMCTL_DECIDE_ENDPOINT_<P> URLs, never an unregistered engine on a catalog port
+	// (review 2026-10-15 finding 7). mode=static is an explicit operator choice and keeps the full static table.
+	fallback := static
+	if env[validateStrictVar] != "0" {
+		fallback = func() gateway.Resolver {
+			return gateway.NewProbeResolver(gateway.StaticResolverExplicitFromEnv(specs, get), 300*time.Millisecond, time.Second)
+		}
+	}
 	if mode == "static" {
 		return static(), nil
 	}
@@ -119,7 +133,7 @@ func (p *prepared) buildResolver(specs []gateway.ProfileSpec) (gateway.Resolver,
 		if mode == "registry" {
 			return nil, fmt.Errorf("%s=registry: %v", resolverVar, cerr)
 		}
-		return static(), nil
+		return fallback(), nil
 	}
 	if mode != "registry" {
 		// auto: PER PROFILE (B3-09). A profile with a healthy registry entry is served from the registry;
@@ -131,7 +145,7 @@ func (p *prepared) buildResolver(specs []gateway.ProfileSpec) (gateway.Resolver,
 		p.regs.res = rr // followed by publishSelf like in registry mode
 		ar := &autoResolver{
 			reg:      p.regs.reg,
-			static:   static(),
+			static:   fallback(),
 			registry: gateway.NewProbeResolver(rr, 300*time.Millisecond, time.Second),
 			every:    interval,
 		}

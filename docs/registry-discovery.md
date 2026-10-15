@@ -94,7 +94,9 @@ FAILs until `llmctl-decide registry ack-corrupt` acknowledges it.
 
 `serve --resolver auto` (the default) decides **per profile, on every request**: a profile with at least one
 **healthy** `kind=decide` registry entry is served from the registry, every other profile from its static
-endpoint (`LLMCTL_DECIDE_ENDPOINT_<PROFILE>` or the catalog port). A stale `decide-gateway` row or an unhealthy
+endpoint - under the strict validation gate (the default, review 2026-10-15 finding 7) ONLY an operator-declared
+`LLMCTL_DECIDE_ENDPOINT_<PROFILE>`: an engine that merely listens on the catalog port is not registered (llmctl never
+validated it, or withdrew it) and is not routed; `LLMCTL_VALIDATE_STRICT=0` restores the catalog-port fallback. A stale `decide-gateway` row or an unhealthy
 engine therefore never leaves the gateway with zero backends while the static endpoints would have worked
 (C-23), a mixed deployment (profile X registered, profile Y configured only statically) keeps both, and an
 engine that registers later wins for its profile from the moment it is healthy (C2-13). The status line
