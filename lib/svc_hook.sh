@@ -160,6 +160,12 @@ hk_validated() {
   local inst="$1" f prof until why llmctl
   f="$(_hk_envfile "${inst}")"
   [[ -f "${f}" ]] || return 0
+  # review 2026-10-15 finding 1: only units installed by an llmctl that has this gate are gated (lib/common.sh
+  # enforcement_installed; `llmctl install` writes the marker). Without it: c23c2e6 behaviour - no such check.
+  if ! enforcement_installed; then
+    _hk_log "${inst}: unit-level validation gate not installed (units predate it; run: llmctl install) - not checked"
+    return 0
+  fi
   until="$(_hk_get "${f}" LLMCTL_QUARANTINE_UNTIL)"
   if [[ -n "${until}" ]]; then
     if [[ "${until}" =~ ^[0-9]+$ ]] && (( $(date +%s) <= until )); then
@@ -337,6 +343,56 @@ _hk_validate_after_ready() {
   return 1
 }
 
+# _hk_legacy_validate_after_ready <inst> <port> <envfile> [pid] - the c23c2e6 post-REGISTRATION check, kept VERBATIM
+# for units installed before the validation gate (no `llmctl install` marker; review 2026-10-15 finding 1). Only kind=llm
+# catalog profiles (profile == instance). PASS -> nothing; FAIL -> `systemctl --user stop <unit>`; UNDETERMINED -> logged,
+# the unit keeps running NOT validated (stopped only with LLMCTL_VALIDATE_STRICT=1). Do not "improve" it: its whole
+# point is that a tree update changes nothing for a unit nobody re-installed.
+_hk_legacy_validate_after_ready() {
+  local inst="$1" port="$2" f="$3" pid="${4:-}" prof kind engine llmctl rc=0 unit st
+  if [[ -n "${pid}" ]]; then
+    sleep "${LLMCTL_VALIDATE_SETTLE:-1}"
+    kill -0 "${pid}" 2>/dev/null || return 0
+    st="$(awk '{print $3}' "/proc/${pid}/stat" 2>/dev/null || true)"
+    [[ "${st}" != "Z" ]] || return 0
+  fi
+  [[ "${LLMCTL_VALIDATE_ON_START:-1}" == "0" ]] && { _hk_log "${inst}: validation on start disabled (LLMCTL_VALIDATE_ON_START=0) - NOT validated"; return 0; }
+  [[ "${LLMCTL_DRY_RUN:-0}" == "1" ]] && return 0
+  prof="$(_hk_get "${f}" LLMCTL_REG_PROFILE)"; kind="$(_hk_get "${f}" LLMCTL_REG_KIND)"
+  [[ "${kind}" == "llm" && -n "${prof}" && "${prof}" == "${inst}" ]] || return 0
+  llmctl="${LLMCTL_ROOT}/bin/llmctl"
+  [[ -x "${llmctl}" ]] || { _hk_log "${inst}: ${llmctl} not executable - NOT validated"; return 0; }
+  mkdir -p "${LLMCTL_RUNTIME_DIR}" 2>/dev/null || true
+  _hk_log "${inst}: validation (legacy unit, installed before the validation gate): running the validation suite(s) against the started unit (port ${port})"
+  (
+    flock -w "${LLMCTL_VALIDATE_LOCK_WAIT:-900}" 9 || exit 98
+    if "${llmctl}" require-validated "${prof}" >/dev/null 2>&1; then exit 97; fi
+    LLMCTL_VALIDATE_FAIL_RC=64 LLMCTL_VALIDATE_ATTACH_PROFILE="${prof}" LLMCTL_VALIDATE_ATTACH_PORT="${port}" \
+      "${llmctl}" validate "${prof}" >> "${LLMCTL_LOG_DIR}/svc_hook.log" 2>&1
+  ) 9>"${LLMCTL_RUNTIME_DIR}/.validate-${prof}.lock" || rc=$?
+  if [[ "${rc}" == "97" ]]; then _hk_log "${inst}: validation: a fresh passing record exists - not re-run"; return 0; fi
+  if [[ "${rc}" == "98" ]]; then _hk_log "${inst}: validation UNDETERMINED: another validator held the lock too long - nothing stopped"; return 0; fi
+  case "${rc}" in
+    0) _hk_log "${inst}: validation PASSED"; return 0 ;;
+    64) _hk_log "${inst}: validation FAILED (wrong answers) - stopping the unit through the normal stop path" ;;
+    *) if [[ "${LLMCTL_VALIDATE_STRICT:-0}" == "1" ]]; then
+         _hk_log "${inst}: validation UNDETERMINED and LLMCTL_VALIDATE_STRICT=1 - stopping the unit"
+       else
+         _hk_log "${inst}: validation UNDETERMINED (could not be validated) - the unit keeps running, NOT validated (legacy unit: run llmctl install to enforce); llmctl require-validated ${prof} refuses"
+         return 0
+       fi ;;
+  esac
+  engine="$(_hk_get "${f}" LLMCTL_ENGINE)"
+  rm -f -- "${LLMCTL_RUNTIME_DIR:?}/${inst:?}.run"
+  if command -v systemctl >/dev/null 2>&1 && [[ -n "${engine}" ]]; then
+    unit="llmctl-${engine}@${inst}.service"
+    systemctl --user stop "${unit}" >> "${LLMCTL_LOG_DIR}/svc_hook.log" 2>&1 || _hk_log "${inst}: could not stop ${unit} - stop it by hand: llmctl stop ${inst}"
+  else
+    "${llmctl}" stop "${inst}" >> "${LLMCTL_LOG_DIR}/svc_hook.log" 2>&1 || _hk_log "${inst}: could not stop - run: llmctl stop ${inst}"
+  fi
+  return 0
+}
+
 hk__wait_register() {
   local inst="$1" pid="$2" f port
   f="$(_hk_envfile "${inst}")"
@@ -347,6 +403,18 @@ hk__wait_register() {
   if [[ -n "$(_hk_get "${f}" LLMCTL_QUARANTINE_UNTIL)" ]]; then
     _hk_log "${inst}: quarantine start - not registered (validation only)"
     return 0
+  fi
+  # review 2026-10-15 finding 1: a unit installed BEFORE the validation gate (no `llmctl install` marker, lib/common.sh
+  # enforcement_installed) keeps the c23c2e6 behaviour exactly: register first, then the old kind=llm-only check
+  # (FAIL stops, UNDETERMINED keeps it running unless LLMCTL_VALIDATE_STRICT=1). A live decide unit is never
+  # validated or stopped by a tree update alone.
+  if ! enforcement_installed; then
+    _hk_wait_register "${inst}" "${port}" "${pid}" "$(_hk_get "${f}" LLMCTL_REG_TOKEN)" \
+      "$(_hk_get "${f}" LLMCTL_REG_PROTOCOL)" "$(_hk_get "${f}" LLMCTL_REG_HEALTH)" \
+      "$(_hk_get "${f}" LLMCTL_REG_KIND)" "$(_hk_get "${f}" LLMCTL_REG_PROFILE)" "${inst}" \
+      "$(_hk_get "${f}" LLMCTL_REG_LOOPBACK)" "$(_hk_get "${f}" LLMCTL_KEY_FILE)" || return 1
+    _hk_legacy_validate_after_ready "${inst}" "${port}" "${f}" "${pid}"
+    return
   fi
   # validate BEFORE registering: a unit is published only once it is validated (it used to be registered first and
   # validated afterwards, so consumers could discover an unvalidated model)

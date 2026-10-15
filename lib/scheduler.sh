@@ -1699,6 +1699,9 @@ _sched_status_rows() {
 _sched_status_optout_banner() {
   [[ "${LLMCTL_VALIDATE_STRICT:-1}" == "0" ]] && printf 'WARN: LLMCTL_VALIDATE_STRICT=0 is set: an UNDETERMINED validation of a NON-consumer-facing profile is served UNVALIDATED (refused for consumer-facing profiles)\n'
   [[ "${LLMCTL_VALIDATE_ON_START:-1}" == "0" ]] && printf 'WARN: LLMCTL_VALIDATE_ON_START=0 is set: starts are NOT validated (refused for consumer-facing profiles outside the test harness)\n'
+  if declare -F enforcement_installed >/dev/null 2>&1 && ! enforcement_installed; then
+    printf 'WARN: the unit-level validation gate is NOT installed (units predate it): a boot, crash or Restart= start is NOT validated; run "llmctl install" to enable it (validate decision profiles first: docs/validation.md "Upgrading installed units")\n'
+  fi
   return 0
 }
 

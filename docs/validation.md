@@ -224,7 +224,7 @@ an enabled unit - only with a fresh, signed PASS record for what would run. Othe
 | `enable` | validated (in quarantine) BEFORE any unit is enabled; FAIL/UNDETERMINED -> nothing enabled |
 | `restart` | with a fresh record: `systemctl restart`; without: stopped, started in quarantine, validated, published or stopped - never restarted in place on its public port |
 | `decide scale` | adding instances needs a fresh record of the base profile (validate it first); scaling down is never blocked |
-| systemd unit (boot, `Restart=`, `systemctl start`) | `ExecCondition=svc_hook.sh validated %i`: skipped with exit 77 (not failed, not restarted) without a fresh record; a live quarantine start and an opt-out marker pass. The registration waiter validates BEFORE it registers and stops the unit on FAIL/UNDETERMINED; a quarantine unit is never registered |
+| systemd unit (boot, `Restart=`, `systemctl start`) - **only after `llmctl install`** (see "Upgrading installed units") | `ExecCondition=svc_hook.sh validated %i`: skipped with exit 77 (not failed, not restarted) without a fresh record; a live quarantine start and an opt-out marker pass. The registration waiter validates BEFORE it registers and stops the unit on FAIL/UNDETERMINED; a quarantine unit is never registered. launchd: the same gate in `svc_hook.sh run-engine` |
 | `status` / `status --json` | a `validation:` line / field per running profile: `validated`, `QUARANTINE (...)`, `UNVALIDATED (<opt-out>)`, `NOT VALIDATED (<reason>)`; opt-outs in effect are printed as WARN lines |
 | `endpoint`, `require-validated` | refuse everything but a running, published, validated profile |
 | llmctld model routes | dispatch to `bin/llmctl start/stop/status`, so the same gate applies |
@@ -242,10 +242,27 @@ catalog `validation.consumer_facing` is not `false` (the default is consumer-fac
 `tests/helpers.sh`). `LLMCTL_DRY_RUN=1` starts nothing and validates nothing.
 
 **Costs, stated plainly.** The first start of a profile without a record loads the model twice (quarantine, then published); later starts with a
-fresh record load it once. Already-installed units keep their old template until `llmctl install` - after it, a unit whose profile has no fresh
-record (today: every profile, see "Status of the evidence") is skipped at its next boot or restart until it is validated: run
-`llmctl start <profile>` (which validates first) for each profile you serve. The decide-* profiles cannot be validated on a host without a working
-`llmctl-decide` that has `--question-file` (rebuild: `llmctl build decide`) and `decide-tiny` cannot be validated at all yet.
+fresh record load it once. The decide-* profiles cannot be validated on a host without a working `llmctl-decide` that has `--question-file`
+(rebuild: `llmctl build decide`) and `decide-tiny` cannot be validated at all (it has no validation driver).
+
+#### Upgrading installed units (review 2026-10-15 finding 1)
+
+Installed units and launchd agents run `lib/svc_hook.sh` straight from the checkout, so updating the tree changes the hooks of units that are
+already installed and running. The unit-level gates (the `validated` ExecCondition, the `run-engine` gate, the waiter that validates BEFORE it
+registers) are therefore switched on **only** by the marker `$LLMCTL_STATE_DIR/unit-enforcement` (`validation-gate=1`, mode 0600), which
+`llmctl install` writes after it regenerated the units; no environment variable can set or clear it.
+
+* **Marker absent** (units installed by an older llmctl): the hooks behave exactly as at c23c2e6 - the waiter registers the unit, then validates
+  only a `kind=llm` profile (FAIL stops it, UNDETERMINED leaves it running NOT validated unless `LLMCTL_VALIDATE_STRICT=1`); a decision unit
+  (`llmctl-onnx@decide-nli`, the decide-* llama units) is registered and never validated or stopped by its own restart, crash or boot.
+  `llmctl status` prints `WARN: the unit-level validation gate is NOT installed`. The CLI gates (`start`, `restart`, `enable`, `switch`, ...)
+  apply regardless: they are what the command you typed does.
+* **Marker present**: every row of the table above applies to boot, crash and `Restart=` starts too.
+
+**Before running `llmctl install`** on a host that serves profiles without a fresh record (today: every profile, see "Status of the evidence"),
+validate each profile you serve while it runs - `llmctl validate <profile>`, then `llmctl require-validated <profile>` must exit 0 - or accept that
+its next boot or restart is skipped (exit 77) until `llmctl start <profile>` validates it. A decision profile needs a working `llmctl-decide` with
+`--question-file` for that (above); a profile that cannot be validated is not served after the install.
 
 ### Operational safety
 

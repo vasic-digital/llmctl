@@ -110,6 +110,10 @@ test_setup_env() {
   export LLMCTL_PSI_FILE="${TEST_TMP}/psi.fixture" LLMCTL_MEMINFO_FILE="${TEST_TMP}/meminfo.fixture"
   export LLMCTL_GATE_WAIT=0   # the unit-level gate waits in production (default 120 s); hermetic tests refuse at once
   mkdir -p "${LLMCTL_STATE_DIR}" "${LLMCTL_RUNTIME_DIR}"
+  # The hermetic world models an INSTALLED llmctl (`llmctl install` ran): the unit-level validation gate marker exists
+  # (lib/common.sh enforcement_installed). tests/test_enforcement_marker.sh removes it to test the pre-gate units.
+  printf 'validation-gate=1\ninstalled=test-harness\n' > "${LLMCTL_STATE_DIR}/unit-enforcement"
+  chmod 600 "${LLMCTL_STATE_DIR}/unit-enforcement"
 }
 
 test_teardown_env() {

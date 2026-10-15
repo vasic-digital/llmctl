@@ -1,0 +1,84 @@
+# FIXTURE (tests/test_enforcement_marker.sh): the llmctl-onnx@.service body `llmctl install` wrote at c23c2e6 - i.e. a unit
+# installed BEFORE the validation gate (no ExecCondition `validated`). Paths are placeholders: @ROOT@ (the checkout whose
+# lib/svc_hook.sh the unit runs - the WORKING TREE, which is why a hook change reaches it), @STATE@ (LLMCTL_STATE_DIR).
+[Unit]
+Description=llmctl onnx encoder decision server (profile %i)
+After=network-online.target
+Wants=network-online.target
+# Restart bounds belong in [Unit]: systemd ignores StartLimitIntervalSec= in
+# [Service] ("Unknown key ... ignoring", reproduced with systemd-analyze
+# --user verify on systemd 259), which silently left the interval at its
+# default. Restart=on-failure never fires again once the burst is exhausted
+# (until reset-failed) - the crash-loop signal FR-044 surfaces in status. 3 starts / 900 s: a real cycle (model load +
+# stop) exceeds the old 60 s window, so 5/60 could never trip and OOM kills were retried forever.
+StartLimitBurst=3
+StartLimitIntervalSec=900
+
+[Service]
+Type=simple
+# The hooks below find the state/registry/log locations through these (the
+# manager's own environment would silently differ from the installing shell's
+# when LLMCTL_STATE_DIR & co. are overridden - registry and units must agree).
+Environment="LLMCTL_ROOT=@ROOT@"
+Environment="LLMCTL_STATE_DIR=@STATE@"
+Environment="LLMCTL_LOG_DIR=@STATE@/logs"
+Environment="LLMCTL_SERVICES_DIR=@STATE@/services"
+# LLMCTL_DECIDE_BIN: registry binary not built at install time (llmctl build decide)
+EnvironmentFile=@STATE@/services/%i.env
+# Root-caused 2026-09-17 (real repro on this host's systemd 259, not
+# guessed): systemd's $VAR/${VAR} expansion in ExecStart= applies ONLY to
+# the argument list, NEVER to the executable path itself (word 0) - a bare
+# "ExecStart=${LLMCTL_EXEC} ${LLMCTL_ARGS}" therefore made systemd try to
+# literally exec a program named "${LLMCTL_EXEC}", which always fails with
+# status=203/EXEC. The fix: exec through a shell, whose OWN path is a fixed,
+# parse-time-resolvable literal, and let that shell resolve the dynamic
+# executable from its inherited environment at RUN time.
+#
+# `set -f` (independent review, 2026-09-17): systemd's own expansion
+# word-splits but never globs; bash's $LLMCTL_ARGS expansion DOES glob, so a
+# literal "a*b" argument was silently expanded into pathname matches. `set -f`
+# restores systemd's no-globbing behaviour exactly.
+#
+# Hooks (lib/svc_hook.sh): ExecStartPre rotates the engine's internal key
+# file on EVERY start (G-028: a true per-start key, not create-if-absent; a
+# no-op for services without a key file); ExecStartPost detaches a waiter that
+# publishes the service in the registry once it answers its health endpoint;
+# ExecStopPost removes the row (the port hold stays so a restart reuses the
+# port, FR-088). Registration failures never fail the unit (the "-" prefix).
+ExecCondition=/bin/bash -c 'bash "$$0" portcheck "$$1"; rc=$$?; case $$rc in 0|98) exit $$rc;; *) exit 255;; esac' "@ROOT@/lib/svc_hook.sh" %i
+ExecStartPre=/bin/bash "@ROOT@/lib/svc_hook.sh" gate %i
+ExecStartPre=/bin/bash "@ROOT@/lib/svc_hook.sh" prestart %i
+ExecStart=/bin/bash -c 'set -f; exec "$LLMCTL_EXEC" $LLMCTL_ARGS'
+ExecStartPost=-/bin/bash "@ROOT@/lib/svc_hook.sh" register %i
+ExecStopPost=-/bin/bash "@ROOT@/lib/svc_hook.sh" unregister %i
+Restart=on-failure
+RestartSec=5
+RestartSteps=4
+RestartMaxDelaySec=120
+# No restart after an OOM kill (SIGKILL), a deliberate stop (SIGTERM) or 98 = "port already in use" (EADDRINUSE; the
+# ExecCondition portcheck skips such a start cleanly - systemd only tests RestartPreventExitStatus against the MAIN process): each only repeats itself. Real cycles are > 60 s (model load), so the window is 900 s / 3 starts.
+RestartPreventExitStatus=SIGKILL SIGTERM 98
+MemoryHigh=22937M
+MemoryMax=27852M
+MemorySwapMax=0
+Nice=10
+IOWeight=50
+CPUWeight=50
+OOMScoreAdjust=500
+ManagedOOMPreference=avoid
+TimeoutStopSec=20
+KillMode=control-group
+TimeoutStartSec=600
+NoNewPrivileges=yes
+ProtectSystem=full
+UMask=0077
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictSUIDSGID=yes
+LockPersonality=yes
+RestrictRealtime=yes
+SystemCallArchitectures=native
+StandardOutput=append:@STATE@/logs/%i.log
+StandardError=append:@STATE@/logs/%i.log
+
+[Install]
+WantedBy=default.target

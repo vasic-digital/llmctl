@@ -39,6 +39,38 @@ LLMCTL_SERVICES_DIR="${LLMCTL_SERVICES_DIR:-${LLMCTL_STATE_DIR}/services}"
 export LLMCTL_CONFIG_DIR LLMCTL_DATA_DIR LLMCTL_STATE_DIR LLMCTL_RUNTIME_DIR
 export LLMCTL_MODELS_DIR LLMCTL_LOG_DIR LLMCTL_VERIFY_DIR LLMCTL_SERVICES_DIR
 
+# Unit-level validation enforcement marker (review 2026-10-15 finding 1). Installed units and agents run
+# lib/svc_hook.sh straight from THIS checkout, so a hook change reaches a unit installed by an OLDER llmctl as soon as
+# the tree is updated: without this marker a live unit would start being validated - and stopped on any non-PASS - at
+# its next restart, crash or boot, although nobody opted in. The unit-level gates (ExecCondition `validated`, the
+# launchd run-engine gate, the validate-BEFORE-register waiter) are therefore ON only when this file exists, and only
+# `llmctl install` writes it, AFTER it regenerated the units. Absent (or unreadable / unknown format) => the hooks
+# behave exactly as at c23c2e6: register, then the old llm-only check after registration. Not overridable by
+# environment: an env var must never be able to switch a gate off.
+LLMCTL_ENFORCEMENT_VERSION=1
+# enforcement_file -> the marker path, resolved at CALL time (callers may re-point LLMCTL_STATE_DIR after sourcing).
+enforcement_file() { printf '%s/unit-enforcement' "${LLMCTL_STATE_DIR}"; }
+
+# enforcement_installed -> rc 0 when `llmctl install` recorded validation-gate=<n> (n >= 1).
+enforcement_installed() {
+  local v
+  v="$(sed -n 's/^validation-gate=//p' "$(enforcement_file)" 2>/dev/null | head -1)"
+  [[ "${v}" =~ ^[0-9]+$ ]] && (( v >= 1 ))
+}
+
+# enforcement_mark_installed - written by svc_install (both backends) once the units carry the gate. Atomic, 0600.
+enforcement_mark_installed() {
+  local tmp
+  mkdir -p "${LLMCTL_STATE_DIR}" || return 1
+  tmp="$(umask 077; mktemp "$(enforcement_file).XXXXXX")" || return 1
+  if printf 'validation-gate=%s\ninstalled=%s\n' "${LLMCTL_ENFORCEMENT_VERSION}" "$(date -u +%FT%TZ)" > "${tmp}" \
+      && chmod 600 "${tmp}" && mv -f "${tmp}" "$(enforcement_file)"; then
+    return 0
+  fi
+  rm -f -- "${tmp:?}"
+  return 1
+}
+
 # Catalog location.
 LLMCTL_CATALOG="${LLMCTL_CATALOG:-${LLMCTL_ROOT}/models/catalog.json}"
 

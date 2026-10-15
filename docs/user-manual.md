@@ -268,8 +268,11 @@ uses a model.
 **Enforced, strict by default.** `start`, `switch`, `auto`, `enable`,
 `restart` and `decide scale` never serve a profile without a fresh record: it
 is started unpublished (127.0.0.1, a private port, no registry row), validated,
-and published only on PASS; FAIL **and** UNDETERMINED stop it. A systemd unit
-without a fresh record is skipped at boot/restart (exit 77). The opt-out
+and published only on PASS; FAIL **and** UNDETERMINED stop it. Once `llmctl
+install` has been run with this version, a systemd unit without a fresh record
+is skipped at boot/restart (exit 77); units installed by an older llmctl keep
+their old behaviour until then - validate the profiles you serve before you run
+it ([upgrading installed units](validation.md#upgrading-installed-units-review-2026-10-15-finding-1)). The opt-out
 `LLMCTL_VALIDATE_STRICT=0` (serve an UNDETERMINED profile marked UNVALIDATED)
 is refused for consumer-facing profiles - every shipped profile is one.
 `LLMCTL_VALIDATE_REPEAT` (default 3) asks every probe that many times;

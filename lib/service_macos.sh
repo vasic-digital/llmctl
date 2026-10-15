@@ -44,6 +44,12 @@ svc_install() {
   ensure_dir "$(svc_plist_dir)"
   ensure_state_dirs
   info "launchd backend ready (agents dir: $(svc_plist_dir))"
+  # switch the run-engine wrapper over to the unit-level validation gate (review 2026-10-15 finding 1)
+  if enforcement_mark_installed; then
+    info "unit-level validation gate enabled ($(enforcement_file)): agents start only for profiles with a fresh, signed PASS record"
+  else
+    warn "could not write $(enforcement_file): the agents keep the pre-gate behaviour (not validated at load/KeepAlive)"
+  fi
 }
 
 # _svc_plist_xml <string> -> the string XML-escaped (& < > " '), for <string> elements.

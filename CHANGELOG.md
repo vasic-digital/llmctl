@@ -25,6 +25,15 @@ repository as an honest record of that process.
 
 ## Unreleased
 
+* **fix(validate): the unit-level validation gate reaches only units installed with it (independent review 2026-10-15, finding 1).**
+  Installed units run `lib/svc_hook.sh` from the working tree, so the 2026-10-14 waiter (validate before register, stop on any non-PASS) was
+  already in force for units installed BEFORE it - e.g. a live `llmctl-onnx@decide-nli`, which has no validation record, would have been
+  validated and stopped at its next restart, crash or boot. The `validated` ExecCondition, the launchd `run-engine` gate and the new waiter are
+  now switched on only by `$LLMCTL_STATE_DIR/unit-enforcement` (`validation-gate=1`), written by `llmctl install`; without it the hooks behave
+  exactly as at c23c2e6 (proved against a fixture of the c23c2e6 unit body, `tests/test_enforcement_marker.sh`, and four mutants).
+  `llmctl status` warns while the gate is not installed. `llmctl install` no longer executes `validated` from `PATH` (backticks in the unit
+  comment). docs/validation.md "Upgrading installed units".
+
 * **feat(validate): the model validation gate is ENFORCED, strict by default (independent review 2026-10-14, NO-GO findings 1-12).**
   - **(1) Enforcement.** A profile without a fresh, signed PASS record is started in QUARANTINE (127.0.0.1, a private ephemeral port, no
     registry row, `quarantine=1`), validated, and published on its documented port only on PASS (`sched_publish`); FAIL **and** UNDETERMINED

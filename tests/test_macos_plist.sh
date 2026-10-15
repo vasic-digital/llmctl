@@ -67,7 +67,11 @@ else printf '  FAIL: C2-04: the key file was not rotated under the plist environ
 assert_file_exists "${LLMCTL_LOG_DIR}/svc_hook.log" "C2-04: the hook logged into the OVERRIDDEN log dir"
 # launchd parity of the validation gate: without the quarantine marker and without a validation record the wrapper refuses
 # (exit 77) BEFORE it rotates the key or execs the engine
+# - once `llmctl install` (svc_install) has switched the gate on: the marker in the OVERRIDDEN state dir (review 2026-10-15
+# finding 1); without it an agent installed before the gate keeps its old behaviour
 sed -i '/^LLMCTL_QUARANTINE_UNTIL=/d' "${LLMCTL_SERVICES_DIR}/small.env"
+( source "${LLMCTL_ROOT}/lib/common.sh"; source "${LLMCTL_ROOT}/lib/service_macos.sh"; svc_install ) >/dev/null 2>&1
+assert_file_contains "${LLMCTL_STATE_DIR}/unit-enforcement" "validation-gate=1" "launchd svc_install wrote the gate marker into the overridden state dir"
 echo OLD-KEY-CONTENT > "${KEYF}"
 rc=0; env -i HOME="${W}/home" PATH=/usr/bin:/bin "${envargs[@]}" "${args[@]}" >/dev/null 2>&1 || rc=$?
 assert_eq 77 "${rc}" "launchd: an unvalidated profile is refused by the run-engine wrapper (exit 77)"

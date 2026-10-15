@@ -372,7 +372,7 @@ EnvironmentFile=$(_svc_pct "${LLMCTL_SERVICES_DIR}")/%i.env
 # publishes the service in the registry once it answers its health endpoint;
 # ExecStopPost removes the row (the port hold stays so a restart reuses the
 # port, FR-088). Registration failures never fail the unit (the "-" prefix).
-# ExecCondition `validated` (docs/validation.md "Enforcement"): the unit is skipped
+# ExecCondition "validated" (docs/validation.md "Enforcement"): the unit is skipped
 # (exit 77, not failed, not restarted) unless its profile has a fresh, signed
 # validation PASS record - a boot-time start or a Restart= is gated too; a
 # llmctl quarantine (validation-only) start passes through.
@@ -508,6 +508,13 @@ svc_install() {
   done
 
   _svc_sys daemon-reload
+  # Only now do the units carry the unit-level validation gate: switch the hooks over to it (review 2026-10-15
+  # finding 1; lib/common.sh enforcement_installed). Units installed by an older llmctl never reach this line.
+  if enforcement_mark_installed; then
+    info "unit-level validation gate enabled ($(enforcement_file)): units start only for profiles with a fresh, signed PASS record (llmctl validate <profile>)"
+  else
+    warn "could not write $(enforcement_file): the hooks keep the pre-gate behaviour (units are NOT validated at boot/Restart=)"
+  fi
 
   # Linger lets user services survive logout.
   if [[ "${LLMCTL_DRY_RUN}" == "1" ]]; then
