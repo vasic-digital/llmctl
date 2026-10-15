@@ -307,7 +307,7 @@ _hk_validate_after_ready() {
   fi
   if [[ "${LLMCTL_VALIDATE_ON_START:-1}" == "0" ]]; then
     # mirrors lib/validate.sh _val_gate_mode: honoured only inside the test harness; a unit is otherwise never published unvalidated
-    if [[ "${LLMCTL_VALIDATE_HERMETIC:-0}" == "1" ]]; then _hk_log "${inst}: validation on start disabled (LLMCTL_VALIDATE_ON_START=0, test harness) - NOT validated"; return 0; fi
+    if validation_hermetic; then _hk_log "${inst}: validation on start disabled (LLMCTL_VALIDATE_ON_START=0, test harness) - NOT validated"; return 0; fi
     _hk_log "${inst}: validation on start disabled (LLMCTL_VALIDATE_ON_START=0) - NOT validated, NOT registered"; return 1
   fi
   llmctl="${LLMCTL_ROOT}/bin/llmctl"
