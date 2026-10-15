@@ -340,7 +340,7 @@ _hk_validate_after_ready() {
     if "${llmctl}" require-validated "${prof}" >/dev/null 2>&1; then exit 97; fi
     # LLMCTL_VALIDATE_FAIL_RC: the explicit-verdict code (64). A bare exit 1 (llmctl crashed / die() / set -e) is NOT a
     # wrong answer - it is UNDETERMINED, which strict mode (the default) does not serve either.
-    LLMCTL_VALIDATE_FAIL_RC=64 LLMCTL_VALIDATE_ATTACH_PROFILE="${prof}" LLMCTL_VALIDATE_ATTACH_PORT="${port}" \
+    LLMCTL_VALIDATE_LOCK_HELD="${prof}:${BASHPID}" LLMCTL_VALIDATE_FAIL_RC=64 LLMCTL_VALIDATE_ATTACH_PROFILE="${prof}" LLMCTL_VALIDATE_ATTACH_PORT="${port}" \
       "${llmctl}" validate "${prof}" >> "${LLMCTL_LOG_DIR}/svc_hook.log" 2>&1
   ) 9>"${LLMCTL_RUNTIME_DIR}/.validate-${prof}.lock" || rc=$?
   if [[ "${rc}" == "97" ]]; then _hk_log "${inst}: validation: a fresh passing record exists - not re-run"; return 0; fi
@@ -386,7 +386,7 @@ _hk_legacy_validate_after_ready() {
   (
     flock -w "${LLMCTL_VALIDATE_LOCK_WAIT:-900}" 9 || exit 98
     if "${llmctl}" require-validated "${prof}" >/dev/null 2>&1; then exit 97; fi
-    LLMCTL_VALIDATE_FAIL_RC=64 LLMCTL_VALIDATE_ATTACH_PROFILE="${prof}" LLMCTL_VALIDATE_ATTACH_PORT="${port}" \
+    LLMCTL_VALIDATE_LOCK_HELD="${prof}:${BASHPID}" LLMCTL_VALIDATE_FAIL_RC=64 LLMCTL_VALIDATE_ATTACH_PROFILE="${prof}" LLMCTL_VALIDATE_ATTACH_PORT="${port}" \
       "${llmctl}" validate "${prof}" >> "${LLMCTL_LOG_DIR}/svc_hook.log" 2>&1
   ) 9>"${LLMCTL_RUNTIME_DIR}/.validate-${prof}.lock" || rc=$?
   if [[ "${rc}" == "97" ]]; then _hk_log "${inst}: validation: a fresh passing record exists - not re-run"; return 0; fi

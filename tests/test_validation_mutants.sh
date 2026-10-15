@@ -50,7 +50,7 @@ tree() {
   printf '%s\n' "${d}"
 }
 run_suite() { local rc=0; env "$@" >"${TEST_TMP}/suite.out" 2>&1 || rc=$?; echo "${rc}"; }
-# MUTANT_GROUPS (space-separated: judge judge2 judge3 suites record served cleanup enforcement qenv marker interrupt gate policy ramunits ramcap gateway; default all) lets a bounded runner split the work
+# MUTANT_GROUPS (space-separated: judge judge2 judge3 suites record served cleanup enforcement qenv vlock marker interrupt gate policy ramunits ramcap; default all) lets a bounded runner split the work
 want() { [[ -z "${MUTANT_GROUPS:-}" || " ${MUTANT_GROUPS} " == *" $1 "* ]]; }
 
 if want judge; then
@@ -196,6 +196,18 @@ qm stop-keeps-quarantine-record scheduler.sh '    _sched_quarantine_env_restore 
 qm previous-record-not-saved scheduler.sh '      if ! _sched_quarantine_env_save "${p}"; then' '      if false; then'
 qm validator-not-recorded scheduler.sh 'LLMCTL_SVC_QUARANTINE_VALIDATOR="$(proc_identity "$$")"' 'LLMCTL_SVC_QUARANTINE_VALIDATOR=""'
 qm dead-validator-honoured svc_hook.sh '        && [[ "${vid}" =~ ^[0-9]+: ]] && [[ "$(proc_identity "${vid%%:*}" 2>/dev/null)" == "${vid}" ]]; then' '        ; then'
+
+fi
+if want vlock; then
+echo "== manual-validate lock mutants (third 2026-10-15 review finding 10; each must turn tests/test_validation_lock.sh RED)"
+vm() { # vm <name> <lib-file> <old> <new>
+  mutate "${LLMCTL_ROOT}/lib/$2" "${TEST_TMP}/vm.check" "$3" "$4"
+  caught "vlock/$1" "$(run_suite LOCK_MUT_FILE="$2" LOCK_MUT_OLD="$3" LOCK_MUT_NEW="$4" bash "${T}/test_validation_lock.sh")" nonzero
+  assert_contains "$(cat "${TEST_TMP}/suite.out")" "MUTANT applied to $2" "vlock/$1: the mutant was really applied"
+}
+vm manual-validate-unlocked validate.sh '    _val_locked_profile_validate "${lp}" "$@" || rc=$?' '    validate_profile "$@" || rc=$?'
+vm holder-child-not-reentrant validate.sh '  [[ "${cur}" == "${want}" ]] && return 0       # the holder exec'"'"'d' '  :       # the holder exec'"'"'d'
+vm forged-holder-trusted validate.sh '  want="${v##*:}"; cur="$$"' '  return 0'
 
 fi
 if want marker; then
