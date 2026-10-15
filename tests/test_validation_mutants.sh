@@ -50,7 +50,7 @@ tree() {
   printf '%s\n' "${d}"
 }
 run_suite() { local rc=0; env "$@" >"${TEST_TMP}/suite.out" 2>&1 || rc=$?; echo "${rc}"; }
-# MUTANT_GROUPS (space-separated: judge record served cleanup enforcement marker ramcap; default all) lets a bounded runner split the work
+# MUTANT_GROUPS (space-separated: judge record served cleanup enforcement marker interrupt ramcap; default all) lets a bounded runner split the work
 want() { [[ -z "${MUTANT_GROUPS:-}" || " ${MUTANT_GROUPS} " == *" $1 "* ]]; }
 
 if want judge; then
@@ -137,6 +137,22 @@ mm install-writes-no-marker service_linux.sh '  if enforcement_mark_installed; t
     info "unit-level'
 
 fi
+if want interrupt; then
+echo "== interruption mutants (review 2026-10-15 finding 2; each must turn tests/test_validate_interrupt.sh RED)"
+im() { # im <name> <lib-file> <old> <new>
+  mutate "${LLMCTL_ROOT}/lib/$2" "${TEST_TMP}/im.check" "$3" "$4"
+  caught "interrupt/$1" "$(run_suite INT_MUT_FILE="$2" INT_MUT_OLD="$3" INT_MUT_NEW="$4" bash "${T}/test_validate_interrupt.sh")" nonzero
+  assert_contains "$(cat "${TEST_TMP}/suite.out")" "MUTANT applied to $2" "interrupt/$1: the mutant was really applied"
+}
+im lock-not-reentrant scheduler.sh '  if [[ -n "${_SCHED_LOCK_OWNER}" && "${_SCHED_LOCK_OWNER}" == "${BASHPID}" ]]; then' '  if false; then'
+im rfiles-declared-late validate.sh '  local evidence="" run_ev="" vfile=""
+  local -a rfiles=()' '  local evidence="" run_ev="" vfile=""'
+im quarantine-left-on-interrupt validate.sh '    elif [[ -z "${host}" ]] && _val_is_quarantined "${p}"; then' '    elif false; then'
+im after-start-handler-inert validate.sh '      if _val_is_quarantined "${q}"; then
+        warn "interrupted: stopping the quarantined' '      if false; then
+        warn "interrupted: stopping the quarantined'
+
+fi
 if want ramcap; then
 echo "== supply-chain / RAM-cap mutant (must turn tests/test_supply_chain_ramcap.sh RED)"
 d="$(tree cap catalog.sh)"
@@ -146,5 +162,5 @@ caught "ramcap/cap-ignored" "$(run_suite SUPPLY_ROOT_UNDER_TEST="${d}" bash "${T
 fi
 echo "== summary: ${CAUGHT} of ${TOTAL} mutants caught"
 assert_eq "${TOTAL}" "${CAUGHT}" "every mutant of the new branches is caught by an assertion"
-[[ -n "${MUTANT_GROUPS:-}" ]] || assert_eq 23 "${TOTAL}" "all 23 mutants were run"
+[[ -n "${MUTANT_GROUPS:-}" ]] || assert_eq 27 "${TOTAL}" "all 27 mutants were run"
 test_finish

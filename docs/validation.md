@@ -268,7 +268,11 @@ its next boot or restart is skipped (exit 77) until `llmctl start <profile>` val
 
 * `validate_profile` has ONE stop path for a profile it started (`_val_cleanup_started`): every return after the start (no port reservation, key
   failure, pressure refusal) stops it unless `--keep`, which says it keeps running. SIGINT/SIGTERM/SIGHUP remove the temp files, kill the judge child
-  by PID (never by process group) and stop such a profile; exit status 130/143/129.
+  by PID (never by process group) and stop such a profile; exit status 130/143/129. A QUARANTINED profile is stopped on such an interrupt
+  too, also when the validator did not start it itself (the post-start validation of `start`/`switch`/`restart`, while it waits for the
+  per-profile validation lock or probes) - a quarantine never outlives an interrupted validation. The scheduler lock is re-entrant
+  within the process that holds it, so a stop from the handler during the quarantine START (lock held) runs inline instead of
+  blocking (review 2026-10-15 finding 2; `tests/test_validate_interrupt.sh`).
 * **Host-pressure gate** (`hw_pressure_gate`, lib/hardware.sh): before the validator's own start (footprint included; message "nothing was
   started or probed") and again before the probe loop (PSI only; message "the probes were NOT sent" - the profile may already be up and is then
   stopped by the cleanup path). Thresholds: PSI memory `full avg10 > 2`, `some avg10 > 10`, `MemAvailable < footprint + 4096 MiB`. A refusal is

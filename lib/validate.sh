@@ -275,6 +275,10 @@ validate_profile() {
   suites="$(_val_suites "${p}" "${kind}")" || return 2
 
   local endpoint started=0 starting=0 jpid="" key_file="" saved_traps
+  # everything the signal handler reads is declared BEFORE the traps are armed (review 2026-10-15 finding 2: under
+  # `set -u` the handler aborted on the then-undeclared rfiles and never stopped the profile it had started)
+  local evidence="" run_ev="" vfile=""
+  local -a rfiles=()
   saved_traps="$(trap -p INT TERM HUP)"      # the caller's traps (e.g. scheduler lock cleanup) are restored on every return
   # _val_cleanup_started - the ONE stop path for a profile THIS call started (finding 4 of the 2026-10-14 review: two early
   # `return 2`s after a start left the profile running). Every return after `started=1` goes through it; it stops the
@@ -300,11 +304,16 @@ validate_profile() {
     [[ -n "${key_file}" ]] && rm -f "${key_file}"
     [[ -n "${vfile:-}" ]] && rm -f "${vfile}"
     [[ -n "${run_ev:-}" ]] && rm -f "${run_ev}"
-    [[ ${#rfiles[@]} -gt 0 ]] 2>/dev/null && rm -f "${rfiles[@]}"
+    [[ ${#rfiles[@]} -gt 0 ]] && rm -f "${rfiles[@]}"
     if [[ "${started}" == "1" || "${starting}" == "1" ]] && [[ "${keep}" != "1" ]]; then
       warn "interrupted: stopping '${p}' (it was started only for validation)"
       sched_stop "${p}" >/dev/null 2>&1 || true
+    elif [[ -z "${host}" ]] && _val_is_quarantined "${p}"; then
+      # a QUARANTINED profile exists only to be validated: an interrupted validation never leaves it behind (finding 2c)
+      warn "interrupted: stopping the quarantined '${p}' (unpublished, never validated)"
+      sched_stop "${p}" >/dev/null 2>&1 || true
     fi
+    _val_cli_done=1      # the documented signal status (130/143/129), not _validate_cli's "unexpected exit -> 2"
     exit "${code}"
   }
   trap '_val_on_signal 130' INT
@@ -350,8 +359,7 @@ validate_profile() {
     fi
   fi
 
-  local evidence run_ev=""; evidence="${LLMCTL_VERIFY_DIR}/validate-${p}.log"
-  local -a rfiles=()
+  evidence="${LLMCTL_VERIFY_DIR}/validate-${p}.log"
   key_file="$(mktemp)"
   if ! _val_key "${p}" "${key_file}" "${kind}"; then
     err "cannot compute the validation key of '${p}' - cannot validate: could not determine"
@@ -369,7 +377,7 @@ validate_profile() {
   printf '\n==== %s llmctl validate %s endpoint=%s kind=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${p}" "$(_val_judge redact "${endpoint}")" "${kind:-all}" >> "${run_ev}"
   printf 'KEY %s\n' "$(cat "${key_file}")" >> "${run_ev}"
 
-  local s rc=0 one worst=0 saw_undet=0 vfile="" rf
+  local s rc=0 one worst=0 saw_undet=0 rf
   for s in ${suites}; do
     one=0
     local -a jargs=(run --suite "${LLMCTL_VALIDATION_SUITES_DIR}/${s}" --endpoint "${endpoint}"
@@ -662,6 +670,27 @@ validate_after_start() {
     return 0
   fi
   local p rc=0 one lockfd lf
+  # interrupted outside validate_profile (lock wait, publish): a quarantined profile of this call is stopped, never left
+  # QUARANTINE forever (finding 2c). validate_profile installs its own handler while it runs and restores this one.
+  _val_after_start_on_signal() {
+    local code="$1" q
+    trap - INT TERM HUP
+    for q in "${@:2}"; do
+      if _val_is_quarantined "${q}"; then
+        warn "interrupted: stopping the quarantined '${q}' (unpublished, never validated)"
+        sched_stop "${q}" >/dev/null 2>&1 || true
+      fi
+    done
+    exit "${code}"
+  }
+  local _vas_saved; _vas_saved="$(trap -p INT TERM HUP)"
+  local _vas_q; _vas_q="$(printf '%q ' "$@")"
+  # shellcheck disable=SC2064  # the profile list is fixed now, on purpose
+  trap "_val_after_start_on_signal 130 ${_vas_q}" INT
+  # shellcheck disable=SC2064
+  trap "_val_after_start_on_signal 143 ${_vas_q}" TERM
+  # shellcheck disable=SC2064
+  trap "_val_after_start_on_signal 129 ${_vas_q}" HUP
   for p in "$@"; do
     [[ -f "${LLMCTL_RUNTIME_DIR}/${p}.run" ]] || continue
     # per-profile validation lock (NOT the scheduler lock): `enable`/`restart` are also validated by the systemd waiter
@@ -679,6 +708,8 @@ validate_after_start() {
     flock -u "${lockfd}"; exec {lockfd}>&-
     [[ "${one}" == "0" ]] || rc=1
   done
+  trap - INT TERM HUP
+  [[ -n "${_vas_saved}" ]] && eval "${_vas_saved}"
   return "${rc}"
 }
 

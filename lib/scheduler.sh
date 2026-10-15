@@ -88,14 +88,25 @@ sched_rank_for_capability() {
 # An environment variable of this name would be imported as a shell variable and bypass the gate: drop it at load time.
 unset _sched_rollback_nogate LLMCTL_SCHED_NO_GATE
 
+# Re-entrant within the process that holds it (review 2026-10-15 finding 2): a signal handler that stops a profile while
+# the interrupted command still holds the lock (validate_profile's quarantine start) runs its stop inline instead of
+# opening a second description of the lock file and blocking on it forever. Ownership is per process ($BASHPID): a
+# subshell or child never inherits it and still waits like any other process.
+_SCHED_LOCK_OWNER=""
 scheduler::with_lock() {
+  if [[ -n "${_SCHED_LOCK_OWNER}" && "${_SCHED_LOCK_OWNER}" == "${BASHPID}" ]]; then
+    "$@"
+    return
+  fi
   ensure_dir "${LLMCTL_RUNTIME_DIR}"
   local lock_file="${LLMCTL_RUNTIME_DIR}/.scheduler.lock"
   local lock_fd
   exec {lock_fd}>"${lock_file}"
   flock -x "${lock_fd}"
+  _SCHED_LOCK_OWNER="${BASHPID}"
   local rc=0
   "$@" || rc=$?
+  _SCHED_LOCK_OWNER=""
   flock -u "${lock_fd}"
   exec {lock_fd}>&-
   return "${rc}"

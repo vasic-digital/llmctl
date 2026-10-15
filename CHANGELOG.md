@@ -25,6 +25,13 @@ repository as an honest record of that process.
 
 ## Unreleased
 
+* **fix(validate): interrupting a validation never leaves a model running (independent review 2026-10-15, finding 2).** The signal handler
+  of `validate_profile` read `${#rfiles[@]}` before `rfiles` was declared, so under `set -u` it aborted and a profile started for validation
+  was never stopped; `scheduler::with_lock` (no timeout, not re-entrant) would have deadlocked the handler's stop while the interrupted
+  quarantine start held the lock - it is now re-entrant within the owning process; and a SIGTERM during the post-start validation of a
+  QUARANTINED profile left it QUARANTINE forever - it is stopped now (also while waiting for the validation lock). The handler keeps the
+  documented exit status 130/143/129. `tests/test_validate_interrupt.sh` (RED 7 ok / 5 FAIL, GREEN 14/0), four mutants.
+
 * **fix(validate): the unit-level validation gate reaches only units installed with it (independent review 2026-10-15, finding 1).**
   Installed units run `lib/svc_hook.sh` from the working tree, so the 2026-10-14 waiter (validate before register, stop on any non-PASS) was
   already in force for units installed BEFORE it - e.g. a live `llmctl-onnx@decide-nli`, which has no validation record, would have been
