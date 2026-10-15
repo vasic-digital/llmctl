@@ -67,6 +67,21 @@ validation_hermetic() {
 }
 
 # enforcement_mark_installed - written by svc_install (both backends) once the units carry the gate. Atomic, 0600.
+# proc_identity <pid> -> "<pid>:<start>" of a LIVE process (its start time from /proc, else ps lstart), nothing (rc 1)
+# when the process does not exist. Two different processes never share it, so a recorded identity proves the SAME
+# process is still alive (a reused PID has another start time) - review 3 of 2026-10-15, finding 6.
+proc_identity() {
+  local pid="$1" st=""
+  [[ "${pid}" =~ ^[0-9]+$ ]] || return 1
+  if [[ -r "/proc/${pid}/stat" ]]; then
+    st="$(sed -E 's/.*\) //' "/proc/${pid}/stat" 2>/dev/null | awk '{print $20}')"
+  else
+    st="$(LC_ALL=C ps -o lstart= -p "${pid}" 2>/dev/null | tr -s ' ' '_')"
+  fi
+  [[ -n "${st}" ]] || return 1
+  printf '%s:%s\n' "${pid}" "${st}"
+}
+
 enforcement_mark_installed() {
   local tmp
   mkdir -p "${LLMCTL_STATE_DIR}" || return 1

@@ -168,21 +168,40 @@ hk_validated() {
   fi
   until="$(_hk_get "${f}" LLMCTL_QUARANTINE_UNTIL)"
   if [[ -n "${until}" ]]; then
-    if [[ "${until}" =~ ^[0-9]+$ ]] && (( $(date +%s) <= until )); then
-      _hk_log "${inst}: quarantine start (validation only: loopback, private port, never registered)"
+    local vid
+    vid="$(_hk_get "${f}" LLMCTL_QUARANTINE_VALIDATOR)"
+    if [[ "${until}" =~ ^[0-9]+$ ]] && (( $(date +%s) <= until )) \
+        && [[ "${vid}" =~ ^[0-9]+: ]] && [[ "$(proc_identity "${vid%%:*}" 2>/dev/null)" == "${vid}" ]]; then
+      _hk_log "${inst}: quarantine start (validation only: loopback, private port, never registered; validator ${vid%%:*} alive)"
       return 0
+    fi
+    # review 3 of 2026-10-15, finding 6: a quarantine record is honoured only while the llmctl process that started it
+    # to validate it is ALIVE (same PID, same start time); a record left behind by a validator that is gone (reboot,
+    # crash, kill) is never booted, even before its deadline
+    if [[ "${until}" =~ ^[0-9]+$ ]] && (( $(date +%s) <= until )); then
+      _hk_log "${inst}: quarantine record whose validator (${vid:-none recorded}) is not alive - refusing to start (ExecCondition exit 77)"
+      printf 'llmctl: %s carries a validation-quarantine record whose validator is gone; not starting (run: llmctl start %s)\n' "${inst}" "${inst}" >&2
+      return 77
     fi
     _hk_log "${inst}: stale quarantine record (a validation start that never completed) - refusing to start (ExecCondition exit 77)"
     printf 'llmctl: %s carries an expired validation-quarantine record; not starting (run: llmctl start %s)\n' "${inst}" "${inst}" >&2
     return 77
   fi
-  why="$(_hk_get "${f}" LLMCTL_UNVALIDATED)"
-  if [[ -n "${why}" ]]; then
-    _hk_log "${inst}: starting UNVALIDATED by opt-out (${why})"
-    return 0
-  fi
   prof="$(_hk_get "${f}" LLMCTL_REG_PROFILE)"
   [[ -n "${prof}" ]] || prof="${inst%%.*}"
+  why="$(_hk_get "${f}" LLMCTL_UNVALIDATED)"
+  if [[ -n "${why}" ]]; then
+    # review 3 of 2026-10-15, finding 9: the opt-out is re-checked against the CATALOG at every start - an env record
+    # (hand-edited, or written before the profile became consumer-facing) never serves a consumer-facing profile
+    # unvalidated. An unknown profile or an unreadable catalog counts as consumer-facing (refused).
+    local cf
+    cf="$(json_query "${LLMCTL_CATALOG}" 'str((d["profiles"].get(argv[0], {}).get("validation") or {}).get("consumer_facing", True))' "${prof}" 2>/dev/null || echo True)"
+    if [[ "${cf}" == "False" ]]; then
+      _hk_log "${inst}: starting UNVALIDATED by opt-out (${why})"
+      return 0
+    fi
+    _hk_log "${inst}: env record asks for an UNVALIDATED start (${why}) but '${prof}' is consumer-facing - opt-out refused, the validation record decides"
+  fi
   llmctl="${LLMCTL_ROOT}/bin/llmctl"
   if [[ -x "${llmctl}" ]] && "${llmctl}" require-validated "${prof}" >/dev/null 2>&1; then
     return 0

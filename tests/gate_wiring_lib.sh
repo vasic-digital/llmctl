@@ -125,9 +125,11 @@ _gw_lock_held() {
 }
 validate_profile() {
   printf 'validate_profile %s lock_held=%s\n' "$*" "$(_gw_lock_held)" >> "${GW_CALLS:?}"
-  if [[ "${GW_REAL_VALIDATE:-0}" == 1 ]]; then _gw_orig_validate_profile "$@"; return; fi
   local a p="" v rc
   for a in "$@"; do case "${a}" in -*) ;; *) p="${a}"; break ;; esac; done
+  # the env record the profile runs with WHILE it is validated (a stop puts a quarantine record back - review 3 finding 6)
+  cp -p -- "${LLMCTL_SERVICES_DIR}/${p}.env" "${GW_CALLS}.env_at_validate.${p}" 2>/dev/null || rm -f -- "${GW_CALLS}.env_at_validate.${p}"
+  if [[ "${GW_REAL_VALIDATE:-0}" == 1 ]]; then _gw_orig_validate_profile "$@"; return; fi
   printf 'validate_profile_begin %s %s\n' "${p}" "$(date +%s.%N)" >> "${GW_CALLS}"
   [[ -z "${GW_VALIDATE_SLEEP:-}" ]] || sleep "${GW_VALIDATE_SLEEP}"
   v="GW_VALIDATE_RC_${p//[-.]/_}"

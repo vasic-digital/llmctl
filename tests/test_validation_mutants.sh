@@ -50,7 +50,7 @@ tree() {
   printf '%s\n' "${d}"
 }
 run_suite() { local rc=0; env "$@" >"${TEST_TMP}/suite.out" 2>&1 || rc=$?; echo "${rc}"; }
-# MUTANT_GROUPS (space-separated: judge record served cleanup enforcement marker interrupt gate judge2 policy ramunits ramcap; default all) lets a bounded runner split the work
+# MUTANT_GROUPS (space-separated: judge judge2 judge3 suites record served cleanup enforcement qenv marker interrupt gate policy ramunits ramcap gateway; default all) lets a bounded runner split the work
 want() { [[ -z "${MUTANT_GROUPS:-}" || " ${MUTANT_GROUPS} " == *" $1 "* ]]; }
 
 if want judge; then
@@ -181,6 +181,21 @@ em unit-gate-open svc_hook.sh '  printf '"'"'llmctl: profile %s is not validated
   return 77' '  return 0'
 em consumer-facing-ignored validate.sh '  _val_consumer_facing "$1" && return 0
   return 1' '  return 1'
+em optout-consumer-facing-unchecked svc_hook.sh '    if [[ "${cf}" == "False" ]]; then' '    if true; then'
+
+fi
+if want qenv; then
+echo "== quarantine env-record mutants (third 2026-10-15 review finding 6; each must turn tests/test_validation_quarantine_env.sh RED)"
+qm() { # qm <name> <lib-file> <old> <new>
+  mutate "${LLMCTL_ROOT}/lib/$2" "${TEST_TMP}/qm.check" "$3" "$4"
+  caught "qenv/$1" "$(run_suite QE_MUT_FILE="$2" QE_MUT_OLD="$3" QE_MUT_NEW="$4" bash "${T}/test_validation_quarantine_env.sh")" nonzero
+  assert_contains "$(cat "${TEST_TMP}/suite.out")" "MUTANT applied to $2" "qenv/$1: the mutant was really applied"
+}
+qm stop-keeps-quarantine-record scheduler.sh '    _sched_quarantine_env_restore "${p}"
+    rm -f "$(_sched_run_file "${p}")"' '    rm -f "$(_sched_run_file "${p}")"'
+qm previous-record-not-saved scheduler.sh '      if ! _sched_quarantine_env_save "${p}"; then' '      if false; then'
+qm validator-not-recorded scheduler.sh 'LLMCTL_SVC_QUARANTINE_VALIDATOR="$(proc_identity "$$")"' 'LLMCTL_SVC_QUARANTINE_VALIDATOR=""'
+qm dead-validator-honoured svc_hook.sh '        && [[ "${vid}" =~ ^[0-9]+: ]] && [[ "$(proc_identity "${vid%%:*}" 2>/dev/null)" == "${vid}" ]]; then' '        ; then'
 
 fi
 if want marker; then

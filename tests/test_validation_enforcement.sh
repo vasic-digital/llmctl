@@ -40,18 +40,21 @@ PY
 fi
 DOC_PORT="$(python3 -I -c 'import json,sys; print(json.load(open(sys.argv[1]))["profiles"]["small"]["port"])' "${LLMCTL_CATALOG}")"
 envv() { sed -n "s/^$2=//p" "${LLMCTL_SERVICES_DIR}/$1.env" 2>/dev/null | head -1; }
+# the env record as it was WHILE the profile was being validated (a stop restores the pre-quarantine record: review 3 finding 6)
+qenvv() { sed -n "s/^$2=//p" "${GW_CALLS}.env_at_validate.$1" 2>/dev/null | head -1; }
 b2i() { if "$@"; then echo 1; else echo 0; fi; }
 out_has() { grep -qE -- "$1" "${TEST_TMP}/last.out"; }
 
 echo "== (a) no record: the start is a QUARANTINE start (loopback, private port, unpublished); PASS -> published"
 gw_calls_reset; rm -f "${LLMCTL_RUNTIME_DIR}"/*.run
-export GW_VALIDATE_RC=2      # UNDETERMINED first: the profile is stopped, so the quarantine env record stays inspectable
+export GW_VALIDATE_RC=2      # UNDETERMINED first: the profile is stopped; the quarantine record is inspected as it was during validation
 rc="$(gw_run "${L}" start small)"
 assert_eq 1 "$(( rc != 0 ? 1 : 0 ))" "UNDETERMINED (default strict): start exits non-zero (rc=${rc})"
-assert_contains "$(envv small LLMCTL_ARGS)" "--host 127.0.0.1" "the quarantine start binds loopback only"
-qport="$(envv small LLMCTL_PORT)"
+assert_contains "$(qenvv small LLMCTL_ARGS)" "--host 127.0.0.1" "the quarantine start binds loopback only"
+qport="$(qenvv small LLMCTL_PORT)"
 if [[ "${qport}" =~ ^[0-9]+$ && "${qport}" != "${DOC_PORT}" ]]; then printf '  ok: private port %s, not the documented %s\n' "${qport}" "${DOC_PORT}"; else printf '  FAIL: quarantine port %s (documented %s)\n' "${qport}" "${DOC_PORT}" >&2; TEST_FAILS=$((TEST_FAILS+1)); fi
-assert_eq 1 "$(b2i [ -n "$(envv small LLMCTL_QUARANTINE_UNTIL)" ])" "the env record carries the quarantine deadline (the unit's ExecCondition reads it)"
+assert_eq 1 "$(b2i [ -n "$(qenvv small LLMCTL_QUARANTINE_UNTIL)" ])" "the env record carries the quarantine deadline (the unit's ExecCondition reads it)"
+assert_file_absent "${LLMCTL_SERVICES_DIR}/small.env" "...and once the quarantined start is stopped, the quarantine record is gone (there was none before)"
 assert_eq 1 "$(b2i out_has 'UNPUBLISHED for validation')" "the start says it is unpublished"
 assert_eq 1 "$(gw_count '^validate_profile small')" "validation ran once"
 assert_eq 1 "$(gw_count '^svc_stop small$')" "UNDETERMINED: stopped (strict is the default)"
@@ -160,9 +163,17 @@ mkdir -p "${LLMCTL_SERVICES_DIR}"
 uenv() { { printf 'LLMCTL_ENGINE=llama\nLLMCTL_PORT=9\nLLMCTL_REG_KIND=chat\nLLMCTL_REG_PROFILE=small\n'; printf '%s\n' "$@"; } > "${LLMCTL_SERVICES_DIR}/small.env"; }
 hrc() { local rc=0; LLMCTL_ROOT="${GW_TREE}" bash "${HK}" validated small >/dev/null 2>&1 || rc=$?; echo "${rc}"; }
 uenv;                                                  assert_eq 77 "$(hrc)" "no fresh record -> exit 77 (unit skipped, not failed, not restarted)"
-uenv "LLMCTL_QUARANTINE_UNTIL=$(( $(date +%s) + 600 ))"; assert_eq 0 "$(hrc)" "a live quarantine start -> allowed"
+uenv "LLMCTL_QUARANTINE_UNTIL=$(( $(date +%s) + 600 ))" "LLMCTL_QUARANTINE_VALIDATOR=$(LLMCTL_ROOT="${GW_TREE}" bash -c 'source "${LLMCTL_ROOT}/lib/common.sh"; proc_identity "$1"' _ "$$")"
+assert_eq 0 "$(hrc)" "a live quarantine start (its validator is alive) -> allowed"
 uenv "LLMCTL_QUARANTINE_UNTIL=$(( $(date +%s) - 1 ))";   assert_eq 77 "$(hrc)" "an EXPIRED quarantine record (validation never finished) -> refused at boot"
-uenv "LLMCTL_UNVALIDATED=opt-out";                     assert_eq 0 "$(hrc)" "an opt-out env record -> allowed (and logged)"
+uenv "LLMCTL_UNVALIDATED=opt-out";                     assert_eq 77 "$(hrc)" "an opt-out env record of a CONSUMER-FACING profile -> refused (the catalog decides, review 3 finding 9)"
+cp -p "${LLMCTL_CATALOG}" "${TEST_TMP}/catalog.cf.bak"
+python3 -I - "${LLMCTL_CATALOG}" <<'PY'
+import json, sys
+p = sys.argv[1]; d = json.load(open(p)); d["profiles"]["small"].setdefault("validation", {})["consumer_facing"] = False; json.dump(d, open(p, "w"))
+PY
+uenv "LLMCTL_UNVALIDATED=opt-out";                     assert_eq 0 "$(hrc)" "an opt-out env record of a profile the catalog says is NOT consumer-facing -> allowed (and logged)"
+cp -p "${TEST_TMP}/catalog.cf.bak" "${LLMCTL_CATALOG}"
 ( export LLMCTL_DRY_RUN=1 LLMCTL_ROOT="${LLMCTL_ROOT}"; for l in common os_detect hardware service_linux; do source "${LLMCTL_ROOT}/lib/${l}.sh"; done; svc_install ) >/dev/null 2>&1 || true
 U="${LLMCTL_UNIT_DIR}/llmctl-llama@.service"
 assert_eq 1 "$(grep -cE '^ExecCondition=.*svc_hook\.sh.* validated %i' "${U}" 2>/dev/null || echo 0)" "the generated engine unit carries ExecCondition=... validated %i"
