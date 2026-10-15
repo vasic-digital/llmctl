@@ -79,7 +79,7 @@ _val_engine_tag() {
       bin="${LLMCTL_LLAMA_SERVER:-${LLMCTL_ROOT}/submodules/llama.cpp/build/bin/llama-server}"
       if [[ -x "${bin}" ]]; then
         dir="$(cd "$(dirname "${bin}")" && pwd)"
-        v="$(LD_LIBRARY_PATH="${dir}${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}" "${bin}" --version 2>&1 \
+        v="$(LD_LIBRARY_PATH="${dir}${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}" timeout 10 "${bin}" --version 2>&1 \
               | grep -oE 'build [0-9]+, commit [0-9a-f]+' | head -1 || true)"
         echo "${v:-llama-server:unknown-version}"
       else
@@ -596,6 +596,11 @@ _val_gate_mode() {
     return 0
   fi
   if [[ "${LLMCTL_DRY_RUN:-0}" == "1" ]]; then echo public; return 0; fi
+  # inside the test harness the ON_START=0 relaxation is decided before the record (fixture engines are no real servers; a
+  # freshness check would run their `--version`); outside it the fresh record counts first (finding 3)
+  if [[ "${LLMCTL_VALIDATE_ON_START:-1}" == "0" ]] && validation_hermetic; then
+    echo "public-unvalidated:LLMCTL_VALIDATE_ON_START=0 (hermetic test harness)"; return 0
+  fi
   if _val_fresh "${p}" "${envf}"; then echo public; return 0; fi
   case "${LLMCTL_VALIDATE_ON_START:-1}" in
     0)

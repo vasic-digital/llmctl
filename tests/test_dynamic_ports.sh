@@ -212,7 +212,9 @@ assert_eq "${EXPL}" "$(reg_field small port)" "registry carries the explicit por
 echo "== 8. per-user isolation: a second user gets a disjoint port set =="
 U2="${TEST_TMP}/user2"
 u2() { env LLMCTL_STATE_DIR="${U2}/state" LLMCTL_RUNTIME_DIR="${U2}/run" LLMCTL_SERVICES_DIR="${U2}/services" LLMCTL_LOG_DIR="${U2}/logs" "$@"; }
-mkdir -p "${U2}"
+mkdir -p "${U2}/state"
+# the second user is still inside the test harness (lib/common.sh validation_hermetic needs the harness file in ITS state dir)
+cp -p "${LLMCTL_STATE_DIR}/.test-harness" "${U2}/state/.test-harness"
 u2 "${LLMCTL}" start small fast >/dev/null 2>&1
 U1_SET="$(for p in small fast decide-tiny; do run_port "${p}"; done | sort -n | tr '\n' ' ')"
 U2_SET="$(for p in small fast; do sed -n 's/^port=//p' "${U2}/run/${p}.run"; done | sort -n | tr '\n' ' ')"
