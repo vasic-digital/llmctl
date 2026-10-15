@@ -255,7 +255,7 @@ an enabled unit - only with a fresh, signed PASS record for what would run. Othe
 | `decide scale` | adding instances needs a fresh record of the base profile (validate it first); scaling down is never blocked |
 | systemd unit (boot, `Restart=`, `systemctl start`) - **only after `llmctl install`** (see "Upgrading installed units") | `ExecCondition=svc_hook.sh validated %i`: skipped with exit 77 (not failed, not restarted) without a fresh record; a live quarantine start and an opt-out marker pass. The registration waiter validates BEFORE it registers and stops the unit on FAIL/UNDETERMINED; a quarantine unit is never registered. launchd: the same gate in `svc_hook.sh run-engine`, which exits 0 on a refusal and the agent's `KeepAlive` restarts only an unsuccessful exit (`SuccessfulExit=false`; agents written before 2026-10-15 keep `KeepAlive=true` and retry a refused start every 60 s until they are re-written by `llmctl enable`) |
 | `status` / `status --json` | a `validation:` line / field per running profile: `validated` (only when `require-validated` would accept it now: the record's bytes, engine and launch match), `QUARANTINE (...)`, `UNVALIDATED (<opt-out>)`, `NOT VALIDATED (<reason>)`; opt-outs in effect are printed as WARN lines |
-| `validate` (by hand) | of a SERVED profile (finding 6): FAIL -> stopped, registry row withdrawn; UNDETERMINED -> keeps running NOT validated (status / `require-validated` / `endpoint` refuse). Of a STOPPED profile: started in quarantine, validated, stopped again, and its previous env record restored (finding 8: an enabled unit used to boot from the quarantine record and was refused). `--host` and the unit waiter's own call never stop anything |
+| `validate`, `vision validate`, `validate-all`, `models verify` (by hand) | of a SERVED profile (finding 6; every manual entry point): FAIL -> stopped, registry row withdrawn; UNDETERMINED -> keeps running NOT validated (status / `require-validated` / `endpoint` refuse). Of a STOPPED profile: started in quarantine, validated, stopped again, and its previous env record restored (finding 8: an enabled unit used to boot from the quarantine record and was refused). `--host` and the unit waiter's own call never stop anything |
 | `endpoint`, `require-validated` | refuse everything but a running, published, validated profile |
 | llmctld model routes | dispatch to `bin/llmctl start/stop/status`, so the same gate applies |
 
@@ -302,7 +302,9 @@ registers) are therefore switched on **only** by the marker `$LLMCTL_STATE_DIR/u
 
 **Before running `llmctl install`** on a host that serves profiles without a fresh record (today: every profile, see "Status of the evidence"),
 validate each profile you serve while it runs - `llmctl validate <profile>`, then `llmctl require-validated <profile>` must exit 0 - or accept that
-its next boot or restart is skipped (exit 77) until `llmctl start <profile>` validates it. A decision profile needs a working `llmctl-decide` with
+its next boot or restart is skipped (exit 77) until `llmctl start <profile>` validates it. Since finding 6 a FAIL of that manual validation
+STOPS the served profile and withdraws its registry row (an UNDETERMINED leaves it running): validate at a time a stopped profile is acceptable.
+A decision profile needs a working `llmctl-decide` with
 `--question-file` for that (above); a profile that cannot be validated is not served after the install.
 
 ### Operational safety
@@ -372,6 +374,7 @@ into every validation record, so a changed byte invalidates the record.
 | every suite: structure, determinism, controls, per-probe discrimination | `test_validation_suites.sh` |
 | the wiring of the gate (start/switch/auto, restart/enable, systemd waiter, pressure) | `test_gate_wiring_start_paths.sh`, `test_gate_wiring_restart_enable.sh`, `test_gate_wiring_systemd_waiter.sh`, `test_gate_wiring_pressure.sh`, `test_gate_waiter_stop.sh` |
 | the defect register of the first independent review | `test_validation_gate_defects.sh`, `test_validation_exit_mapping.sh`, `test_validation_http_codes.sh`, `test_validation_identity.sh`, `test_validation_lock.sh` |
+| review 2026-10-15: verdict policy of every manual entry point, env record restored (6, 8), unit RAM (10), served launch / mmproj / inode, max age, status label (11) | `test_validate_policy.sh`, `test_validate_policy_entrypoints.sh`, `test_ramcap_units.sh`, `test_validation_served_launch.sh`, `test_validation_r2_small.sh` |
 
 ## Model download verification
 

@@ -510,7 +510,8 @@ _validate_cli() {
   return "${rc}"
 }
 
-# _val_cli_policy <rc> <validate args...> - finding 6 of the 2026-10-15 review: a manual `llmctl validate <p>` of a profile
+# _val_cli_policy <rc> <validate args...> - finding 6 of the 2026-10-15 review: a manual validation (`llmctl validate <p>`,
+# `llmctl vision validate`, every profile of `llmctl validate-all`, `llmctl models verify <p>` of a running profile) of a profile
 # that is SERVED (running, published: not quarantined) applies the verdict policy. FAIL (wrong answers) -> stopped through
 # the normal stop path, its registry row withdrawn (sched_stop). UNDETERMINED -> it keeps running NOT validated: `llmctl
 # status`, `require-validated` and `endpoint` say so / refuse (documented in docs/validation.md). Not applied to --host
@@ -579,6 +580,7 @@ validate_all() {
     n=$((n+1))
     one=0
     validate_profile "${p}" "$@" || one=$?
+    _val_cli_policy "${one}" "${p}" "$@" || true     # a FAILING served profile is stopped (finding 6 of the 2026-10-15 review)
     case "${one}" in
       0) verdicts+=("${p}: PASS") ;;
       1) verdicts+=("${p}: FAIL"); worst=1 ;;
@@ -933,8 +935,10 @@ models_verify_gate() {
   fi
   info "validation suites for '${p}': $(tr '\n' ' ' <<<"${suites}")"
   if [[ "${live}" == "--live" || -f "${LLMCTL_RUNTIME_DIR}/${p}.run" ]]; then
-    validate_profile "${p}"
-    return
+    local vrc=0
+    validate_profile "${p}" || vrc=$?
+    _val_cli_policy "${vrc}" "${p}" || true          # a FAILING served profile is stopped (finding 6 of the 2026-10-15 review)
+    return "${vrc}"
   fi
   log "live validation NOT run ('${p}' is not running; run 'llmctl validate ${p}' or 'llmctl models verify ${p} --live')"
 }
@@ -956,7 +960,10 @@ cmd_vision() {
           *) err "unknown 'vision validate' option: ${a}"; err "usage: llmctl vision validate [--profile vision|vision-pro] [--host URL] [--json] [--keep]"; return 2 ;;
         esac
       done
-      validate_profile "${p}" --kind vision ${rest[@]+"${rest[@]}"}
+      local vrc=0
+      validate_profile "${p}" --kind vision ${rest[@]+"${rest[@]}"} || vrc=$?
+      _val_cli_policy "${vrc}" "${p}" ${rest[@]+"${rest[@]}"} || true   # finding 6 of the 2026-10-15 review
+      return "${vrc}"
       ;;
     help|-h|--help)
       cat <<'EOF'

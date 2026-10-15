@@ -236,10 +236,15 @@ assert_eq 1 "$(run_rc env LLMCTL_VALIDATION_MAX_AGE=0 "${LLMCTL}" require-valida
 # a failing validation replaces the record and require-validated refuses
 U2="$(fake_start "$(answers_with "05_table/lookup" "PARIS")" --model-id "${LLMCTL_MODELS_DIR}/vision/gemma-3-4b-it-Q4_K_M.gguf")"
 sed -i "s/^port=.*/port=${U2##*:}/" "${LLMCTL_RUNTIME_DIR}/vision.run"
-assert_eq 1 "$(run_rc "${LLMCTL}" vision validate)" "wrong answer on the local profile -> exit 1"
+cp "${LLMCTL_RUNTIME_DIR}/vision.run" "${TEST_TMP}/vision.run.fail.bak"
+# a FAIL of a served profile stops it (review 2026-10-15 finding 6): through a RECORDING service manager, never the host's
+mkdir -p "${TEST_TMP}/svc.active"; : > "${TEST_TMP}/svc.active/vision"; : > "${TEST_TMP}/svc.calls"
+assert_eq 1 "$(run_rc env LLMCTL_SERVICE_BACKEND_FILE="${LLMCTL_ROOT}/tests/fixtures/svc_backend_recording.sh" GW_CALLS="${TEST_TMP}/svc.calls" GW_ACTIVE_DIR="${TEST_TMP}/svc.active" "${LLMCTL}" vision validate)" "wrong answer on the local profile -> exit 1"
+assert_file_contains "${TEST_TMP}/svc.calls" "svc_stop vision" "the served profile that gave wrong answers is stopped (finding 6)"
 assert_eq "fail" "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["status"])' "${LLMCTL_STATE_DIR}/validation/vision.json")" "record now says fail"
 assert_eq 1 "$(run_rc "${LLMCTL}" require-validated vision)" "require-validated refuses a failed record"
 assert_contains "$(cat "${TEST_TMP}/last.out")" "status=fail" "reason: status=fail"
+cp "${TEST_TMP}/vision.run.fail.bak" "${LLMCTL_RUNTIME_DIR}/vision.run"   # restore the fixture world for the sections below
 sed -i "s/^port=.*/port=${port}/" "${LLMCTL_RUNTIME_DIR}/vision.run"
 
 echo "== 11. validate-all + start hook + models verify gate + no-suite profiles"

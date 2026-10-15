@@ -201,6 +201,15 @@ pm fail-keeps-serving validate.sh '       sched_stop "${p}" || warn "validation:
 pm env-not-restored validate.sh '        _val_restore_env
       else' '        :
       else'
+# the other manual entry points (each must turn tests/test_validate_policy_entrypoints.sh RED)
+pe() { # pe <name> <old> <new>
+  mutate "${LLMCTL_ROOT}/lib/validate.sh" "${TEST_TMP}/pe.check" "$2" "$3"
+  caught "policy/$1" "$(run_suite POL_MUT_FILE=validate.sh POL_MUT_OLD="$2" POL_MUT_NEW="$3" bash "${T}/test_validate_policy_entrypoints.sh")" nonzero
+  assert_contains "$(cat "${TEST_TMP}/suite.out")" "MUTANT applied to validate.sh" "policy/$1: the mutant was really applied"
+}
+pe vision-keeps-serving '      _val_cli_policy "${vrc}" "${p}" ${rest[@]+"${rest[@]}"} || true   # finding 6 of the 2026-10-15 review' '      :'
+pe validate-all-keeps-serving '    _val_cli_policy "${one}" "${p}" "$@" || true     # a FAILING served profile is stopped (finding 6 of the 2026-10-15 review)' '    :'
+pe models-verify-keeps-serving '    _val_cli_policy "${vrc}" "${p}" || true          # a FAILING served profile is stopped (finding 6 of the 2026-10-15 review)' '    :'
 
 fi
 if want ramunits; then
@@ -219,5 +228,5 @@ caught "ramcap/cap-ignored" "$(run_suite SUPPLY_ROOT_UNDER_TEST="${d}" bash "${T
 fi
 echo "== summary: ${CAUGHT} of ${TOTAL} mutants caught"
 assert_eq "${TOTAL}" "${CAUGHT}" "every mutant of the new branches is caught by an assertion"
-[[ -n "${MUTANT_GROUPS:-}" ]] || assert_eq 43 "${TOTAL}" "all 43 mutants were run"
+[[ -n "${MUTANT_GROUPS:-}" ]] || assert_eq 46 "${TOTAL}" "all 46 mutants were run"
 test_finish

@@ -36,6 +36,9 @@ repository as an honest record of that process.
 * **fix(validate): a manual `llmctl validate` of a served profile applies the verdict; a validation of a stopped profile restores its env
   record (findings 6, 8).** FAIL stops it and withdraws its registry row; UNDETERMINED keeps it running NOT validated and says so. A
   validation-only start no longer leaves the quarantine env record behind (an enabled unit then booted into ExecCondition exit 77).
+  The same policy applies to every manual entry point: `llmctl vision validate`, each profile of `llmctl validate-all` and
+  `llmctl models verify <p>` of a running profile used to leave a FAILING served profile serving
+  (`tests/test_validate_policy_entrypoints.sh`, RED 6 FAIL, GREEN 14 ok; 3 new mutants).
 * **fix(gateway): auto mode does not route an unregistered profile under the strict gate (finding 7).** Only an operator-declared
   `LLMCTL_DECIDE_ENDPOINT_<P>` is a static fallback; `LLMCTL_VALIDATE_STRICT=0` restores the catalog-port fallback.
 * **fix(plan): running llmctl units without a reservation count against the 60% RAM cap (finding 10)** - systemd `MemoryCurrent`,
