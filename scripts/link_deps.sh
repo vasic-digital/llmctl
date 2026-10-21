@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+# link_deps.sh - materialise the (untracked, .gitignored) convenience links to llmctl's resolved dependencies.
+#
+# llmctl no longer vendors `constitution`, `submodules/containers` or `submodules/superspec` as submodules
+# (single source of truth: the copy in the constitution hub / on the host - see lib/resolve_deps.sh). Two
+# things still address them by fixed repo-relative path: go.mod (`replace digital.vasic.containers =>
+# ./submodules/containers`) and the carriers' `@constitution/CLAUDE.md` import. This script makes those paths
+# valid by symlinking them to whatever lib/resolve_deps.sh resolves. Nothing is copied; nothing is pinned.
+#
+# Usage:
+#   bash scripts/link_deps.sh            # create/refresh the links (idempotent)
+#   bash scripts/link_deps.sh --check    # verify only; exit 1 if any link is missing or points elsewhere
+#
+# Links managed (relative to the llmctl root):
+#   constitution -> <resolved constitution>      submodules/containers -> <resolved containers>
+#   submodules/superspec -> <resolved superspec>
+#
+# Safety: a path that exists as a REAL directory or file is never replaced (reported and skipped, exit 1);
+# only missing paths and symlinks are touched. An unresolvable dependency is reported (exit 1) after the
+# others have still been linked - never a silent skip.
+# Exit codes: 0 all links correct; 1 at least one dependency unresolved / blocked by a real dir / (--check) wrong.
+# Side effects: creates/replaces symlinks inside the llmctl checkout. Dependencies: bash, ln, readlink.
+# Cross-references: lib/resolve_deps.sh, tests/test_link_deps.sh, docs/dependency-layout.md.
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=../lib/resolve_deps.sh
+source "${ROOT}/lib/resolve_deps.sh"
+
+check_only=0
+[[ "${1:-}" == "--check" ]] && check_only=1
+
+rc=0
+link_one() { # <dep-name> <link-path-relative-to-root>
+  local dep="$1" rel="$2" target link="${ROOT}/$2" cur
+  if ! target="$(llmctl_resolve_dep "${dep}")"; then rc=1; return 0; fi
+  if [[ -L "${link}" ]]; then
+    cur="$(readlink "${link}")"
+    if [[ "${cur}" == "${target}" ]]; then printf 'ok    %s -> %s\n' "${rel}" "${target}"; return 0; fi
+    if [[ "${check_only}" == 1 ]]; then printf 'WRONG %s -> %s (resolver says %s)\n' "${rel}" "${cur}" "${target}" >&2; rc=1; return 0; fi
+  elif [[ -e "${link}" ]]; then
+    printf 'BLOCKED %s exists as a real file/directory; not replacing it (remove it, or set LLMCTL_%s_DIR to it)\n' \
+      "${rel}" "$(printf '%s' "${dep}" | tr '[:lower:]' '[:upper:]')" >&2
+    rc=1; return 0
+  elif [[ "${check_only}" == 1 ]]; then
+    printf 'MISSING %s (would link to %s)\n' "${rel}" "${target}" >&2; rc=1; return 0
+  fi
+  mkdir -p "$(dirname "${link}")"
+  ln -sfn "${target}" "${link}"
+  printf 'link  %s -> %s\n' "${rel}" "${target}"
+}
+
+link_one constitution constitution
+link_one containers submodules/containers
+link_one superspec submodules/superspec
+exit "${rc}"
