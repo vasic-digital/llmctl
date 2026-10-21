@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # test_containers_submodule.sh - T069 / FR-091 / Helix §11.4.76: the Containers submodule is the
 # one implementation of port allocation, service registry and health probing. Asserts:
-#   1. submodules/containers is checked out at the commit recorded in helix-deps.yaml (and in the index)
-#   2. go.mod requires digital.vasic.containers and replaces it with ./submodules/containers
+#   1. containers is NOT a submodule of llmctl any more: it is resolved (lib/resolve_deps.sh) and linked (scripts/link_deps.sh)
+#   2. go.mod requires digital.vasic.containers and replaces it with ./submodules/containers (the link)
 #   3. internal/registry really depends on the submodule packages it claims to use
 #   4. a grep gate finds no own port-allocator / registry reimplementation markers in internal/ and cmd/
 #      (the gate is itself validated against a golden-bad and a golden-good fixture tree)
@@ -12,18 +12,22 @@ cd "${LLMCTL_ROOT}"
 
 assert_not_contains() { if [[ "$1" != *"$2"* ]]; then printf '  ok: %s\n' "$3"; else printf '  FAIL: %s\n' "$3" >&2; TEST_FAILS=$((TEST_FAILS+1)); fi; }
 
-echo "== 1. submodule pinned and checked out at the recorded commit =="
-pinned="$(awk '/name: containers/{f=1} f&&/pinned:/{print $2; exit}' helix-deps.yaml)"
-assert_eq "40" "${#pinned}" "helix-deps.yaml records a full 40-hex pinned commit for containers"
-assert_file_contains .gitmodules "submodules/containers" ".gitmodules declares submodules/containers"
-assert_file_exists submodules/containers/go.mod "submodule working tree is checked out (go.mod present)"
-head_sha="$(git -C submodules/containers rev-parse HEAD)"
-assert_eq "${pinned}" "${head_sha}" "submodule HEAD == helix-deps.yaml pinned commit"
-gitlink="$(git ls-files -s submodules/containers | awk '{print $2}')"
-assert_eq "${pinned}" "${gitlink}" "recorded gitlink (index) == pinned commit"
-dirty="$(git -C submodules/containers status --porcelain | wc -l)"
-assert_eq "0" "${dirty}" "submodule working tree is unmodified"
-assert_file_contains submodules/containers/go.mod "module digital.vasic.containers" "submodule module path is digital.vasic.containers"
+echo "== 1. containers is resolved, not vendored (single source of truth, owner mandate 2026-10-21) =="
+if grep -qF 'submodules/containers' .gitmodules; then
+  printf '  FAIL: .gitmodules must NOT declare submodules/containers (it is resolved from the hub by lib/resolve_deps.sh)\n' >&2; TEST_FAILS=$((TEST_FAILS+1))
+else
+  printf '  ok: .gitmodules does not declare submodules/containers\n'
+fi
+assert_eq "" "$(git ls-files -s submodules/containers | awk '$1==160000')" "no gitlink for submodules/containers in the index"
+assert_eq "" "$(awk '/name: containers/{f=1} f&&/pinned:/{print $2; exit}' helix-deps.yaml)" "helix-deps.yaml records no private pin for containers (the hub copy is the one source)"
+assert_file_contains helix-deps.yaml "layout: hub-resolved" "helix-deps.yaml marks containers as hub-resolved"
+if ! resolved="$(bash lib/resolve_deps.sh containers 2>/dev/null)"; then
+  skip_suite "containers cannot be resolved on this host (set LLMCTL_CONTAINERS_DIR or nest llmctl in the constitution hub; see docs/dependency-layout.md)"
+fi
+bash scripts/link_deps.sh >/dev/null
+assert_file_exists "${resolved}/go.mod" "resolved containers tree is checked out (go.mod present)"
+assert_file_contains "${resolved}/go.mod" "module digital.vasic.containers" "resolved module path is digital.vasic.containers"
+assert_eq "$(cd "${resolved}" && pwd -P)" "$(cd submodules/containers && pwd -P)" "submodules/containers (go.mod replace target) points at the resolved copy"
 
 echo "== 2. go.mod wiring =="
 assert_file_contains go.mod "digital.vasic.containers v0.0.0" "go.mod requires digital.vasic.containers"

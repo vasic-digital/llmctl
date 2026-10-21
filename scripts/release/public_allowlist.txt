@@ -21,11 +21,3 @@ vendor/llama.cpp/docs/development/llama-star/idea-arch.key
 archive/llmctl.zip!vendor/llama.cpp/docs/development/llama-star/idea-arch.key
 # Another earlier-history path of the same deck (plain entry, exact path only).
 submodules/llama.cpp/docs/llama-star/idea-arch.key
-# Test-configuration templates of the Containers submodule (CONTAINERS_REMOTE_* host settings;
-# reviewed: no password, token or key material in any of them).
-submodules/containers/tests/configs/.env.docker
-submodules/containers/tests/configs/.env.local
-submodules/containers/tests/configs/.env.podman
-submodules/containers/tests/configs/.env.remote-cluster
-submodules/containers/tests/configs/.env.remote-single
-submodules/containers/tests/configs/.env.scheduler-roundrobin

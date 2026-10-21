@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # preflight_submodules.sh - verifies every pinned submodule ref (this
-# repo's own submodules PLUS constitution's nested submodule set,
-# recursively) is genuinely fetchable from its configured remote, BEFORE
-# any release artifact is built.
+# repo's own submodules - llama.cpp and colibri; constitution/containers/superspec
+# are hub-resolved, not llmctl pins) is genuinely fetchable from its configured
+# remote, BEFORE any release artifact is built.
 #
 # Purpose:
 #   spec.md FR-014/FR-052, Clarification 21: "What happens when a pinned
@@ -18,16 +18,16 @@
 #                                                     # preflight_run functions
 #   bash scripts/release/preflight_submodules.sh      # standalone run: walks
 #                                                     # every submodule this
-#                                                     # repo + constitution
-#                                                     # declare, recursively,
+#                                                     # repo declares,
 #                                                     # and hard-fails on the
 #                                                     # first unreachable one
 #
 # Inputs:
 #   None required for the standalone run (it discovers submodules from the
-#   real `.gitmodules` files via `git submodule status --recursive`, run
-#   from this repo's root AND from inside constitution/ - the task's own
-#   "including constitution's nested submodules" requirement). The library
+#   real `.gitmodules` file via `git submodule status`, run from this repo's
+#   root; since 2026-10-21 llmctl pins only llama.cpp and colibri - the
+#   constitution/containers/superspec dependencies are resolved by
+#   lib/resolve_deps.sh and are not llmctl pins). The library
 #   functions (preflight_check_ref, preflight_run) take explicit arguments
 #   for unit-testability without a real network dependency.
 #
@@ -206,14 +206,17 @@ _preflight_walk() {
   done < <(git -C "${repo_dir}" submodule status 2>/dev/null || true)
 }
 
-# --- standalone run: real submodules, this repo + constitution recursively --
+# --- standalone run: this repo's own submodules --
 _preflight_main() {
   local root; root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
   _PREFLIGHT_FAILS=0
   _PREFLIGHT_UNKNOWNS=0
 
+  # Only llmctl's OWN submodules (llama.cpp, colibri) are pinned here. constitution, containers and superspec
+  # are resolved from the hub / host (lib/resolve_deps.sh), not pinned by llmctl, so there is nothing of ours
+  # to verify for them - and walking the whole hub's nested set would verify somebody else's pins (it also
+  # contains llmctl itself: the mutual-reference cycle this layout removes).
   _preflight_walk "${root}"
-  [[ -d "${root}/constitution" ]] && _preflight_walk "${root}/constitution"
 
   if (( _PREFLIGHT_FAILS > 0 || _PREFLIGHT_UNKNOWNS > 0 )); then
     printf 'PREFLIGHT FAILED: %d submodule ref(s) confirmed unreachable, %d could not be verified (see FAIL/UNKNOWN lines above)\n' \

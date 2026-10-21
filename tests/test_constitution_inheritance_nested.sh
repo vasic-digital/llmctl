@@ -20,14 +20,15 @@ REAL_TEST="${LLMCTL_ROOT}/tests/test_constitution_inheritance.sh"
 
 # --- locate the REAL validation scripts (constitution/ here, or the main worktree's in a linked worktree) ----------
 src=""
-for cand in "${LLMCTL_ROOT}/constitution" \
+for cand in "$(bash "${LLMCTL_ROOT}/lib/resolve_deps.sh" constitution 2>/dev/null || true)" \
+            "${LLMCTL_ROOT}/constitution" \
             "$(git -C "${LLMCTL_ROOT}" rev-parse --path-format=absolute --git-common-dir 2>/dev/null | sed 's#/\.git$##')/constitution"; do
   if [[ -f "${cand}/scripts/validation/run_verification.sh" && -f "${cand}/scripts/validation/meta_test_verification.sh" ]]; then
     src="${cand}"; break
   fi
 done
 if [[ -z "${src}" ]]; then
-  skip_suite "no constitution/scripts/validation/*.sh available (constitution/ not checked out here nor in the main worktree): git submodule update --init constitution"
+  skip_suite "no constitution/scripts/validation/*.sh available (constitution not resolvable: set LLMCTL_CONSTITUTION_DIR, nest llmctl in the hub, or see docs/dependency-layout.md)"
 fi
 
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/llmctl-inherit-nested.XXXXXX")"

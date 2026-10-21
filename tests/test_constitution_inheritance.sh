@@ -6,6 +6,14 @@ set -euo pipefail
 
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CONSTITUTION_DIR="${PROJECT_ROOT}/constitution"
+# llmctl no longer vendors the constitution as a submodule (single source of truth, owner mandate 2026-10-21):
+# lib/resolve_deps.sh finds the hub copy (LLMCTL_CONSTITUTION_DIR -> parent hub -> <root>/constitution -> ...).
+# Fixture projects built by the sibling tests carry no lib/, and keep the legacy <root>/constitution path.
+if [[ -f "${PROJECT_ROOT}/lib/resolve_deps.sh" ]]; then
+    if _resolved_const="$(bash "${PROJECT_ROOT}/lib/resolve_deps.sh" constitution 2>/dev/null)"; then
+        CONSTITUTION_DIR="${_resolved_const}"
+    fi
+fi
 
 # A submodule checkout carries a `.git` entry (file or dir). In a linked `git worktree`, or before
 # `git submodule update --init`, constitution/ is absent or EMPTY: every `git -C constitution ...` would then
@@ -181,6 +189,7 @@ fi
 # instead, which we do control and can safely commit/push.
 echo
 echo "Invariant 6: Nested third-party submodules are documented, never modified"
+# superspec is no longer a submodule of this repo: it is resolved (lib/resolve_deps.sh), like the constitution.
 SUBMODULES=(
     "submodules/superspec"
     "submodules/llama.cpp"
@@ -189,6 +198,9 @@ SUBMODULES=(
 
 for submodule in "${SUBMODULES[@]}"; do
     SUB_PATH="${PROJECT_ROOT}/${submodule}"
+    if [[ "${submodule}" == "submodules/superspec" && -f "${PROJECT_ROOT}/lib/resolve_deps.sh" ]]; then
+        SUB_PATH="$(bash "${PROJECT_ROOT}/lib/resolve_deps.sh" superspec 2>/dev/null || echo "${SUB_PATH}")"
+    fi
     if [[ -d "${SUB_PATH}" ]]; then
         echo "  Checking ${submodule}..."
 
@@ -274,7 +286,7 @@ if [[ -f "${HARNESS}" && -f "${META_TEST}" ]] && bash -n "${HARNESS}" 2>/dev/nul
         fi
     done
     if [[ ${#_required[@]} -gt 0 && ${#_not_gitlink[@]} -eq 0 && ${#_uninit[@]} -gt 0 && "${LLMCTL_REQUIRE_NESTED_SUBMODULES:-}" != "1" ]]; then
-        NESTED_SKIP_REASON="${#_uninit[@]} of ${#_required[@]} nested submodules required by run_verification.sh are not initialised in constitution/submodules/ (${_uninit[*]}); the pin itself is consistent (all ${#_required[@]} are gitlinks in the pinned tree) - run: git submodule update --init --recursive constitution (or set LLMCTL_REQUIRE_NESTED_SUBMODULES=1 to make this a failure)"
+        NESTED_SKIP_REASON="${#_uninit[@]} of ${#_required[@]} nested submodules required by run_verification.sh are not initialised in constitution/submodules/ (${_uninit[*]}); the pin itself is consistent (all ${#_required[@]} are gitlinks in the pinned tree) - run: git submodule update --init --recursive inside the resolved constitution hub (or set LLMCTL_REQUIRE_NESTED_SUBMODULES=1 to make this a failure)"
     fi
 fi
 

@@ -106,7 +106,7 @@ for pth in "${denied[@]}"; do
   rc=0; _ba_is_secret_path "${pth}" || rc=$?
   assert_eq 0 "${rc}" "denied: ${pth}"
 done
-allowed_ok=( ".env.example" "x/.env.example" "README.md" "lib/keyring.sh" "docs/monkey.md" "src/keystone.go" "certificate.md" "tests/test_certs.sh" "x/.git/config" "submodules/llama.cpp/docs/development/llama-star/idea-arch.key" "submodules/containers/tests/configs/.env.docker" )
+allowed_ok=( ".env.example" "x/.env.example" "README.md" "lib/keyring.sh" "docs/monkey.md" "src/keystone.go" "certificate.md" "tests/test_certs.sh" "x/.git/config" "submodules/llama.cpp/docs/development/llama-star/idea-arch.key" )
 for pth in "${allowed_ok[@]}"; do
   rc=0; _ba_is_secret_path "${pth}" || rc=$?
   assert_eq 1 "${rc}" "allowed (control, no false positive): ${pth}"
