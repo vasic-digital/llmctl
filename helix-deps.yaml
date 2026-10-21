@@ -32,6 +32,8 @@ deps:
     ssh_url: git@github.com:WangX0111/superspec.git
     ref: main
     why: "Spec Kit superspec extension (third-party, consumed read-only)"
+    third_party: true
+    licence: MIT   # verified from the LICENSE file of the hub checkout (constitution/submodules/superspec/LICENSE)
     layout: grouped   # the hub vendors it under <hub>/submodules/superspec
     path: submodules/superspec    # llmctl-local convenience link (untracked, scripts/link_deps.sh)
 
