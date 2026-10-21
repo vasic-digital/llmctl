@@ -32,3 +32,9 @@ decide/log.key
 # Python bytecode (defect D-25)
 __pycache__/
 *.pyc
+
+# Resolved (NOT vendored) dependencies - single source of truth lives in the constitution hub / on the host.
+# These are symlinks created by scripts/link_deps.sh from what lib/resolve_deps.sh resolves.
+/constitution
+/submodules/containers
+/submodules/superspec

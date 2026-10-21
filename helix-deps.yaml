@@ -1,8 +1,14 @@
 # helix-deps.yaml — llmctl Submodule-Dependency Manifest
 # Per HelixConstitution §11.4.31 (Submodule-Dependency-Manifest Mandate).
 # Only the own-org (vasic-digital / HelixDevelopment) dependencies are listed; third-party
-# engines (llama.cpp, colibri) and tooling (superspec) are pinned in .gitmodules.
-# Last updated: 2026-10-07 (spec 009-jev-decision-models, FR-091).
+# engines (llama.cpp, colibri) are pinned in .gitmodules.
+# Single source of truth (owner mandate 2026-10-21): constitution, containers and superspec are NOT vendored
+# by llmctl any more. They are resolved at run time by lib/resolve_deps.sh (env override LLMCTL_*_DIR -> the
+# parent hub when llmctl is nested at <hub>/submodules/llmctl -> <root> -> siblings -> ancestors -> host
+# fallback) and linked by scripts/link_deps.sh. The hub's copy is always the latest; llmctl pins nothing.
+# Previous gitlinks (for recovery only): constitution 8a604628ebf4af9ac19a70014e640edd9024d43b,
+# containers 4a8f04e05f3535d77c48f69b89687f9fcc896fbf, superspec c20ac6c1ba069cc9a72dacb8044b7b193d3dde81.
+# Last updated: 2026-10-21 (chore/single-source-layout).
 
 schema_version: 1
 
@@ -11,15 +17,24 @@ deps:
     ssh_url: git@github.com:HelixDevelopment/constitution.git
     ref: main
     why: "Canonical-root Helix Constitution (project CLAUDE.md inherits it)"
-    layout: flat
+    layout: hub-resolved
+    env_override: LLMCTL_CONSTITUTION_DIR
 
   - name: containers
     ssh_url: git@github.com:vasic-digital/Containers.git
     ref: main
-    pinned: 4a8f04e05f3535d77c48f69b89687f9fcc896fbf
     why: "Dynamic port allocation, service registry/discovery, health probes and rootless container boot for the decision layer and its transport tests (spec FR-088..091, Helix §11.4.76); consumed from Go via go.mod replace => ./submodules/containers"
-    path: submodules/containers
-    layout: flat
+    layout: hub-resolved
+    env_override: LLMCTL_CONTAINERS_DIR
+    path: submodules/containers   # untracked symlink made by scripts/link_deps.sh (go.mod replace target)
+
+  - name: superspec
+    ssh_url: git@github.com:WangX0111/superspec.git
+    ref: main
+    why: "Spec Kit superspec extension (third-party, consumed read-only)"
+    layout: hub-resolved
+    env_override: LLMCTL_SUPERSPEC_DIR
+    path: submodules/superspec    # untracked symlink made by scripts/link_deps.sh
 
 transitive_handling:
   recursive: true
