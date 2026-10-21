@@ -148,3 +148,7 @@ One page per script, library or test suite (Constitution 11.4.18). Test pages st
 | [test_version_consistency](test_version_consistency.md) | `test_version_consistency.sh` |
 | [vantage](vantage.md) | llmctl-decide vantage (second network location, FR-064/FR-069/FR-073) |
 | [verify_manifest](verify_manifest.md) | `verify_manifest.py` |
+| [resolve_deps](resolve_deps.md) | `resolve_deps.sh` |
+| [link_deps](link_deps.md) | `link_deps.sh` |
+| [test_resolve_deps](test_resolve_deps.md) | `test_resolve_deps.sh` |
+| [test_link_deps](test_link_deps.md) | `test_link_deps.sh` |

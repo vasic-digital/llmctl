@@ -46,10 +46,11 @@ All changes MUST pass:
 
 No commit is valid without ALL gates passing.
 
-### Submodules
-This project includes the following submodules (all inherit from Helix Constitution):
-- `constitution/` — Helix Universal Constitution
-- `submodules/superspec/` — SuperSpec
+### Submodules and resolved dependencies
+This project vendors `submodules/llama.cpp` and `submodules/colibri`; the other entries are resolved from the hub (single source of truth). All inherit from Helix Constitution:
+- `constitution/` — Helix Universal Constitution (NOT a submodule of this repo: resolved from the constitution hub by `lib/resolve_deps.sh`; `scripts/link_deps.sh` / `make deps` creates the ignored symlink so `@constitution/CLAUDE.md` and the paths below work; see `docs/dependency-layout.md`)
+- `submodules/superspec/` — SuperSpec (resolved the same way, not vendored)
+- `submodules/containers/` — Containers Go module (resolved the same way, not vendored)
 - `submodules/llama.cpp/` — llama.cpp engine
 - `submodules/colibri/` — colibri engine
 

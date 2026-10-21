@@ -348,7 +348,7 @@ The daemon's decider appends an entry for every token validation, RBAC check, qu
 
 ### What happens when a pinned submodule's ref is unreachable at release-packaging time (upstream private/deleted/rate-limited)?
 
-**Status: current behavior (`scripts/release/preflight_submodules.sh`).** The preflight walks every submodule of this repository and the nested set of `constitution/`, recursively, and fetches the pinned commit from its configured remote. A ref that is
+**Status: current behavior (`scripts/release/preflight_submodules.sh`).** The preflight walks every submodule of this repository (llama.cpp and colibri; constitution/containers/superspec are hub-resolved since 2026-10-21 and are not walked) and fetches the pinned commit from its configured remote. A ref that is
 confirmed absent hard-fails naming the submodule and the expected SHA (exit 1); a submodule whose remote could not be reached at all is reported as `UNKNOWN` (network/auth problem, not evidence the ref is missing) rather than as unreachable.
 No archive is built past a failed preflight. This is distinct from `llmctl doctor`, which only confirms that `submodules/llama.cpp` and `submodules/colibri` are initialized in the working tree.
 

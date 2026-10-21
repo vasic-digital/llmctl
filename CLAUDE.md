@@ -9,6 +9,13 @@ disagrees with the constitution submodule, the constitution wins.
 
 @constitution/CLAUDE.md
 
+> **Dependency layout (2026-10-21).** `constitution/`, `submodules/containers` and `submodules/superspec` are
+> NOT submodules of this repo: they are resolved from the constitution hub (or `LLMCTL_CONSTITUTION_DIR` /
+> `LLMCTL_CONTAINERS_DIR` / `LLMCTL_SUPERSPEC_DIR`) by `lib/resolve_deps.sh`. `make deps` (or
+> `bash scripts/link_deps.sh`) creates the ignored symlinks that make the `@constitution/CLAUDE.md` import
+> above and the paths below work; inside the hub (`constitution/submodules/llmctl`) it links to `../..`.
+> Details: `docs/dependency-layout.md`.
+
 ---
 
 ## Project-Specific Rules for llmctl

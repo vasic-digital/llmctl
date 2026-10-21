@@ -21,7 +21,7 @@ this project's constitution mandates be verified rather than assumed.
   it is a self-contained script with its own `FAILURES` array and its own
   local `check_file_exists`/`check_anchor`/`check_inheritance_pointer`
   helper functions.
-* `constitution/` — the vendored Helix Constitution git submodule, expected
+* `constitution/` — the Helix Constitution (resolved by `lib/resolve_deps.sh`: the constitution hub, or `LLMCTL_CONSTITUTION_DIR`; no longer a submodule of llmctl), expected
   to contain `Constitution.md`, `CLAUDE.md`, `AGENTS.md`,
   `install_upstreams.sh`, `find_constitution.sh`, and
   `scripts/validation/run_verification.sh` +

@@ -81,12 +81,10 @@ Both a leading `v` and a bare `1.0.0` form are accepted by
 ## Submodule preflight (Clarification 21)
 
 Before anything is built, every pinned submodule ref — this repo's own
-(`constitution`, `submodules/superspec`, `submodules/llama.cpp`,
-`submodules/colibri`) plus `constitution`'s own nested set (23 submodules
-as of this session — the spec's original "17" figure is stale; the
-preflight discovers the real, current set dynamically via `git submodule
-status --recursive` rather than a hardcoded count, so it never goes stale
-again) — is checked for genuine reachability from its configured remote.
+(`submodules/llama.cpp`, `submodules/colibri`) — is checked for genuine
+reachability from its configured remote. Since 2026-10-21 `constitution`,
+`containers` and `superspec` are resolved from the hub (`lib/resolve_deps.sh`),
+not pinned by llmctl, so the preflight no longer walks the hub's nested set.
 
 The check is a real `git fetch` into a throwaway scratch repository (never
 mutating any of this repo's own submodule checkouts), bounded by a 30s

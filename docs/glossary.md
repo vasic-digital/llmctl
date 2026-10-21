@@ -35,7 +35,7 @@
 | **Probe** | A deliberately adversarial golden-set item (forged options, injection, arithmetic, dates, double negatives, irrelevant state) |
 | **Admission gates (G1-G10)** | `llmctl admit`: mechanical checks a candidate model must pass before it may join the catalog |
 | **Vantage** | A rootless container with its own network namespace used to probe the gateway "from outside" (`vantage`) |
-| **Containers submodule** | `submodules/containers` (vasic-digital/Containers): rootless container runtime library |
+| **Containers submodule** | `submodules/containers` (vasic-digital/Containers): rootless container runtime library; resolved from the constitution hub by `lib/resolve_deps.sh` (an ignored symlink made by `scripts/link_deps.sh`), not a submodule of llmctl |
 | **Agent kit** | Hooks, router and question templates (`templates/agents/`, `scripts/install_agents.sh`) that let coding agents make decision calls ([agents](agents/README.md)) |
 | **MCP** | Model Context Protocol; `llmctl-decide mcp` exposes one tool, `decide`, over stdio |
 | **Pin** | An exact version/hash fixed in the repository: engine submodule tags, model sha256 in the catalog, `scripts/agents.lock`, the hash-locked onnx requirements |

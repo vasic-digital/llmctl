@@ -61,8 +61,10 @@ For a service that survives logout/reboot, follow up with
 `./bin/llmctl enable fast` (enable + start persistently) — or just use
 `./scripts/install.sh` above, which chains all of this for you.
 
-Forgot `--recursive`? `git submodule update --init` or just run
+Forgot `--recursive`? `git submodule update --init` (llama.cpp and colibri) or just run
 `llmctl build all` (a target is required), which initializes the submodules itself.
+`constitution`, `containers` and `superspec` are **not** submodules of llmctl: they are resolved
+from the constitution hub (or `LLMCTL_*_DIR`) - run `make deps`, see [`docs/dependency-layout.md`](docs/dependency-layout.md).
 
 > **Release 3.2.2** adds typed local decisions (`noul` / `choice` / `score`) behind a secured HTTPS gateway.
 > What changed and what you must do when upgrading: [`CHANGELOG.md`](CHANGELOG.md) (migration table).

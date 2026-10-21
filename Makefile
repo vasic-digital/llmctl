@@ -5,9 +5,16 @@ SHELL := /bin/bash
 ROOT  := $(abspath .)
 SCRIPTS := bin/llmctl $(wildcard lib/*.sh) $(wildcard tests/*.sh)
 
-.PHONY: test lint validate install archive json-check llmctld-build llmctld-test llmctld-lint bench-all
+.PHONY: deps test lint validate install archive json-check llmctld-build llmctld-test llmctld-lint bench-all
+
+# constitution / containers / superspec are resolved from the hub (lib/resolve_deps.sh), not vendored.
+# `deps` makes the ignored convenience links (go.mod replace target, @constitution import); it reports a
+# dependency it cannot resolve (set LLMCTL_*_DIR) but does not fail `test`: the suites that need it SKIP loudly.
+deps:
+	bash scripts/link_deps.sh
 
 test:
+	-@bash scripts/link_deps.sh
 	bash tests/run_tests.sh
 
 lint:
@@ -88,8 +95,9 @@ install:
 # - zero of any submodule's actual file content, at any nesting depth).
 # scripts/release/build_archive.sh does a real filesystem-level tar/zip of
 # the checked-out tree instead, which naturally includes every submodule's
-# real content recursively (submodule/constitution nesting is a git-level
-# concept with no special filesystem representation) plus the real `.git`
+# real content recursively (constitution/containers/superspec are NOT part of
+# this repo any more: they are resolved by lib/resolve_deps.sh and the ignored
+# links from scripts/link_deps.sh are not archived) plus the real `.git`
 # directory itself, so extracting the archive anywhere produces a fully
 # self-contained, buildable git repo (spec.md FR-014, Clarification 4;
 # proven by tests/test_archive_completeness.sh).
