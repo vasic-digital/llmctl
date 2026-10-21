@@ -331,3 +331,5 @@ fastest path to a running model.
 ## License
 
 MIT (see `LICENSE`).
+
+Dependency manifest (§11.4.31): see `helix-deps.yaml` — own-org dependencies are declared there and resolved at run time by `lib/resolve_deps.sh`; they are never vendored or nested as submodules.

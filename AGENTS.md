@@ -55,3 +55,5 @@ This project vendors `submodules/llama.cpp` and `submodules/colibri`; the other 
 - `submodules/colibri/` — colibri engine
 
 All submodules MUST have inheritance pointers in their CLAUDE.md/AGENTS.md files.
+
+Dependency manifest (§11.4.31): see `helix-deps.yaml` — own-org dependencies are declared there and resolved at run time by `lib/resolve_deps.sh`; they are never vendored or nested as submodules.

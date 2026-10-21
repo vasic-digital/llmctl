@@ -59,3 +59,5 @@ All changes MUST pass:
 5. Meta-test mutation: `bash constitution/scripts/validation/meta_test_verification.sh`
 
 No commit is valid without ALL gates passing.
+
+Dependency manifest (§11.4.31): see `helix-deps.yaml` — own-org dependencies are declared there and resolved at run time by `lib/resolve_deps.sh`; they are never vendored or nested as submodules.
