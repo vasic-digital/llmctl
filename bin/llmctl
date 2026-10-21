@@ -194,6 +194,7 @@ cmd_models_list() {
 
 cmd_setup() {
   log "llmctl setup: doctor -> build -> plan"
+  engine_ensure_containers   # first: a missing dependency must not surface after an hour of engine builds
   doctor_run || die "doctor reported failures; fix them and re-run 'llmctl setup'"
   engine_build all
   echo

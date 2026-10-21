@@ -98,9 +98,12 @@ install:
 # real content recursively (constitution/containers/superspec are NOT part of
 # this repo any more: they are resolved by lib/resolve_deps.sh and the ignored
 # links from scripts/link_deps.sh are not archived) plus the real `.git`
-# directory itself, so extracting the archive anywhere produces a fully
-# self-contained, buildable git repo (spec.md FR-014, Clarification 4;
-# proven by tests/test_archive_completeness.sh).
+# directory itself, so extracting the archive anywhere produces a git repo
+# that holds everything llmctl PINS (llama.cpp, colibri). It is NOT buildable
+# for the Go decision binary on its own: `containers` (go.mod replace target) is
+# resolved from the hub / LLMCTL_CONTAINERS_DIR and is not in the archive
+# (spec.md FR-014, Clarification 4; tests/test_archive_completeness.sh covers
+# the pinned content only). See docs/dependency-layout.md.
 archive:
 	bash scripts/release/build_archive.sh "$(ROOT)" ../llmctl
 	@echo "wrote ../llmctl.tar.gz and ../llmctl.zip"

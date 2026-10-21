@@ -17,9 +17,10 @@ L="${HUB}/submodules/llmctl"; mk_llmctl "${L}"
 echo "== 1. nested in a hub: all three links are created =="
 run "${L}"
 assert_eq "0" "${RC}" "link_deps exits 0 when everything resolves"
-assert_eq "${HUB}" "$(readlink "${L}/constitution")" "constitution -> hub"
-assert_eq "${HUB}/submodules/containers" "$(readlink "${L}/submodules/containers")" "submodules/containers -> hub copy"
-assert_eq "${HUB}/submodules/superspec" "$(readlink "${L}/submodules/superspec")" "submodules/superspec -> hub copy"
+assert_eq "../.." "$(readlink "${L}/constitution")" "constitution -> ../.. (relative inside the hub)"
+assert_eq "../../containers" "$(readlink "${L}/submodules/containers")" "submodules/containers -> ../../containers (relative inside the hub)"
+assert_eq "$(cd "${HUB}" && pwd -P)" "$(cd "${L}/constitution" && pwd -P)" "the relative link really lands on the hub"
+assert_eq "../../superspec" "$(readlink "${L}/submodules/superspec")" "submodules/superspec -> ../../superspec"
 assert_file_exists "${L}/submodules/containers/go.mod" "the link is usable by go.mod's replace path"
 
 echo "== 2. idempotent + --check =="
@@ -62,5 +63,11 @@ assert_eq "0" "${RC}" "second run WITHOUT env overrides exits 0"
 assert_eq "${V}/real/c" "$(readlink "${V}/llmctl/constitution")" "constitution link still points at the real tree (no self-loop)"
 assert_file_exists "${V}/llmctl/submodules/containers/go.mod" "containers link still resolves to a real go.mod"
 assert_file_exists "${V}/llmctl/submodules/superspec/extension.yml" "superspec link still resolves to a real extension.yml"
+
+echo "== 7. named dependency only (used by the build path) =="
+Q="${WORK}/q7/llmctl"; mk_llmctl "${Q}"; mkdir -p "${WORK}/q7/containers"; printf 'module digital.vasic.containers\n' > "${WORK}/q7/containers/go.mod"
+RC=0; OUT="$(env -i PATH="${PATH}" HOME="${WORK}/h" bash "${Q}/scripts/link_deps.sh" containers 2>&1)" || RC=$?
+assert_eq "0" "${RC}" "link_deps containers exits 0 although constitution/superspec are unresolved"
+assert_eq "yes" "$([[ -L "${Q}/submodules/containers" && ! -e "${Q}/constitution" && ! -L "${Q}/constitution" ]] && echo yes || echo no)" "only containers was linked"
 
 test_finish

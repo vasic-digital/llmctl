@@ -7,9 +7,9 @@
 # Why this exists (owner mandate 2026-10-21, "one source of truth, always the latest"): llmctl used to carry
 # its own pinned `constitution`, `submodules/containers` and `submodules/superspec` submodules. llmctl lives
 # INSIDE the constitution hub (constitution/submodules/llmctl), so its nested `constitution` created a
-# mutual-reference cycle (hub -> llmctl -> hub), and `containers`/`superspec` duplicated the hub's own flat
-# copies. They are now resolved at run time from the single copy that exists on the host. llmctl's own real
-# dependencies (submodules/llama.cpp, submodules/colibri) are still ordinary submodules.
+# mutual-reference cycle (hub -> llmctl -> hub). The hub now vendors `containers` and `superspec` flat at
+# <hub>/submodules/<name> (owner decision 2026-10-21), so llmctl no longer pins private copies: it resolves
+# them. llmctl's own real dependencies (submodules/llama.cpp, submodules/colibri) are still ordinary submodules.
 #
 # Usage:
 #   bash lib/resolve_deps.sh <constitution|containers|superspec>   # prints the absolute path, exit 0
@@ -17,16 +17,19 @@
 #   source lib/resolve_deps.sh; llmctl_resolve_dep containers      # function form (no shell options are changed)
 #
 # Resolution order (first candidate that passes its marker check wins):
-#   1. env override  LLMCTL_CONSTITUTION_DIR / LLMCTL_CONTAINERS_DIR / LLMCTL_SUPERSPEC_DIR. An override that
-#      does not pass the marker check is an ERROR (exit 1), never a silent fall-through to another location.
+#   1. env override  LLMCTL_CONSTITUTION_DIR / LLMCTL_CONTAINERS_DIR / LLMCTL_SUPERSPEC_DIR. A relative value is
+#      made absolute. An override that is empty or does not pass the marker check is an ERROR (exit 1), never a
+#      silent fall-through to another location.
 #   2. the parent hub, when llmctl is nested at <hub>/submodules/llmctl (hub = ../.. and holds Constitution.md):
-#      constitution = <hub>; containers/superspec = <hub>/submodules/<name> (= ../<name>).
-#   3. <root>/constitution and <root>/submodules/<name>  (root = this llmctl checkout; usually the symlinks
-#      made by scripts/link_deps.sh).
-#   4. sibling directories  <root>/../constitution, <root>/../containers, <root>/../superspec.
+#      constitution = <hub>; containers/superspec = <hub>/submodules/<name> (= ../<name>, vendored by the hub).
+#      This step comes BEFORE step 3 (pinned by a fixture in tests/test_resolve_deps.sh).
+#   3. <root>/constitution and <root>/submodules/<name>  (root = this llmctl checkout: a consumer's own copy,
+#      Constitution section 11.4.76, or the symlinks made by scripts/link_deps.sh).
+#   4. sibling clones  <root>/../constitution, <root>/../containers, <root>/../superspec  (standalone use).
 #   5. ancestor walk: for every ancestor A of <root>: A/constitution, A/submodules/constitution (constitution
 #      - the semantics of the hub's find_constitution.sh), A/submodules/<name>, A/constitution/submodules/<name>.
-#   6. host fallback (constitution ONLY): ${LLMCTL_HOST_FALLBACK_DIR:-/home/milosvasic/Projects/helix_code/constitution}.
+#   6. host fallback (constitution ONLY) - OPT-IN: only when LLMCTL_HOST_FALLBACK_DIR is set. There is no
+#      built-in host path (a host-specific literal does not belong in a shared library).
 #
 # Marker checks (so an empty directory or a different project is never accepted):
 #   constitution: Constitution.md exists;  containers: go.mod declares `module digital.vasic.containers`;
@@ -42,8 +45,8 @@
 # _llmctl_rd_root: absolute path of the llmctl checkout this library belongs to.
 _llmctl_rd_root() {
   local here
-  here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-  (cd "${here}/.." && pwd)
+  here="$(CDPATH='' cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  (CDPATH='' cd "${here}/.." && pwd)
 }
 
 # _llmctl_rd_valid <name> <dir> : marker check
@@ -59,17 +62,18 @@ _llmctl_rd_valid() {
 }
 
 # _llmctl_rd_norm <dir> : absolute, '..'-free form of an existing directory (symlinks are NOT resolved)
-_llmctl_rd_norm() { (cd "$1" 2>/dev/null && pwd); }
+_llmctl_rd_norm() { (CDPATH='' cd "$1" 2>/dev/null && pwd); }
 
 # _llmctl_rd_candidates <name> <root> : candidate directories in resolution order (steps 2-6), one per line
 _llmctl_rd_candidates() {
   local name="$1" root="$2" parent hub a
   parent="$(dirname "${root}")"
   hub="$(dirname "${parent}")"
-  # 2. the parent hub
+  # 2. the parent hub (step-2-begin)
   if [[ "$(basename "${parent}")" == "submodules" && -f "${hub}/Constitution.md" ]]; then
     if [[ "${name}" == "constitution" ]]; then printf '%s\n' "${hub}"; else printf '%s\n' "${parent}/${name}"; fi
   fi
+  # (step-2-end)
   # 3. <root>/constitution, <root>/submodules/<name>
   if [[ "${name}" == "constitution" ]]; then printf '%s\n' "${root}/constitution"; else printf '%s\n' "${root}/submodules/${name}"; fi
   # 4. siblings
@@ -86,8 +90,8 @@ _llmctl_rd_candidates() {
     a="$(dirname "${a}")"
   done
   # 6. host fallback (constitution only)
-  if [[ "${name}" == "constitution" ]]; then
-    printf '%s\n' "${LLMCTL_HOST_FALLBACK_DIR:-/home/milosvasic/Projects/helix_code/constitution}"
+  if [[ "${name}" == "constitution" && -n "${LLMCTL_HOST_FALLBACK_DIR:-}" ]]; then
+    printf '%s\n' "${LLMCTL_HOST_FALLBACK_DIR}"
   fi
 }
 
@@ -99,8 +103,13 @@ llmctl_resolve_dep() {
     *) printf 'llmctl_resolve_dep: unknown dependency "%s" (want constitution|containers|superspec)\n' "${name}" >&2; return 2 ;;
   esac
   var="LLMCTL_$(printf '%s' "${name}" | tr '[:lower:]' '[:upper:]')_DIR"
-  override="${!var:-}"
-  if [[ -n "${override}" ]]; then
+  if [[ -n "${!var+x}" ]]; then
+    override="${!var}"
+    if [[ -z "${override}" ]]; then
+      printf 'llmctl: %s is set but empty; unset it or give a directory - not falling back silently\n' "${var}" >&2
+      return 1
+    fi
+    case "${override}" in /*) ;; *) override="$(pwd)/${override}" ;; esac
     if _llmctl_rd_valid "${name}" "${override}"; then
       printf '%s\n' "${override}"
       return 0
@@ -113,6 +122,9 @@ llmctl_resolve_dep() {
   while IFS= read -r cand; do
     [[ -n "${cand}" ]] || continue
     if _llmctl_rd_valid "${name}" "${cand}"; then
+      if [[ "${name}" == "constitution" && "${cand}" == "${root}/constitution" && -d "${cand}" && ! -L "${cand}" ]]; then
+        printf 'llmctl: WARNING: %s is a real directory (a leftover of the removed constitution gitlink?); using it. Remove it and run scripts/link_deps.sh to use the hub copy.\n' "${cand}" >&2
+      fi
       norm="$(_llmctl_rd_norm "${cand}")"
       printf '%s\n' "${norm:-${cand}}"
       return 0
@@ -120,7 +132,7 @@ llmctl_resolve_dep() {
   done < <(_llmctl_rd_candidates "${name}" "${root}")
   printf 'llmctl: cannot resolve %s. Looked (in order): %s, the parent hub, %s, sibling dirs, ancestor dirs%s.\n' \
     "${name}" "${var}" "${root}/$([[ ${name} == constitution ]] && echo constitution || echo "submodules/${name}")" \
-    "$([[ ${name} == constitution ]] && echo ", host fallback")" >&2
+    "$([[ ${name} == constitution ]] && echo ", LLMCTL_HOST_FALLBACK_DIR if set")" >&2
   printf '  Fix: set %s=/absolute/path, or place llmctl at <hub>/submodules/llmctl inside the constitution hub, or put %s next to llmctl.\n' "${var}" "${name}" >&2
   return 1
 }

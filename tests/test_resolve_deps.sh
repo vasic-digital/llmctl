@@ -125,4 +125,35 @@ echo "== 10. real nesting: this repo's library, sourced as a function library ==
 ( source "${LIB_SRC}"; type llmctl_resolve_dep >/dev/null ) && ok=yes || ok=no
 assert_eq "yes" "${ok}" "llmctl_resolve_dep is exported when the library is sourced"
 
+echo "== 11. M3: hub copy beats <root>/submodules/<name> (order pinned, reviewer mutation) =="
+H11="${WORK}/h11"; mk_constitution "${H11}"; mk_llmctl "${H11}/submodules/llmctl"
+mk_containers "${H11}/submodules/containers"; mk_containers "${H11}/submodules/llmctl/submodules/containers"
+resolve "${H11}/submodules/llmctl" containers
+assert_eq "${H11}/submodules/containers" "${OUT}" "hub-vendored containers wins over the llmctl-local copy"
+# mutation: drop the hub step from a COPY of the library; the same fixture must then pick the local copy,
+# proving the assertion above is sensitive to the order (a test that cannot see the swap is decoration).
+sed -i '/(step-2-begin)/,/(step-2-end)/d' "${H11}/submodules/llmctl/lib/resolve_deps.sh"
+resolve "${H11}/submodules/llmctl" containers
+assert_eq "${H11}/submodules/llmctl/submodules/containers" "${OUT}" "MUTATION (hub step removed) changes the answer: the order fixture is load-bearing"
+
+echo "== 12. I2: no built-in host fallback literal; nothing configured -> exit 1 =="
+if grep -q 'helix_code' "${LIB_SRC}"; then
+  printf '  FAIL: hard-coded host path in lib/resolve_deps.sh\n' >&2; TEST_FAILS=$((TEST_FAILS+1))
+else printf '  ok: resolver has no hard-coded host path\n'; fi
+RC=0; OUT="$(env -i PATH="${PATH}" HOME="${WORK}/home" bash "${N7}/llmctl/lib/resolve_deps.sh" constitution 2>/dev/null)" || RC=$?
+assert_eq "1" "${RC}" "no LLMCTL_HOST_FALLBACK_DIR and nothing nearby: exit 1"
+
+echo "== 13. M2/N1: relative override is made absolute; empty override is an error =="
+mkdir -p "${WORK}/rel/c"; : > "${WORK}/rel/c/Constitution.md"
+RC=0; OUT="$(cd "${WORK}/rel" && env -i PATH="${PATH}" HOME="${WORK}/home" CDPATH="${WORK}" LLMCTL_CONSTITUTION_DIR=c bash "${H1}/submodules/llmctl/lib/resolve_deps.sh" constitution 2>/dev/null)" || RC=$?
+assert_eq "${WORK}/rel/c" "${OUT}" "relative override c -> absolute path (and a hostile CDPATH does not change it)"
+resolve "${H1}/submodules/llmctl" constitution LLMCTL_CONSTITUTION_DIR=
+assert_eq "1" "${RC}" "empty-but-set override is an error"
+
+echo "== 14. M5: a real <root>/constitution directory (old gitlink leftover) is warned about =="
+W14="${WORK}/w14/llmctl"; mk_llmctl "${W14}"; mk_constitution "${W14}/constitution"
+resolve "${W14}" constitution
+assert_eq "${W14}/constitution" "${OUT}" "still resolves to the real directory"
+assert_contains "${ERR}" "real directory" "...with a warning on stderr"
+
 test_finish

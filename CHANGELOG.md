@@ -28,13 +28,13 @@ repository as an honest record of that process.
 * **chore(deps): one source of truth - llmctl no longer vendors `constitution`, `submodules/containers` or `submodules/superspec`
   (owner mandate 2026-10-21; branch `chore/single-source-layout`).** llmctl lives inside the constitution hub
   (`constitution/submodules/llmctl`), so its nested `constitution` made a hub -> llmctl -> hub cycle (the
-  `CM-LLMCTL-SUBMODULE-NONRECURSIVE` gate FAILed on pin `8a60462`) and `containers` / `superspec` duplicated the hub's flat copies.
+  `CM-LLMCTL-SUBMODULE-NONRECURSIVE` gate FAILed on pin `8a60462`) and llmctl's private `containers` / `superspec` pins were a second copy of what the hub now vendors flat (`<hub>/submodules/<name>`).
   The three gitlinks and their `.gitmodules` entries are removed (previous pins, for recovery only: constitution
   `8a604628ebf4af9ac19a70014e640edd9024d43b`, containers `4a8f04e05f3535d77c48f69b89687f9fcc896fbf`, superspec
   `c20ac6c1ba069cc9a72dacb8044b7b193d3dde81`); `submodules/llama.cpp` and `submodules/colibri` stay. New `lib/resolve_deps.sh` is the single
-  resolver (env `LLMCTL_{CONSTITUTION,CONTAINERS,SUPERSPEC}_DIR` -> parent hub -> root -> siblings -> ancestors -> host fallback; exit 1 with
+  resolver (env `LLMCTL_{CONSTITUTION,CONTAINERS,SUPERSPEC}_DIR` -> `<hub>/submodules/<name>` -> `<root>` -> siblings -> ancestors -> opt-in host fallback, no built-in host path; exit 1 with
   an actionable message when nothing resolves) and `scripts/link_deps.sh` (`make deps`) makes the ignored symlinks that `go.mod`'s
-  `replace` and the carriers' `@constitution/CLAUDE.md` import need. The release preflight now verifies only llmctl's own pins. Tests:
+  `replace` and the carriers' `@constitution/CLAUDE.md` import need (relative inside the hub). `llmctl setup` and `llmctl build decide|all` link `containers` first or stop with the resolver message (`tests/test_engine_deps.sh`). The release preflight now verifies only llmctl's own pins. Tests:
   `tests/test_resolve_deps.sh` (35 assertions, RED before the library existed), `tests/test_link_deps.sh` (regression: a re-run without the
   env override turned a link into a self-loop - found live, fixed); `test_containers_submodule`, `test_constitution_inheritance*`,
   `test_release_no_secrets` adapted. See `docs/dependency-layout.md`. **Migration:** after pulling, run `make deps` (set `LLMCTL_*_DIR`

@@ -21,8 +21,8 @@ one that already succeeded.
 
 | Script | What it does |
 |---|---|
-| [`scripts/release/preflight_submodules.sh`](../scripts/release/preflight_submodules.sh) | Verifies every pinned submodule ref (this repo's own + `constitution`'s nested set, recursively) is genuinely fetchable, before anything else runs |
-| [`scripts/release/build_archive.sh`](../scripts/release/build_archive.sh) | Builds `llmctl.tar.gz`/`llmctl.zip` as a full, self-contained, buildable tree (working tree + `.git` + every submodule's real content recursively) |
+| [`scripts/release/preflight_submodules.sh`](../scripts/release/preflight_submodules.sh) | Verifies every pinned submodule ref (this repo's own: llama.cpp, colibri) is genuinely fetchable, before anything else runs, and prints the commit of each resolved dependency (constitution, containers, superspec) for the release evidence |
+| [`scripts/release/build_archive.sh`](../scripts/release/build_archive.sh) | Builds `llmctl.tar.gz`/`llmctl.zip` as a full tree of what llmctl pins (working tree + `.git` + llama.cpp and colibri content). It does not contain `containers`/`constitution`/`superspec` (resolved, not vendored): the Go decision binary needs them from the hub or `LLMCTL_CONTAINERS_DIR` |
 | [`scripts/release/create_release.sh`](../scripts/release/create_release.sh) | Orchestrates the above plus SemVer validation, changelog generation, and the actual `gh release create` + `glab release create` calls |
 
 ## Step-by-step procedure
@@ -123,7 +123,7 @@ tree, which naturally includes every submodule's real content recursively
 (a nested submodule is a git-level concept with no special filesystem
 representation — it is just more files in more directories) plus the real
 `.git` directory itself, so extracting the archive anywhere produces a
-fully self-contained, buildable git repo — proven by
+git repo that holds every pinned submodule (llama.cpp, colibri) — but NOT the resolved `containers`/`constitution`/`superspec` dependencies, so it is no longer buildable for the Go decision binary on its own (`docs/dependency-layout.md`) — proven by
 `tests/test_archive_completeness.sh` against a real (small) fixture
 submodule, including the decisive check that a relocated submodule's
 relative `.git` gitdir pointer survives being extracted to a brand-new

@@ -9,6 +9,7 @@ test_setup_env
 ( source "${LLMCTL_ROOT}/lib/engine.sh"
   : > "${TEST_TMP}/calls"
   engine_ensure_submodules() { :; }
+  engine_ensure_containers() { :; }
   engine_build_llama()   { echo llama   >> "${TEST_TMP}/calls"; }
   engine_build_colibri() { echo colibri >> "${TEST_TMP}/calls"; }
   engine_build_onnx()    { echo onnx    >> "${TEST_TMP}/calls"; }

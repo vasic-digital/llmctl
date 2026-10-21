@@ -206,6 +206,22 @@ _preflight_walk() {
   done < <(git -C "${repo_dir}" submodule status 2>/dev/null || true)
 }
 
+# _preflight_record_resolved <root>: release evidence for the dependencies llmctl does NOT pin. Prints, for each
+# of constitution/containers/superspec, the resolved path and its git commit ("untracked" when the directory is
+# not its own git checkout, "UNRESOLVED" when lib/resolve_deps.sh finds nothing). Informational: never fails the
+# preflight (those commits are the hub's pins, not llmctl's), but the lines belong in the release evidence.
+_preflight_record_resolved() {
+  local root="$1" dep path sha
+  for dep in constitution containers superspec; do
+    if path="$(bash "${root}/lib/resolve_deps.sh" "${dep}" 2>/dev/null)"; then
+      if [[ -e "${path}/.git" ]]; then sha="$(git -C "${path}" rev-parse HEAD 2>/dev/null || echo unknown)"; else sha="untracked"; fi
+      printf 'RESOLVED %s: %s @ %s\n' "${dep}" "${path}" "${sha}"
+    else
+      printf 'RESOLVED %s: UNRESOLVED (see lib/resolve_deps.sh; record this gap in the release evidence)\n' "${dep}"
+    fi
+  done
+}
+
 # --- standalone run: this repo's own submodules --
 _preflight_main() {
   local root; root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -225,6 +241,7 @@ _preflight_main() {
     return 1
   fi
   printf 'PREFLIGHT PASSED: every submodule ref is reachable\n'
+  _preflight_record_resolved "${root}"
   return 0
 }
 

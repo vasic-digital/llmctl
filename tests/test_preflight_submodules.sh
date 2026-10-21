@@ -179,4 +179,16 @@ assert_contains "${walk_out}" "PASS" "the mismatched-section-name submodule's ge
 assert_eq 0 "${_PREFLIGHT_FAILS}" "no false FAIL recorded for the mismatched-section-name submodule"
 assert_eq 0 "${_PREFLIGHT_UNKNOWNS}" "no false UNKNOWN recorded for the mismatched-section-name submodule"
 
+# --- I4: release evidence records the commits of the RESOLVED (not pinned) dependencies ---------------------------
+RES_ROOT="$(mktemp -d)"; mkdir -p "${RES_ROOT}/lib" "${RES_ROOT}/constitution" "${RES_ROOT}/submodules/containers"
+cp "${LLMCTL_ROOT}/lib/resolve_deps.sh" "${RES_ROOT}/lib/"; : > "${RES_ROOT}/constitution/Constitution.md"
+printf 'module digital.vasic.containers\n' > "${RES_ROOT}/submodules/containers/go.mod"
+git init -q "${RES_ROOT}/submodules/containers"; git -C "${RES_ROOT}/submodules/containers" -c user.email=t@t -c user.name=t add go.mod
+git -C "${RES_ROOT}/submodules/containers" -c user.email=t@t -c user.name=t commit -qm i
+rec_out="$(env -i PATH="${PATH}" HOME="${RES_ROOT}" bash -c "source '${LLMCTL_ROOT}/scripts/release/preflight_submodules.sh'; _preflight_record_resolved '${RES_ROOT}'")"
+assert_contains "${rec_out}" "RESOLVED containers: ${RES_ROOT}/submodules/containers @ $(git -C "${RES_ROOT}/submodules/containers" rev-parse HEAD)" "the containers commit is recorded"
+assert_contains "${rec_out}" "RESOLVED constitution: ${RES_ROOT}/constitution @ untracked" "a non-git constitution is reported as untracked"
+assert_contains "${rec_out}" "RESOLVED superspec: UNRESOLVED" "an unresolved dependency is a visible gap, not silence"
+rm -rf "${RES_ROOT}"
+
 test_finish

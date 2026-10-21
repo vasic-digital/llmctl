@@ -20,13 +20,18 @@ else
 fi
 assert_eq "" "$(git ls-files -s submodules/containers | awk '$1==160000')" "no gitlink for submodules/containers in the index"
 assert_eq "" "$(awk '/name: containers/{f=1} f&&/pinned:/{print $2; exit}' helix-deps.yaml)" "helix-deps.yaml records no private pin for containers (the hub copy is the one source)"
-assert_file_contains helix-deps.yaml "layout: hub-resolved" "helix-deps.yaml marks containers as hub-resolved"
+assert_file_contains helix-deps.yaml "resolved by lib/resolve_deps.sh" "helix-deps.yaml marks containers as resolved, not pinned"
 if ! resolved="$(bash lib/resolve_deps.sh containers 2>/dev/null)"; then
   skip_suite "containers cannot be resolved on this host (set LLMCTL_CONTAINERS_DIR or nest llmctl in the constitution hub; see docs/dependency-layout.md)"
 fi
-bash scripts/link_deps.sh >/dev/null
+bash scripts/link_deps.sh containers >/dev/null   # only containers: another unresolved dependency must not abort this suite
 assert_file_exists "${resolved}/go.mod" "resolved containers tree is checked out (go.mod present)"
 assert_file_contains "${resolved}/go.mod" "module digital.vasic.containers" "resolved module path is digital.vasic.containers"
+if [[ -e "${resolved}/.git" ]]; then
+  assert_eq "0" "$(git -C "${resolved}" status --porcelain | wc -l)" "resolved dependency working tree is unmodified (git status --porcelain empty)"
+else
+  echo "  SKIP: ${resolved} is not a git checkout of its own; the unmodified-tree check does not apply"
+fi
 assert_eq "$(cd "${resolved}" && pwd -P)" "$(cd submodules/containers && pwd -P)" "submodules/containers (go.mod replace target) points at the resolved copy"
 
 echo "== 2. go.mod wiring =="

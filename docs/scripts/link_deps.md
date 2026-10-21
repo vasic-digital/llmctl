@@ -14,8 +14,11 @@ things still address them by fixed repo-relative path: go.mod (`replace digital.
 valid by symlinking them to whatever lib/resolve_deps.sh resolves. Nothing is copied; nothing is pinned.
 
 Usage:
-  bash scripts/link_deps.sh            # create/refresh the links (idempotent)
-  bash scripts/link_deps.sh --check    # verify only; exit 1 if any link is missing or points elsewhere
+  bash scripts/link_deps.sh                       # create/refresh all three links (idempotent)
+  bash scripts/link_deps.sh containers            # only the named ones (constitution|containers|superspec)
+  bash scripts/link_deps.sh --check [names...]    # verify only; exit 1 if any link is missing or points elsewhere
+Inside the hub (llmctl at <hub>/submodules/llmctl) the links are RELATIVE (constitution -> ../..,
+submodules/<name> -> ../../<name>) so they survive moving the hub; elsewhere they are absolute.
 
 Links managed (relative to the llmctl root):
   constitution -> <resolved constitution>      submodules/containers -> <resolved containers>

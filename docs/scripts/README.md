@@ -152,3 +152,4 @@ One page per script, library or test suite (Constitution 11.4.18). Test pages st
 | [link_deps](link_deps.md) | `link_deps.sh` |
 | [test_resolve_deps](test_resolve_deps.md) | `test_resolve_deps.sh` |
 | [test_link_deps](test_link_deps.md) | `test_link_deps.sh` |
+| [test_engine_deps](test_engine_deps.md) | `test_engine_deps.sh` |

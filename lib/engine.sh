@@ -305,11 +305,27 @@ engine_build_onnx() {
   log "onnx runtime venv ready: ${py}"
 }
 
+# engine_ensure_containers - the Go module replace target (go.mod: digital.vasic.containers => ./submodules/containers)
+# is NOT a submodule of llmctl: it is resolved (lib/resolve_deps.sh, e.g. the constitution hub's flat copy) and
+# linked (scripts/link_deps.sh). A fresh clone has no link, so every build path that needs Go calls this first and
+# STOPS with the resolver's actionable message when containers cannot be found (never a misleading
+# "Go toolchain / module cache" error). Dry-run only warns.
+engine_ensure_containers() {
+  if [[ "${LLMCTL_DRY_RUN:-0}" == "1" ]]; then
+    bash "${LLMCTL_ROOT}/scripts/link_deps.sh" containers >/dev/null 2>&1 \
+      || warn "[dry-run] containers dependency not resolvable (see docs/dependency-layout.md)"
+    return 0
+  fi
+  bash "${LLMCTL_ROOT}/scripts/link_deps.sh" containers >/dev/null \
+    || die "the containers dependency (Go module digital.vasic.containers) is not available - see the message above; set LLMCTL_CONTAINERS_DIR or place llmctl in the constitution hub (docs/dependency-layout.md)"
+}
+
 # engine_build_decide - builds the Go decision binary (gateway + decide client + key/cert
 # management; Go + Gin Gonic). Output: ${LLMCTL_DECIDE_BUILD_OUT:-${LLMCTL_ROOT}/build/llmctl-decide}.
 # Hermetic-ish: -mod=readonly + the committed go.sum (verified with `go mod verify`), -trimpath;
 # a first build needs the module cache warm or network access (documented, not vendored).
 engine_build_decide() {
+  engine_ensure_containers
   need_cmd go
   local out="${LLMCTL_DECIDE_BUILD_OUT:-${LLMCTL_ROOT}/build/llmctl-decide}"
   ensure_dir "$(dirname "${out}")"
@@ -335,7 +351,7 @@ engine_build() {
     colibri) shift || true; engine_build_colibri "$@" ;;
     onnx)    engine_build_onnx ;;
     decide)  engine_build_decide ;;
-    all)     engine_build_llama; engine_build_colibri; engine_build_onnx; engine_build_decide ;;
+    all)     engine_ensure_containers; engine_build_llama; engine_build_colibri; engine_build_onnx; engine_build_decide ;;
     *)       die "unknown build target: ${what} (expected llama|colibri|onnx|decide|all)" ;;
   esac
 }
