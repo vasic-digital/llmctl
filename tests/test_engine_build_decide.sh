@@ -21,6 +21,12 @@ assert_eq 2 "${rc}" "a bare 'llmctl build' exits 2 (G-078)"
 assert_contains "${out}" "usage: llmctl build <llama|colibri|onnx|decide|all>" "...printing the usage, a target is required"
 case "${out}" in *"building"*|*"cmake"*|*"configure"*) TEST_FAILS=$((TEST_FAILS+1)); echo "  FAIL: a bare 'llmctl build' started building: ${out}" >&2 ;; *) echo "  ok: a bare 'llmctl build' started no build" ;; esac
 if ! command -v go >/dev/null 2>&1; then echo "SKIP-SUITE: go toolchain not installed"; exit 0; fi
+# The real build needs the containers go.mod replace target; assertions already ran above, so (SKIP-SUITE is only legal
+# before any assertion) record an honest per-assertion SKIP with the resolver message instead of failing.
+if [[ ! -f "${LLMCTL_ROOT}/submodules/containers/go.mod" ]] && ! _cmsg="$(bash "${LLMCTL_ROOT}/scripts/link_deps.sh" containers 2>&1 >/dev/null)"; then
+  assert_skip "containers unresolvable (${_cmsg//$'\n'/ | })" "real engine_build decide + built binary"
+  test_finish
+fi
 out="$(mktemp -d)"; trap 'rm -rf "${out}"' EXIT
 export LLMCTL_DECIDE_BUILD_OUT="${out}/llmctl-decide"
 source "${LLMCTL_ROOT}/lib/engine.sh"
