@@ -208,13 +208,16 @@ _preflight_walk() {
 
 # _preflight_record_resolved <root>: release evidence for the dependencies llmctl does NOT pin. Prints, for each
 # of constitution/containers/superspec, the resolved path and its git commit ("untracked" when the directory is
-# not its own git checkout, "UNRESOLVED" when lib/resolve_deps.sh finds nothing). Informational: never fails the
+# not its own git checkout, "<sha> dirty" when its working tree has changes, "UNRESOLVED" when lib/resolve_deps.sh finds nothing). Informational: never fails the
 # preflight (those commits are the hub's pins, not llmctl's), but the lines belong in the release evidence.
 _preflight_record_resolved() {
   local root="$1" dep path sha
   for dep in constitution containers superspec; do
     if path="$(bash "${root}/lib/resolve_deps.sh" "${dep}" 2>/dev/null)"; then
-      if [[ -e "${path}/.git" ]]; then sha="$(git -C "${path}" rev-parse HEAD 2>/dev/null || echo unknown)"; else sha="untracked"; fi
+      if [[ -e "${path}/.git" ]]; then
+        sha="$(git -C "${path}" rev-parse HEAD 2>/dev/null || echo unknown)"
+        [[ -z "$(git -C "${path}" status --porcelain 2>/dev/null)" ]] || sha="${sha} dirty"
+      else sha="untracked"; fi
       printf 'RESOLVED %s: %s @ %s\n' "${dep}" "${path}" "${sha}"
     else
       printf 'RESOLVED %s: UNRESOLVED (see lib/resolve_deps.sh; record this gap in the release evidence)\n' "${dep}"

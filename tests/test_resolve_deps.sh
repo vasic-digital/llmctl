@@ -137,9 +137,14 @@ resolve "${H11}/submodules/llmctl" containers
 assert_eq "${H11}/submodules/llmctl/submodules/containers" "${OUT}" "MUTATION (hub step removed) changes the answer: the order fixture is load-bearing"
 
 echo "== 12. I2: no built-in host fallback literal; nothing configured -> exit 1 =="
-if grep -q 'helix_code' "${LIB_SRC}"; then
-  printf '  FAIL: hard-coded host path in lib/resolve_deps.sh\n' >&2; TEST_FAILS=$((TEST_FAILS+1))
-else printf '  ok: resolver has no hard-coded host path\n'; fi
+# host-literal needle: any absolute host/user path. Control first: the needle MUST see a planted host path.
+HOST_NEEDLE='/home/|/Users/|Projects/'
+printf 'x=/home/someone/Projects/y\n' > "${WORK}/needle-control.txt"
+if grep -qE "${HOST_NEEDLE}" "${WORK}/needle-control.txt"; then printf '  ok: control needle: the host-literal pattern sees a planted host path\n'
+else printf '  FAIL: control needle is blind\n' >&2; TEST_FAILS=$((TEST_FAILS+1)); fi
+if grep -qE "${HOST_NEEDLE}" "${LIB_SRC}"; then
+  printf '  FAIL: host-specific path literal in lib/resolve_deps.sh\n' >&2; grep -nE "${HOST_NEEDLE}" "${LIB_SRC}" >&2; TEST_FAILS=$((TEST_FAILS+1))
+else printf '  ok: resolver has no host-specific path literal\n'; fi
 RC=0; OUT="$(env -i PATH="${PATH}" HOME="${WORK}/home" bash "${N7}/llmctl/lib/resolve_deps.sh" constitution 2>/dev/null)" || RC=$?
 assert_eq "1" "${RC}" "no LLMCTL_HOST_FALLBACK_DIR and nothing nearby: exit 1"
 
@@ -147,6 +152,8 @@ echo "== 13. M2/N1: relative override is made absolute; empty override is an err
 mkdir -p "${WORK}/rel/c"; : > "${WORK}/rel/c/Constitution.md"
 RC=0; OUT="$(cd "${WORK}/rel" && env -i PATH="${PATH}" HOME="${WORK}/home" CDPATH="${WORK}" LLMCTL_CONSTITUTION_DIR=c bash "${H1}/submodules/llmctl/lib/resolve_deps.sh" constitution 2>/dev/null)" || RC=$?
 assert_eq "${WORK}/rel/c" "${OUT}" "relative override c -> absolute path (and a hostile CDPATH does not change it)"
+RC=0; OUT="$(cd "${WORK}/rel" && env -i PATH="${PATH}" HOME="${WORK}/home" LLMCTL_CONSTITUTION_DIR=c/../c bash "${H1}/submodules/llmctl/lib/resolve_deps.sh" constitution 2>/dev/null)" || RC=$?
+assert_eq "${WORK}/rel/c" "${OUT}" "a relative override with .. is normalised (no .. in the result)"
 resolve "${H1}/submodules/llmctl" constitution LLMCTL_CONSTITUTION_DIR=
 assert_eq "1" "${RC}" "empty-but-set override is an error"
 

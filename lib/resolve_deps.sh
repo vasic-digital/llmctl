@@ -7,7 +7,7 @@
 # Why this exists (owner mandate 2026-10-21, "one source of truth, always the latest"): llmctl used to carry
 # its own pinned `constitution`, `submodules/containers` and `submodules/superspec` submodules. llmctl lives
 # INSIDE the constitution hub (constitution/submodules/llmctl), so its nested `constitution` created a
-# mutual-reference cycle (hub -> llmctl -> hub). The hub now vendors `containers` and `superspec` flat at
+# mutual-reference cycle (hub -> llmctl -> hub). The hub now vendors `containers` and `superspec` under
 # <hub>/submodules/<name> (owner decision 2026-10-21), so llmctl no longer pins private copies: it resolves
 # them. llmctl's own real dependencies (submodules/llama.cpp, submodules/colibri) are still ordinary submodules.
 #
@@ -30,6 +30,9 @@
 #      - the semantics of the hub's find_constitution.sh), A/submodules/<name>, A/constitution/submodules/<name>.
 #   6. host fallback (constitution ONLY) - OPT-IN: only when LLMCTL_HOST_FALLBACK_DIR is set. There is no
 #      built-in host path (a host-specific literal does not belong in a shared library).
+#
+# A real <root>/constitution or <root>/submodules/<name> directory (the checkout git leaves behind when a submodule
+# gitlink is removed) is warned about on stderr whenever it exists, used or not.
 #
 # Marker checks (so an empty directory or a different project is never accepted):
 #   constitution: Constitution.md exists;  containers: go.mod declares `module digital.vasic.containers`;
@@ -95,6 +98,20 @@ _llmctl_rd_candidates() {
   fi
 }
 
+# _llmctl_rd_warn_leftover <name> <root> <resolved> : a REAL (non-symlink) <root>/constitution or
+# <root>/submodules/<name> is almost always the checkout left behind when the gitlink was removed (git does not
+# delete a populated submodule worktree). Warn on stderr - whether it is the answer or is shadowed by a better one.
+_llmctl_rd_warn_leftover() {
+  local name="$1" root="$2" resolved="$3" legacy
+  if [[ "${name}" == "constitution" ]]; then legacy="${root}/constitution"; else legacy="${root}/submodules/${name}"; fi
+  [[ -d "${legacy}" && ! -L "${legacy}" ]] || return 0
+  if [[ "${resolved}" == "${legacy}" ]]; then
+    printf 'llmctl: WARNING: %s is a real directory (a leftover of the removed %s submodule?); using it. Verify it is clean, remove it and run scripts/link_deps.sh to use the shared copy.\n' "${legacy}" "${name}" >&2
+  else
+    printf 'llmctl: WARNING: %s is a real directory (a leftover of the removed %s submodule?) but %s wins; the leftover is ignored. Verify it is clean and remove it.\n' "${legacy}" "${name}" "${resolved}" >&2
+  fi
+}
+
 # llmctl_resolve_dep <name> : print the absolute path of the dependency; return 1 (message on stderr) otherwise.
 llmctl_resolve_dep() {
   local name="${1:-}" root var override cand norm
@@ -109,7 +126,10 @@ llmctl_resolve_dep() {
       printf 'llmctl: %s is set but empty; unset it or give a directory - not falling back silently\n' "${var}" >&2
       return 1
     fi
-    case "${override}" in /*) ;; *) override="$(pwd)/${override}" ;; esac
+    case "${override}" in
+      /*) ;;
+      *) override="$(CDPATH='' cd "${override}" 2>/dev/null && pwd || printf '%s/%s' "$(pwd)" "${override}")" ;;
+    esac
     if _llmctl_rd_valid "${name}" "${override}"; then
       printf '%s\n' "${override}"
       return 0
@@ -122,10 +142,8 @@ llmctl_resolve_dep() {
   while IFS= read -r cand; do
     [[ -n "${cand}" ]] || continue
     if _llmctl_rd_valid "${name}" "${cand}"; then
-      if [[ "${name}" == "constitution" && "${cand}" == "${root}/constitution" && -d "${cand}" && ! -L "${cand}" ]]; then
-        printf 'llmctl: WARNING: %s is a real directory (a leftover of the removed constitution gitlink?); using it. Remove it and run scripts/link_deps.sh to use the hub copy.\n' "${cand}" >&2
-      fi
       norm="$(_llmctl_rd_norm "${cand}")"
+      _llmctl_rd_warn_leftover "${name}" "${root}" "${norm:-${cand}}"
       printf '%s\n' "${norm:-${cand}}"
       return 0
     fi

@@ -13,7 +13,7 @@ resolve_deps.sh - the ONE place that locates llmctl's non-vendored dependencies:
 Why this exists (owner mandate 2026-10-21, "one source of truth, always the latest"): llmctl used to carry
 its own pinned `constitution`, `submodules/containers` and `submodules/superspec` submodules. llmctl lives
 INSIDE the constitution hub (constitution/submodules/llmctl), so its nested `constitution` created a
-mutual-reference cycle (hub -> llmctl -> hub). The hub now vendors `containers` and `superspec` flat at
+mutual-reference cycle (hub -> llmctl -> hub). The hub now vendors `containers` and `superspec` under
 <hub>/submodules/<name> (owner decision 2026-10-21), so llmctl no longer pins private copies: it resolves
 them. llmctl's own real dependencies (submodules/llama.cpp, submodules/colibri) are still ordinary submodules.
 
@@ -36,6 +36,9 @@ Resolution order (first candidate that passes its marker check wins):
      - the semantics of the hub's find_constitution.sh), A/submodules/<name>, A/constitution/submodules/<name>.
   6. host fallback (constitution ONLY) - OPT-IN: only when LLMCTL_HOST_FALLBACK_DIR is set. There is no
      built-in host path (a host-specific literal does not belong in a shared library).
+
+A real <root>/constitution or <root>/submodules/<name> directory (the checkout git leaves behind when a submodule
+gitlink is removed) is warned about on stderr whenever it exists, used or not.
 
 Marker checks (so an empty directory or a different project is never accepted):
   constitution: Constitution.md exists;  containers: go.mod declares `module digital.vasic.containers`;

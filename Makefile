@@ -9,7 +9,8 @@ SCRIPTS := bin/llmctl $(wildcard lib/*.sh) $(wildcard tests/*.sh)
 
 # constitution / containers / superspec are resolved from the hub (lib/resolve_deps.sh), not vendored.
 # `deps` makes the ignored convenience links (go.mod replace target, @constitution import); it reports a
-# dependency it cannot resolve (set LLMCTL_*_DIR) but does not fail `test`: the suites that need it SKIP loudly.
+# dependency it cannot resolve (set LLMCTL_*_DIR) but does not fail `test`: Go-building suites SKIP loudly
+# (SKIP-SUITE with the resolver message, tests/helpers.sh guard) instead of failing.
 deps:
 	bash scripts/link_deps.sh
 

@@ -4,7 +4,7 @@
 # it is listed because llmctl RESOLVES it like the others, not because llmctl owns it. The engines llmctl
 # itself pins as submodules (llama.cpp, colibri; third-party) are in .gitmodules only.
 # Single source of truth (owner mandate 2026-10-21): constitution, containers and superspec are NOT vendored
-# by llmctl any more; the constitution hub vendors containers and superspec flat at <hub>/submodules/<name>.
+# by llmctl any more; the constitution hub vendors containers and superspec (grouped layout) at <hub>/submodules/<name>.
 # llmctl resolves them at run time (lib/resolve_deps.sh: env LLMCTL_{CONSTITUTION,CONTAINERS,SUPERSPEC}_DIR ->
 # <hub>/submodules/<name> -> <root>/submodules/<name> -> sibling clones -> ancestors -> opt-in host fallback)
 # and links them (scripts/link_deps.sh). llmctl pins nothing for them ("resolved by lib/resolve_deps.sh").
@@ -25,15 +25,15 @@ deps:
     ssh_url: git@github.com:vasic-digital/Containers.git
     ref: main
     why: "Dynamic port allocation, service registry/discovery, health probes and rootless container boot for the decision layer and its transport tests (spec FR-088..091, Helix §11.4.76); consumed from Go via go.mod replace => ./submodules/containers; resolved by lib/resolve_deps.sh (hub copy), not pinned"
-    layout: flat
-    path: submodules/containers   # untracked symlink made by scripts/link_deps.sh (go.mod replace target)
+    layout: grouped   # the hub vendors it under <hub>/submodules/containers
+    path: submodules/containers   # llmctl-local convenience link (untracked, scripts/link_deps.sh); the go.mod replace target
 
   - name: superspec
     ssh_url: git@github.com:WangX0111/superspec.git
     ref: main
     why: "Spec Kit superspec extension (third-party, consumed read-only)"
-    layout: flat
-    path: submodules/superspec    # untracked symlink made by scripts/link_deps.sh
+    layout: grouped   # the hub vendors it under <hub>/submodules/superspec
+    path: submodules/superspec    # llmctl-local convenience link (untracked, scripts/link_deps.sh)
 
 transitive_handling:
   recursive: true

@@ -40,7 +40,7 @@ echo "== 4. a real directory is never clobbered =="
 rm -f "${L}/submodules/superspec"; mkdir -p "${L}/submodules/superspec"; : > "${L}/submodules/superspec/keep"
 run "${L}"
 assert_eq "1" "${RC}" "real dir in the way: exit 1"
-assert_contains "${OUT}" "BLOCKED submodules/superspec" "reported"
+assert_contains "${OUT}" "LEFTOVER submodules/superspec" "reported as a leftover with its remediation"
 assert_file_exists "${L}/submodules/superspec/keep" "the real directory content is untouched"
 
 echo "== 5. NEGATIVE CONTROL: unresolvable dependency -> exit 1, others still linked =="

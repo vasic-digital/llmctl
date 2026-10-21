@@ -17,6 +17,16 @@ Usage:
   bash scripts/link_deps.sh                       # create/refresh all three links (idempotent)
   bash scripts/link_deps.sh containers            # only the named ones (constitution|containers|superspec)
   bash scripts/link_deps.sh --check [names...]    # verify only; exit 1 if any link is missing or points elsewhere
+  bash scripts/link_deps.sh --adopt-leftover [names...]   # see UPGRADE LEFTOVERS below
+
+UPGRADE LEFTOVERS: git does not delete a populated submodule worktree when its gitlink is removed, so an
+existing checkout keeps REAL directories constitution/, submodules/containers/, submodules/superspec/ (they are
+.gitignored now, i.e. hidden). Such a path blocks the link (exit 1, "LEFTOVER <path>") and the script prints the
+remediation: verify `git -C <path> status --porcelain` is empty, then `rm -rf <path>` and re-run. With the explicit
+opt-in --adopt-leftover it converts ONLY a leftover that is (a) a gitfile-style submodule worktree (.git is a
+FILE), (b) clean, and (c) at HEAD == the old recorded pin (constitution 8a60462..., containers 4a8f04e...,
+superspec c20ac6c...; test hook: LLMCTL_ADOPT_PIN_<NAME>) by MOVING it to <path>.leftover-<YYYYMMDD>[-N]
+(nothing is deleted, section 9.2) and linking. Anything else is refused with the reason.
 Inside the hub (llmctl at <hub>/submodules/llmctl) the links are RELATIVE (constitution -> ../..,
 submodules/<name> -> ../../<name>) so they survive moving the hub; elsewhere they are absolute.
 

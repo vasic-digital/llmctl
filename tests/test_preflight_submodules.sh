@@ -189,6 +189,9 @@ rec_out="$(env -i PATH="${PATH}" HOME="${RES_ROOT}" bash -c "source '${LLMCTL_RO
 assert_contains "${rec_out}" "RESOLVED containers: ${RES_ROOT}/submodules/containers @ $(git -C "${RES_ROOT}/submodules/containers" rev-parse HEAD)" "the containers commit is recorded"
 assert_contains "${rec_out}" "RESOLVED constitution: ${RES_ROOT}/constitution @ untracked" "a non-git constitution is reported as untracked"
 assert_contains "${rec_out}" "RESOLVED superspec: UNRESOLVED" "an unresolved dependency is a visible gap, not silence"
+echo dirt > "${RES_ROOT}/submodules/containers/untracked.txt"
+rec_dirty="$(env -i PATH="${PATH}" HOME="${RES_ROOT}" bash -c "source '${LLMCTL_ROOT}/scripts/release/preflight_submodules.sh'; _preflight_record_resolved '${RES_ROOT}'")"
+assert_contains "${rec_dirty}" "$(git -C "${RES_ROOT}/submodules/containers" rev-parse HEAD) dirty" "M5: a dirty resolved tree is flagged 'dirty'"
 rm -rf "${RES_ROOT}"
 
 test_finish

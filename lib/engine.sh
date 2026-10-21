@@ -311,9 +311,19 @@ engine_build_onnx() {
 # STOPS with the resolver's actionable message when containers cannot be found (never a misleading
 # "Go toolchain / module cache" error). Dry-run only warns.
 engine_ensure_containers() {
+  local dir="${LLMCTL_ROOT}/submodules/containers" resolved
   if [[ "${LLMCTL_DRY_RUN:-0}" == "1" ]]; then
-    bash "${LLMCTL_ROOT}/scripts/link_deps.sh" containers >/dev/null 2>&1 \
-      || warn "[dry-run] containers dependency not resolvable (see docs/dependency-layout.md)"
+    # dry-run: report what would happen (the resolver's message goes to stderr when unresolvable); create nothing
+    if resolved="$(bash "${LLMCTL_ROOT}/lib/resolve_deps.sh" containers)"; then
+      log "[dry-run] would link submodules/containers -> ${resolved}"
+    else
+      warn "[dry-run] the containers dependency is not resolvable (see docs/dependency-layout.md)"
+    fi
+    return 0
+  fi
+  # A valid REAL directory here is the leftover of the removed submodule: it builds fine, so warn and continue.
+  if [[ -d "${dir}" && ! -L "${dir}" ]] && grep -qE '^module[[:space:]]+digital\.vasic\.containers[[:space:]]*$' "${dir}/go.mod" 2>/dev/null; then
+    warn "submodules/containers is a leftover real directory of the removed submodule; using it. Verify it is clean, remove it and run scripts/link_deps.sh to use the shared copy"
     return 0
   fi
   bash "${LLMCTL_ROOT}/scripts/link_deps.sh" containers >/dev/null \

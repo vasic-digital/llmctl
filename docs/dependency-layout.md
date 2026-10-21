@@ -2,8 +2,9 @@
 
 | Field | Value |
 |---|---|
-| Revision | 1 |
+| Revision | 2 |
 | Created | 2026-10-21 |
+| Last modified | 2026-10-21 |
 | Status | active |
 
 llmctl does **not** vendor `constitution`, `submodules/containers` or `submodules/superspec`
@@ -11,7 +12,7 @@ llmctl does **not** vendor `constitution`, `submodules/containers` or `submodule
 submodules live in `<root>/submodules` or `<root>/constitution/submodules`, never nested chains).
 llmctl itself lives inside the constitution hub at `constitution/submodules/llmctl`; a nested
 `constitution` here created a hub -> llmctl -> hub cycle. The hub now vendors `containers` and
-`superspec` flat at `<hub>/submodules/<name>` (owner decision 2026-10-21), so llmctl resolves them
+`superspec` under `<hub>/submodules/<name>` (owner decision 2026-10-21), so llmctl resolves them
 instead of pinning private copies. llmctl's own real dependencies stay ordinary submodules:
 `submodules/llama.cpp` and `submodules/colibri` (`git submodule update --init`).
 
@@ -50,3 +51,18 @@ from code indexes and scans (the links are gitignored and never archived; do not
 Outside the hub on a bare clone: clone the constitution next to llmctl, or export the
 `LLMCTL_*_DIR` variables, then run `make deps`. The release preflight only verifies llmctl's own
 pins (llama.cpp, colibri) and prints the commits of the resolved dependencies so the release evidence records them.
+
+## Upgrading an existing checkout (leftovers)
+
+git does not delete a populated submodule worktree when its gitlink is removed. After pulling, an old checkout
+keeps REAL directories `constitution/`, `submodules/containers/`, `submodules/superspec/` (gitignored, so hidden).
+`scripts/link_deps.sh` reports each as `LEFTOVER <path>` and exits 1 (so `make deps` fails) until you either
+
+1. verify `git -C <path> status --porcelain` prints nothing, then `rm -rf <path>`, and re-run; or
+2. opt in: `bash scripts/link_deps.sh --adopt-leftover [name]` moves a leftover that is a clean submodule-style worktree
+   at the old pinned commit to `<path>.leftover-<YYYYMMDD>` (nothing is deleted) and links; a dirty, wrong-commit or
+   plain-directory leftover is refused with the reason.
+
+Until then the resolver warns (for every dependency, also when the hub copy wins over the leftover) and
+`llmctl setup` / `llmctl build decide|all` use a valid leftover `containers` with a warning. Go-building test suites
+SKIP loudly (SKIP-SUITE with the resolver message) when containers is unresolvable (`tests/helpers.sh`).
