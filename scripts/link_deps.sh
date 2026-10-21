@@ -34,6 +34,11 @@ rc=0
 link_one() { # <dep-name> <link-path-relative-to-root>
   local dep="$1" rel="$2" target link="${ROOT}/$2" cur
   if ! target="$(llmctl_resolve_dep "${dep}")"; then rc=1; return 0; fi
+  # The resolver's own <root>/... candidate IS this link when it already exists and is valid: it then returns
+  # the link's own path. Re-pointing the link at itself would make a self-loop - the link is already correct.
+  if [[ -L "${link}" && "${target}" == "${link}" ]]; then
+    printf 'ok    %s -> %s (kept)\n' "${rel}" "$(readlink "${link}")"; return 0
+  fi
   if [[ -L "${link}" ]]; then
     cur="$(readlink "${link}")"
     if [[ "${cur}" == "${target}" ]]; then printf 'ok    %s -> %s\n' "${rel}" "${target}"; return 0; fi

@@ -50,4 +50,17 @@ assert_contains "${OUT}" "cannot resolve constitution" "message names the unreso
 assert_eq "${WORK}/alone/containers" "$(readlink "${N}/submodules/containers")" "the resolvable one was still linked"
 assert_eq "no" "$([[ -e "${N}/constitution" || -L "${N}/constitution" ]] && echo yes || echo no)" "no dangling link made for the unresolved one"
 
+echo "== 6. REGRESSION: a run without the env override must not turn an env-made link into a self-loop =="
+# root cause (found live 2026-10-21): the resolver's <root>/constitution candidate IS the link made earlier, so
+# link_deps resolved "constitution" to the link's own path and `ln -sfn` replaced it with a link to itself.
+V="${WORK}/v6"; mk_llmctl "${V}/llmctl"; mkdir -p "${V}/real/c" "${V}/real/k" "${V}/real/s"
+: > "${V}/real/c/Constitution.md"; printf 'module digital.vasic.containers\n' > "${V}/real/k/go.mod"; : > "${V}/real/s/extension.yml"
+run "${V}/llmctl" LLMCTL_CONSTITUTION_DIR="${V}/real/c" LLMCTL_CONTAINERS_DIR="${V}/real/k" LLMCTL_SUPERSPEC_DIR="${V}/real/s"
+assert_eq "0" "${RC}" "first run with env overrides links the three"
+run "${V}/llmctl"
+assert_eq "0" "${RC}" "second run WITHOUT env overrides exits 0"
+assert_eq "${V}/real/c" "$(readlink "${V}/llmctl/constitution")" "constitution link still points at the real tree (no self-loop)"
+assert_file_exists "${V}/llmctl/submodules/containers/go.mod" "containers link still resolves to a real go.mod"
+assert_file_exists "${V}/llmctl/submodules/superspec/extension.yml" "superspec link still resolves to a real extension.yml"
+
 test_finish
