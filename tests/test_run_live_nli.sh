@@ -9,6 +9,7 @@
 # It also asserts the runner's live_checks.py path exists in the tree.
 set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/helpers.sh"
+require_containers_or_skip   # runs the Go toolchain on this module: SKIP loudly if containers is unresolvable
 test_setup_env
 
 if ! command -v go >/dev/null 2>&1; then

@@ -39,11 +39,12 @@ repository as an honest record of that process.
   env override turned a link into a self-loop - found live, fixed); `test_containers_submodule`, `test_constitution_inheritance*`,
   `test_release_no_secrets` adapted. See `docs/dependency-layout.md`. **Migration (existing checkouts):** git does not delete a populated
   submodule worktree, so after pulling you still have REAL (now gitignored) directories `constitution/`, `submodules/containers/`,
-  `submodules/superspec/`. `make deps` / `scripts/link_deps.sh` FAILS ("LEFTOVER <path>") until each is removed - verify
-  `git -C <path> status --porcelain` is empty, then `rm -rf <path>` - or adopted with `scripts/link_deps.sh --adopt-leftover` (moves a clean
-  worktree at the old pin to `<path>.leftover-<date>`, deletes nothing). Until then the resolver warns and Go builds keep using the leftover
-  `containers`. Outside the hub set `LLMCTL_*_DIR`. Go-building test suites SKIP loudly (SKIP-SUITE with the resolver message) when
-  containers is unresolvable (`tests/helpers.sh` guard).
+  `submodules/superspec/`. `make deps` / `scripts/link_deps.sh` FAILS ("LEFTOVER <path>") until you clean each up BY HAND (nothing in llmctl
+  moves or deletes a directory of yours): if a shared copy exists, verify `git -C <path> status --porcelain` is empty and `rm -rf <path>`;
+  if the leftover is the only copy, set `LLMCTL_<DEP>_DIR` to a clean checkout or `mv <path> <path>.old`. Until then the resolver warns,
+  and `llmctl setup` / `llmctl build decide|all` build from a leftover `containers` only when it is the resolver's own answer and clean.
+  Outside the hub set `LLMCTL_*_DIR`. Go-building test suites opt in to `require_containers_or_skip` (tests/helpers.sh) and SKIP loudly
+  (SKIP-SUITE with the resolver message) when containers is unresolvable; sourcing helpers.sh itself never skips or links anything.
 
 * **fix(judge): positive allow-lists for numbers, exact transcriptions and label sets (independent review 3 of 2026-10-15, findings
   1-5).** Of 144 new adversarial answers 30 clearly wrong ones PASSED and 4 clearly right ones FAILED. `number_equals` accepts next to

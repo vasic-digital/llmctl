@@ -298,21 +298,17 @@ test_finish() {
   exit 0
 }
 
-# --- containers guard (review round 3, M2) ------------------------------------------------------------------------
+# --- containers guard (OPT-IN, review round 4) ---------------------------------------------------------------------
 # go.mod replaces digital.vasic.containers => ./submodules/containers, which is NOT a submodule of llmctl: it is
-# resolved (lib/resolve_deps.sh) and linked (scripts/link_deps.sh). A suite that builds Go code cannot work without it,
-# so instead of failing with "replacement directory ./submodules/containers does not exist" it SKIPs LOUDLY
-# (SKIP-SUITE + the resolver's own message; tests/run_tests.sh lists it as SKIP with the reason). Applies to a test file
-# whose text invokes the Go toolchain / the decision-binary build (`go build|test|list|vet|run`, `build decide`,
-# `engine_build_decide`, `llmctld-build`, `llmctl-decide`); opt out with LLMCTL_TEST_NO_DEPS_GUARD=1 set BEFORE sourcing
-# this file (suites that test the dependency handling themselves). Runs at source time, i.e. before any assertion.
-_llmctl_containers_guard() {
-  local caller="${BASH_SOURCE[2]:-}"
-  [[ "${LLMCTL_TEST_NO_DEPS_GUARD:-0}" != "1" && -f "${caller}" ]] || return 0
-  grep -qE 'go (build|test|list|vet|run)\b|build decide|engine_build_decide|llmctld-build|llmctl-decide' "${caller}" || return 0
+# resolved (lib/resolve_deps.sh) and linked (scripts/link_deps.sh). A suite that really runs the Go toolchain on this
+# module (go build|test|list|vet|run in an executable line) calls `require_containers_or_skip` ONCE, at the top, right
+# after sourcing this file: when containers cannot be found it prints SKIP-SUITE with the resolver's own message
+# (tests/run_tests.sh lists it as SKIP with the reason) instead of failing with "replacement directory ./submodules/
+# containers does not exist". Sourcing this file itself NEVER probes, links or skips anything: a suite that merely
+# MENTIONS llmctl-decide (a binary / service name) is not skipped, and a genuine FAIL is never turned into a SKIP.
+require_containers_or_skip() {
   [[ -f "${LLMCTL_ROOT}/submodules/containers/go.mod" ]] && return 0
   local msg
   if msg="$(bash "${LLMCTL_ROOT}/scripts/link_deps.sh" containers 2>&1 >/dev/null)"; then return 0; fi
   skip_suite "containers dependency unresolvable, Go-building suite not run: ${msg//$'\n'/ | }"
 }
-_llmctl_containers_guard

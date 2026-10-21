@@ -6,6 +6,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${ROOT}"
 if ! command -v go >/dev/null 2>&1; then echo "SKIP-SUITE: go toolchain not installed (decision layer unit tier not run)"; exit 0; fi
+source "${ROOT}/tests/helpers.sh"
+require_containers_or_skip   # runs the Go toolchain on this module: SKIP loudly if containers is unresolvable
 export GOFLAGS="-mod=readonly"
 go mod verify
 go vet ./...

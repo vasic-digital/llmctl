@@ -4,6 +4,7 @@
 # processes (FR-088..FR-090, SC-015). Exit status, stdout and the live process set are judged.
 set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/helpers.sh"
+require_containers_or_skip   # runs the Go toolchain on this module: SKIP loudly if containers is unresolvable
 test_setup_env
 SVC_PIDS=()
 cleanup() { for p in "${SVC_PIDS[@]:-}"; do [[ -n "${p}" ]] && kill -9 "${p}" 2>/dev/null || true; done; test_teardown_env; }

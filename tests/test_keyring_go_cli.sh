@@ -7,6 +7,7 @@
 # FR-057..FR-063, FR-087; contracts/cli.md `key`.
 set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/helpers.sh"
+require_containers_or_skip   # runs the Go toolchain on this module: SKIP loudly if containers is unresolvable
 test_setup_env
 
 if ! command -v go >/dev/null 2>&1; then

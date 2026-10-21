@@ -311,20 +311,25 @@ engine_build_onnx() {
 # STOPS with the resolver's actionable message when containers cannot be found (never a misleading
 # "Go toolchain / module cache" error). Dry-run only warns.
 engine_ensure_containers() {
-  local dir="${LLMCTL_ROOT}/submodules/containers" resolved
+  local dir="${LLMCTL_ROOT}/submodules/containers" resolved=""
+  resolved="$(bash "${LLMCTL_ROOT}/lib/resolve_deps.sh" containers 2>/dev/null)" || resolved=""
   if [[ "${LLMCTL_DRY_RUN:-0}" == "1" ]]; then
     # dry-run: report what would happen (the resolver's message goes to stderr when unresolvable); create nothing
-    if resolved="$(bash "${LLMCTL_ROOT}/lib/resolve_deps.sh" containers)"; then
-      log "[dry-run] would link submodules/containers -> ${resolved}"
-    else
-      warn "[dry-run] the containers dependency is not resolvable (see docs/dependency-layout.md)"
-    fi
+    if [[ -n "${resolved}" ]]; then log "[dry-run] would link submodules/containers -> ${resolved}"
+    else bash "${LLMCTL_ROOT}/lib/resolve_deps.sh" containers >/dev/null || true; warn "[dry-run] the containers dependency is not resolvable (see docs/dependency-layout.md)"; fi
     return 0
   fi
-  # A valid REAL directory here is the leftover of the removed submodule: it builds fine, so warn and continue.
-  if [[ -d "${dir}" && ! -L "${dir}" ]] && grep -qE '^module[[:space:]]+digital\.vasic\.containers[[:space:]]*$' "${dir}/go.mod" 2>/dev/null; then
-    warn "submodules/containers is a leftover real directory of the removed submodule; using it. Verify it is clean, remove it and run scripts/link_deps.sh to use the shared copy"
-    return 0
+  # A REAL directory here is the leftover of the removed submodule. It is accepted ONLY when it is the resolver's own
+  # answer (nothing better exists) and, if it is a git checkout, clean; otherwise a different/shared copy must win
+  # and the user must clean the leftover up by hand (scripts/link_deps.sh prints the remediation). Never built dirty.
+  if [[ -d "${dir}" && ! -L "${dir}" ]]; then
+    if [[ "${resolved}" == "${dir}" ]] && grep -qE '^module[[:space:]]+digital\.vasic\.containers[[:space:]]*$' "${dir}/go.mod" 2>/dev/null \
+       && { [[ ! -e "${dir}/.git" ]] || [[ -z "$(git -C "${dir}" status --porcelain 2>/dev/null)" ]]; }; then
+      warn "submodules/containers is a leftover real directory of the removed submodule and the only copy found; using it. Prefer LLMCTL_CONTAINERS_DIR=<clean checkout> (docs/dependency-layout.md)"
+      return 0
+    fi
+    bash "${LLMCTL_ROOT}/scripts/link_deps.sh" containers >/dev/null || true
+    die "submodules/containers is a leftover real directory that must not be built from (a different copy resolves: ${resolved:-none}, or it has local changes); see the LEFTOVER message above"
   fi
   bash "${LLMCTL_ROOT}/scripts/link_deps.sh" containers >/dev/null \
     || die "the containers dependency (Go module digital.vasic.containers) is not available - see the message above; set LLMCTL_CONTAINERS_DIR or place llmctl in the constitution hub (docs/dependency-layout.md)"
@@ -336,6 +341,10 @@ engine_ensure_containers() {
 # a first build needs the module cache warm or network access (documented, not vendored).
 engine_build_decide() {
   engine_ensure_containers
+  if [[ "${LLMCTL_DRY_RUN:-0}" == "1" ]]; then
+    log "[dry-run] would build the Go decision binary -> ${LLMCTL_DECIDE_BUILD_OUT:-${LLMCTL_ROOT}/build/llmctl-decide} (go mod verify + go build ./cmd/llmctl-decide)"
+    return 0
+  fi
   need_cmd go
   local out="${LLMCTL_DECIDE_BUILD_OUT:-${LLMCTL_ROOT}/build/llmctl-decide}"
   ensure_dir "$(dirname "${out}")"

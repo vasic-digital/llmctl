@@ -56,13 +56,13 @@ pins (llama.cpp, colibri) and prints the commits of the resolved dependencies so
 
 git does not delete a populated submodule worktree when its gitlink is removed. After pulling, an old checkout
 keeps REAL directories `constitution/`, `submodules/containers/`, `submodules/superspec/` (gitignored, so hidden).
-`scripts/link_deps.sh` reports each as `LEFTOVER <path>` and exits 1 (so `make deps` fails) until you either
+`scripts/link_deps.sh` reports each as `LEFTOVER <path>` and exits 1 (so `make deps` fails) until you clean it up
+**by hand** - no llmctl code moves, renames or deletes a directory of yours:
 
-1. verify `git -C <path> status --porcelain` prints nothing, then `rm -rf <path>`, and re-run; or
-2. opt in: `bash scripts/link_deps.sh --adopt-leftover [name]` moves a leftover that is a clean submodule-style worktree
-   at the old pinned commit to `<path>.leftover-<YYYYMMDD>` (nothing is deleted) and links; a dirty, wrong-commit or
-   plain-directory leftover is refused with the reason.
+- a shared copy exists (hub / `LLMCTL_*_DIR`): verify `git -C <path> status --porcelain` prints nothing, then `rm -rf <path>`;
+- the leftover is the only copy found: set `LLMCTL_<DEP>_DIR` to a clean checkout, or `mv <path> <path>.old`; then re-run.
 
-Until then the resolver warns (for every dependency, also when the hub copy wins over the leftover) and
-`llmctl setup` / `llmctl build decide|all` use a valid leftover `containers` with a warning. Go-building test suites
-SKIP loudly (SKIP-SUITE with the resolver message) when containers is unresolvable (`tests/helpers.sh`).
+Until then the resolver warns (every dependency, also when the hub copy wins) and `llmctl setup` / `llmctl build
+decide|all` build from a leftover `containers` only if it is the resolver's own answer and, as a git checkout, clean;
+otherwise they stop with the LEFTOVER message. Go-building test suites call `require_containers_or_skip`
+(`tests/helpers.sh`, opt-in) and SKIP loudly when containers is unresolvable.

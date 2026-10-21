@@ -11,6 +11,7 @@
 # additionally goes through a real transient systemd unit when a user manager is reachable.
 set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/helpers.sh"
+require_containers_or_skip   # runs the Go toolchain on this module: SKIP loudly if containers is unresolvable
 test_setup_env
 
 command -v python3 >/dev/null 2>&1 || { echo "SKIP-SUITE: python3 not installed"; exit 0; }

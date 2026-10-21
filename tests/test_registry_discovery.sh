@@ -17,6 +17,7 @@
 # All ports/paths derive from this host at run time.
 set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/helpers.sh"
+require_containers_or_skip   # runs the Go toolchain on this module: SKIP loudly if containers is unresolvable
 test_setup_env
 
 command -v go >/dev/null 2>&1 || { echo "SKIP-SUITE: go not installed"; exit 0; }
