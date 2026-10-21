@@ -59,8 +59,13 @@ keeps REAL directories `constitution/`, `submodules/containers/`, `submodules/su
 `scripts/link_deps.sh` reports each as `LEFTOVER <path>` and exits 1 (so `make deps` fails) until you clean it up
 **by hand** - no llmctl code moves, renames or deletes a directory of yours:
 
-- a shared copy exists (hub / `LLMCTL_*_DIR`): verify `git -C <path> status --porcelain` prints nothing, then `rm -rf <path>`;
-- the leftover is the only copy found: set `LLMCTL_<DEP>_DIR` to a clean checkout, or `mv <path> <path>.old`; then re-run.
+- a shared copy exists (hub / `LLMCTL_*_DIR`): verify nothing is lost - each of `git -C <path> status --porcelain`,
+  `git -C <path> log --branches --not --remotes --oneline` and `git -C <path> stash list` prints nothing - then `rm -rf <path>`;
+- the leftover is the only copy found: `git clone <path> <a directory OUTSIDE this repository>` and `export LLMCTL_<DEP>_DIR=<that directory>`;
+  leave `<path>` untouched until the clone is verified. **Never move or rename it to a name inside this repository**: it would stay an
+  untracked embedded repository (`git add -A` stages it as a gitlink) and its `core.worktree` would still point at the old path, so git
+  commands inside it would act on the shared checkout (`.gitignore` also ignores renamed siblings of the three paths, as defence in depth only);
+- then re-run `scripts/link_deps.sh`.
 
 Until then the resolver warns (every dependency, also when the hub copy wins) and `llmctl setup` / `llmctl build
 decide|all` build from a leftover `containers` only if it is the resolver's own answer and, as a git checkout, clean;

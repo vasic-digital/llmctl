@@ -10,9 +10,11 @@ test_leftover_deps.sh - UPGRADE LEFTOVERS (detect + warn + manual remediation ON
 git does not delete a populated submodule worktree when its gitlink is removed, so an existing checkout keeps REAL
 directories constitution/, submodules/containers/ and submodules/superspec/ (now .gitignored, i.e. hidden). Proven here,
 against throw-away fixtures only:
-  1. link_deps names the leftover and prints a MANUAL remediation: when the leftover is the ONLY copy it says set
-     LLMCTL_<DEP>_DIR / move it aside (never "rm -rf" first); when a shared copy exists it says verify clean, then rm -rf;
-  2. NO code moves, renames or deletes a user directory; the old "adopt" convenience is gone;
+  1. link_deps names the leftover and prints a MANUAL remediation: when the leftover is the ONLY copy it says clone it to a
+     directory OUTSIDE the repository and set LLMCTL_<DEP>_DIR to that clone (never "rm -rf" first, never a destination
+     inside the tree: a renamed copy stays an untracked embedded repo whose core.worktree still points here); when a shared
+     copy exists it says verify clean (status, unpushed commits, stash), then rm -rf;
+  2. NO code moves, renames or deletes a user directory; the old "adopt" convenience is gone, a flag attempting it is refused;
   3. the resolver warns for every dependency, also when the hub copy wins over a real <root>/<name>;
   4. engine_ensure_containers builds from a leftover ONLY when it is the resolver's own answer and clean; never when a
      different copy resolves, never when dirty;

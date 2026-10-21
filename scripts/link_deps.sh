@@ -65,11 +65,17 @@ leftover() {
   up="$(printf '%s' "${dep}" | tr '[:lower:]' '[:upper:]')"
   printf 'LEFTOVER %s is a real directory (a checkout left behind by the removed submodule). Not replacing it.\n' "${rel}" >&2
   if [[ "${target}" == "${path}" ]]; then
-    # the leftover is the ONLY source found: removing it first could destroy the only copy
-    printf '  It is the only copy found. Either set LLMCTL_%s_DIR to a clean checkout of %s,\n' "${up}" "${dep}" >&2
-    printf '  or move this directory out of the tree (mv %s %s.old) and re-run scripts/link_deps.sh.\n' "${path}" "${path}" >&2
+    # the leftover is the ONLY source found: removing it, or renaming it INSIDE this tree, is wrong (a renamed copy stays an
+    # untracked embedded repository, `git add -A` stages it as a gitlink and its core.worktree still points at the old path)
+    printf '  It is the only copy found. Make a clone OUTSIDE this repository and point LLMCTL_%s_DIR at it:\n' "${up}" >&2
+    printf '      git clone %s <a directory OUTSIDE this repository>\n' "${path}" >&2
+    printf '      export LLMCTL_%s_DIR=<that directory>\n' "${up}" >&2
+    printf '  Leave %s untouched until the clone is verified; never move or rename it to a name inside this repository.\n' "${path}" >&2
   else
-    printf '  A shared copy exists at %s. Verify `git -C %s status --porcelain` prints nothing (no local work),\n' "${target}" "${path}" >&2
+    printf '  A shared copy exists at %s. Before deleting this one, verify NOTHING is lost - each of these prints nothing:\n' "${target}" >&2
+    printf '      git -C %s status --porcelain\n' "${path}" >&2
+    printf '      git -C %s log --branches --not --remotes --oneline\n' "${path}" >&2
+    printf '      git -C %s stash list\n' "${path}" >&2
     printf '  then `rm -rf %s` and re-run scripts/link_deps.sh.\n' "${path}" >&2
   fi
   rc=1

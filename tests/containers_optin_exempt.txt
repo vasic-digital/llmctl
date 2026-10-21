@@ -1,0 +1,10 @@
+# containers_optin_exempt.txt - tests/*.sh files that contain an executable-looking `go build|test|list|vet|run` line but
+# do NOT need `require_containers_or_skip`. Format: <file><TAB><reason>. Checked by tests/test_containers_optin.sh, which also
+# fails on a stale entry (file gone, no go line left, or it opted in anyway).
+test_certs_go_mutation.sh	runs go test in a scratch copy of internal/certs + internal/placement (go list -deps: no digital.vasic.containers)
+test_tls_server.sh	builds/tests internal/server (go list -deps ./internal/server: 0 containers packages)
+test_systemd_cleanliness.sh	go test in the separate llmctld module (go list -deps: 0 containers packages)
+test_containers_submodule.sh	handles the unresolvable case itself with an inline skip_suite and asserts the wiring
+test_validation_decide_colibri.sh	records an assert_skip carrying the resolver message when the real decide build is impossible
+test_leftover_deps.sh	go lines appear only inside printf-generated fixture suites
+test_containers_optin.sh	go lines appear only in printf-generated planted control files

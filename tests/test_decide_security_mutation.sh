@@ -7,6 +7,7 @@
 # Each mutant runs with a test timeout so a mutation that makes a test HANG fails cleanly.
 set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/helpers.sh"
+require_containers_or_skip   # runs the Go toolchain on a package that imports containers: SKIP loudly if unresolvable
 test_setup_env
 trap test_teardown_env EXIT
 command -v go >/dev/null 2>&1 || { echo "SKIP-SUITE: go not installed"; exit 0; }

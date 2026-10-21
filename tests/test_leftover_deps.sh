@@ -4,8 +4,10 @@
 # git does not delete a populated submodule worktree when its gitlink is removed, so an existing checkout keeps REAL
 # directories constitution/, submodules/containers/ and submodules/superspec/ (now .gitignored, i.e. hidden). Proven here,
 # against throw-away fixtures only:
-#   1. link_deps names the leftover and prints a MANUAL remediation: when the leftover is the ONLY copy it says set
-#      LLMCTL_<DEP>_DIR / move it aside (never "rm -rf" first); when a shared copy exists it says verify clean, then rm -rf;
+#   1. link_deps names the leftover and prints a MANUAL remediation: when the leftover is the ONLY copy it says clone it to a
+#      directory OUTSIDE the repository and set LLMCTL_<DEP>_DIR to that clone (never "rm -rf" first, never a destination
+#      inside the tree: a renamed copy stays an untracked embedded repo whose core.worktree still points here); when a shared
+#      copy exists it says verify clean (status, unpushed commits, stash), then rm -rf;
 #   2. NO code moves, renames or deletes a user directory; the old "adopt" convenience is gone, a flag attempting it is refused;
 #   3. the resolver warns for every dependency, also when the hub copy wins over a real <root>/<name>;
 #   4. engine_ensure_containers builds from a leftover ONLY when it is the resolver's own answer and clean; never when a
@@ -14,7 +16,6 @@
 #      llmctl-decide still runs, a genuine FAIL stays a FAIL; an opted-in suite SKIPs loudly when containers is unresolvable;
 #   6. dry-run: resolver message, no link, and NO go invocation (a fake go on PATH fails the test if called).
 set -euo pipefail
-export LLMCTL_TEST_NO_DEPS_GUARD=1
 source "$(dirname "${BASH_SOURCE[0]}")/helpers.sh"
 
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/llmctl-leftover.XXXXXX")"
@@ -36,8 +37,10 @@ ld "${S}" containers
 assert_eq "1" "${RC}" "link_deps: a leftover real dir blocks (exit 1)"
 assert_contains "${OUT}" "LEFTOVER submodules/containers" "names it a LEFTOVER"
 assert_contains "${OUT}" "only copy found" "says it is the only copy"
-assert_contains "${OUT}" "LLMCTL_CONTAINERS_DIR to a clean checkout" "remediation: point LLMCTL_CONTAINERS_DIR at a clean checkout"
-assert_contains "${OUT}" "mv ${S}/submodules/containers ${S}/submodules/containers.old" "...or move it aside by hand"
+assert_contains "${OUT}" "git clone ${S}/submodules/containers" "remediation: clone the leftover"
+assert_contains "${OUT}" "OUTSIDE this repository" "...to a directory OUTSIDE the repository"
+assert_contains "${OUT}" "LLMCTL_CONTAINERS_DIR=" "...and point LLMCTL_CONTAINERS_DIR at the clone"
+case "${OUT}" in *"mv "*|*".old"*) TEST_FAILS=$((TEST_FAILS+1)); echo "  FAIL: an in-tree move/rename destination is advised: ${OUT}" >&2;; *) echo "  ok: no mv / .old advice";; esac
 case "${OUT}" in *"rm -rf"*) TEST_FAILS=$((TEST_FAILS+1)); echo "  FAIL: rm -rf advised although the leftover is the only copy" >&2;; *) echo "  ok: no rm -rf advice for the only copy";; esac
 assert_file_exists "${S}/submodules/containers/go.mod" "nothing was moved or deleted"
 run "${S}" env LLMCTL_CONTAINERS_DIR="${S}/submodules/containers" bash "${S}/scripts/link_deps.sh" containers
@@ -54,6 +57,8 @@ assert_eq "1" "${RC}" "hub layout: leftover real dir still blocks the link"
 assert_contains "${OUT}" "LEFTOVER submodules/containers" "...and is named"
 assert_contains "${OUT}" "git -C ${HL}/submodules/containers status --porcelain" "shared copy exists: prints the verify command"
 assert_contains "${OUT}" "rm -rf ${HL}/submodules/containers" "...and the removal command"
+assert_contains "${OUT}" "log --branches --not --remotes --oneline" "M-2: unpushed commits must be checked too"
+assert_contains "${OUT}" "stash list" "M-2: so must the stash"
 RC=0; OUT="$(env -i PATH="${PATH}" HOME="${WORK}/h" bash "${HL}/lib/resolve_deps.sh" containers 2>"${WORK}/err")" || RC=$?
 assert_eq "${WORK}/hub/submodules/containers" "${OUT}" "the hub copy wins (step 2)"
 assert_contains "$(cat "${WORK}/err")" "real directory" "...and the shadowed real directory is warned about"
@@ -80,6 +85,28 @@ assert_eq "none" "$(ls -d "${A}"/submodules/containers.leftover-* 2>/dev/null | 
 run "${A}" bash -c "source '${A}/lib/engine.sh'; engine_ensure_containers"
 assert_eq "1" "${RC}" "a dirty leftover that is the only copy is NEVER built from"
 assert_file_exists "${A}/submodules/containers/dirty.txt" "...and is left exactly as it was"
+
+echo "== 4b. M-1: a git status that FAILS is not 'clean' =="
+B="${WORK}/b/llmctl"; mk_clone "${B}"; mkdir -p "${B}/submodules/containers"; printf 'module digital.vasic.containers\n' > "${B}/submodules/containers/go.mod"
+printf 'gitdir: %s/missing-gitdir\n' "${WORK}" > "${B}/submodules/containers/.git"; : > "${B}/submodules/containers/untracked.txt"
+RC=0; git -C "${B}/submodules/containers" status --porcelain >/dev/null 2>&1 || RC=$?
+assert_eq "128" "${RC}" "precondition: git status itself fails (rc 128) on this leftover"
+run "${B}" bash -c "source '${B}/lib/engine.sh'; engine_ensure_containers"
+assert_eq "1" "${RC}" "a leftover whose git status FAILS is refused, not built from"
+assert_file_exists "${B}/submodules/containers/untracked.txt" "...and left exactly as it was"
+
+echo "== 4c. I-1 class-exhaustive: NO remediation text suggests a destination inside the tree =="
+BAD_RE='(^|[^[:alnum:]_])mv [^|;]*\.(old|bak|orig|leftover)|\.leftover-|\.old([^[:alnum:]_]|$)'
+printf 'or move it: mv /r/x /r/x.old and re-run\n' > "${WORK}/needle.txt"
+if grep -qE "${BAD_RE}" "${WORK}/needle.txt"; then echo "  ok: control needle: the pattern sees a planted in-tree move advice"; else printf '  FAIL: control needle blind\n' >&2; TEST_FAILS=$((TEST_FAILS+1)); fi
+printf 'git clone /r/x /elsewhere/x then LLMCTL_X_DIR=/elsewhere/x\n' > "${WORK}/clean.txt"
+if grep -qE "${BAD_RE}" "${WORK}/clean.txt"; then printf '  FAIL: negative control matched\n' >&2; TEST_FAILS=$((TEST_FAILS+1)); else echo "  ok: negative control: the new advice is not flagged"; fi
+hits="$(cd "${LLMCTL_ROOT}" && grep -nE "${BAD_RE}" lib/*.sh scripts/link_deps.sh docs/dependency-layout.md README.md Makefile CHANGELOG.md 2>/dev/null || true)"
+assert_eq "" "${hits}" "no printed or documented remediation (lib, scripts, docs, README, Makefile, CHANGELOG) names an in-tree destination"
+assert_eq "" "$(printf '%s\n' "${OUT:-}" | grep -E "${BAD_RE}" || true)" "last captured output is clean too"
+run "${HL}" bash "${HL}/lib/resolve_deps.sh" containers
+assert_eq "" "$(printf '%s\n' "${OUT}" | grep -E "${BAD_RE}" || true)" "resolver leftover warnings name no in-tree destination"
+assert_contains "${OUT}" "real directory" "...(and still warn)"
 
 echo "== 5. require_containers_or_skip is opt-in =="
 GS="${WORK}/g/llmctl"; mk_clone "${GS}"

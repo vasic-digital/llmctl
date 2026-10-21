@@ -4,7 +4,6 @@
 # the resolver's actionable message - never fall through to a misleading "Go toolchain / module cache" error.
 # Every case runs the REAL bin/llmctl or lib/engine.sh from a throw-away fresh-clone FIXTURE (no link, no go build).
 set -euo pipefail
-export LLMCTL_TEST_NO_DEPS_GUARD=1
 source "$(dirname "${BASH_SOURCE[0]}")/helpers.sh"
 
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/llmctl-engdeps.XXXXXX")"

@@ -4,6 +4,7 @@
 # an unmutated control copy MUST stay GREEN first (a mutation test with a red baseline proves nothing).
 set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/helpers.sh"
+require_containers_or_skip   # runs the Go toolchain on a package that imports containers: SKIP loudly if unresolvable
 test_setup_env
 trap test_teardown_env EXIT
 command -v go >/dev/null 2>&1 || { echo "SKIP-SUITE: go not installed"; exit 0; }

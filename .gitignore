@@ -38,3 +38,8 @@ __pycache__/
 /constitution
 /submodules/containers
 /submodules/superspec
+# Defence in depth: renamed leftovers of the removed submodules must never be staged as embedded repositories.
+/constitution.old
+/submodules/*.old
+/submodules/containers.*
+/submodules/superspec.*

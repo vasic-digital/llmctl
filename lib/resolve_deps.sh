@@ -106,9 +106,9 @@ _llmctl_rd_warn_leftover() {
   if [[ "${name}" == "constitution" ]]; then legacy="${root}/constitution"; else legacy="${root}/submodules/${name}"; fi
   [[ -d "${legacy}" && ! -L "${legacy}" ]] || return 0
   if [[ "${resolved}" == "${legacy}" ]]; then
-    printf 'llmctl: WARNING: %s is a real directory (a leftover of the removed %s submodule?); using it. Verify it is clean, remove it and run scripts/link_deps.sh to use the shared copy.\n' "${legacy}" "${name}" >&2
+    printf 'llmctl: WARNING: %s is a real directory (a leftover of the removed %s submodule?); using it. Prefer LLMCTL_%s_DIR=<a clean clone OUTSIDE this repository> (see docs/dependency-layout.md).\n' "${legacy}" "${name}" "$(printf '%s' "${name}" | tr '[:lower:]' '[:upper:]')" >&2
   else
-    printf 'llmctl: WARNING: %s is a real directory (a leftover of the removed %s submodule?) but %s wins; the leftover is ignored. Verify it is clean and remove it.\n' "${legacy}" "${name}" "${resolved}" >&2
+    printf 'llmctl: WARNING: %s is a real directory (a leftover of the removed %s submodule?) but %s wins; the leftover is ignored. Once nothing in it is needed (docs/dependency-layout.md says how to check), delete it.\n' "${legacy}" "${name}" "${resolved}" >&2
   fi
 }
 

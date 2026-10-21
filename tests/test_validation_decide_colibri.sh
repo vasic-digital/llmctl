@@ -130,7 +130,12 @@ rm -f "${LLMCTL_RUNTIME_DIR}/vision.run"
 
 echo "== 5. the REAL llmctl-decide (built from this tree) has the --question-file flag the validator relies on"
 if command -v go >/dev/null 2>&1; then
-  ( cd "${LLMCTL_ROOT}" && go build -o "${TEST_TMP}/real-decide" ./cmd/llmctl-decide ) >"${TEST_TMP}/build.out" 2>&1 || true
+  _cmsg=""   # the resolver's reason (not Go's text) reaches the SKIP below when containers is unresolvable
+  if [[ ! -f "${LLMCTL_ROOT}/submodules/containers/go.mod" ]]; then
+    _cmsg="$(bash "${LLMCTL_ROOT}/scripts/link_deps.sh" containers 2>&1 >/dev/null)" && _cmsg=""
+  fi
+  : > "${TEST_TMP}/build.out"
+  if [[ -z "${_cmsg}" ]]; then ( cd "${LLMCTL_ROOT}" && go build -o "${TEST_TMP}/real-decide" ./cmd/llmctl-decide ) >"${TEST_TMP}/build.out" 2>&1 || true; fi
   if [[ -x "${TEST_TMP}/real-decide" ]]; then
     printf '{"model":"smoke","state":"s","questions":{"q":{"type":"choice","instructions":"i","criteria":{"a":"x","b":"y"}}}}' > "${TEST_TMP}/q.json"
     rc=0; "${TEST_TMP}/real-decide" smoke --url http://127.0.0.1:9 --protocol letter-logit --question-file "${TEST_TMP}/q.json" >/dev/null 2>&1 || rc=$?
@@ -138,7 +143,7 @@ if command -v go >/dev/null 2>&1; then
     rc=0; "${TEST_TMP}/real-decide" smoke --url http://127.0.0.1:9 --protocol letter-logit --question-file /nonexistent >/dev/null 2>&1 || rc=$?
     assert_eq 2 "${rc}" "real binary: unreadable question file -> 2"
   else
-    assert_skip "go build failed: $(tail -1 "${TEST_TMP}/build.out")" "real llmctl-decide --question-file"
+    assert_skip "${_cmsg:+containers unresolvable: ${_cmsg//$'\n'/ | }}${_cmsg:-go build failed: $(tail -1 "${TEST_TMP}/build.out")}" "real llmctl-decide --question-file"
   fi
 else
   assert_skip "go is not installed" "real llmctl-decide --question-file"

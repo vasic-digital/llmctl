@@ -310,6 +310,15 @@ engine_build_onnx() {
 # linked (scripts/link_deps.sh). A fresh clone has no link, so every build path that needs Go calls this first and
 # STOPS with the resolver's actionable message when containers cannot be found (never a misleading
 # "Go toolchain / module cache" error). Dry-run only warns.
+# _eng_tree_clean <dir> : 0 only when <dir> is not a git checkout, or `git status --porcelain` SUCCEEDED and printed nothing.
+# A git that FAILS (rc != 0: broken .git file, missing gitdir, corrupt repo) says nothing about cleanliness: treated as NOT clean.
+_eng_tree_clean() {
+  local d="$1" st
+  [[ -e "${d}/.git" ]] || return 0
+  st="$(git -C "${d}" status --porcelain 2>/dev/null)" || return 1
+  [[ -z "${st}" ]]
+}
+
 engine_ensure_containers() {
   local dir="${LLMCTL_ROOT}/submodules/containers" resolved=""
   resolved="$(bash "${LLMCTL_ROOT}/lib/resolve_deps.sh" containers 2>/dev/null)" || resolved=""
@@ -324,8 +333,8 @@ engine_ensure_containers() {
   # and the user must clean the leftover up by hand (scripts/link_deps.sh prints the remediation). Never built dirty.
   if [[ -d "${dir}" && ! -L "${dir}" ]]; then
     if [[ "${resolved}" == "${dir}" ]] && grep -qE '^module[[:space:]]+digital\.vasic\.containers[[:space:]]*$' "${dir}/go.mod" 2>/dev/null \
-       && { [[ ! -e "${dir}/.git" ]] || [[ -z "$(git -C "${dir}" status --porcelain 2>/dev/null)" ]]; }; then
-      warn "submodules/containers is a leftover real directory of the removed submodule and the only copy found; using it. Prefer LLMCTL_CONTAINERS_DIR=<clean checkout> (docs/dependency-layout.md)"
+       && _eng_tree_clean "${dir}"; then
+      warn "submodules/containers is a leftover real directory of the removed submodule and the only copy found; using it. Prefer LLMCTL_CONTAINERS_DIR=<a clean clone OUTSIDE this repository> (docs/dependency-layout.md)"
       return 0
     fi
     bash "${LLMCTL_ROOT}/scripts/link_deps.sh" containers >/dev/null || true

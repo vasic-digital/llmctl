@@ -40,8 +40,10 @@ repository as an honest record of that process.
   `test_release_no_secrets` adapted. See `docs/dependency-layout.md`. **Migration (existing checkouts):** git does not delete a populated
   submodule worktree, so after pulling you still have REAL (now gitignored) directories `constitution/`, `submodules/containers/`,
   `submodules/superspec/`. `make deps` / `scripts/link_deps.sh` FAILS ("LEFTOVER <path>") until you clean each up BY HAND (nothing in llmctl
-  moves or deletes a directory of yours): if a shared copy exists, verify `git -C <path> status --porcelain` is empty and `rm -rf <path>`;
-  if the leftover is the only copy, set `LLMCTL_<DEP>_DIR` to a clean checkout or `mv <path> <path>.old`. Until then the resolver warns,
+  moves or deletes a directory of yours): if a shared copy exists, check that `git -C <path> status --porcelain`, `git -C <path> log --branches
+  --not --remotes --oneline` and `git -C <path> stash list` all print nothing, then `rm -rf <path>`; if the leftover is the only copy, `git clone <path>`
+  into a directory OUTSIDE the repository and set `LLMCTL_<DEP>_DIR` to it (never move or rename it inside the tree - it would stay an untracked embedded
+  repo whose `core.worktree` still points at the old path). Until then the resolver warns,
   and `llmctl setup` / `llmctl build decide|all` build from a leftover `containers` only when it is the resolver's own answer and clean.
   Outside the hub set `LLMCTL_*_DIR`. Go-building test suites opt in to `require_containers_or_skip` (tests/helpers.sh) and SKIP loudly
   (SKIP-SUITE with the resolver message) when containers is unresolvable; sourcing helpers.sh itself never skips or links anything.
