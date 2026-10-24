@@ -33,12 +33,16 @@ one that already succeeded.
 bash scripts/release/create_release.sh --dry-run v1.2.3
 ```
 
-This performs **every real check** — SemVer validation, the real submodule
-preflight (real `git fetch` calls against every submodule's real remote,
-bounded by a 30s-per-submodule timeout), real changelog generation from the
-actual conventional-commit history since the last tag, and a real `make
-archive` build — but makes **zero calls** to `gh`/`glab`. Review its full
-output before proceeding.
+What it really does: SemVer validation, and changelog generation from the
+conventional-commit history since the newest release tag (`git describe --tags
+--match 'v[0-9]*'`, so a non-release tag such as `helixconstitution-v70` never
+becomes the label), plus the `### Migration notes` of the matching `CHANGELOG.md`
+section when there is one. What it does **not** do: the submodule preflight
+(step 1 of the script) and the asset build (`make archive`, step 3) are only
+**announced** ("would run"); neither is executed, and no `git fetch` is made.
+It makes zero calls to `gh`/`glab`. Run
+`bash scripts/release/preflight_submodules.sh` and `make archive` yourself
+if you want those two checked before the real run.
 
 ### 2. Real release (only after reviewing the dry-run output)
 
@@ -46,9 +50,14 @@ output before proceeding.
 bash scripts/release/create_release.sh v1.2.3
 ```
 
-This runs the exact same steps as the dry-run, then actually calls
-`gh release create` and `glab release create`, publishing the release +
-uploading assets + pushing the version tag.
+This runs the submodule preflight and `make archive`, then calls
+`gh release create` and `glab release create` with the generated notes. It does
+**not** create or push a git tag and does **not** attach the built archives as
+release assets (no asset arguments are passed). Push the annotated tag first
+(`git tag -a v1.2.3 ...`, push to every remote), otherwise the forges create the
+tag on their default branch instead of on the release commit, and upload the
+archives separately. For the 3.3.0 release the path is
+[`release-3.3.0-checklist.md`](release-3.3.0-checklist.md), which does this by hand.
 
 ### 3. If either forge fails
 

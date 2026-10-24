@@ -14,9 +14,12 @@ re-running MUST be idempotent, retrying only the failed forge"), and
 SC-009/Clarification 5 (SemVer with pre-release tag support, e.g.
 `v1.0.0-rc.1`).
 
-The script supports a `--dry-run` mode that performs every real check
-(SemVer validation, submodule preflight, changelog generation, asset build)
-but makes zero calls to `gh`/`glab` — this is the only mode this project's
+The script supports a `--dry-run` mode that really runs the SemVer
+validation and the changelog generation (since-tag via `git describe --tags
+--match 'v[0-9]*'`, plus the CHANGELOG migration notes); the submodule
+preflight and the asset build are only announced, not executed. It makes zero
+calls to `gh`/`glab` and, in either mode, creates no git tag and attaches no
+assets — this is the only mode this project's
 own test suite ever exercises against the real `gh`/`glab` binaries (via a
 PATH-injected fake). Creating a public release is a hard-to-reverse,
 externally-visible action this script never takes unattended: a real

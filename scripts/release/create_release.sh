@@ -17,8 +17,9 @@
 #   source scripts/release/create_release.sh   # for unit-testing the
 #                                               # individual functions
 #
-#   --dry-run performs every real check (SemVer validation, submodule
-#   preflight, changelog generation, asset build) but makes ZERO calls to
+#   --dry-run really runs the SemVer validation and the changelog generation
+#   (since-tag + migration notes); the submodule preflight and the asset build
+#   are only ANNOUNCED ("would run"), not executed. It makes ZERO calls to
 #   `gh`/`glab` - it prints what would be run instead. This is the ONLY
 #   mode this project's own test suite (and any automated CI-style check)
 #   ever exercises against the real `gh`/`glab` binaries; a REAL release
@@ -44,8 +45,11 @@
 #   step fails, naming which one.
 #
 # Side-effects (non-dry-run mode only):
-#   Runs `git tag`, `gh release create`, `glab release create` against the
-#   real configured remotes - genuinely publishes a public release. NEVER
+#   Runs the submodule preflight and `make archive`, then `gh release create`
+#   and `glab release create` against the real configured remotes - genuinely
+#   publishes a public release. It does NOT create or push a git tag and does
+#   NOT attach the built archives as release assets: push the annotated tag
+#   first, otherwise the forges create the tag on their default branch. NEVER
 #   invoked by this project's own test suite or by any automated pass;
 #   requires deliberate, explicit, unattended-free operator action.
 #
@@ -102,6 +106,28 @@ release_generate_changelog() {
     echo; echo "### Other"
     while IFS= read -r line; do [[ -n "${line}" ]] && echo "- ${line}"; done <<<"${other}"
   fi
+}
+
+# release_since_tag <repo-dir>
+# The newest RELEASE tag (v<digit>...) reachable from HEAD, else the root commit. `--match 'v[0-9]*'` matters: a plain
+# `git describe --tags` can pick a non-release tag such as an annotated `helixconstitution-v70` (same commit as v3.2.2 in
+# this repository) and put that name in the changelog header.
+release_since_tag() {
+  local repo="$1"
+  git -C "${repo}" describe --tags --match 'v[0-9]*' --abbrev=0 2>/dev/null || git -C "${repo}" rev-list --max-parents=0 HEAD
+}
+
+# release_migration_notes <CHANGELOG.md> <version>
+# Prints the body of the "### Migration notes" subsection of the "## <version> (...)" section (leading "v" ignored), up
+# to the next "###" or "##" heading. Prints nothing when the section does not exist (nothing is invented).
+release_migration_notes() {
+  local file="$1" ver="${2#v}"
+  [[ -f "${file}" ]] || return 0
+  awk -v ver="${ver}" '
+    /^## / { insec = ($2 == ver); inmig = 0; next }
+    /^### / { inmig = (insec && $0 == "### Migration notes"); next }
+    inmig { print }
+  ' "${file}" | sed -e '/./,$!d'
 }
 
 _release_state_dir() {
@@ -205,7 +231,7 @@ _release_main() {
   echo "PASS: '${version}' is a valid SemVer version"
 
   local root; root="$(_release_root)"
-  local since_tag; since_tag="$(git -C "${root}" describe --tags --abbrev=0 2>/dev/null || echo "$(git -C "${root}" rev-list --max-parents=0 HEAD)")"
+  local since_tag; since_tag="$(release_since_tag "${root}")"
 
   echo
   echo "=== Step 1: submodule preflight (spec.md FR-052/Clarification 21) ==="
@@ -234,6 +260,10 @@ _release_main() {
   mkdir -p "${notes_dir}"
   local notes_file; notes_file="$(mktemp "${notes_dir}/notes.XXXXXX")"
   release_generate_changelog "${root}" "${since_tag}" | tee "${notes_file}"
+  local mig; mig="$(release_migration_notes "${root}/CHANGELOG.md" "${version}")"
+  if [[ -n "${mig}" ]]; then
+    { echo; echo "## Migration notes"; echo; printf '%s\n' "${mig}"; } | tee -a "${notes_file}"
+  fi
 
   echo
   echo "=== Step 3: build release assets (make archive) ==="
@@ -247,9 +277,12 @@ _release_main() {
   echo "=== Step 4: publish to GitHub + GitLab ==="
   if [[ "${dry_run}" -eq 1 ]]; then
     echo "[dry-run] would run: gh release create ${version} --title ${version} --notes-file ${notes_file}"
-    echo "[dry-run] would run: glab release create ${version} --title ${version} --notes-file ${notes_file}"
+    echo "[dry-run] would run: glab release create ${version} --name ${version} --notes-file ${notes_file}"
     echo
-    echo "This was a dry-run: every check above ran for real; zero network-mutating gh/glab calls were made."
+    echo "This was a dry-run. Ran for real: SemVer validation and changelog generation (the since-tag and the migration notes)."
+    echo "NOT run in a dry-run (only announced above): the submodule preflight (step 1) and the asset build (step 3)."
+    echo "No gh/glab call was made. This script creates no git tag and uploads no assets: gh/glab 'release create' is called"
+    echo "without --target and without asset arguments, so push the annotated tag yourself FIRST (docs/release-3.3.0-checklist.md)."
     rm -f "${notes_file}"
     return 0
   fi

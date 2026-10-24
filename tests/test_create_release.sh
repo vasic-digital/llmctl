@@ -125,4 +125,35 @@ assert_eq "" "$(cat "${FAKE_GH_LOG}")" "dry-run makes ZERO calls to gh"
 assert_eq "" "$(cat "${FAKE_GLAB_LOG}")" "dry-run makes ZERO calls to glab"
 assert_contains "${out}" "dry-run" "dry-run output announces itself as a dry run"
 
+# --- 7. since-tag: a non-release tag (helixconstitution-v70 style) must never become the changelog label ---------
+SREPO="${TEST_TMP}/since_repo"
+git init -q "${SREPO}"
+(
+  cd "${SREPO}"
+  git config user.email test@example.com; git config user.name test
+  echo a > a.txt; git add a.txt; git commit -qm "chore: init"
+  git tag v2.0.0
+  echo b > b.txt; git add b.txt; git commit -qm "feat: after the release tag"
+  git tag -a helixconstitution-v70 -m "constitution marker, newer than v2.0.0"
+)
+assert_eq "helixconstitution-v70" "$(git -C "${SREPO}" describe --tags --abbrev=0)" "control: plain 'git describe --tags' DOES pick the non-release tag (the 3.3.0 review finding)"
+assert_eq "v2.0.0" "$(release_since_tag "${SREPO}")" "release_since_tag picks the newest v<digit> tag, not helixconstitution-v70"
+NOTAG="${TEST_TMP}/notag_repo"; git init -q "${NOTAG}"
+(cd "${NOTAG}" && git config user.email t@e.c && git config user.name t && echo a > a && git add a && git commit -qm "chore: init")
+assert_eq "$(git -C "${NOTAG}" rev-list --max-parents=0 HEAD)" "$(release_since_tag "${NOTAG}")" "no v-tag: falls back to the root commit"
+
+# --- 8. migration notes from CHANGELOG.md are carried into the release notes ---------------------------------
+CL="${TEST_TMP}/CHANGELOG.md"
+printf '%s\n' '# Changelog' '' '## 3.4.0 (2026-01-01)' '' '### Added' '- thing' '' '### Migration notes' '' '- run `make deps` first' '- re-validate every profile' '' '### Known limitations' '- none' '' '## 3.3.0 (2026-10-22)' '' '### Migration notes' '- old note' > "${CL}"
+notes="$(release_migration_notes "${CL}" "v3.4.0")"
+assert_contains "${notes}" "run \`make deps\` first" "migration notes of the requested version are included"
+assert_contains "${notes}" "re-validate every profile" "all lines of the migration section are included"
+case "${notes}" in *"none"*|*"old note"*) assert_eq "leaked" "ok" "migration notes stop at the next heading / other versions" ;; *) assert_eq ok ok "migration notes stop at the next heading / other versions" ;; esac
+assert_eq "" "$(release_migration_notes "${CL}" "v9.9.9")" "no section for the version: nothing is invented"
+
+# --- 9. the dry-run says what it did NOT run (steps 1 and 3 are announced only) --------------------------------
+case "${out}" in *"every check above ran for real"*) assert_eq "overclaim" "honest" "dry-run does not claim every check ran" ;; *) assert_eq honest honest "dry-run does not claim every check ran" ;; esac
+assert_contains "${out}" "NOT run in a dry-run" "dry-run names the steps it only announced (preflight, archive)"
+assert_contains "${out}" "creates no git tag" "dry-run/notes state that this script creates no tag"
+
 test_finish
