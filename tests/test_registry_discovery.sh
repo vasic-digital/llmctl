@@ -230,7 +230,7 @@ stop_gw() {
   wait "${GW_PID}" 2>/dev/null || true; GW_PID=""
 }
 model_status() { # model_status <port> <model> -> the gateway's own status for the model ("absent" if unlisted, "?" if unparsable)
-  curl -s --cacert "${LLMCTL_HOME}/cert/ca/ca.crt" -H "Authorization: Bearer ${GWKEY}" "https://127.0.0.1:$1/v1/models" \
+  curl -s --cacert "${LLMCTL_HOME}/cert/ca/ca.crt" -H "@$(auth_hdr_file "${GWKEY}")" "https://127.0.0.1:$1/v1/models" \
     | python3 -c '
 import json, sys
 try:

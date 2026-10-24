@@ -103,28 +103,20 @@ _cluster_tls_prepare() {
   return 0
 }
 
-# _cluster_auth_header_file: writes "Authorization: Bearer <token>" to a 0600
-# temp file and prints its path, so the token is handed to curl as `-H @file`
-# instead of appearing on the process command line (visible in `ps`).
-_cluster_auth_header_file() {
-  local f
-  f="$(umask 077; mktemp "${TMPDIR:-/tmp}/llmctl-hdr.XXXXXX")" || return 1
-  printf 'Authorization: Bearer %s\n' "${LLMCTL_CLUSTER_TOKEN}" >"${f}"
-  printf '%s' "${f}"
-}
-
-# _cluster_curl <curl args...>: runs curl with the TLS args and (when set) the
-# bearer token header from a private temp file, removing it afterwards.
+# _cluster_curl <curl args...>: runs curl with the TLS args and (when set) the bearer token as `-H @/dev/fd/3`:
+# fd 3 is a process substitution (an anonymous pipe), so the token is never on the command line
+# (visible in `ps`) AND never on disk - nothing to remove, nothing that survives a SIGTERM/SIGKILL of the caller
+# (class sweep 2026-10-22, C10: the former 0600 temp file was removed on normal return only). printf is a builtin,
+# so the token does not appear in any argv.
 _cluster_curl() {
   _cluster_tls_prepare || return $?
-  local -a args=("$@")
-  local hdr="" rc=0
+  local rc=0
   if [[ -n "${LLMCTL_CLUSTER_TOKEN:-}" ]]; then
-    hdr="$(_cluster_auth_header_file)" || return 1
-    args+=(-H "@${hdr}")
+    curl ${_CLUSTER_TLS_ARGS[@]+"${_CLUSTER_TLS_ARGS[@]}"} "$@" \
+      -H "@/dev/fd/3" 3< <(printf 'Authorization: Bearer %s\n' "${LLMCTL_CLUSTER_TOKEN}") || rc=$?
+  else
+    curl ${_CLUSTER_TLS_ARGS[@]+"${_CLUSTER_TLS_ARGS[@]}"} "$@" || rc=$?
   fi
-  curl ${_CLUSTER_TLS_ARGS[@]+"${_CLUSTER_TLS_ARGS[@]}"} "${args[@]}" || rc=$?
-  [[ -z "${hdr}" ]] || rm -f "${hdr}"
   return "${rc}"
 }
 

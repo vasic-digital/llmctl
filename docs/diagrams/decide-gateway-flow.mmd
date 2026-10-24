@@ -1,0 +1,22 @@
+sequenceDiagram
+  autonumber
+  participant C as Client (TypeSafe SDK, coding agent, claude_toolkit JEV MCP)
+  participant G as llmctl-decide gateway (HTTPS, default port 8095)
+  participant A as Auth (bearer key, constant-time)
+  participant R as Registry and resolver (validated profiles only)
+  participant E as Engine on loopback (llama-server or onnx)
+  C->>G: POST /v1/systemone over HTTPS (local CA, TLS 1.2+), Authorization Bearer key
+  G->>A: check the bearer key
+  alt key missing or wrong
+    A-->>C: 401 (repeated failures: 429 rate_limited)
+  else key valid
+    A->>R: pick a profile (explicit, or auto ranking)
+    R->>R: llmctl require-validated gate (strict by default)
+    alt profile not validated
+      R-->>C: refused, no engine call
+    else validated
+      R->>E: typed decision request (internal key file, loopback only)
+      E-->>G: logprob readout
+      G-->>C: 200 typed answer (choice, noul or score)
+    end
+  end

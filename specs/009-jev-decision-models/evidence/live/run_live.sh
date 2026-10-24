@@ -46,9 +46,11 @@ if ! systemctl --user is-active --quiet "${UNIT}"; then
   python3 tests/evidence/manifest.py build "${OUT}" >/dev/null
   exit 3
 fi
+HF="$(mktemp)"; chmod 600 "${HF}"; printf 'Authorization: Bearer %s\n' "$(cat "${IKEY}")" > "${HF}"   # header file (class sweep C2)
+trap 'rm -f "${HF}"' EXIT
 PID="$(systemctl --user show "${UNIT}" -p MainPID --value)"
 tr '\0' ' ' < "/proc/${PID}/cmdline" | sed 's#--api-key-file [^ ]*#--api-key-file <path>#' > "${OUT}/engine-cmdline.txt"
-for _ in $(seq 1 120); do curl -fsS -m 2 -H "Authorization: Bearer $(cat "${IKEY}")" "http://127.0.0.1:${PORT}/health" >/dev/null 2>&1 && break; sleep 1; done
+for _ in $(seq 1 120); do curl -fsS -m 2 -H "@${HF}" "http://127.0.0.1:${PORT}/health" >/dev/null 2>&1 && break; sleep 1; done
 sleep 2
 grep -o '[^ ]*libggml[^ ]*\.so[^ ]*' "/proc/${PID}/maps" | sort -u > "${OUT}/engine-libs.txt"
 mem() { # <label>

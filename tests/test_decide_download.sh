@@ -193,7 +193,7 @@ http.server.HTTPServer(("127.0.0.1", int(sys.argv[1])), H).serve_forever()
 PY
 python3 "${TEST_TMP}/foreign.py" "${FOREIGN_PORT}" & FOREIGN_PID=$!
 sleep 600 & IDLE_PID=$!
-trap 'kill "${FOREIGN_PID}" "${IDLE_PID}" 2>/dev/null || true; test_teardown_env' EXIT
+trap 'kill "${HTTP_PID}" "${FOREIGN_PID}" "${IDLE_PID}" 2>/dev/null || true; test_teardown_env' EXIT
 for _ in $(seq 1 50); do _dl_port_in_use "${FOREIGN_PORT}" && break; sleep 0.1; done
 assert_eq 0 "$(_dl_pid_owns_port "${FOREIGN_PID}" "${FOREIGN_PORT}"; echo $?)" "_dl_pid_owns_port: the listener's own pid owns its port"
 assert_eq 1 "$(_dl_pid_owns_port "${IDLE_PID}" "${FOREIGN_PORT}"; echo $?)" "_dl_pid_owns_port: another pid does NOT own it"

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# REDIRECT-OK: loopback fixture (http://127.0.0.1 gateway/engine under test); no redirect target exists in the recorded run (class sweep 2026-10-22)
 """decide_gateway.py - HTTP gateway exposing llmctl decision models over the
 Jev/TypeSafe-SDK wire shape (POST /v1/systemone).
 

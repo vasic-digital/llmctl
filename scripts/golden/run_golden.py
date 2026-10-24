@@ -176,12 +176,19 @@ def make_context(cacert):
     return ctx
 
 
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """Never follow a redirect: urllib would replay the Authorization header to the new location (class sweep 2026-10-22)."""
+    def redirect_request(self, *a, **k):
+        return None
+
+
 def post_json(url, ctx, key, payload, timeout):
     data = json.dumps(payload).encode()
     req = urllib.request.Request(url, data=data, method="POST", headers={
         "Content-Type": "application/json", "Authorization": "Bearer " + key})
     try:
-        with urllib.request.urlopen(req, context=ctx, timeout=timeout) as r:
+        opener = urllib.request.build_opener(_NoRedirect, urllib.request.HTTPSHandler(context=ctx))
+        with opener.open(req, timeout=timeout) as r:
             return r.status, dict(r.headers), r.read()
     except urllib.error.HTTPError as e:
         return e.code, dict(e.headers), e.read()

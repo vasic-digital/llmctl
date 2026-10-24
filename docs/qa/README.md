@@ -15,3 +15,5 @@ Evidence directories kept in the repository (Constitution 11.4.83). Each is a po
 | `005-cuda-gpu-inference`, `007-claude-toolkit-test-fixes`, `008-full-test-coverage` | raw logs and observations (plain text; no narrative page) |
 
 Release-3.1.0 evidence (gap register, review reports, engine advance, portability run) lives under `specs/009-jev-decision-models/evidence/`; the honest summary of what it does and does not prove is [limitations](../limitations.md).
+
+See also [class-sweep follow-ups](class-sweep-followups.md): class-sweep hits not fixed in 3.3.0.

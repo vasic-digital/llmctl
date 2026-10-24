@@ -132,6 +132,40 @@ flowchart TB
   PUBL --> RV["llmctl require-validated / llmctl endpoint: 0 / URL only for a fresh signed PASS"]
 ```
 
+### Gate state machine and exit codes
+
+Source: [`diagrams/validation-gate.mmd`](diagrams/validation-gate.mmd) (rendered [svg](diagrams/validation-gate.svg)). `0` pass, `1` wrong answer,
+Exit codes in play: 0, 1, 2, 75 (pressure refusal), 77 (unit skipped), 98 (port in use). `2` could not determine (a host-pressure refusal, `rc 75`, is reported as `2`: it is not a verdict). On the systemd path `77` means the unit was
+skipped for lack of a fresh record, and `98` means the port is already in use (not restarted).
+
+```mermaid
+stateDiagram-v2
+  direction LR
+  [*] --> Requested: start / switch / auto / enable / restart / decide scale
+  Requested --> Quarantine: no fresh signed PASS record
+  Requested --> Published: fresh signed PASS record
+  Quarantine --> Refused: host pressure gate refuses (rc 75)
+  Refused --> Undetermined: refusal is not a verdict, reported as exit 2
+  Quarantine --> Judging: suites run, N repeats, deterministic judge
+  Judging --> Pass: every check right (exit 0)
+  Judging --> Fail: any wrong answer (exit 1)
+  Judging --> Undetermined: no answer, wrong model served, suite defect (exit 2)
+  Pass --> Published: record signed, then published
+  Fail --> Stopped: stopped through the normal stop path
+  Undetermined --> Stopped: STRICT=1 (default)
+  Undetermined --> Unvalidated: STRICT=0 and not consumer-facing
+  Published --> [*]: require-validated exit 0, endpoint prints URL
+  Stopped --> [*]
+  Unvalidated --> [*]: require-validated exit 1
+  state "systemd unit path" as Unit {
+    [*] --> ExecCondition
+    ExecCondition --> UnitSkipped: no fresh record, exit 77
+    ExecCondition --> PortCheck: record or live quarantine
+    PortCheck --> PortBusy: port in use, exit 98 (not restarted)
+    PortCheck --> Waiter: port free
+  }
+```
+
 ### Commands and exit codes
 
 | Command | Meaning |
@@ -434,6 +468,44 @@ for each of `judge judge2 judge3 suites record served cleanup enforcement qenv v
 per group (s): judge 31, judge2 4, judge3 7, suites 10, record 178, served 14, cleanup 3, enforcement 217, qenv 149, vlock 45, marker 68,
 interrupt 166, gate 211, policy 57, ramunits 15, ramcap 7 - every group well inside the bound. The Go-side mutants of the gateway are in
 `tests/test_gateway_mutation.sh` (40 assertions, 408 s).
+
+## Vision tiers and model identity (Constitution §11.4.278)
+
+HelixQA's UI QA (Constitution §11.4.278) uses a Vision model as its eyes, and that model must hold a fresh validation record under §11.4.277 first.
+llmctl ships two Vision profiles that share the golden-screenshot suite `vision-golden-v1`: `vision` (hardware tier `baseline`, port 8082) and
+`vision-pro` (tier `workstation`, port 8083). A consumer declares an ordered ladder of at least two validated tiers; a tier without a fresh signed PASS
+(`llmctl require-validated <profile>` under `LLMCTL_VALIDATE_STRICT=1`) makes its checks `not_validated`, never PASS. Every verdict and per-frame record
+must name the model identity: profile, tier, model and `mmproj` sha256, quantisation, engine and version, launch fingerprint, and the
+validation-record id and age (the validation record carries these inputs; see the record fields above). A lower-tier PASS is never presented as a
+higher-tier PASS.
+
+Source: [`diagrams/vision-tiers.mmd`](diagrams/vision-tiers.mmd) (rendered [svg](diagrams/vision-tiers.svg)).
+
+```mermaid
+flowchart TB
+  P["HelixQA / consumer needs eyes (Constitution 11.4.278)"] --> L{"declared ladder of validated Vision tiers"}
+  L --> T1["tier 1: profile vision (baseline hardware, port 8082)"]
+  L --> T2["tier 2: profile vision-pro (workstation hardware, port 8083)"]
+  T1 --> V1{"llmctl require-validated vision under STRICT, exit 0?"}
+  T2 --> V2{"llmctl require-validated vision-pro under STRICT, exit 0?"}
+  V1 -- "no: exit 1 or 2" --> NV["checks are not_validated, no PASS is issued"]
+  V2 -- "no: exit 1 or 2" --> NV
+  V1 -- yes --> ID1["verdict carries model identity: profile, tier, model and mmproj sha256, quantisation, engine, launch fingerprint, record id and age"]
+  V2 -- yes --> ID2["verdict carries the same identity fields"]
+  ID1 --> OUT["per-frame record: a lower-tier PASS is never shown as a higher-tier PASS"]
+  ID2 --> OUT
+```
+
+**Evidence boundary (stated plainly).** Real-model Vision runs exist for `vision` only (one host, 21 pass / 0 fail / 0 undetermined each); `vision-pro` has
+no real-model run in this repository, and no profile currently holds a fresh record (see the status note above). Whether the consuming HelixQA
+code reads these identity fields is the consumer's obligation and is not verified here.
+
+## Constitution mapping (hub engine)
+
+llmctl is a constitution hub engine (`constitution/submodules/llmctl`; Constitution §11.4.28(C) and §11.4.31, [`dependency-layout.md`](dependency-layout.md)).
+The gate in this document is its implementation of §11.4.277: UNDETERMINED is never a pass; decision-bearing use runs with `LLMCTL_VALIDATE_STRICT=1` and
+gates on `llmctl require-validated <profile>`; models come only through llmctl. The decisions-model layer (§11.4.279) rides on the same gate: the decide
+gateway serves only validated profiles ([decide-gateway](decide-gateway.md)). The claude_toolkit JEV layer consumes the gateway; it does not replace the gate.
 
 ## Model download verification
 

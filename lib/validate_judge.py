@@ -1388,7 +1388,7 @@ def decide_ask(args, case, timeout):
     import subprocess
     import tempfile
     q = case["question"]
-    body = {"model": "validate", "state": q["state"],
+    body = {"model": "smoke", "state": q["state"],
             "questions": {"q": {"type": q["type"], "instructions": q["instructions"], "criteria": q["criteria"]}}}
     fd, path = tempfile.mkstemp(prefix="llmctl-validate-q.", suffix=".json")
     t0 = time.monotonic()

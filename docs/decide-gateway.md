@@ -24,6 +24,45 @@ real HTTPS against a Go fake engine: every row of `specs/009-jev-decision-models
 the Go tests of `internal/server`, `internal/gateway`, `internal/contract`, and
 `cmd/llmctl-decide`, and `tests/test_decide_cli.sh` (the shell front end against a real TLS gateway).
 
+## Request flow (diagram)
+
+Source: [`diagrams/decide-gateway-flow.mmd`](diagrams/decide-gateway-flow.mmd) (rendered [svg](diagrams/decide-gateway-flow.svg)). The transport is
+HTTPS only and every `/v1/*` request needs the bearer key (see Auth below).
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant C as Client (TypeSafe SDK, coding agent, claude_toolkit JEV MCP)
+  participant G as llmctl-decide gateway (HTTPS, default port 8095)
+  participant A as Auth (bearer key, constant-time)
+  participant R as Registry and resolver (validated profiles only)
+  participant E as Engine on loopback (llama-server or onnx)
+  C->>G: POST /v1/systemone over HTTPS (local CA, TLS 1.2+), Authorization Bearer key
+  G->>A: check the bearer key
+  alt key missing or wrong
+    A-->>C: 401 (repeated failures: 429 rate_limited)
+  else key valid
+    A->>R: pick a profile (explicit, or auto ranking)
+    R->>R: llmctl require-validated gate (strict by default)
+    alt profile not validated
+      R-->>C: refused, no engine call
+    else validated
+      R->>E: typed decision request (internal key file, loopback only)
+      E-->>G: logprob readout
+      G-->>C: 200 typed answer (choice, noul or score)
+    end
+  end
+```
+
+## Governance (Constitution §11.4.279, §11.4.277, claude_toolkit)
+
+The decide gateway is llmctl's side of the decisions-model layer (Constitution §11.4.279; the anchor text lives in the constitution, this page describes
+only what llmctl implements): typed decisions over HTTPS with a mandatory bearer key, served only from profiles that pass the validation gate
+(§11.4.277, [validation](validation.md)). llmctl is a constitution hub engine ([dependency layout](dependency-layout.md), §11.4.28(C) / §11.4.31). The
+**consumer** side is claude_toolkit's JEV integration (`jev-setup.sh`, `jev-gate.sh`, `jev_mcp.py`): it registers decision endpoints as
+`classification: "decision"` (never aliases) and sends `Authorization: Bearer <key>`; a consumer must use the `https://` base URL and trust the local CA.
+That the toolkit's scripts handle the HTTPS scheme and CA correctly end to end is not verified in this repository.
+
 ## Lifecycle
 
 ```bash

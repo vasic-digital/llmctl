@@ -67,7 +67,8 @@ the resolver's message.
 `constitution`, `containers` and `superspec` are **not** submodules of llmctl: they are resolved
 from the constitution hub (or `LLMCTL_*_DIR`) - run `make deps`, see [`docs/dependency-layout.md`](docs/dependency-layout.md).
 
-> **Release 3.2.2** adds typed local decisions (`noul` / `choice` / `score`) behind a secured HTTPS gateway.
+> **Release 3.3.0** makes the model validation gate enforced (strict by default), resolves `constitution` / `containers` / `superspec` from the constitution hub instead of vendoring them,
+> and documents llmctl's governance role (below). Typed local decisions (`noul` / `choice` / `score`) behind a secured HTTPS gateway arrived in 3.2.0.
 > What changed and what you must do when upgrading: [`CHANGELOG.md`](CHANGELOG.md) (migration table).
 > What it does not do, and what was not verified live: [`docs/limitations.md`](docs/limitations.md).
 > Building the decision binary needs Go >= 1.25; everything else still needs only bash, python3 and curl.
@@ -80,7 +81,7 @@ from the constitution hub (or `LLMCTL_*_DIR`) - run `make deps`, see [`docs/depe
 
 ### Supported platforms
 
-| Platform | Status in 3.2.2 |
+| Platform | Status in 3.3.0 |
 |---|---|
 | Linux (systemd `--user`) | **Live-verified**: the development host, plus a second Linux machine (ALT Linux, CPU only) for portability runs |
 | macOS (launchd) | Shipped, **verified statically only** (code read and fixture-tested; never run on a Mac) |
@@ -266,6 +267,26 @@ make validate   # json-check + lint + test
 make archive    # ../llmctl.tar.gz + ../llmctl.zip
 ```
 
+## Governance: llmctl as a constitution hub engine
+
+llmctl is a **hub engine** of the Helix constitution: it lives at `constitution/submodules/llmctl`, is consumed by reference (never copied into a
+product, initialised one level only, `recursive_init: false`), and declares itself in a tracked `helix-deps.yaml` (Constitution §11.4.31). It must not
+nest the constitution or any other own-org repository: `constitution`, `containers` and `superspec` are found by one **resolver**
+(`lib/resolve_deps.sh`) instead of nested copies (Constitution §11.4.28(C); gate `CM-HUB-ENGINE-NO-OWNORG-NESTING`). Layout and the resolver order:
+[`docs/dependency-layout.md`](docs/dependency-layout.md).
+
+| Constitution anchor | What it means for llmctl | Where |
+|---|---|---|
+| §11.4.277 (model validation gate) | Every model run through llmctl, Vision included, passes a deterministic known-answer suite before decision-bearing use; gate on `llmctl require-validated <profile>` under `LLMCTL_VALIDATE_STRICT=1`; a wrong answer is a defect, never retried until green; exit codes 0 / 1 / 2 (75 pressure refusal reported as 2, 98 port in use) | [`docs/validation.md`](docs/validation.md) |
+| §11.4.278 (HelixQA Vision UI QA) | llmctl's `vision` and `vision-pro` profiles are the Vision "eyes" a consumer declares as ordered tiers; every verdict must carry the model identity (profile, tier, model and `mmproj` sha256, engine, launch fingerprint, validation-record id and age) | [`docs/validation.md`](docs/validation.md#vision-tiers-and-model-identity-constitution-114278) |
+| §11.4.279 (decisions-model layer) | The decide gateway and decision profiles are llmctl's side of that layer: HTTPS plus a mandatory bearer key, only validated profiles served. The anchor text lives in the constitution; this repository describes only what llmctl implements | [`docs/decision-models.md`](docs/decision-models.md), [`docs/decide-gateway.md`](docs/decide-gateway.md) |
+
+**claude_toolkit (JEV) integration.** [claude_toolkit](https://github.com/vasic-digital/claude_toolkit) (also a hub engine) owns the *consumer* side of the
+decision layer: it detects the local decision gateway of llmctl, registers decision endpoints with `classification: "decision"` (they never become aliases),
+and exposes a permission gate, an MCP tool and launch-time environment to its agents (`jev-setup.sh`, `jev-gate.sh`, `jev_mcp.py`). llmctl supplies the
+endpoint and the validation gate; the toolkit's own guides are in `docs/jev/` of that repository. The diagrams are indexed in
+[`docs/diagrams/README.md`](docs/diagrams/README.md).
+
 ## Documentation
 
 Every doc in this project is reachable from this table (Constitution
@@ -312,7 +333,8 @@ fastest path to a running model.
 | [`docs/scripts/test_onnx_server.md`](docs/scripts/test_onnx_server.md), [`docs/scripts/test_onnx_download.md`](docs/scripts/test_onnx_download.md) | Per-test docs for the two `onnx`-engine test suites (27 / 27 passing assertions, measured with `scripts/doc_counts.sh`) |
 | [`docs/research/README.md`](docs/research/README.md) | Index of the decision-models research briefs (Jev ecosystem survey, verified HF hashes, encoder-model hashes, implementation architecture map) |
 | [`docs/qa/decision-models-validation/README.md`](docs/qa/decision-models-validation/README.md) | Captured evidence for the decision-models feature's validation runs (iteration 1: 34 PASS / 7 pre-existing environment FAIL; iteration 2: 36 PASS / 7 environment FAIL) |
-| [`docs/validation.md`](docs/validation.md) | The project's V&V (validation & verification) contract |
+| [`docs/validation.md`](docs/validation.md) | The project's V&V (validation & verification) contract, the model validation gate (§11.4.277), Vision tiers and model identity (§11.4.278) |
+| [`docs/diagrams/README.md`](docs/diagrams/README.md) | Index of the Mermaid diagrams (`.mmd` plus rendered `.svg`): validation gate, decide gateway flow, hub-engine placement, Vision tiers |
 | [`docs/host-safety.md`](docs/host-safety.md) | Host-hang safeguards after the 2026-10-08 incident: cgroup limits, `bounded-run`, [containing agent and test jobs](docs/host-safety.md#containing-agent-and-test-jobs) (`agent-run`), the memory-pressure guard and its `pressure.json` advisory, the 2026-10-14 tmpfs hang analysis, and the root-only steps |
 | [`docs/live-test-protocol.md`](docs/live-test-protocol.md) | The guarded live test of the `vision` profile: pre-gate, watchdog, exit codes 0-7, evidence directory (run live for `vision` twice, 2026-10-13, and for `small` once, 2026-10-14: PASS every time, [vision evidence](docs/qa/vision-live-2026-10-13/README.md), [small evidence](docs/qa/small-live-2026-10-14/README.md)) |
 | [`docs/hardening-2026-10-changelog.md`](docs/hardening-2026-10-changelog.md) | Changelog-ready summary: per-profile memory caps, bounded restarts, the pressure start gate, one engine per profile |

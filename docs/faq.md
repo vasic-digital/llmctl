@@ -22,7 +22,7 @@ real models for release gating — see [`docs/quickstart.md`](quickstart.md)),
 automated test (part of `make test`) or a real-model manual verification
 step; each entry says which.
 
-**Revision 2 (llmctl 3.2.2).** The cluster, tenant, API-key and audit entries were re-audited against the code under `llmctld/` and the
+**Revision 2 (llmctl 3.3.0).** The cluster, tenant, API-key and audit entries were re-audited against the code under `llmctld/` and the
 tests in `llmctld/internal/**` and `llmctld/test/integration/`. The first revision of this FAQ was written while `llmctld` was a scaffold;
 that is no longer true: the daemon has a Raft node with real multi-process bootstrap, join/leave and leader failover, an HTTP/3 API with mutual TLS,
 JWT/RBAC, tenants and namespace isolation, API keys, an in-memory hash-chained audit log, KV-cache WAL/checkpoint replication and a health monitor.
@@ -37,6 +37,31 @@ run `find llmctld -name '*.go' -not -name '*_test.go'`; to run the daemon's test
 > [llmctld-cluster-tls](llmctld-cluster-tls.md#getting-a-curl-that-lists-http3).
 
 ---
+
+## Constitution, governance and integrations
+
+### Is llmctl part of the constitution, and where does it live?
+
+Yes: it is a constitution **hub engine** at `constitution/submodules/llmctl`, consumed by reference and initialised one level only (`recursive_init: false`).
+It declares itself in a tracked `helix-deps.yaml` (Constitution §11.4.31) and does not nest the constitution or other own-org repositories: it finds
+`constitution`, `containers` and `superspec` through `lib/resolve_deps.sh` (Constitution §11.4.28(C)). See [dependency layout](dependency-layout.md).
+
+### What does the constitution require of the models llmctl runs (§11.4.277)?
+
+A deterministic known-answer validation before any decision-bearing use. Run with `LLMCTL_VALIDATE_STRICT=1` and gate on `llmctl require-validated
+<profile>` (0 pass, 1 wrong answer, 2 could not determine; 75 pressure refusal is reported as 2, 98 is port in use). A wrong answer is a defect to
+investigate, not something to retry until green. See [validation](validation.md).
+
+### How does this relate to HelixQA Vision QA (§11.4.278)?
+
+HelixQA uses a validated Vision model as its eyes. llmctl's `vision` (baseline hardware) and `vision-pro` (workstation) profiles are the tiers a consumer
+can declare; each verdict must record the model identity. Only `vision` has real-model runs here ([validation](validation.md#vision-tiers-and-model-identity-constitution-114278)).
+
+### What is the decisions-model layer (§11.4.279) and how do claude_toolkit and llmctl split it?
+
+llmctl provides the decision profiles and the HTTPS decide gateway with a mandatory bearer key ([decide gateway](decide-gateway.md)). claude_toolkit's JEV
+integration is the consumer: it registers the endpoint as a `decision` record (never an alias) and offers a permission gate, an MCP tool and a launch
+environment to its agents. The anchor text is in the constitution; this FAQ describes only what llmctl does.
 
 ## Hardware, scheduling, and local model lifecycle
 

@@ -1,3 +1,4 @@
+# REDIRECT-OK: loopback fixture (http://127.0.0.1 gateway/engine under test); no redirect target exists in the recorded run (class sweep 2026-10-22)
 """Unit tests for scripts/bench/jevbench_adapter.py (spec 009 T065 part a).
 
 A loopback stand-in gateway answers /v1/systemone; a tiny fake harness (written to a temp dir, NOT the real

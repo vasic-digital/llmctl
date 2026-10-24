@@ -16,6 +16,32 @@ llmctl itself lives inside the constitution hub at `constitution/submodules/llmc
 instead of pinning private copies. llmctl's own real dependencies stay ordinary submodules:
 `submodules/llama.cpp` and `submodules/colibri` (`git submodule update --init`).
 
+## Hub-engine placement (diagram)
+
+Source: [`diagrams/hub-engine-placement.mmd`](diagrams/hub-engine-placement.mmd) (rendered [svg](diagrams/hub-engine-placement.svg)). llmctl is a hub
+engine (Constitution §11.4.28(C), §11.4.31): consumed by reference, depth 1, never nesting the canon.
+
+```mermaid
+flowchart TB
+  subgraph HUB["constitution hub (Constitution 11.4.28(C), 11.4.31)"]
+    CON["constitution (canon, CLAUDE.md, Constitution.md)"]
+    subgraph ENG["constitution/submodules (hub engines, depth 1, recursive_init false)"]
+      LLM["llmctl (this repository)"]
+      CT["claude_toolkit (provider aliases, JEV decision layer)"]
+      OD["open_design (reference checkout)"]
+    end
+    CNT["submodules/containers (vendored once by the hub)"]
+    SS["submodules/superspec (third party)"]
+  end
+  LLM -- "lib/resolve_deps.sh: env, then parent hub, then root, then siblings" --> CON
+  LLM -- "resolved, never nested" --> CNT
+  LLM -- "resolved, never nested" --> SS
+  LLM -. "own third-party pins only" .-> LC["submodules/llama.cpp and submodules/colibri"]
+  CT -- "calls llmctl decide / endpoint" --> LLM
+  GATE["CM-HUB-ENGINE-NO-OWNORG-NESTING: FAIL on a nested own-org repo"] -. checks .-> ENG
+  MAN["helix-deps.yaml in every own-org repo (CM-HELIX-DEPS-MANIFEST-PRESENT)"] -. describes .-> LLM
+```
+
 ## How a dependency is found (`lib/resolve_deps.sh`)
 
 ```bash

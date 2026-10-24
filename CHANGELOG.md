@@ -23,7 +23,75 @@ where `scripts/release/preflight_submodules.sh` reports a fully clean
 35-file test suite is green. Both `v3.0.0` and `v3.0.1` tags remain in the
 repository as an honest record of that process.
 
-## Unreleased
+## 3.3.0 (2026-10-22)
+
+A **minor release** (version 3.2.2 -> 3.3.0, proposed). Why minor and not patch: since `v3.2.2` there are 68 commits (215 files, about 15.7k insertions) that
+add behaviour and change defaults - the model validation gate is now **enforced** (quarantine until PASS, strict by default, every entry point), the
+dependency layout changed (`constitution`, `containers`, `superspec` are resolved from the hub, no longer vendored gitlinks), the judge rules were rewritten
+(every suite hash changed, so every existing validation record is stale), plus new host-safety tooling and a supply-chain pin gate. None of it removes a CLI
+command. Scope: `lib/validate.sh`, `lib/validate_judge.py`, `lib/scheduler.sh`, `lib/svc_hook.sh`, `lib/resolve_deps.sh`, `scripts/link_deps.sh`, `scripts/hostsafety/`,
+`validation/suites/`, `models/catalog.json` pins, `tests/`, `docs/`, `helix-deps.yaml`, and the version pins.
+
+**Release status (read first).**
+
+- **Unchanged surface (still documented here for the release checks):** the `llmctl-decide` gateway, `decide scale`, `decide calibrate`, probe-order and
+  completions handling, maturity labels, `llmctl doctor`, `status --json` with `overhead_mb`, the `LLMCTL_CTX_*` knobs and eviction behaviour are not changed
+  by this release.
+- **Live evidence is unchanged in kind and now older than the code.** Real-model runs exist from before this fix round only (`vision` on one host, `small`
+  once). The judge and every suite hash changed since, so **no profile currently has a fresh validation record**; validate every model again before relying on it.
+- **Tests for this release were run hermetically** (isolated `HOME`, no model started, enabled or switched). The totals and any failure are listed in the
+  release hand-off, not asserted here.
+- Documentation added in this release: llmctl as a constitution hub engine (§11.4.28(C), §11.4.31), the validation gate mapping (§11.4.277), Vision tiers and
+  model identity (§11.4.278), the decisions-model layer (§11.4.279; the anchor text lives in the constitution), the claude_toolkit JEV integration, and
+  `docs/diagrams/` (four Mermaid diagrams with rendered SVGs). `tests/test_docs_diagrams_governance.sh` checks them.
+
+### Added
+
+- **Model validation gate enforcement** (quarantine start, signed records bound to model bytes / host / engine / launch / suites, per-profile validation lock,
+  unit-level `ExecCondition` gate, verdict policy on every manual entry point) - see the detailed entries below.
+- **`lib/resolve_deps.sh` and `scripts/link_deps.sh` (`make deps`)**: one resolver for `constitution`, `containers`, `superspec` (Constitution §11.4.28(C)); `docs/dependency-layout.md`.
+- **`llmctl models pins`** supply-chain gate and an UNPINNED-download warning; RAM budget capped at 60% of MemTotal.
+- **Host-safety tooling**: `verify-persistence`, boot self-check, pressure time series, pressure advisory, `root-steps` (`/tmp` cap, earlyoom), app.slice swap cap.
+- **Validation of `decide-*` and colibri profiles** is possible (never-executed ones reported NOT VALIDATED); a validation record names its host.
+- **Class-sweep guard tests**: `test_no_trap_replacement.sh`, `test_no_secret_on_argv.sh`, `test_cluster_header_signal.sh`, `test_tls_off_allowlist.sh`, `test_no_auth_redirect_forwarding.sh` (each with a control needle); see `docs/qa/class-sweep-followups.md`.
+- **`docs/diagrams/`** (validation gate state machine, decide gateway request flow, hub-engine placement, Vision tiers) and **`tests/test_docs_diagrams_governance.sh`**.
+- Evidence pages under `docs/qa/` (`small-live-2026-10-14`, `vision-live-2026-10-14`, `vision-live-nezha-2026-10-14`).
+
+### Changed
+
+- The validation gate is strict by default; once `llmctl install` has been run with this version, a unit without a fresh record is skipped (exit 77).
+- Judge rules are positive allow-lists; every suite hash changed (see the review-3 entry below).
+- `constitution`, `submodules/containers` and `submodules/superspec` are no longer gitlinks of this repository.
+- README, user manual, FAQ, validation, decision-models, decide-gateway and dependency-layout documents now state llmctl's hub-engine role and the constitution anchors.
+- Version pins moved from 3.2.2 to 3.3.0 (`VERSION`, `bin/llmctl`, README banner, `docs/*.md` statements, OpenAPI `info.version`).
+
+### Fixed
+
+- **Class sweep 2026-10-22** (test-first, RED observed): `lib/cluster.sh` no longer writes the bearer token to a temp file (`-H @/dev/fd/3`; the file survived a SIGTERM); two tests replaced an earlier EXIT trap and leaked a fixture process; keys were expanded onto command lines in 5 tests and 6 evidence scripts (now `-H @file`); `scripts/golden/run_golden.py` and `evidence/pin_reverify.py` no longer forward `Authorization` across redirects; every TLS-verification-off site is justified in place; `tests/test_decide_service.sh` asserted a stale `KeepAlive` value (red since e0e7423).
+- Review rounds of 2026-10-14 and 2026-10-15 (judge soundness, quarantine env restore, validation lock, gateway auto mode, plan memory accounting, bounded-run
+  false timeout, interrupted validation leaving a model running) and the dependency-resolver rounds 1-5 - each entry below names the finding and its test.
+
+### Security
+
+- Supply-chain pin gate (`llmctl models pins`), signed validation records, gateway endpoint declarations ignore blank values, host-safety files mode 0600.
+
+### Removed
+
+- The vendored `constitution`, `submodules/containers` and `submodules/superspec` gitlinks (previous pins are recorded in `helix-deps.yaml` for recovery). No CLI command is removed.
+
+### Migration notes
+
+- After pulling, existing checkouts keep REAL leftover directories `constitution/`, `submodules/containers/`, `submodules/superspec/`; `make deps` fails with
+  `LEFTOVER <path>` until you clean each up by hand (procedure in the first entry below). Outside the hub set `LLMCTL_*_DIR`.
+- Re-run `llmctl install` to refresh unit files, then **validate every profile you serve** (`llmctl validate <profile>`) before the next boot or restart.
+
+### Known limitations
+
+- No profile holds a fresh validation record after this release; `vision-pro`, the decide-* and colibri profiles have never been run against a real model.
+- The hosted-Jev parity statements, the HTTPS/CA handling of the claude_toolkit side, and macOS behaviour are not verified live here.
+- Manual QA (Constitution §11.4.185) has not been performed on this release.
+
+### Detailed entries (moved from "Unreleased")
 
 * **chore(deps): one source of truth - llmctl no longer vendors `constitution`, `submodules/containers` or `submodules/superspec`
   (owner mandate 2026-10-21; branch `chore/single-source-layout`).** llmctl lives inside the constitution hub

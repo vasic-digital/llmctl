@@ -72,7 +72,7 @@ SLOWBODY='{"model":"decide-tiny","state":"SLOW load","questions":{"q":{"type":"n
 post_slow() {
   local n="$1" st
   st="$(curl -sS --cacert "${CA}" --max-time 30 -o /dev/null -D "${TEST_TMP}/hdr.${n}" -w '%{http_code}' \
-    -H "Authorization: Bearer ${KEY}" -H 'Content-Type: application/json' --data-binary "${SLOWBODY}" \
+    -H "@$(auth_hdr_file "${KEY}")" -H 'Content-Type: application/json' --data-binary "${SLOWBODY}" \
     "https://127.0.0.1:${PORT}/v1/systemone" 2>/dev/null)" || st="000"
   printf '%s %s\n' "${st}" "$(tr -d '\r' < "${TEST_TMP}/hdr.${n}" 2>/dev/null | awk 'tolower($1)=="retry-after:"{print $2}')" > "${TEST_TMP}/out.${n}"
 }

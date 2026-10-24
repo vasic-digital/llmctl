@@ -86,7 +86,7 @@ req() { # req <port> <METHOD> <path> <auth: key|none|wrong> [body] [extra curl a
   local port="$1" method="$2" path="$3" auth="$4" body="${5:-}"; shift 5 2>/dev/null || shift $#
   local args=(-sS --cacert "${CA}" --max-time 20 -o "${TEST_TMP}/resp" -w '%{http_code}' -X "${method}")
   case "${auth}" in
-    key)   args+=(-H "Authorization: Bearer ${KEY}") ;;
+    key)   args+=(-H "@$(auth_hdr_file "${KEY}")") ;;
     wrong) args+=(-H "Authorization: Bearer not-the-key-not-the-key-not-the-key-0000") ;;
   esac
   if [[ -n "${body}" ]]; then args+=(-H "Content-Type:${CT-application/json}" --data-binary "${body}"); fi

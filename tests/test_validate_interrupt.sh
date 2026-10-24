@@ -75,7 +75,7 @@ assert_file_absent "${LLMCTL_RUNTIME_DIR}/small.run" "its quarantine reservation
 
 echo "== (c) ...also when the signal arrives OUTSIDE validate_profile (waiting for the per-profile validation lock)"
 gw_mark_running small "${HP}"; printf 'quarantine=1\n' >> "${LLMCTL_RUNTIME_DIR}/small.run"
-( exec 8>"${LLMCTL_RUNTIME_DIR}/.validate-small.lock"; flock 8; sleep 30 ) & HOLD=$!; GW_BG_PIDS+=("${HOLD}")
+( exec 8>"${LLMCTL_RUNTIME_DIR}/.validate-small.lock"; flock -w 60 8; sleep 30 ) & HOLD=$!; GW_BG_PIDS+=("${HOLD}")
 sleep 0.5
 gw_calls_reset
 LLMCTL_VALIDATE_LOCK_WAIT=4 "${L}" validate-after-start small > "${TEST_TMP}/c2.out" 2>&1 & VP=$!

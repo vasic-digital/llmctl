@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# REDIRECT-OK: loopback fixture (http://127.0.0.1 gateway/engine under test); no redirect target exists in the recorded run (class sweep 2026-10-22)
 """live_checks.py - encoder-specific live checks against the REAL decide-nli runtime + gateway.
 usage: live_checks.py <gw> <ca> <access-keyfile> <profile> <engine-url> <engine-keyfile> <outdir> <spm.model>
 Keys are read from files and never printed or written. State texts are synthetic filler."""

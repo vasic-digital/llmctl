@@ -8,6 +8,28 @@ export LLMCTL_ROOT
 
 TEST_FAILS=0
 
+# close_inherited_lock_fds - drop every inherited regular-file fd >= 3 (never 255, bash's script fd) in THIS shell.
+# Why: a suite runs under a host lock (`flock <lockfile> cmd` / `flock -x N`); every background fixture server and flock
+# waiter it starts would inherit that open file description and keep the host lock held after the suite is gone (real
+# incident 2026-10-22: the shared heavy lock stayed held for hours by orphaned python http.server fixtures and
+# `flock -x N` waiters). Closing here, at source time, means no child of the suite can inherit it; the wrapper that
+# opened the lock still holds it for as long as the suite runs. Guard: tests/test_no_lock_fd_leak.sh.
+close_inherited_lock_fds() {
+  local l n
+  for l in /proc/$$/fd/*; do
+    n="${l##*/}"
+    [[ "${n}" =~ ^[0-9]+$ ]] || continue
+    (( n >= 3 && n < 255 )) || continue
+    [[ -f "${l}" ]] || continue
+    eval "exec ${n}>&-" 2>/dev/null || true
+  done
+}
+close_inherited_lock_fds
+
+# test_bg_register <pid...> - record background pids THIS test started; test_teardown_env kills exactly those (no pattern kills).
+TEST_BG_PIDS=()
+test_bg_register() { TEST_BG_PIDS+=("$@"); }
+
 # assert_eq <expected> <actual> <message>
 assert_eq() {
   if [[ "$1" == "$2" ]]; then
@@ -133,6 +155,9 @@ test_setup_env() {
 }
 
 test_teardown_env() {
+  local _bgp
+  for _bgp in ${TEST_BG_PIDS[@]+"${TEST_BG_PIDS[@]}"}; do [[ -n "${_bgp}" ]] && kill "${_bgp}" 2>/dev/null || true; done
+  TEST_BG_PIDS=()
   # `[[ ... ]] && cmd` as a bare statement returns the condition's own exit
   # status (1) when false, which - under this file's `set -e` - aborts the
   # calling script entirely the moment a test skips test_setup_env (TEST_TMP
@@ -164,6 +189,13 @@ skip_suite() {
 # pass nor a failure of THIS test run, but it MUST be loud, not silent.
 assert_skip() {
   printf '  SKIP: %s\n    reason: %s\n' "$2" "$1" >&2
+}
+
+# auth_hdr_file <key> - prints the path of a 0600 header file holding `Authorization: Bearer <key>` under TEST_TMP, so a test
+# passes the key to curl as `-H @file` instead of expanding it onto the command line (class sweep 2026-10-22, C2).
+auth_hdr_file() {
+  local f; f="$(umask 077; mktemp "${TEST_TMP:-${TMPDIR:-/tmp}}/auth.XXXXXX")" || return 1
+  printf 'Authorization: Bearer %s\n' "$1" >"${f}"; printf '%s' "${f}"
 }
 
 # curl_has_http3 - the SAME predicate lib/cluster.sh uses (_cluster_http3_supported): does this curl list

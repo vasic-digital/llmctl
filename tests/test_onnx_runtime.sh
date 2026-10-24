@@ -173,7 +173,7 @@ fi
 
 # request text never reaches the logs
 req_text="UNIQUE-PREMISE-TOKEN-$$"
-curl -fsS -X POST "http://127.0.0.1:${PORT[A]}/v1/score" -H "Authorization: Bearer ${KEY}" \
+curl -fsS -X POST "http://127.0.0.1:${PORT[A]}/v1/score" -H "@$(auth_hdr_file "${KEY}")" \
   -H 'Content-Type: application/json' -d "{\"pairs\":[{\"premise\":\"${req_text}\",\"hypothesis\":\"h\"}]}" >/dev/null
 sleep 0.2
 assert_eq 0 "$(grep -c -- "${req_text}" "${TEST_TMP}/server-A.log" || true)" "request text (premise) is never logged"

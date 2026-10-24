@@ -1,4 +1,4 @@
-# Limitations and honest boundaries (llmctl 3.2.2)
+# Limitations and honest boundaries (llmctl 3.3.0)
 
 **Revision:** 2 - 2026-10-08. Read this before relying on a decision answer or on the security properties of the gateway. Each item names where it
 comes from: *vendor-documented* (the hosted Jev vendor's own failure modes, as recorded in the research notes under

@@ -1,3 +1,4 @@
+# REDIRECT-OK: loopback fixture (http://127.0.0.1 gateway/engine under test); no redirect target exists in the recorded run (class sweep 2026-10-22)
 """Shared helpers for the RED (failing-first) defect tests D-16..D-32.
 
 stdlib only. Never prints credentials. Starts/kills only its own PIDs.

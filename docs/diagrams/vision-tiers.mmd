@@ -1,0 +1,12 @@
+flowchart TB
+  P["HelixQA / consumer needs eyes (Constitution 11.4.278)"] --> L{"declared ladder of validated Vision tiers"}
+  L --> T1["tier 1: profile vision (baseline hardware, port 8082)"]
+  L --> T2["tier 2: profile vision-pro (workstation hardware, port 8083)"]
+  T1 --> V1{"llmctl require-validated vision under STRICT, exit 0?"}
+  T2 --> V2{"llmctl require-validated vision-pro under STRICT, exit 0?"}
+  V1 -- "no: exit 1 or 2" --> NV["checks are not_validated, no PASS is issued"]
+  V2 -- "no: exit 1 or 2" --> NV
+  V1 -- yes --> ID1["verdict carries model identity: profile, tier, model and mmproj sha256, quantisation, engine, launch fingerprint, record id and age"]
+  V2 -- yes --> ID2["verdict carries the same identity fields"]
+  ID1 --> OUT["per-frame record: a lower-tier PASS is never shown as a higher-tier PASS"]
+  ID2 --> OUT

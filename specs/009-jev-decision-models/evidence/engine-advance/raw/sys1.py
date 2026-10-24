@@ -1,5 +1,7 @@
+# REDIRECT-OK: loopback fixture (http://127.0.0.1 gateway/engine under test); no redirect target exists in the recorded run (class sweep 2026-10-22)
 import sys,json,urllib.request,urllib.error
-port,key,outdir,tag=sys.argv[1],sys.argv[2],sys.argv[3],sys.argv[4]
+port,keyfile,outdir,tag=sys.argv[1],sys.argv[2],sys.argv[3],sys.argv[4]
+key=open(keyfile).read().strip()   # the key is read from a 0600 file, never passed on argv (class sweep C2)
 req={"state":"Customer message: I was charged twice for my order last week and nobody has replied.",
 "questions":{
  "route":{"type":"choice","instructions":"Which team should handle this?","criteria":{"billing":None,"shipping":None,"technical":None}},

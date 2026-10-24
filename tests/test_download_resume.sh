@@ -90,7 +90,7 @@ cp "${WWW1}/model.bin" "${WWW2}/model.bin"
 PORT2=18922
 python3 -m http.server "${PORT2}" --bind 127.0.0.1 --directory "${TEST_TMP}/www2" >/dev/null 2>&1 &
 PLAIN_PID=$!
-trap 'kill ${PLAIN_PID} 2>/dev/null || true' EXIT
+trap 'kill ${RANGE_PID} ${PLAIN_PID} 2>/dev/null || true' EXIT
 for _ in $(seq 1 50); do
   curl -fsS "http://127.0.0.1:${PORT2}/" >/dev/null 2>&1 && break
   sleep 0.1

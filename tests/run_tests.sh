@@ -30,6 +30,10 @@ partial=0
 declare -a results=()
 declare -a skips=()
 
+# Do not hand the suites an inherited lock fd (see tests/helpers.sh close_inherited_lock_fds): the wrapper that holds the
+# host lock keeps it; nothing started by a test can outlive the run holding it.
+for _l in /proc/$$/fd/*; do _n="${_l##*/}"; [[ "${_n}" =~ ^[0-9]+$ ]] && (( _n >= 3 && _n < 255 )) && [[ -f "${_l}" ]] && eval "exec ${_n}>&-" 2>/dev/null || true; done
+
 shopt -s nullglob
 for t in "${TESTS_DIR}"/test_*.sh; do
   name="$(basename "${t}")"

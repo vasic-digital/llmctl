@@ -787,9 +787,9 @@ scheduling. Single-host usage never touches them.
 llmctl version
 ```
 
-Prints `llmctl <version>`, e.g. `llmctl 3.2.2` (the `LLMCTL_VERSION`
+Prints `llmctl <version>`, e.g. `llmctl 3.3.0` (the `LLMCTL_VERSION`
 constant at the top of `bin/llmctl`, kept equal to the `VERSION` file at the repository root). Real evidence
-(`tests/test_cli.sh`): the output contains the literal substring `llmctl 3.2.2`.
+(`tests/test_cli.sh`): the output contains the literal substring `llmctl 3.3.0`.
 
 ## help
 
@@ -806,6 +806,21 @@ command — an unrecognized command prints `unknown command: <cmd>` to
 stderr, then the usage text, then exits 2).
 
 ---
+
+## Constitution role and integrations
+
+- **Hub engine.** llmctl is a constitution hub engine at `constitution/submodules/llmctl` (Constitution §11.4.28(C), §11.4.31): consumed by reference, never
+  nested copies; `constitution`, `containers` and `superspec` are found by `lib/resolve_deps.sh` and linked by `make deps`
+  ([dependency layout](dependency-layout.md)).
+- **§11.4.277.** `validate`, `vision validate`, `validate-all` and `require-validated` implement the validation gate. Decision-bearing use runs with
+  `LLMCTL_VALIDATE_STRICT=1` and gates on `llmctl require-validated <profile>`; `0` pass, `1` wrong answer, `2` could not determine (`75` pressure
+  refusal is reported as `2`; `98` port in use on the unit path). Diagram: [validation](validation.md#gate-state-machine-and-exit-codes).
+- **§11.4.278.** The `vision` and `vision-pro` profiles are the Vision tiers a HelixQA consumer declares; verdicts must carry the model identity
+  ([validation](validation.md#vision-tiers-and-model-identity-constitution-114278)).
+- **§11.4.279.** The `decide` command family and the HTTPS gateway (bearer key mandatory) are llmctl's side of the decisions-model layer
+  ([decision models](decision-models.md), [decide gateway](decide-gateway.md#request-flow-diagram)).
+- **claude_toolkit (JEV).** claude_toolkit detects the local decide gateway and exposes it to agents as a decision layer (permission gate, MCP tool
+  `jev_ask`, launch environment); llmctl does not depend on it. Diagram index: [diagrams](diagrams/README.md).
 
 ## Environment variables
 

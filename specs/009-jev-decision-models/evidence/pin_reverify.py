@@ -3,12 +3,22 @@
 LFS files: size + sha256 from the tree API (lfs.oid) - never downloaded.
 Non-LFS files < 20 MB: downloaded from /resolve/<rev>/ and sha256 computed.
 HF_TOKEN is honoured when set and never printed. Usage: pin_reverify.py [--write-catalog]"""
-import hashlib, json, os, sys, time, urllib.request, urllib.error
+import hashlib, json, os, sys, time, urllib.request, urllib.error, urllib.parse
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 CAT = os.path.join(ROOT, "models", "catalog.json")
 OUT = os.path.join(os.path.dirname(__file__), "pin-reverify.json")
 BASE = "https://huggingface.co"
 LIMIT = 20 * 1024 * 1024
+
+class _StripAuthCrossHost(urllib.request.HTTPRedirectHandler):
+    """A redirect to another host (the HF CDN) must not receive the HF token (class sweep 2026-10-22)."""
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        new = super().redirect_request(req, fp, code, msg, headers, newurl)
+        if new is not None and urllib.parse.urlsplit(newurl).netloc != urllib.parse.urlsplit(req.full_url).netloc:
+            new.remove_header("Authorization")
+        return new
+
+_OPENER = urllib.request.build_opener(_StripAuthCrossHost)
 
 def req(url):
     h = {"User-Agent": "llmctl-pin-reverify"}
@@ -17,7 +27,7 @@ def req(url):
     return urllib.request.Request(url, headers=h)
 
 def get_json(url):
-    with urllib.request.urlopen(req(url), timeout=60) as r:
+    with _OPENER.open(req(url), timeout=60) as r:
         return json.load(r)
 
 cat = json.load(open(CAT))
@@ -45,7 +55,7 @@ for name, p in cat["profiles"].items():
                 row.update(sha256=lfs["oid"], source="api")
             elif t["size"] < LIMIT:
                 h = hashlib.sha256(); n = 0
-                with urllib.request.urlopen(req("%s/%s/resolve/%s/%s" % (BASE, repo, rev, f["name"])), timeout=120) as r:
+                with _OPENER.open(req("%s/%s/resolve/%s/%s" % (BASE, repo, rev, f["name"])), timeout=120) as r:
                     for chunk in iter(lambda: r.read(1 << 20), b""):
                         h.update(chunk); n += len(chunk)
                 row.update(sha256=h.hexdigest(), source="computed", downloaded_bytes=n)

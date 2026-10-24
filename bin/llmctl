@@ -4,7 +4,7 @@
 # Portable bash targeting Linux (systemd --user) and macOS (launchd).
 set -euo pipefail
 
-LLMCTL_VERSION="3.2.2"
+LLMCTL_VERSION="3.3.0"
 
 # Resolve symlinks manually (portable across Linux + macOS/BSD, unlike
 # GNU-only `readlink -f` or a `realpath` that may not be installed) so

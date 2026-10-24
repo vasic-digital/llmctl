@@ -521,6 +521,15 @@ Run 2026-10-08 on host `anton` (CPU only), the real ONNX encoder `decide-nli` (D
   (`_dl_smoke_test_decision` in `lib/download.sh`) is the
   evidence-based gate that catches this at download time (it runs `llmctl-decide smoke`).
 
+## Governance and consumers
+
+Decision models are llmctl's implementation of the decisions-model layer (Constitution §11.4.279; the anchor text is maintained in the constitution, not
+here). llmctl is a constitution hub engine (§11.4.28(C), §11.4.31; [dependency layout](dependency-layout.md)); every decision profile is subject to the
+model validation gate (§11.4.277; [validation](validation.md)), with the honest exception that the `decide-*` and colibri suites have been proven against
+fixtures only. Vision verdicts of HelixQA (§11.4.278) are a separate use of the gate. The consumer integration is claude_toolkit's JEV layer: decision
+endpoints are registered as `classification: "decision"`, never become aliases, and feed a permission gate, an MCP tool (`jev_ask`) and a launch
+environment; transport details are in [decide-gateway](decide-gateway.md#request-flow-diagram).
+
 ## Related docs
 
 * [`docs/decide-gateway.md`](decide-gateway.md) - the Go HTTPS gateway reference.

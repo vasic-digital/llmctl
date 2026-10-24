@@ -1,0 +1,25 @@
+stateDiagram-v2
+  direction LR
+  [*] --> Requested: start / switch / auto / enable / restart / decide scale
+  Requested --> Quarantine: no fresh signed PASS record
+  Requested --> Published: fresh signed PASS record
+  Quarantine --> Refused: host pressure gate refuses (rc 75)
+  Refused --> Undetermined: refusal is not a verdict, reported as exit 2
+  Quarantine --> Judging: suites run, N repeats, deterministic judge
+  Judging --> Pass: every check right (exit 0)
+  Judging --> Fail: any wrong answer (exit 1)
+  Judging --> Undetermined: no answer, wrong model served, suite defect (exit 2)
+  Pass --> Published: record signed, then published
+  Fail --> Stopped: stopped through the normal stop path
+  Undetermined --> Stopped: STRICT=1 (default)
+  Undetermined --> Unvalidated: STRICT=0 and not consumer-facing
+  Published --> [*]: require-validated exit 0, endpoint prints URL
+  Stopped --> [*]
+  Unvalidated --> [*]: require-validated exit 1
+  state "systemd unit path" as Unit {
+    [*] --> ExecCondition
+    ExecCondition --> UnitSkipped: no fresh record, exit 77
+    ExecCondition --> PortCheck: record or live quarantine
+    PortCheck --> PortBusy: port in use, exit 98 (not restarted)
+    PortCheck --> Waiter: port free
+  }
