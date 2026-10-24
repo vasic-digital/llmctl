@@ -67,7 +67,7 @@ the resolver's message.
 `constitution`, `containers` and `superspec` are **not** submodules of llmctl: they are resolved
 from the constitution hub (or `LLMCTL_*_DIR`) - run `make deps`, see [`docs/dependency-layout.md`](docs/dependency-layout.md).
 
-> **Release 3.3.0** makes the model validation gate enforced (strict by default), resolves `constitution` / `containers` / `superspec` from the constitution hub instead of vendoring them,
+> **Release 3.3.0** makes the model validation gate enforced (strict by default; for systemd units this holds once `llmctl install` has regenerated them - a legacy, not re-installed unit still keeps an UNDETERMINED profile running, NOT validated), resolves `constitution` / `containers` / `superspec` from the constitution hub instead of vendoring them,
 > and documents llmctl's governance role (below). Typed local decisions (`noul` / `choice` / `score`) behind a secured HTTPS gateway arrived in 3.1.0.
 > What changed and what you must do when upgrading: [`CHANGELOG.md`](CHANGELOG.md) (migration table).
 > What it does not do, and what was not verified live: [`docs/limitations.md`](docs/limitations.md).
@@ -277,7 +277,7 @@ nest the constitution or any other own-org repository: `constitution`, `containe
 
 | Constitution anchor | What it means for llmctl | Where |
 |---|---|---|
-| §11.4.277 (model validation gate) | Every model run through llmctl, Vision included, passes a deterministic known-answer suite before decision-bearing use; gate on `llmctl require-validated <profile>` under `LLMCTL_VALIDATE_STRICT=1`; a wrong answer is a defect, never retried until green; exit codes 0 / 1 / 2 (75 pressure refusal reported as 2, 98 port in use) | [`docs/validation.md`](docs/validation.md) |
+| §11.4.277 (model validation gate) | Every model run through llmctl, Vision included, passes a deterministic known-answer suite before decision-bearing use; gate on `llmctl require-validated <profile>` under `LLMCTL_VALIDATE_STRICT=1`; a wrong answer is a defect, never retried until green; exit codes: `validate` 0 pass / 1 wrong answer / 2 undetermined, `require-validated` 0 fresh passing record / 1 not validated for any reason / 2 cannot determine (75 pressure refusal reported as 2, 98 port in use) | [`docs/validation.md`](docs/validation.md) |
 | §11.4.278 (HelixQA Vision UI QA) | llmctl's `vision` and `vision-pro` profiles are the Vision "eyes" a consumer declares as ordered tiers; every verdict must carry the model identity (profile, tier, model and `mmproj` sha256, engine, launch fingerprint, validation-record id and age) | [`docs/validation.md`](docs/validation.md#vision-tiers-and-model-identity-constitution-114278) |
 | §11.4.279 (decisions-model layer) | The decide gateway and decision profiles are llmctl's side of that layer: HTTPS plus a mandatory bearer key, only validated profiles served. The anchor text lives in the constitution; this repository describes only what llmctl implements | [`docs/decision-models.md`](docs/decision-models.md), [`docs/decide-gateway.md`](docs/decide-gateway.md) |
 
