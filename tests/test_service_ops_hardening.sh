@@ -284,6 +284,13 @@ printf 'LLMCTL_PROFILE=eng\nLLMCTL_ENGINE=onnx\nLLMCTL_EXEC=python3\nLLMCTL_ARGS
 # 'eng' is not a catalog profile, so the validation gate of run-engine (review 2026-10-14, launchd parity of the unit's
 # ExecCondition) would refuse it: the env record carries the opt-out marker, as an opt-out start of llmctl writes it
 printf 'LLMCTL_UNVALIDATED=%s\n' "test fixture: eng is not a catalog profile" >> "${LLMCTL_SERVICES_DIR}/eng.env"
+# review 3 of 2026-10-15, finding 9: the opt-out is re-checked against the CATALOG at every start and an unknown profile counts as
+# consumer-facing (refused). So 'eng' (and the G-129 fixture profile 'g129' below) must be non-consumer-facing profiles of a fixture
+# catalog, exported for the rest of this file; the real catalog is untouched
+# (this fixture was red since that change: "profile eng is not validated; not starting", 3 assertions of C-13/C-14)
+python3 -I -c 'import json,sys; d=json.load(open(sys.argv[1])); [d["profiles"].__setitem__(n,{"validation":{"consumer_facing":False}}) for n in ("eng","g129")]; json.dump(d,open(sys.argv[2],"w"))' \
+  "${LLMCTL_CATALOG:-${LLMCTL_ROOT}/models/catalog.json}" "${TEST_TMP}/catalog.eng.json"
+export LLMCTL_CATALOG="${TEST_TMP}/catalog.eng.json"
 export LLMCTL_PORTREG=1 LLMCTL_DECIDE_BIN="${BIN}" LLMCTL_REGISTER_POLL=0.2 LLMCTL_REGISTER_WAIT=30
 reg_pid() { "${BIN}" registry list --json | python3 -c 'import json,sys;print(next((s["pid"] for s in json.load(sys.stdin)["services"] if s["name"]=="eng"),""))'; }
 spawn_engine() { # the launchd ProgramArguments, verbatim

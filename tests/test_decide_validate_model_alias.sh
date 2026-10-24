@@ -34,6 +34,6 @@ lp=$!; for _ in 1 2 3 4 5 6 7 8 9 10; do [ -s "$f.port" ] && break; sleep 0.2; d
 port=$(cat "$f.port")
 out=$("$BIN" smoke --url "http://127.0.0.1:$port" --protocol letter-logit --question-file "$f" --json --timeout 2s 2>&1) && rc=0 || rc=$?
 kill $lp 2>/dev/null; rm -f "$f" "$f.port"
-if echo "$out" | grep -q 'Unknown model'; then echo "FAIL: driver refused validator body: $out"; fail=1
+if grep -q 'Unknown model' <<<"$out"; then echo "FAIL: driver refused validator body: $out"; fail=1
 else echo "PASS: driver accepted the validator body (rc=$rc, not an Unknown-model refusal)"; fi
 if [ $fail = 0 ]; then echo "RESULT: PASS"; else echo "RESULT: FAIL"; fi; exit $fail

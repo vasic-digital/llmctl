@@ -37,6 +37,13 @@ count_procs() { # live processes whose cmdline contains a fixed string (reads /p
   done
   echo "${n}"
 }
+scope_gone_wait() { # <name> : scope_gone, polled for up to 15 s. The scope is stopped ASYNCHRONOUSLY after bounded-run returns
+  # (systemd kills the cgroup, then drops the unit; TimeoutStopSec=5 is its own bound), so one check after a fixed `sleep 1` is a race.
+  # Measured 2026-10-24: idle host, gone at 0.04 s; under CPU load one run still showed it active at 0.08 s and gone at 0.27 s. The cause
+  # of the two FAILs seen once in an isolated-HOME run is UNCONFIRMED (not reproduced in 3 later runs). A scope that never goes still FAILs.
+  for _ in $(seq 1 75); do [[ "$(scope_gone "$1")" == yes ]] && { echo yes; return 0; }; sleep 0.2; done
+  scope_gone "$1"
+}
 scope_gone() { # <name> : the transient scope no longer exists
   local ls st
   st="$(systemctl --user is-active "bounded-run-$1.scope" 2>&1 | head -1 || true)"
@@ -102,7 +109,7 @@ peak="$(printf '%s' "${res}" | sed -n 's/.*peak=\([0-9]*\).*/\1/p')"
 assert_eq "yes" "$([[ ${ev_max:-0} -gt 0 ]] && echo yes || echo no)" "bomb: pids.events max > 0 (the cap was hit: ${ev_max:-?})"
 assert_eq "yes" "$([[ -n ${peak} && ${peak} -le 40 ]] && echo yes || echo no)" "bomb: pids.peak <= 40 (peak=${peak:-?})"
 sleep 1
-assert_eq "yes" "$(scope_gone "acbomb$$")" "bomb: the scope is gone afterwards"
+assert_eq "yes" "$(scope_gone_wait "acbomb$$")" "bomb: the scope is gone afterwards"
 assert_eq "0" "$(count_procs "acmark-${mark} 300")" "bomb: leftover processes = 0"
 assert_eq "0" "$(procs_in_scope "acbomb$$")" "bomb: zero processes left in the bomb's cgroup (read from /proc/*/cgroup)"
 assert_eq "active" "$(systemctl --user is-active "bounded-run-acbefore$$.scope" 2>&1 | head -1)" "bomb: a bystander scope started before it is still active"
@@ -126,7 +133,7 @@ peak="$(printf '%s' "${res}" | sed -n 's/.*peak=\([0-9]*\).*/\1/p')"
 assert_eq "yes" "$([[ ${ev_max:-0} -gt 0 ]] && echo yes || echo no)" "recursive shim: pids.events max > 0 (${ev_max:-?})"
 assert_eq "yes" "$([[ -n ${peak} && ${peak} -le 40 ]] && echo yes || echo no)" "recursive shim: pids.peak <= 40 (peak=${peak:-?})"
 sleep 1
-assert_eq "yes" "$(scope_gone "acrec$$")" "recursive shim: the scope is gone afterwards"
+assert_eq "yes" "$(scope_gone_wait "acrec$$")" "recursive shim: the scope is gone afterwards"
 assert_eq "0" "$(count_procs "${SH}/tr")" "recursive shim: leftover processes = 0"
 assert_eq "0" "$(procs_in_scope "acrec$$")" "recursive shim: zero processes left in its cgroup (read from /proc/*/cgroup)"
 assert_eq "active" "$(systemctl --user is-active "bounded-run-acbefore$$.scope" 2>&1 | head -1)" "recursive shim: the bystander scope is still active"
@@ -149,7 +156,7 @@ took=$((SECONDS - start))
 assert_eq "124" "${rc}" "--timeout 2 returns 124"
 assert_eq "yes" "$([[ ${took} -le 6 ]] && echo yes || echo no)" "--timeout enforced within seconds (took ${took}s)"
 sleep 1
-assert_eq "yes" "$(scope_gone "acto$$")" "timeout: its scope is stopped and gone"
+assert_eq "yes" "$(scope_gone_wait "acto$$")" "timeout: its scope is stopped and gone"
 assert_eq "0" "$(count_procs "acmarkb-${mark}")" "timeout: leftover processes = 0"
 assert_eq "active" "$(systemctl --user is-active "bounded-run-acbystander$$.scope" 2>&1 | head -1)" "timeout did NOT touch a bystander scope (command 'sleep 20')"
 assert_eq "active" "$(systemctl --user is-active "bounded-run-acbystander2$$.scope" 2>&1 | head -1)" "timeout did NOT touch a bystander scope running a command that does not match 'sleep 20'"

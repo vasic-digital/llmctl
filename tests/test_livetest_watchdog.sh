@@ -590,7 +590,11 @@ wdp=$(sed -n 's/.*started watchdog pid \([0-9]*\)/\1/p' "$EVD/signals.log")
 kill -INT "$M"; sleep 0.8; kill -INT "$M"; sleep 0.5; kill -TERM "$M" 2>/dev/null; sleep 0.5; kill -HUP "$M" 2>/dev/null
 RC=0; wait "$M" || RC=$?
 check "double SIGINT (+TERM) -> exit 2" "$RC" "2"
-[ ! -d "/proc/$wdp" ] && ok "watchdog reaped despite the second signal" || bad "watchdog $wdp leaked"
+# a second signal can interrupt the driver's `wait` on the watchdog, so the driver may exit while the watchdog is still finishing its
+# current sleep before the TERM trap runs (measured 2026-10-24: alive at the instant the driver exits, gone within 3 s, 2 of 5 runs):
+# the property is "gone within a bound", not "gone at the instant the driver returns"
+for _ in $(seq 1 50); do [ -d "/proc/$wdp" ] || break; sleep 0.1; done
+[ ! -d "/proc/$wdp" ] && ok "watchdog reaped despite the second signal (within 5 s)" || bad "watchdog $wdp leaked (still alive 5 s after the driver exited)"
 [ ! -e "$E/fake/running" ] && ok "profile stopped" || bad "profile still running"
 [ -s "$EVD/verdict.txt" ] && ok "verdict finalized" || bad "no verdict.txt"
 has "cleanup completed (cleanup stop logged)" "$EVD/stop.out" 'cleanup stop rc='
