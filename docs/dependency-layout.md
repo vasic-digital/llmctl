@@ -53,7 +53,7 @@ First match wins: 1. env override `LLMCTL_CONSTITUTION_DIR` / `LLMCTL_CONTAINERS
 silent fall-through); 2. the parent hub, when llmctl is at `<hub>/submodules/llmctl` (constitution = `<hub>`,
 containers/superspec = `<hub>/submodules/<name>`, vendored by the hub); 3. `<root>/constitution`,
 `<root>/submodules/<name>` (a consumer's own copy, Constitution section 11.4.76); 4. sibling clones for
-standalone use; 5. ancestor directories (`A/constitution`, `A/submodules/<name>`); 6. host fallback for the
+standalone use; 5. ancestor directories (`A/constitution`, `A/submodules/<name>`), a bounded walk: it stops before any directory named `.cache` (a cache is never a source), after `LLMCTL_RESOLVE_STOP_AT` when set, and after `$HOME`; 6. host fallback for the
 constitution only, **opt-in**: used only when `LLMCTL_HOST_FALLBACK_DIR` is set (there is no built-in host
 path). Nothing resolved: exit 1 with an actionable message. A real `<root>/constitution` directory (leftover
 of the old gitlink) is used but warned about.

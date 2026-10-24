@@ -15,7 +15,7 @@ tree or in the real hub is touched.
 
 Cases: 1 env override wins; 2 nested at <hub>/submodules/llmctl finds the hub constitution + flat siblings;
 3 standalone root layout (<root>/constitution, <root>/submodules/<name>); 4 sibling directories;
-5 ancestor walk (<ancestor>/submodules/<name>); 6 host fallback (constitution only); 7 nothing resolves ->
+5 ancestor walk (<ancestor>/submodules/<name>; case 15: bounded - a decoy under .cache / above LLMCTL_RESOLVE_STOP_AT / above HOME is ignored); 6 host fallback (constitution only); 7 nothing resolves ->
 non-zero + actionable message (negative control, never a silent pass); 8 a candidate that lacks the marker
 file is rejected (no false positive on an empty dir); 9 an invalid env override is an error, not a fallthrough.
 ```

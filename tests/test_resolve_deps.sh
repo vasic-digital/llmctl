@@ -163,4 +163,32 @@ resolve "${W14}" constitution
 assert_eq "${W14}/constitution" "${OUT}" "still resolves to the real directory"
 assert_contains "${ERR}" "real directory" "...with a warning on stderr"
 
+echo "== 15. decoy: the ancestor walk never reaches into a .cache directory, and honours LLMCTL_RESOLVE_STOP_AT / HOME =="
+# A stray copy under ~/.cache/submodules (a cache, not a source) must not satisfy resolution for a checkout that lives
+# below the same .cache directory (the 3.3.0 review finding: five suites failed whenever TMPDIR was under ~/.cache).
+D15="${WORK}/fakehome/.cache"; mk_llmctl "${D15}/work/llmctl"
+mk_constitution "${D15}/submodules/constitution"; mk_containers "${D15}/submodules/containers"
+resolve "${D15}/work/llmctl" constitution
+assert_eq "1" "${RC}" "decoy constitution under a .cache ancestor is NOT picked up (rc)"
+assert_eq "" "${OUT}" "decoy: nothing printed on stdout"
+resolve "${D15}/work/llmctl" containers
+assert_eq "1" "${RC}" "decoy containers under a .cache ancestor is NOT picked up (rc)"
+# positive control: the SAME layout without the .cache component resolves (so rc 1 above is the boundary, not a broken fixture)
+P15="${WORK}/plain15"; mk_llmctl "${P15}/work/llmctl"; mk_constitution "${P15}/submodules/constitution"
+resolve "${P15}/work/llmctl" constitution
+assert_eq "${P15}/submodules/constitution" "${OUT}" "positive control: same layout without .cache resolves"
+# explicit boundary: a decoy above LLMCTL_RESOLVE_STOP_AT is ignored, one at the boundary is used
+S15="${WORK}/stop15"; mk_llmctl "${S15}/inner/x/llmctl"; mk_constitution "${S15}/submodules/constitution"
+resolve "${S15}/inner/x/llmctl" constitution
+assert_eq "${S15}/submodules/constitution" "${OUT}" "without a boundary the ancestor above is used (control)"
+resolve "${S15}/inner/x/llmctl" constitution LLMCTL_RESOLVE_STOP_AT="${S15}/inner"
+assert_eq "1" "${RC}" "LLMCTL_RESOLVE_STOP_AT stops the walk below the decoy"
+mk_constitution "${S15}/inner/submodules/constitution"
+resolve "${S15}/inner/x/llmctl" constitution LLMCTL_RESOLVE_STOP_AT="${S15}/inner"
+assert_eq "${S15}/inner/submodules/constitution" "${OUT}" "the boundary directory itself is still examined"
+# HOME is a boundary: nothing above $HOME is examined
+H15="${WORK}/home15"; mk_llmctl "${H15}/home/u/llmctl"; mk_constitution "${H15}/submodules/constitution"
+resolve "${H15}/home/u/llmctl" constitution HOME="${H15}/home"
+assert_eq "1" "${RC}" "the walk stops at HOME (a copy above HOME is ignored)"
+
 test_finish
