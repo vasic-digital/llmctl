@@ -174,6 +174,7 @@ p = sys.argv[1]; d = json.load(open(p)); d["profiles"]["small"].setdefault("vali
 PY
 uenv "LLMCTL_UNVALIDATED=opt-out";                     assert_eq 0 "$(hrc)" "an opt-out env record of a profile the catalog says is NOT consumer-facing -> allowed (and logged)"
 cp -p "${TEST_TMP}/catalog.cf.bak" "${LLMCTL_CATALOG}"
+# shellcheck source=/dev/null  # the sourced libs are lib/<name>.sh under LLMCTL_ROOT (non-constant on purpose)
 ( export LLMCTL_DRY_RUN=1 LLMCTL_ROOT="${LLMCTL_ROOT}"; for l in common os_detect hardware service_linux; do source "${LLMCTL_ROOT}/lib/${l}.sh"; done; svc_install ) >/dev/null 2>&1 || true
 U="${LLMCTL_UNIT_DIR}/llmctl-llama@.service"
 assert_eq 1 "$(grep -cE '^ExecCondition=.*svc_hook\.sh.* validated %i' "${U}" 2>/dev/null || echo 0)" "the generated engine unit carries ExecCondition=... validated %i"

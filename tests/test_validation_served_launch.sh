@@ -13,6 +13,7 @@ test_setup_env
 JUDGE="${JUDGE_UNDER_TEST:-${LLMCTL_ROOT}/lib/validate_judge.py}"
 # start_engine runs inside $(...): its pids go to a FILE outside TEST_TMP (an array append would die with the subshell)
 PIDS_FILE="$(mktemp)"
+# shellcheck disable=SC2154  # p is assigned by the read inside the trap string
 trap 'while read -r p; do [[ -n "$p" ]] && kill "$p" 2>/dev/null || true; done < "${PIDS_FILE}"; rm -f "${PIDS_FILE}"; test_teardown_env' EXIT
 D="${TEST_TMP}/models/vision"; O="${TEST_TMP}/other"; mkdir -p "${D}" "${O}"
 printf 'model bytes A\n' > "${D}/model.gguf"; printf 'proj\n' > "${D}/mmproj.gguf"; printf 'proj\n' > "${O}/mmproj.gguf"

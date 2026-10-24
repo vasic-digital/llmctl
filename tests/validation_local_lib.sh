@@ -12,6 +12,7 @@
 set -euo pipefail
 VL_FIX="${LLMCTL_ROOT}/tests/fixtures/validation"
 VL_LLMCTL="${VL_LLMCTL_OVERRIDE:-${LLMCTL_ROOT}/bin/llmctl}"   # override: a mutant tree (tests/test_validation_mutants.sh)
+# shellcheck disable=SC2034  # used by the test files that source this library
 VL_JUDGE="$(cd "$(dirname "${VL_LLMCTL}")/.." && pwd)/lib/validate_judge.py"
 VL_PIDS_FILE="${VL_PIDS_FILE:-$(mktemp)}"
 

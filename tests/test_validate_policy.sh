@@ -70,7 +70,7 @@ assert_eq 2 "${rc}" "a real validation of the stopped profile (quarantine start;
 assert_eq 1 "$(gw_count '^svc_start small')" "...it was started (in quarantine) for the validation"
 assert_eq 1 "$(b2i cmp -s "${TEST_TMP}/small.env.before" "${LLMCTL_SERVICES_DIR}/small.env")" "the env record is the enabled (public) one again, byte for byte"
 assert_eq "" "$(sed -n 's/^LLMCTL_QUARANTINE_UNTIL=//p' "${LLMCTL_SERVICES_DIR}/small.env")" "no quarantine marker left in the env record"
-hrc=0; LLMCTL_ROOT="${GW_TREE}" bash "${GW_TREE}/lib/svc_hook.sh" validated small > "${TEST_TMP}/hk.out" 2>&1 || hrc=$?
+LLMCTL_ROOT="${GW_TREE}" bash "${GW_TREE}/lib/svc_hook.sh" validated small > "${TEST_TMP}/hk.out" 2>&1 || true
 assert_eq 0 "$(b2i grep -q 'expired validation-quarantine' "${TEST_TMP}/hk.out")" "the unit's ExecCondition no longer sees a stale quarantine record"
 unset GW_REAL_VALIDATE
 

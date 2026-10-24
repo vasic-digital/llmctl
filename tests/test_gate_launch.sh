@@ -28,6 +28,7 @@ PY2
 fi
 L="${GW_LLMCTL}"
 b2i() { if "$@"; then echo 1; else echo 0; fi; }
+# shellcheck disable=SC2010  # the runtime dir holds only <name>.run files written by the harness; names are plain
 running() { ls "${LLMCTL_RUNTIME_DIR}" | grep '\.run$' | sed 's/\.run$//' | sort | tr '\n' ' '; }
 reset() { gw_calls_reset; rm -f "${LLMCTL_RUNTIME_DIR:?}"/*.run "${GW_ACTIVE_DIR:?}"/* 2>/dev/null || true; }
 
