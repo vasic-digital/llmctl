@@ -83,7 +83,7 @@ sched_rank_for_capability() {
 # Runs <command> under an exclusive advisory lock on the scheduler state
 # directory, so two concurrent llmctl invocations (e.g. a cron job and an
 # interactive user) never interleave their read-budgets-then-write-reservation
-# sequence. A second invocation BLOCKS until the first releases the lock,
+# sequence. A second invocation WAITS (up to LLMCTL_SCHED_LOCK_WAIT seconds, default 900; then exit 2) for the first to release the lock,
 # then runs against fresh state - it never proceeds on a stale read (FR-043).
 # An environment variable of this name would be imported as a shell variable and bypass the gate: drop it at load time.
 unset _sched_rollback_nogate LLMCTL_SCHED_NO_GATE

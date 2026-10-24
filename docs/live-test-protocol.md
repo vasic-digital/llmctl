@@ -123,7 +123,7 @@ exits 0 with verdict `GATE-OK` (not PASS). The runner uses it between runs.
    `validate --host` (an installed copy elsewhere is refused). Explicit override: `LT_LLMCTL_TREE=<dir>`; it is honoured and logged in `overrides.log`.
 4. The scheduler lock `<runtime dir>/.scheduler.lock` (`LLMCTL_RUNTIME_DIR`, else `$XDG_RUNTIME_DIR/llmctl`, else
    `<state>/run`) is not held by another process (non-blocking shared probe, never held past the check). Reason:
-   `scheduler::with_lock` takes `flock -x` with NO timeout, so a holder makes both our start and our stops queue behind it.
+   `scheduler::with_lock` takes `flock -x` bounded by `LLMCTL_SCHED_LOCK_WAIT` (default 900 s, then exit 2), so a holder makes both our start and our stops queue behind it.
    The refusal names the holder when `fuser` can.
 5. `llmctl vision help` (vision suites) or `llmctl help` (all other suites) shows `--host` (checked again after the start).
 

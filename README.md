@@ -68,7 +68,7 @@ the resolver's message.
 from the constitution hub (or `LLMCTL_*_DIR`) - run `make deps`, see [`docs/dependency-layout.md`](docs/dependency-layout.md).
 
 > **Release 3.3.0** makes the model validation gate enforced (strict by default), resolves `constitution` / `containers` / `superspec` from the constitution hub instead of vendoring them,
-> and documents llmctl's governance role (below). Typed local decisions (`noul` / `choice` / `score`) behind a secured HTTPS gateway arrived in 3.2.0.
+> and documents llmctl's governance role (below). Typed local decisions (`noul` / `choice` / `score`) behind a secured HTTPS gateway arrived in 3.1.0.
 > What changed and what you must do when upgrading: [`CHANGELOG.md`](CHANGELOG.md) (migration table).
 > What it does not do, and what was not verified live: [`docs/limitations.md`](docs/limitations.md).
 > Building the decision binary needs Go >= 1.25; everything else still needs only bash, python3 and curl.
@@ -307,6 +307,7 @@ fastest path to a running model.
 | [`docs/release-3.2.0-checklist.md`](docs/release-3.2.0-checklist.md) | The 3.2.0 release checklist: gates, merge order, version bump, tag and publication steps |
 | [`docs/release-3.2.1-checklist.md`](docs/release-3.2.1-checklist.md) | The 3.2.1 (documentation and help-text correction) release checklist |
 | [`docs/release-3.2.2-checklist.md`](docs/release-3.2.2-checklist.md) | The 3.2.2 release checklist (prepared, not executed against a remote) |
+| [`docs/release-3.3.0-checklist.md`](docs/release-3.3.0-checklist.md) | The 3.3.0 release checklist: test results with their real scope, review verdict, operator commands (prepared, not executed against a remote) |
 | [`docs/scripts/bump_version.md`](docs/scripts/bump_version.md) | `scripts/release/bump_version.sh`: what it rewrites for a version bump and what stays manual |
 | [`docs/ports.md`](docs/ports.md) | Every port llmctl uses (generated from the catalog), the `LLMCTL_PORT_<PROFILE>` override named in the port-conflict message, fixed versus dynamic assignment, collisions seen on a real host |
 | [`docs/hardware-tiers.md`](docs/hardware-tiers.md) | The `below-minimum`/`baseline`/`workstation`/`datacenter` tier classification rules, plus decision-profile tiers and multi-instance capacity semantics |

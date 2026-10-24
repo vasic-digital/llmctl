@@ -53,7 +53,7 @@ command. Scope: `lib/validate.sh`, `lib/validate_judge.py`, `lib/scheduler.sh`, 
 - **`llmctl models pins`** supply-chain gate and an UNPINNED-download warning; RAM budget capped at 60% of MemTotal.
 - **Host-safety tooling**: `verify-persistence`, boot self-check, pressure time series, pressure advisory, `root-steps` (`/tmp` cap, earlyoom), app.slice swap cap.
 - **Validation of `decide-*` and colibri profiles** is possible (never-executed ones reported NOT VALIDATED); a validation record names its host.
-- **Class-sweep guard tests**: `test_no_trap_replacement.sh`, `test_no_secret_on_argv.sh`, `test_cluster_header_signal.sh`, `test_tls_off_allowlist.sh`, `test_no_auth_redirect_forwarding.sh` (each with a control needle); see `docs/qa/class-sweep-followups.md`.
+- **Class-sweep guard tests**: `test_no_trap_replacement.sh`, `test_no_secret_on_argv.sh`, `test_cluster_header_signal.sh`, `test_tls_off_allowlist.sh`, `test_no_auth_redirect_forwarding.sh`, `test_no_lock_fd_leak.sh`, `test_decide_validate_model_alias.sh` (each with a control needle; the redirect guard is a presence scan, not a behavioural test of the redirect handlers); see `docs/qa/class-sweep-followups.md`.
 - **`docs/diagrams/`** (validation gate state machine, decide gateway request flow, hub-engine placement, Vision tiers) and **`tests/test_docs_diagrams_governance.sh`**.
 - Evidence pages under `docs/qa/` (`small-live-2026-10-14`, `vision-live-2026-10-14`, `vision-live-nezha-2026-10-14`).
 
@@ -64,10 +64,12 @@ command. Scope: `lib/validate.sh`, `lib/validate_judge.py`, `lib/scheduler.sh`, 
 - `constitution`, `submodules/containers` and `submodules/superspec` are no longer gitlinks of this repository.
 - README, user manual, FAQ, validation, decision-models, decide-gateway and dependency-layout documents now state llmctl's hub-engine role and the constitution anchors.
 - Version pins moved from 3.2.2 to 3.3.0 (`VERSION`, `bin/llmctl`, README banner, `docs/*.md` statements, OpenAPI `info.version`).
+- `scheduler::with_lock` now gives up after `LLMCTL_SCHED_LOCK_WAIT` seconds (default 900) with exit 2 instead of waiting forever; test helpers close inherited lock file descriptors.
+- The validator's decide question body names the model `smoke` (was `validate`), so decide-* profiles can be judged instead of ending UNDETERMINED ("Unknown model"); `tests/test_decide_validate_model_alias.sh`.
 
 ### Fixed
 
-- **Class sweep 2026-10-22** (test-first, RED observed): `lib/cluster.sh` no longer writes the bearer token to a temp file (`-H @/dev/fd/3`; the file survived a SIGTERM); two tests replaced an earlier EXIT trap and leaked a fixture process; keys were expanded onto command lines in 5 tests and 6 evidence scripts (now `-H @file`); `scripts/golden/run_golden.py` and `evidence/pin_reverify.py` no longer forward `Authorization` across redirects; every TLS-verification-off site is justified in place; `tests/test_decide_service.sh` asserted a stale `KeepAlive` value (red since e0e7423).
+- **Class sweep 2026-10-22** (test-first, RED observed): `lib/cluster.sh` no longer writes the bearer token to a temp file (`-H @/dev/fd/3`; the file survived a SIGTERM); one test (`test_decide_download.sh`) replaced an earlier EXIT trap and leaked a fixture process, and `test_download_resume.sh` was edited for the same pattern although its earlier PID was already killed (harmless: it re-signals a dead PID at exit); keys were expanded onto command lines in 5 tests and 6 evidence scripts (now `-H @file`); `scripts/golden/run_golden.py` and `evidence/pin_reverify.py` no longer forward `Authorization` across redirects; every TLS-verification-off site is justified in place; `tests/test_decide_service.sh` asserted a stale `KeepAlive` value (red since e0e7423).
 - Review rounds of 2026-10-14 and 2026-10-15 (judge soundness, quarantine env restore, validation lock, gateway auto mode, plan memory accounting, bounded-run
   false timeout, interrupted validation leaving a model running) and the dependency-resolver rounds 1-5 - each entry below names the finding and its test.
 
@@ -90,6 +92,8 @@ command. Scope: `lib/validate.sh`, `lib/validate_judge.py`, `lib/scheduler.sh`, 
 - No profile holds a fresh validation record after this release; `vision-pro`, the decide-* and colibri profiles have never been run against a real model.
 - The hosted-Jev parity statements, the HTTPS/CA handling of the claude_toolkit side, and macOS behaviour are not verified live here.
 - Manual QA (Constitution §11.4.185) has not been performed on this release.
+- The counts in the first paragraph cover `v3.2.2..f42bad6`; the section date is the date the notes were drafted, not a tag date.
+- `pin_reverify.py` keeps `Authorization` on a same-host https to http redirect; the TLS-off and redirect guard tests are pattern scans with known blind spots.
 
 ### Detailed entries (moved from "Unreleased")
 
