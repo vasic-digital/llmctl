@@ -25,8 +25,8 @@ repository as an honest record of that process.
 
 ## 3.3.0 (2026-10-22)
 
-A **minor release** (version 3.2.2 -> 3.3.0, proposed). Why minor and not patch: since `v3.2.2` there are 68 commits (215 files, about 15.7k insertions) that
-add behaviour and change defaults - the model validation gate is now **enforced** (quarantine until PASS, strict by default, every entry point), the
+A **minor release candidate** (version 3.2.2 -> 3.3.0; not yet tagged or published - the date above is the date the notes were drafted, set it at tag time). Why minor and not patch: `git diff --shortstat v3.2.2..31479f9` (the candidate before the review-fix commits, exports not counted) is 72 commits, 263 files, 16828 insertions, 994 deletions (the earlier "68 commits / 215 files / 15.7k" was `v3.2.2..f42bad6`) that
+add behaviour and change defaults - the model validation gate is now **enforced** (quarantine until PASS, strict by default - for systemd units once `llmctl install` has regenerated them; a legacy unit keeps `LLMCTL_VALIDATE_STRICT` default 0 - every entry point), the
 dependency layout changed (`constitution`, `containers`, `superspec` are resolved from the hub, no longer vendored gitlinks), the judge rules were rewritten
 (every suite hash changed, so every existing validation record is stale), plus new host-safety tooling and a supply-chain pin gate. None of it removes a CLI
 command. Scope: `lib/validate.sh`, `lib/validate_judge.py`, `lib/scheduler.sh`, `lib/svc_hook.sh`, `lib/resolve_deps.sh`, `scripts/link_deps.sh`, `scripts/hostsafety/`,
@@ -92,7 +92,7 @@ command. Scope: `lib/validate.sh`, `lib/validate_judge.py`, `lib/scheduler.sh`, 
 - No profile holds a fresh validation record after this release; `vision-pro`, the decide-* and colibri profiles have never been run against a real model.
 - The hosted-Jev parity statements, the HTTPS/CA handling of the claude_toolkit side, and macOS behaviour are not verified live here.
 - Manual QA (Constitution §11.4.185) has not been performed on this release.
-- The counts in the first paragraph cover `v3.2.2..f42bad6`; the section date is the date the notes were drafted, not a tag date.
+- The counts in the first paragraph cover `v3.2.2..31479f9`; the section date is the date the notes were drafted, not a tag date.
 - `pin_reverify.py` keeps `Authorization` on a same-host https to http redirect; the TLS-off and redirect guard tests are pattern scans with known blind spots.
 
 ### Detailed entries (moved from "Unreleased")
