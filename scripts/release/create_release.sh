@@ -111,17 +111,28 @@ release_generate_changelog() {
 # release_since_tag <repo-dir> [<version>]
 # The newest RELEASE tag (v<digit>...) reachable from HEAD, else the root commit. `--match 'v[0-9]*'` matters: a plain
 # `git describe --tags` can pick a non-release tag such as an annotated `helixconstitution-v70` (same commit as v3.2.2 in
-# this repository) and put that name in the changelog header. When <version> is given, that version's own tag
-# (v<version> and <version>) is EXCLUDED: the documented order is "push the annotated tag, then run this script", so the
-# tag being released is already on HEAD and would otherwise be returned, giving an empty changelog.
+# this repository) and put that name in the changelog header. When <version> is given, the tag(s) of the release being
+# made are EXCLUDED, because the documented order is "push the annotated tag, then run this script" - the tag being
+# released is already on HEAD and would otherwise be returned, giving an empty changelog:
+#   - always v<version> itself (a leading "v" on <version> is ignored; the exclusion is the exact name, so a
+#     similar-prefix tag such as v1.1.01 is NOT excluded when releasing 1.1.0);
+#   - for a FINAL version (no "-" pre-release part) also its own pre-release tags v<version>-* (rc/beta). DECIDED: a final
+#     release's changelog covers everything since the previous release, the rc content included; anchoring at the rc
+#     tag would give an empty changelog whenever the rc and the final share a commit. A pre-release (1.1.0-rc.2)
+#     excludes only itself, so it reads "since rc.1".
+# Tags are matched by git's own glob (--exclude); no unprefixed form is needed, since --match already limits to v[0-9]*.
 release_since_tag() {
   local repo="$1" ver="${2:-}"
-  local -a excl=()
-  if [[ -n "${ver}" ]]; then
-    ver="${ver#v}"
-    excl=(--exclude "v${ver}" --exclude "${ver}")
+  if [[ -z "${ver}" ]]; then
+    git -C "${repo}" describe --tags --match 'v[0-9]*' --abbrev=0 2>/dev/null || git -C "${repo}" rev-list --max-parents=0 HEAD
+    return
   fi
-  git -C "${repo}" describe --tags --match 'v[0-9]*' "${excl[@]}" --abbrev=0 2>/dev/null || git -C "${repo}" rev-list --max-parents=0 HEAD
+  ver="${ver#v}"
+  if [[ "${ver}" == *-* ]]; then
+    git -C "${repo}" describe --tags --match 'v[0-9]*' --exclude "v${ver}" --abbrev=0 2>/dev/null || git -C "${repo}" rev-list --max-parents=0 HEAD
+  else
+    git -C "${repo}" describe --tags --match 'v[0-9]*' --exclude "v${ver}" --exclude "v${ver}-*" --abbrev=0 2>/dev/null || git -C "${repo}" rev-list --max-parents=0 HEAD
+  fi
 }
 
 # release_migration_notes <CHANGELOG.md> <version>

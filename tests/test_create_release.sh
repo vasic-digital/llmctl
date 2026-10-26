@@ -157,6 +157,46 @@ assert_eq "v1.0.0" "$(release_since_tag "${TREPO}" "v1.1.0")" "since-tag exclude
 assert_eq "v1.0.0" "$(release_since_tag "${TREPO}" "1.1.0")" "since-tag excludes the release tag given without the leading v"
 assert_contains "$(release_generate_changelog "${TREPO}" "$(release_since_tag "${TREPO}" "v1.1.0")" 2>/dev/null)" "new thing" "changelog is not empty when the release tag is already on HEAD"
 
+# --- 7c. the WIRING: _release_main must pass the version to release_since_tag (a revert here leaves 7b green) -----
+# A fixture repo that carries its own copy of the script, so _release_root is the fixture; tag-first order: v1.1.0 is on HEAD.
+mk_fixture_repo() { # <dir>: v1.0.0 -> "fix: early" -> v1.1.01 (similar-prefix tag) -> "feat: new thing" -> v1.1.0 on HEAD
+  local d="$1"
+  mkdir -p "${d}/scripts/release"; cp "${LLMCTL_ROOT}/scripts/release/create_release.sh" "${d}/scripts/release/"
+  git init -q "${d}"
+  (
+    cd "${d}"
+    git config user.email test@example.com; git config user.name test
+    echo a > a.txt; git add -A; git commit -qm "chore: init"; git tag -a v1.0.0 -m v1.0.0
+    echo b > b.txt; git add b.txt; git commit -qm "fix: early fix"; git tag -a v1.1.01 -m v1.1.01
+    echo c > c.txt; git add c.txt; git commit -qm "feat: new thing"; git tag -a v1.1.0 -m v1.1.0
+  )
+}
+WREPO="${TEST_TMP}/wiring_repo"; mk_fixture_repo "${WREPO}"
+mkdir -p "${TEST_TMP}/wiring_home"
+wout="$(HOME="${TEST_TMP}/wiring_home" LLMCTL_RELEASE_STATE_DIR="${TEST_TMP}/wiring_state" PATH="${FAKE_BIN}:${PATH}" bash "${WREPO}/scripts/release/create_release.sh" --dry-run "v1.1.0" 2>&1)" && wrc=0 || wrc=$?
+assert_eq "0" "${wrc}" "wiring: the dry-run in a fixture repo with the release tag on HEAD succeeds"
+assert_contains "${wout}" "since v1.1.01)" "wiring: _release_main passes the version (the tag on HEAD is skipped, the SIMILAR-PREFIX tag v1.1.01 is not)"
+assert_contains "${wout}" "new thing" "wiring: the generated changelog is not empty when the release tag is on HEAD"
+assert_eq "v1.1.01" "$(release_since_tag "${WREPO}" "1.1.0")" "similar prefix: excluding v1.1.0 must not also exclude v1.1.01"
+wout2="$(HOME="${TEST_TMP}/wiring_home" PATH="${FAKE_BIN}:${PATH}" bash "${WREPO}/scripts/release/create_release.sh" --dry-run "1.1.0" 2>&1)" || true
+assert_contains "${wout2}" "since v1.1.01)" "wiring: the version given WITHOUT a leading v is handled too"
+
+# --- 7d. rc and final tag on the same commit: DECIDED behaviour -------------------------------------------------------
+# A FINAL release (no pre-release part) also excludes its own pre-release tags, so its changelog covers everything since
+# the previous release, rc content included, and is not empty. A PRE-RELEASE excludes only itself (rc.2 is "since rc.1").
+RREPO="${TEST_TMP}/rc_repo"; git init -q "${RREPO}"
+(
+  cd "${RREPO}"
+  git config user.email test@example.com; git config user.name test
+  echo a > a.txt; git add -A; git commit -qm "chore: init"; git tag -a v1.0.0 -m v1.0.0
+  echo b > b.txt; git add b.txt; git commit -qm "feat: rc content"; git tag -a v1.1.0-rc.1 -m rc1
+  echo c > c.txt; git add c.txt; git commit -qm "fix: after rc1"; git tag -a v1.1.0-rc.2 -m rc2
+)
+assert_eq "v1.1.0-rc.1" "$(release_since_tag "${RREPO}" "1.1.0-rc.2")" "pre-release rc.2 releasing: since rc.1 (only itself is excluded)"
+git -C "${RREPO}" tag -a v1.1.0 -m final
+assert_eq "v1.0.0" "$(release_since_tag "${RREPO}" "1.1.0")" "final release with rc.1/rc.2/final all on HEAD: since the previous release v1.0.0 (not the rc, not empty)"
+assert_contains "$(release_generate_changelog "${RREPO}" "$(release_since_tag "${RREPO}" "1.1.0")" 2>/dev/null)" "rc content" "final changelog includes the rc's commits"
+
 # --- 8. migration notes from CHANGELOG.md are carried into the release notes ---------------------------------
 CL="${TEST_TMP}/CHANGELOG.md"
 printf '%s\n' '# Changelog' '' '## 3.4.0 (2026-01-01)' '' '### Added' '- thing' '' '### Migration notes' '' '- run `make deps` first' '- re-validate every profile' '' '### Known limitations' '- none' '' '## 3.3.0 (2026-10-22)' '' '### Migration notes' '- old note' > "${CL}"
