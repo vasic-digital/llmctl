@@ -429,6 +429,9 @@ svc_stale_units() {
   for f in "$(svc_unit_dir)"/llmctl-*.service; do
     [[ -f "${f}" ]] || continue
     base="$(basename "${f}")"
+    # The periodic revalidation service is a oneshot with no Restart=: the restart-bound checks below are about units that
+    # restart, and flagged it "too weak" (a false stale warning right after every `llmctl install`, 2026-10-26).
+    [[ "${base}" == "${REVALIDATE_SERVICE_UNIT}" ]] && continue
     if awk '/^\[/{sec=$0} sec=="[Service]" && /^[[:space:]]*StartLimit(Interval(Sec)?|Burst)=/{found=1} END{exit !found}' "${f}"; then
       printf '%s: StartLimit*= inside [Service] is ignored by systemd (restart bound not applied); regenerate with: llmctl install\n' "${base}"
     fi
@@ -446,7 +449,9 @@ svc_stale_units() {
     esac
     expected="$(printf '%s\n' "${expected}" | grep -v -x '\[Service\]/Environment:LLMCTL_DECIDE_BIN' || true)"
     got="$(_svc_unit_directives < "${f}")"
-    missing="$(comm -23 <(printf '%s\n' "${expected}") <(printf '%s\n' "${got}") | sed 's#^\[[A-Za-z]*\]/##' | paste -sd, - | sed 's/,/, /g')"
+    # LC_ALL=C: _svc_unit_directives sorts with LC_ALL=C; comm reads its inputs in the AMBIENT collation, so under en_US.UTF-8 it
+    # reported "not in sorted order" (and failed) or compared wrongly - the stale-unit detector was unreliable on non-C locales.
+    missing="$(LC_ALL=C comm -23 <(printf '%s\n' "${expected}") <(printf '%s\n' "${got}") | sed 's#^\[[A-Za-z]*\]/##' | paste -sd, - | sed 's/,/, /g')"
     if [[ -n "${missing}" ]]; then
       printf '%s: lacks directive(s) the current generator writes (%s); regenerate with: llmctl install\n' "${base}" "${missing}"
     fi
@@ -463,8 +468,89 @@ svc_stale_units() {
   return 0
 }
 
+# --- periodic revalidation (2026-10-26) ----------------------------------------------------------------------------------
+# A signed validation PASS record expires (LLMCTL_VALIDATION_MAX_AGE, default 7 d); an engine validated once and left running
+# is then skipped (ExecCondition exit 77) at the next boot. llmctl-revalidate.timer runs `llmctl revalidate` daily: it
+# re-validates the RUNNING engines whose record is due and replaces the record on PASS. It never stops, restarts or demotes an
+# engine (lib/validate.sh revalidate_all). Opt out with LLMCTL_REVALIDATE_TIMER=0 at `llmctl install` (the units are still written).
+REVALIDATE_SERVICE_UNIT="llmctl-revalidate.service"
+REVALIDATE_TIMER_UNIT="llmctl-revalidate.timer"
+
+_svc_revalidate_service_body() {
+  cat <<EOF
+[Unit]
+Description=llmctl periodic revalidation of the running engines (refreshes validation PASS records; never stops or restarts an engine)
+After=network-online.target
+
+[Service]
+Type=oneshot
+$(_svc_env LLMCTL_ROOT "${LLMCTL_ROOT}")
+$(_svc_env LLMCTL_STATE_DIR "${LLMCTL_STATE_DIR}")
+$(_svc_env LLMCTL_LOG_DIR "${LLMCTL_LOG_DIR}")
+$(_svc_env LLMCTL_SERVICES_DIR "${LLMCTL_SERVICES_DIR}")
+$(_svc_env LLMCTL_CONFIG_DIR "${LLMCTL_CONFIG_DIR}")
+$(_svc_env LLMCTL_DATA_DIR "${LLMCTL_DATA_DIR}")
+$(_svc_env LLMCTL_RUNTIME_DIR "${LLMCTL_RUNTIME_DIR}")
+$(_svc_decide_bin_env_line)
+# Operator overrides (LLMCTL_VALIDATION_MAX_AGE - keep it equal to the value the engine units use -, LLMCTL_REVALIDATE_AFTER,
+# LLMCTL_VALIDATE_REPEAT, ...) go in a drop-in or this optional file; no secret belongs in either.
+EnvironmentFile=-$(_svc_pct "${LLMCTL_STATE_DIR}")/revalidate.conf
+ExecStart=/bin/bash $(_svc_qx "${LLMCTL_ROOT}/bin/llmctl") revalidate
+# A bounded, low-priority job: it asks each due engine a handful of known-answer questions and exits. A non-PASS makes the unit
+# FAILED (visible in systemctl --user --failed); there is no Restart= - the next timer tick retries.
+Nice=10
+IOSchedulingClass=idle
+TimeoutStartSec=3600
+$(_svc_hardening basic)
+StandardOutput=append:$(_svc_pct "${LLMCTL_LOG_DIR}")/revalidate.log
+StandardError=append:$(_svc_pct "${LLMCTL_LOG_DIR}")/revalidate.log
+EOF
+}
+
+_svc_revalidate_timer_body() {
+  cat <<'EOF'
+[Unit]
+Description=llmctl daily revalidation of the running engines (refreshes validation PASS records before they expire)
+
+[Timer]
+# shortly after login/boot (the engines are up), then daily; a missed run (host off) fires at the next start
+OnBootSec=30min
+OnCalendar=daily
+Persistent=true
+RandomizedDelaySec=1h
+
+[Install]
+WantedBy=timers.target
+EOF
+}
+
 # --- unit installation -------------------------------------------------------
+# _svc_install_plan - what svc_install WOULD do, printed and never done (LLMCTL_DRY_RUN=1, dry_run_pure): no directory is
+# created, no unit / marker / drop-in is written, no systemctl / loginctl is run. Read-only: it only looks at what exists.
+_svc_install_plan() {
+  local unit_dir u _envf _p
+  unit_dir="$(svc_unit_dir)"
+  printf '[dry-run] llmctl install: NOTHING is written or changed (LLMCTL_DRY_RUN=1); a real run would:\n'
+  for u in llmctl-llama@.service llmctl-onnx@.service llmctl-colibri@.service; do
+    printf '[dry-run]   write %s/%s\n' "${unit_dir}" "${u}"
+  done
+  if [[ -f "${unit_dir}/${DECIDE_GATEWAY_UNIT}" ]]; then
+    printf '[dry-run]   regenerate %s/%s (installed already)\n' "${unit_dir}" "${DECIDE_GATEWAY_UNIT}"
+  fi
+  for _envf in "${LLMCTL_SERVICES_DIR}"/*.env; do
+    [[ -f "${_envf}" ]] || continue
+    _p="$(sed -n 's/^LLMCTL_PROFILE=//p' "${_envf}" | head -1 | tr -d "'")"
+    [[ -n "${_p}" ]] && printf '[dry-run]   write the per-profile memory drop-in of %s\n' "${_p}"
+  done
+  printf '[dry-run]   write %s/%s and %s/%s (the periodic revalidation timer)\n' "${unit_dir}" "${REVALIDATE_SERVICE_UNIT}" "${unit_dir}" "${REVALIDATE_TIMER_UNIT}"
+  printf '[dry-run]   write %s (the unit-level validation gate marker)\n' "$(enforcement_file)"
+  printf '[dry-run] systemctl --user daemon-reload\n'
+  [[ "${LLMCTL_REVALIDATE_TIMER:-1}" == "0" ]] || printf '[dry-run] systemctl --user enable --now %s\n' "${REVALIDATE_TIMER_UNIT}"
+  printf '[dry-run] loginctl enable-linger %s\n' "${USER:-$(id -un)}"
+}
+
 svc_install() {
+  if dry_run_pure; then _svc_install_plan; return 0; fi
   local unit_dir; unit_dir="$(svc_unit_dir)"
   ensure_dir "${unit_dir}"
   ensure_state_dirs
@@ -485,6 +571,8 @@ svc_install() {
     "${memhigh}" "${memmax}" > "${unit_dir}/llmctl-onnx@.service"
   _svc_engine_unit_body "llmctl colibri inference server (profile %i)" basic \
     "${memhigh}" "${memmax}" > "${unit_dir}/llmctl-colibri@.service"
+  _svc_revalidate_service_body > "${unit_dir}/${REVALIDATE_SERVICE_UNIT}"
+  _svc_revalidate_timer_body > "${unit_dir}/${REVALIDATE_TIMER_UNIT}"
   info "installed systemd user units into ${unit_dir} (MemoryHigh=${memhigh}M MemoryMax=${memmax}M)"
   # The decision gateway's boot service is regenerated too when it is installed: units written by an
   # earlier llmctl keep their old body (G-067: StartLimitIntervalSec in [Service]) until this runs.
@@ -508,6 +596,13 @@ svc_install() {
   done
 
   _svc_sys daemon-reload
+  if [[ "${LLMCTL_REVALIDATE_TIMER:-1}" == "0" ]]; then
+    info "${REVALIDATE_TIMER_UNIT} written but NOT enabled (LLMCTL_REVALIDATE_TIMER=0): validation records will expire; run 'llmctl revalidate' yourself"
+  elif _svc_sys enable --now "${REVALIDATE_TIMER_UNIT}"; then
+    info "${REVALIDATE_TIMER_UNIT} enabled: running engines are re-validated daily (never stopped or restarted by it)"
+  else
+    warn "could not enable ${REVALIDATE_TIMER_UNIT}: validation records will expire; enable it by hand: systemctl --user enable --now ${REVALIDATE_TIMER_UNIT}"
+  fi
   # Only now do the units carry the unit-level validation gate: switch the hooks over to it (review 2026-10-15
   # finding 1; lib/common.sh enforcement_installed). Units installed by an older llmctl never reach this line.
   if enforcement_mark_installed; then

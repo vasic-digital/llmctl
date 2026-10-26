@@ -25,6 +25,24 @@ repository as an honest record of that process.
 
 ## Unreleased
 
+* **fix(validate): decide profiles could never be validated on a real engine (`Unknown model.`), `LLMCTL_DRY_RUN=1 llmctl install` wrote files, and no periodic refresh of the validation records existed (2026-10-26, T1).**
+  * `lib/validate_judge.py` `decide_ask` wrote `{"model": "validate", ...}` into the question file, but `llmctl-decide smoke --question-file` parses it against ONE profile, `smoke`
+    (`internal/gateway/smoke.go`); every decide profile therefore ended `UNDETERMINED ... question file refused: Unknown model.` and, strict by default, `llmctl restart decide-max` stopped it
+    (restart without a fresh record = stop, quarantine start, validate, publish-or-stop: by design; the defect was the model id). The stub and the closed-port check of
+    `test_validation_decide_colibri.sh` could not see it (the driver dials the engine before it parses the file). `tests/test_validate_decide_real_driver.sh`: the real driver built from
+    the tree, a listening fake letter-logit engine (`tests/fixtures/validation/fake_letter_engine.py`), a wrong-answering control, and a paired mutation (the old id -> exit 2 `Unknown model`).
+  * `LLMCTL_DRY_RUN=1 llmctl install` printed `[dry-run]` for systemctl/loginctl but still wrote the three unit templates, the unit-level validation gate marker `unit-enforcement` (a host-wide
+    behaviour switch) and the state directories. Now `dry_run_pure` (`lib/common.sh`): install prints its plan and writes nothing, on both backends. The historical file-writing dry run is
+    the explicit test seam `LLMCTL_DRY_RUN_WRITE=1` (set by `tests/helpers.sh`). `tests/test_dry_run_writes_nothing.sh` snapshots the tree before/after, with a control and a paired mutation.
+  * `llmctl revalidate [--force]` + `llmctl-revalidate.timer` (daily, installed and enabled by `llmctl install`, `LLMCTL_REVALIDATE_TIMER=0` opts out): refreshes the PASS records of the RUNNING engines
+    before they expire (an engine validated once and left running was skipped with exit 77 at the first boot after expiry). It stages the new record and promotes it only on PASS: a FAIL / UNDETERMINED
+    leaves the live record byte-identical and the engine running (nothing is stopped, restarted or withdrawn). `tests/test_revalidate.sh` (fixture engine, real signed records, units, four
+    paired mutations). See `docs/validation.md#periodic-revalidation`.
+  * `svc_stale_units` (the "stale unit" check used by `llmctl doctor` and the decide gate) listed the NEW `llmctl-revalidate.service` as "restart bound too weak": it is a oneshot with no
+    `Restart=` by design. It is now skipped by name (`REVALIDATE_SERVICE_UNIT`), so a freshly installed host reports nothing stale. Covered by `tests/test_revalidate.sh` section 6 + mutant M-D.
+  * `svc_stale_units` sorted the template directive lists with `LC_ALL=C` but compared them with a locale-dependent `comm`, which aborts ("file 1 is not in sorted order") under a UTF-8 locale such
+    as `en_US.UTF-8` and silently turned the whole check into a no-op. Now `LC_ALL=C comm -23`. Regression assertion + paired mutant in `tests/test_service_ops_hardening.sh` (runs under `en_US.UTF-8`).
+
 * **chore(deps): one source of truth - llmctl no longer vendors `constitution`, `submodules/containers` or `submodules/superspec`
   (owner mandate 2026-10-21; branch `chore/single-source-layout`).** llmctl lives inside the constitution hub
   (`constitution/submodules/llmctl`), so its nested `constitution` made a hub -> llmctl -> hub cycle (the

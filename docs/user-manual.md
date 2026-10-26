@@ -35,7 +35,7 @@ running profile see `docs/integrations.md`.
 | [`models list`](#models-list) | list catalog profiles |
 | [`models download`](#models-download-profile) | verified model download |
 | [`models verify`](#models-verify-profile) | re-verify a downloaded profile's checksums |
-| [`validate`, `vision validate`, `validate-all`, `require-validated`](#validate--vision-validate--validate-all--require-validated) | deterministic known-answer validation of a served model, and the consumer check |
+| [`validate`, `vision validate`, `validate-all`, `revalidate`, `require-validated`](#validate--vision-validate--validate-all--revalidate--require-validated) | deterministic known-answer validation of a served model, periodic refresh of its record, and the consumer check |
 | [`build`](#build-allllamacolibrionnx) | build the inference engines from source (`onnx` has no build step) |
 | [`install`](#install) | install/refresh persistent-service unit templates |
 | [`enable`](#enable-profile) | enable a profile at login + start it now |
@@ -223,12 +223,13 @@ profile exits 2 (cannot validate). When the profile is running (or with
 `--live`) its suite is also run against the live endpoint. See
 [validation](validation.md#model-validation-gate).
 
-## validate | vision validate | validate-all | require-validated
+## validate | vision validate | validate-all | revalidate | require-validated
 
 ```
 llmctl validate <profile> [--host URL] [--json] [--keep]
 llmctl vision validate [--profile vision|vision-pro] [--host URL] [--json] [--keep]
 llmctl validate-all
+llmctl revalidate [--force]
 llmctl require-validated <profile>
 ```
 
@@ -253,6 +254,13 @@ Exit codes: `0` every check passed, `1` any wrong answer, `2` could not
 determine (not downloaded, not served, endpoint down, wrong model served,
 memory pressure, no suite). `--host URL` validates an explicit endpoint; the
 result is evidence only and is never recorded as local state.
+
+`revalidate` refreshes the signed PASS records of the **running** profiles before they expire, without the side effects of `validate` on a
+served profile: a record older than `LLMCTL_REVALIDATE_AFTER` seconds (default: half of `LLMCTL_VALIDATION_MAX_AGE`), or no longer a fresh
+valid PASS, is re-validated into a private staging directory and promoted over the live record **only on PASS**. A FAIL (exit 1) or an
+UNDETERMINED (exit 2) leaves the previous record byte-for-byte as it was and the engine running (nothing is stopped, restarted or
+withdrawn from the registry); `--force` re-validates regardless of age. A stopped profile is never started by it. `llmctl install` installs and
+enables the user timer that runs it daily (`llmctl-revalidate.timer`, details in [validation](validation.md#periodic-revalidation)).
 
 `validate-all` validates every running profile (exit 2 when nothing runs) and
 then lists EVERY catalog profile without a signed, unexpired PASS record as
@@ -815,7 +823,7 @@ the relevant `lib/*.sh` module.
 
 | Variable | Effect |
 |---|---|
-| `LLMCTL_DRY_RUN=1` | Every OS service action (`systemctl`/`launchctl`/`tail`/`curl` downloads/`cmake`/`make` builds) is printed instead of executed. Env/unit/plist files are still written for real so their content is testable. |
+| `LLMCTL_DRY_RUN=1` | Every OS service action (`systemctl`/`launchctl`/`tail`/`curl` downloads/`cmake`/`make` builds) is printed instead of executed. **`llmctl install` writes nothing under a dry run** (no unit template, no `unit-enforcement` marker, no directory): it prints the plan with a `[dry-run]` prefix. The other service commands still write their env/plist records for real so the hermetic tests can read them; those suites reach the file-writing mode through the test seam `LLMCTL_DRY_RUN_WRITE=1` (set by `tests/helpers.sh`, never needed by an operator). |
 | `LLMCTL_FAKE_HW=<file.json>` | Use a hardware fixture instead of a live probe (testing). |
 | `LLMCTL_MODELS_DIR=<dir>` | Override where downloaded model files are stored. |
 | `LLMCTL_CLUSTER_ENDPOINT=<url>` | `llmctld` API endpoint for `cluster`/`tenant`/`apikey` commands. Default `https://127.0.0.1:9443`. |

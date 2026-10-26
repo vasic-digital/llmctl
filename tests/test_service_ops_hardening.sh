@@ -199,6 +199,27 @@ StartLimitIntervalSec=60
 ExecStart=/bin/true
 EOF
 cp "${SU}/llmctl-llama@.service" "${SU}/llmctl-decide-gateway.service"   # an installed, stale gateway unit too
+# Root cause (2026-10-26): _svc_unit_directives sorts with LC_ALL=C but comm read its inputs in the AMBIENT collation, so under
+# en_US.UTF-8 `comm` printed "file 1 is not in sorted order", exited 1 and aborted this whole suite (and made the detector unreliable there).
+if locale -a 2>/dev/null | grep -qiE '^en_US\.utf-?8$'; then
+  loc="$( export LC_ALL=en_US.UTF-8 LLMCTL_UNIT_DIR="${SU}"; source "${LLMCTL_ROOT}/lib/common.sh"; source "${LLMCTL_ROOT}/lib/service_linux.sh"; svc_stale_units 2>&1 || true )"
+  assert_eq 0 "$(grep -c 'not in sorted order' <<<"${loc}" || true)" "svc_stale_units under en_US.UTF-8: comm reports no collation disorder"
+  assert_contains "${loc}" "llmctl-llama@.service" "svc_stale_units under en_US.UTF-8 still names the stale unit"
+  mkdir -p "${TEST_TMP}/mlib"
+  for f in "${LLMCTL_ROOT}"/lib/*; do [[ "$(basename "${f}")" == service_linux.sh ]] || ln -sf "${f}" "${TEST_TMP}/mlib/"; done
+  python3 -I -c '
+import sys
+s = open(sys.argv[1]).read()
+old = "missing=\"$(LC_ALL=C comm -23"
+if s.count(old) != 1:
+    sys.exit("mutation anchor found %d times" % s.count(old))
+open(sys.argv[2], "w").write(s.replace(old, "missing=\"$(comm -23"))
+' "${LLMCTL_ROOT}/lib/service_linux.sh" "${TEST_TMP}/mlib/service_linux.sh"
+  mloc="$( export LC_ALL=en_US.UTF-8 LLMCTL_UNIT_DIR="${SU}"; source "${TEST_TMP}/mlib/common.sh"; source "${TEST_TMP}/mlib/service_linux.sh"; svc_stale_units 2>&1 || true )"
+  if grep -q 'not in sorted order' <<<"${mloc}"; then printf '  ok: MUTANT comm without LC_ALL=C: the collation disorder is reported -> the assertion above goes RED\n'; else printf '  FAIL: mutant comm-locale was not caught\n' >&2; TEST_FAILS=$((TEST_FAILS+1)); fi
+else
+  printf '  SKIP: no en_US.UTF-8 locale on this host: the non-C collation case is not exercised\n'
+fi
 stale="$( export LLMCTL_UNIT_DIR="${SU}"; source "${LLMCTL_ROOT}/lib/common.sh"; source "${LLMCTL_ROOT}/lib/service_linux.sh"; svc_stale_units )"
 assert_contains "${stale}" "llmctl-llama@.service" "svc_stale_units names the stale unit"
 assert_contains "${stale}" "llmctl install" "...with the remedy"

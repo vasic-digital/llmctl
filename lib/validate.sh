@@ -48,7 +48,10 @@ LLMCTL_VALIDATION_MAX_AGE="${LLMCTL_VALIDATION_MAX_AGE:-604800}"
 
 _val_judge() { python3 -I "${LLMCTL_ROOT}/lib/validate_judge.py" "$@"; }
 _val_state_dir() { echo "${LLMCTL_STATE_DIR}/validation"; }
-_val_state_file() { echo "$(_val_state_dir)/$1.json"; }
+# LLMCTL_VALIDATE_RECORD_DIR (internal seam of `llmctl revalidate`, never set by an operator): where validate_profile writes the
+# record of THIS run. revalidate stages the new record there and promotes it over the live one only on PASS, so a periodic
+# re-check that is not a PASS can never demote (overwrite) the record of an engine that is serving.
+_val_state_file() { echo "${LLMCTL_VALIDATE_RECORD_DIR:-$(_val_state_dir)}/$1.json"; }
 # record signing key + model-file sha256 cache (both 0600, created by the judge on first use; docs/validation.md)
 _val_hmac_key() { echo "$(_val_state_dir)/.hmac.key"; }
 _val_hash_cache() { echo "$(_val_state_dir)/.hashcache.json"; }
@@ -660,6 +663,115 @@ validate_all() {
   _val_coverage || true
   if [[ "${worst}" == "1" ]]; then rc=1; elif [[ "${undet}" == "1" ]]; then rc=2; fi
   return "${rc}"
+}
+
+# --- PERIODIC REVALIDATION (2026-10-26) -------------------------------------------------------------------------------
+# A signed PASS record expires after LLMCTL_VALIDATION_MAX_AGE (default 7 d). An engine that was validated once and then ran
+# for weeks is fine - until the host reboots: the unit's ExecCondition `validated` refuses a start without a FRESH record (exit
+# 77, the unit is skipped, not failed), so every long-running engine would silently not come back. `llmctl revalidate` (run by
+# the user timer llmctl-revalidate.timer) re-validates the RUNNING engines whose record is due and replaces the record on PASS.
+#
+# It is deliberately NOT `llmctl validate`: a manual validate of a served profile applies the verdict policy (FAIL stops the
+# engine, UNDETERMINED overwrites the record with "undetermined", which demotes a healthy engine to NOT VALIDATED at the next
+# `endpoint` / `require-validated` call). A periodic job must be incapable of that:
+#   * the run writes its record into a private staging directory (LLMCTL_VALIDATE_RECORD_DIR) and promotes it (atomic mv) ONLY on
+#     PASS - on FAIL / UNDETERMINED the live record is byte-for-byte what it was;
+#   * _val_cli_policy is never called: no engine is stopped, restarted or withdrawn from the registry, whatever the verdict;
+#   * only RUNNING, published profiles are touched: a stopped profile is never started (a stopped one whose record expires is
+#     refreshed by `llmctl validate <profile>` by hand);
+#   * a non-PASS is reported (exit 1 = wrong answers, 2 = could not determine) so the unit shows FAILED in
+#     `systemctl --user --failed`, and the evidence of the failed run is kept next to the staged record.
+# due = --force, or no fresh valid record, or the record is older than LLMCTL_REVALIDATE_AFTER seconds (default: half of
+# LLMCTL_VALIDATION_MAX_AGE).
+_val_record_age() {
+  python3 -I -c 'import json, sys, time
+try:
+    d = json.load(open(sys.argv[1]))
+    print(max(0, int(time.time()) - int(d["epoch"])))
+except Exception:
+    sys.exit(1)' "$(LLMCTL_VALIDATE_RECORD_DIR="" _val_state_file "$1")" 2>/dev/null
+}
+
+# _val_revalidate_note <profile> <result> <age-before> - the last revalidation of a profile, for the operator (0600 JSON)
+_val_revalidate_note() {
+  local f; f="$(_val_state_dir)/$1.revalidate.json"
+  ( umask 077; printf '{"profile": "%s", "at": "%s", "result": "%s", "record_age_before_s": %s}\n' \
+      "$1" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$2" "${3:-null}" > "${f}.tmp.$$" && mv -f "${f}.tmp.$$" "${f}" ) 2>/dev/null || true
+}
+
+revalidate_all() {
+  local force=0 a
+  for a in "$@"; do
+    case "${a}" in
+      --force) force=1 ;;
+      *) err "usage: llmctl revalidate [--force]   (re-validates the running profiles whose record is due; never stops an engine)"; return 2 ;;
+    esac
+  done
+  local max after
+  max="$(_val_max_age)" || return 2
+  after="${LLMCTL_REVALIDATE_AFTER:-$(( max / 2 ))}"
+  if ! [[ "${after}" =~ ^[0-9]{1,8}$ ]]; then
+    err "LLMCTL_REVALIDATE_AFTER='${after}' is not a whole number of seconds - cannot decide which records are due"
+    return 2
+  fi
+  ensure_dir "${LLMCTL_RUNTIME_DIR}"
+  ensure_state_dirs
+  _val_ensure_state_dir
+  local f p age key_file stage one worst=0 undet=0 n=0 due=0 why
+  local -a verdicts=()
+  for f in "${LLMCTL_RUNTIME_DIR}"/*.run; do
+    [[ -e "${f}" ]] || continue
+    p="$(basename "${f}" .run)"
+    if _val_instance_base "${p}" >/dev/null; then verdicts+=("${p}: scaled instance of '$(_val_instance_base "${p}")' - covered by its base profile"); continue; fi
+    if _val_is_quarantined "${p}"; then verdicts+=("${p}: quarantined (its starter is validating it) - skipped"); continue; fi
+    if ! catalog_exists "${p}"; then verdicts+=("${p}: not in the catalog - skipped"); continue; fi
+    n=$((n+1))
+    age="$(_val_record_age "${p}" || true)"
+    why=""
+    if (( force )); then why="--force"
+    elif [[ -z "${age}" ]]; then why="no readable record"
+    else
+      key_file="$(mktemp)"
+      if _val_key "${p}" "${key_file}" >/dev/null 2>&1 && _val_check "${p}" "${key_file}" >/dev/null 2>&1; then
+        (( age >= after )) && why="record is ${age}s old (>= ${after}s)"
+      else
+        why="the record is not a fresh valid PASS for what runs now"
+      fi
+      rm -f "${key_file}"
+    fi
+    if [[ -z "${why}" ]]; then verdicts+=("${p}: not due (record ${age}s old < ${after}s)"); continue; fi
+    due=$((due+1))
+    stage="$(_val_state_dir)/.revalidate.$$.${p}"
+    rm -rf -- "${stage:?}"; ( umask 077; mkdir -p "${stage}" ) || { verdicts+=("${p}: UNDETERMINED (cannot create ${stage})"); undet=1; continue; }
+    info "revalidate: '${p}' is due (${why}) - validating the running engine; nothing will be stopped"
+    one=0
+    LLMCTL_VALIDATE_RECORD_DIR="${stage}" _val_locked_profile_validate "${p}" "${p}" || one=$?
+    case "${one}" in
+      0)
+        if [[ -s "${stage}/${p}.json" ]] && mv -f -- "${stage}/${p}.json" "$(LLMCTL_VALIDATE_RECORD_DIR="" _val_state_file "${p}")"; then
+          verdicts+=("${p}: PASS - record refreshed (${why})"); _val_revalidate_note "${p}" pass "${age:-null}"
+        else
+          verdicts+=("${p}: UNDETERMINED (the run passed but produced no record; the previous record is untouched)"); undet=1
+          _val_revalidate_note "${p}" undetermined "${age:-null}"
+        fi ;;
+      1) verdicts+=("${p}: FAIL - wrong answers; the engine keeps running and its previous record is untouched (evidence: ${stage##*/} -> $(_val_state_dir))"); worst=1
+         _val_revalidate_note "${p}" fail "${age:-null}"
+         # keep the failed run's staged record next to the live one for diagnosis (never read by require-validated)
+         [[ -s "${stage}/${p}.json" ]] && mv -f -- "${stage}/${p}.json" "$(_val_state_dir)/${p}.revalidate-failed.json" || true ;;
+      *) verdicts+=("${p}: UNDETERMINED (exit ${one}); the engine keeps running and its previous record is untouched"); undet=1
+         _val_revalidate_note "${p}" undetermined "${age:-null}" ;;
+    esac
+    rm -rf -- "${stage:?}"
+  done
+  if (( n == 0 )); then
+    info "revalidate: no running profile - nothing to do"
+    (( ${#verdicts[@]} == 0 )) || printf '  %s\n' "${verdicts[@]}"
+    return 0
+  fi
+  bold "revalidate summary (${due} of ${n} running profile(s) were due)"
+  printf '  %s\n' "${verdicts[@]}"
+  if (( worst )); then return 1; elif (( undet )); then return 2; fi
+  return 0
 }
 
 # _val_coverage - every catalog profile and whether it has a signed, unexpired PASS record (review 2026-10-14 finding 2):
