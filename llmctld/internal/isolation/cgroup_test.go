@@ -1,12 +1,14 @@
 package isolation
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 )
 
 // TestWrapCommand_ArgvShape proves WrapCommand produces the exact real
@@ -232,33 +234,18 @@ func TestTenantStateDir_DetectsPermissionDrift(t *testing.T) {
 // Constitution §11.4.3 (per-environment-topology test dispatch), when
 // systemd-run is not on PATH this SKIPs with the real observed reason
 // rather than fabricating a PASS; every other test in this file runs
-// unconditionally regardless of systemd-run's availability.
+// unconditionally regardless of systemd-run's availability. The one
+// deliberate difference from production: the --slice value is swapped for
+// a per-run test-only slice (see the M-3 note below), so the test never
+// creates, nor stops, llmctl's real llmctl.slice / llmctl-tenant.slice.
 func TestWrapCommand_RealSystemdRunInvocation(t *testing.T) {
 	systemdRunPath, err := exec.LookPath("systemd-run")
 	if err != nil {
 		t.Skipf("systemd-run not found on PATH (exec.LookPath: %v) - this build host has no usable systemd-run, SKIPping per Constitution §11.4.3 rather than fabricating a PASS", err)
 	}
 
-	// G-088: systemd keeps a slice active after its last scope exits, so this test would leave
-	// llmctl-tenant-cgrouptest.slice (and its implicit parents llmctl-tenant.slice, llmctl.slice) behind in
-	// the user manager. Record which of these EXACT slices were not active before the run and stop exactly
-	// those afterwards (deepest first); a slice already active before (a real tenant's, another run's) is
-	// never touched.
-	sliceNames := []string{"llmctl-tenant-cgrouptest.slice", "llmctl-tenant.slice", "llmctl.slice"}
-	var createdSlices []string
-	for _, n := range sliceNames {
-		if err := exec.Command("systemctl", "--user", "is-active", "--quiet", n).Run(); err != nil {
-			createdSlices = append(createdSlices, n)
-		}
-	}
-	t.Cleanup(func() {
-		for _, n := range createdSlices {
-			_ = exec.Command("systemctl", "--user", "stop", n).Run()
-		}
-	})
-
-	// A distinct, greppable slice name for this test run so a failure's
-	// captured evidence is unambiguous about which invocation produced it.
+	// A distinct, greppable tenant ID so a failure's captured evidence is
+	// unambiguous about which invocation produced it.
 	path, args, err := WrapCommand(WrapConfig{TenantID: "cgrouptest"}, "/bin/true")
 	if err != nil {
 		t.Fatalf("WrapCommand: unexpected error: %v", err)
@@ -266,6 +253,34 @@ func TestWrapCommand_RealSystemdRunInvocation(t *testing.T) {
 	if path != "systemd-run" {
 		t.Fatalf("WrapCommand path = %q, want %q", path, "systemd-run")
 	}
+
+	// G-088 + review of release/3.3.0 finding M-3: the production slice
+	// llmctl-tenant-cgrouptest.slice would make systemd create its implicit
+	// parents llmctl-tenant.slice and llmctl.slice - REAL llmctl unit names
+	// (the parents of every real tenant's slice). Stopping them afterwards is
+	// the harness guard's refused case (tests/fixtures/guard/systemctl); not
+	// stopping them leaks them. So the real invocation runs under a test-only,
+	// per-run unique slice with no dash (no implicit parent slices at all):
+	// the test owns exactly one slice and stops exactly that one. The
+	// production --slice value itself is asserted first, so the argv shape
+	// WrapCommand builds is still checked; only the slice name the real
+	// systemd-run sees is swapped. The ArgvShape test covers the name format.
+	if want := "--slice=llmctl-tenant-cgrouptest.slice"; !containsArg(args, want) {
+		t.Fatalf("WrapCommand argv %q lacks %q", args, want)
+	}
+	testSlice := testOnlySliceName()
+	args, err = withTestOnlySlice(args, testSlice)
+	if err != nil {
+		t.Fatalf("withTestOnlySlice: %v", err)
+	}
+	// Never touch a slice this run did not create: a unique name that is
+	// already active (it cannot be, but the check is cheap) is left alone.
+	if exec.Command("systemctl", "--user", "is-active", "--quiet", testSlice).Run() == nil {
+		t.Fatalf("test-only slice %s is already active before the run: refusing to run under (or stop) a slice this run does not own", testSlice)
+	}
+	t.Cleanup(func() {
+		_ = exec.Command("systemctl", "--user", "stop", testSlice).Run()
+	})
 
 	cmd := exec.Command(systemdRunPath, args...)
 	out, err := cmd.CombinedOutput()
@@ -283,5 +298,77 @@ func TestWrapCommand_RealSystemdRunInvocation(t *testing.T) {
 			t.Skipf("systemd-run present on PATH but this build host's environment cannot run it (real observed output: %q) - SKIPping per Constitution §11.4.3 rather than fabricating a PASS or a spurious FAIL unrelated to WrapCommand's own argv-shape correctness", strings.TrimSpace(combined))
 		}
 		t.Fatalf("real systemd-run invocation with WrapCommand's argv failed: %v\noutput: %s", err, combined)
+	}
+}
+
+// testOnlySliceName returns a per-run unique slice name for the real
+// systemd-run test. It starts with "llmctltest" so the llmctl* cleanliness
+// snapshot (tests/test_systemd_cleanliness.sh) still sees a leak, and has no
+// dash, so systemd creates no implicit parent slice for it.
+func testOnlySliceName() string {
+	return fmt.Sprintf("llmctltest_isolation_%d_%d.slice", os.Getpid(), time.Now().UnixNano())
+}
+
+func containsArg(args []string, want string) bool {
+	for _, a := range args {
+		if a == want {
+			return true
+		}
+	}
+	return false
+}
+
+// withTestOnlySlice returns a copy of args with the single --slice= argument
+// before "--" replaced by --slice=<slice>. It fails when there is not exactly
+// one, so a WrapCommand change cannot silently send the production slice.
+func withTestOnlySlice(args []string, slice string) ([]string, error) {
+	out := append([]string(nil), args...)
+	n := 0
+	for i, a := range out {
+		if a == "--" {
+			break
+		}
+		if strings.HasPrefix(a, "--slice=") {
+			out[i] = "--slice=" + slice
+			n++
+		}
+	}
+	if n != 1 {
+		return nil, fmt.Errorf("expected exactly one --slice= argument before \"--\", found %d in %q", n, args)
+	}
+	return out, nil
+}
+
+// TestTestOnlySlice_NeverARealLlmctlSlice pins the M-3 fix without systemd:
+// the slice the real-invocation test runs under (and stops) is never one of
+// llmctl's real slice names nor a production tenant slice, and has no dash
+// (no implicit parents to leak or to stop).
+func TestTestOnlySlice_NeverARealLlmctlSlice(t *testing.T) {
+	s := testOnlySliceName()
+	if s == "llmctl.slice" || s == "llmctl-tenant.slice" || strings.HasPrefix(s, "llmctl-tenant-") {
+		t.Fatalf("test-only slice %q is a real llmctl slice name", s)
+	}
+	if strings.Contains(strings.TrimSuffix(s, ".slice"), "-") {
+		t.Fatalf("test-only slice %q contains a dash: systemd would create implicit parent slices", s)
+	}
+	if !strings.HasPrefix(s, "llmctltest") || !strings.HasSuffix(s, ".slice") {
+		t.Fatalf("test-only slice %q must start with llmctltest and end in .slice", s)
+	}
+	_, args, err := WrapCommand(WrapConfig{TenantID: "cgrouptest"}, "/bin/true", "--slice=not-touched")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := withTestOnlySlice(args, s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !containsArg(got, "--slice="+s) || containsArg(got, "--slice=llmctl-tenant-cgrouptest.slice") {
+		t.Fatalf("withTestOnlySlice did not swap the production slice: %q", got)
+	}
+	if got[len(got)-1] != "--slice=not-touched" {
+		t.Fatalf("withTestOnlySlice changed an argument after \"--\": %q", got)
+	}
+	if _, err := withTestOnlySlice([]string{"--user", "--", "x"}, s); err == nil {
+		t.Fatal("withTestOnlySlice accepted an argv with no --slice=")
 	}
 }

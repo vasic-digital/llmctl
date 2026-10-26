@@ -8,3 +8,4 @@ test_containers_submodule.sh	handles the unresolvable case itself with an inline
 test_validation_decide_colibri.sh	records an assert_skip carrying the resolver message when the real decide build is impossible
 test_leftover_deps.sh	go lines appear only inside printf-generated fixture suites
 test_containers_optin.sh	go lines appear only in printf-generated planted control files
+test_isolation_slice_cleanup.sh	go test in the separate llmctld module (go list -deps: 0 containers packages), against fake systemctl/systemd-run

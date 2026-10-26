@@ -7,8 +7,10 @@
 # The detector is proven with a control needle: a deliberately leaking transient unit (exact name, removed
 # by exact name) MUST be reported, otherwise a clean result would mean nothing.
 # Suites exercised: tests/test_unit_hardening.sh (starts transient units, some of which fail to start) and,
-# when go is installed, llmctld/internal/isolation TestWrapCommand_RealSystemdRunInvocation (creates tenant
-# slices). SKIPs (SKIP-SUITE) when no systemd --user manager is reachable.
+# when go is installed, llmctld/internal/isolation TestWrapCommand_RealSystemdRunInvocation (creates and stops
+# one per-run test-only slice llmctltest_isolation_<pid>_<ns>.slice; since the M-3 fix of release 3.3.0 it no
+# longer creates llmctl.slice / llmctl-tenant.slice, whose stop the harness guard refuses - see
+# tests/test_isolation_slice_cleanup.sh for the hermetic regression guard). SKIPs (SKIP-SUITE) when no systemd --user manager is reachable.
 set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/helpers.sh"
 test_setup_env
