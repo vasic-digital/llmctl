@@ -95,7 +95,7 @@ assert_eq "200" "${code}" "models => 200"
 assert_contains "$(cat "${TEST_TMP}/body")" '"decide-tiny"' "models lists the profile"
 code="$(curl -sS --cacert "${CA}" -o "${TEST_TMP}/body" -w '%{http_code}' -H "@$(auth_hdr_file "${KEY}")" "${URL}/metrics")"
 assert_eq "200" "${code}" "metrics => 200"
-assert_eq "0" "$(grep -c "${KEY}" "${TEST_TMP}/body" || true)" "metrics never contain the key"
+assert_eq "0" "$(grep -cF -e "${KEY}" "${TEST_TMP}/body" || true)" "metrics never contain the key"
 
 echo "-- keep-alive survives an error response (N-12), one curl invocation, one connection --"
 out="$(curl -sS --cacert "${CA}" -w ' conn=%{num_connects}\n' -o /dev/null -X POST -H 'Authorization: Bearer wrong' -H 'Content-Type: application/json' -d "${body}" "${URL}/v1/systemone" --next --cacert "${CA}" -w ' code=%{http_code} conn=%{num_connects}\n' -o /dev/null "${URL}/healthz" 2>&1)"
