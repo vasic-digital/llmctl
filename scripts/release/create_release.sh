@@ -108,13 +108,20 @@ release_generate_changelog() {
   fi
 }
 
-# release_since_tag <repo-dir>
+# release_since_tag <repo-dir> [<version>]
 # The newest RELEASE tag (v<digit>...) reachable from HEAD, else the root commit. `--match 'v[0-9]*'` matters: a plain
 # `git describe --tags` can pick a non-release tag such as an annotated `helixconstitution-v70` (same commit as v3.2.2 in
-# this repository) and put that name in the changelog header.
+# this repository) and put that name in the changelog header. When <version> is given, that version's own tag
+# (v<version> and <version>) is EXCLUDED: the documented order is "push the annotated tag, then run this script", so the
+# tag being released is already on HEAD and would otherwise be returned, giving an empty changelog.
 release_since_tag() {
-  local repo="$1"
-  git -C "${repo}" describe --tags --match 'v[0-9]*' --abbrev=0 2>/dev/null || git -C "${repo}" rev-list --max-parents=0 HEAD
+  local repo="$1" ver="${2:-}"
+  local -a excl=()
+  if [[ -n "${ver}" ]]; then
+    ver="${ver#v}"
+    excl=(--exclude "v${ver}" --exclude "${ver}")
+  fi
+  git -C "${repo}" describe --tags --match 'v[0-9]*' "${excl[@]}" --abbrev=0 2>/dev/null || git -C "${repo}" rev-list --max-parents=0 HEAD
 }
 
 # release_migration_notes <CHANGELOG.md> <version>
@@ -231,7 +238,7 @@ _release_main() {
   echo "PASS: '${version}' is a valid SemVer version"
 
   local root; root="$(_release_root)"
-  local since_tag; since_tag="$(release_since_tag "${root}")"
+  local since_tag; since_tag="$(release_since_tag "${root}" "${version}")"
 
   echo
   echo "=== Step 1: submodule preflight (spec.md FR-052/Clarification 21) ==="

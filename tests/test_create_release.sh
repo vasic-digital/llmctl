@@ -142,6 +142,21 @@ NOTAG="${TEST_TMP}/notag_repo"; git init -q "${NOTAG}"
 (cd "${NOTAG}" && git config user.email t@e.c && git config user.name t && echo a > a && git add a && git commit -qm "chore: init")
 assert_eq "$(git -C "${NOTAG}" rev-list --max-parents=0 HEAD)" "$(release_since_tag "${NOTAG}")" "no v-tag: falls back to the root commit"
 
+# --- 7b. the release tag being released is already on HEAD (documented order: tag first, then the script) -------
+TREPO="${TEST_TMP}/tagged_head_repo"
+git init -q "${TREPO}"
+(
+  cd "${TREPO}"
+  git config user.email test@example.com; git config user.name test
+  echo a > a.txt; git add a.txt; git commit -qm "chore: init"
+  git tag -a v1.0.0 -m v1.0.0
+  echo b > b.txt; git add b.txt; git commit -qm "feat: new thing"
+  git tag -a v1.1.0 -m v1.1.0
+)
+assert_eq "v1.0.0" "$(release_since_tag "${TREPO}" "v1.1.0")" "since-tag excludes the tag being released (v1.1.0 on HEAD -> v1.0.0)"
+assert_eq "v1.0.0" "$(release_since_tag "${TREPO}" "1.1.0")" "since-tag excludes the release tag given without the leading v"
+assert_contains "$(release_generate_changelog "${TREPO}" "$(release_since_tag "${TREPO}" "v1.1.0")" 2>/dev/null)" "new thing" "changelog is not empty when the release tag is already on HEAD"
+
 # --- 8. migration notes from CHANGELOG.md are carried into the release notes ---------------------------------
 CL="${TEST_TMP}/CHANGELOG.md"
 printf '%s\n' '# Changelog' '' '## 3.4.0 (2026-01-01)' '' '### Added' '- thing' '' '### Migration notes' '' '- run `make deps` first' '- re-validate every profile' '' '### Known limitations' '- none' '' '## 3.3.0 (2026-10-22)' '' '### Migration notes' '- old note' > "${CL}"
