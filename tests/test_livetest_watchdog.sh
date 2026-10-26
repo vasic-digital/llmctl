@@ -22,6 +22,10 @@ want() { [ -z "${ONLY:-}" ] || [ "$1" = always ] || [[ ",$ONLY," == *",$1,"* ]];
 # shared fake environment (fake llmctl/systemctl/nvidia-smi, health server, mkenv, run_main): tests/livetest_fake_lib.sh
 # shellcheck source=tests/livetest_fake_lib.sh
 source "$ROOT/tests/livetest_fake_lib.sh"
+# llama-server processes this suite did not start (ollama's runner is respawned by `ollama serve` at any time on a developer host):
+# only a NEW llama-server whose parent is not ollama can be a test leak
+ls_foreign() { local p pp; for p in $(pgrep -x llama-server 2>/dev/null); do pp="$(ps -o ppid= -p "$p" 2>/dev/null | tr -d ' ')"; [ "$(ps -o comm= -p "${pp:-0}" 2>/dev/null)" = ollama ] || echo "$p"; done | sort; }
+LS_BASE="$(ls_foreign)"
 if want base; then
 echo "== 0. static: lint + signal discipline =="
 bash -n "$MAIN" && bash -n "$WD" && ok "bash -n both scripts" || bad "bash -n"
@@ -654,7 +658,8 @@ fi
 
 if want always; then
 echo "== 7. whole-suite sanity: nothing real was touched =="
-[ -z "$(pgrep -x llama-server || true)" ] && ok "no real llama-server process spawned by tests" || bad "llama-server present (may be pre-existing)"
+LS_NEW="$(comm -13 <(printf '%s\n' "$LS_BASE") <(ls_foreign) | tr '\n' ' ')"
+[ -z "${LS_NEW// /}" ] && ok "no real llama-server process spawned by tests (pre-existing and ollama-owned ones ignored)" || bad "new llama-server process(es) appeared during the suite" "$LS_NEW"
 
 fi
 printf '\nRESULT: %d passed, %d failed\n' "$PASS" "$FAIL"
