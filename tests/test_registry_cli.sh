@@ -118,7 +118,9 @@ for i in 1 2 3; do
   for u in "${U1}" "${U2}"; do
     p="$(D port allocate "svc$i" --state-dir "${u}")"
     python3 -c "import socket,time;s=socket.socket();s.bind(('127.0.0.1',${p}));s.listen();time.sleep(30)" &
-    SVC_PIDS+=("$!"); sleep 0.15; ports+=("${p}")
+    SVC_PIDS+=("$!"); ports+=("${p}")
+    # wait until the listener has really bound: the allocator bind-tests, so a fixed sleep raced python startup on a loaded host
+    for _ in $(seq 1 200); do python3 -c "import socket,sys;socket.create_connection(('127.0.0.1',${p}),0.2)" 2>/dev/null && break; sleep 0.05; done
   done
 done
 assert_eq "6" "$(printf '%s\n' "${ports[@]}" | sort -u | wc -l)" "two users: six distinct ports"
