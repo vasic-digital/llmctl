@@ -42,6 +42,21 @@ repository as an honest record of that process.
     `Restart=` by design. It is now skipped by name (`REVALIDATE_SERVICE_UNIT`), so a freshly installed host reports nothing stale. Covered by `tests/test_revalidate.sh` section 6 + mutant M-D.
   * `svc_stale_units` sorted the template directive lists with `LC_ALL=C` but compared them with a locale-dependent `comm`, which aborts ("file 1 is not in sorted order") under a UTF-8 locale such
     as `en_US.UTF-8` and silently turned the whole check into a no-op. Now `LC_ALL=C comm -23`. Regression assertion + paired mutant in `tests/test_service_ops_hardening.sh` (runs under `en_US.UTF-8`).
+  * `tests/test_decide_service.sh` asserted `KeepAlive is True`; since commit e0e7423 the launchd plist carries `{"SuccessfulExit": false}` plus `ThrottleInterval 60`. The assertion now checks the
+    shipped contract (stale-test fix, verified against `git archive HEAD`; paired mutant red).
+  * Five more pre-existing test defects of the full suite, each traced to its cause (all failed identically on `git archive HEAD`) and fixed in the test, none by weakening an assertion:
+    `tests/test_service_ops_hardening.sh` C-13/C-14/G-129 (the fixture profiles `eng`/`g129` are not catalog profiles, and since commit b3d5856 an unknown profile counts as consumer-facing, so
+    the gate REFUSES their opt-out marker and `run-engine` exits 0 without starting anything: the fixtures now run against a catalog copy that declares them non-consumer-facing; two controls
+    pin the refusal of the real catalog and the acceptance of the copy, plus a paired mutant of the gate default; the fixture-never-ran abort also hid the G-129, C3-08 and launchd assertions,
+    which now run and pass); `tests/test_systemd_cleanliness.sh` (the Go slice teardown `systemctl --user stop llmctl-tenant.slice` was refused by the harness PATH guard, so the slices
+    stayed behind: that one invocation now runs with the guard directory off PATH; mutant red); `tests/test_hostsafety.sh` (the guard fixtures did not pin tmpfs fullness, so a host with
+    /tmp above 60 % logged a report-only `tmpfs-high` event counted as a decision; and the `--expand-environment=no dropped` mutant is EQUIVALENT on systemd 255, where a `--scope` no
+    longer expands `${VAR}`/`$$` by default - now probed and reported SKIP with the reason, the kill is still asserted on systemd 254); `tests/test_livetest_watchdog.sh` section 7
+    (`pgrep -x llama-server` empty failed on every host serving a model: now the pids present at the start are the baseline, with a negative control); `tests/test_matrix_harness.sh`
+    (the full 6-client matrix failed one cell with `429 != 401`, deterministic here; two causes, each necessary: the reference server answered `Retry-After: 5` while its failed-auth window is
+    10 s and a throttled attempt stays counted, so the harness's single re-probe after Retry-After+1 s still found the window full - the header is now the true time until a retry is admitted;
+    and the headless Chromium adapter sent a hidden second request (`/favicon.ico`) per navigation, which for a step refused on purpose is a second failed authentication, so a browser step
+    counted double - measured 401 x10 then 429 against a limit of 20, and 22 of 22 stay 401 with `Network.setBlockedURLs` on the favicon. Either fix alone still fails one cell, both pass 270/270).
 
 * **chore(deps): one source of truth - llmctl no longer vendors `constitution`, `submodules/containers` or `submodules/superspec`
   (owner mandate 2026-10-21; branch `chore/single-source-layout`).** llmctl lives inside the constitution hub

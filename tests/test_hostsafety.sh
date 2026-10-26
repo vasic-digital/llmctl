@@ -281,9 +281,14 @@ printf 'some avg10=5.00 avg60=1.00 avg300=0.50 total=1\nfull avg10=1.00 avg60=1.
 printf 'some avg10=90.00 avg60=80.00 avg300=50.00 total=1\nfull avg10=98.00 avg60=70.00 avg300=50.00 total=1\n' >"${TEST_TMP}/psi_bad"
 printf 'MemTotal: 32000000 kB\nSwapTotal: 8000000 kB\nSwapFree: 8000000 kB\n' >"${TEST_TMP}/mi_ok"
 printf 'MemTotal: 32000000 kB\nSwapTotal: 8000000 kB\nSwapFree: 100000 kB\n' >"${TEST_TMP}/mi_swapfull"
+# Root cause of two historical failures of the "healthy host / no decision logged" and "swap nearly full but no memory stall" assertions
+# (2026-10-26, traced by running the guard on the fixtures by hand): run_guard pinned PSI, meminfo and /proc but NOT the tmpfs fullness, so the guard
+# also read the REAL /tmp (--tmp-dir default) and, on a host whose /tmp is above the 60 % warning line (91 % on the T1 host), logged a report-only
+# `tmpfs-high` event that these assertions counted as a decision. The fullness is pinned to a healthy 10 % through the guard's own fixture option.
 run_guard() { # psi meminfo proc [arm]
   XDG_RUNTIME_DIR="${TEST_TMP}/xdg" HOSTSAFETY_GUARD_ARM="${4:-0}" python3 -I "${GUARD}" --psi-file "$1" --meminfo "$2" --proc-root "$3" \
-    --uid "${UID_ME}" --self-pid "$((P0 + 900))" --log-file "${TEST_TMP}/glog/guard.log" --state-file "${TEST_TMP}/guard.state" >/dev/null
+    --uid "${UID_ME}" --self-pid "$((P0 + 900))" --log-file "${TEST_TMP}/glog/guard.log" --state-file "${TEST_TMP}/guard.state" \
+    --tmpfs-used-pct-fixture 10 >/dev/null
 }
 mkdir -p "${TEST_TMP}/xdg" "${TEST_TMP}/glog"; : >"${TEST_TMP}/glog/guard.log"
 run_guard "${TEST_TMP}/psi_ok" "${TEST_TMP}/mi_ok" "${R2}"
@@ -991,7 +996,18 @@ PY
   read -r _ _ _ n1 _ <<<"$(staleprobe "${TEST_TMP}/mut/staleage/bounded-run")"
   assert_eq "0" "${n1}" "mutation [stale cleanup ignores the age]: the proof catches it (a recent dir was removed)"
   eout="$("${TEST_TMP}/mut/noexpand/bounded-run" -q -T 30 -n "hsmexp$$" -- bash -c 'X=hi; printf "[%s] " "$X" "${X}" "$$"' 2>/dev/null)" || true
-  assert_eq "yes" "$([[ ${eout} =~ ${ere} ]] && echo no || echo yes)" "mutation [--expand-environment=no dropped]: the verbatim proof catches it (got '${eout}')"
+  # Root cause of this assertion's historical failure on a systemd 255 host (2026-10-26, measured on 255.22-alt1): bounded-run starts the
+  # command with `systemd-run --scope`, and since systemd 255 a SCOPE does not expand ${VAR} / $$ by default (a service still does):
+  # `systemd-run --user --scope -- bash -c ...` already returns the verbatim `[hi] [hi] [<pid>]`, so dropping --expand-environment=no
+  # changes nothing here - the mutant is EQUIVALENT on such a host, and no proof can kill it. The probe below measures that on the running
+  # systemd-run (the unmutated default, no flag): when the default already is verbatim the kill assertion is reported SKIP with the reason
+  # (never a silent pass); where the default expands (systemd 254), the kill is asserted as before.
+  pdef="$(systemd-run --user --scope -q -- bash -c 'X=hi; printf "[%s] " "$X" "${X}" "$$"' 2>/dev/null)" || pdef=""
+  if [[ -n "${pdef}" && ${pdef} =~ ${ere} ]]; then
+    assert_skip "this systemd-run --scope does not expand \${VAR} / \$\$ by default (systemd >= 255), so dropping --expand-environment=no is an equivalent mutant here; the kill is provable only on systemd 254" "mutation [--expand-environment=no dropped]"
+  else
+    assert_eq "yes" "$([[ ${eout} =~ ${ere} ]] && echo no || echo yes)" "mutation [--expand-environment=no dropped]: the verbatim proof catches it (got '${eout}')"
+  fi
   rc=0; PATH="${TEST_TMP}/noexp:${PATH}" "${TEST_TMP}/mut/expfailopen/bounded-run" -q -T 30 -n "hsmexp2$$" -- bash -c 'echo "$HOME"' >/dev/null 2>&1 || rc=$?
   assert_eq "yes" "$([[ ${rc} -ne 125 ]] && echo yes || echo no)" "mutation [fail-open without the option]: the fail-closed proof catches it (rc ${rc})"
   echo keep >"${TEST_TMP}/brstale-out/victim/precious.txt" 2>/dev/null || true

@@ -11,6 +11,12 @@ MAIN="$ROOT/scripts/livetest/vision_live_test.sh"
 WD="$ROOT/scripts/livetest/watchdog.sh"
 T="$(mktemp -d "${TMPDIR:-/tmp}/livetest.XXXXXX")"
 PASS=0; FAIL=0
+# Section 7 must tell a llama-server THIS suite spawned from the ones that were already running (an operator's live decision engines
+# on the same host): the old check, `pgrep -x llama-server` empty, failed on every host that serves a model (root cause, 2026-10-26: the
+# T1 host runs seven real llama-server units). The pids present at the start are the baseline; only a NEW pid counts.
+_llama_pids() { LC_ALL=C pgrep -x llama-server 2>/dev/null | LC_ALL=C sort || true; }
+LLAMA_BASE="$(_llama_pids)"
+llama_new() { LC_ALL=C comm -13 <(printf '%s\n' "${LLAMA_BASE}" | LC_ALL=C sort) <(_llama_pids) | grep -v '^$' || true; }
 ok()   { PASS=$((PASS+1)); printf 'PASS  %s\n' "$1"; }
 bad()  { FAIL=$((FAIL+1)); printf 'FAIL  %s  -- %s\n' "$1" "${2:-}"; }
 check(){ if [ "$2" = "$3" ]; then ok "$1"; else bad "$1" "expected '$3' got '$2'"; fi; }
@@ -650,7 +656,18 @@ fi
 
 if want always; then
 echo "== 7. whole-suite sanity: nothing real was touched =="
-[ -z "$(pgrep -x llama-server || true)" ] && ok "no real llama-server process spawned by tests" || bad "llama-server present (may be pre-existing)"
+# NEGATIVE CONTROL: a process named llama-server started AFTER the baseline must be reported as new (else a clean result means nothing)
+cp "$(command -v sleep)" "$T/llama-server"
+"$T/llama-server" 60 >/dev/null 2>&1 &
+ctl_pid=$!
+sleep 0.3
+case " $(llama_new | tr '\n' ' ') " in
+  *" ${ctl_pid} "*) ok "NEG-CONTROL the new-pid detector reports a llama-server started after the baseline" ;;
+  *) bad "new-pid detector blind (control pid ${ctl_pid})" ;;
+esac
+kill "${ctl_pid}" 2>/dev/null; wait "${ctl_pid}" 2>/dev/null
+sleep 0.3
+[ -z "$(llama_new)" ] && ok "no real llama-server process spawned by tests (ones already running before the suite, e.g. live engines, are excluded by pid)" || bad "llama-server spawned during the suite: $(llama_new | tr '\n' ' ')"
 
 fi
 printf '\nRESULT: %d passed, %d failed\n' "$PASS" "$FAIL"

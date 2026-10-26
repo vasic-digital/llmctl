@@ -36,6 +36,12 @@ try {
   ws.onmessage = (m) => { const d = JSON.parse(m.data); if (d.id && pend.has(d.id)) { pend.get(d.id)(d); pend.delete(d.id); } else events.push(d); };
   const call = (method, params = {}) => new Promise((r) => { const i = ++id; pend.set(i, r); ws.send(JSON.stringify({ id: i, method, params })); });
   await call('Network.enable'); await call('Page.enable');
+  // A headless Chromium follows every navigation with a hidden GET /favicon.ico from the same source. For a step that is
+  // refused on purpose (401) that second request is a second FAILED authentication, so one browser step counted double
+  // against the server's failed-auth limiter (measured 2026-10-26: 401 for 10 navigations, then 429, against a limit of 20;
+  // with this block 22 of 22 stay 401) and the matrix's single Retry-After re-probe could not recover. The adapter issues the
+  // one request the step asks for.
+  await call('Network.setBlockedURLs', { urls: ['*://*/favicon.ico'] });
   if (Object.keys(headers).length) await call('Network.setExtraHTTPHeaders', { headers });
   const nav = await call('Page.navigate', { url });
   const deadline = Date.now() + Number(tmo) * 1000;
