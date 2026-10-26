@@ -404,6 +404,8 @@ FAKE="$E/fake" PATH="$E/bin:$PATH" LT_HERMETIC=1 LT_WD_INTERVAL=0.2 LT_STOP_BOUN
   timeout 30 bash "$WD" vision "$E/wdev" $$ >/dev/null 2>&1 &
 W=$!; for _ in $(seq 1 120); do [ -s "$E/wdev/trigger" ] && break; sleep 0.2; done
 has "watchdog: hung nvidia-smi -> sensor_unreadable trigger" "$E/wdev/trigger" 'sensor_unreadable'
+# the trigger file is written BEFORE the stop is issued: wait for the stop call instead of reading the log in the same instant
+for _ in $(seq 1 120); do grep -qE '^stop vision' "$E/fake/calls" 2>/dev/null && break; sleep 0.2; done
 has "  watchdog still stopped the profile" "$E/fake/calls" '^stop vision'
 kill -TERM "$W" 2>/dev/null; wait "$W" 2>/dev/null
 # NEG-CONTROL: responsive sensor -> no trigger (covered by the healthy-watchdog test in section 5)
