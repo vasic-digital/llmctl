@@ -16,7 +16,7 @@ SC-009/Clarification 5 (SemVer with pre-release tag support, e.g.
 
 The script supports a `--dry-run` mode that really runs the SemVer
 validation and the changelog generation (since-tag via `git describe --tags
---match 'v[0-9]*'`, plus the CHANGELOG migration notes); the submodule
+--match 'v[0-9]*'`, excluding the tag of the version being released so a tag already on HEAD does not empty the changelog, plus the CHANGELOG migration notes); the submodule
 preflight and the asset build are only announced, not executed. It makes zero
 calls to `gh`/`glab` and, in either mode, creates no git tag and attaches no
 assets — this is the only mode this project's
