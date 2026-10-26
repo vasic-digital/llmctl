@@ -28,4 +28,20 @@ for f in docs/faq.md docs/user-manual.md README.md; do
   assert_eq 1 "$(yes '[Nn][Oo][Tt] validated for any reason' "$(flat "${ROOT}/${f}")")" "${f}: exit 1 of require-validated = 'not validated for any reason'"
 done
 assert_eq 1 "$(yes 'For `llmctl validate`: `0` pass, `1` wrong answer' "$(flat "${ROOT}/docs/validation.md")")" "docs/validation.md: the 0/1/2 verdict mapping is scoped to 'llmctl validate'"
+
+# round 2: an UNSCOPED "Exit codes: **0** ... **1** a wrong result" paragraph that follows a require-validated sentence
+# (faq.md "How do I validate a model?") reads as the require-validated mapping. The validate mapping must name `llmctl validate`.
+for f in docs/faq.md docs/user-manual.md docs/validation.md README.md; do
+  assert_eq 0 "$(yes '[^`]Exit codes: \*{0,2}0\*{0,2} every check passed, \*{0,2}1\*{0,2} (a|any) wrong' "$(flat "${ROOT}/${f}")")" "${f}: no unscoped 'Exit codes: 0 every check passed, 1 a wrong result' (name llmctl validate)"
+done
+# usage error / unknown profile also exit 2: documented next to the require-validated codes
+for f in docs/faq.md docs/user-manual.md docs/validation.md; do
+  assert_eq 1 "$(yes 'usage error[^.]{0,60}unknown profile|unknown profile[^.]{0,60}usage error' "$(flat "${ROOT}/${f}")")" "${f}: a usage error / unknown profile also exits 2"
+done
+# 75 (pressure refusal) and 98 (port in use) belong to `llmctl validate` / the unit path, never to require-validated
+for f in docs/faq.md docs/user-manual.md README.md; do
+  assert_eq 0 "$(yes 'require-validated`?[^|;]{0,200}\b(75|98)\b[^|;]{0,60}(reported as `?2|port in use)' "$(flat "${ROOT}/${f}")")" "${f}: 75/98 are not tied to require-validated"
+done
+# validation.md must not carry the spliced "wrong answer, Exit codes in play" sentence
+assert_eq 0 "$(yes 'wrong answer, +Exit codes in play' "$(flat "${ROOT}/docs/validation.md")")" "docs/validation.md: the exit-code sentence is not spliced"
 test_finish

@@ -813,7 +813,7 @@ stderr, then the usage text, then exits 2).
   nested copies; `constitution`, `containers` and `superspec` are found by `lib/resolve_deps.sh` and linked by `make deps`
   ([dependency layout](dependency-layout.md)).
 - **§11.4.277.** `validate`, `vision validate`, `validate-all` and `require-validated` implement the validation gate. Decision-bearing use runs with
-  `LLMCTL_VALIDATE_STRICT=1` and gates on `llmctl require-validated <profile>`; `require-validated`: `0` fresh passing record, `1` NOT validated for any reason (no record, stale record, another launch or host, a FAIL record), `2` could not determine; `llmctl validate`: `0` pass, `1` wrong answer, `2` undetermined (`75` pressure
+  `LLMCTL_VALIDATE_STRICT=1` and gates on `llmctl require-validated <profile>`; `require-validated`: `0` fresh passing record, `1` NOT validated for any reason (no record, stale record, another launch or host, a FAIL record), `2` could not determine (a usage error or an unknown profile also exits 2); `llmctl validate`: `0` pass, `1` wrong answer, `2` undetermined (`75` pressure
   refusal is reported as `2`; `98` port in use on the unit path). Diagram: [validation](validation.md#gate-state-machine-and-exit-codes).
 - **§11.4.278.** The `vision` and `vision-pro` profiles are the Vision tiers a HelixQA consumer declares; verdicts must carry the model identity
   ([validation](validation.md#vision-tiers-and-model-identity-constitution-114278)).

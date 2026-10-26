@@ -183,7 +183,7 @@ assert_contains "${DCMD}" "--api-key-file ${KEYF}" "key passed as a FILE path"
 assert_eq "600" "$(stat -c %a "${KEYF}")" "key file mode 0600"
 assert_eq "700" "$(stat -c %a "$(dirname "${KEYF}")")" "key directory mode 0700"
 KEYVAL="$(head -1 "${KEYF}")"
-if [[ -n "${KEYVAL}" && "${DCMD}" != *"${KEYVAL}"* ]] && ! grep -q "${KEYVAL}" "/proc/$(pid_of decide-tiny)/environ" 2>/dev/null; then
+if [[ -n "${KEYVAL}" && "${DCMD}" != *"${KEYVAL}"* ]] && ! grep -qF -e "${KEYVAL}" "/proc/$(pid_of decide-tiny)/environ" 2>/dev/null; then
   printf '  ok: the key value is in neither /proc/<pid>/cmdline nor /proc/<pid>/environ\n'
 else
   printf '  FAIL: key value visible in cmdline or environ (or empty)\n' >&2; TEST_FAILS=$((TEST_FAILS+1))

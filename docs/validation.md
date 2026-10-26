@@ -134,9 +134,10 @@ flowchart TB
 
 ### Gate state machine and exit codes
 
-Source: [`diagrams/validation-gate.mmd`](diagrams/validation-gate.mmd) (rendered [svg](diagrams/validation-gate.svg)). For `llmctl validate`: `0` pass, `1` wrong answer,
-Exit codes in play: 0, 1, 2, 75 (pressure refusal), 77 (unit skipped), 98 (port in use). `2` could not determine (a host-pressure refusal, `rc 75`, is reported as `2`: it is not a verdict). On the systemd path `77` means the unit was
-skipped for lack of a fresh record, and `98` means the port is already in use (not restarted).
+Source: [`diagrams/validation-gate.mmd`](diagrams/validation-gate.mmd) (rendered [svg](diagrams/validation-gate.svg)).
+For `llmctl validate`: `0` pass, `1` wrong answer, `2` could not determine (a host-pressure refusal, internal `rc 75`, is reported as `2`: it is not a verdict).
+For `llmctl require-validated`: `0` fresh signed passing record, `1` not validated for any reason, `2` could not determine (also a usage error or an unknown profile); it never returns 75 or 98.
+On the systemd path `77` means the unit was skipped for lack of a fresh record, and `98` means the port is already in use (not restarted).
 
 ```mermaid
 stateDiagram-v2
