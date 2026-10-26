@@ -84,8 +84,11 @@ SemVer `MAJOR.MINOR.PATCH`, with an optional pre-release suffix, e.g.:
 - `v1.0.0-rc.1` — a release candidate
 - `v1.0.0-beta.2` — a beta
 
-Both a leading `v` and a bare `1.0.0` form are accepted by
-`release_validate_semver`.
+`scripts/release/create_release.sh` requires the leading lower-case `v`
+(release tags are `v<version>`): `create_release.sh 1.0.0` or `V1.0.0` is
+refused with exit 1 before any step runs (review of 3.3.0, finding M-4). The
+sourced helper `release_validate_semver` is a plain SemVer check and still
+accepts both `v1.0.0` and `1.0.0`.
 
 ## Submodule preflight (Clarification 21)
 

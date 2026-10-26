@@ -178,8 +178,14 @@ assert_eq "0" "${wrc}" "wiring: the dry-run in a fixture repo with the release t
 assert_contains "${wout}" "since v1.1.01)" "wiring: _release_main passes the version (the tag on HEAD is skipped, the SIMILAR-PREFIX tag v1.1.01 is not)"
 assert_contains "${wout}" "new thing" "wiring: the generated changelog is not empty when the release tag is on HEAD"
 assert_eq "v1.1.01" "$(release_since_tag "${WREPO}" "1.1.0")" "similar prefix: excluding v1.1.0 must not also exclude v1.1.01"
-wout2="$(HOME="${TEST_TMP}/wiring_home" PATH="${FAKE_BIN}:${PATH}" bash "${WREPO}/scripts/release/create_release.sh" --dry-run "1.1.0" 2>&1)" || true
-assert_contains "${wout2}" "since v1.1.01)" "wiring: the version given WITHOUT a leading v is handled too"
+# M-4 (review of release/3.3.0): the entry point refuses a version without the leading "v" (tags are v<version>; a bare
+# 1.1.0 would publish a release named differently from its tag). release_validate_semver itself stays a plain SemVer check.
+wout2="$(HOME="${TEST_TMP}/wiring_home" LLMCTL_RELEASE_STATE_DIR="${TEST_TMP}/wiring_state" PATH="${FAKE_BIN}:${PATH}" bash "${WREPO}/scripts/release/create_release.sh" --dry-run "1.1.0" 2>&1)" && wrc2=0 || wrc2=$?
+assert_eq "1" "${wrc2}" "M-4: a version WITHOUT the leading v is refused (rc 1)"
+assert_contains "${wout2}" "must start with 'v'" "M-4: the refusal says why"
+case "${wout2}" in *"Step 1"*|*"since v"*) assert_eq "ran" "refused-before-any-step" "M-4: refused before any release step" ;; *) assert_eq ok ok "M-4: refused before any release step" ;; esac
+wout3="$(HOME="${TEST_TMP}/wiring_home" LLMCTL_RELEASE_STATE_DIR="${TEST_TMP}/wiring_state" PATH="${FAKE_BIN}:${PATH}" bash "${WREPO}/scripts/release/create_release.sh" --dry-run "V1.1.0" 2>&1)" && wrc3=0 || wrc3=$?
+assert_eq "1" "${wrc3}" "M-4: an upper-case V is refused too (tags use a lower-case v)"
 
 # --- 7d. rc and final tag on the same commit: DECIDED behaviour -------------------------------------------------------
 # A FINAL release (no pre-release part) also excludes its own pre-release tags, so its changelog covers everything since

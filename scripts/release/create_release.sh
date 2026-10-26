@@ -32,7 +32,9 @@
 # Inputs:
 #   $1 (positional, after any --dry-run flag) - the release version, SemVer
 #   MAJOR.MINOR.PATCH with an optional pre-release suffix (e.g. v1.0.0,
-#   1.2.3, v1.0.0-rc.1), with or without a leading "v".
+#   v1.2.3, v1.0.0-rc.1). The leading lower-case "v" is REQUIRED by the entry
+#   point (review M-4: tags are v<version>); release_validate_semver itself, when
+#   sourced, accepts both forms.
 #   LLMCTL_RELEASE_STATE_DIR (optional) - where per-version, per-forge
 #   idempotency state is recorded; defaults to
 #   ~/.local/state/llmctl/release/ (XDG-aware, matching this project's
@@ -242,6 +244,12 @@ _release_main() {
     return 1
   fi
 
+  # M-4 (review of release/3.3.0): release tags are v<version>; a bare 1.0.0 would publish a release whose name differs
+  # from its tag. release_validate_semver stays a plain SemVer check (it still accepts both forms for its callers).
+  if [[ "${version}" != v* ]]; then
+    echo "FAIL: '${version}' must start with 'v' (release tags are v<MAJOR.MINOR.PATCH>, e.g. v1.0.0 or v1.0.0-rc.1)" >&2
+    return 1
+  fi
   if ! release_validate_semver "${version}"; then
     echo "FAIL: '${version}' is not a valid SemVer version (MAJOR.MINOR.PATCH[-prerelease], e.g. v1.0.0 or v1.0.0-rc.1)" >&2
     return 1
