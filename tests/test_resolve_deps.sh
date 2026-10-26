@@ -191,20 +191,47 @@ H15="${WORK}/home15"; mk_llmctl "${H15}/home/u/llmctl"; mk_constitution "${H15}/
 resolve "${H15}/home/u/llmctl" constitution HOME="${H15}/home"
 assert_eq "1" "${RC}" "the walk stops at HOME (a copy above HOME is ignored)"
 
-echo "== 16. HOME equals the project root: the boundary directory itself is still examined (inclusive), with and without a trailing slash =="
-R16="${WORK}/root16"; mk_llmctl "${R16}/submodules/llmctl"; mk_constitution "${R16}/constitution"; mk_containers "${R16}/submodules/containers"
-resolve "${R16}/submodules/llmctl" constitution HOME="${R16}"
-assert_eq "${R16}/constitution" "${OUT}" "HOME == project root: <root>/constitution resolves (HOME is inclusive)"
-resolve "${R16}/submodules/llmctl" containers HOME="${R16}"
-assert_eq "${R16}/submodules/containers" "${OUT}" "HOME == project root: <root>/submodules/containers resolves"
-resolve "${R16}/submodules/llmctl" constitution HOME="${R16}/"
-assert_eq "${R16}/constitution" "${OUT}" "HOME with a trailing slash == project root still resolves"
+echo "== 16. HOME is an inclusive bound for the ANCESTOR WALK, with and without a trailing slash =="
+# Layout: the root is R16/x/llmctl, so R16/submodules/containers and R16/constitution are reachable ONLY by the walk
+# (not step 3 = <root>/..., not step 4 = the root's sibling dirs). HOME == R16 is the boundary directory itself.
+R16="${WORK}/root16"; mk_llmctl "${R16}/x/llmctl"; mk_constitution "${R16}/constitution"; mk_containers "${R16}/submodules/containers"
+resolve "${R16}/x/llmctl" constitution HOME="${R16}"
+assert_eq "${R16}/constitution" "${OUT}" "HOME == boundary: <boundary>/constitution is found by the walk (HOME is inclusive)"
+resolve "${R16}/x/llmctl" containers HOME="${R16}"
+assert_eq "${R16}/submodules/containers" "${OUT}" "HOME == boundary: <boundary>/submodules/containers is found by the walk (HOME is inclusive)"
+resolve "${R16}/x/llmctl" constitution HOME="${R16}/"
+assert_eq "${R16}/constitution" "${OUT}" "HOME with a trailing slash == boundary still resolves"
+resolve "${R16}/x/llmctl" containers HOME="${R16}/x"
+assert_eq "1" "${RC}" "HOME one level BELOW the boundary: the walk stops before it, so containers is NOT found (the bound is real)"
 # trailing slash must still STOP the walk at HOME (a copy above HOME stays ignored)
 T16="${WORK}/trail16"; mk_llmctl "${T16}/home/u/llmctl"; mk_constitution "${T16}/submodules/constitution"
 resolve "${T16}/home/u/llmctl" constitution HOME="${T16}/home/"
 assert_eq "1" "${RC}" "HOME with a trailing slash still stops the walk (copy above HOME ignored)"
 resolve "${T16}/home/u/llmctl" constitution LLMCTL_RESOLVE_STOP_AT="${T16}/home/"
 assert_eq "1" "${RC}" "LLMCTL_RESOLVE_STOP_AT with a trailing slash still stops the walk"
+
+echo "== 18. a bound that is the llmctl root itself, or lies below it, means NO ancestor is walked =="
+# 3.3.0 review round 3: the walk starts at the root's parent, so such a bound was never met and a copy ABOVE it still resolved.
+B18="${WORK}/b18"; mk_llmctl "${B18}/a/b/llmctl"
+mk_constitution "${B18}/submodules/constitution"; mk_containers "${B18}/submodules/containers"; mk_superspec "${B18}/submodules/superspec"
+R18="${B18}/a/b/llmctl"
+for _n in constitution containers superspec; do
+  resolve "${R18}" "${_n}" HOME="${R18}" LLMCTL_RESOLVE_STOP_AT=/
+  assert_eq "1" "${RC}" "HOME == root: ${_n} planted above the root is NOT resolved"
+  resolve "${R18}" "${_n}" HOME="${R18}/"
+  assert_eq "1" "${RC}" "HOME == root (trailing slash): ${_n} planted above is NOT resolved"
+  resolve "${R18}" "${_n}" HOME=/ LLMCTL_RESOLVE_STOP_AT="${R18}"
+  assert_eq "1" "${RC}" "STOP_AT == root: ${_n} planted above the root is NOT resolved"
+  resolve "${R18}" "${_n}" HOME=/ LLMCTL_RESOLVE_STOP_AT="${R18}/lib"
+  assert_eq "1" "${RC}" "STOP_AT below the root: ${_n} planted above is NOT resolved"
+done
+# control: with a bound ABOVE the root the same layout does resolve (the planted copies are valid and findable)
+resolve "${R18}" constitution HOME="${B18}"
+assert_eq "${B18}/submodules/constitution" "${OUT}" "control: HOME above the root DOES find the planted constitution (the fixture is valid)"
+# a bound at the root must not disable the non-walk steps: <root>/constitution still resolves
+mk_constitution "${R18}/constitution"
+resolve "${R18}" constitution HOME="${R18}" LLMCTL_RESOLVE_STOP_AT=/
+assert_eq "${R18}/constitution" "${OUT}" "HOME == root: step 3 (<root>/constitution) still resolves"
 
 echo "== 17. host isolation: a submodules/<dep> planted in an ancestor of TMPDIR (outside any .cache) must not change the result =="
 # The class behind the 3.3.0 review finding: the suite's own negative controls must not depend on what sits above TMPDIR.

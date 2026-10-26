@@ -29,7 +29,8 @@
 #   5. ancestor walk: for every ancestor A of <root>: A/constitution, A/submodules/constitution (constitution
 #      - the semantics of the hub's find_constitution.sh), A/submodules/<name>, A/constitution/submodules/<name>.
 #      BOUNDED: the walk stops BEFORE any directory named .cache (a cache is never a source), AFTER
-#      LLMCTL_RESOLVE_STOP_AT when set, and AFTER $HOME. (A stray ~/.cache/submodules/<name> used to satisfy it.)
+#      LLMCTL_RESOLVE_STOP_AT when set, and AFTER $HOME; when either bound is <root> itself or below it, no ancestor
+#      is walked at all (a bound that contains the root is never crossed). (A stray ~/.cache/submodules/<name> used to satisfy it.)
 #   6. host fallback (constitution ONLY) - OPT-IN: only when LLMCTL_HOST_FALLBACK_DIR is set. There is no
 #      built-in host path (a host-specific literal does not belong in a shared library).
 #
@@ -87,7 +88,15 @@ _llmctl_rd_candidates() {
   # The walk is BOUNDED (3.3.0 review): it never examines a directory named .cache (a cache is not a source of truth; a
   # stray ~/.cache/submodules/<name> must not satisfy resolution) or anything above it, stops after
   # LLMCTL_RESOLVE_STOP_AT (inclusive) when that is set, and stops after $HOME (inclusive).
+  # Rule (3.3.0 review round 3): never walk outside a bound that contains the root. When HOME or
+  # LLMCTL_RESOLVE_STOP_AT is the llmctl root itself or lies below it, every ancestor is outside the bound, so NO
+  # ancestor is examined (the walk used to start at the root's parent and never meet such a bound).
   a="${parent}"
+  local b
+  for b in "${LLMCTL_RESOLVE_STOP_AT:-}" "${HOME:-}"; do
+    b="${b%/}"
+    if [[ -n "${b}" && ( "${b}" == "${root}" || "${b}" == "${root}"/* ) ]]; then a=""; fi
+  done
   while [[ -n "${a}" ]]; do
     [[ "$(basename "${a}")" == ".cache" ]] && break
     if [[ "${name}" == "constitution" ]]; then

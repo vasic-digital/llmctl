@@ -180,18 +180,34 @@ assert_eq 0 "${_PREFLIGHT_FAILS}" "no false FAIL recorded for the mismatched-sec
 assert_eq 0 "${_PREFLIGHT_UNKNOWNS}" "no false UNKNOWN recorded for the mismatched-section-name submodule"
 
 # --- I4: release evidence records the commits of the RESOLVED (not pinned) dependencies ---------------------------
-RES_ROOT="$(mktemp -d)"; mkdir -p "${RES_ROOT}/lib" "${RES_ROOT}/constitution" "${RES_ROOT}/submodules/containers"
+# Hermetic (3.3.0 review round 3): the llmctl root is NESTED one level below a scratch base, and that base is the
+# HOME / LLMCTL_RESOLVE_STOP_AT bound, so the ancestor walk never leaves the fixture whatever sits above TMPDIR.
+RES_BASE="$(mktemp -d)"; RES_ROOT="${RES_BASE}/llmctl"
+mkdir -p "${RES_ROOT}/lib" "${RES_ROOT}/constitution" "${RES_ROOT}/submodules/containers"
 cp "${LLMCTL_ROOT}/lib/resolve_deps.sh" "${RES_ROOT}/lib/"; : > "${RES_ROOT}/constitution/Constitution.md"
 printf 'module digital.vasic.containers\n' > "${RES_ROOT}/submodules/containers/go.mod"
 git init -q "${RES_ROOT}/submodules/containers"; git -C "${RES_ROOT}/submodules/containers" -c user.email=t@t -c user.name=t add go.mod
 git -C "${RES_ROOT}/submodules/containers" -c user.email=t@t -c user.name=t commit -qm i
-rec_out="$(env -i PATH="${PATH}" HOME="${RES_ROOT}" LLMCTL_RESOLVE_STOP_AT="${RES_ROOT}" bash -c "source '${LLMCTL_ROOT}/scripts/release/preflight_submodules.sh'; _preflight_record_resolved '${RES_ROOT}'")"
+rec_out="$(env -i PATH="${PATH}" HOME="${RES_BASE}" LLMCTL_RESOLVE_STOP_AT="${RES_BASE}" bash -c "source '${LLMCTL_ROOT}/scripts/release/preflight_submodules.sh'; _preflight_record_resolved '${RES_ROOT}'")"
 assert_contains "${rec_out}" "RESOLVED containers: ${RES_ROOT}/submodules/containers @ $(git -C "${RES_ROOT}/submodules/containers" rev-parse HEAD)" "the containers commit is recorded"
 assert_contains "${rec_out}" "RESOLVED constitution: ${RES_ROOT}/constitution @ untracked" "a non-git constitution is reported as untracked"
 assert_contains "${rec_out}" "RESOLVED superspec: UNRESOLVED" "an unresolved dependency is a visible gap, not silence"
 echo dirt > "${RES_ROOT}/submodules/containers/untracked.txt"
-rec_dirty="$(env -i PATH="${PATH}" HOME="${RES_ROOT}" LLMCTL_RESOLVE_STOP_AT="${RES_ROOT}" bash -c "source '${LLMCTL_ROOT}/scripts/release/preflight_submodules.sh'; _preflight_record_resolved '${RES_ROOT}'")"
+rec_dirty="$(env -i PATH="${PATH}" HOME="${RES_BASE}" LLMCTL_RESOLVE_STOP_AT="${RES_BASE}" bash -c "source '${LLMCTL_ROOT}/scripts/release/preflight_submodules.sh'; _preflight_record_resolved '${RES_ROOT}'")"
 assert_contains "${rec_dirty}" "$(git -C "${RES_ROOT}/submodules/containers" rev-parse HEAD) dirty" "M5: a dirty resolved tree is flagged 'dirty'"
-rm -rf "${RES_ROOT}"
+rm -rf "${RES_BASE}"
+
+# --- poisoned-TMPDIR proof: this suite must pass when TMPDIR sits below a directory holding submodules/<dep> ----------
+if [[ -z "${LLMCTL_PF_CHILD:-}" ]]; then
+  PF_POISON="$(mktemp -d)"
+  for _d in constitution containers superspec; do mkdir -p "${PF_POISON}/submodules/${_d}"; done
+  : > "${PF_POISON}/submodules/constitution/Constitution.md"; : > "${PF_POISON}/submodules/superspec/extension.yml"
+  printf 'module digital.vasic.containers\n' > "${PF_POISON}/submodules/containers/go.mod"
+  mkdir -p "${PF_POISON}/tmp"
+  pf_rc=0; pf_out="$(env LLMCTL_PF_CHILD=1 TMPDIR="${PF_POISON}/tmp" bash "${BASH_SOURCE[0]}" 2>&1)" || pf_rc=$?
+  assert_eq "0" "${pf_rc}" "this suite passes when TMPDIR sits below a directory holding submodules/{constitution,containers,superspec}"
+  [[ "${pf_rc}" -eq 0 ]] || printf '%s\n' "${pf_out}" | /usr/bin/grep -E 'FAIL' | head -5 >&2
+  rm -rf "${PF_POISON}"
+fi
 
 test_finish
