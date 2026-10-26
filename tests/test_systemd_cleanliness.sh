@@ -52,7 +52,8 @@ if command -v go >/dev/null 2>&1; then
   assert_eq 0 "${grc}" "TestWrapCommand_RealSystemdRunInvocation green (rc=${grc})"
   assert_eq "" "$(new_since "${BEFORE}" "$(snap)")" "the isolation test leaves no new llmctl*.slice or unit behind"
   if [[ "${slices_before}" != 0 ]]; then
-    assert_skip "llmctl*.slice units were already active before this run (a real tenant or an earlier leak): the 'created by this run' part of the slice cleanup is not provable now" "slice teardown proof"
+    pre_slices="$(grep '^llmctl.*\.slice$' <<<"${BEFORE}" | paste -sd, - || true)"
+    assert_skip "slice teardown not provable: ${slices_before} llmctl*.slice unit(s) were already active before this run (${pre_slices}); a pre-existing slice cannot be shown to be created or removed by this run. Stopping them is an operator action (this test never stops them); the check runs once they are gone" "slice teardown proof"
   fi
 else
   assert_skip "go is not installed" "isolation slice teardown"

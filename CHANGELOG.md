@@ -97,6 +97,8 @@ command. Scope: `lib/validate.sh`, `lib/validate_judge.py`, `lib/scheduler.sh`, 
 - Manual QA (Constitution §11.4.185) has not been performed on this release.
 - The counts in the first paragraph are labelled with the commit they were measured at; the section date is the date the notes were drafted, not a tag date.
 - `pin_reverify.py` keeps `Authorization` on a same-host https to http redirect; the TLS-off and redirect guard tests are pattern scans with known blind spots.
+- Resolver bound normalisation (M-1, `lib/resolve_deps.sh` line 74): a bound (`HOME` or `LLMCTL_RESOLVE_STOP_AT`) that does not exist is compared as written (only a trailing slash is stripped), so a non-existent bound spelled with `/./` or `//` segments (for example `/a/./b` or `/a//b`) is not normalised and may not compare equal to the same real path. The walk stays bounded by the other bound and by the `.cache` rule, and fails closed on a relative or empty bound; an existing bound is physically resolved and unaffected. Not fixed in 3.3.0 (needs its own test-first round).
+- Resolver ancestor walk start (M-2, `lib/resolve_deps.sh` lines 102-103): the ancestor walk starts from the PHYSICAL parent of the llmctl root, while steps 2 and 4 use the LOGICAL parent (`dirname` of the root as spelled). When the root is reached through a symlink the walk can begin at a different directory than steps 2 and 4 examined. Containment is compared on physical paths, so no directory outside a bound is examined; only which ancestors are considered differs. Not fixed in 3.3.0.
 
 ### Detailed entries (moved from "Unreleased")
 

@@ -1020,7 +1020,10 @@ PY
 
   # name collision: a second run with the SAME -n must neither start nor touch the first run's scope
   cn="hscol$$"
-  "${BR}" -q -T 15 -n "${cn}" -- bash -c "(exec -a hsmarkd-${mark} sleep 200) & wait" >/dev/null 2>&1 &
+  # The winner's own -T must outlast the slowest loaded host: with -T 15 its legitimate deadline could expire before the
+  # asserts below ran (observed under load average ~11: scope inactive / process gone, then the unguarded kill below
+  # aborted the whole test under set -e). The test ends the winner itself; -T 120 only bounds a crashed test run.
+  "${BR}" -q -T 120 -n "${cn}" -- bash -c "(exec -a hsmarkd-${mark} sleep 200) & wait" >/dev/null 2>&1 &
   colpid=$!
   for _ in $(seq 1 50); do systemctl --user is-active "bounded-run-${cn}.scope" >/dev/null 2>&1 && break; sleep 0.1; done
   rc=0; "${BR}" -q -n "${cn}" -- true >"${TEST_TMP}/col.out" 2>&1 || rc=$?
@@ -1041,7 +1044,7 @@ SH
   sleep 1.5   # past the loser's own -T 1 watchdog
   assert_eq "active" "$(systemctl --user is-active "bounded-run-${cn}.scope" 2>&1 | head -1)" "the loser's cleanup and timeout watchdog did NOT kill the winner's scope"
   assert_eq "1" "$(count_procs "^hsmarkd-${mark} 200")" "the winner's process survived the losing run"
-  systemctl --user kill --signal=SIGKILL "bounded-run-${cn}.scope" 2>/dev/null; wait "${colpid}" 2>/dev/null || true
+  systemctl --user kill --signal=SIGKILL "bounded-run-${cn}.scope" 2>/dev/null || true; wait "${colpid}" 2>/dev/null || true
 
   # exit status passthrough + banner shows the computed limits
   rc=0; "${BR}" -q -- bash -c 'exit 7' >/dev/null 2>&1 || rc=$?
