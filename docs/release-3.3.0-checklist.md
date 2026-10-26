@@ -13,7 +13,7 @@ Wording note: this file avoids the literal "llmctl" + space + digits pattern tha
 
 ## Commits
 
-Release tree: branch `release/3.3.0` = `main` (`d9d15a2`) + one test-fix commit + the documentation commit that adds this file. `main` itself is `2875a61` (release: 3.3.0, the 78-entry release layer) + `d9d15a2` (lint fix). The branch `release/3.3.0-prep` was created by another process in the same checkout during this preparation; it additionally commits 24 generated `.docx/.html/.pdf` exports (decision recorded: HEAD tracks none, so they are **not** part of this release; the files are present, untracked, in the working tree). It is not part of the release and was not modified.
+Release tree: branch `release/3.3.0` = `main` (`d9d15a2`) + one test-fix commit + the documentation commit that adds this file. `main` itself is `2875a61` (release: 3.3.0, the 78-entry release layer) + `d9d15a2` (lint fix). The branch `release/3.3.0-prep` was created by another process in the same checkout during this preparation. Generated `.docx/.html/.pdf` exports: **HEAD tracks none** (the only tracked `.html` is a third-party example under `.specify/extensions/`). Commit 97f4307 had added 21 stale exports; the round-3 fix commit removed them from the index (`git rm --cached`; the files stay on disk) and `.gitignore` now ignores them. This is the reversible choice; whether exports ship with a release is an open operator decision, and if they do they must be regenerated from the final `.md` and covered by a freshness check.
 
 ## Test results (what was run, on which tree, what it proves)
 

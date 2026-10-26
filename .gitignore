@@ -43,3 +43,12 @@ __pycache__/
 /submodules/*.old
 /submodules/containers.*
 /submodules/superspec.*
+
+# Generated documentation exports (pandoc html/pdf/docx twins of the .md files). Not release content: they go stale
+# against the .md they are made from (3.3.0 review round 3). Whether exports ship is an operator decision.
+/README.html
+/README.pdf
+/README.docx
+/docs/**/*.html
+/docs/**/*.pdf
+/docs/**/*.docx
