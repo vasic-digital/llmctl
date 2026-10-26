@@ -18,8 +18,8 @@ The script supports a `--dry-run` mode that really runs the SemVer
 validation and the changelog generation (since-tag via `git describe --tags
 --match 'v[0-9]*'`, excluding the tag of the version being released (and, for a final version, its own pre-release tags `v<version>-*`, so a final that shares a commit with its rc still gets a non-empty changelog covering everything since the previous release) so a tag already on HEAD does not empty the changelog, plus the CHANGELOG migration notes); the submodule
 preflight and the asset build are only announced, not executed. It makes zero
-calls to `gh`/`glab` and, in either mode, creates no git tag and attaches no
-assets — this is the only mode this project's
+calls to `gh`/`glab` and, in dry-run mode, creates no git tag and attaches no
+assets (a non-dry-run `gh release create` WITHOUT `--verify-tag` creates the tag on the remote if it does not exist; this script never creates a local tag and attaches no assets itself) — this is the only mode this project's
 own test suite ever exercises against the real `gh`/`glab` binaries (via a
 PATH-injected fake). Creating a public release is a hard-to-reverse,
 externally-visible action this script never takes unattended: a real
@@ -210,3 +210,8 @@ LLMCTL_RELEASE_STATE_DIR=/tmp/my-release-state bash scripts/release/create_relea
 ## Last verified date
 
 2026-09-17
+
+
+## Changelog range (known limitation)
+
+The changelog covers `<since-tag>..HEAD`, not `<since-tag>..<release tag>`: if HEAD is past the release tag the range is wider than the release. When there is no previous release tag, `since` falls back to the root commit and `root..HEAD` DROPS the root commit itself.

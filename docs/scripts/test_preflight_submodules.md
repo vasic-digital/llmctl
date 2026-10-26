@@ -144,3 +144,8 @@ preflight_run <submodule-name> <upstream-url> <expected-sha>
 ## Last verified date
 
 2026-09-17
+
+
+## Hermetic resolver fixture (3.3.0 review round 3)
+
+The fixture lives under its own `mktemp -d` base (`RES_BASE`); `HOME` and `LLMCTL_RESOLVE_STOP_AT` are both set to that base, so the resolver's ancestor walk can never reach a directory outside it. The suite also re-runs itself (`LLMCTL_PF_CHILD=1`) with `TMPDIR` below a planted `submodules/{constitution,containers,superspec}` and asserts rc 0.

@@ -55,6 +55,7 @@ command. Scope: `lib/validate.sh`, `lib/validate_judge.py`, `lib/scheduler.sh`, 
 - **Validation of `decide-*` and colibri profiles** is possible (never-executed ones reported NOT VALIDATED); a validation record names its host.
 - **Class-sweep guard tests**: `test_no_trap_replacement.sh`, `test_no_secret_on_argv.sh`, `test_cluster_header_signal.sh`, `test_tls_off_allowlist.sh`, `test_no_auth_redirect_forwarding.sh`, `test_no_lock_fd_leak.sh`, `test_decide_validate_model_alias.sh` (each with a control needle; the redirect guard is a presence scan, not a behavioural test of the redirect handlers); see `docs/qa/class-sweep-followups.md`.
 - **`docs/diagrams/`** (validation gate state machine, decide gateway request flow, hub-engine placement, Vision tiers) and **`tests/test_docs_diagrams_governance.sh`**.
+- **Resolver walk bounds and `LLMCTL_RESOLVE_STOP_AT`**: the ancestor walk of `lib/resolve_deps.sh` stops before any `.cache` directory, after `LLMCTL_RESOLVE_STOP_AT` and after `$HOME`; it walks nothing when a bound is the llmctl root or below it, is relative, or HOME is empty/unset; bounds are compared on physical paths (symlinks resolved). Tests: `test_resolve_deps` cases 15-19.
 - Evidence pages under `docs/qa/` (`small-live-2026-10-14`, `vision-live-2026-10-14`, `vision-live-nezha-2026-10-14`).
 
 ### Changed
@@ -92,7 +93,7 @@ command. Scope: `lib/validate.sh`, `lib/validate_judge.py`, `lib/scheduler.sh`, 
 - No profile holds a fresh validation record after this release; `vision-pro`, the decide-* and colibri profiles have never been run against a real model.
 - The hosted-Jev parity statements, the HTTPS/CA handling of the claude_toolkit side, and macOS behaviour are not verified live here.
 - Manual QA (Constitution §11.4.185) has not been performed on this release.
-- The counts in the first paragraph cover `v3.2.2..31479f9`; the section date is the date the notes were drafted, not a tag date.
+- The counts in the first paragraph are labelled with the commit they were measured at; the section date is the date the notes were drafted, not a tag date.
 - `pin_reverify.py` keeps `Authorization` on a same-host https to http redirect; the TLS-off and redirect guard tests are pattern scans with known blind spots.
 
 ### Detailed entries (moved from "Unreleased")

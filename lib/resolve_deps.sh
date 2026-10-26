@@ -70,6 +70,9 @@ _llmctl_rd_valid() {
 # _llmctl_rd_norm <dir> : absolute, '..'-free form of an existing directory (symlinks are NOT resolved)
 _llmctl_rd_norm() { (CDPATH='' cd "$1" 2>/dev/null && pwd); }
 
+# _llmctl_rd_phys <abs-path> : physical path (symlinks resolved) when it exists, else the path as written
+_llmctl_rd_phys() { local d; d="$(cd -P -- "$1" 2>/dev/null && pwd -P)" && printf '%s' "${d}" || printf '%s' "${1%/}"; }
+
 # _llmctl_rd_candidates <name> <root> : candidate directories in resolution order (steps 2-6), one per line
 _llmctl_rd_candidates() {
   local name="$1" root="$2" parent hub a
@@ -91,11 +94,19 @@ _llmctl_rd_candidates() {
   # Rule (3.3.0 review round 3): never walk outside a bound that contains the root. When HOME or
   # LLMCTL_RESOLVE_STOP_AT is the llmctl root itself or lies below it, every ancestor is outside the bound, so NO
   # ancestor is examined (the walk used to start at the root's parent and never meet such a bound).
-  a="${parent}"
-  local b
-  for b in "${LLMCTL_RESOLVE_STOP_AT:-}" "${HOME:-}"; do
-    b="${b%/}"
-    if [[ -n "${b}" && ( "${b}" == "${root}" || "${b}" == "${root}"/* ) ]]; then a=""; fi
+  # Containment is compared on PHYSICAL paths (3.3.0 review round 4): a symlinked spelling of the root or of a bound
+  # must not escape it. A bound that is relative, or HOME empty/unset, cannot be proven to contain anything, so the
+  # walk FAILS CLOSED (no ancestor is examined). A bound that does not exist is compared as written (absolute only).
+  local proot pstop="" phome="" b ok=1
+  proot="$(_llmctl_rd_phys "${root}")"
+  a="$(dirname "${proot}")"
+  if [[ -z "${HOME:-}" || "${HOME}" != /* ]]; then ok=0; else phome="$(_llmctl_rd_phys "${HOME%/}")"; fi
+  if [[ -n "${LLMCTL_RESOLVE_STOP_AT:-}" ]]; then
+    if [[ "${LLMCTL_RESOLVE_STOP_AT}" != /* ]]; then ok=0; else pstop="$(_llmctl_rd_phys "${LLMCTL_RESOLVE_STOP_AT%/}")"; fi
+  fi
+  [[ "${ok}" == 1 ]] || a=""
+  for b in "${pstop}" "${phome}"; do
+    if [[ -n "${b}" && ( "${b}" == "${proot}" || "${b}" == "${proot}"/* ) ]]; then a=""; fi
   done
   while [[ -n "${a}" ]]; do
     [[ "$(basename "${a}")" == ".cache" ]] && break
@@ -105,8 +116,8 @@ _llmctl_rd_candidates() {
       printf '%s\n' "${a}/submodules/${name}" "${a}/constitution/submodules/${name}"
     fi
     [[ "${a}" == "/" ]] && break
-    [[ -n "${LLMCTL_RESOLVE_STOP_AT:-}" && "${a}" == "${LLMCTL_RESOLVE_STOP_AT%/}" ]] && break
-    [[ -n "${HOME:-}" && "${a}" == "${HOME%/}" ]] && break
+    [[ -n "${pstop}" && "${a}" == "${pstop}" ]] && break
+    [[ -n "${phome}" && "${a}" == "${phome}" ]] && break
     a="$(dirname "${a}")"
   done
   # 6. host fallback (constitution only)

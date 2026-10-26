@@ -17,7 +17,7 @@ Cases: 1 env override wins; 2 nested at <hub>/submodules/llmctl finds the hub co
 3 standalone root layout (<root>/constitution, <root>/submodules/<name>); 4 sibling directories;
 5 ancestor walk (<ancestor>/submodules/<name>; case 15: bounded - a decoy under .cache / above LLMCTL_RESOLVE_STOP_AT / above HOME is ignored); 6 host fallback (constitution only); 7 nothing resolves ->
 non-zero + actionable message (negative control, never a silent pass); 8 a candidate that lacks the marker
-file is rejected (no false positive on an empty dir); 9 an invalid env override is an error, not a fallthrough.
+file is rejected (no false positive on an empty dir); 9 an invalid env override is an error, not a fallthrough; 16-18 the bounds (HOME / LLMCTL_RESOLVE_STOP_AT equal to, or below, the root walk no ancestor); 19 containment is physical (symlinked root / HOME / STOP_AT spellings) and a relative or empty bound fails closed; 17 the whole suite is re-run with TMPDIR below a planted submodules/{constitution,containers,superspec}.
 ```
 
 Run: `bash tests/test_resolve_deps.sh`.

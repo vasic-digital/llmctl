@@ -233,6 +233,27 @@ mk_constitution "${R18}/constitution"
 resolve "${R18}" constitution HOME="${R18}" LLMCTL_RESOLVE_STOP_AT=/
 assert_eq "${R18}/constitution" "${OUT}" "HOME == root: step 3 (<root>/constitution) still resolves"
 
+echo "== 19. containment is physical, and an unprovable bound fails closed (symlinked spelling, relative, empty) =="
+B19="${WORK}/b19"; mk_llmctl "${B19}/a/b/llmctl"
+mk_constitution "${B19}/submodules/constitution"; mk_containers "${B19}/submodules/containers"; mk_superspec "${B19}/submodules/superspec"
+R19="${B19}/a/b/llmctl"; ln -s "${R19}" "${B19}/rootlink"; ln -s "${R19}" "${B19}/boundlink"
+for _n in constitution containers superspec; do
+  resolve "${B19}/rootlink" "${_n}" HOME="${R19}" LLMCTL_RESOLVE_STOP_AT=/
+  assert_eq "1" "${RC}" "root reached through a symlink, HOME == physical root: ${_n} planted above is NOT resolved"
+  resolve "${R19}" "${_n}" HOME="${B19}/boundlink" LLMCTL_RESOLVE_STOP_AT=/
+  assert_eq "1" "${RC}" "HOME is a symlink spelling of the root: ${_n} planted above is NOT resolved"
+  resolve "${R19}" "${_n}" HOME=/ LLMCTL_RESOLVE_STOP_AT="${B19}/boundlink"
+  assert_eq "1" "${RC}" "STOP_AT is a symlink spelling of the root: ${_n} planted above is NOT resolved"
+  resolve "${R19}" "${_n}" HOME="a/b/llmctl" LLMCTL_RESOLVE_STOP_AT=/
+  assert_eq "1" "${RC}" "relative HOME fails closed: ${_n} planted above is NOT resolved"
+  resolve "${R19}" "${_n}" HOME=/ LLMCTL_RESOLVE_STOP_AT="a/b"
+  assert_eq "1" "${RC}" "relative STOP_AT fails closed: ${_n} planted above is NOT resolved"
+  resolve "${R19}" "${_n}" HOME= LLMCTL_RESOLVE_STOP_AT=/
+  assert_eq "1" "${RC}" "empty HOME fails closed: ${_n} planted above is NOT resolved"
+done
+resolve "${R19}" constitution HOME="${B19}"
+assert_eq "${B19}/submodules/constitution" "${OUT}" "control: an absolute HOME above the root still finds the planted constitution"
+
 echo "== 17. host isolation: a submodules/<dep> planted in an ancestor of TMPDIR (outside any .cache) must not change the result =="
 # The class behind the 3.3.0 review finding: the suite's own negative controls must not depend on what sits above TMPDIR.
 if [[ -z "${LLMCTL_RD_CHILD:-}" ]]; then
@@ -241,7 +262,7 @@ if [[ -z "${LLMCTL_RD_CHILD:-}" ]]; then
   mkdir -p "${POISON}/tmp"
   CH_RC=0
   CH_OUT="$(env LLMCTL_RD_CHILD=1 TMPDIR="${POISON}/tmp" bash "${BASH_SOURCE[0]}" 2>&1)" || CH_RC=$?
-  assert_eq "0" "${CH_RC}" "this suite passes when TMPDIR sits below a directory holding submodules/{constitution,containers}"
+  assert_eq "0" "${CH_RC}" "this suite passes when TMPDIR sits below a directory holding submodules/{constitution,containers,superspec}"
   [[ "${CH_RC}" -eq 0 ]] || printf '%s\n' "${CH_OUT}" | grep -E 'FAIL' | head -5 >&2
 fi
 

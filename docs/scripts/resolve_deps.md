@@ -32,7 +32,7 @@ Resolution order (first candidate that passes its marker check wins):
   3. <root>/constitution and <root>/submodules/<name>  (root = this llmctl checkout: a consumer's own copy,
      Constitution section 11.4.76, or the symlinks made by scripts/link_deps.sh).
   4. sibling clones  <root>/../constitution, <root>/../containers, <root>/../superspec  (standalone use).
-  5. ancestor walk (BOUNDED: stops before any `.cache` directory, after LLMCTL_RESOLVE_STOP_AT, after $HOME): for every ancestor A of <root>: A/constitution, A/submodules/constitution (constitution
+  5. ancestor walk (BOUNDED: stops before any `.cache` directory, after LLMCTL_RESOLVE_STOP_AT, after $HOME; the bounds are compared on PHYSICAL paths - symlinked spellings of the root or a bound do not escape; if HOME or LLMCTL_RESOLVE_STOP_AT is the root or below it, or is relative, or HOME is empty/unset, NO ancestor is walked - fail closed): for every ancestor A of <root>: A/constitution, A/submodules/constitution (constitution
      - the semantics of the hub's find_constitution.sh), A/submodules/<name>, A/constitution/submodules/<name>.
   6. host fallback (constitution ONLY) - OPT-IN: only when LLMCTL_HOST_FALLBACK_DIR is set. There is no
      built-in host path (a host-specific literal does not belong in a shared library).
