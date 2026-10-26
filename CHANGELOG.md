@@ -23,9 +23,9 @@ where `scripts/release/preflight_submodules.sh` reports a fully clean
 35-file test suite is green. Both `v3.0.0` and `v3.0.1` tags remain in the
 repository as an honest record of that process.
 
-## 3.3.0 (2026-10-22)
+## 3.3.0 (2026-10-26)
 
-A **minor release candidate** (version 3.2.2 -> 3.3.0; not yet tagged or published - the date above is the date the notes were drafted, set it at tag time). Why minor and not patch: `git diff --shortstat v3.2.2..1d48dc7` (re-measured at commit 1d48dc7, the last code/test commit; later documentation-only commits are not counted; no generated export is tracked) is 86 commits, 268 files, 17213 insertions, 1015 deletions (the earlier "68 commits / 215 files / 15.7k" was `v3.2.2..f42bad6`) that
+A **minor release** (version 3.2.2 -> 3.3.0). Why minor and not patch: `git diff --shortstat v3.2.2..1d48dc7` (re-measured at commit 1d48dc7, the last code/test commit; later documentation-only commits are not counted; no generated export is tracked) is 86 commits, 268 files, 17213 insertions, 1015 deletions (the earlier "68 commits / 215 files / 15.7k" was `v3.2.2..f42bad6`) that
 add behaviour and change defaults - the model validation gate is now **enforced** (quarantine until PASS, strict by default - for systemd units once `llmctl install` has regenerated them; a legacy unit keeps `LLMCTL_VALIDATE_STRICT` default 0 - every entry point), the
 dependency layout changed (`constitution`, `containers`, `superspec` are resolved from the hub, no longer vendored gitlinks), the judge rules were rewritten
 (every suite hash changed, so every existing validation record is stale), plus new host-safety tooling and a supply-chain pin gate. None of it removes a CLI

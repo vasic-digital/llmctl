@@ -186,6 +186,7 @@ assert_contains "${wout2}" "must start with 'v'" "M-4: the refusal says why"
 case "${wout2}" in *"Step 1"*|*"since v"*) assert_eq "ran" "refused-before-any-step" "M-4: refused before any release step" ;; *) assert_eq ok ok "M-4: refused before any release step" ;; esac
 wout3="$(HOME="${TEST_TMP}/wiring_home" LLMCTL_RELEASE_STATE_DIR="${TEST_TMP}/wiring_state" PATH="${FAKE_BIN}:${PATH}" bash "${WREPO}/scripts/release/create_release.sh" --dry-run "V1.1.0" 2>&1)" && wrc3=0 || wrc3=$?
 assert_eq "1" "${wrc3}" "M-4: an upper-case V is refused too (tags use a lower-case v)"
+assert_contains "${wout3}" "must start with 'v'" "M-4: the upper-case V refusal says why (same message as the bare version)"
 
 # --- 7d. rc and final tag on the same commit: DECIDED behaviour -------------------------------------------------------
 # A FINAL release (no pre-release part) also excludes its own pre-release tags, so its changelog covers everything since
