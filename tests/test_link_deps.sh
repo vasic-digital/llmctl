@@ -8,7 +8,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/helpers.sh"
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/llmctl-link.XXXXXX")"
 trap 'rm -rf -- "${WORK}"' EXIT
 mk_llmctl() { mkdir -p "$1/lib" "$1/scripts"; cp "${LLMCTL_ROOT}/lib/resolve_deps.sh" "$1/lib/"; cp "${LLMCTL_ROOT}/scripts/link_deps.sh" "$1/scripts/"; }
-run() { local d="$1"; shift; RC=0; OUT="$(env -i PATH="${PATH}" HOME="${WORK}/h" LLMCTL_HOST_FALLBACK_DIR="${WORK}/none" "$@" bash "${d}/scripts/link_deps.sh" 2>&1)" || RC=$?; }
+run() { local d="$1"; shift; RC=0; OUT="$(env -i PATH="${PATH}" HOME="${WORK}/h" LLMCTL_RESOLVE_STOP_AT="${WORK}" LLMCTL_HOST_FALLBACK_DIR="${WORK}/none" "$@" bash "${d}/scripts/link_deps.sh" 2>&1)" || RC=$?; }
 
 HUB="${WORK}/hub"; mkdir -p "${HUB}/submodules/containers" "${HUB}/submodules/superspec"
 : > "${HUB}/Constitution.md"; printf 'module digital.vasic.containers\n' > "${HUB}/submodules/containers/go.mod"; : > "${HUB}/submodules/superspec/extension.yml"
@@ -25,12 +25,12 @@ assert_file_exists "${L}/submodules/containers/go.mod" "the link is usable by go
 
 echo "== 2. idempotent + --check =="
 run "${L}"; assert_eq "0" "${RC}" "second run exits 0"
-run "${L}" ; run "${L}" ; RC=0; OUT="$(env -i PATH="${PATH}" HOME="${WORK}/h" bash "${L}/scripts/link_deps.sh" --check 2>&1)" || RC=$?
+run "${L}" ; run "${L}" ; RC=0; OUT="$(env -i PATH="${PATH}" HOME="${WORK}/h" LLMCTL_RESOLVE_STOP_AT="${WORK}" bash "${L}/scripts/link_deps.sh" --check 2>&1)" || RC=$?
 assert_eq "0" "${RC}" "--check passes on a correct layout"
 
 echo "== 3. --check detects a wrong link and a missing one =="
 ln -sfn "${WORK}" "${L}/submodules/superspec"; rm -f "${L}/submodules/containers"
-RC=0; OUT="$(env -i PATH="${PATH}" HOME="${WORK}/h" bash "${L}/scripts/link_deps.sh" --check 2>&1)" || RC=$?
+RC=0; OUT="$(env -i PATH="${PATH}" HOME="${WORK}/h" LLMCTL_RESOLVE_STOP_AT="${WORK}" bash "${L}/scripts/link_deps.sh" --check 2>&1)" || RC=$?
 assert_eq "1" "${RC}" "--check fails on wrong/missing links"
 assert_contains "${OUT}" "WRONG submodules/superspec" "wrong link named"
 assert_contains "${OUT}" "MISSING submodules/containers" "missing link named"
@@ -66,7 +66,7 @@ assert_file_exists "${V}/llmctl/submodules/superspec/extension.yml" "superspec l
 
 echo "== 7. named dependency only (used by the build path) =="
 Q="${WORK}/q7/llmctl"; mk_llmctl "${Q}"; mkdir -p "${WORK}/q7/containers"; printf 'module digital.vasic.containers\n' > "${WORK}/q7/containers/go.mod"
-RC=0; OUT="$(env -i PATH="${PATH}" HOME="${WORK}/h" bash "${Q}/scripts/link_deps.sh" containers 2>&1)" || RC=$?
+RC=0; OUT="$(env -i PATH="${PATH}" HOME="${WORK}/h" LLMCTL_RESOLVE_STOP_AT="${WORK}" bash "${Q}/scripts/link_deps.sh" containers 2>&1)" || RC=$?
 assert_eq "0" "${RC}" "link_deps containers exits 0 although constitution/superspec are unresolved"
 assert_eq "yes" "$([[ -L "${Q}/submodules/containers" && ! -e "${Q}/constitution" && ! -L "${Q}/constitution" ]] && echo yes || echo no)" "only containers was linked"
 

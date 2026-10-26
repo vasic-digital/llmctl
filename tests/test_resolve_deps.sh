@@ -35,7 +35,7 @@ mk_llmctl()       { mkdir -p "$1/lib"; cp "${LIB_SRC}" "$1/lib/resolve_deps.sh";
 resolve() {
   local d="$1" name="$2"; shift 2
   RC=0; ERR_FILE="${WORK}/err.$$"
-  OUT="$(env -i PATH="${PATH}" HOME="${WORK}/home" LLMCTL_HOST_FALLBACK_DIR="${WORK}/no-such-host-fallback" "$@" \
+  OUT="$(env -i PATH="${PATH}" HOME="${WORK}/home" LLMCTL_RESOLVE_STOP_AT="${WORK}" LLMCTL_HOST_FALLBACK_DIR="${WORK}/no-such-host-fallback" "$@" \
         bash "${d}/lib/resolve_deps.sh" "${name}" 2>"${ERR_FILE}")" || RC=$?
   ERR="$(cat "${ERR_FILE}")"
 }
@@ -145,7 +145,7 @@ else printf '  FAIL: control needle is blind\n' >&2; TEST_FAILS=$((TEST_FAILS+1)
 if grep -qE "${HOST_NEEDLE}" "${LIB_SRC}"; then
   printf '  FAIL: host-specific path literal in lib/resolve_deps.sh\n' >&2; grep -nE "${HOST_NEEDLE}" "${LIB_SRC}" >&2; TEST_FAILS=$((TEST_FAILS+1))
 else printf '  ok: resolver has no host-specific path literal\n'; fi
-RC=0; OUT="$(env -i PATH="${PATH}" HOME="${WORK}/home" bash "${N7}/llmctl/lib/resolve_deps.sh" constitution 2>/dev/null)" || RC=$?
+RC=0; OUT="$(env -i PATH="${PATH}" HOME="${WORK}/home" LLMCTL_RESOLVE_STOP_AT="${WORK}" bash "${N7}/llmctl/lib/resolve_deps.sh" constitution 2>/dev/null)" || RC=$?
 assert_eq "1" "${RC}" "no LLMCTL_HOST_FALLBACK_DIR and nothing nearby: exit 1"
 
 echo "== 13. M2/N1: relative override is made absolute; empty override is an error =="
@@ -190,5 +190,32 @@ assert_eq "${S15}/inner/submodules/constitution" "${OUT}" "the boundary director
 H15="${WORK}/home15"; mk_llmctl "${H15}/home/u/llmctl"; mk_constitution "${H15}/submodules/constitution"
 resolve "${H15}/home/u/llmctl" constitution HOME="${H15}/home"
 assert_eq "1" "${RC}" "the walk stops at HOME (a copy above HOME is ignored)"
+
+echo "== 16. HOME equals the project root: the boundary directory itself is still examined (inclusive), with and without a trailing slash =="
+R16="${WORK}/root16"; mk_llmctl "${R16}/submodules/llmctl"; mk_constitution "${R16}/constitution"; mk_containers "${R16}/submodules/containers"
+resolve "${R16}/submodules/llmctl" constitution HOME="${R16}"
+assert_eq "${R16}/constitution" "${OUT}" "HOME == project root: <root>/constitution resolves (HOME is inclusive)"
+resolve "${R16}/submodules/llmctl" containers HOME="${R16}"
+assert_eq "${R16}/submodules/containers" "${OUT}" "HOME == project root: <root>/submodules/containers resolves"
+resolve "${R16}/submodules/llmctl" constitution HOME="${R16}/"
+assert_eq "${R16}/constitution" "${OUT}" "HOME with a trailing slash == project root still resolves"
+# trailing slash must still STOP the walk at HOME (a copy above HOME stays ignored)
+T16="${WORK}/trail16"; mk_llmctl "${T16}/home/u/llmctl"; mk_constitution "${T16}/submodules/constitution"
+resolve "${T16}/home/u/llmctl" constitution HOME="${T16}/home/"
+assert_eq "1" "${RC}" "HOME with a trailing slash still stops the walk (copy above HOME ignored)"
+resolve "${T16}/home/u/llmctl" constitution LLMCTL_RESOLVE_STOP_AT="${T16}/home/"
+assert_eq "1" "${RC}" "LLMCTL_RESOLVE_STOP_AT with a trailing slash still stops the walk"
+
+echo "== 17. host isolation: a submodules/<dep> planted in an ancestor of TMPDIR (outside any .cache) must not change the result =="
+# The class behind the 3.3.0 review finding: the suite's own negative controls must not depend on what sits above TMPDIR.
+if [[ -z "${LLMCTL_RD_CHILD:-}" ]]; then
+  POISON="${WORK}/poison17"
+  mk_constitution "${POISON}/submodules/constitution"; mk_containers "${POISON}/submodules/containers"; mk_superspec "${POISON}/submodules/superspec"
+  mkdir -p "${POISON}/tmp"
+  CH_RC=0
+  CH_OUT="$(env LLMCTL_RD_CHILD=1 TMPDIR="${POISON}/tmp" bash "${BASH_SOURCE[0]}" 2>&1)" || CH_RC=$?
+  assert_eq "0" "${CH_RC}" "this suite passes when TMPDIR sits below a directory holding submodules/{constitution,containers}"
+  [[ "${CH_RC}" -eq 0 ]] || printf '%s\n' "${CH_OUT}" | grep -E 'FAIL' | head -5 >&2
+fi
 
 test_finish

@@ -12,7 +12,7 @@ trap 'rm -rf -- "${WORK}"' EXIT
 mk_clone() { mkdir -p "$1/bin" "$1/scripts"; cp -r "${LLMCTL_ROOT}/lib" "$1/"; cp "${LLMCTL_ROOT}/bin/llmctl" "$1/bin/"; cp "${LLMCTL_ROOT}/scripts/link_deps.sh" "$1/scripts/"; rm -rf "$1/lib/__pycache__"; }
 mk_hub() { mkdir -p "$1/submodules/containers" "$1/submodules/superspec"; : > "$1/Constitution.md"
            printf 'module digital.vasic.containers\n' > "$1/submodules/containers/go.mod"; : > "$1/submodules/superspec/extension.yml"; }
-run() { local d="$1"; shift; RC=0; OUT="$(env -i PATH="${PATH}" HOME="${WORK}/h" XDG_CONFIG_HOME="${WORK}/h/c" XDG_DATA_HOME="${WORK}/h/d" XDG_STATE_HOME="${WORK}/h/s" LLMCTL_ROOT="${d}" LLMCTL_HOST_FALLBACK_DIR="${WORK}/none" "$@" 2>&1)" || RC=$?; }
+run() { local d="$1"; shift; RC=0; OUT="$(env -i PATH="${PATH}" HOME="${WORK}/h" LLMCTL_RESOLVE_STOP_AT="${WORK}" XDG_CONFIG_HOME="${WORK}/h/c" XDG_DATA_HOME="${WORK}/h/d" XDG_STATE_HOME="${WORK}/h/s" LLMCTL_ROOT="${d}" LLMCTL_HOST_FALLBACK_DIR="${WORK}/none" "$@" 2>&1)" || RC=$?; }
 
 echo "== 1. fresh clone nested in a hub: engine_ensure_containers creates the link =="
 mk_hub "${WORK}/hub"; mk_clone "${WORK}/hub/submodules/llmctl"

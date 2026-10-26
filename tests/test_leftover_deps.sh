@@ -28,7 +28,7 @@ mk_hub() { mkdir -p "$1/submodules/containers" "$1/submodules/superspec"; : > "$
 # mk_gitfile_repo <worktree> : a git worktree whose .git is a FILE pointing at a separate gitdir (submodule style)
 mk_gitfile_repo() { mkdir -p "$(dirname "$1")"; G init -q --separate-git-dir="$1.gitdir" "$1"; printf 'module digital.vasic.containers\n' > "$1/go.mod"
                     G -C "$1" add go.mod; G -C "$1" commit -qm i; }
-run() { local d="$1"; shift; RC=0; OUT="$(env -i PATH="${PATH}" HOME="${WORK}/h" "$@" 2>&1)" || RC=$?; }
+run() { local d="$1"; shift; RC=0; OUT="$(env -i PATH="${PATH}" HOME="${WORK}/h" LLMCTL_RESOLVE_STOP_AT="${WORK}" "$@" 2>&1)" || RC=$?; }
 ld() { local d="$1"; shift; run "${d}" bash "${d}/scripts/link_deps.sh" "$@"; }
 
 echo "== 1. standalone: leftover REAL submodules/containers is the ONLY copy =="
@@ -59,7 +59,7 @@ assert_contains "${OUT}" "git -C ${HL}/submodules/containers status --porcelain"
 assert_contains "${OUT}" "rm -rf ${HL}/submodules/containers" "...and the removal command"
 assert_contains "${OUT}" "log --branches --not --remotes --oneline" "M-2: unpushed commits must be checked too"
 assert_contains "${OUT}" "stash list" "M-2: so must the stash"
-RC=0; OUT="$(env -i PATH="${PATH}" HOME="${WORK}/h" bash "${HL}/lib/resolve_deps.sh" containers 2>"${WORK}/err")" || RC=$?
+RC=0; OUT="$(env -i PATH="${PATH}" HOME="${WORK}/h" LLMCTL_RESOLVE_STOP_AT="${WORK}" bash "${HL}/lib/resolve_deps.sh" containers 2>"${WORK}/err")" || RC=$?
 assert_eq "${WORK}/hub/submodules/containers" "${OUT}" "the hub copy wins (step 2)"
 assert_contains "$(cat "${WORK}/err")" "real directory" "...and the shadowed real directory is warned about"
 run "${HL}" bash -c "source '${HL}/lib/engine.sh'; engine_ensure_containers"
@@ -69,11 +69,11 @@ assert_contains "${OUT}" "must not be built from" "...and stopping"
 
 echo "== 3. hub layout: leftover real constitution / superspec are warned about =="
 mkdir -p "${HL}/constitution"; : > "${HL}/constitution/Constitution.md"
-RC=0; OUT="$(env -i PATH="${PATH}" HOME="${WORK}/h" bash "${HL}/lib/resolve_deps.sh" constitution 2>"${WORK}/err")" || RC=$?
+RC=0; OUT="$(env -i PATH="${PATH}" HOME="${WORK}/h" LLMCTL_RESOLVE_STOP_AT="${WORK}" bash "${HL}/lib/resolve_deps.sh" constitution 2>"${WORK}/err")" || RC=$?
 assert_eq "${WORK}/hub" "${OUT}" "hub constitution wins"
 assert_contains "$(cat "${WORK}/err")" "real directory" "a leftover real constitution is no longer silent"
 mkdir -p "${S}/submodules/superspec"; : > "${S}/submodules/superspec/extension.yml"
-RC=0; OUT="$(env -i PATH="${PATH}" HOME="${WORK}/h" bash "${S}/lib/resolve_deps.sh" superspec 2>&1)" || RC=$?
+RC=0; OUT="$(env -i PATH="${PATH}" HOME="${WORK}/h" LLMCTL_RESOLVE_STOP_AT="${WORK}" bash "${S}/lib/resolve_deps.sh" superspec 2>&1)" || RC=$?
 assert_contains "${OUT}" "real directory" "a leftover real superspec is warned about too (every dependency)"
 
 echo "== 4. no code moves or deletes a user directory; a dirty leftover is never built =="

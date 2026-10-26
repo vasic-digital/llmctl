@@ -185,12 +185,12 @@ cp "${LLMCTL_ROOT}/lib/resolve_deps.sh" "${RES_ROOT}/lib/"; : > "${RES_ROOT}/con
 printf 'module digital.vasic.containers\n' > "${RES_ROOT}/submodules/containers/go.mod"
 git init -q "${RES_ROOT}/submodules/containers"; git -C "${RES_ROOT}/submodules/containers" -c user.email=t@t -c user.name=t add go.mod
 git -C "${RES_ROOT}/submodules/containers" -c user.email=t@t -c user.name=t commit -qm i
-rec_out="$(env -i PATH="${PATH}" HOME="${RES_ROOT}" bash -c "source '${LLMCTL_ROOT}/scripts/release/preflight_submodules.sh'; _preflight_record_resolved '${RES_ROOT}'")"
+rec_out="$(env -i PATH="${PATH}" HOME="${RES_ROOT}" LLMCTL_RESOLVE_STOP_AT="${RES_ROOT}" bash -c "source '${LLMCTL_ROOT}/scripts/release/preflight_submodules.sh'; _preflight_record_resolved '${RES_ROOT}'")"
 assert_contains "${rec_out}" "RESOLVED containers: ${RES_ROOT}/submodules/containers @ $(git -C "${RES_ROOT}/submodules/containers" rev-parse HEAD)" "the containers commit is recorded"
 assert_contains "${rec_out}" "RESOLVED constitution: ${RES_ROOT}/constitution @ untracked" "a non-git constitution is reported as untracked"
 assert_contains "${rec_out}" "RESOLVED superspec: UNRESOLVED" "an unresolved dependency is a visible gap, not silence"
 echo dirt > "${RES_ROOT}/submodules/containers/untracked.txt"
-rec_dirty="$(env -i PATH="${PATH}" HOME="${RES_ROOT}" bash -c "source '${LLMCTL_ROOT}/scripts/release/preflight_submodules.sh'; _preflight_record_resolved '${RES_ROOT}'")"
+rec_dirty="$(env -i PATH="${PATH}" HOME="${RES_ROOT}" LLMCTL_RESOLVE_STOP_AT="${RES_ROOT}" bash -c "source '${LLMCTL_ROOT}/scripts/release/preflight_submodules.sh'; _preflight_record_resolved '${RES_ROOT}'")"
 assert_contains "${rec_dirty}" "$(git -C "${RES_ROOT}/submodules/containers" rev-parse HEAD) dirty" "M5: a dirty resolved tree is flagged 'dirty'"
 rm -rf "${RES_ROOT}"
 
