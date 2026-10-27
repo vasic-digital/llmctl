@@ -553,8 +553,9 @@ cluster-bootstrap AND cluster-join startup paths (`main.go:561-563` and
 `main.go:769-771`) and passes it into `api.RegisterReplicationRoutes`,
 which invokes `forwarder.ForwardAppend`/`ForwardCheckpoint` from inside the
 real `POST /v1/replication/append`/`checkpoint` handlers, AFTER each
-request's own local `store.WAL().Append`/`store.Checkpoint` has already
-durably succeeded (`routes_replication.go:282-298`, `:312-321`) — a
+request's own local `store.WAL().AppendBatch` (all entries of the request
+in ONE WAL transaction, since llmctl 3.3.1)/`store.Checkpoint` has already
+durably succeeded (`routes_replication.go:289-304`, `:318-327`) — a
 forwarding failure is logged via an `X-Replication-Forward-Warning`
 response header, never turned into a failed local write (FR-004). The
 same handlers call `ensureReplicationRole` (`routes_replication.go:176-196`)

@@ -23,6 +23,72 @@ where `scripts/release/preflight_submodules.sh` reports a fully clean
 35-file test suite is green. Both `v3.0.0` and `v3.0.1` tags remain in the
 repository as an honest record of that process.
 
+## 3.3.1 (2026-10-27)
+
+A **patch release** (version 3.3.0 -> 3.3.1): bug fixes and test hygiene, no new command, no changed default. Measured at commit 8cbdb21
+(the last code/test commit before this version bump): `git log --oneline v3.3.0..8cbdb21` is 7 commits, and `git diff --shortstat v3.3.0..8cbdb21`
+is 17 files changed, 599 insertions, 21 deletions.
+
+**Release status (read first).**
+
+- **Unchanged surface (still documented here for the release checks):** the `llmctl-decide` gateway's HTTP surface, `decide scale`, `decide calibrate`,
+  probe-order and completions handling, maturity labels, `llmctl doctor`, `status --json` with `overhead_mb`, the `LLMCTL_CTX_*` knobs and eviction behaviour
+  are not changed by this release. The one change the gateway sees is the registry watch fix below (its resolver now notices a rewrite it used to miss).
+- **Not tagged, not pushed, not released.** This entry and the version bump are prepared in a local commit only.
+
+### Added
+
+- `WAL.AppendBatch(entries)` (`llmctld/internal/replication/wal.go`): writes a list of entries in ONE bbolt transaction, all or nothing; an empty list
+  is a no-op. Also `WAL.CommittedWriteTxID()`, a read of bbolt's committed write-transaction id, used by the tests to count commits.
+- `tests/test_bg_register.sh`: guard for `test_bg_register` (a registration made in a subshell is honoured, a reused pid is never killed, control needles).
+
+### Changed
+
+- `POST /v1/replication/append` stores the whole request with one `AppendBatch` call instead of one `WAL.Append` (one fsync) per entry.
+  Behaviour change: when the write fails, nothing from that request is persisted (before, the entries written before the failing one stayed).
+  A retry of the same range overwrites by `Seq`, as before.
+- `test_bg_register` records each pid with its `/proc` start time in `${TEST_TMP}/.bg_pids` (it used an in-memory array).
+- `make go-test` links the `containers` dependency through the resolver, then builds, vets and tests; the docs say why a bare `go test` fails on a
+  fresh clone (00908d7).
+
+### Fixed
+
+- **Replication failover timed out on a 500-entry append.** The append handler did 500 separate WAL commits (500 fsyncs); the forward to the replica
+  runs the same handler, serially and synchronously, so the client's 5 s timeout was exceeded on a disk-backed temp directory.
+  `TestFailoverState_*` now passes 3 of 3 runs on disk (11.9 s - 13.3 s); with the handler reverted to per-entry appends it fails at
+  `failover_state_test.go:335` with `Client.Timeout exceeded`. New unit tests count bbolt commits: 500 entries, 1 commit (was 500).
+- **Registry watch missed a same-size rewrite within one timestamp tick** (2b28d0d): the watcher keyed on (size, mtime, inode), and the
+  `llmctl-decide` registry resolver kept routing on stale data. The file identity now includes a sha256 of the file bytes.
+- **Test processes leaked past the test run:** `test_health_path_engines.sh` (3 stub HTTP servers per run, 881d110), `test_dup_unit_registry.sh`
+  (3 `sleep 120`), `test_no_lock_fd_leak.sh` (1 `sleep 60` holding the scheduler lock) and `test_agent_kit.sh` (1 `sleep 30`). Each run now leaves
+  0 processes, counted by an environment marker 2 s after the run.
+- `test_version_consistency.sh` reports a versionless top CHANGELOG heading as an assertion instead of aborting after 4 of 30 checks (81645ab).
+
+### Security
+
+- No security-relevant change in this release.
+
+### Removed
+
+- Nothing removed. The private `_kill_stubs` / `stub.pids` mechanism of `test_health_path_engines.sh` was replaced by `test_bg_register` (test code only).
+
+### Migration notes
+
+- No action needed. A replica that receives an append from a 3.3.0 primary (or the reverse) behaves as before; only the number of local commits per
+  request changed.
+
+### Known limitations
+
+- The replication forward to the replica is still serial and synchronous on the request path: a slow replica still adds its delay to the client's request.
+- `TestClusterPlacement_ConcurrentStarts_NeverDoubleBookANode` fails on hosts with less available memory than the profile footprint plus reserve
+  (exit 75 from the memory-pressure gate: measured "only 12921 MiB available, need 15644 MiB footprint + 4096 MiB reserve"). It depends on the
+  host, not on this change, and is not fixed here. The integration tests still read the real `/proc/pressure/memory` and `/proc/meminfo` (review finding F6, open).
+- Earlier intermittent `TestClusterPlacement_*` failures did not reproduce in this round (NameOnly and SameProfile passed); their cause is UNCONFIRMED.
+- The decision hook (`templates/agents/llmctl_gate.py`) times out by killing its direct child only; a real decision binary that forks would leave its
+  grandchildren running. Only the test fixture was fixed.
+- `beforeBatchPut`, a test seam, is a field of the production `WAL` struct (nil in production).
+- Manual QA (Constitution §11.4.185) has not been performed on this release.
+
 ## 3.3.0 (2026-10-26)
 
 A **minor release** (version 3.2.2 -> 3.3.0). Why minor and not patch: `git diff --shortstat v3.2.2..1d48dc7` (re-measured at commit 1d48dc7, the last code/test commit; later documentation-only commits are not counted; no generated export is tracked) is 86 commits, 268 files, 17213 insertions, 1015 deletions (the earlier "68 commits / 215 files / 15.7k" was `v3.2.2..f42bad6`) that

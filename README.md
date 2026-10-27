@@ -67,6 +67,10 @@ the resolver's message.
 `constitution`, `containers` and `superspec` are **not** submodules of llmctl: they are resolved
 from the constitution hub (or `LLMCTL_*_DIR`) - run `make deps`, see [`docs/dependency-layout.md`](docs/dependency-layout.md).
 
+> **Release 3.3.1** is a patch release: the replication append handler stores a whole request in one WAL transaction (a 500-entry append was
+> 500 fsyncs and timed out on failover), the registry watch no longer misses a same-size rewrite, and several tests no longer leave processes running.
+> Details: [`CHANGELOG.md`](CHANGELOG.md).
+>
 > **Release 3.3.0** makes the model validation gate enforced (strict by default; for systemd units this holds once `llmctl install` has regenerated them - a legacy, not re-installed unit still keeps an UNDETERMINED profile running, NOT validated), resolves `constitution` / `containers` / `superspec` from the constitution hub instead of vendoring them,
 > and documents llmctl's governance role (below). Typed local decisions (`noul` / `choice` / `score`) behind a secured HTTPS gateway arrived in 3.1.0.
 > What changed and what you must do when upgrading: [`CHANGELOG.md`](CHANGELOG.md) (migration table).
