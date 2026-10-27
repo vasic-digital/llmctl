@@ -11,6 +11,13 @@ MAIN="$ROOT/scripts/livetest/vision_live_test.sh"
 WD="$ROOT/scripts/livetest/watchdog.sh"
 T="$(mktemp -d "${TMPDIR:-/tmp}/livetest.XXXXXX")"
 PASS=0; FAIL=0
+# Section 7 must tell a llama-server THIS suite spawned from the ones that were already running (an operator's live decision engines
+# on the same host): the old check, `pgrep -x llama-server` empty, failed on every host that serves a model (root cause, 2026-10-26: the
+# T1 host runs seven real llama-server units). The pids present at the start are the baseline; only a NEW pid counts.
+# ollama's runner (parent comm ollama) is respawned by `ollama serve` at any time on a developer host and is never a test leak: excluded
+_llama_pids() { local p pp; for p in $(LC_ALL=C pgrep -x llama-server 2>/dev/null); do pp="$(ps -o ppid= -p "$p" 2>/dev/null | tr -d ' ')"; [ "$(ps -o comm= -p "${pp:-0}" 2>/dev/null)" = ollama ] || echo "$p"; done | LC_ALL=C sort || true; }
+LLAMA_BASE="$(_llama_pids)"
+llama_new() { LC_ALL=C comm -13 <(printf '%s\n' "${LLAMA_BASE}" | LC_ALL=C sort) <(_llama_pids) | grep -v '^$' || true; }
 ok()   { PASS=$((PASS+1)); printf 'PASS  %s\n' "$1"; }
 bad()  { FAIL=$((FAIL+1)); printf 'FAIL  %s  -- %s\n' "$1" "${2:-}"; }
 check(){ if [ "$2" = "$3" ]; then ok "$1"; else bad "$1" "expected '$3' got '$2'"; fi; }
@@ -22,10 +29,6 @@ want() { [ -z "${ONLY:-}" ] || [ "$1" = always ] || [[ ",$ONLY," == *",$1,"* ]];
 # shared fake environment (fake llmctl/systemctl/nvidia-smi, health server, mkenv, run_main): tests/livetest_fake_lib.sh
 # shellcheck source=tests/livetest_fake_lib.sh
 source "$ROOT/tests/livetest_fake_lib.sh"
-# llama-server processes this suite did not start (ollama's runner is respawned by `ollama serve` at any time on a developer host):
-# only a NEW llama-server whose parent is not ollama can be a test leak
-ls_foreign() { local p pp; for p in $(pgrep -x llama-server 2>/dev/null); do pp="$(ps -o ppid= -p "$p" 2>/dev/null | tr -d ' ')"; [ "$(ps -o comm= -p "${pp:-0}" 2>/dev/null)" = ollama ] || echo "$p"; done | sort; }
-LS_BASE="$(ls_foreign)"
 if want base; then
 echo "== 0. static: lint + signal discipline =="
 bash -n "$MAIN" && bash -n "$WD" && ok "bash -n both scripts" || bad "bash -n"
@@ -660,8 +663,26 @@ fi
 
 if want always; then
 echo "== 7. whole-suite sanity: nothing real was touched =="
-LS_NEW="$(comm -13 <(printf '%s\n' "$LS_BASE") <(ls_foreign) | tr '\n' ' ')"
-[ -z "${LS_NEW// /}" ] && ok "no real llama-server process spawned by tests (pre-existing and ollama-owned ones ignored)" || bad "new llama-server process(es) appeared during the suite" "$LS_NEW"
+# NEGATIVE CONTROL: a process named llama-server started AFTER the baseline must be reported as new (else a clean result means nothing)
+# the control binary must be a real executable that keeps its own name: a multicall `sleep` (uutils coreutils, where /usr/bin/sleep is a
+# symlink to the multicall binary) dispatches on argv[0], does not run when renamed and the control would be blind for a host reason
+# (measured 2026-10-27); python3 is copied when the renamed sleep does not run
+cp "$(command -v sleep)" "$T/llama-server"
+if "$T/llama-server" 0 >/dev/null 2>&1; then
+  "$T/llama-server" 60 >/dev/null 2>&1 &
+else
+  cp "$(command -v python3)" "$T/llama-server"
+  "$T/llama-server" -c 'import time; time.sleep(60)' >/dev/null 2>&1 &
+fi
+ctl_pid=$!
+sleep 0.3
+case " $(llama_new | tr '\n' ' ') " in
+  *" ${ctl_pid} "*) ok "NEG-CONTROL the new-pid detector reports a llama-server started after the baseline" ;;
+  *) bad "new-pid detector blind (control pid ${ctl_pid})" ;;
+esac
+kill "${ctl_pid}" 2>/dev/null; wait "${ctl_pid}" 2>/dev/null
+sleep 0.3
+[ -z "$(llama_new)" ] && ok "no real llama-server process spawned by tests (ones already running before the suite, e.g. live engines, are excluded by pid)" || bad "llama-server spawned during the suite: $(llama_new | tr '\n' ' ')"
 
 fi
 printf '\nRESULT: %d passed, %d failed\n' "$PASS" "$FAIL"

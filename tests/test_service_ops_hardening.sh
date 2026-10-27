@@ -199,6 +199,32 @@ StartLimitIntervalSec=60
 ExecStart=/bin/true
 EOF
 cp "${SU}/llmctl-llama@.service" "${SU}/llmctl-decide-gateway.service"   # an installed, stale gateway unit too
+# Root cause (2026-10-26): _svc_unit_directives sorts with LC_ALL=C but comm read its inputs in the AMBIENT collation, so under
+# en_US.UTF-8 `comm` printed "file 1 is not in sorted order", exited 1 and aborted this whole suite (and made the detector unreliable there).
+if locale -a 2>/dev/null | grep -qiE '^en_US\.utf-?8$'; then
+  loc="$( export LC_ALL=en_US.UTF-8 LLMCTL_UNIT_DIR="${SU}"; source "${LLMCTL_ROOT}/lib/common.sh"; source "${LLMCTL_ROOT}/lib/service_linux.sh"; svc_stale_units 2>&1 || true )"
+  assert_eq 0 "$(grep -c 'not in sorted order' <<<"${loc}" || true)" "svc_stale_units under en_US.UTF-8: comm reports no collation disorder"
+  assert_contains "${loc}" "llmctl-llama@.service" "svc_stale_units under en_US.UTF-8 still names the stale unit"
+  mkdir -p "${TEST_TMP}/mlib"
+  for f in "${LLMCTL_ROOT}"/lib/*; do [[ "$(basename "${f}")" == service_linux.sh ]] || ln -sf "${f}" "${TEST_TMP}/mlib/"; done
+  python3 -I -c '
+import sys
+s = open(sys.argv[1]).read()
+old = "missing=\"$(LC_ALL=C comm -23"
+if s.count(old) != 1:
+    sys.exit("mutation anchor found %d times" % s.count(old))
+open(sys.argv[2], "w").write(s.replace(old, "missing=\"$(comm -23"))
+' "${LLMCTL_ROOT}/lib/service_linux.sh" "${TEST_TMP}/mlib/service_linux.sh"
+  mloc="$( export LC_ALL=en_US.UTF-8 LLMCTL_UNIT_DIR="${SU}"; source "${TEST_TMP}/mlib/common.sh"; source "${TEST_TMP}/mlib/service_linux.sh"; svc_stale_units 2>&1 || true )"
+  # The mutant is observable only where `comm` itself compares in the ambient collation (GNU coreutils). uutils comm (0.8.0, measured
+  # 2026-10-27) compares bytewise and never reports disorder, so there the mutant is EQUIVALENT: probed with a C-sorted pair that is
+  # unsorted in en_US, and reported SKIP with the reason (same treatment as the systemd-255 mutant in test_hostsafety.sh).
+  if ! LC_ALL=en_US.UTF-8 comm -23 <(printf 'B\na\n') <(printf 'B\na\n') 2>&1 | grep -q 'not in sorted order'; then
+    printf '  SKIP: MUTANT comm without LC_ALL=C is equivalent on this host (%s compares bytewise and reports no disorder under en_US.UTF-8)\n' "$(comm --version 2>&1 | head -1)"
+  elif grep -q 'not in sorted order' <<<"${mloc}"; then printf '  ok: MUTANT comm without LC_ALL=C: the collation disorder is reported -> the assertion above goes RED\n'; else printf '  FAIL: mutant comm-locale was not caught\n' >&2; TEST_FAILS=$((TEST_FAILS+1)); fi
+else
+  printf '  SKIP: no en_US.UTF-8 locale on this host: the non-C collation case is not exercised\n'
+fi
 stale="$( export LLMCTL_UNIT_DIR="${SU}"; source "${LLMCTL_ROOT}/lib/common.sh"; source "${LLMCTL_ROOT}/lib/service_linux.sh"; svc_stale_units )"
 assert_contains "${stale}" "llmctl-llama@.service" "svc_stale_units names the stale unit"
 assert_contains "${stale}" "llmctl install" "...with the remedy"
@@ -284,17 +310,42 @@ printf 'LLMCTL_PROFILE=eng\nLLMCTL_ENGINE=onnx\nLLMCTL_EXEC=python3\nLLMCTL_ARGS
 # 'eng' is not a catalog profile, so the validation gate of run-engine (review 2026-10-14, launchd parity of the unit's
 # ExecCondition) would refuse it: the env record carries the opt-out marker, as an opt-out start of llmctl writes it
 printf 'LLMCTL_UNVALIDATED=%s\n' "test fixture: eng is not a catalog profile" >> "${LLMCTL_SERVICES_DIR}/eng.env"
-# review 3 of 2026-10-15, finding 9: the opt-out is re-checked against the CATALOG at every start and an unknown profile counts as
-# consumer-facing (refused). So 'eng' (and the G-129 fixture profile 'g129' below) must be non-consumer-facing profiles of a fixture
-# catalog, exported for the rest of this file; the real catalog is untouched
-# (this fixture was red since that change: "profile eng is not validated; not starting", 3 assertions of C-13/C-14)
-python3 -I -c 'import json,sys; d=json.load(open(sys.argv[1])); [d["profiles"].__setitem__(n,{"validation":{"consumer_facing":False}}) for n in ("eng","g129")]; json.dump(d,open(sys.argv[2],"w"))' \
-  "${LLMCTL_CATALOG:-${LLMCTL_ROOT}/models/catalog.json}" "${TEST_TMP}/catalog.eng.json"
-export LLMCTL_CATALOG="${TEST_TMP}/catalog.eng.json"
+# Root cause of this section's three failures (2026-10-26, verified with a `bash -x` trace of run-engine): since review 3 of
+# 2026-10-15 (finding 9, commit b3d5856) the opt-out marker is re-checked against the CATALOG at every start and an UNKNOWN
+# profile counts as consumer-facing, so the gate REFUSES the marker and run-engine exits 0 without starting anything (by design:
+# "opt-out refused, the validation record decides"). The fixture therefore never ran, and the registration / key-file / reconcile
+# assertions below failed. The only case the opt-out is valid for is a profile the catalog declares non-consumer-facing, so the
+# engine runs against a catalog COPY that declares 'eng' (and, for the G-129 section below, 'g129') that way - the real catalog is
+# untouched. Two controls pin both halves.
+ENG_CATALOG="${TEST_TMP}/eng-catalog.json"
+python3 -I -c '
+import json, sys
+d = json.load(open(sys.argv[1]))
+for n in ("eng", "g129"):   # the two fixture profiles of this suite (C-13/C-14 above, G-129 below)
+    d["profiles"][n] = {"validation": {"consumer_facing": False}}
+json.dump(d, open(sys.argv[2], "w"))
+' "${LLMCTL_CATALOG:-${LLMCTL_ROOT}/models/catalog.json}" "${ENG_CATALOG}"
+rc=0; bash "${LLMCTL_ROOT}/lib/svc_hook.sh" validated eng >/dev/null 2>&1 || rc=$?
+assert_eq 77 "${rc}" "the gate REFUSES the opt-out marker of a profile the catalog does not know (unknown = consumer-facing)"
+rc=0; LLMCTL_CATALOG="${ENG_CATALOG}" bash "${LLMCTL_ROOT}/lib/svc_hook.sh" validated eng >/dev/null 2>&1 || rc=$?
+assert_eq 0 "${rc}" "...and accepts it once the catalog declares the profile non-consumer-facing (the fixture of this section)"
+# paired mutation of the gate: an unknown profile defaults to NON-consumer-facing -> the refusal control above must go RED
+mkdir -p "${TEST_TMP}/mhook"
+for f in "${LLMCTL_ROOT}"/lib/*; do [[ "$(basename "${f}")" == svc_hook.sh ]] || ln -sf "${f}" "${TEST_TMP}/mhook/"; done
+python3 -I -c '
+import sys
+s = open(sys.argv[1]).read()
+old = ".get(\"consumer_facing\", True))'"'"' \"${prof}\""
+if s.count(old) != 1:
+    sys.exit("mutation anchor found %d times" % s.count(old))
+open(sys.argv[2], "w").write(s.replace(old, ".get(\"consumer_facing\", False))'"'"' \"${prof}\""))
+' "${LLMCTL_ROOT}/lib/svc_hook.sh" "${TEST_TMP}/mhook/svc_hook.sh"
+rc=0; bash "${TEST_TMP}/mhook/svc_hook.sh" validated eng >/dev/null 2>&1 || rc=$?
+if (( rc == 0 )); then printf '  ok: MUTANT unknown profile defaults to non-consumer-facing: the gate accepts the marker (rc 0) -> the refusal control above goes RED\n'; else printf '  FAIL: mutant consumer-facing-default was not caught (rc %s)\n' "${rc}" >&2; TEST_FAILS=$((TEST_FAILS+1)); fi
 export LLMCTL_PORTREG=1 LLMCTL_DECIDE_BIN="${BIN}" LLMCTL_REGISTER_POLL=0.2 LLMCTL_REGISTER_WAIT=30
 reg_pid() { "${BIN}" registry list --json | python3 -c 'import json,sys;print(next((s["pid"] for s in json.load(sys.stdin)["services"] if s["name"]=="eng"),""))'; }
-spawn_engine() { # the launchd ProgramArguments, verbatim
-  bash "${LLMCTL_ROOT}/lib/svc_hook.sh" run-engine eng -- python3 "${ENGINE}" --port "${PORT}" >/dev/null 2>&1 &
+spawn_engine() { # the launchd ProgramArguments, verbatim (the catalog copy is the fixture's only difference to a real unit)
+  LLMCTL_CATALOG="${ENG_CATALOG}" bash "${LLMCTL_ROOT}/lib/svc_hook.sh" run-engine eng -- python3 "${ENGINE}" --port "${PORT}" >/dev/null 2>&1 &
   ENG_PID=$!; PIDS+=("${ENG_PID}")
 }
 wait_row() { local want="$1"; for _ in $(seq 1 100); do [[ "$(reg_pid)" == "${want}" ]] && return 0; sleep 0.1; done; return 1; }
@@ -341,14 +392,15 @@ ENGDIR="${TEST_TMP}/own-libs"; mkdir -p "${ENGDIR}" "${TEST_TMP}/plain-engine"
 : > "${ENGDIR}/libggml.so.0"
 printf '#!/bin/sh\nprintf "%%s|%%s\\n" "${LD_LIBRARY_PATH-UNSET}" "${DYLD_LIBRARY_PATH-UNSET}" > "$G129_OUT"\n' > "${ENGDIR}/llama-server"
 cp "${ENGDIR}/llama-server" "${TEST_TMP}/plain-engine/engine"; chmod +x "${ENGDIR}/llama-server" "${TEST_TMP}/plain-engine/engine"
-# opt-out marker: g129 is not a catalog profile, and run-engine's validation gate (review 2026-10-14) would refuse it
+# opt-out marker: g129 is not a catalog profile, and run-engine's validation gate (review 2026-10-14) would refuse it; like 'eng'
+# above, it is declared non-consumer-facing in the catalog COPY (ENG_CATALOG) that the wrapper runs against
 printf 'LLMCTL_PROFILE=g129\nLLMCTL_ENGINE=llama\nLLMCTL_UNVALIDATED=test fixture\n' > "${LLMCTL_SERVICES_DIR}/g129.env"
 run_engine_env() { # <exe> <LD_LIBRARY_PATH or -> : prints what the engine saw
   local exe="$1" ld="$2" out="${TEST_TMP}/g129.out"; rm -f "${out}"
   if [[ "${ld}" == "-" ]]; then
-    env -u LD_LIBRARY_PATH -u DYLD_LIBRARY_PATH G129_OUT="${out}" bash "${LLMCTL_ROOT}/lib/svc_hook.sh" run-engine g129 -- "${exe}" >/dev/null 2>&1 || true
+    env -u LD_LIBRARY_PATH -u DYLD_LIBRARY_PATH LLMCTL_CATALOG="${ENG_CATALOG}" G129_OUT="${out}" bash "${LLMCTL_ROOT}/lib/svc_hook.sh" run-engine g129 -- "${exe}" >/dev/null 2>&1 || true
   else
-    env -u DYLD_LIBRARY_PATH LD_LIBRARY_PATH="${ld}" G129_OUT="${out}" bash "${LLMCTL_ROOT}/lib/svc_hook.sh" run-engine g129 -- "${exe}" >/dev/null 2>&1 || true
+    env -u DYLD_LIBRARY_PATH LD_LIBRARY_PATH="${ld}" LLMCTL_CATALOG="${ENG_CATALOG}" G129_OUT="${out}" bash "${LLMCTL_ROOT}/lib/svc_hook.sh" run-engine g129 -- "${exe}" >/dev/null 2>&1 || true
   fi
   cat "${out}" 2>/dev/null || echo "NO-OUTPUT"
 }

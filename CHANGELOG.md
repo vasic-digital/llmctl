@@ -57,6 +57,8 @@ command. Scope: `lib/validate.sh`, `lib/validate_judge.py`, `lib/scheduler.sh`, 
 - **`docs/diagrams/`** (validation gate state machine, decide gateway request flow, hub-engine placement, Vision tiers) and **`tests/test_docs_diagrams_governance.sh`**.
 - **Resolver walk bounds and `LLMCTL_RESOLVE_STOP_AT`**: the ancestor walk of `lib/resolve_deps.sh` stops before any `.cache` directory, after `LLMCTL_RESOLVE_STOP_AT` and after `$HOME`; it walks nothing when a bound is the llmctl root or below it, is relative, or HOME is empty/unset; bounds are compared on physical paths (symlinks resolved). Tests: `test_resolve_deps` cases 15-19.
 - Evidence pages under `docs/qa/` (`small-live-2026-10-14`, `vision-live-2026-10-14`, `vision-live-nezha-2026-10-14`).
+- **`llmctl revalidate [--force]` and the daily `llmctl-revalidate.timer`** (installed and enabled by `llmctl install`; `LLMCTL_REVALIDATE_TIMER=0` opts out): refreshes the validation records of RUNNING engines before they expire, staging the new record and promoting it only on PASS (a FAIL / UNDETERMINED leaves the live record and the engine untouched). `tests/test_revalidate.sh`; `docs/validation.md#periodic-revalidation`.
+- **Real-driver and dry-run tests**: `tests/test_validate_decide_real_driver.sh` (the real `llmctl-decide smoke` driver against a fake letter-logit engine, `tests/fixtures/validation/fake_letter_engine.py`) and `tests/test_dry_run_writes_nothing.sh`.
 
 ### Changed
 
@@ -67,9 +69,14 @@ command. Scope: `lib/validate.sh`, `lib/validate_judge.py`, `lib/scheduler.sh`, 
 - Version pins moved from 3.2.2 to 3.3.0 (`VERSION`, `bin/llmctl`, README banner, `docs/*.md` statements, OpenAPI `info.version`).
 - `scheduler::with_lock` now gives up after `LLMCTL_SCHED_LOCK_WAIT` seconds (default 900) with exit 2 instead of waiting forever; test helpers close inherited lock file descriptors.
 - The validator's decide question body names the model `smoke` (was `validate`), so decide-* profiles can be judged instead of ending UNDETERMINED ("Unknown model"); `tests/test_decide_validate_model_alias.sh`.
+- `LLMCTL_DRY_RUN=1 llmctl install` is now a pure dry run (`dry_run_pure` in `lib/common.sh`): it prints its plan and writes no unit template, no gate marker and no state directory. The historical file-writing dry run is the explicit test seam `LLMCTL_DRY_RUN_WRITE=1` (set by `tests/helpers.sh`).
 
 ### Fixed
 
+- **Decide profiles validated against the real driver** (upstream `7f58ac0`): `lib/validate_judge.py` `decide_ask` wrote `"model": "validate"`, which `llmctl-decide smoke --question-file` refused as `Unknown model.`; the decide question body now uses `smoke` and `tests/test_validate_decide_real_driver.sh` pins it with the real driver.
+- `svc_stale_units` no longer lists the oneshot `llmctl-revalidate.service` as "restart bound too weak", and compares the directive lists with `LC_ALL=C comm -23` (a UTF-8 locale made the check a silent no-op). Upstream `7f58ac0`.
+- **Pre-existing test defects of the full suite, root-caused and fixed in the tests without weakening an assertion** (upstream `0c00cb2`; details in the detailed entries): `test_decide_service.sh` (stale `KeepAlive is True`), `test_service_ops_hardening.sh` (fixture profiles not in the catalog; gate refuses their opt-out marker), `test_systemd_cleanliness.sh` (PATH guard refused the slice teardown), `test_hostsafety.sh` (tmpfs fullness not pinned; equivalent mutant on systemd 255 reported SKIP), `test_livetest_watchdog.sh` (baseline of already-running llama-server pids, ollama-owned runners excluded, with a negative control), `test_matrix_harness.sh` (`Retry-After` and the hidden `/favicon.ico` request).
+- Two more host-dependent test defects found while merging (uutils coreutils host): the negative control of `test_livetest_watchdog.sh` section 7 renamed a multicall `sleep` that does not run under another name (now falls back to a copied `python3`), and the `comm`-locale mutant of `test_service_ops_hardening.sh` is equivalent where `comm` compares bytewise (probed, reported SKIP with the reason).
 - **Test harness: the isolation test no longer stops the real `llmctl.slice` / `llmctl-tenant.slice`** (review of release/3.3.0, M-3). `TestWrapCommand_RealSystemdRunInvocation` ran under the production slice, whose implicit parents are those real slices, and its G-088 cleanup stopped them when they were inactive before the run; the harness guard (`4a84dc4`, added after `v3.2.2`) refuses that stop, so `tests/test_systemd_cleanliness.sh` failed 2 assertions on a host whose slices were inactive (and passed, masking it, once they were active). The test now runs under a per-run test-only slice `llmctltest_isolation_<pid>_<ns>.slice` and stops only that one. Hermetic regression suite: `tests/test_isolation_slice_cleanup.sh` (fake `systemctl` / `systemd-run`, guard on `PATH`, no real unit touched).
 - `scripts/release/create_release.sh` refuses a version without the leading lower-case `v` (review M-4); `release_validate_semver` itself is unchanged.
 - **Class sweep 2026-10-22** (test-first, RED observed): `lib/cluster.sh` no longer writes the bearer token to a temp file (`-H @/dev/fd/3`; the file survived a SIGTERM); one test (`test_decide_download.sh`) replaced an earlier EXIT trap and leaked a fixture process, and `test_download_resume.sh` was edited for the same pattern although its earlier PID was already killed (harmless: it re-signals a dead PID at exit); keys were expanded onto command lines in 5 tests and 6 evidence scripts (now `-H @file`); `scripts/golden/run_golden.py` and `evidence/pin_reverify.py` no longer forward `Authorization` across redirects; every TLS-verification-off site is justified in place; `tests/test_decide_service.sh` asserted a stale `KeepAlive` value (red since e0e7423).
@@ -101,6 +108,39 @@ command. Scope: `lib/validate.sh`, `lib/validate_judge.py`, `lib/scheduler.sh`, 
 - Resolver ancestor walk start (M-2, `lib/resolve_deps.sh` lines 102-103): the ancestor walk starts from the PHYSICAL parent of the llmctl root, while steps 2 and 4 use the LOGICAL parent (`dirname` of the root as spelled). When the root is reached through a symlink the walk can begin at a different directory than steps 2 and 4 examined. Containment is compared on physical paths, so no directory outside a bound is examined; only which ancestors are considered differs. Not fixed in 3.3.0.
 
 ### Detailed entries (moved from "Unreleased")
+
+* **fix(validate): decide profiles could never be validated on a real engine (`Unknown model.`), `LLMCTL_DRY_RUN=1 llmctl install` wrote files, and no periodic refresh of the validation records existed (2026-10-26, T1).**
+  * `lib/validate_judge.py` `decide_ask` wrote `{"model": "validate", ...}` into the question file, but `llmctl-decide smoke --question-file` parses it against ONE profile, `smoke`
+    (`internal/gateway/smoke.go`); every decide profile therefore ended `UNDETERMINED ... question file refused: Unknown model.` and, strict by default, `llmctl restart decide-max` stopped it
+    (restart without a fresh record = stop, quarantine start, validate, publish-or-stop: by design; the defect was the model id). The stub and the closed-port check of
+    `test_validation_decide_colibri.sh` could not see it (the driver dials the engine before it parses the file). `tests/test_validate_decide_real_driver.sh`: the real driver built from
+    the tree, a listening fake letter-logit engine (`tests/fixtures/validation/fake_letter_engine.py`), a wrong-answering control, and a paired mutation (the old id -> exit 2 `Unknown model`).
+  * `LLMCTL_DRY_RUN=1 llmctl install` printed `[dry-run]` for systemctl/loginctl but still wrote the three unit templates, the unit-level validation gate marker `unit-enforcement` (a host-wide
+    behaviour switch) and the state directories. Now `dry_run_pure` (`lib/common.sh`): install prints its plan and writes nothing, on both backends. The historical file-writing dry run is
+    the explicit test seam `LLMCTL_DRY_RUN_WRITE=1` (set by `tests/helpers.sh`). `tests/test_dry_run_writes_nothing.sh` snapshots the tree before/after, with a control and a paired mutation.
+  * `llmctl revalidate [--force]` + `llmctl-revalidate.timer` (daily, installed and enabled by `llmctl install`, `LLMCTL_REVALIDATE_TIMER=0` opts out): refreshes the PASS records of the RUNNING engines
+    before they expire (an engine validated once and left running was skipped with exit 77 at the first boot after expiry). It stages the new record and promotes it only on PASS: a FAIL / UNDETERMINED
+    leaves the live record byte-identical and the engine running (nothing is stopped, restarted or withdrawn). `tests/test_revalidate.sh` (fixture engine, real signed records, units, four
+    paired mutations). See `docs/validation.md#periodic-revalidation`.
+  * `svc_stale_units` (the "stale unit" check used by `llmctl doctor` and the decide gate) listed the NEW `llmctl-revalidate.service` as "restart bound too weak": it is a oneshot with no
+    `Restart=` by design. It is now skipped by name (`REVALIDATE_SERVICE_UNIT`), so a freshly installed host reports nothing stale. Covered by `tests/test_revalidate.sh` section 6 + mutant M-D.
+  * `svc_stale_units` sorted the template directive lists with `LC_ALL=C` but compared them with a locale-dependent `comm`, which aborts ("file 1 is not in sorted order") under a UTF-8 locale such
+    as `en_US.UTF-8` and silently turned the whole check into a no-op. Now `LC_ALL=C comm -23`. Regression assertion + paired mutant in `tests/test_service_ops_hardening.sh` (runs under `en_US.UTF-8`).
+  * `tests/test_decide_service.sh` asserted `KeepAlive is True`; since commit e0e7423 the launchd plist carries `{"SuccessfulExit": false}` plus `ThrottleInterval 60`. The assertion now checks the
+    shipped contract (stale-test fix, verified against `git archive HEAD`; paired mutant red).
+  * Five more pre-existing test defects of the full suite, each traced to its cause (all failed identically on `git archive HEAD`) and fixed in the test, none by weakening an assertion:
+    `tests/test_service_ops_hardening.sh` C-13/C-14/G-129 (the fixture profiles `eng`/`g129` are not catalog profiles, and since commit b3d5856 an unknown profile counts as consumer-facing, so
+    the gate REFUSES their opt-out marker and `run-engine` exits 0 without starting anything: the fixtures now run against a catalog copy that declares them non-consumer-facing; two controls
+    pin the refusal of the real catalog and the acceptance of the copy, plus a paired mutant of the gate default; the fixture-never-ran abort also hid the G-129, C3-08 and launchd assertions,
+    which now run and pass); `tests/test_systemd_cleanliness.sh` (the Go slice teardown `systemctl --user stop llmctl-tenant.slice` was refused by the harness PATH guard, so the slices
+    stayed behind: that one invocation now runs with the guard directory off PATH; mutant red); `tests/test_hostsafety.sh` (the guard fixtures did not pin tmpfs fullness, so a host with
+    /tmp above 60 % logged a report-only `tmpfs-high` event counted as a decision; and the `--expand-environment=no dropped` mutant is EQUIVALENT on systemd 255, where a `--scope` no
+    longer expands `${VAR}`/`$$` by default - now probed and reported SKIP with the reason, the kill is still asserted on systemd 254); `tests/test_livetest_watchdog.sh` section 7
+    (`pgrep -x llama-server` empty failed on every host serving a model: now the pids present at the start are the baseline, with a negative control); `tests/test_matrix_harness.sh`
+    (the full 6-client matrix failed one cell with `429 != 401`, deterministic here; two causes, each necessary: the reference server answered `Retry-After: 5` while its failed-auth window is
+    10 s and a throttled attempt stays counted, so the harness's single re-probe after Retry-After+1 s still found the window full - the header is now the true time until a retry is admitted;
+    and the headless Chromium adapter sent a hidden second request (`/favicon.ico`) per navigation, which for a step refused on purpose is a second failed authentication, so a browser step
+    counted double - measured 401 x10 then 429 against a limit of 20, and 22 of 22 stay 401 with `Network.setBlockedURLs` on the favicon. Either fix alone still fails one cell, both pass 270/270).
 
 * **chore(deps): one source of truth - llmctl no longer vendors `constitution`, `submodules/containers` or `submodules/superspec`
   (owner mandate 2026-10-21; branch `chore/single-source-layout`).** llmctl lives inside the constitution hub

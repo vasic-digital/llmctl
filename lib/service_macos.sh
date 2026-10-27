@@ -41,9 +41,16 @@ _svc_launchctl() {
 
 # On macOS there is no global unit install step; plists are per-profile.
 svc_install() {
+  if dry_run_pure; then
+    printf '[dry-run] llmctl install: NOTHING is written or changed (LLMCTL_DRY_RUN=1); a real run would:\n'
+    printf '[dry-run]   create %s (the launchd agents directory)\n' "$(svc_plist_dir)"
+    printf '[dry-run]   write %s (the unit-level validation gate marker)\n' "$(enforcement_file)"
+    return 0
+  fi
   ensure_dir "$(svc_plist_dir)"
   ensure_state_dirs
   info "launchd backend ready (agents dir: $(svc_plist_dir))"
+  info "no periodic revalidation agent on macOS (the systemd timer llmctl-revalidate.timer is Linux-only): schedule 'llmctl revalidate' (cron/launchd) so validation records do not expire"
   # switch the run-engine wrapper over to the unit-level validation gate (review 2026-10-15 finding 1)
   if enforcement_mark_installed; then
     info "unit-level validation gate enabled ($(enforcement_file)): agents start only for profiles with a fresh, signed PASS record"

@@ -359,9 +359,40 @@ excluded). `start` and `enable` decide on the launch they are ABOUT to run (`LLM
 quarantined and validated again), and the publish step after a quarantine PASS re-checks the record against the launch it publishes (a change
 in between is refused, not published). `restart` reuses the unit's env record, so its record is checked against that.
 
+#### Periodic revalidation
+
+A signed PASS record expires after `LLMCTL_VALIDATION_MAX_AGE` (default 7 days; a deployment can raise it up to 400 days). An engine that was
+validated once and then ran for weeks is fine - until the host reboots: the unit's `ExecCondition validated` then finds no FRESH record and the unit is
+**skipped with exit 77** (not failed, not restarted), so every long-running engine silently does not come back (observed risk on the authoring host:
+all decision engines, ~30 days after their validation).
+
+`llmctl revalidate [--force]` closes that gap and is run daily by the user timer `llmctl-revalidate.timer` (oneshot service
+`llmctl-revalidate.service`, `OnBootSec=30min`, `OnCalendar=daily`, `Persistent=true`, `RandomizedDelaySec=1h`; written and enabled by `llmctl install`,
+opt out with `LLMCTL_REVALIDATE_TIMER=0`; log `<log dir>/revalidate.log`). It is **not** `llmctl validate`: a manual validate of a served profile applies the
+verdict policy (FAIL stops the engine; UNDETERMINED overwrites the record with `undetermined`, demoting a healthy engine to NOT VALIDATED at the next
+`endpoint` / `require-validated` call). A periodic job must be incapable of both, so:
+
+| Property | How |
+|---|---|
+| never stops / restarts / withdraws an engine | the verdict policy (`_val_cli_policy`) is never applied, whatever the verdict; only RUNNING, published profiles are touched, a stopped profile is never started (refresh it by hand: `llmctl validate <profile>`) |
+| a non-PASS never demotes the live record | the run writes its record into a private staging directory (`LLMCTL_VALIDATE_RECORD_DIR`, internal) and the record is promoted over the live one (atomic `mv`) **only on PASS**; after a FAIL or UNDETERMINED the live record is byte-identical to what it was |
+| a problem is visible | exit 1 = wrong answers, exit 2 = could not determine -> the unit is `FAILED` in `systemctl --user --failed`; the failed run's record is kept as `validation/<profile>.revalidate-failed.json` and `validation/<profile>.revalidate.json` says `pass` / `fail` / `undetermined` and when |
+| only what is due | `--force`, or the record is not a fresh valid PASS for what runs now, or it is older than `LLMCTL_REVALIDATE_AFTER` seconds (default: half of `LLMCTL_VALIDATION_MAX_AGE`) |
+| idle host is not a failure | nothing running -> exit 0; a quarantined profile (its starter is validating it) and a scaled instance are skipped |
+
+Keep `LLMCTL_VALIDATION_MAX_AGE` in the timer's service equal to what the engine units use (a drop-in
+`llmctl-revalidate.service.d/20-validation-age.conf`, or `<state dir>/revalidate.conf`, `EnvironmentFile`): the job only decides *when* to refresh, so a smaller value
+refreshes earlier (harmless), a larger one later than the units tolerate. Hermetic proof: `tests/test_revalidate.sh` (fixture engine + real signed records; four
+paired mutations). Installing on a host that has been up for more than 30 minutes makes the timer fire once at once (`OnBootSec` is already in the past): that run executes
+the unit under systemd, and does nothing while no record is due (observed on the authoring host: exit 0, every engine "not due"). **Not proven here:** a daily `OnCalendar`
+tick on a real clock (the units are verified with `systemd-analyze verify`, the install wiring and that first run), and macOS (no launchd agent: schedule `llmctl revalidate` yourself).
+
 **Costs, stated plainly.** The first start of a profile without a record loads the model twice (quarantine, then published); later starts with a
 fresh record load it once. The decide-* profiles cannot be validated on a host without a working `llmctl-decide` that has `--question-file`
-(rebuild: `llmctl build decide`) and `decide-tiny` cannot be validated at all (it has no validation driver).
+(rebuild: `llmctl build decide`) and `decide-tiny` cannot be validated at all (it has no validation driver). The question file the validator hands the driver must name
+the model `smoke` (`internal/gateway/smoke.go` parses it against a single profile of that id): the model `validate` it carried before 2026-10-26 was refused by the real driver
+(`question file refused: Unknown model.`, exit 2), so every decide profile ended UNDETERMINED on a real engine and, under the strict default, was stopped; `tests/test_validate_decide_real_driver.sh`
+now runs the validator against the real driver and a listening fake letter-logit engine.
 
 #### Upgrading installed units (review 2026-10-15 finding 1)
 

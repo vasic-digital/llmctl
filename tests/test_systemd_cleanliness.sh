@@ -48,7 +48,15 @@ assert_eq "" "$(new_since "${BEFORE}" "${AFTER_H}")" "test_unit_hardening.sh lea
 
 if command -v go >/dev/null 2>&1; then
   slices_before="$(grep -c '^llmctl.*\.slice$' <<<"${BEFORE}" || true)"
-  ( cd "${LLMCTL_ROOT}/llmctld" && go test ./internal/isolation -run TestWrapCommand_RealSystemdRunInvocation -count=1 ) >"${TEST_TMP}/go.out" 2>&1 && grc=0 || grc=$?
+  # Root cause of the two historical failures of this suite (2026-10-26, traced: the guard log named
+  # `systemctl --user stop llmctl-tenant.slice` / `llmctl.slice`): the Go test's own t.Cleanup stops exactly the slices it created
+  # (llmctl-tenant.slice, llmctl.slice), and `systemctl` on PATH here is the harness guard (tests/fixtures/guard/systemctl, installed by
+  # test_setup_env), which REFUSES a mutating verb on those real unit names. The teardown never ran, the slices stayed behind and the guard
+  # log failed the suite in test_finish. This suite exists to observe the REAL manager, and the Go test only stops slices that were
+  # inactive before it ran (never a real tenant's), so that one invocation runs with the guard directory taken off PATH.
+  real_path="${PATH//${TESTS_DIR}\/fixtures\/guard:/}"
+  assert_eq 0 "$(grep -c 'fixtures/guard' <<<"${real_path}" || true)" "the isolation Go test runs with the harness systemctl guard off PATH (its own slice teardown must reach the real manager)"
+  ( cd "${LLMCTL_ROOT}/llmctld" && PATH="${real_path}" go test ./internal/isolation -run TestWrapCommand_RealSystemdRunInvocation -count=1 ) >"${TEST_TMP}/go.out" 2>&1 && grc=0 || grc=$?
   assert_eq 0 "${grc}" "TestWrapCommand_RealSystemdRunInvocation green (rc=${grc})"
   assert_eq "" "$(new_since "${BEFORE}" "$(snap)")" "the isolation test leaves no new llmctl*.slice or unit behind"
   if [[ "${slices_before}" != 0 ]]; then

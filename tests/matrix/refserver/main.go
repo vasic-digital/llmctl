@@ -354,7 +354,21 @@ func (c *config) authenticate(w http.ResponseWriter, r *http.Request) bool {
 	n := len(keep)
 	c.mu.Unlock()
 	if n > c.failLimit {
-		fail(w, 429, "rate_limited", "Too many failed attempts.", map[string]string{"Retry-After": "5"})
+		// Retry-After must be TRUE: the seconds after which a retry from this source is admitted. Every failed attempt, a throttled
+		// one included, stays in the window for failWindow; a retry is admitted when, counting itself, at most failLimit entries
+		// remain, i.e. once the (n-failLimit+1) oldest entries have left the window. This header used to be a constant "5" while
+		// the window is 10 s, so the matrix harness's single re-probe after Retry-After+1 s still found the window full and read
+		// 429 instead of the expected 401 (deterministic on a fast host, 2026-10-26).
+		retry := 1
+		if idx := n - c.failLimit; idx >= 0 && idx < len(keep) {
+			if d := keep[idx].Add(c.failWindow).Sub(now); d > 0 {
+				retry = int(d / time.Second)
+				if d%time.Second != 0 {
+					retry++
+				}
+			}
+		}
+		fail(w, 429, "rate_limited", "Too many failed attempts.", map[string]string{"Retry-After": strconv.Itoa(retry)})
 		return false
 	}
 	fail(w, 401, "unauthorized", "Unauthorized.", map[string]string{"WWW-Authenticate": `Bearer realm="llmctl"`})

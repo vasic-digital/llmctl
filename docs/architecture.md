@@ -163,8 +163,11 @@ stateDiagram-v2
   memory-ceiling analog to systemd's cgroup `MemoryMax`/`MemoryHigh`, so no
   equivalent directive is set on macOS.
 
-Both backends honor `LLMCTL_DRY_RUN=1`: files are generated for real,
-process-management calls are printed instead of executed.
+Both backends honor `LLMCTL_DRY_RUN=1`: process-management calls are printed instead of executed, and
+`llmctl install` additionally **writes nothing** (it prints the plan: the unit templates, the unit-level
+validation gate marker, the per-profile drop-ins, the revalidation timer units). The hermetic test suites read
+generated unit / env files through a dry run via the explicit test seam `LLMCTL_DRY_RUN_WRITE=1`
+(`lib/common.sh` `dry_run_pure`), which `tests/helpers.sh` sets.
 
 ```mermaid
 flowchart TD

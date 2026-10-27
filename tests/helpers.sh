@@ -102,6 +102,10 @@ test_setup_env() {
   export LLMCTL_UNIT_DIR="${TEST_TMP}/systemd-user"
   export LLMCTL_PLIST_DIR="${TEST_TMP}/LaunchAgents"
   export NO_COLOR=1
+  # LLMCTL_DRY_RUN=1 writes NOTHING for the install path (lib/common.sh dry_run_pure); the ~80 hermetic suites that read
+  # generated units / env records through a dry run opt into the historical file-writing mode here (the explicit test seam).
+  # tests/test_dry_run_writes_nothing.sh unsets it.
+  export LLMCTL_DRY_RUN_WRITE=1
   # Disabled by default for every hermetic test: _sched_wait_ready polls a
   # REAL http://127.0.0.1:<port>/v1/models after a start/switch, but every
   # existing fake-systemctl fixture's "start" verb only flips a state file -

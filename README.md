@@ -102,6 +102,7 @@ What the verification did and did not cover: [`docs/limitations.md`](docs/limita
 | `llmctl models download <p>` | resumable download + sha256 verify + smoke test |
 | `llmctl models verify <p> [--live]` | re-verify checksums of a downloaded profile, then the validation gate; a profile with no suite prints **NOT validated** |
 | `llmctl validate <p>` / `vision validate` / `validate-all` | deterministic known-answer suites against a served model (exit 0 pass, 1 wrong answer, 2 undetermined); `docs/validation.md` |
+| `llmctl revalidate [--force]` + `llmctl-revalidate.timer` | daily refresh of the PASS records of the RUNNING engines before they expire (a reboot after expiry skips every engine with exit 77); never stops, restarts or demotes an engine; `docs/validation.md#periodic-revalidation` |
 | `llmctl require-validated <p>` | exit 0 only for a fresh, signed passing validation record for the model bytes on disk (the check for consumer scripts) |
 | `llmctl endpoint <p>` | the profile's URL, printed ONLY for a running, published, validated profile - what a project should call |
 | `llmctl models pins` | supply-chain gate: lists every UNPINNED revision / file sha256 of the catalog (exit 1 while any remains) |

@@ -96,6 +96,13 @@ VALIDATION (deterministic known-answer gate - run BEFORE any use)
                               vision model; deterministic judge, golden-bad
                               controls, determinism repeat
   validate-all [--json]       validate every running profile
+  revalidate [--force]        re-validate the RUNNING profiles whose record is due
+                              (older than LLMCTL_REVALIDATE_AFTER, default half
+                              of LLMCTL_VALIDATION_MAX_AGE) and replace the record
+                              on PASS; never stops, restarts or demotes an engine
+                              (a non-PASS leaves the old record untouched, exit 1
+                              wrong answers / 2 undetermined). Run daily by the
+                              user timer llmctl-revalidate.timer (llmctl install)
   require-validated <profile> exit 0 only if the profile has a FRESH, signed
                               passing record (same model BYTES, engine build,
                               launch flags, suite hash, machine; younger than
@@ -155,7 +162,8 @@ MISC
   help                        this help
 
 ENVIRONMENT
-  LLMCTL_DRY_RUN=1            print service actions instead of executing them
+  LLMCTL_DRY_RUN=1            print service actions instead of executing them;
+                              `install` writes NOTHING (prints the plan only)
   LLMCTL_VALIDATE_STRICT=0    opt-out: serve a NOT consumer-facing profile whose
                               validation is UNDETERMINED (marked UNVALIDATED in
                               status); refused for consumer-facing profiles.
@@ -302,6 +310,7 @@ main() {
     validate) _validate_cli "$@" ;;
     vision)   cmd_vision "$@" ;;
     validate-all) validate_all "$@" ;;
+    revalidate) revalidate_all "$@" ;;
     require-validated) require_validated "$@" ;;
     endpoint) endpoint "$@" ;;
     validate-after-start) validate_after_start "$@" ;;

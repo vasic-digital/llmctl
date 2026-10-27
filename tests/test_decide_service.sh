@@ -202,9 +202,10 @@ assert isinstance(pa, list) and pa[0] == "/usr/bin/python3" and "--api-key-file"
 assert pa[pa.index("--api-key-file") + 1].endswith("onnx-decide-nli.key")
 assert pa[pa.index("--host") + 1] == "127.0.0.1", "encoder runtime must be loopback-only"
 assert not [a for a in pa if re.fullmatch(r"[0-9a-f]{32,}", a)], "key material in ProgramArguments"
-# KeepAlive is {SuccessfulExit: false} since e0e7423 (a refused start, exit 0, is not respawned forever; review 2026-10-15 finding 11);
-# this assertion still said `is True` and had been RED since (root cause: stale test, the product change is intended and pinned by test_macos_plist.sh)
-assert d["KeepAlive"] == {"SuccessfulExit": False} and d["ThrottleInterval"] == 60, d["KeepAlive"]
+# KeepAlive is {SuccessfulExit: false} since e0e7423 (a refused start exits 0 and is NOT respawned forever; a crash still is).
+# This assertion still said `is True` and failed on a known-good plist (a TEST defect; the plist is asserted as a dict by
+# test_macos_plist.sh too).
+assert d["KeepAlive"] == {"SuccessfulExit": False} and d["ThrottleInterval"] == 60, d
 PY
 assert_file_contains "${LLMCTL_SERVICES_DIR}/decide-nli.env" "LLMCTL_KEY_FILE=" "macOS env record names the key FILE too (rotated before each start)"
 out="$(

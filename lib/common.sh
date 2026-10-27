@@ -100,6 +100,13 @@ LLMCTL_CATALOG="${LLMCTL_CATALOG:-${LLMCTL_ROOT}/models/catalog.json}"
 # Dry-run switch: service/scheduler side effects are printed, not executed.
 LLMCTL_DRY_RUN="${LLMCTL_DRY_RUN:-0}"
 
+# dry_run_pure - true when a dry run must WRITE NOTHING (the meaning an operator gives LLMCTL_DRY_RUN=1: "show me, change
+# nothing"). Used by the install path (svc_install of both backends): it printed its plan but still wrote the unit templates, the
+# unit-level validation gate marker (a host-wide behaviour switch) and the state directories (root cause 2026-10-26, tests/
+# test_dry_run_writes_nothing.sh). LLMCTL_DRY_RUN_WRITE=1 is the explicit TEST SEAM that keeps the historical mode (files are
+# written, commands are printed) which the hermetic suites read generated units through; tests/helpers.sh test_setup_env sets it.
+dry_run_pure() { [[ "${LLMCTL_DRY_RUN:-0}" == "1" && "${LLMCTL_DRY_RUN_WRITE:-0}" != "1" ]]; }
+
 # Engine bind host (opt-in override, ${VAR:-default}-style, same convention
 # as LLMCTL_LLAMA_SERVER / LLMCTL_COLI_BIN / LLMCTL_DRY_RUN). Consumed by
 # lib/catalog.sh's catalog_bind_host() - see that file's header comment for

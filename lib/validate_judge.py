@@ -1388,6 +1388,8 @@ def decide_ask(args, case, timeout):
     import subprocess
     import tempfile
     q = case["question"]
+    # "smoke" is the one profile id the smoke driver's question-file parser serves (internal/gateway/smoke.go BuildProfiles);
+    # the former "validate" was an unknown model there (422 Unknown model.) so decide-v1 could never answer on a real engine.
     body = {"model": "smoke", "state": q["state"],
             "questions": {"q": {"type": q["type"], "instructions": q["instructions"], "criteria": q["criteria"]}}}
     fd, path = tempfile.mkstemp(prefix="llmctl-validate-q.", suffix=".json")
