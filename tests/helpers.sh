@@ -27,8 +27,28 @@ close_inherited_lock_fds() {
 close_inherited_lock_fds
 
 # test_bg_register <pid...> - record background pids THIS test started; test_teardown_env kills exactly those (no pattern kills).
+# Each pid is recorded with its /proc start time in ${TEST_TMP}/.bg_pids - a FILE, so a registration made inside a subshell
+# ($(...) or ( ... )) is not lost the way an array assignment there is - and teardown kills a pid only while its start time
+# still matches, so a pid the kernel has since handed to another process is never killed. Without TEST_TMP (a test that
+# skipped test_setup_env) the record falls back to the in-memory array.
 TEST_BG_PIDS=()
-test_bg_register() { TEST_BG_PIDS+=("$@"); }
+_test_pid_start() { # <pid> -> the process's start time (field 22 of /proc/<pid>/stat); fails if the process is gone
+  local s f; s="$(cat "/proc/$1/stat" 2>/dev/null)" || return 1
+  s="${s##*) }"; read -r -a f <<<"${s}"; [[ -n "${f[19]:-}" ]] || return 1; printf '%s' "${f[19]}"; }
+test_bg_register() {
+  local p st
+  for p in "$@"; do
+    [[ "${p}" =~ ^[0-9]+$ ]] && (( p > 1 )) || continue
+    st="$(_test_pid_start "${p}")" || continue
+    if [[ -n "${TEST_TMP:-}" && -d "${TEST_TMP}" ]]; then printf '%s %s\n' "${p}" "${st}" >> "${TEST_TMP}/.bg_pids"
+    else TEST_BG_PIDS+=("${p} ${st}"); fi
+  done
+}
+_test_kill_owned() { # <pid> <start>: kill the pid only while it is still the process that was registered
+  [[ "${1:-}" =~ ^[0-9]+$ ]] && (( $1 > 1 )) || return 0
+  [[ "$(_test_pid_start "$1" 2>/dev/null || true)" == "${2:-}" ]] && kill "$1" 2>/dev/null
+  return 0
+}
 
 # assert_eq <expected> <actual> <message>
 assert_eq() {
@@ -159,9 +179,12 @@ test_setup_env() {
 }
 
 test_teardown_env() {
-  local _bgp
-  for _bgp in ${TEST_BG_PIDS[@]+"${TEST_BG_PIDS[@]}"}; do [[ -n "${_bgp}" ]] && kill "${_bgp}" 2>/dev/null || true; done
+  local _bgp _bgs
+  for _bgp in ${TEST_BG_PIDS[@]+"${TEST_BG_PIDS[@]}"}; do _test_kill_owned ${_bgp}; done
   TEST_BG_PIDS=()
+  if [[ -n "${TEST_TMP:-}" && -f "${TEST_TMP}/.bg_pids" ]]; then
+    while read -r _bgp _bgs; do _test_kill_owned "${_bgp}" "${_bgs}"; done < "${TEST_TMP}/.bg_pids"
+  fi
   # `[[ ... ]] && cmd` as a bare statement returns the condition's own exit
   # status (1) when false, which - under this file's `set -e` - aborts the
   # calling script entirely the moment a test skips test_setup_env (TEST_TMP

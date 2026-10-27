@@ -7,16 +7,14 @@
 set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/helpers.sh"
 test_setup_env
-# Stub pids are recorded in a FILE: stub_only runs inside $(...) (a subshell), so a plain variable assignment there is lost
-# and the old `kill ${STUB_PIDS}` trap killed nothing (3 serve_forever servers leaked per run).
-_kill_stubs() { local p; [[ -f "${TEST_TMP:-/nonexistent}/stub.pids" ]] || return 0
-  for p in $(cat "${TEST_TMP}/stub.pids" 2>/dev/null); do [[ "$p" =~ ^[0-9]+$ ]] && (( p > 1 )) && kill "$p" 2>/dev/null; done; return 0; }
-trap '_kill_stubs; test_teardown_env' EXIT
+# Stub servers are registered with test_bg_register, which records each pid with its start time in a file under TEST_TMP:
+# stub_only runs inside $(...) (a subshell), where a plain variable assignment is lost, and test_teardown_env kills a pid
+# only while it is still the process that was registered.
+trap test_teardown_env EXIT
 command -v python3 >/dev/null 2>&1 || { echo "SKIP-SUITE: python3 not installed"; exit 0; }
 command -v curl >/dev/null 2>&1 || { echo "SKIP-SUITE: curl not installed"; exit 0; }
 
 export LLMCTL_PORTREG=1 LLMCTL_REGISTER_POLL=0.2 LLMCTL_REGISTER_WAIT=6
-STUB_PIDS=""
 
 free_port() { python3 -c 'import socket;s=socket.socket();s.bind(("127.0.0.1",0));print(s.getsockname()[1])'; }
 # stub_only <port> <path> : answers 200 on exactly <path>, 404 elsewhere (like the real engines)
@@ -29,7 +27,7 @@ class H(http.server.BaseHTTPRequestHandler):
         self.send_response(200 if self.path == only else 404); self.send_header("Content-Length","2"); self.end_headers(); self.wfile.write(b"ok")
     def log_message(self,*a): pass
 http.server.HTTPServer(("127.0.0.1", port), H).serve_forever()' "$1" "$2" >/dev/null 2>&1 </dev/null &
-  echo "$!" >> "${TEST_TMP}/stub.pids"
+  test_bg_register "$!"
   for _ in $(seq 1 50); do curl -s --max-time 1 -o /dev/null "http://127.0.0.1:$1/__probe" && return 0; sleep 0.1; done
   return 1
 }
