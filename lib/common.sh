@@ -170,6 +170,38 @@ have_cmd() { command -v "$1" >/dev/null 2>&1; }
 
 ensure_dir() { mkdir -p "$1"; }
 
+# lock_wait <fd> <total seconds> [flock options, e.g. -x] - acquire the flock on <fd>, bounded, in 1 s SLICES.
+# A single `flock -w 900 <fd>` is a foreground child for up to 900 s: if its parent is SIGKILLed the child is ORPHANED
+# for the whole budget (a stray `flock -w 900` per killed validator), and a SIGTERM trap in the parent cannot run until
+# that child returns. Slices bound an orphan to ~1 s and let a pending trap run within ~1 s. rc 0 acquired, 1 timed out,
+# >1 flock error (e.g. a bad fd) or an invalid budget (rc 2) - never retried. A budget of 0 is one non-blocking attempt;
+# a fractional budget is rounded up to whole seconds.
+lock_wait() {
+  local fd="$1" total="$2" rc=0 deadline slice=1
+  shift 2
+  # The budget comes from an operator-set variable (LLMCTL_*_LOCK_WAIT). Plain `flock -w` accepts a fractional value, so
+  # accept one (rounded UP to whole seconds) and refuse anything else BEFORE any arithmetic: bash would otherwise abort
+  # the caller on `(( abc ))` / `1.5` (and evaluate `a[$(cmd)]`).
+  if [[ "${total}" =~ ^[0-9]+$ ]]; then
+    total=$(( 10#${total} ))
+  elif [[ "${total}" =~ ^([0-9]*)\.([0-9]*)$ && -n "${BASH_REMATCH[1]}${BASH_REMATCH[2]}" ]]; then
+    local whole="${BASH_REMATCH[1]:-0}" frac="${BASH_REMATCH[2]}"
+    total=$(( 10#${whole} ))
+    [[ "${frac}" =~ [1-9] ]] && total=$(( total + 1 ))
+  else
+    printf 'lock_wait: invalid wait budget %q (want seconds, e.g. 900 or 1.5)\n' "${total}" >&2
+    return 2
+  fi
+  (( total >= 1 )) || slice=0
+  deadline=$(( SECONDS + total ))
+  while :; do
+    flock "$@" -w "${slice}" "${fd}" && return 0
+    rc=$?
+    [[ "${rc}" == "1" ]] || return "${rc}"
+    (( SECONDS < deadline )) || return 1
+  done
+}
+
 ensure_state_dirs() {
   ensure_dir "${LLMCTL_STATE_DIR}"
   ensure_dir "${LLMCTL_RUNTIME_DIR}"

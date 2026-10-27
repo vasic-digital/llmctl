@@ -216,10 +216,9 @@ func TestOSIdentity(t *testing.T) {
 // substring match).
 func TestOSIdentityRejectsCarriers(t *testing.T) {
 	cmd := exec.Command("sh", "-c", "sleep 300; : supervising tok-svc forever")
-	if err := cmd.Start(); err != nil {
+	if err := startGroup(t, cmd); err != nil { // the group, not just the sh: its `sleep 300` child outlives a plain Kill
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = cmd.Process.Kill(); _, _ = cmd.Process.Wait() })
 	time.Sleep(100 * time.Millisecond)
 	if OSIdentity(cmd.Process.Pid, "tok-svc") {
 		t.Fatal("a carrier whose argument merely contains the token was treated as the service")

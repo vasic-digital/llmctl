@@ -22,7 +22,15 @@ func TestMain(m *testing.M) {
 		helperMain(os.Args[2:])
 		return
 	}
-	os.Exit(m.Run())
+	// Stamp the run so a leaked child can be recognised afterwards (leakcheck_*_test.go).
+	runID := strconv.Itoa(os.Getpid()) + "-" + strconv.FormatInt(time.Now().UnixNano(), 36)
+	_ = os.Setenv("LLMCTL_REGISTRY_TEST_RUN", runID)
+	code := m.Run()
+	time.Sleep(200 * time.Millisecond) // a killed child needs a moment to be reaped by init
+	if reportAndReapLeaks(runID) && code == 0 {
+		code = 1
+	}
+	os.Exit(code)
 }
 
 func helperMain(a []string) {
@@ -175,4 +183,32 @@ func envOf(m map[string]string) func(string) string { return func(k string) stri
 func testCfg(t *testing.T) Config {
 	t.Helper()
 	return Config{StateDir: t.TempDir(), Strategy: Fixed, RangeLo: 34000, RangeHi: 34499}
+}
+
+// startGroup starts cmd as the leader of its OWN process group and registers a
+// cleanup that kills the whole group. Killing only cmd.Process leaves the children
+// of a shell wrapper (`sh -c "sleep 300; ..."`, a script that runs `sleep 300`)
+// running forever after the test binary exits (found 3.3.1: 2 orphans per run).
+func startGroup(t *testing.T, cmd *exec.Cmd) error {
+	t.Helper()
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	t.Cleanup(func() { killGroup(cmd) })
+	return nil
+}
+
+// killGroup kills the group led by cmd. The pgid is cmd's own pid, so it is a real
+// pid; anything <= 1 would address init or every process of the user
+// (kill(-1, sig)) and is refused.
+func killGroup(cmd *exec.Cmd) {
+	if cmd.Process == nil {
+		return
+	}
+	if pid := cmd.Process.Pid; pid > 1 {
+		_ = syscall.Kill(-pid, syscall.SIGKILL)
+	}
+	_ = cmd.Process.Kill()
+	_, _ = cmd.Process.Wait()
 }

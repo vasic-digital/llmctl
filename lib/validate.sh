@@ -530,7 +530,7 @@ _val_with_profile_lock() {
   fi
   ensure_dir "${LLMCTL_RUNTIME_DIR}"
   exec {lockfd}>"${LLMCTL_RUNTIME_DIR}/.validate-${p}.lock"
-  if ! flock -w "${LLMCTL_VALIDATE_LOCK_WAIT:-900}" "${lockfd}"; then
+  if ! lock_wait "${lockfd}" "${LLMCTL_VALIDATE_LOCK_WAIT:-900}"; then
     exec {lockfd}>&-
     err "validation: '${p}' is being validated by another process and did not finish within ${LLMCTL_VALIDATE_LOCK_WAIT:-900}s - could not determine"
     return 2
@@ -974,7 +974,7 @@ validate_after_start() {
     # (lib/svc_hook.sh) - the second validator waits for the first and then finds its fresh record (docs/validation.md)
     lf="${LLMCTL_RUNTIME_DIR}/.validate-${p}.lock"
     exec {lockfd}>"${lf}"
-    if ! flock -w "${LLMCTL_VALIDATE_LOCK_WAIT:-900}" "${lockfd}"; then
+    if ! lock_wait "${lockfd}" "${LLMCTL_VALIDATE_LOCK_WAIT:-900}"; then
       exec {lockfd}>&-
       warn "validation: '${p}' is being validated by another process and did not finish within ${LLMCTL_VALIDATE_LOCK_WAIT:-900}s - UNDETERMINED here (that validator publishes or stops it)"
       rc=1

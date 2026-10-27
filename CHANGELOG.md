@@ -23,6 +23,78 @@ where `scripts/release/preflight_submodules.sh` reports a fully clean
 35-file test suite is green. Both `v3.0.0` and `v3.0.1` tags remain in the
 repository as an honest record of that process.
 
+## 3.3.2 (2026-10-27)
+
+A **patch release** (version 3.3.1 -> 3.3.2): one bug fix (lock waits no longer leave orphaned `flock` processes) and its regression test. No new command,
+no changed default, no changed interface.
+
+**Release status (read first).**
+
+- **Documented imperfection (review):** the independent review budget (5 rounds) was exhausted; round 5 ended NO-GO on one MINOR finding (R5-M1, the test guard's comment stripping could hide a later blocking `flock` on a line with `#` in an earlier quoted string). The test-only fix was applied and re-verified by mechanical mutations, and the remaining NO-GO was accepted by operator decision (2026-10-28). No formal GO word was issued. The guard is a regex and cannot parse shell quoting in general.
+- **Known, not fixed here:** `TestBlockIsFreeRejectsAPortHeldOnANonLoopbackAddress` (`internal/registry`) can fail intermittently on a random-port collision; it predates 3.3.2.
+- **Leak-check limits (reviewer minors):** the registry leak check does not run if the test binary dies early (panic on `-timeout`, SIGKILL); it is blind to leaks started without the run marker in their environment; and with `-run` filtering out its self-test a blind detector would go unnoticed.
+- **Unchanged surface (still documented here for the release checks):** the `llmctl-decide` gateway's HTTP surface, `decide scale`, `decide calibrate`,
+  probe-order and completions handling, maturity labels, `llmctl doctor`, `status --json` with `overhead_mb`, the `LLMCTL_CTX_*` knobs and eviction behaviour,
+  and the replication endpoints are not changed by this release.
+
+### Added
+
+- `lock_wait <fd> <seconds> [flock options]` in `lib/common.sh`: acquires the flock on an open fd within a time budget, waiting in 1 s slices
+  (rc 0 acquired, 1 timed out, greater than 1 a flock error such as a bad fd, which is never retried; a budget of 0 is one non-blocking attempt;
+  a fractional budget such as `1.5` is rounded up to whole seconds; any budget other than digits with an optional fraction returns 2 with the message `lock_wait: invalid wait budget ...`
+  before any arithmetic, so the caller is never aborted by a shell arithmetic error).
+- `tests/test_validation_lock_orphans.sh`: drives the real `llmctl validate` and `llmctl validate-after-start` entry points with the default 900 s wait
+  while another process holds the profile validation lock, kills the waiting llmctl (SIGKILL and SIGTERM, 4 cases) and asserts the `flock` child is gone
+  within 3 s, plus unit checks of `lock_wait` (timeout rc 1 after the budget, free lock rc 0, fractional budget, invalid budget, bad fd) and a class
+  guard that fails when any other `flock ... -w` wait appears in `lib/`.
+
+### Fixed (tests)
+
+- `go test ./internal/registry` no longer leaves `sleep 300` orphans: the two tests that start shell-wrapped sleepers now start them as their own process group and kill the group (pid > 1 guarded); `TestMain` marks the run with a unique environment marker and fails the run (and reaps) any surviving process that carries it, with a control-needle self-test (`leakcheck_*_test.go`). Test code only.
+
+### Changed
+
+- `lib/validate.sh` (`_val_with_profile_lock`, `validate_after_start`), `lib/scheduler.sh` (`scheduler::with_lock`) and `lib/svc_hook.sh` (the two
+  validation-lock waits of the start hook) call `lock_wait` instead of a single `flock -w <budget>`: five waits in all. The total wait budgets
+  (`LLMCTL_VALIDATE_LOCK_WAIT`, `LLMCTL_SCHED_LOCK_WAIT`, default 900 s) and the messages on timeout are unchanged for integer budgets. A fractional budget
+  used to be accepted by `flock` and is still accepted (rounded up); anything other than digits with an optional fraction (for example `abc`, a leading space, or exponent notation such as `1e3`) used to be handed to `flock`
+  and now gives the `lock_wait: invalid wait budget` message and rc 2 (whether `flock` accepted a leading space or exponent notation is UNCONFIRMED); the
+  caller then reports its usual "could not determine" result, and for an invalid budget its text still quotes the budget as if it had waited (known limitation below).
+
+### Fixed
+
+- **Orphaned `flock -w 900` waiters.** The five lock waits ran `flock -w 900` as a foreground child. When the waiting llmctl was killed with SIGKILL the child
+  was orphaned for the rest of its budget (up to 15 minutes), and after SIGTERM the parent's trap could not run until that child returned. This is the
+  mechanism behind the 4 orphaned `flock -w 900` waiters observed after a full suite run in 3.3.1. Each wait now blocks at most about 1 s in any one `flock`
+  child. Measured with the new test: on the 3.3.1 code all 4 cases leave an orphan (`flock -w 900 10`, `RESULT: FAIL (1 assertion failure(s))`); with the fix
+  all 4 flock waiters are gone within 3 s (`RESULT: PASS`); with the slice length mutated back to the full budget the test fails again with 4 orphans.
+
+### Security
+
+- No security-relevant change in this release.
+
+### Removed
+
+- Nothing removed.
+
+### Migration notes
+
+- No action needed.
+
+### Known limitations
+
+- For an invalid budget the caller's second message (`did not finish within <budget>s`) wrongly implies a wait happened, and `svc_hook.sh` logs it like a
+  held lock (exit 98); the result (could not determine) is right, the wording is not. Not changed here.
+- The orphan bound is about 1 s per waiter, not zero: a killed llmctl can leave its current 1 s `flock` slice running for up to 1 s.
+- Fairness: a sliced waiter leaves the kernel's wait queue for a few milliseconds between slices, so another process that blocks continuously on the same
+  lock can win it more often than before. Waits stay bounded by their budget and end in the usual "could not determine" result.
+- The `scheduler::with_lock` timeout path is covered only by the existing `tests/test_no_lock_fd_leak.sh` (waiter exits), not by a new test of its own.
+- `TestClusterPlacement_ConcurrentStarts_NeverDoubleBookANode` still depends on host memory (exit 75 from the memory-pressure gate on a host with too little
+  available memory); not changed here.
+- `go test ./internal/registry` leaves orphaned `sleep 300` processes (test-hygiene item from 3.3.1, not addressed here).
+- Which test of the full suite created the 4 waiters seen in 3.3.1 is still UNCONFIRMED; the reproduced mechanism is the one above.
+- Manual QA (Constitution section 11.4.185) has not been performed on this release.
+
 ## 3.3.1 (2026-10-27)
 
 A **patch release** (version 3.3.0 -> 3.3.1): bug fixes and test hygiene, no new command, no changed default. Measured at commit 173393b

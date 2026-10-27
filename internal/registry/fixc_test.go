@@ -42,10 +42,9 @@ func TestC01InterpreterScriptMatches(t *testing.T) {
 		t.Fatal(err)
 	}
 	cmd := exec.Command("sh", sc)
-	if err := cmd.Start(); err != nil {
+	if err := startGroup(t, cmd); err != nil { // the script runs `sleep 300` as a child: kill the group
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = cmd.Process.Kill(); _, _ = cmd.Process.Wait() })
 	time.Sleep(100 * time.Millisecond)
 	if !OSIdentity(cmd.Process.Pid, "onnx_server.sh") {
 		t.Fatal("`sh <dir>/onnx_server.sh` must be the onnx_server.sh service")

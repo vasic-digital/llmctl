@@ -336,7 +336,7 @@ _hk_validate_after_ready() {
   mkdir -p "${LLMCTL_RUNTIME_DIR}" 2>/dev/null || true
   _hk_log "${inst}: validation: waiting for / running the validation suite(s) against the started unit (port ${port})"
   (
-    flock -w "${LLMCTL_VALIDATE_LOCK_WAIT:-900}" 9 || exit 98
+    lock_wait 9 "${LLMCTL_VALIDATE_LOCK_WAIT:-900}" || exit 98
     if "${llmctl}" require-validated "${prof}" >/dev/null 2>&1; then exit 97; fi
     # LLMCTL_VALIDATE_FAIL_RC: the explicit-verdict code (64). A bare exit 1 (llmctl crashed / die() / set -e) is NOT a
     # wrong answer - it is UNDETERMINED, which strict mode (the default) does not serve either.
@@ -384,7 +384,7 @@ _hk_legacy_validate_after_ready() {
   mkdir -p "${LLMCTL_RUNTIME_DIR}" 2>/dev/null || true
   _hk_log "${inst}: validation (legacy unit, installed before the validation gate): running the validation suite(s) against the started unit (port ${port})"
   (
-    flock -w "${LLMCTL_VALIDATE_LOCK_WAIT:-900}" 9 || exit 98
+    lock_wait 9 "${LLMCTL_VALIDATE_LOCK_WAIT:-900}" || exit 98
     if "${llmctl}" require-validated "${prof}" >/dev/null 2>&1; then exit 97; fi
     LLMCTL_VALIDATE_LOCK_HELD="${prof}:${BASHPID}" LLMCTL_VALIDATE_FAIL_RC=64 LLMCTL_VALIDATE_ATTACH_PROFILE="${prof}" LLMCTL_VALIDATE_ATTACH_PORT="${port}" \
       "${llmctl}" validate "${prof}" >> "${LLMCTL_LOG_DIR}/svc_hook.log" 2>&1

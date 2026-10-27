@@ -104,7 +104,7 @@ scheduler::with_lock() {
   exec {lock_fd}>"${lock_file}"
   # Bounded wait (a lock file deleted under a waiter, or a holder that never releases, must not block forever -
   # real incident 2026-10-22: orphaned `flock -x N` waiters kept a host lock held for hours).
-  if ! flock -x -w "${LLMCTL_SCHED_LOCK_WAIT:-900}" "${lock_fd}"; then
+  if ! lock_wait "${lock_fd}" "${LLMCTL_SCHED_LOCK_WAIT:-900}" -x; then
     exec {lock_fd}>&-
     err "scheduler: the scheduler lock was not acquired within ${LLMCTL_SCHED_LOCK_WAIT:-900}s - could not determine"
     return 2

@@ -67,6 +67,9 @@ the resolver's message.
 `constitution`, `containers` and `superspec` are **not** submodules of llmctl: they are resolved
 from the constitution hub (or `LLMCTL_*_DIR`) - run `make deps`, see [`docs/dependency-layout.md`](docs/dependency-layout.md).
 
+> **Release 3.3.2** is a patch release: a killed `llmctl validate` / `validate-after-start` / scheduler run no longer leaves a stray `flock -w 900`
+> waiter running for up to 15 minutes (lock waits are now bounded 1-second slices). Details: [`CHANGELOG.md`](CHANGELOG.md).
+>
 > **Release 3.3.1** is a patch release: the replication append handler stores a whole request in one WAL transaction (a 500-entry append was
 > 500 fsyncs and timed out on failover), the registry watch no longer misses a same-size rewrite, and several tests no longer leave processes running.
 > Details: [`CHANGELOG.md`](CHANGELOG.md).
