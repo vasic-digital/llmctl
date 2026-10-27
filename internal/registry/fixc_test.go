@@ -207,6 +207,69 @@ func TestC10WatchDetectsSameSizeRewrite(t *testing.T) {
 	_ = s1
 }
 
+// C-10 (identical metadata): the previous test rewrites through Register and then waits for the
+// announcement, so whether the watcher can tell the two versions apart by metadata depends on the
+// kernel's timestamp tick and on inode recycling (it failed in 15 of 30 runs: the second write landed
+// in the same 1 ms tick as the first, and the recycled inode number made the file identical in size,
+// mtime and inode). This test removes the dependence: the new content is written IN PLACE (same
+// inode, same size) and the old mtime is restored with Chtimes, so the premise "size, mtime and inode
+// are exactly those of the previous version" is constructed and asserted, never hoped for. The
+// rewrite must still be announced, because the content differs.
+func TestC10WatchDetectsRewriteWithIdenticalMetadata(t *testing.T) {
+	cfg := testCfg(t)
+	r := New(cfg)
+	r.Identity = func(int, string) bool { return true }
+	r.Fingerprint = func(int) string { return "" }
+	e := Entry{Name: "svc", Host: "127.0.0.1", Port: 40123, Protocol: "tcp", PID: 12345, CmdToken: "tok", Started: time.Unix(1700000000, 0)}
+	if err := r.Register(e); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	ch := r.Watch(ctx, 20*time.Millisecond)
+	s0, ok := recv(t, ch, time.Second)
+	if !ok || len(s0.Entries) != 1 || s0.Entries[0].PID != 12345 {
+		t.Fatalf("initial snapshot: %v %+v", ok, s0)
+	}
+	file := filepath.Join(cfg.Dir(), "services.json")
+	before, err := os.Stat(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	old, err := os.ReadFile(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	next := bytes.Replace(old, []byte(`"llmctl.pid": "12345"`), []byte(`"llmctl.pid": "54321"`), 1)
+	if len(next) != len(old) || bytes.Equal(next, old) {
+		t.Fatalf("test premise broken: the pid label was not found or the length changed (%d -> %d)", len(old), len(next))
+	}
+	f, err := os.OpenFile(file, os.O_WRONLY, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.WriteAt(next, 0); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(file, before.ModTime(), before.ModTime()); err != nil {
+		t.Fatal(err)
+	}
+	after, err := os.Stat(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after.Size() != before.Size() || !after.ModTime().Equal(before.ModTime()) || inode(after) != inode(before) {
+		t.Fatalf("test premise broken: metadata differs (size %d/%d mtime %v/%v inode %d/%d)",
+			before.Size(), after.Size(), before.ModTime(), after.ModTime(), inode(before), inode(after))
+	}
+	if _, ok := recvPID(t, ch, 3*time.Second, 54321); !ok {
+		t.Fatal("a rewrite with identical size, mtime and inode (pid 12345 -> 54321) was not announced")
+	}
+}
+
 // ---- C-24: a corrupt registry stays reported ------------------------------------------
 
 func TestC24CorruptRegistryIsReportedUntilAcknowledged(t *testing.T) {

@@ -802,17 +802,30 @@ func (r *Registry) Watch(ctx context.Context, every time.Duration) <-chan Snapsh
 	go func() {
 		defer close(ch)
 		file := filepath.Join(r.cfg.Dir(), "services.json")
+		// fid identifies one version of the registry file. size/mtime/inode alone are NOT enough:
+		// persist() writes a temp file and renames it over the target, the filesystem recycles the
+		// freed inode number for the next temp file, and mtime has the kernel's coarse tick
+		// granularity (1 ms measured here), so a same-size rewrite within one tick of the previous
+		// write carries an IDENTICAL (size, mtime, inode) and was never announced (measured: 15 of 30
+		// runs of TestC10WatchDetectsSameSizeRewrite, the consumer being the gateway's registry
+		// resolver). The content hash closes that: the file is small, and the routable digest below
+		// still gates what is emitted, so a heartbeat-only rewrite stays silent.
 		type fid struct {
 			size int64
 			mod  time.Time
 			ino  uint64
+			sum  [32]byte
 		}
 		ident := func() fid {
 			st, err := os.Stat(file)
 			if err != nil {
 				return fid{}
 			}
-			return fid{st.Size(), st.ModTime(), inode(st)}
+			id := fid{size: st.Size(), mod: st.ModTime(), ino: inode(st)}
+			if b, err := os.ReadFile(file); err == nil {
+				id.sum = sha256.Sum256(b)
+			}
+			return id
 		}
 		var last [32]byte
 		var lastID fid
