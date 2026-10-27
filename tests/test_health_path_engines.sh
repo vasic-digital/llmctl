@@ -7,7 +7,11 @@
 set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/helpers.sh"
 test_setup_env
-trap 'kill ${STUB_PIDS:-} 2>/dev/null || true; test_teardown_env' EXIT
+# Stub pids are recorded in a FILE: stub_only runs inside $(...) (a subshell), so a plain variable assignment there is lost
+# and the old `kill ${STUB_PIDS}` trap killed nothing (3 serve_forever servers leaked per run).
+_kill_stubs() { local p; [[ -f "${TEST_TMP:-/nonexistent}/stub.pids" ]] || return 0
+  for p in $(cat "${TEST_TMP}/stub.pids" 2>/dev/null); do [[ "$p" =~ ^[0-9]+$ ]] && (( p > 1 )) && kill "$p" 2>/dev/null; done; return 0; }
+trap '_kill_stubs; test_teardown_env' EXIT
 command -v python3 >/dev/null 2>&1 || { echo "SKIP-SUITE: python3 not installed"; exit 0; }
 command -v curl >/dev/null 2>&1 || { echo "SKIP-SUITE: curl not installed"; exit 0; }
 
@@ -25,7 +29,7 @@ class H(http.server.BaseHTTPRequestHandler):
         self.send_response(200 if self.path == only else 404); self.send_header("Content-Length","2"); self.end_headers(); self.wfile.write(b"ok")
     def log_message(self,*a): pass
 http.server.HTTPServer(("127.0.0.1", port), H).serve_forever()' "$1" "$2" >/dev/null 2>&1 </dev/null &
-  STUB_PIDS="${STUB_PIDS} $!"
+  echo "$!" >> "${TEST_TMP}/stub.pids"
   for _ in $(seq 1 50); do curl -s --max-time 1 -o /dev/null "http://127.0.0.1:$1/__probe" && return 0; sleep 0.1; done
   return 1
 }
