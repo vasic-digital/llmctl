@@ -219,7 +219,8 @@ open(sys.argv[2], "w").write(s.replace(old, "missing=\"$(comm -23"))
   # The mutant is observable only where `comm` itself compares in the ambient collation (GNU coreutils). uutils comm (0.8.0, measured
   # 2026-10-27) compares bytewise and never reports disorder, so there the mutant is EQUIVALENT: probed with a C-sorted pair that is
   # unsorted in en_US, and reported SKIP with the reason (same treatment as the systemd-255 mutant in test_hostsafety.sh).
-  if ! LC_ALL=en_US.UTF-8 comm -23 <(printf 'B\na\n') <(printf 'B\na\n') 2>&1 | grep -q 'not in sorted order'; then
+  probe="$(LC_ALL=en_US.UTF-8 comm -23 <(printf 'B\na\n') <(printf 'B\na\n') 2>&1 || true)"   # captured first: no producer|grep -q pipeline under pipefail
+  if ! grep -q 'not in sorted order' <<<"${probe}"; then
     printf '  SKIP: MUTANT comm without LC_ALL=C is equivalent on this host (%s compares bytewise and reports no disorder under en_US.UTF-8)\n' "$(comm --version 2>&1 | head -1)"
   elif grep -q 'not in sorted order' <<<"${mloc}"; then printf '  ok: MUTANT comm without LC_ALL=C: the collation disorder is reported -> the assertion above goes RED\n'; else printf '  FAIL: mutant comm-locale was not caught\n' >&2; TEST_FAILS=$((TEST_FAILS+1)); fi
 else
