@@ -5,7 +5,7 @@ SHELL := /bin/bash
 ROOT  := $(abspath .)
 SCRIPTS := bin/llmctl $(wildcard lib/*.sh) $(wildcard tests/*.sh)
 
-.PHONY: deps test lint validate install archive json-check llmctld-build llmctld-test llmctld-lint bench-all
+.PHONY: deps go-test test lint validate install archive json-check llmctld-build llmctld-test llmctld-lint bench-all
 
 # constitution / containers / superspec are resolved from the hub (lib/resolve_deps.sh), not vendored.
 # `deps` makes the ignored convenience links (go.mod replace target, @constitution import); it reports a
@@ -13,6 +13,12 @@ SCRIPTS := bin/llmctl $(wildcard lib/*.sh) $(wildcard tests/*.sh)
 # (SKIP-SUITE with the resolver message, tests/helpers.sh guard) instead of failing.
 deps:
 	bash scripts/link_deps.sh
+
+# go-test: a clean clone has no submodules/containers (go.mod replace target); link it via the resolver first, then run the
+# root-module Go tests. Fails (does not skip) when containers cannot be resolved: set LLMCTL_CONTAINERS_DIR.
+go-test:
+	bash scripts/link_deps.sh containers
+	go build ./... && go vet ./... && go test -count=1 -p 2 ./...
 
 test:
 	-@bash scripts/link_deps.sh

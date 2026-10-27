@@ -74,6 +74,8 @@ Tools that follow symlinks (`find -L`, `grep -R`, indexers, archivers) will loop
 `submodules/llmctl/constitution`, `submodules/llmctl/submodules/containers` and `submodules/llmctl/submodules/superspec`
 from code indexes and scans (the links are gitignored and never archived; do not edit canon for this).
 
+A bare `go test ./...` on a fresh clone fails with `replacement directory ./submodules/containers does not exist`: that is by design (the gitlink was removed in 933d2e4 on 2026-10-21, the path is an untracked link). Run `make deps` first, or `make go-test`, which links only containers and then builds, vets and tests.
+
 Outside the hub on a bare clone: clone the constitution next to llmctl, or export the
 `LLMCTL_*_DIR` variables, then run `make deps`. The release preflight only verifies llmctl's own
 pins (llama.cpp, colibri) and prints the commits of the resolved dependencies so the release evidence records them.
