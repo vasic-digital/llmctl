@@ -34,7 +34,9 @@ export LLMCTL_RUNTIME_DIR="${W}/run" LLMCTL_STATE_DIR="${W}/state" LLMCTL_CONFIG
 mkdir -p "${LLMCTL_RUNTIME_DIR}"
 python3 -c 'import sys, http.server; http.server.HTTPServer(("127.0.0.1", 0), http.server.BaseHTTPRequestHandler).serve_forever()' >/dev/null 2>&1 &
 echo $! >> "${W}/pids"
-flock -x "${LLMCTL_RUNTIME_DIR}/.scheduler.lock" sleep 60 >/dev/null 2>&1 &
+# hold the lock on fd 9 and exec into the sleep, so the recorded pid IS the lock holder (`flock file sleep 60 &` records
+# the flock pid; killing it orphans its child sleep, which kept the scheduler lock for the rest of the minute)
+( exec 9>>"${LLMCTL_RUNTIME_DIR}/.scheduler.lock"; flock -x 9; exec sleep 60 ) >/dev/null 2>&1 &
 echo $! >> "${W}/pids"
 sleep 0.5
 LLMCTL_SCHED_LOCK_WAIT=2 bash -c 'source "$1/lib/common.sh"; source "$1/lib/scheduler.sh"; scheduler::with_lock true' _ "${TREE}" >/dev/null 2>&1 &
@@ -63,7 +65,7 @@ wp="$(cat "${W}/waiter.pid")"
 if kill -0 "${wp}" 2>/dev/null; then printf '  FAIL: B: scheduler::with_lock waiter %s is still blocked after its wait budget (unbounded flock)\n' "${wp}" >&2; TEST_FAILS=$((TEST_FAILS+1)); else echo "  ok: B: the scheduler waiter exited on its own within LLMCTL_SCHED_LOCK_WAIT"; fi
 
 # control needle: the instrument CAN see a holder (a known holder is found, a fabricated path is not)
-( exec 7>>"${LOCK}"; sleep 3 ) & echo $! >> "${PIDF}"; sleep 0.5
+( exec 7>>"${LOCK}"; exec sleep 3 ) & echo $! >> "${PIDF}"; sleep 0.5
 seen="$(_holders "${LOCK}")"
 if [[ -n "${seen}" ]]; then echo "  ok: control needle: the /proc scan finds a known holder of the lock"; else printf '  FAIL: control needle: scan blind\n' >&2; TEST_FAILS=$((TEST_FAILS+1)); fi
 ghost="$(_holders "${W}/no-such-lock")"

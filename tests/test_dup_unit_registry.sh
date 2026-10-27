@@ -18,7 +18,9 @@ export LLMCTL_PORTREG=1 LLMCTL_LOG_DIR="${TEST_TMP}/logs" LLMCTL_VALIDATE_ON_STA
 export LLMCTL_REGISTER_WAIT=20 LLMCTL_REGISTER_POLL=1 LLMCTL_REGISTER_IDENTITY_WAIT=1
 mkdir -p "${LLMCTL_LOG_DIR}" "${LLMCTL_SERVICES_DIR}"
 ROW="${TEST_TMP}/row"          # the fake registry: one file "pid cmd_token" per name
-printf '#!/bin/sh\nsleep 120\n' > "${TEST_TMP}/llama-server"; chmod +x "${TEST_TMP}/llama-server"
+# the stub keeps its own cmdline (the registry identity check matches the "llama-server" token) and forwards TERM to its
+# sleep: the cleanup kills the recorded sh pid, and a plain `sleep 120` child survived that as an orphan
+printf '#!/bin/sh\ntrap '\''kill $c 2>/dev/null; exit 0'\'' TERM\nsleep 120 & c=$!\nwait $c\n' > "${TEST_TMP}/llama-server"; chmod +x "${TEST_TMP}/llama-server"
 cat > "${TEST_TMP}/fake-decide" <<F
 #!/bin/sh
 [ "\$1" = registry ] || exit 0
