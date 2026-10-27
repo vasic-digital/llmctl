@@ -25,8 +25,8 @@ repository as an honest record of that process.
 
 ## 3.3.1 (2026-10-27)
 
-A **patch release** (version 3.3.0 -> 3.3.1): bug fixes and test hygiene, no new command, no changed default. Measured at commit 8cbdb21
-(the last code/test commit before this version bump): `git log --oneline v3.3.0..8cbdb21` is 7 commits, and `git diff --shortstat v3.3.0..8cbdb21`
+A **patch release** (version 3.3.0 -> 3.3.1): bug fixes and test hygiene, no new command, no changed default. Measured at commit 173393b
+(the last code/test commit before this version bump; reworded from 8cbdb21 to change only the commit trailer, same tree): `git log --oneline v3.3.0..173393b` is 7 commits, and `git diff --shortstat v3.3.0..173393b`
 is 17 files changed, 599 insertions, 21 deletions.
 
 **Release status (read first).**
@@ -34,7 +34,6 @@ is 17 files changed, 599 insertions, 21 deletions.
 - **Unchanged surface (still documented here for the release checks):** the `llmctl-decide` gateway's HTTP surface, `decide scale`, `decide calibrate`,
   probe-order and completions handling, maturity labels, `llmctl doctor`, `status --json` with `overhead_mb`, the `LLMCTL_CTX_*` knobs and eviction behaviour
   are not changed by this release. The one change the gateway sees is the registry watch fix below (its resolver now notices a rewrite it used to miss).
-- **Not tagged, not pushed, not released.** This entry and the version bump are prepared in a local commit only.
 
 ### Added
 
@@ -87,6 +86,8 @@ is 17 files changed, 599 insertions, 21 deletions.
 - The decision hook (`templates/agents/llmctl_gate.py`) times out by killing its direct child only; a real decision binary that forks would leave its
   grandchildren running. Only the test fixture was fixed.
 - `beforeBatchPut`, a test seam, is a field of the production `WAL` struct (nil in production).
+- During one full test-suite run the release author observed 4 orphaned `flock -w 900` waiters (the lock code in `lib/`) left behind after the run. The source of those waiters is under separate investigation and is UNCONFIRMED; they were not killed, and the independent review did not see them again (its full run left none). Nothing in this release changes that code path.
+- Two older replication issues are not addressed here and are tracked as follow-ups: a WAL value is not bound (as additional authenticated data) to its sequence number, so a ciphertext could be moved between keys by someone with write access to the WAL file; and the append handler has no cap on the number of entries per request (with `AppendBatch` a very large authenticated request now holds one large write transaction instead of many small ones).
 - Manual QA (Constitution §11.4.185) has not been performed on this release.
 
 ## 3.3.0 (2026-10-26)
