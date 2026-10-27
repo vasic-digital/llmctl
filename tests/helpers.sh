@@ -39,6 +39,8 @@ test_bg_register() {
   local p st
   for p in "$@"; do
     [[ "${p}" =~ ^[0-9]+$ ]] && (( p > 1 )) || continue
+    # never record the shell's own pids: teardown would signal the test runner (or its parent) itself
+    (( p == $$ || p == BASHPID || p == PPID )) && continue
     st="$(_test_pid_start "${p}")" || continue
     if [[ -n "${TEST_TMP:-}" && -d "${TEST_TMP}" ]]; then printf '%s %s\n' "${p}" "${st}" >> "${TEST_TMP}/.bg_pids"
     else TEST_BG_PIDS+=("${p} ${st}"); fi

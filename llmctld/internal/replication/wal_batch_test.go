@@ -34,6 +34,17 @@ func seqRange(from, n uint64) []WALEntry {
 	return entries
 }
 
+// retriedWithNewValues is seqRange with every TokenID changed, so a retry that
+// overlaps earlier entries only matches the per-entry oracle when the retry
+// overwrites them (identical values would hide a first-wins bug).
+func retriedWithNewValues(from, n uint64) []WALEntry {
+	entries := seqRange(from, n)
+	for i := range entries {
+		entries[i].TokenID += 1000
+	}
+	return entries
+}
+
 func openWALs(t *testing.T) map[string]*WAL {
 	t.Helper()
 	plain := openTestWAL(t)
@@ -170,7 +181,7 @@ func TestAppendBatch_MatchesPerEntryAppend(t *testing.T) {
 			{Seq: 2, TokenID: 2, Position: 1},
 			{Seq: 5, TokenID: 5, Position: 4},
 		}},
-		"retried overlapping range": {seqRange(1, 10), seqRange(5, 10)},
+		"retried overlapping range": {seqRange(1, 10), retriedWithNewValues(5, 10)},
 	}
 	for name, batches := range cases {
 		t.Run(name, func(t *testing.T) {

@@ -5,6 +5,7 @@
 #      subshell is lost, so the process outlived the test: review 2026-10-27 finding F2);
 #   B. a recorded pid whose /proc start time no longer matches (the pid was reused by another process) is NOT killed
 #      (review finding F3: kill only what we still own);
+#   D. the shell's own pids ($$, $BASHPID, $PPID) are never recorded (review finding F-3, section 11.4.263 hardening);
 #   C. control needles: a registration made in the test's own shell is killed (the mechanism works at all), and a process
 #      the test never registered survives teardown (teardown is not a pattern kill).
 set -euo pipefail
@@ -33,10 +34,24 @@ test_bg_register "${STRANGER}"
 # simulate pid reuse: the record now carries a start time that is not the running process's start time
 REC="${TEST_TMP}/.bg_pids"
 assert_eq 1 "$([[ -s "${REC}" ]] && echo 1 || echo 0)" "setup: the registration is recorded in ${REC##*/}"
-sed -i "s/^${STRANGER} .*/${STRANGER} 1/" "${REC}"
+# the recorded start time must be field 22 of /proc/<pid>/stat (read here with awk, independently of the helper): a helper that
+# read field 21 (always 0) or any other field is caught here, not only by the reuse simulation below (review F-2)
+REAL_START="$(awk '{print $22}' "/proc/${STRANGER}/stat")"
+assert_eq "${STRANGER} ${REAL_START}" "$(cat "${REC}")" "B: the recorded start time equals field 22 of /proc/<pid>/stat"
+# simulate pid reuse with a start time that really differs from the running process's own (REAL_START + 1), not a made-up constant
+sed -i "s/^${STRANGER} .*/${STRANGER} $(( REAL_START + 1 ))/" "${REC}"
 test_teardown_env
 sleep 0.3
 assert_eq 1 "$(alive "${STRANGER}")" "B: a recorded pid with a different start time (a reused pid) is not killed"
+
+echo "== D: the shell's own pids are refused (a recorded \$\$ / \$BASHPID / \$PPID would make teardown kill the test runner)"
+test_setup_env
+REC="${TEST_TMP}/.bg_pids"
+test_bg_register "$$" "${BASHPID}" "${PPID}"
+( test_bg_register "$$" "${BASHPID}" "${PPID}" )
+assert_eq 0 "$([[ -s "${REC}" ]] && echo 1 || echo 0)" "D: nothing was recorded for \$\$, \$BASHPID or \$PPID"
+: > "${REC}"   # never let a failing D reach teardown with our own pids recorded
+test_teardown_env
 
 echo "== C: control needles"
 test_setup_env

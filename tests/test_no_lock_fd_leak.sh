@@ -14,7 +14,8 @@ TESTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${TESTS_DIR}/helpers.sh"
 
 TREE="${LLMCTL_FDLEAK_TREE:-${LLMCTL_ROOT}}"
-BASE="${LLMCTL_FDLEAK_TMPBASE:-${TMPDIR:-/tmp}}"
+# canonical path: the /proc scan matches fd symlink targets by `find -lname`, which compares the literal path (a TMPDIR with `..` or a symlink would make the scan blind)
+BASE="$(realpath "${LLMCTL_FDLEAK_TMPBASE:-${TMPDIR:-/tmp}}")"
 W="$(mktemp -d "${BASE}/fdleak.XXXXXX")"
 PIDF="${W}/pids"; : > "${PIDF}"
 LOCK="${W}/host.lock"; : > "${LOCK}"
