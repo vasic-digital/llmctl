@@ -279,10 +279,16 @@ func RegisterReplicationRoutes(r gin.IRoutes, registry *replication.StoreRegistr
 		entries := make([]replication.WALEntry, len(req.Entries))
 		for i, e := range req.Entries {
 			entries[i] = replication.WALEntry{Seq: e.Seq, TokenID: e.TokenID, Position: e.Position}
-			if err := store.WAL().Append(entries[i]); err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-				return
-			}
+		}
+		// One transaction (one fsync) for the whole request, all-or-nothing
+		// (v3.3.1). A per-entry Append here cost one fsync per token; with
+		// 500 entries on a loaded disk that alone took seconds per node,
+		// and the replicas run this same handler, so the forward below
+		// added their delay on top. On error nothing from this request is
+		// persisted, and a retry of the same range overwrites by Seq.
+		if err := store.WAL().AppendBatch(entries); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
 		}
 		// T008/T009: forwarding runs AFTER this node's own local append has
 		// already durably succeeded (above) - a forwarding failure/timeout

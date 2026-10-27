@@ -50,6 +50,12 @@ type WAL struct {
 	// OpenWAL's original behavior exactly for callers that don't (yet)
 	// have a tenant key.
 	key []byte
+	// beforeBatchPut, when non-nil, is called inside AppendBatch's
+	// transaction before the Put of entry i; a non-nil return aborts the
+	// batch. It is always nil in production: it exists only so the
+	// package's own tests can inject a failure in the middle of a batch
+	// and prove the batch is all-or-nothing.
+	beforeBatchPut func(i int) error
 }
 
 // OpenWAL opens (creating if necessary) a WAL backed by the bbolt file at
@@ -111,6 +117,78 @@ func (w *WAL) Append(entry WALEntry) error {
 		b := tx.Bucket(walBucket)
 		return b.Put(seqKey(entry.Seq), value)
 	})
+}
+
+// AppendBatch durably persists every entry in ONE bbolt transaction:
+// one commit and one fsync for the whole batch, instead of one per entry
+// as a loop of Append would cost (on a loaded disk 500 per-entry commits
+// took 2.4-4.2 s; the same 500 entries in one transaction take
+// milliseconds). When AppendBatch returns nil, all entries are durable;
+// when it returns an error, none of them were persisted (all-or-nothing).
+//
+// The per-key semantics are exactly those of calling Append once per
+// entry in slice order: an entry whose Seq is already present overwrites
+// it, a Seq repeated inside the batch keeps its last value, and order in
+// the slice does not matter for reading (ReadAll is always ascending by
+// Seq). So a client that retries a batch after an error, or re-sends an
+// overlapping range, gets the same result as with per-entry appends.
+// An empty batch is a no-op and touches nothing on disk.
+//
+// Values are encrypted before the transaction opens, so the write lock is
+// held only for the Puts and the commit.
+func (w *WAL) AppendBatch(entries []WALEntry) error {
+	if len(entries) == 0 {
+		return nil
+	}
+	keys := make([][]byte, len(entries))
+	values := make([][]byte, len(entries))
+	for i, e := range entries {
+		value := encodeEntry(e)
+		if w.key != nil {
+			encrypted, err := encryptValue(w.key, value)
+			if err != nil {
+				return err
+			}
+			value = encrypted
+		}
+		keys[i] = seqKey(e.Seq)
+		values[i] = value
+	}
+	return w.db.Update(func(tx *bolt.Tx) error {
+		b := tx.Bucket(walBucket)
+		for i := range keys {
+			if w.beforeBatchPut != nil {
+				if err := w.beforeBatchPut(i); err != nil {
+					return err
+				}
+			}
+			if err := b.Put(keys[i], values[i]); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+// CommittedWriteTxID returns the id of the last write transaction
+// committed to this WAL's bbolt file. bbolt increments the id once per
+// committed read-write transaction (and therefore once per fsync'd
+// commit under the default, sync-on-commit options this package uses),
+// so the difference between two readings is the number of commits made
+// in between. It is a read-only diagnostic: tests use it to prove that a
+// batch of N entries costs one commit, not N (the per-entry fsync storm
+// that made POST /v1/replication/append exceed its client timeout on a
+// loaded disk, v3.3.1).
+func (w *WAL) CommittedWriteTxID() (int, error) {
+	tx, err := w.db.Begin(false)
+	if err != nil {
+		return 0, fmt.Errorf("replication: begin read tx on WAL %q: %w", w.path, err)
+	}
+	id := tx.ID()
+	if err := tx.Rollback(); err != nil {
+		return 0, fmt.Errorf("replication: end read tx on WAL %q: %w", w.path, err)
+	}
+	return id, nil
 }
 
 // ReadAll returns every currently-persisted entry, in ascending Seq

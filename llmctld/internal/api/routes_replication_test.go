@@ -478,6 +478,94 @@ func TestReplicationRoutes_AppendCheckpointStateRealHTTP3RoundTrip(t *testing.T)
 	}
 }
 
+// TestReplicationRoutes_AppendBatchIsOneWALCommit proves that one
+// POST /v1/replication/append carrying N entries costs exactly ONE
+// committed (fsync'd) WAL transaction, not N. Before v3.3.1 the handler
+// appended entry by entry, one bbolt commit (and one fsync) each; on a
+// loaded disk 500 entries took 2.4-4.2 s per node, which together with
+// the serial forward to the replicas pushed the response past the 5 s
+// client timeout of TestFailoverState_KVCacheSurvivesPrimaryKill. The
+// commit count is read from bbolt's own transaction id
+// (WAL.CommittedWriteTxID), not from a wall-clock bound, so the test is
+// deterministic on any disk.
+func TestReplicationRoutes_AppendBatchIsOneWALCommit(t *testing.T) {
+	ca, err := mtls.GenerateCA()
+	if err != nil {
+		t.Fatalf("GenerateCA: %v", err)
+	}
+	node, err := raft.Bootstrap(raft.Config{
+		NodeID:    "node-a",
+		BindAddr:  "127.0.0.1:0",
+		TLSConfig: buildTestTLSConfig(t, ca, "node-a"),
+	})
+	if err != nil {
+		t.Fatalf("raft.Bootstrap: %v", err)
+	}
+	defer func() { _ = node.Shutdown() }()
+	waitForRealLeader(t, node, 3*time.Second)
+
+	registry := replication.NewStoreRegistry(t.TempDir(), replication.CheckpointConfig{})
+	defer func() { _ = registry.Close() }()
+	decider := newReplicationTestDecider()
+	token := issueReplicationTestJWT(t, decider, "")
+
+	srv := NewServer(node, buildTestTLSConfig(t, ca, "node-a-api"))
+	RegisterReplicationRoutes(srv.Router(), registry, decider, node, NewNodeForwarder(node, http.DefaultClient))
+	if err := srv.Listen("127.0.0.1:0"); err != nil {
+		t.Fatalf("Listen: %v", err)
+	}
+	defer func() { _ = srv.Close() }()
+	client := newTestClient(buildTestTLSConfig(t, ca, "test-client"))
+
+	// Open the default tenant's store first, so the baseline reading is
+	// taken on the same WAL file the handler will write.
+	store, err := registry.Get("")
+	if err != nil {
+		t.Fatalf("registry.Get(\"\"): %v", err)
+	}
+	before, err := store.WAL().CommittedWriteTxID()
+	if err != nil {
+		t.Fatalf("CommittedWriteTxID (before): %v", err)
+	}
+
+	const n = 50
+	entries := make([]map[string]any, n)
+	for i := 0; i < n; i++ {
+		entries[i] = map[string]any{"seq": i + 1, "token_id": 1000 + i, "position": i}
+	}
+	body, err := json.Marshal(map[string]any{"entries": entries})
+	if err != nil {
+		t.Fatalf("marshal append body: %v", err)
+	}
+	resp := doAuthedReplicationRequest(t, client, http.MethodPost, srv.Addr, "/v1/replication/append", token, "", body)
+	if resp.StatusCode != http.StatusOK {
+		respBody, _ := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		t.Fatalf("POST /v1/replication/append: status = %d, body = %s", resp.StatusCode, respBody)
+	}
+	_ = resp.Body.Close()
+
+	after, err := store.WAL().CommittedWriteTxID()
+	if err != nil {
+		t.Fatalf("CommittedWriteTxID (after): %v", err)
+	}
+	if commits := after - before; commits != 1 {
+		t.Fatalf("POST /v1/replication/append with %d entries made %d WAL commits, want exactly 1", n, commits)
+	}
+	got, err := store.WAL().ReadAll()
+	if err != nil {
+		t.Fatalf("ReadAll: %v", err)
+	}
+	if len(got) != n {
+		t.Fatalf("ReadAll after append returned %d entries, want %d", len(got), n)
+	}
+	for i, e := range got {
+		if e.Seq != uint64(i+1) || e.TokenID != int32(1000+i) || e.Position != int32(i) {
+			t.Fatalf("entry %d = %+v, want seq=%d token=%d pos=%d", i, e, i+1, 1000+i, i)
+		}
+	}
+}
+
 // TestReplicationRoutes_DifferentTenantHeaders_AreIsolatedRealHTTP3RoundTrip
 // is the direct HTTP-layer proof that RegisterReplicationRoutes' switch
 // to *replication.StoreRegistry (T072-FU2) genuinely isolates tenants:
