@@ -1,0 +1,147 @@
+  [llmctl] llmctl setup: doctor -> build -> plan
+  [llmctl] [dry-run] would link submodules/containers -> <tmp>/submodules/containers
+  llmctl doctor - environment self-diagnosis
+  PASS OS: linux (x86_64)
+  PASS command 'bash' -> /usr/bin/bash
+  PASS command 'curl' -> /usr/bin/curl
+  PASS command 'git' -> /usr/bin/git
+  PASS command 'python3' -> /usr/bin/python3
+  PASS command 'cmake' -> /usr/bin/cmake
+  PASS command 'make' -> /usr/bin/make
+  PASS C compiler available
+  PASS sha256 tool available
+  WARN submodule submodules/llama.cpp not initialized (run: llmctl build)
+  WARN submodule submodules/colibri not initialized (run: llmctl build)
+  PASS catalog valid JSON (22 profiles)
+  PASS state dir writable: <tmp>/tmp.b9EQvi9njW/state
+  PASS nvidia-smi present (NVIDIA GeForce RTX 3060)
+  PASS systemd --user session available
+  WARN llama-server not built yet (llmctl build llama)
+  WARN llmctl-decide not built - dynamic ports and the service registry are unavailable (llmctl build decide)
+  PASS every profile has at most one enabled engine unit
+  WARN onnx: onnxruntime NOT importable - decide-nli (onnx engine) cannot run real inference (run: llmctl build onnx - hash-locked private venv; llama decision profiles are unaffected)
+  WARN onnx: sentencepiece NOT importable - DeBERTa-class spm.model tokenizers need it (run: llmctl build onnx; llama decision profiles are unaffected)
+  WARN curl lacks HTTP/3 (Features: alt-svc AsynchDNS brotli GSS-API HSTS HTTP2 HTTPS-proxy IDN IPv6 Kerberos Largefile libz NTLM PSL SPNEGO SSL threadsafe TLS-SRP UnixSockets zstd) - llmctl cluster commands will use HTTP/2 against llmctld (llmctld itself always serves both)
+  PASS go toolchain available (go1.26.8) - can build llmctld from source (make llmctld-build)
+  
+  doctor: 0 failure(s), 7 warning(s)
+  [llmctl] [dry-run] would link submodules/containers -> <tmp>/submodules/containers
+  WARN: submodule submodules/llama.cpp not initialized
+  WARN: submodule submodules/colibri not initialized
+  [llmctl] [dry-run] git -C <scratch>/base332.LWCE/llmctl submodule update --init --recursive
+  [llmctl] CUDA toolkit detected -> GGML_CUDA=ON
+  [llmctl] [dry-run] cmake -S <scratch>/base332.LWCE/llmctl/submodules/llama.cpp -B <scratch>/base332.LWCE/llmctl/submodules/llama.cpp/build -DCMAKE_BUILD_TYPE=Release -DGGML_CUDA=ON -DLLAMA_OPENSSL=ON
+  [llmctl] [dry-run] cmake --build <scratch>/base332.LWCE/llmctl/submodules/llama.cpp/build --config Release --target llama-server -j 2
+  WARN: submodule submodules/llama.cpp not initialized
+  WARN: submodule submodules/colibri not initialized
+  [llmctl] [dry-run] git -C <scratch>/base332.LWCE/llmctl submodule update --init --recursive
+  [llmctl] [dry-run] make -C <scratch>/base332.LWCE/llmctl/submodules/colibri/c colibri
+  [llmctl] [dry-run] make -C <scratch>/base332.LWCE/llmctl/submodules/colibri/c qwen36
+  [llmctl] [dry-run] pip install -e <scratch>/base332.LWCE/llmctl/submodules/colibri
+  building the onnx encoder runtime venv at <tmp>/tmp.b9EQvi9njW/data/venv-onnx
+  [llmctl] hash-locked pins: numpy==2.4.6 numpy==2.5.3 onnxruntime==1.30.0 sentencepiece==0.2.2 tokenizers==0.23.2 (every file verified with --require-hashes; lock: <scratch>/base332.LWCE/llmctl/lib/lock/requirements-onnx.lock)
+  [llmctl] dry-run: would create <tmp>/tmp.b9EQvi9njW/data/venv-onnx and install from <scratch>/base332.LWCE/llmctl/lib/lock/requirements-onnx.lock
+  [llmctl] [dry-run] would link submodules/containers -> <tmp>/submodules/containers
+  [llmctl] [dry-run] would build the Go decision binary -> <scratch>/base332.LWCE/llmctl/build/llmctl-decide (go mod verify + go build ./cmd/llmctl-decide)
+  
+  Host tier:   baseline
+  Budgets:     RAM 19660 MiB (min of avail - 4GiB = 25904 and 60% cap 19660 - 0 reserved), VRAM 10444 MiB (total - 15%), storage 500000 MiB free
+  
+  profile          port   verdict   mode     RAM MiB  VRAM   ctx   ngl  why
+  fast             8080   FITS      gpu      2048     5716   8192  99   recommended
+  coder            8081   NO-FIT    none     21793    0      32768 0    footprint exceeds RAM and VRAM budgets (cpu-mode VRAM unmeasured)
+  vision           8082   FITS      gpu      2048     4030   24000 99   recommended
+  vision-pro       8083   GATED     gpu      2048     9824   16384 99   needs min_tier=workstation
+  moe-fast         8084   FITS      cpu      15644    0      16384 0    recommended (cpu-mode VRAM unmeasured)
+  small            8085   FITS      gpu      2048     3859   55000 99   recommended
+  ws-dense-32b     8086   GATED     none     23027    0      32768 0    needs min_tier=workstation
+  ws-moe-30b       8087   GATED     none     25889    0      32768 0    needs min_tier=workstation
+  colibri-glm      8090   GATED     colibri  24576    0      8192  0    needs min_tier=datacenter
+  colibri-qwen36   8091   GATED     colibri  8192     0      8192  0    needs min_tier=workstation
+  decide-tiny      8092   FITS      gpu      2048     1592   4096  99   recommended (overhead UNKNOWN (ram,vram): booked 0 until measured) (VRAM estimated: engine compute buffer UNKNOWN, not measured on a GPU)
+  decide           8093   FITS      gpu      2048     3671   8192  99   recommended (overhead UNKNOWN (ram,vram): booked 0 until measured) (VRAM estimated: engine compute buffer UNKNOWN, not measured on a GPU)
+  decide-pro       8094   GATED     gpu      2048     5260   8192  99   needs min_tier=workstation
+  decide-nli       8096   FITS      cpu      3006     0      512   0    recommended (overhead UNKNOWN (ram,vram): booked 0 until measured)
+  decide-max       8097   GATED     gpu      2048     10174  8192  99   needs min_tier=workstation
+  decide-2b        8098   FITS      gpu      2048     3006   8192  99   recommended (overhead UNKNOWN (ram,vram): booked 0 until measured) (VRAM estimated: engine compute buffer UNKNOWN, not measured on a GPU)
+  decide-julia     8103   FITS      gpu      2048     212    1024  99   recommended
+  decide-kev-08b   8104   FITS      gpu      2048     2900   2048  99   recommended
+  decide-kev-4b    8105   FITS      gpu      4899     7328   8192  99   recommended (overhead UNKNOWN (ram): booked 0 until measured)
+  decide-kev-9b    8106   GATED     cpu      7088     4016   8192  0    needs min_tier=workstation
+  decide-laya      8107   FITS      gpu      2048     574    1024  99   recommended
+  decide-lev       8108   FITS      gpu      3130     3926   8192  99   recommended (overhead UNKNOWN (vram): booked 0 until measured)
+  
+  Maturity (decision profiles; a type not measured above its baseline answers with maturity=experimental):
+    decide-tiny      experimental: noul, choice, score
+    decide           experimental: noul, choice, score
+    decide-pro       experimental: noul, choice, score
+    decide-nli       experimental: noul, choice, score
+    decide-max       experimental: noul, choice, score
+    decide-2b        experimental: noul, choice, score
+    decide-julia     experimental: noul, choice, score
+    decide-kev-08b   experimental: score
+    decide-kev-4b    all types measured
+    decide-kev-9b    experimental: noul, choice, score
+    decide-laya      experimental: noul, score
+    decide-lev       all types measured
+  
+  Co-residency groups (profiles that can run at the same time):
+    group 1: fast, vision  (RAM 4096 MiB, VRAM 9746 MiB)
+    group 2: moe-fast, small  (RAM 17692 MiB, VRAM 3859 MiB)
+    group 3: decide-tiny, decide, decide-nli, decide-2b, decide-julia  (RAM 11198 MiB, VRAM 8481 MiB)
+    group 4: decide-kev-08b, decide-kev-4b  (RAM 6947 MiB, VRAM 10228 MiB)
+    group 5: decide-laya, decide-lev  (RAM 5178 MiB, VRAM 4500 MiB)
+  
+  Decision capacity (max parallel instances per decide profile; capacity report, nothing reserved):
+  profile        tier-ok  gpu-instances  cpu-instances  slots/instance  detail
+  decide         yes      2              5              2               RAM 2048 MiB / VRAM 3671 MiB per instance
+  decide-2b      yes      3              6              2               RAM 2048 MiB / VRAM 3006 MiB per instance
+  decide-julia   yes      9              11             1               RAM 2048 MiB / VRAM 212 MiB per instance
+  decide-kev-08b yes      3              3              1               RAM 2048 MiB / VRAM 2900 MiB per instance
+  decide-kev-4b  yes      1              2              1               RAM 4899 MiB / VRAM 7328 MiB per instance
+  decide-kev-9b  no       0              0              1               tier gate: host tier baseline below min_tier workstation
+  decide-laya    yes      9              16             1               RAM 2048 MiB / VRAM 574 MiB per instance
+  decide-lev     yes      2              2              1               RAM 3130 MiB / VRAM 3926 MiB per instance
+  decide-max     no       0              0              2               tier gate: host tier baseline below min_tier workstation
+  decide-nli     yes      0              6              1               RAM 3006 MiB / VRAM 0 MiB per instance
+  decide-pro     no       0              0              2               tier gate: host tier baseline below min_tier workstation
+  decide-tiny    yes      6              12             4               RAM 2048 MiB / VRAM 1592 MiB per instance
+  
+  setup complete. Next: llmctl models download <profile>, then llmctl start <profile>
+  ok: llmctl setup exit code (fresh-clone simulation)
+  ok: setup announces its own orchestration sequence
+  ok: doctor phase: hardware/OS probe ran
+  FAIL: doctor phase: real submodule path checked (not the removed vendor/ path)
+    needle not found: submodule submodules/llama.cpp initialized
+    haystack: [llmctl] llmctl setup: doctor -> build -> plan
+[llmctl] [dry-run] would link submodules/containers -> <tmp>/submodules/containers
+llmctl doctor - environment self-diagnosis
+PASS OS: linux (x86_64)
+PASS command 'bash' -> /usr/bin/bash
+PASS command 'curl' -> /usr/bin/curl
+PASS command 'git' -> /usr/bin/git
+PASS command 'python3' -> /usr/bin/python3
+PASS command 'cmake' -> /usr/bin/cmake
+PASS command 'make' -> /usr/bin/make
+PASS C compiler available
+PASS sha256 tool ava
+  FAIL: doctor phase: real submodule path checked (not the removed vendor/ path)
+    needle not found: submodule submodules/colibri initialized
+    haystack: [llmctl] llmctl setup: doctor -> build -> plan
+[llmctl] [dry-run] would link submodules/containers -> <tmp>/submodules/containers
+llmctl doctor - environment self-diagnosis
+PASS OS: linux (x86_64)
+PASS command 'bash' -> /usr/bin/bash
+PASS command 'curl' -> /usr/bin/curl
+PASS command 'git' -> /usr/bin/git
+PASS command 'python3' -> /usr/bin/python3
+PASS command 'cmake' -> /usr/bin/cmake
+PASS command 'make' -> /usr/bin/make
+PASS C compiler available
+PASS sha256 tool ava
+  ok: doctor phase: model catalog validated
+  ok: build phase: llama.cpp engine build was invoked (dry-run)
+  ok: build phase: colibri engine build was invoked (dry-run)
+  ok: plan phase: catalog profiles considered
+  ok: setup reports completion
+RESULT: FAIL (2 assertion failure(s))

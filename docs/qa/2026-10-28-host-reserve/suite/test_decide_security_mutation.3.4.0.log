@@ -1,0 +1,24 @@
+  ok: every relative-path test fixture is present in the scratch copy (9 checked)
+== control: unmutated copy is GREEN ==
+  ok: control run passes
+== the reviewer's seven mutations (A-17) ==
+  ok: killed - R-M1 duplicate Authorization guard removed (TestDuplicateAuthorizationHeadersAreRefused)
+  ok: killed - R-M2 session tickets enabled (TestGetConfigForClientCannotBypassTheTLSFloor,TestSessionTicketsAreDisabledNoResumption)
+  ok: killed - R-M3 'serve' subcommand requirement dropped (TestVerifyRequiresServeAsTheSubcommand)
+  ok: killed - R-M4 previous-key expiry ignored (TestRotateWithGraceAcceptsPreviousUntilExpiry)
+  ok: killed - R-M5 present-but-wrong key never reaches the throttle (TestThrottleNeverThrottlesTheValidKey)
+  ok: killed - R-M6 CGNAT range dropped from the CA name constraints (TestCAProperties,TestCAPropertiesIndependentOracleOpenSSL)
+  ok: killed - R-M7 binary-name match dropped (the reviewer's run hung) (TestVerifyRejectsACarrierThatMentionsTheGateway)
+== A-01 admission ==
+  ok: killed - eviction removed: a full pool refuses the newcomer again (panic: test timed out after 5m0s)
+  ok: killed - unauthenticated budget not enforced (no reserve) (TestSlotsUnauthenticatedPoolIsBoundedIndependentlyOfTheTotal,TestSlotsVictimWithinAnAggregateIsTheHeaviestSource)
+  ok: killed - authenticated connections can be evicted (TestSlotsAuthenticatedAreProtectedAndReserved)
+  ok: killed - victim taken from the LIGHTEST source (TestSlotsVictimWithinAnAggregateIsTheHeaviestSource)
+  ok: killed - IPv6 /48 aggregate cap off (TestAcceptEnforcesThePer48AggregateCapAcrossDifferent64s,TestSlotsUnauthenticatedBudgetsAreSeparate)
+  ok: killed - a valid key never promotes the connection (TestAuthenticatedConnectionsKeepReservedCapacity,TestNoGoroutineLeakAfterShutdown,TestPreAuthTimeoutReapsUnauthenticatedConnections)
+  ok: killed - pre-auth timer never armed (TestPreAuthTimeoutReapsUnauthenticatedConnections,TestValidKeyClientIsServedWhileHostileSourcesHoldTheSlots)
+  ok: killed - pre-auth timer not stopped on authentication (TestNoGoroutineLeakAfterShutdown,TestPreAuthTimeoutReapsUnauthenticatedConnections)
+  ok: killed - unauthenticated per-source cap off (TestSlotsUnauthenticatedBudgetsAreSeparate)
+== A2-03 / A2-04 / A2-T1 admission (review 3) ==
+  ok: killed - A2-03 victim ranking ignores the /48 aggregate (TestAcceptVictimRankingUsesTheAggregate,TestSlotsVictimRankingUsesTheAggregateFirst)
+  ok: killed - A2-03 victim taken from the LIGHTEST aggregate (TestAcceptVictimRankingUsesTheAggregate,TestGlobalCapEvictsUnauthenticatedHoldersInsteadOfRefusingTheNewcomer,TestSlotsGlobalAndPerSource,TestSlotsVictimRankingUsesTheAggregateFirst)

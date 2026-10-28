@@ -2,7 +2,7 @@
 
 | Field | Value |
 |---|---|
-| Revision | 7 |
+| Revision | 8 |
 | Created | 2026-10-09 |
 | Status | active (guard ships in DRY-RUN) |
 | Code | `scripts/hostsafety/` |
@@ -684,3 +684,13 @@ stopping unit's own pid; `unregister` is bounded (2 s) and the registration wait
 
 UNKNOWN: whether this systemd applies `RestartPreventExitStatus` to a failing `ExecStartPre` (the StartLimit bound
 applies either way).
+
+## Host reserve for local models (3.4.0, 2026-10-28)
+
+Measured on this host (16 CPUs, 31 GiB) on 2026-10-28: one decision model under four parallel requests used 5 to
+6.5 CPUs (llama-server ran 28 threads without `--threads`), no llmctl unit had a CPU quota or affinity, a unit's
+`MemoryMax` could reach 90% of RAM and the start gate kept a fixed 4 GiB. From 3.4.0 llmctl keeps
+`max(2 CPUs, 25%)` of the CPUs (whole cores) and `max(4 GiB, 20%)` of the RAM for the host, caps each model's
+threads and CPU quota, pins models to the remaining CPUs, refuses a start under CPU pressure or high load (exit 75)
+and checks that the model fits next to the current workload. Formulas, knobs and the `llmctl capacity --json`
+schema: [`capacity.md`](capacity.md). Live evidence: `docs/qa/2026-10-28-host-reserve/`.

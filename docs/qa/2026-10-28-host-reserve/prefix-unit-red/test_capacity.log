@@ -1,0 +1,2 @@
+== idle host: decision profiles fit, local fallback ==
+tests/test_capacity.sh: line 31: capacity_json: command not found

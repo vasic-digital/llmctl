@@ -193,13 +193,19 @@ _svc_hook_cmd() { printf '/bin/bash %s %s' "$(_svc_qx "${_svl_dir}/svc_hook.sh")
 #   * ManagedOOMPreference=avoid: the engine is already bounded by its own MemoryMax, so systemd-oomd (which acts per
 #     cgroup on PSI, see docs/host-safety.md) should pick other victims first. UNKNOWN: whether the user manager
 #     honours the xattr for an unprivileged unit; the directive is harmless when ignored.
+#   * host reserve (3.4.0, lib/reserve.sh): with the reserve ON (the default) the engine yields harder - Nice=15,
+#     CPUWeight=20, IOWeight=20, OOMScoreAdjust=800 (the kernel kills the model long before the desktop session) - and
+#     the TEMPLATE carries a CPU backstop (CPUQuota = the chat cap, CPUAffinity = the model CPU set) for a unit whose
+#     per-profile 06-reserve.conf is missing. LLMCTL_HOST_RESERVE=0 (diagnostics) writes the pre-3.4.0 values.
 _svc_resource_directives() {
+  if reserve_enabled; then
+    reserve_compute
+    printf 'MemorySwapMax=0\nNice=15\nIOWeight=20\nCPUWeight=20\nOOMScoreAdjust=800\nCPUQuota=%s%%\nCPUAffinity=%s\n' \
+      "$(( RSV_CHAT_CPUS * 100 ))" "${RSV_CPUSET//,/ }"
+  else
+    printf 'MemorySwapMax=0\nNice=10\nIOWeight=50\nCPUWeight=50\nOOMScoreAdjust=500\n'
+  fi
   cat <<'EOF'
-MemorySwapMax=0
-Nice=10
-IOWeight=50
-CPUWeight=50
-OOMScoreAdjust=500
 ManagedOOMPreference=avoid
 TimeoutStopSec=20
 KillMode=control-group
@@ -207,8 +213,23 @@ TimeoutStartSec=600
 EOF
 }
 
+# _svc_rsv_mem_limit <total-MiB> -> the highest MemoryMax any single engine unit may get: 90% of RAM, and with the host
+# reserve on also no more than the model RAM budget (total - max(4 GiB, 20%)).
+_svc_rsv_mem_limit() {
+  local lim=$(( $1 * 90 / 100 ))
+  if reserve_enabled; then
+    LLMCTL_HOST_MEM_MB="$1" reserve_compute
+    (( RSV_BM < lim )) && lim="${RSV_BM}"
+  fi
+  echo "${lim}"
+}
+
 # _svc_template_caps <total-MiB> -> "<high> <max>" backstop for a template unit (always below total RAM).
-_svc_template_caps() { echo "$(( $1 * 70 / 100 )) $(( $1 * 85 / 100 ))"; }
+_svc_template_caps() {
+  local h=$(( $1 * 70 / 100 )) m=$(( $1 * 85 / 100 )) lim; lim="$(_svc_rsv_mem_limit "$1")"
+  (( m > lim )) && m="${lim}"; (( h >= m )) && h=$(( m * 5 / 6 ))
+  echo "${h} ${m}"
+}
 
 # _svc_gateway_caps <total-MiB> -> "<high> <max>": the gateway is a small Go process; 20%/25% of RAM, capped 3/4 GiB.
 _svc_gateway_caps() {
@@ -217,7 +238,8 @@ _svc_gateway_caps() {
   echo "${h} ${m}"
 }
 
-# _svc_profile_caps <footprint-MiB> <total-MiB> -> "<high> <max>" (1.25x / 1.5x, floor 1 GiB, max < 90% of total).
+# _svc_profile_caps <footprint-MiB> <total-MiB> -> "<high> <max>" (1.25x / 1.5x, floor 1 GiB, max < 90% of total and,
+# with the host reserve on, max <= the model RAM budget of lib/reserve.sh).
 # For a GPU-mode profile whose provenance is NOT "measured" the plan's 2048 MiB RAM is a placeholder, not a measurement: the
 # CUDA context, pinned staging and compute buffers (--ubatch-size 4096) live in host memory too, and a cgroup OOM kill of a
 # HEALTHY model is final (RestartPreventExitStatus=SIGKILL). Such a profile gets a floor of High 5120 / Max 6144 MiB
@@ -226,7 +248,7 @@ _svc_gateway_caps() {
 # (memory.gpu status "measured"), which switches the profile back to the 1.25x / 1.5x rule.
 # _svc_profile_caps <footprint-MiB> <total-MiB> [<mode> <provenance>]
 _svc_profile_caps() {
-  local fp="$1" total="$2" mode="${3:-}" prov="${4:-}" h m lim=$(( $2 * 90 / 100 ))
+  local fp="$1" total="$2" mode="${3:-}" prov="${4:-}" h m lim; lim="$(_svc_rsv_mem_limit "$2")"
   h=$(( fp * 125 / 100 )); m=$(( fp * 150 / 100 ))
   (( h < 1024 )) && h=1024; (( m < 1280 )) && m=1280
   if [[ "${mode}" == gpu && "${prov}" != measured ]]; then
@@ -248,9 +270,38 @@ _svc_rm_stale_layout() {
 # directory when that leaves it empty.
 _svc_rm_mem_dropin() {
   local d; d="$(svc_unit_dir)/llmctl-$2@$1.service.d"
-  rm -f "${d}/05-memory.conf"
+  rm -f "${d}/05-memory.conf" "${d}/06-reserve.conf"
   _svc_rm_stale_layout "${d}"
   rmdir "${d}" 2>/dev/null || true
+}
+
+# _svc_write_reserve_dropin <profile> <engine> <instance> - the per-profile host-reserve drop-in (06-reserve.conf:
+# CPUQuota, CPUAffinity/AllowedCPUs, OMP_NUM_THREADS - lib/reserve.sh reserve_dropin_body) plus the unit's CPU limit in
+# its env record (the start gate's fallback when it does not run inside the unit's cgroup). With LLMCTL_HOST_RESERVE=0
+# the drop-in is removed and the env record says LLMCTL_HOST_RESERVE=0, so the unit's own gate runs the old checks.
+_svc_write_reserve_dropin() {
+  local profile="$1" engine="$2" instance="$3" dir envf tmp body=""
+  dir="$(svc_unit_dir)/llmctl-${engine}@${instance}.service.d"
+  envf="${LLMCTL_SERVICES_DIR}/${instance}.env"
+  (
+    umask 077
+    if reserve_enabled; then
+      ensure_dir "${dir}"
+      body="$(reserve_dropin_body "${profile}")"
+      printf '%s\n' "${body}" > "${dir}/06-reserve.conf"
+    else
+      rm -f "${dir}/06-reserve.conf"
+    fi
+    if [[ -f "${envf}" ]] && tmp="$(mktemp "${envf}.XXXXXX")"; then
+      { grep -v '^LLMCTL_RESERVE_CPU_PCT_UNIT=\|^LLMCTL_HOST_RESERVE=' "${envf}" || true
+        if reserve_enabled; then
+          printf 'LLMCTL_RESERVE_CPU_PCT_UNIT=%s\n' "$(sed -n 's/^CPUQuota=\([0-9]*\)%$/\1/p' <<<"${body}")"
+        else
+          printf 'LLMCTL_HOST_RESERVE=0\n'
+        fi; } > "${tmp}"
+      chmod 600 "${tmp}"; mv -f "${tmp}" "${envf}"
+    fi
+  )
 }
 
 # _svc_write_mem_dropin <profile> <engine> - per-profile MemoryHigh/MemoryMax drop-in sized from the plan footprint.
@@ -263,6 +314,7 @@ _svc_write_mem_dropin() {
   # a stale llmctl-written 10-memory.conf sorts AFTER the operator's 10-hostsafety.conf and would override it: it goes
   # away on EVERY path of this function, including the warn-and-return ones below (review L6)
   _svc_rm_stale_layout "$(svc_unit_dir)/llmctl-${engine}@${instance}.service.d"
+  _svc_write_reserve_dropin "${profile}" "${engine}" "${instance}"
   if ! declare -F catalog_plan_json >/dev/null 2>&1; then
     warn "no per-profile memory cap written for ${profile} (planner not loaded here); the template backstop applies - run: llmctl install"
     return 0
@@ -308,7 +360,8 @@ _svc_write_mem_dropin() {
       if ! tmp="$(mktemp "${envf}.XXXXXX")"; then
         warn "cannot record the footprint for ${profile} (mktemp failed in $(dirname "${envf}")): the start gate falls back to the 4 GiB reserve only"
       else
-      { grep -v '^LLMCTL_FOOTPRINT_MB=' "${envf}" || true; printf 'LLMCTL_FOOTPRINT_MB=%s\n' "${fp}"; } > "${tmp}"
+      { grep -v '^LLMCTL_FOOTPRINT_MB=\|^LLMCTL_RESERVE_MEM_MB_UNIT=' "${envf}" || true
+        printf 'LLMCTL_FOOTPRINT_MB=%s\nLLMCTL_RESERVE_MEM_MB_UNIT=%s\n' "${fp}" "${caps##* }"; } > "${tmp}"
       chmod 600 "${tmp}"; mv -f "${tmp}" "${envf}"
       fi
     fi

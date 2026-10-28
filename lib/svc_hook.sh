@@ -236,7 +236,8 @@ hk_prestart() {
 # 120; LLMCTL_GATE_POLL s, default 5) and fails closed with 75 (EX_TEMPFAIL) only if it persists: an immediate 75 was
 # retried by Restart=on-failure and every retry burns StartLimitBurst, so a short spike ended in a 900 s lockout.
 # TimeoutStartSec (600) covers wait + model load. A pressure that lasts through ~3 waits still ends in start-limit-hit:
-# the deliberate fail-closed end state (docs/host-safety.md).
+# the deliberate fail-closed end state (docs/host-safety.md). The same bounded wait covers the host-reserve checks
+# (CPU pressure / load, and the combined CPU + RAM budget of all running engine units, lib/reserve.sh).
 hk_gate() {
   local inst="${1:-}" f fp=0 wait="${LLMCTL_GATE_WAIT:-120}" poll="${LLMCTL_GATE_POLL:-5}" waited=0 rc=0
   [[ "${wait}" =~ ^[0-9]+$ ]] || wait=120
@@ -245,9 +246,19 @@ hk_gate() {
     f="$(_hk_envfile "${inst}")"
     [[ -f "${f}" ]] && fp="$(_hk_get "${f}" LLMCTL_FOOTPRINT_MB)"
   fi
+  # Combined host-reserve check (lib/reserve.sh): this unit's OWN limits are read from its cgroup (the gate runs inside
+  # it, so they are exactly what systemd applied); the env record values are the fallback outside a unit.
+  local self ncpu="" nmem=""
+  self="$(_rsv_self_cgroup)"
+  if [[ -n "${self}" && "${self##*/}" == llmctl-*@*.service ]]; then
+    ncpu="$(_rsv_cpu_pct "${self}")"; nmem="$(_rsv_mem_mb "${self}")"
+  fi
+  if [[ -z "${ncpu}" && -n "${inst}" && -f "${f:-}" ]]; then ncpu="$(_hk_get "${f}" LLMCTL_RESERVE_CPU_PCT_UNIT)"; fi
+  if [[ -z "${nmem}" && -n "${inst}" && -f "${f:-}" ]]; then nmem="$(_hk_get "${f}" LLMCTL_RESERVE_MEM_MB_UNIT)"; fi
   local msg=""
   while :; do
     rc=0; msg="$(hw_pressure_gate "${fp:-0}" "${inst:-service}" 2>&1 >/dev/null)" || rc=$?
+    if [[ "${rc}" -eq 0 ]]; then msg="$(reserve_combined_check "${ncpu}" "${nmem}" "${inst:-service}" 2>&1 >/dev/null)" || rc=$?; fi
     if [[ "${rc}" -eq 0 ]]; then (( waited == 0 )) || _hk_log "${inst}: pressure cleared after ${waited}s"; return 0; fi
     if [[ "${rc}" -ne 75 || "${waited}" -ge "${wait}" ]]; then printf '%s\n' "${msg}" >&2; return "${rc}"; fi
     sleep "${poll}"; waited=$(( waited + poll ))

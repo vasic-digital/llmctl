@@ -130,6 +130,10 @@ assert_contains "${out}" "[dry-run] systemctl --user stop" "stop is a dry-run ac
 # "workstation" classification. ------------------------------------------------
 export LLMCTL_FAKE_HW="${LLMCTL_ROOT}/tests/fixtures/hw-workstation.json"
 test_teardown_env; test_setup_env   # fresh state for the new fixture
+# The live memory gate reads LLMCTL_MEMINFO_FILE, not LLMCTL_FAKE_HW. The default hermetic meminfo is a 32 GiB host;
+# since 3.4.0 the gate keeps max(4 GiB, 20% of RAM) free (lib/reserve.sh), so a 24 GiB profile no longer fits there.
+# Give this section the meminfo of the abundant fixture it describes (262144 MiB total, 240000 MiB available).
+printf 'MemTotal:       268435456 kB\nMemFree:        245760000 kB\nMemAvailable:   245760000 kB\n' > "${LLMCTL_MEMINFO_FILE}"
 
 out="$("${LLMCTL}" auto coder vision 2>&1)" && rc=0 || rc=$?
 assert_eq 0 "${rc}" "auto coder vision exit code (US1 Acceptance Scenario 3)"

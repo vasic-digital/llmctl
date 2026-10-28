@@ -21,6 +21,8 @@ _dl_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${_dl_dir}/common.sh"
 # shellcheck source=catalog.sh
 source "${_dl_dir}/catalog.sh"
+# shellcheck source=reserve.sh
+source "${_dl_dir}/reserve.sh"
 
 # LLMCTL_SMOKE_PORT: unset / "auto" (default) = a FREE ephemeral port is chosen for every smoke test;
 # a number pins it (refused when something already listens there). Either way readiness is proven
@@ -355,6 +357,8 @@ _dl_smoke_test_gguf() {
   local port; port="$(_dl_smoke_pick_port)" || return 1
   local args=(--model "${model}" --ctx-size 512 --n-gpu-layers 0 --host 127.0.0.1 --port "${port}")
   [[ -n "${mmproj}" ]] && args+=(--mmproj "${mmproj}")
+  # host reserve (lib/reserve.sh): the smoke server is a direct launch outside any unit - cap its threads too
+  if reserve_enabled; then local _thr; _thr="$(reserve_cpu_cap "${profile}")"; args+=(--threads "${_thr}" --threads-batch "${_thr}"); fi
 
   log "smoke test: starting llama-server for ${profile} on 127.0.0.1:${port}"
   _dl_log "smoke: ${server} ${args[*]}"
@@ -526,6 +530,8 @@ _dl_smoke_test_decision() {
   local port; port="$(_dl_smoke_pick_port)" || return 1
   local ctx=512; [[ "${_DL_DECISION_PROTO}" == "systemone-native" ]] && ctx=4096
   local args=(--model "${model}" --ctx-size "${ctx}" --n-gpu-layers 0 --host 127.0.0.1 --port "${port}")
+  # host reserve: a decision model gets the decision cap (lib/reserve.sh)
+  if reserve_enabled; then reserve_compute; args+=(--threads "${RSV_DECIDE_CPUS}" --threads-batch "${RSV_DECIDE_CPUS}"); fi
   log "decision smoke test: starting llama-server for ${profile} on 127.0.0.1:${port}"
   _dl_log "smoke protocol: ${_DL_DECISION_PROTO}"
   _dl_log "smoke: ${server} ${args[*]}"
@@ -701,7 +707,8 @@ _dl_smoke_test_onnx() {
   _dl_log "smoke: ${py} ${runner} --model-dir ${dest} --host 127.0.0.1 --port ${port} --profile ${profile} --tokenizer ${tok} --api-key-file <throwaway 0600 file>"
   local server_log="${LLMCTL_LOG_DIR}/smoke-${profile}.log"
   ensure_dir "${LLMCTL_LOG_DIR}"
-  "${py}" -B "${runner}" --model-dir "${dest}" --host 127.0.0.1 \
+  local _omp=""; if reserve_enabled; then reserve_compute; _omp="${RSV_DECIDE_CPUS}"; fi
+  env ${_omp:+OMP_NUM_THREADS="${_omp}"} "${py}" -B "${runner}" --model-dir "${dest}" --host 127.0.0.1 \
     --port "${port}" --profile "${profile}" --tokenizer "${tok}" \
     --api-key-file "${keyfile}" > "${server_log}" 2>&1 &
   local pid=$!

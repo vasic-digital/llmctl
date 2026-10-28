@@ -1,0 +1,186 @@
+{
+  "control": {
+    "GO": {
+      "rc": 0,
+      "tail": [
+        "ok  \tgithub.com/vasic-digital/llmctl/llmctld/internal/isolation\t0.049s"
+      ]
+    },
+    "tests/test_capacity.sh": {
+      "rc": 0,
+      "tail": [
+        "  ok: start prints the fallback line",
+        "  ok: no env record written for a refused start",
+        "RESULT: PASS"
+      ]
+    },
+    "tests/test_host_reserve.sh": {
+      "rc": 0,
+      "tail": [
+        "  ok: catalog rewritten in place after priming: the class follows the new content",
+        "  ok: a knob changed after priming recomputes the reserve (was 4)",
+        "RESULT: PASS"
+      ]
+    }
+  },
+  "mutants": [
+    {
+      "mutant": "M1-drop-cpu-quota",
+      "file": "lib/reserve.sh",
+      "suite": "tests/test_host_reserve.sh",
+      "rc": 1,
+      "verdict": "killed",
+      "tail": [
+        "Environment=OMP_NUM_THREADS=6",
+        "Environment=LLMCTL_RESERVE_CPU_PCT_UNIT=600",
+        "RESULT: FAIL (2 assertion failure(s))"
+      ]
+    },
+    {
+      "mutant": "M2-drop-cpu-reserve-floor",
+      "file": "lib/reserve.sh",
+      "suite": "tests/test_host_reserve.sh",
+      "rc": 1,
+      "verdict": "killed",
+      "tail": [
+        "    expected: 4",
+        "    actual:   2",
+        "RESULT: FAIL (1 assertion failure(s))"
+      ]
+    },
+    {
+      "mutant": "M3-invert-combined-cpu-check",
+      "file": "lib/reserve.sh",
+      "suite": "tests/test_host_reserve.sh",
+      "rc": 1,
+      "verdict": "killed",
+      "tail": [
+        "    expected: 75",
+        "    actual:   0",
+        "RESULT: FAIL (1 assertion failure(s))"
+      ]
+    },
+    {
+      "mutant": "M4-remove-gate-clamp",
+      "file": "lib/reserve.sh",
+      "suite": "tests/test_host_reserve.sh",
+      "rc": 1,
+      "verdict": "killed",
+      "tail": [
+        "    expected: 75",
+        "    actual:   0",
+        "RESULT: FAIL (1 assertion failure(s))"
+      ]
+    },
+    {
+      "mutant": "M5-drop-oom-score-adjust",
+      "file": "lib/service_linux.sh",
+      "suite": "tests/test_host_reserve.sh",
+      "rc": 1,
+      "verdict": "killed",
+      "tail": [
+        "KillMode=control-group",
+        "TimeoutStartSec=600",
+        "RESULT: FAIL (1 assertion failure(s))"
+      ]
+    },
+    {
+      "mutant": "M6-capacity-admit-always-pass",
+      "file": "lib/capacity.sh",
+      "suite": "tests/test_capacity.sh",
+      "rc": 1,
+      "verdict": "killed",
+      "tail": [
+        "  FAIL: no env record written for a refused start",
+        "    file should not exist: /home/milosvasic/.cache/claude-tmp/tmp.DLYYhlnGR4/state/services/decide-tiny.env",
+        "RESULT: FAIL (6 assertion failure(s))"
+      ]
+    },
+    {
+      "mutant": "M7-leak-key-value",
+      "file": "lib/capacity.sh",
+      "suite": "tests/test_capacity.sh",
+      "rc": 1,
+      "verdict": "killed",
+      "tail": [
+        "    expected: hidden",
+        "    actual:   leaked",
+        "RESULT: FAIL (1 assertion failure(s))"
+      ]
+    },
+    {
+      "mutant": "M8-no-cpu-left-check",
+      "file": "lib/capacity.sh",
+      "suite": "tests/test_capacity.sh",
+      "rc": 1,
+      "verdict": "killed",
+      "tail": [
+        "  FAIL: no env record written for a refused start",
+        "    file should not exist: /home/milosvasic/.cache/claude-tmp/tmp.X4u3rCg9le/state/services/decide-tiny.env",
+        "RESULT: FAIL (10 assertion failure(s))"
+      ]
+    },
+    {
+      "mutant": "M9-drop-memory-reserve-floor",
+      "file": "lib/reserve.sh",
+      "suite": "tests/test_host_reserve.sh",
+      "rc": 1,
+      "verdict": "killed",
+      "tail": [
+        "    expected: 4096",
+        "    actual:   1638",
+        "RESULT: FAIL (1 assertion failure(s))"
+      ]
+    },
+    {
+      "mutant": "M10-drop-threads-arg",
+      "file": "lib/scheduler.sh",
+      "suite": "tests/test_host_reserve.sh",
+      "rc": 1,
+      "verdict": "killed",
+      "tail": [
+        "    needle not found:  --threads-batch 3 ",
+        "    haystack:  --model /home/milosvasic/.cache/claude-tmp/tmp.R0N9BagXh6/models/decide-tiny/Jev-Style-0.8B-Decision-v3-Q4_K_M.gguf --host 127.0.0.1 --port 18080 --ctx-size 2048 --n-gpu-layers 0 --flash-attn off --parallel 1 --jinja --api-key-file /home/milosvasic/.cache/claude-tmp/tmp.R0N9BagXh6/state/keys/llama-decide-tiny.key --no-webui ",
+        "RESULT: FAIL (2 assertion failure(s))"
+      ]
+    },
+    {
+      "mutant": "M11-go-decide-equals-chat",
+      "file": "llmctld/internal/isolation/reserve.go",
+      "suite": "GO",
+      "rc": 1,
+      "verdict": "killed",
+      "tail": [
+        "FAIL",
+        "FAIL\tgithub.com/vasic-digital/llmctl/llmctld/internal/isolation\t0.046s",
+        "FAIL"
+      ]
+    },
+    {
+      "mutant": "M12-reserve-memo-key-drops-topology",
+      "file": "lib/reserve.sh",
+      "suite": "tests/test_host_reserve.sh",
+      "rc": 1,
+      "verdict": "killed",
+      "tail": [
+        "    expected: 2-7,10-15",
+        "    actual:   4-15",
+        "RESULT: FAIL (2 assertion failure(s))"
+      ]
+    },
+    {
+      "mutant": "M13-decide-memo-key-drops-catalog-content",
+      "file": "lib/reserve.sh",
+      "suite": "tests/test_host_reserve.sh",
+      "rc": 1,
+      "verdict": "killed",
+      "tail": [
+        "    expected: chat",
+        "    actual:   decide",
+        "RESULT: FAIL (1 assertion failure(s))"
+      ]
+    }
+  ],
+  "control_green": true,
+  "all_killed": true
+}

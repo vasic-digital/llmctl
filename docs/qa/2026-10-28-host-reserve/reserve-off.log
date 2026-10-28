@@ -1,0 +1,9 @@
+[21:29:34] label=reserve-off root=/home/milosvasic/.cache/claude-tmp/llmctl-reserve.aCff0E/llmctl profile=decide-tiny runs=3
+[21:29:35] run 1: starting llmctl-qa-reserve-reserve-off-r1.service on 127.0.0.1:52409
+[21:30:16] run 1: done
+[21:30:18] run 2: starting llmctl-qa-reserve-reserve-off-r2.service on 127.0.0.1:43475
+[21:31:01] run 2: done
+[21:31:02] run 3: starting llmctl-qa-reserve-reserve-off-r3.service on 127.0.0.1:48025
+[21:31:48] run 3: done
+[21:31:48] summary: deterministic_limits=True deterministic_verdicts=True all_checks_true=False
+rc=0

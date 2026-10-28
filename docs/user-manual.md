@@ -789,15 +789,39 @@ scheduling. Single-host usage never touches them.
 * `cluster join` sends this host's `hostname` as the peer id and `<peer-addr>` as the address; `apikey create <scope>` uses the scope as both owner id and sole scope entry.
   Multi-node behaviour with a second real peer is covered by the Go integration tests of `llmctld`, not by a shell test.
 
+## capacity
+
+```
+llmctl capacity [--json] [profile...]
+```
+
+Measures the host now (MemAvailable, swap, PSI for cpu/memory/io, load, the cgroup limits, the limits of running llmctl
+units) and reports for every catalog profile (or only the named ones) `fits`, `fits_with_reduced_threads`,
+`does_not_fit` or `running`, with reasons and headroom numbers, the largest decision profile that fits, every running
+llmctl unit as `ok` or `degraded` (with a `llmctl stop <profile>` suggestion) and a `local|cloud|none` fallback.
+Exit codes: 0 fits / nothing degraded, 75 a named profile does not fit, 3 a running model is degraded. It changes
+nothing and can be run at any time. Schema `llmctl.capacity/1`: [`capacity.md`](capacity.md).
+
+## reserve
+
+```
+llmctl reserve [--json]
+```
+
+Prints the host reserve: the CPUs and RAM kept for the system, the CPUs and RAM all models together may use, the
+per-model CPU cap (chat / decision), the start-gate thresholds and the running llmctl units with their applied limits
+read back from the cgroup. `LLMCTL_HOST_RESERVE=0` (diagnostics only) turns the reserve off and is reported as
+`OFF` (`llmctl reserve`) or `DISABLED` (`llmctl status`, `llmctl doctor`). Formulas and knobs: [`capacity.md`](capacity.md).
+
 ## version
 
 ```
 llmctl version
 ```
 
-Prints `llmctl <version>`, e.g. `llmctl 3.3.2` (the `LLMCTL_VERSION`
+Prints `llmctl <version>`, e.g. `llmctl 3.4.0` (the `LLMCTL_VERSION`
 constant at the top of `bin/llmctl`, kept equal to the `VERSION` file at the repository root). Real evidence
-(`tests/test_cli.sh`): the output contains the literal substring `llmctl 3.3.2`.
+(`tests/test_cli.sh`): the output contains the literal substring `llmctl 3.4.0`.
 
 ## help
 

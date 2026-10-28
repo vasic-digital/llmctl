@@ -157,6 +157,19 @@ test_setup_env() {
   printf 'MemTotal:       33554432 kB\nMemFree:        31457280 kB\nMemAvailable:   31457280 kB\n' > "${TEST_TMP}/meminfo.fixture"
   export LLMCTL_PSI_FILE="${TEST_TMP}/psi.fixture" LLMCTL_MEMINFO_FILE="${TEST_TMP}/meminfo.fixture"
   export LLMCTL_GATE_WAIT=0   # the unit-level gate waits in production (default 120 s); hermetic tests refuse at once
+  # Hermetic host reserve + capacity (3.4.0, lib/reserve.sh / lib/capacity.sh): the real CPU count, topology, CPU/IO PSI,
+  # load average, cgroup tree and hosted-key variables of the machine running the tests must not decide a result.
+  # Default world: 16 CPUs without SMT topology, no CPU/IO pressure, load 0, no running llmctl unit, no hosted key.
+  printf 'some avg10=0.00 avg60=0.00 avg300=0.00 total=0\n' > "${TEST_TMP}/cpu-psi.fixture"
+  printf 'some avg10=0.00 avg60=0.00 avg300=0.00 total=0\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0\n' > "${TEST_TMP}/io-psi.fixture"
+  printf '0.00 0.00 0.00 1/100 1\n' > "${TEST_TMP}/loadavg.fixture"
+  mkdir -p "${TEST_TMP}/cgroup-root" "${TEST_TMP}/cpu-sysfs"
+  export LLMCTL_HOST_CPUS=16 LLMCTL_CPU_SYSFS="${TEST_TMP}/cpu-sysfs" LLMCTL_CGROUP_ROOT="${TEST_TMP}/cgroup-root" \
+    LLMCTL_CPU_PSI_FILE="${TEST_TMP}/cpu-psi.fixture" LLMCTL_IO_PSI_FILE="${TEST_TMP}/io-psi.fixture" \
+    LLMCTL_LOADAVG_FILE="${TEST_TMP}/loadavg.fixture" LLMCTL_SELF_CGROUP="${TEST_TMP}/self.cgroup" \
+    LLMCTL_HOSTED_KEY_VARS="LLMCTL_TEST_HOSTED_KEY"
+  printf '0::/test.scope\n' > "${TEST_TMP}/self.cgroup"
+  unset LLMCTL_TEST_HOSTED_KEY LLMCTL_HOST_RESERVE LLMCTL_HOST_MEM_MB
   mkdir -p "${LLMCTL_STATE_DIR}" "${LLMCTL_RUNTIME_DIR}"
   # The hermetic world models an INSTALLED llmctl (`llmctl install` ran): the unit-level validation gate marker exists
   # (lib/common.sh enforcement_installed). tests/test_enforcement_marker.sh removes it to test the pre-gate units.

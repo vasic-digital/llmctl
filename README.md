@@ -67,6 +67,12 @@ the resolver's message.
 `constitution`, `containers` and `superspec` are **not** submodules of llmctl: they are resolved
 from the constitution hub (or `LLMCTL_*_DIR`) - run `make deps`, see [`docs/dependency-layout.md`](docs/dependency-layout.md).
 
+> **Release 3.4.0** keeps resources for the host when models run locally: by default `max(2 CPUs, 25%)` (whole cores) and
+> `max(4 GiB, 20%)` of the RAM stay reserved, every model gets a thread cap, a CPU quota and a CPU affinity, a start is refused
+> (exit 75) under CPU pressure or when the model does not fit next to the current workload, and `llmctl capacity --json` reports
+> per-profile verdicts, the largest decision model that fits and a `local|cloud|none` fallback. Upgrade note: run `llmctl install`
+> and re-validate (`--threads` changes the launch fingerprint). Details: [`CHANGELOG.md`](CHANGELOG.md), [`docs/capacity.md`](docs/capacity.md).
+>
 > **Release 3.3.2** is a patch release: a killed `llmctl validate` / `validate-after-start` / scheduler run no longer leaves a stray `flock -w 900`
 > waiter running for up to 15 minutes (lock waits are now bounded 1-second slices). Details: [`CHANGELOG.md`](CHANGELOG.md).
 >

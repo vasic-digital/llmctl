@@ -13,6 +13,10 @@ _hw_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${_hw_dir}/common.sh"
 # shellcheck source=os_detect.sh
 source "${_hw_dir}/os_detect.sh"
+# shellcheck source=reserve.sh
+source "${_hw_dir}/reserve.sh"
+# shellcheck source=capacity.sh
+source "${_hw_dir}/capacity.sh"
 
 # ---------------------------------------------------------------------------
 # CPU
@@ -412,7 +416,8 @@ PYEOF
 # --- start admission: memory pressure gate (root cause 5, docs/host-safety.md) ------------------------------------------
 # hw_pressure_gate <footprint-MiB> [label]
 # Refuses (rc 75 = EX_TEMPFAIL, message on stderr) to START or RESTART a model while the host is already under memory
-# pressure, or when MemAvailable cannot hold the footprint plus a 4 GiB reserve. Shared by `svc_hook.sh gate`
+# pressure, or when MemAvailable cannot hold the footprint plus the host RAM reserve (max(4 GiB, 20% of RAM),
+# lib/reserve.sh), or (host reserve on) while the CPU is saturated (reserve_cpu_gate). Shared by `svc_hook.sh gate`
 # (the unit's ExecStartPre, so restarts are gated), sched_start / enable / switch and (hook point) `llmctl validate`.
 # Inputs (overridable for tests): LLMCTL_PSI_FILE (default /proc/pressure/memory), LLMCTL_MEMINFO_FILE (default
 # /proc/meminfo); thresholds LLMCTL_GATE_FULL_MAX (2), LLMCTL_GATE_SOME_MAX (10), LLMCTL_GATE_RESERVE_MB (4096).
@@ -422,7 +427,11 @@ PYEOF
 hw_pressure_gate() {
   local fp="${1:-0}" label="${2:-service}" act="${LLMCTL_GATE_ACTION:-start}"
   local psi="${LLMCTL_PSI_FILE:-/proc/pressure/memory}" mi="${LLMCTL_MEMINFO_FILE:-/proc/meminfo}"
-  local fmax="${LLMCTL_GATE_FULL_MAX:-2}" smax="${LLMCTL_GATE_SOME_MAX:-10}" reserve="${LLMCTL_GATE_RESERVE_MB:-4096}"
+  local fmax="${LLMCTL_GATE_FULL_MAX:-2}" smax="${LLMCTL_GATE_SOME_MAX:-10}" reserve="${LLMCTL_GATE_RESERVE_MB:-}"
+  # host reserve (lib/reserve.sh): the default reserve is max(4 GiB, 20% of RAM), not a fixed 4 GiB
+  if [[ -z "${reserve}" ]]; then
+    if reserve_enabled; then reserve_compute; reserve="${RSV_RM}"; else reserve=4096; fi
+  fi
   [[ "${fp}" =~ ^[0-9]+$ ]] || fp=0
   local some="" full="" avail_kb=""
   if [[ -r "${psi}" ]]; then
@@ -445,5 +454,7 @@ hw_pressure_gate() {
       return 75
     fi
   fi
+  # CPU pressure / load (host reserve): skipped for the PSI-only pre-switch check (LLMCTL_GATE_CPU_CHECKS=0)
+  reserve_cpu_gate "${label}" || return $?
   return 0
 }

@@ -1,0 +1,6 @@
+time=2026-10-28T21:25:35Z
+nproc=16
+loadavg=9.04 12.68 15.65 18/3036 3421737
+psi_cpu=some avg10=7.78 avg60=8.46 avg300=10.27 total=24449721977
+psi_mem=some avg10=0.00 avg60=0.00 avg300=0.00 total=5861200465
+memavailable_kb=23925192

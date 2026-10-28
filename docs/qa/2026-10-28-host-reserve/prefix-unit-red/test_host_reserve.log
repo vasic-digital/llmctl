@@ -1,0 +1,2 @@
+== CPU reserve arithmetic (16 CPUs, no SMT topology) ==
+tests/test_host_reserve.sh: line 22: reserve_compute: command not found

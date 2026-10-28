@@ -1,0 +1,159 @@
+{
+ "label": "reserve-off",
+ "runs": 3,
+ "deterministic_limits": true,
+ "deterministic_verdicts": true,
+ "all_checks_true": false,
+ "results": [
+  {
+   "run": 1,
+   "limits": {
+    "unit": "llmctl-qa-reserve-reserve-off-r1.service",
+    "cgroup": "/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/llmctl-qa-reserve-reserve-off-r1.service",
+    "cpu.max": "max 100000",
+    "cpu.weight": "50",
+    "memory.max": "3221225472",
+    "memory.high": "2684354560",
+    "memory.swap.max": "0",
+    "pid": "3667297",
+    "threads": "31",
+    "nice": "10",
+    "oom_score_adj": "500",
+    "cpus_allowed_main": "0-15",
+    "cpus_allowed_all_threads": "0-15",
+    "argv_threads": "none",
+    "env_omp": "none"
+   },
+   "stress": {
+    "skipped": "negative control is not loaded (an unlimited engine would take the shared host)"
+   },
+   "second_start": {
+    "rc": "0",
+    "reached_admission": "yes",
+    "fallback_line": "none",
+    "units_before": "llmctl-decide-gateway.service llmctl-onnx@decide-nli.service llmctl-qa-reserve-reserve-off-filler-r1.service llmctl-qa-reserve-reserve-off-r1.service llmctl-revalidate-weekly.service llmctl-revalidate-weekly.timer",
+    "units_after": "llmctl-decide-gateway.service llmctl-onnx@decide-nli.service llmctl-qa-reserve-reserve-off-filler-r1.service llmctl-qa-reserve-reserve-off-r1.service llmctl-revalidate-weekly.service llmctl-revalidate-weekly.timer",
+    "engine_pids_before": "3667297",
+    "engine_pids_after": "3667297",
+    "env_record_written": "yes"
+   },
+   "pressure": {},
+   "checks": {
+    "cpu_quota_set": false,
+    "affinity_excludes_reserved_cpus": false,
+    "thread_cap_in_argv": false,
+    "swap_off": true,
+    "memory_max_bounded": true,
+    "oom_score_adj_800": false,
+    "nice_15": false,
+    "second_start_reached_admission": true,
+    "second_start_refused_75": false,
+    "second_start_fallback_line": false,
+    "second_start_no_new_unit": true,
+    "second_start_no_new_engine_process": true,
+    "second_start_no_env_record": false,
+    "no_process_left": true
+   }
+  },
+  {
+   "run": 2,
+   "limits": {
+    "unit": "llmctl-qa-reserve-reserve-off-r2.service",
+    "cgroup": "/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/llmctl-qa-reserve-reserve-off-r2.service",
+    "cpu.max": "max 100000",
+    "cpu.weight": "50",
+    "memory.max": "3221225472",
+    "memory.high": "2684354560",
+    "memory.swap.max": "0",
+    "pid": "3710411",
+    "threads": "31",
+    "nice": "10",
+    "oom_score_adj": "500",
+    "cpus_allowed_main": "0-15",
+    "cpus_allowed_all_threads": "0-15",
+    "argv_threads": "none",
+    "env_omp": "none"
+   },
+   "stress": {
+    "skipped": "negative control is not loaded (an unlimited engine would take the shared host)"
+   },
+   "second_start": {
+    "rc": "0",
+    "reached_admission": "yes",
+    "fallback_line": "none",
+    "units_before": "llmctl-decide-gateway.service llmctl-onnx@decide-nli.service llmctl-qa-reserve-reserve-off-filler-r2.service llmctl-qa-reserve-reserve-off-r2.service llmctl-revalidate-weekly.service llmctl-revalidate-weekly.timer",
+    "units_after": "llmctl-decide-gateway.service llmctl-onnx@decide-nli.service llmctl-qa-reserve-reserve-off-filler-r2.service llmctl-qa-reserve-reserve-off-r2.service llmctl-revalidate-weekly.service llmctl-revalidate-weekly.timer",
+    "engine_pids_before": "3710411",
+    "engine_pids_after": "3710411",
+    "env_record_written": "yes"
+   },
+   "pressure": {},
+   "checks": {
+    "cpu_quota_set": false,
+    "affinity_excludes_reserved_cpus": false,
+    "thread_cap_in_argv": false,
+    "swap_off": true,
+    "memory_max_bounded": true,
+    "oom_score_adj_800": false,
+    "nice_15": false,
+    "second_start_reached_admission": true,
+    "second_start_refused_75": false,
+    "second_start_fallback_line": false,
+    "second_start_no_new_unit": true,
+    "second_start_no_new_engine_process": true,
+    "second_start_no_env_record": false,
+    "no_process_left": true
+   }
+  },
+  {
+   "run": 3,
+   "limits": {
+    "unit": "llmctl-qa-reserve-reserve-off-r3.service",
+    "cgroup": "/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/llmctl-qa-reserve-reserve-off-r3.service",
+    "cpu.max": "max 100000",
+    "cpu.weight": "50",
+    "memory.max": "3221225472",
+    "memory.high": "2684354560",
+    "memory.swap.max": "0",
+    "pid": "3764618",
+    "threads": "31",
+    "nice": "10",
+    "oom_score_adj": "500",
+    "cpus_allowed_main": "0-15",
+    "cpus_allowed_all_threads": "0-15",
+    "argv_threads": "none",
+    "env_omp": "none"
+   },
+   "stress": {
+    "skipped": "negative control is not loaded (an unlimited engine would take the shared host)"
+   },
+   "second_start": {
+    "rc": "0",
+    "reached_admission": "yes",
+    "fallback_line": "none",
+    "units_before": "llmctl-decide-gateway.service llmctl-onnx@decide-nli.service llmctl-qa-reserve-reserve-off-filler-r3.service llmctl-qa-reserve-reserve-off-r3.service llmctl-revalidate-weekly.service llmctl-revalidate-weekly.timer",
+    "units_after": "llmctl-decide-gateway.service llmctl-onnx@decide-nli.service llmctl-qa-reserve-reserve-off-filler-r3.service llmctl-qa-reserve-reserve-off-r3.service llmctl-revalidate-weekly.service llmctl-revalidate-weekly.timer",
+    "engine_pids_before": "3764618",
+    "engine_pids_after": "3764618",
+    "env_record_written": "yes"
+   },
+   "pressure": {},
+   "checks": {
+    "cpu_quota_set": false,
+    "affinity_excludes_reserved_cpus": false,
+    "thread_cap_in_argv": false,
+    "swap_off": true,
+    "memory_max_bounded": true,
+    "oom_score_adj_800": false,
+    "nice_15": false,
+    "second_start_reached_admission": true,
+    "second_start_refused_75": false,
+    "second_start_fallback_line": false,
+    "second_start_no_new_unit": true,
+    "second_start_no_new_engine_process": true,
+    "second_start_no_env_record": false,
+    "no_process_left": true
+   }
+  }
+ ]
+}

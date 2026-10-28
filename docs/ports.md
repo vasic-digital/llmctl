@@ -1,6 +1,6 @@
 # Ports
 
-**Revision:** 1 - 2026-10-08 (llmctl 3.3.2). Which TCP ports llmctl uses, how to move one, and which ports other tools commonly want. The table of profile ports is
+**Revision:** 1 - 2026-10-08 (llmctl 3.4.0). Which TCP ports llmctl uses, how to move one, and which ports other tools commonly want. The table of profile ports is
 generated from `models/catalog.json` (the `ports` object); the regeneration command is at the end of the page. If the table and the catalog ever disagree, the catalog wins.
 
 ## Profile ports (fixed strategy defaults)

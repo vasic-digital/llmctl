@@ -1,0 +1,75 @@
+  "not-exercised": 43,
+  "fail": 4,
+  "classes_beyond_fr069": 14,
+  "auth_throttled": 1
+ },
+ "problems": [],
+ "first_failures": [
+  [
+   "EP-025",
+   "chromium",
+   "GET /v1/systemone: no HTTP answer: adapter exit 13: d unsettled top-level await at file://<tmp>/llmctl-reserve.aCff0E/llmctl/tests/"
+  ],
+  [
+   "EP-045",
+   "chromium",
+   "GET /readyz: no HTTP answer: adapter exit 13: d unsettled top-level await at file://<tmp>/llmctl-reserve.aCff0E/llmctl/tests/matrix"
+  ],
+  [
+   "EP-050",
+   "chromium",
+   "GET /metrics: no HTTP answer: adapter exit 13: d unsettled top-level await at file://<tmp>/llmctl-reserve.aCff0E/llmctl/tests/matri"
+  ],
+  [
+   "EP-032",
+   "chromium",
+   "GET /v1/models: no HTTP answer: adapter exit 13: d unsettled top-level await at file://<tmp>/llmctl-reserve.aCff0E/llmctl/tests/mat"
+  ]
+ ],
+ "run_dir": "<tmp>/llmctl-matrix-test-uAQWsw/full"
+}
+FAIL: 4 unexpected failing cells
+FAIL: runner exit 1 for an all-pass matrix
+PASS: 45 cases x 6 clients = 270 cells, none missing
+PASS: programmatic clients: 0 failing cells; every not-exercised cell is in a declared class
+PASS: per-client pass counts: {'curl': 43, 'python-urllib': 45, 'python-requests': 42, 'node-fetch': 42, 'go-nethttp': 42, 'chromium': 9}
+PASS: leak scan clean with control needle found
+FAIL: run.py --check failed
+{
+ "check": "FAIL",
+ "problems": [
+  "4 failing cells"
+ ]
+}
+PASS: M1 broken client adapter: run FAILS (rc=1, 29 failing cells)
+PASS: M1 control: unbroken curl adapter passes the identical command
+PASS: M2 removed inventory row EP-040 detected
+PASS: M2 inventory row without a test (EP-999) detected
+PASS: M3 tampered matrix.json rejected by --check
+PASS: M3 edited evidence.jsonl rejected (chain/manifest)
+PASS: M3 truncated evidence.jsonl rejected
+PASS: leak scanner finds a planted token (exit non-zero)
+   "pass": 3,
+   "fail": 0,
+   "not_exercised": 0
+  },
+  "weak-cipher-only-client": {
+   "pass": 2,
+   "fail": 0,
+   "not_exercised": 0
+  }
+ },
+ "problems": []
+}
+PASS: negative TLS: host name, expired, untrusted, altered, plain HTTP, TLS1.0/1.1, weak cipher all refused as documented (with positive controls)
+PASS: negative TLS covers every FR-070 case
+PASS: negative TLS evidence chain intact
+PASS: negative TLS regexes accept GnuTLS-curl and OpenSSL-curl wordings and reject an unrelated failure
+PASS: matrix harness unit tests (node piped-stdout 100 KB, --model, additive keys, failed-auth throttle) pass
+PASS: run.py --model jev-latest: model recorded, verdict PASS
+PASS: M4 reverted (exit-right-after-log) node adapter is rejected by the 100 KB piped-stdout test
+PASS: plain python3 scripts/golden/run_golden.py (no -B) writes no bytecode under tests/matrix or tests/evidence
+PASS: plain python3 tests/matrix/run.py (no -B) writes no bytecode under tests/matrix or tests/evidence
+PASS: plain python3 tests/matrix/negative_tls.py (no -B) writes no bytecode under tests/matrix or tests/evidence
+PASS: no __pycache__/.pyc written
+SUMMARY: 3 failure(s)

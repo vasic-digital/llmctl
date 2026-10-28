@@ -1,0 +1,15 @@
+unit=llmctl-qa-reserve-prefix-r2.service
+cgroup=/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/llmctl-qa-reserve-prefix-r2.service
+cpu.max=max 100000
+cpu.weight=50
+memory.max=3221225472
+memory.high=2684354560
+memory.swap.max=0
+pid=3863460
+threads=31
+nice=10
+oom_score_adj=500
+cpus_allowed_main=0-15
+cpus_allowed_all_threads=0-15
+argv_threads=none
+env_omp=none

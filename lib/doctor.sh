@@ -412,6 +412,29 @@ print("; ".join(u))' 2>/dev/null || true)"
     _doc_warn "go not installed - only needed to build the opt-in llmctld cluster daemon; single-host llmctl is unaffected"
   fi
 
+  # Host reserve + capacity (3.4.0, lib/reserve.sh / lib/capacity.sh): the part of the host local models may use.
+  if declare -F reserve_compute >/dev/null 2>&1; then
+    if reserve_enabled; then
+      reserve_compute
+      _doc_pass "host reserve: ${RSV_RC} CPU(s) [${RSV_RESERVED_SET}] and ${RSV_RM} MiB kept for the system; models get CPUs [${RSV_CPUSET}] (chat ${RSV_CHAT_CPUS}, decision ${RSV_DECIDE_CPUS} threads) and ${RSV_BM} MiB (llmctl reserve --json)"
+      (( RSV_CPU_SHORT )) && _doc_warn "host reserve: this host has too few CPUs for the full CPU reserve"
+      (( RSV_MEM_SHORT )) && _doc_warn "host reserve: this host has too little RAM for the full memory reserve"
+      local _doc_cap
+      if _doc_cap="$(capacity_json 2>/dev/null)"; then
+        local _doc_cs
+        _doc_cs="$(python3 -c 'import json,sys; d=json.loads(sys.argv[1]); deg=[u["unit"] for u in d["llmctl"]["units"] if u["status"]=="degraded"]; print(("DEGRADED "+",".join(deg)) if deg else ("pressure: "+"; ".join(d["pressure"]["reasons"])) if not d["pressure"]["ok"] else "ok largest decision fit: %s, fallback %s" % (d["largest_decision_fit"], d["fallback"]["recommended"]))' "${_doc_cap}" 2>/dev/null || echo "unreadable")"
+        case "${_doc_cs}" in
+          ok*) _doc_pass "capacity: ${_doc_cs#ok } (llmctl capacity)" ;;
+          *)   _doc_warn "capacity: ${_doc_cs} (llmctl capacity for details)" ;;
+        esac
+      else
+        _doc_warn "capacity: measurement failed (llmctl capacity --json)"
+      fi
+    else
+      _doc_warn "host reserve DISABLED (LLMCTL_HOST_RESERVE=0) - local models may take every CPU and almost all RAM; diagnostics only"
+    fi
+  fi
+
   echo
   echo "doctor: ${DOCTOR_FAILS} failure(s), ${DOCTOR_WARNS} warning(s)"
   [[ "${DOCTOR_FAILS}" -eq 0 ]]

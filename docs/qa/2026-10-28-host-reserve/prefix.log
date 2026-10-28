@@ -1,0 +1,9 @@
+[21:31:48] label=prefix root=<scratch>/prefix.IX9W profile=decide-tiny runs=3
+[21:31:50] run 1: starting llmctl-qa-reserve-prefix-r1.service on 127.0.0.1:42859
+[21:32:35] run 1: done
+[21:32:36] run 2: starting llmctl-qa-reserve-prefix-r2.service on 127.0.0.1:43051
+[21:33:20] run 2: done
+[21:33:21] run 3: starting llmctl-qa-reserve-prefix-r3.service on 127.0.0.1:38679
+[21:34:07] run 3: done
+[21:34:07] summary: deterministic_limits=True deterministic_verdicts=True all_checks_true=False
+rc=0

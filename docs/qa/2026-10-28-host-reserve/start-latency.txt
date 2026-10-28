@@ -1,0 +1,13 @@
+/home/milosvasic/.cache/claude-tmp/llmctl-reserve.aCff0E/llmctl 0 3323
+<scratch>/prefix.IX9W 0 2520
+/home/milosvasic/.cache/claude-tmp/llmctl-reserve.aCff0E/llmctl 0 3149
+<scratch>/prefix.IX9W 0 2419
+/home/milosvasic/.cache/claude-tmp/llmctl-reserve.aCff0E/llmctl 0 3331
+<scratch>/prefix.IX9W 0 2822
+/home/milosvasic/.cache/claude-tmp/llmctl-reserve.aCff0E/llmctl 0 4054
+<scratch>/prefix.IX9W 0 2420
+/home/milosvasic/.cache/claude-tmp/llmctl-reserve.aCff0E/llmctl 0 3126
+<scratch>/prefix.IX9W 0 2622
+mean <scratch>/prefix.IX9W 2560 ms (n=5)
+mean /home/milosvasic/.cache/claude-tmp/llmctl-reserve.aCff0E/llmctl 3396 ms (n=5)
+nonzero_rc 0

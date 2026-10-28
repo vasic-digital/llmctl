@@ -457,6 +457,14 @@ sched_build_launch() {
                     --flash-attn "${fa}" --parallel "${parallel}" --jinja)
       fi
       [[ -n "${mmproj}" && -f "${mmproj}" ]] && SCHED_ARGS+=(--mmproj "${mmproj}")
+      # Host reserve (3.4.0, lib/reserve.sh): without --threads llama.cpp starts one thread per physical core for
+      # generation AND batch, whatever the unit's CPU quota (measured: 28 threads, 5-6.5 CPUs for one decision model).
+      # The thread count equals the profile's CPU cap, so the threads match the quota instead of fighting it.
+      # NOTE: this is part of the launch fingerprint, so validation records of 3.3.x are stale after the upgrade.
+      if reserve_enabled; then
+        local _thr; _thr="$(reserve_cpu_cap "${profile}")"
+        SCHED_ARGS+=(--threads "${_thr}" --threads-batch "${_thr}")
+      fi
       # KV-cache-type quantization (root-caused 2026-10-03: a profile's
       # context was always f16-only, which uses ~4x the VRAM per token
       # that q4_0 does - empirically verified live on real hardware to let
@@ -1076,13 +1084,13 @@ _sched_wait_ready() {
 _sched_unit_started_ok() { declare -F svc_started_ok >/dev/null 2>&1 || return 0; svc_started_ok "$1"; }
 
 # _sched_pressure_gate <profile> [psi] - hw_pressure_gate with the profile's plan footprint (rc 75 on refusal).
-# "psi": PSI test only (footprint 0, reserve 0) - used BEFORE a switch stops the running set, because MemAvailable still
+# "psi": memory PSI test only (footprint 0, reserve 0, no CPU/load test) - used BEFORE a switch stops the running set, because MemAvailable and the CPU load still
 # counts the memory of the models about to be stopped; the full memory test runs after the stop (_sched_start_impl) and
 # in the unit's ExecStartPre. Hook point for `llmctl validate` (lib/validate.sh is owned by another writer and is NOT
 # wired from this branch): call this before sched_start.
 _sched_pressure_gate() {
   local p="$1" fp=0
-  if [[ "${2:-}" == psi ]]; then LLMCTL_GATE_RESERVE_MB=0 hw_pressure_gate 0 "${p}"; return $?; fi
+  if [[ "${2:-}" == psi ]]; then LLMCTL_GATE_RESERVE_MB=0 LLMCTL_GATE_CPU_CHECKS=0 hw_pressure_gate 0 "${p}"; return $?; fi
   fp="$(hw_probe_json | catalog_plan_json 2>/dev/null | json_stdin 'd["profiles"][argv[0]]["ram_mb"]' "${p}" 2>/dev/null || echo 0)"
   hw_pressure_gate "${fp}" "${p}"
 }
@@ -1111,6 +1119,8 @@ _sched_start_impl() {
 
   local p mode port ram vram ctx ngl parallel fa kv_type fits
   local -a selected=()
+  local -A _cap_thr=()
+  local _RSV_CAP_OVERRIDE=""   # dynamic scope: seen by reserve_cpu_cap in the callees, gone when this returns
   for p in "$@"; do
     catalog_exists "${p}" || { rm -f "${plan_file}"; die "unknown profile: ${p} (see: llmctl models list)"; }
     sched_is_running "${p}" && { log "${p} is already running"; continue; }
@@ -1122,7 +1132,13 @@ _sched_start_impl() {
     # _sched_restore_set (dynamic scope), never an environment knob. The unit's own ExecStartPre gate still applies there
     # and can wait up to 120 s and then fail 75: a rollback under persistent pressure can leave nothing running.
     if [[ "${_sched_rollback_nogate:-0}" != 1 ]]; then
+      reserve_prime
       hw_pressure_gate "${ram}" "${p}" || { local _grc=$?; rm -f "${plan_file}"; return "${_grc}"; }
+      # Host capacity (3.4.0, lib/capacity.sh): can the host run this profile NEXT TO its current workload? A
+      # does_not_fit refuses with 75 and a machine-readable "llmctl-fallback: cloud|none" line, before anything is
+      # written or started; fits_with_reduced_threads starts it with the CPUs that are actually left.
+      capacity_admit "${p}" || { local _crc=$?; rm -f "${plan_file}"; return "${_crc}"; }
+      [[ -n "${CAP_THREADS}" ]] && _cap_thr["${p}"]="${CAP_THREADS}"
     fi
     if [[ "${fits}" != "True" ]] || \
        ! _sched_admission_fits "${ram}" "${vram}" "${used_ram}" "${used_vram}" "${ram_budget}" "${vram_budget}"; then
@@ -1161,6 +1177,8 @@ _sched_start_impl() {
   done
 
   for p in ${selected[@]+"${selected[@]}"}; do
+    # the reduced CPU cap of a fits_with_reduced_threads verdict (empty = the profile's normal cap)
+    _RSV_CAP_OVERRIDE="${_cap_thr[${p}]:-}"
     mode="$(json_query "${plan_file}" "d[\"profiles\"][argv[0]][\"mode\"]" "${p}")"
     port="$(json_query "${plan_file}" "d[\"profiles\"][argv[0]][\"port\"]" "${p}")"
     ram="$(json_query "${plan_file}" "d[\"profiles\"][argv[0]][\"ram_mb\"]" "${p}")"
@@ -1356,6 +1374,10 @@ _enable_impl() {
       err "cannot enable '${profile}': needs ${ram} MiB RAM + ${vram} MiB VRAM, but only $(( ram_budget - used_ram )) MiB RAM + $(( vram_budget - used_vram )) MiB VRAM remain within the host budget (stop another enabled profile first, e.g. 'llmctl disable <profile>', or use 'llmctl start ${profile}' on demand instead of a persistent enable)"
       return 1
     fi
+    # host capacity (3.4.0, lib/capacity.sh): enabling is never a way around the capacity check - a profile that
+    # does not fit next to the host's current workload is refused (75, nothing written, no unit enabled)
+    capacity_admit "${profile}" || { local _crc=$?; rm -f "${plan_file}"; return "${_crc}"; }
+    local _RSV_CAP_OVERRIDE="${CAP_THREADS}"
   fi
   rm -f "${plan_file}"
   # FR-088: resolve the port through the registry allocator - unless the
@@ -1818,11 +1840,25 @@ _sched_status_enabled_down() {
   return 0
 }
 
+_sched_status_reserve_line() {
+  # host reserve line on stderr (stdout keeps the table shape scripts parse); JSON: llmctl capacity --json
+  if declare -F reserve_enabled >/dev/null 2>&1; then
+    if reserve_enabled; then
+      reserve_compute
+      printf 'host reserve: %s CPU(s) [%s] + %s MiB kept for the system; models: CPUs [%s], %s MiB (llmctl capacity)\n' \
+        "${RSV_RC}" "${RSV_RESERVED_SET}" "${RSV_RM}" "${RSV_CPUSET}" "${RSV_BM}" >&2
+    else
+      printf 'host reserve: DISABLED (LLMCTL_HOST_RESERVE=0)\n' >&2
+    fi
+  fi
+}
+
 sched_status() {
   local running; running="$(sched_running)"
   if [[ -z "${running}" ]]; then
     echo "no llmctl services running"
     _sched_status_enabled_down
+    _sched_status_reserve_line
     return 0
   fi
   _sched_status_optout_banner >&2   # stderr: the table on stdout keeps its shape for scripts
@@ -1837,6 +1873,7 @@ sched_status() {
     [[ "${state}" == "failed (crash-loop)" ]] && printf '  last log line: %s\n' "${last_log}"
   done < <(_sched_status_rows)
   _sched_status_enabled_down
+  _sched_status_reserve_line
   # Explicit, since a `while read ... <(proc-sub)` loop's own exit status
   # is `read`'s final EOF-signaling failure (1), not the body's last
   # successful printf - without this, sched_status() silently returned 1

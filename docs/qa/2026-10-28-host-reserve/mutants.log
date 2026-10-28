@@ -1,0 +1,58 @@
+{
+ "control_green": true,
+ "all_killed": true,
+ "mutants": [
+  [
+   "M1-drop-cpu-quota",
+   "killed"
+  ],
+  [
+   "M2-drop-cpu-reserve-floor",
+   "killed"
+  ],
+  [
+   "M3-invert-combined-cpu-check",
+   "killed"
+  ],
+  [
+   "M4-remove-gate-clamp",
+   "killed"
+  ],
+  [
+   "M5-drop-oom-score-adjust",
+   "killed"
+  ],
+  [
+   "M6-capacity-admit-always-pass",
+   "killed"
+  ],
+  [
+   "M7-leak-key-value",
+   "killed"
+  ],
+  [
+   "M8-no-cpu-left-check",
+   "killed"
+  ],
+  [
+   "M9-drop-memory-reserve-floor",
+   "killed"
+  ],
+  [
+   "M10-drop-threads-arg",
+   "killed"
+  ],
+  [
+   "M11-go-decide-equals-chat",
+   "killed"
+  ],
+  [
+   "M12-reserve-memo-key-drops-topology",
+   "killed"
+  ],
+  [
+   "M13-decide-memo-key-drops-catalog-content",
+   "killed"
+  ]
+ ]
+}

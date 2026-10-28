@@ -23,9 +23,21 @@ assert_file_contains "${UNIT}" "StartLimitBurst=3" "llama unit: StartLimitBurst=
 assert_file_contains "${UNIT}" "StartLimitIntervalSec=900" "llama unit: StartLimitIntervalSec=900 (bounded restarts, FR-044)"
 # Memory policy (supersedes the 2026-09-15 "full RAM" decision, which let one runaway profile take the host; see
 # docs/host-safety.md and tests/test_unit_memory_caps.sh for the per-profile drop-in contract). baseline fixture: total
-# 32768 MiB -> template backstop MemoryHigh=70% (22937M), MemoryMax=85% (27852M): strictly below total, High < Max.
-assert_file_contains "${UNIT}" "MemoryMax=27852M" "llama unit: template MemoryMax = 85% of probed RAM (backstop below total)"
+# 32768 MiB -> template backstop MemoryHigh=70% (22937M), MemoryMax=85% (27852M), and since 3.4.0 (host reserve on,
+# lib/reserve.sh) MemoryMax is also capped at the model RAM budget: 32768 - max(4096, 20% = 6553) = 26215M. Strictly
+# below total, High < Max. The reserve-off install below keeps the plain 85% backstop covered.
+assert_file_contains "${UNIT}" "MemoryMax=26215M" "llama unit: template MemoryMax = min(85% of RAM, RAM - host reserve) (backstop below total)"
 assert_file_contains "${UNIT}" "MemoryHigh=22937M" "llama unit: template MemoryHigh = 70% of probed RAM (throttle zone below the max)"
+RSV_OFF_DIR="${LLMCTL_UNIT_DIR}/reserve-off"
+(
+  export LLMCTL_UNIT_DIR="${RSV_OFF_DIR}" LLMCTL_HOST_RESERVE=0
+  source "${LLMCTL_ROOT}/lib/common.sh"
+  source "${LLMCTL_ROOT}/lib/os_detect.sh"
+  source "${LLMCTL_ROOT}/lib/hardware.sh"
+  source "${LLMCTL_ROOT}/lib/service_linux.sh"
+  svc_install
+) >/dev/null
+assert_file_contains "${RSV_OFF_DIR}/llmctl-llama@.service" "MemoryMax=27852M" "llama unit, host reserve off: template MemoryMax = 85% of probed RAM"
 assert_file_contains "${UNIT}" "EnvironmentFile=${LLMCTL_SERVICES_DIR}/%i.env" "llama unit: per-profile EnvironmentFile"
 assert_file_contains "${UNIT}" 'ExecStart=${LLMCTL_EXEC} ${LLMCTL_ARGS}' "llama unit: ExecStart from env file (documented in the template comment)"
 assert_file_contains "${UNIT}" "ExecStart=/bin/bash -c 'set -f; exec \"\$LLMCTL_EXEC\" \$LLMCTL_ARGS'" "llama unit: the real ExecStart execs LLMCTL_EXEC through a shell, globbing off"
