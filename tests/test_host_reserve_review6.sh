@@ -170,4 +170,7 @@ mkunit "${J2}/system.slice/ctl"$'\t'"dir/llmctl-llama@x.service" 100 512
 r="$(LLMCTL_CGROUP_ROOT= LLMCTL_CGROUP_FS="${J2}" reserve_report --json)"
 assert_eq 1 "$(q "${r}" 'len(d["units"])')" "F5: a tab in the path -> valid JSON"
 assert_eq 'True' "$(q "$(LLMCTL_CGROUP_ROOT= LLMCTL_CGROUP_FS="${EMPTY}" reserve_report --json)" 'd["units"]==[]')" "F5 control: empty tree"
+UE=$( ( export LLMCTL_CGROUP_ROOT="${TEST_TMP}/no\"such"; reserve_report --json 2>/dev/null ) )
+assert_contains "$(q "${UE}" 'd["units_error"]')" 'no"such' "F5: units_error carrying a double quote is valid JSON and round-trips"
+
 test_finish

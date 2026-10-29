@@ -261,13 +261,14 @@ MUTANTS = [
      '_sched_restart_impl() { svc_restart "$1"; }', CHAIN),
     ("R5-1-unmeasurable-always-measurable", RSV, '  local root depth fs\n  read -r root depth < <(_rsv_units_scan)\n',
      '  local root depth fs\n  read -r root depth < <(_rsv_units_scan)\n  return 0\n', R5),
-    ("R5-1-unreadable-subdir-not-checked", RSV, 'if ! find "${root}" -maxdepth "${depth}" -type d >/dev/null 2>&1; then',
-     "if false; then", R5),
+    # R5-1-unreadable-subdir-not-checked removed: since round 6 the depth+1 truncation probe walks the same directories as the
+    # first check and fails closed with the same message, so the first check alone is redundant (equivalent mutant). The
+    # fail-closed behaviour itself stays pinned by the R6-F1 permission mutants.
     ("R5-1-cgroup-v2-not-required", RSV, 'if [[ ! -f "${fs}/cgroup.controllers" ]]; then', "if false; then", R5),
     ("R5-1-census-root-check-passes", RSV, '[[ -d "${root}" && -r "${root}" && -x "${root}" ]] || return 1',
      '[[ -d "${root}" && -r "${root}" && -x "${root}" ]] || return 0', R5),
-    ("R5-1-census-find-error-ignored", RSV, '-o -name "${LLMCTL_RESERVE_EXTRA_UNIT_GLOB:-llmctl-llama@*.service}" \\) 2>/dev/null)" || return 1',
-     '-o -name "${LLMCTL_RESERVE_EXTRA_UNIT_GLOB:-llmctl-llama@*.service}" \\) 2>/dev/null)" || true', R5),
+    ("R5-1-census-find-error-ignored", RSV, '-o -name "${LLMCTL_RESERVE_EXTRA_UNIT_GLOB:-llmctl-llama@*.service}" \\) || return 1',
+     '-o -name "${LLMCTL_RESERVE_EXTRA_UNIT_GLOB:-llmctl-llama@*.service}" \\) || true', R5),
     ("R5-1-capacity-cgerr-not-critical", CAP, 'if enabled and E.get("CAP_CG_ERR"):', "if False:", R5),
     ("R5-1-capacity-cgerr-not-measured", CAP, '  cg_err="$(_rsv_units_unmeasurable)"\n', '  cg_err=""\n', R5),
     ("R5-2-combined-unmeasurable-admits", RSV,
@@ -281,14 +282,14 @@ MUTANTS = [
      '  uerr=""; census="$(reserve_running_units)" || true', R5),
     ("R5-6-own-pid-needle-dropped", CAP, "if not _self_seen: nproc_ok = False", "pass", R5),
     # F3 (review round 5): the host budget counts the llmctl units of every owner on the host
-    ("F3-scan-own-manager-only", RSV, '  echo "${LLMCTL_CGROUP_FS:-/sys/fs/cgroup} 8"\n',
+    ("F3-scan-own-manager-only", RSV, '  echo "$(_rsv_cgroup_fs) 8"\n',
      '  echo "$(_rsv_cgroup_root) 3"\n', F3),
-    ("F3-host-scan-too-shallow", RSV, '  echo "${LLMCTL_CGROUP_FS:-/sys/fs/cgroup} 8"\n',
-     '  echo "${LLMCTL_CGROUP_FS:-/sys/fs/cgroup} 5"\n', F3),
+    ("F3-host-scan-too-shallow", RSV, '  echo "$(_rsv_cgroup_fs) 8"\n',
+     '  echo "$(_rsv_cgroup_fs) 5"\n', F3),
     ("F3-owner-always-self", RSV, '  local d="$1" mine; mine="$(_rsv_cgroup_root)"\n',
      '  local d="$1" mine; mine="$(_rsv_cgroup_root)"\n  echo self; return\n', F3),
     ("F3-system-owner-unrecognised", RSV,
-     '[[ "${d}" == "${LLMCTL_CGROUP_FS:-/sys/fs/cgroup}/system.slice/"* ]] && { echo system; return; }', ':', F3),
+     '[[ "${d}" == "$(_rsv_cgroup_fs)/system.slice/"* ]] && { echo system; return; }', ':', F3),
     ("F3-other-owner-replaced-on-restart", CAP, 'if replace and prof == replace and owner == "self": continue',
      "if replace and prof == replace: continue", F3),
     ("F3-other-owner-is-running", CAP, 'unit_keys = {u["profile"] for u in units if u["owner"] == "self"}',
@@ -302,7 +303,8 @@ MUTANTS = [
     ("R6-F1-silent-exit1-tolerated", RSV, 'if (( rc > 1 )) || (( n == 0 )) || (( other )); then', 'if (( rc > 1 )) || (( other )); then', R6),
     ("R6-F1-exit2-tolerated", RSV, 'if (( rc > 1 )) || (( n == 0 )) || (( other )); then', 'if (( n == 0 )) || (( other )); then', R6),
     ("R6-F1-root-enoent-tolerated", RSV, '&& "${line}" != "find: \'${root}\': "* ]]', ']]', R6),
-    ("R6-F1-locale-not-pinned", RSV, '_RSV_FIND_OUT="$(LC_ALL=C find', '_RSV_FIND_OUT="$(find', R6),
+    # R6-F1-locale-not-pinned removed: this host has no locale with translated find(1) messages (locale -a: C and en_* only), so the
+    # LC_ALL=C pin cannot be shown to matter here; the pin is kept in lib/reserve.sh and is NOT mutation-verified (stated in review-r7).
     ("R6-F1-reason-dropped", RSV, '(${_RSV_FIND_WHY})"\n    return 0\n  fi\n  # anything', '")"\n    return 0\n  fi\n  # anything', R6),
     ("R6-F2-no-deeper-probe", RSV, '  if [[ -n "${deeper}" ]]; then', '  if false; then', R6),
     ("R6-F2-probe-one-level-too-deep", RSV, '_rsv_find "${root}" $(( depth + 1 )) -mindepth $(( depth + 1 )) -type d -print -quit',
