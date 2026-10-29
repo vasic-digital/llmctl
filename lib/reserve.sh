@@ -363,25 +363,63 @@ reserve_combined_check() {
   return 0
 }
 
+# _rsv_inputs_strict - rc 0 where the gate's /proc inputs are part of the platform (Linux): there an unreadable or
+# unparseable input REFUSES the start (review round 4, F1: the gate failed open). On other platforms (macOS has no
+# /proc/pressure and no /proc/loadavg) the PSI/load tests are skipped, as documented in docs/capacity.md.
+_rsv_inputs_strict() { [[ "$(uname -s 2>/dev/null)" == Linux ]]; }
+
+# _rsv_avg10 <psi file> <some|full> - prints the avg10 value; rc 1 when the file is unreadable or the value is not a
+# plain non-negative decimal number (garbage is never read as "no pressure").
+_rsv_avg10() {
+  local v
+  [[ -r "$1" ]] || return 1
+  v="$(awk -v k="$2" '$1==k{for(i=2;i<=NF;i++) if($i ~ /^avg10=/){sub(/avg10=/,"",$i); print $i; exit}}' "$1" 2>/dev/null)" || return 1
+  [[ "${v}" =~ ^[0-9]+(\.[0-9]+)?$ ]] || return 1
+  printf '%s' "${v}"
+}
+
+# _rsv_load1 <loadavg file> - prints the 1-minute load; rc 1 when unreadable or not a plain decimal number.
+_rsv_load1() {
+  local v
+  [[ -r "$1" ]] || return 1
+  v="$(awk '{print $1; exit}' "$1" 2>/dev/null)" || return 1
+  [[ "${v}" =~ ^[0-9]+(\.[0-9]+)?$ ]] || return 1
+  printf '%s' "${v}"
+}
+
 # reserve_cpu_gate [label] - rc 75 when the host CPU is already saturated: PSI cpu "some" avg10 above
 # LLMCTL_GATE_CPU_SOME_MAX (default 80 %) or the 1-minute load above LLMCTL_GATE_LOAD_PER_CPU (default 3) x CPUs.
-# A missing file skips that test only.
+# On Linux an unreadable or unparseable CPU PSI or loadavg input refuses too (rc 75, fail closed - review round 4, F1);
+# elsewhere a missing file skips that test only.
 reserve_cpu_gate() {
   reserve_enabled || return 0
   [[ "${LLMCTL_GATE_CPU_CHECKS:-1}" == 0 ]] && return 0
   reserve_compute
   local label="${1:-service}" act="${LLMCTL_GATE_ACTION:-start}"
-  local psi="${LLMCTL_CPU_PSI_FILE:-/proc/pressure/cpu}" la="${LLMCTL_LOADAVG_FILE:-/proc/loadavg}" some="" l1=""
-  if [[ -r "${psi}" ]]; then
-    some="$(awk '$1=="some"{for(i=2;i<=NF;i++) if($i ~ /^avg10=/){sub(/avg10=/,"",$i); print $i; exit}}' "${psi}" 2>/dev/null || true)"
+  local psi="${LLMCTL_CPU_PSI_FILE:-/proc/pressure/cpu}" la="${LLMCTL_LOADAVG_FILE:-/proc/loadavg}" some="" l1="" strict=0
+  _rsv_inputs_strict && strict=1
+  if ! some="$(_rsv_avg10 "${psi}" some)"; then
+    some=""
+    if (( strict )); then
+      printf 'refusing to %s %s: the CPU pressure input %s is unreadable or unparseable; the gate cannot judge the host and fails closed.\n' \
+        "${act}" "${label}" "${psi}" >&2
+      return 75
+    fi
   fi
-  if [[ "${some}" =~ ^[0-9.]+$ ]] && awk -v v="${some}" -v m="${RSV_GATE_CPU_SOME_MAX}" 'BEGIN{exit !(v>m)}'; then
+  if [[ -n "${some}" ]] && awk -v v="${some}" -v m="${RSV_GATE_CPU_SOME_MAX}" 'BEGIN{exit !(v>m)}'; then
     printf 'refusing to %s %s: CPU pressure is too high (PSI cpu some avg10=%s > %s). Wait for it to drop; this gate keeps the host responsive.\n' \
       "${act}" "${label}" "${some}" "${RSV_GATE_CPU_SOME_MAX}" >&2
     return 75
   fi
-  [[ -r "${la}" ]] && l1="$(awk '{print $1; exit}' "${la}" 2>/dev/null || true)"
-  if [[ "${l1}" =~ ^[0-9.]+$ ]] && awk -v v="${l1}" -v k="${RSV_GATE_LOAD_PER_CPU}" -v n="${RSV_N}" 'BEGIN{exit !(v>k*n)}'; then
+  if ! l1="$(_rsv_load1 "${la}")"; then
+    l1=""
+    if (( strict )); then
+      printf 'refusing to %s %s: the load input %s is unreadable or unparseable; the gate cannot judge the host and fails closed.\n' \
+        "${act}" "${label}" "${la}" >&2
+      return 75
+    fi
+  fi
+  if [[ -n "${l1}" ]] && awk -v v="${l1}" -v k="${RSV_GATE_LOAD_PER_CPU}" -v n="${RSV_N}" 'BEGIN{exit !(v>k*n)}'; then
     printf 'refusing to %s %s: host load is too high (1-minute load %s > %s x %s CPUs). Wait for it to drop; this gate keeps the host responsive.\n' \
       "${act}" "${label}" "${l1}" "${RSV_GATE_LOAD_PER_CPU}" "${RSV_N}" >&2
     return 75

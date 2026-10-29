@@ -309,7 +309,7 @@ _cap_measure() {
   CAP_CG_ROOT="${root}" CAP_CG_MMAX="${cg_mmax}" CAP_CG_MCUR="${cg_mcur}" CAP_CG_CMAX="${cg_cmax}" \
   CAP_CHECK_PRESSURE="${LLMCTL_GATE_CPU_CHECKS:-1}" CAP_MEM_SHORT="${RSV_MEM_SHORT}" \
   CAP_NEW_INSTANCES="${_CAP_NEW_INSTANCES:-}" CAP_REPLACE="${_CAP_REPLACE:-}" CAP_TENANT="${LLMCTL_TENANT_ID:-}" \
-  CAP_T="${CAP_T:-}" CAP_PT="${CAP_PT:-}" \
+  CAP_T="${CAP_T:-}" CAP_PT="${CAP_PT:-}" CAP_STRICT="$(_rsv_inputs_strict && echo 1 || echo 0)" \
     python3 - "${plan_file}" "$@" <<'PYEOF'
 import json, os, re, sys, time
 E = os.environ
@@ -334,9 +334,13 @@ for line in E.get("CAP_MEMINFO", "").splitlines():
     if parts and parts[0].isdigit(): mi[k.strip()] = int(parts[0]) // 1024
 avail = mi.get("MemAvailable"); swap_t = mi.get("SwapTotal"); swap_f = mi.get("SwapFree")
 la = E.get("CAP_LOAD", "").split()
-load = [float(x) for x in la[:3]] if len(la) >= 3 else None
-psi = {"memory": {"some": num("CAP_MSOME"), "full": num("CAP_MFULL")}, "cpu": {"some": num("CAP_CSOME")},
-       "io": {"some": num("CAP_ISOME"), "full": num("CAP_IFULL")}}
+def _dec(x):
+    # a plain non-negative decimal only (review round 4, F1: garbage is unreadable, never a number and never "no load")
+    return float(x) if re.fullmatch(r"[0-9]+(\.[0-9]+)?", x or "") else None
+load = [_dec(x) for x in la[:3]] if len(la) >= 3 else None
+if load is not None and None in load: load = None
+psi = {"memory": {"some": _dec(E.get("CAP_MSOME")), "full": _dec(E.get("CAP_MFULL"))}, "cpu": {"some": _dec(E.get("CAP_CSOME"))},
+       "io": {"some": _dec(E.get("CAP_ISOME")), "full": _dec(E.get("CAP_IFULL"))}}
 def mb_or_none(v):
     v = (v or "").strip()
     return int(v) // 1048576 if v.isdigit() else None
@@ -535,9 +539,41 @@ elif keyvar:
     fb = {"recommended": "cloud", "route": "hosted", "reason": "%s; a hosted decision key is set" % ("the requested start does not fit" if named_refused else "no local decision model can run now"), "key_variable": keyvar}
 else:
     fb = {"recommended": "none", "route": "none", "reason": "%s and none of %s is set" % ("the requested start does not fit" if named_refused else "no local decision model can run now", E.get("CAP_KEYVARS")), "key_variable": None}
+# --- verdict-critical inputs (review round 4, F1): an input the verdict depends on that is unreadable or unparseable
+# makes the whole measurement undetermined (exit 75, fallback cloud|none, never local), instead of silently skipping
+# the check it feeds. Critical: meminfo MemAvailable, memory PSI some+full (always); with the host reserve on, also
+# CPU PSI some and loadavg (when the CPU checks are on), the cgroup root the llmctl units are counted under, and the
+# /proc thread census for RLIMIT_NPROC. Informational only (never critical): io PSI, the cgroup memory.max/current,
+# cpu.max and cpu.stat. Linux only: elsewhere these /proc inputs do not exist (docs/capacity.md, "Limits").
+def _src(k, d):
+    return (inputs.get(k) or {}).get("source") or d
+critical = []
+if avail is None: critical.append("meminfo MemAvailable (%s)" % _src("meminfo", "/proc/meminfo"))
+if psi["memory"]["some"] is None or psi["memory"]["full"] is None:
+    critical.append("memory PSI some/full avg10 (%s)" % _src("psi_memory", "/proc/pressure/memory"))
+if enabled and E.get("CAP_CHECK_PRESSURE", "1") != "0":
+    if psi["cpu"]["some"] is None: critical.append("CPU PSI some avg10 (%s)" % _src("psi_cpu", "/proc/pressure/cpu"))
+    if load is None: critical.append("loadavg (%s)" % _src("loadavg", "/proc/loadavg"))
+if enabled and not os.path.isdir(E.get("CAP_CG_ROOT") or ""):
+    critical.append("the cgroup root the llmctl units are counted under (%s)" % E.get("CAP_CG_ROOT"))
+if enabled and not nproc_ok: critical.append("the thread census for RLIMIT_NPROC (%s)" % _pdir)
+strict = E.get("CAP_STRICT") == "1"
+measurement = {"ok": True, "timeout_s": inum("CAP_T", None), "probe_timeout_s": inum("CAP_PT", None),
+               "critical_inputs_unreadable": critical}
+if critical and strict:
+    why = "unreadable or unparseable verdict-critical input(s): %s" % "; ".join(critical)
+    measurement.update({"ok": False, "reason": why})
+    for _p, _v in profiles.items():
+        _v.update({"verdict": "undetermined", "verdict_class": "undetermined", "running": False, "threads": 0,
+                   "reasons": [why] + _v["reasons"]})
+    largest = None
+    if keyvar:
+        fb = {"recommended": "cloud", "route": "hosted", "reason": "the host capacity could not be determined (%s); a hosted decision key is set" % why, "key_variable": keyvar}
+    else:
+        fb = {"recommended": "none", "route": "none", "reason": "the host capacity could not be determined (%s); none of %s is set" % (why, E.get("CAP_KEYVARS")), "key_variable": None}
 doc = {
     "schema": "llmctl.capacity/1", "time": int(time.time()),
-    "measurement": {"ok": True, "timeout_s": inum("CAP_T", None), "probe_timeout_s": inum("CAP_PT", None)},
+    "measurement": measurement,
     "host": {"cpus_online": N, "mem_total_mb": T, "mem_available_mb": avail, "usable_mem_mb": live_avail,
              "swap_total_mb": swap_t, "swap_free_mb": swap_f,
              "load": {"1": load[0], "5": load[1], "15": load[2]} if load else None, "psi": psi, "cgroup": cg,
@@ -547,7 +583,12 @@ doc = {
                 "cpus_model_budget": Bc, "cpus_model_set": E.get("CAP_MSET"), "chat_cpu_cap": chat,
                 "decide_cpu_cap": decide, "mem_reserved_mb": Rm, "mem_model_budget_mb": Bm},
     "llmctl": {"units": units, "cpu_pct_used": used_cpu, "mem_limits_used_mb": used_mem,
-               "cpu_pct_free": cpu_free, "mem_budget_free_mb": mem_free},
+               "cpu_pct_free": cpu_free, "mem_budget_free_mb": mem_free,
+               # review round 4, F3: what "used" counts. Only llmctl engine units under this cgroup root (by default this
+               # user's systemd manager, user@UID.service); llmctl units of another user or system units are NOT seen.
+               "consumption_scope": {"cgroup_root": E.get("CAP_CG_ROOT"), "max_depth": 3,
+                                     "units": "llmctl-llama@*, llmctl-onnx@*, llmctl-colibri@* (+ LLMCTL_RESERVE_EXTRA_UNIT_GLOB)",
+                                     "not_counted": "llmctl units of other users or in system.slice, and every non-llmctl workload"}},
     "pressure": {"ok": not pressure, "reasons": pressure},
     "profiles": profiles,
     "unknown_profiles": [p for p in wanted if p not in profiles],

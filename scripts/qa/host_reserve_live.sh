@@ -269,16 +269,20 @@ PY
 mapfile -t ENVV < <(llmctl_env)
 log "label=${LABEL} root=${ROOT} profile=${PROFILE} runs=${RUNS}"
 # the code under test (review round 3 item 2): HEAD, its tree, and a hash of any uncommitted diff, so the evidence is tied
-# to exact content and a dirty run is visible as dirty
+# to exact content and a dirty run is visible as dirty. Review round 4, F5: the WHOLE tree is checked (tracked changes and
+# untracked files, tests and docs included), except this run's own output directory when it lies inside the checkout.
+DIRTY_SPEC=(.)
+case "${OUT}/" in "${ROOT}/"*) DIRTY_SPEC+=(":(exclude)${OUT#"${ROOT}"/}") ;; esac
 {
   echo "head=$(git -C "${ROOT}" rev-parse HEAD 2>/dev/null || echo none)"
   echo "head_tree=$(git -C "${ROOT}" rev-parse 'HEAD^{tree}' 2>/dev/null || echo none)"
   if git -C "${ROOT}" rev-parse --git-dir > /dev/null 2>&1; then
-    if [[ -z "$(git -C "${ROOT}" status --porcelain --untracked-files=no -- lib bin scripts 2>/dev/null)" ]]; then
+    if [[ -z "$(git -C "${ROOT}" status --porcelain -- "${DIRTY_SPEC[@]}" 2>/dev/null)" ]]; then
       echo "dirty=no"
     else
       echo "dirty=yes"
-      echo "dirty_diff_sha256=$(git -C "${ROOT}" diff HEAD -- lib bin scripts | sha256sum | awk '{print $1}')"
+      echo "dirty_paths=$(git -C "${ROOT}" status --porcelain -- "${DIRTY_SPEC[@]}" 2>/dev/null | awk '{print $2}' | tr '\n' ' ')"
+      echo "dirty_diff_sha256=$( { git -C "${ROOT}" diff HEAD -- "${DIRTY_SPEC[@]}"; git -C "${ROOT}" status --porcelain -- "${DIRTY_SPEC[@]}"; } | sha256sum | awk '{print $1}')"
     fi
   else
     echo "dirty=unknown (not a git checkout)"

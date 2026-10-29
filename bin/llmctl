@@ -243,7 +243,16 @@ main() {
       if [[ "${1:-}" == "--json" ]]; then hw_probe_json; else hw_probe_human; fi
       ;;
     capacity)
-      local _cj=0; [[ "${1:-}" == "--json" ]] && { _cj=1; shift; }
+      # --json in any position (review round 4, F2); any other option is a usage error, never a profile name
+      local _cj=0 _ca; local -a _cps=()
+      for _ca in "$@"; do
+        case "${_ca}" in
+          --json) _cj=1 ;;
+          -*) err "usage: llmctl capacity [--json] [profile...] (unknown option '${_ca}')"; exit 2 ;;
+          *) _cps+=("${_ca}") ;;
+        esac
+      done
+      set -- ${_cps[@]+"${_cps[@]}"}
       local _cdoc; _cdoc="$(capacity_json "$@")" || die "capacity: measurement failed"
       if (( _cj )); then printf '%s\n' "${_cdoc}"; else capacity_human "${_cdoc}"; fi
       local _crc=0; capacity_exit_code "${_cdoc}" "$@" || _crc=$?
@@ -321,7 +330,7 @@ main() {
           # validate, and publish only on PASS (the .enabled state is kept)
           if [[ -f "${LLMCTL_RUNTIME_DIR}/$1.run" ]] || svc_is_active "$1" 2>/dev/null; then sched_stop "$1"; fi
           sched_start "$1"; validate_after_start "$1" ;;
-        *) sched_restart_admit "$1" || exit $?; svc_restart "$1"; validate_after_start "$1" ;;
+        *) sched_restart "$1" || exit $?; validate_after_start "$1" ;;
       esac
       ;;
     switch)

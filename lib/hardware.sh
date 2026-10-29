@@ -421,7 +421,9 @@ PYEOF
 # (the unit's ExecStartPre, so restarts are gated), sched_start / enable / switch and (hook point) `llmctl validate`.
 # Inputs (overridable for tests): LLMCTL_PSI_FILE (default /proc/pressure/memory), LLMCTL_MEMINFO_FILE (default
 # /proc/meminfo); thresholds LLMCTL_GATE_FULL_MAX (2), LLMCTL_GATE_SOME_MAX (10), LLMCTL_GATE_RESERVE_MB (4096).
-# A missing PSI file (macOS, old kernel) skips the PSI test only; a missing meminfo skips the memory test.
+# On Linux an unreadable or unparseable memory PSI file or meminfo REFUSES (rc 75): the gate cannot judge the host and
+# fails closed (review round 4, F1; a kernel without PSI must enable it). On other platforms (macOS: no /proc) a missing
+# input skips its test only.
 # LLMCTL_GATE_ACTION (default "start") names what is refused: the validation layer's post-start check sets it to
 # "send validation probes to", because that profile is already running (review 2026-10-14 finding 8).
 hw_pressure_gate() {
@@ -433,22 +435,32 @@ hw_pressure_gate() {
     if reserve_enabled; then reserve_compute; reserve="${RSV_RM}"; else reserve=4096; fi
   fi
   [[ "${fp}" =~ ^[0-9]+$ ]] || fp=0
-  local some="" full="" avail_kb=""
-  if [[ -r "${psi}" ]]; then
-    some="$(awk '$1=="some"{for(i=2;i<=NF;i++) if($i ~ /^avg10=/){sub(/avg10=/,"",$i); print $i; exit}}' "${psi}" 2>/dev/null || true)"
-    full="$(awk '$1=="full"{for(i=2;i<=NF;i++) if($i ~ /^avg10=/){sub(/avg10=/,"",$i); print $i; exit}}' "${psi}" 2>/dev/null || true)"
+  local some="" full="" avail_kb="" strict=0
+  _rsv_inputs_strict && strict=1
+  some="$(_rsv_avg10 "${psi}" some)" || some=""
+  full="$(_rsv_avg10 "${psi}" full)" || full=""
+  if (( strict )) && [[ -z "${some}" || -z "${full}" ]]; then
+    printf 'refusing to %s %s: the memory pressure input %s is unreadable or unparseable (PSI some/full avg10); the gate cannot judge the host and fails closed.\n' "${act}" "${label}" "${psi}" >&2
+    return 75
   fi
-  if [[ "${full}" =~ ^[0-9.]+$ ]] && awk -v v="${full}" -v m="${fmax}" 'BEGIN{exit !(v>m)}'; then
+  if [[ -n "${full}" ]] && awk -v v="${full}" -v m="${fmax}" 'BEGIN{exit !(v>m)}'; then
     printf 'refusing to %s %s: memory pressure is too high (PSI full avg10=%s > %s). Wait for it to drop, or free memory; this gate protects the host from a stall.\n' "${act}" "${label}" "${full}" "${fmax}" >&2
     return 75
   fi
-  if [[ "${some}" =~ ^[0-9.]+$ ]] && awk -v v="${some}" -v m="${smax}" 'BEGIN{exit !(v>m)}'; then
+  if [[ -n "${some}" ]] && awk -v v="${some}" -v m="${smax}" 'BEGIN{exit !(v>m)}'; then
     printf 'refusing to %s %s: memory pressure is too high (PSI some avg10=%s > %s). Wait for it to drop, or free memory; this gate protects the host from a stall.\n' "${act}" "${label}" "${some}" "${smax}" >&2
     return 75
   fi
-  if [[ -r "${mi}" ]]; then
-    avail_kb="$(awk '/^MemAvailable:/{print $2; exit}' "${mi}" 2>/dev/null || true)"
-    if [[ "${avail_kb}" =~ ^[0-9]+$ ]] && (( avail_kb / 1024 < fp + reserve )); then
+  [[ -r "${mi}" ]] && avail_kb="$(awk '/^MemAvailable:/{print $2; exit}' "${mi}" 2>/dev/null || true)"
+  if ! [[ "${avail_kb}" =~ ^[0-9]+$ ]]; then
+    avail_kb=""
+    if (( strict )); then
+      printf 'refusing to %s %s: the memory input %s is unreadable or has no MemAvailable line; the gate cannot judge the host and fails closed.\n' "${act}" "${label}" "${mi}" >&2
+      return 75
+    fi
+  fi
+  if [[ -n "${avail_kb}" ]]; then
+    if (( avail_kb / 1024 < fp + reserve )); then
       printf 'refusing to %s %s: only %s MiB memory available, need %s MiB footprint + %s MiB reserve (memory pressure gate)\n' \
         "${act}" "${label}" "$(( avail_kb / 1024 ))" "${fp}" "${reserve}" >&2
       return 75

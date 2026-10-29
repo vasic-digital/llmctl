@@ -20,6 +20,9 @@ SH = ["bash"]
 R = "tests/test_host_reserve_review.sh"
 R2 = "tests/test_host_reserve_review2.sh"
 R3 = "tests/test_host_reserve_review3.sh"
+R4 = "tests/test_host_reserve_review4.sh"
+RSV = "lib/reserve.sh"
+HW = "lib/hardware.sh"
 C = "tests/test_capacity.sh"
 CAP = "lib/capacity.sh"
 
@@ -68,7 +71,7 @@ MUTANTS = [
      'args+=(--threads "${RSV_CHAT_CPUS}" --threads-batch "${RSV_CHAT_CPUS}")', R),
     ("R-S1-decide-scale-skips-capacity", "lib/scheduler.sh",
      'capacity_admit "${profile}" "${need}" || { local _crc=$?; rm -f "${plan_file}"; return "${_crc}"; }', ":", R),
-    ("R-S3-restart-skips-admission", "bin/llmctl", 'sched_restart_admit "$1" || exit $?; svc_restart', "svc_restart", R),
+    ("R-S3-restart-skips-admission", "lib/scheduler.sh", 'sched_restart_admit "$1" || return $?; svc_restart', "svc_restart", R),
     ("R-S4-instance-suffix-not-mapped", "lib/capacity.sh",
      'return m.group(1) if m and m.group(1) in known else n', "return n", R),
     ("R-S5-fallback-local-without-decision-model", "lib/capacity.sh",
@@ -152,6 +155,56 @@ MUTANTS = [
     ("R3-input-unreadable-reported-readable", CAP, '"readable": _f[1] == "1"', '"readable": True', R3),
     ("R3-unit-cpu-stat-dropped", CAP, '"cpu_stat": ustat,', '"cpu_stat": None,', R3),
     ("R3-scope-cpu-stat-dropped", CAP, '"cpu_stat": cpu_stat(E.get("CAP_CG_CSTAT"))}', '"cpu_stat": None}', R3),
+    # --- review round 4 (F1 fail-open per input, F2/F3/F4, reviewer mutants Y03/Y04/Y05/Y09/Y11/Y13 ported) ---
+    ("R4-F1-meminfo-not-critical", CAP, "if avail is None: critical.append(", "if False: critical.append(", R4),
+    ("R4-F1-mem-psi-not-critical", CAP, 'if psi["memory"]["some"] is None or psi["memory"]["full"] is None:',
+     "if False:", R4),
+    ("R4-F1-cpu-psi-not-critical", CAP, '    if psi["cpu"]["some"] is None: critical.append(',
+     "    if False: critical.append(", R4),
+    ("R4-F1-load-not-critical", CAP, "    if load is None: critical.append(", "    if False: critical.append(", R4),
+    ("R4-F1-cgroot-not-critical", CAP, 'if enabled and not os.path.isdir(E.get("CAP_CG_ROOT") or ""):', "if False:", R4),
+    ("R4-F1-procdir-not-critical", CAP, "if enabled and not nproc_ok: critical.append(",
+     "if False: critical.append(", R4),
+    ("R4-F1-strict-forced-off", CAP, 'strict = E.get("CAP_STRICT") == "1"', "strict = False", R4),
+    ("R4-F1-garbage-load-parsed", CAP, "if load is not None and None in load: load = None", "pass", R4),
+    ("R4-F1-garbage-psi-parsed", CAP, 'return float(x) if re.fullmatch(r"[0-9]+(\\.[0-9]+)?", x or "") else None',
+     "return num_or_none(x)\ndef num_or_none(x):\n    try: return float(x)\n    except Exception: return 0.0", R4),
+    ("R4-F1-gate-mem-psi-skip", HW, 'if (( strict )) && [[ -z "${some}" || -z "${full}" ]]; then', "if false; then", R4),
+    ("R4-F1-gate-meminfo-skip", HW, "    if (( strict )); then\n      printf 'refusing to %s %s: the memory input",
+     "    if false; then\n      printf 'refusing to %s %s: the memory input", R4),
+    ("R4-F1-gate-cpu-psi-skip", RSV, "    if (( strict )); then\n      printf 'refusing to %s %s: the CPU pressure input",
+     "    if false; then\n      printf 'refusing to %s %s: the CPU pressure input", R4),
+    ("R4-F1-gate-load-skip", RSV, "    if (( strict )); then\n      printf 'refusing to %s %s: the load input",
+     "    if false; then\n      printf 'refusing to %s %s: the load input", R4),
+    ("R4-F1-avg10-accepts-anything", RSV,
+     "  [[ \"${v}\" =~ ^[0-9]+(\\.[0-9]+)?$ ]] || return 1\n  printf '%s' \"${v}\"\n}\n\n# _rsv_load1",
+     "  printf '%s' \"${v}\"\n}\n\n# _rsv_load1", R4),
+    ("R4-F1-strict-never", RSV, '_rsv_inputs_strict() { [[ "$(uname -s 2>/dev/null)" == Linux ]]; }',
+     "_rsv_inputs_strict() { false; }", R4),
+    ("R4-F2-json-first-only", "bin/llmctl", "          --json) _cj=1 ;;",
+     '          --json) [[ "${_ca}" == "${1:-}" ]] && _cj=1 ;;', R4),
+    ("R4-F2-unknown-option-is-profile", "bin/llmctl",
+     "          -*) err \"usage: llmctl capacity [--json] [profile...] (unknown option '${_ca}')\"; exit 2 ;;\n", "", R4),
+    ("R4-F3-scope-dropped", CAP, '"consumption_scope": {"cgroup_root"', '"consumption_scope_x": {"cgroup_root"', R4),
+    ("R4-F4-restart-outside-lock", "lib/scheduler.sh",
+     'sched_restart() { scheduler::with_lock _sched_restart_impl "$@"; }', 'sched_restart() { _sched_restart_impl "$@"; }',
+     R4),
+    ("R4-F4-cli-bypasses-lock", "bin/llmctl", '*) sched_restart "$1" || exit $?;',
+     '*) sched_restart_admit "$1" || exit $?; svc_restart "$1";', R4),
+    ("Y03-tenant-prefix-without-separator", CAP, 'return u["profile"].startswith(tenant + "--") if tenant',
+     'return u["profile"].startswith(tenant) if tenant', R4),
+    ("Y04-gpu-floor-python", CAP, "        if m < 6144: m = 6144", "        if m < 614: m = 614", R4),
+    ("Y04-gpu-floor-bash", "lib/service_linux.sh", "(( m < 6144 )) && m=6144", "(( m < 614 )) && m=614", R4),
+    ("Y05-load-threshold-x10-python", CAP, 'load[0] > num("CAP_LOAD_K", 3) * N:',
+     'load[0] > num("CAP_LOAD_K", 3) * N * 10:', R4),
+    ("Y05-load-threshold-x10-bash", RSV, "'BEGIN{exit !(v>k*n)}'", "'BEGIN{exit !(v>k*n*10)}'", R4),
+    ("Y09-tree-collect-one-pass", CAP, "  for pass in 1 2 3 4 5; do", "  for pass in 1; do", R4),
+    ("Y11-mem-full-x10-python", CAP, 'psi["memory"]["full"] > num("CAP_MEM_FULL_MAX", 2):',
+     'psi["memory"]["full"] > num("CAP_MEM_FULL_MAX", 2) * 10:', R4),
+    ("Y11-mem-full-x10-bash", HW, "[[ -n \"${full}\" ]] && awk -v v=\"${full}\" -v m=\"${fmax}\" 'BEGIN{exit !(v>m)}'",
+     "[[ -n \"${full}\" ]] && awk -v v=\"${full}\" -v m=\"${fmax}\" 'BEGIN{exit !(v>m*10)}'", R4),
+    ("Y13-allowedcpus-all-cpus", RSV, '"${RSV_CPUSET//,/ }" "${RSV_CPUSET}" "${cap}"',
+     '"${RSV_CPUSET//,/ }" "0-$(( RSV_N - 1 ))" "${cap}"', R4),
 ]
 
 

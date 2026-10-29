@@ -67,6 +67,10 @@ Before any unit is written or started (`start`, `switch`, `auto`, `enable`, `res
 3. the admission fails closed: a capacity measurement that fails, times out or is empty (`undetermined`), an unknown
    profile, or an unreadable verdict refuses with **75** and the fallback line; it never lets a start through
    unchecked.
+4. on Linux the gate itself also fails closed (review round 4): when the memory PSI (`some` or `full`), `meminfo`
+   `MemAvailable`, the CPU PSI or `loadavg` cannot be read or does not parse as a number, the start is refused with
+   **75** and a message naming the input. Before 3.4.0 round 4 such an input skipped its test and the start went
+   through. On other platforms (no `/proc`) a missing input still skips its test, as before.
 
 `restart` is judged as a start of the same profile that excludes the replaced unit's own limits and counts that unit's
 resident memory as coming back. A restart keeps the unit's existing limits, so when only a reduced thread count would
@@ -74,6 +78,10 @@ fit it is refused (75; run `llmctl stop` then `llmctl start`). `decide scale <pr
 together at the full decision cap. Every unit's own `ExecStartPre` gate (systemd restarts and boot included)
 re-checks the pressure, the load and the combined CPU + RAM budget within its bounded wait; it does not re-run the
 per-profile verdict and prints no fallback line.
+
+`restart` runs its admission and the unit restart under the scheduler lock (the same lock `start` takes), so a
+concurrent `start` cannot be admitted against the same free budget in between (review round 4). A restart that cannot
+get the lock within `LLMCTL_SCHED_LOCK_WAIT` fails without restarting anything.
 
 `enable` starts the profile now AND at login/boot (as before 3.4.0); the start now passes the same gate.
 
@@ -86,6 +94,31 @@ Re-evaluable at any time; it changes nothing. It reads `/proc` (meminfo, loadavg
 the thread count), `/sys/fs/cgroup`, the catalog, `getrlimit(RLIMIT_NPROC)`, and it RUNS the hardware probe and the
 planner (`llmctl plan --json`; the GPU probe can call `nvidia-smi` or a similar tool), each within the time bounds
 below.
+
+`--json` may appear anywhere in the argument list (`llmctl capacity decide-tiny --json`); any other argument that
+starts with `-` is a usage error (exit **2**). Before review round 4 a `--json` after the profile was taken as a profile
+name.
+
+### Verdict-critical inputs (fail closed)
+
+The verdict depends on some inputs; if one of them is unreadable or does not parse, the whole document is
+`undetermined` (`measurement.ok: false`, `measurement.reason` names the inputs, every named profile `undetermined`,
+fallback `cloud`/`none`, exit 75). They are listed in `measurement.critical_inputs_unreadable`.
+
+| input                                   | critical when                                  |
+|-----------------------------------------|------------------------------------------------|
+| `/proc/meminfo` `MemAvailable`          | always                                         |
+| memory PSI `some` and `full` avg10      | always                                         |
+| CPU PSI `some` avg10                    | reserve on and CPU checks on                   |
+| `/proc/loadavg` 1-minute load           | reserve on and CPU checks on                   |
+| the cgroup root (`LLMCTL_CGROUP_ROOT`)  | reserve on (llmctl units are counted under it) |
+| the `/proc` thread census (`nproc`)     | reserve on                                     |
+
+Informational only (recorded `readable: false`, value `null`, the verdict does not change): I/O PSI, the scope's
+cgroup `memory.max`, `memory.current`, `cpu.max` and `cpu.stat`. This applies on Linux. On other platforms
+(no `/proc`) the critical list is not enforced and the verdict is computed from what can be read; this was not tested
+live. A Linux kernel without PSI (`CONFIG_PSI` off, or `psi=0`) therefore refuses every local start while the gate is
+in use; that is the intended fail-closed behaviour, not a bug.
 
 Exit codes: `0` every named profile fits (or none named and nothing is degraded); `75` a named profile does not fit, is
 unknown, or the measurement is `undetermined` - then stderr also carries `llmctl-fallback: cloud|none` (never `local`);
@@ -128,7 +161,8 @@ Both fields are additive; the schema stays `llmctl.capacity/1`.
 ```text
 {
   "schema": "llmctl.capacity/1",
-  "measurement": {"ok": bool, "reason": str (only when ok is false), "timeout_s": int, "probe_timeout_s": int},
+  "measurement": {"ok": bool, "reason": str (only when ok is false), "timeout_s": int, "probe_timeout_s": int,
+                  "critical_inputs_unreadable": [str]},
   "host": {
     "cpus_online": int, "mem_total_mb": int, "mem_available_mb": int, "usable_mem_mb": int,
     "swap_total_mb": int, "swap_free_mb": int,
@@ -149,7 +183,8 @@ Both fields are additive; the schema stays `llmctl.capacity/1`.
     "units": [{"unit": str, "profile": str, "base_profile": str, "cpu_quota_pct": int|null, "memory_max_mb": int|null,
                "memory_current_mb": int|null, "memory_current_provenance": "measured"|null,
                "cpu_stat": {...}|null, "status": "ok"|"degraded", "reasons": [str], "suggest": str|null}],
-    "cpu_pct_used": int, "mem_limits_used_mb": int, "cpu_pct_free": int, "mem_budget_free_mb": int
+    "cpu_pct_used": int, "mem_limits_used_mb": int, "cpu_pct_free": int, "mem_budget_free_mb": int,
+    "consumption_scope": {"cgroup_root": str, "max_depth": int, "units": str, "not_counted": str}
   },
   "pressure": {"ok": bool, "reasons": [str]},
   "profiles": {
@@ -229,8 +264,14 @@ Prints the computed reserve, the gate thresholds and the running llmctl units. `
   inherited by every thread, which the live evidence reads back per thread).
 - The capacity verdict is a snapshot. A model admitted at time t can become `degraded` later; `llmctl capacity`
   reports that, it does not stop the model by itself.
-- If the capacity measurement itself fails or times out (unreadable `/proc`, a hung GPU probe), the start is refused
-  (75, `undetermined`): the admission fails closed.
+- If the capacity measurement itself fails or times out (a hung GPU probe), or a verdict-critical input (see above) is
+  unreadable or does not parse, the start is refused (75, `undetermined`): the admission fails closed. Before review
+  round 4 an unreadable meminfo, PSI, loadavg or cgroup root was skipped and the start was admitted; that was a defect.
+- Consumption scope (`llmctl.consumption_scope`): the CPU and memory already in use by models is counted from the
+  llmctl units (`llmctl-llama@*`, `llmctl-onnx@*`, `llmctl-colibri@*`, plus `LLMCTL_RESERVE_EXTRA_UNIT_GLOB`) under
+  this user's cgroup root, at most 3 levels deep. llmctl units of OTHER users or in `system.slice` are not counted, so
+  two users running llmctl on one host can together exceed the model budget. Every non-llmctl workload is outside the
+  budget too (it is covered only by the PSI/load gate).
 - A host with less than about **4.6 GiB** of RAM refuses EVERY local start while the reserve is on: the memory reserve
   (at least 4 GiB) leaves less than 512 MiB for models. Use the hosted fallback there, or `LLMCTL_HOST_RESERVE=0` for
   diagnostics only.

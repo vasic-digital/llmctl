@@ -980,6 +980,10 @@ _sched_publish_impl() {
 
 sched_start()  { scheduler::with_lock _sched_start_impl "$@"; }
 sched_stop()   { scheduler::with_lock _sched_stop_impl "$@"; }
+# sched_restart <profile> - the restart admission (sched_restart_admit) and the restart itself under ONE scheduler lock,
+# so a concurrent start cannot take the CPU/RAM the admission just counted as free (review round 4, F4).
+_sched_restart_impl() { sched_restart_admit "$1" || return $?; svc_restart "$1"; }
+sched_restart() { scheduler::with_lock _sched_restart_impl "$@"; }
 sched_auto()   { scheduler::with_lock _sched_auto_impl "$@"; }
 sched_enable() { scheduler::with_lock _enable_impl "$@"; }
 

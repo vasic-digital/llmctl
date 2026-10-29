@@ -153,6 +153,25 @@ workload, and reports host capacity on demand (`llmctl capacity --json`).
   - `docs/capacity.md` now says that `llmctl capacity` RUNS the hardware probe and the planner, and that a `restart` whose only reason is the
     planner's RAM/VRAM verdict is admitted.
 
+- Review round 4 (independent review of 9de0557/ea50536: NO-GO; `tests/test_host_reserve_review4.sh` fails 65 assertions
+  on ea50536, `docs/qa/2026-10-28-host-reserve/review-r4/red-on-ea50536.log`):
+  - Unreadable or unparseable inputs FAILED OPEN: with meminfo, the memory or CPU PSI, loadavg, the cgroup root or the
+    `/proc` directory unreadable (or holding garbage), `llmctl capacity` said `fits`, the route was `local` and the start
+    gate admitted. Now on Linux each verdict-critical input that cannot be read or parsed makes the document
+    `undetermined` (`measurement.ok: false`, new field `measurement.critical_inputs_unreadable`), exit 75, route never
+    local; the start gate (`hw_pressure_gate`, the CPU/load gate) refuses with 75 and names the input. The critical and
+    informational inputs are listed in `docs/capacity.md`.
+  - `llmctl capacity <profile> --json` now emits JSON (`--json` accepted in any position); an unknown option is a usage
+    error (exit 2).
+  - `restart` admission and the restart itself run under the scheduler lock, so they cannot race a concurrent `start`.
+  - New field `llmctl.consumption_scope` states which units are counted as model consumption (this user's llmctl units
+    only).
+  - Tests that kill reviewer mutants which had survived: `AllowedCPUs` equals the reserve set, tenant `t1` does not count
+    `t10--decide-tiny`, load and memory-PSI `full` boundary values, GPU estimate memory floor, a short-lived child in the
+    process-tree collection.
+  - The live harness's dirty-tree check covers the whole tree (untracked files included) and records the dirty paths
+    and a hash of the diff.
+
 ### Security
 
 - The hosted-key fallback reports the key's variable NAME only; the value is never read into output (test and mutant M7).
@@ -204,9 +223,11 @@ workload, and reports host capacity on demand (`llmctl capacity --json`).
   higher (HTTP and helper threads), so it is a floor, not a guarantee.
 - A dry-run `llmctl start` (`LLMCTL_DRY_RUN=1`) that is admitted writes a `<profile>.run` reservation in the runtime directory (unchanged from
   3.3.x); later starts of that profile then report "already running". Found while building the live harness, which now isolates and clears it.
-- `llmctl capacity <profile> --json` (flag after the profile) treats `--json` as a profile name: it prints the human view, exits 75 and says
-  the requested start does not fit. `--json` must come first. An unknown profile name should be a usage error, not a refusal; found in
-  review round 3, not changed here (follow-up).
+- An unknown profile name given to `llmctl capacity` is reported as `does_not_fit` (exit 75), not a usage error (follow-up).
+- Model consumption is counted only for THIS user's llmctl units (`llmctl.consumption_scope`); llmctl units of other users or in
+  `system.slice` are not seen, so two users can together over-subscribe the model budget.
+- On Linux a kernel without PSI refuses every local start (fail closed); on macOS and other platforms without `/proc` the critical-input
+  check is not enforced (not tested live).
 - The placeholder-key rule's dummy-word list is fully covered by the 16-character minimum except for the `<...>` form; it is kept to match
   the constitution's `lib_keys.sh` rule exactly.
 
