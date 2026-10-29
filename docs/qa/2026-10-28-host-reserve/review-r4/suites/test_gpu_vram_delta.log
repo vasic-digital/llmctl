@@ -1,0 +1,3 @@
+  SKIP: GPU VRAM-delta measurement
+    reason: llama-server not built (/home/milosvasic/.cache/claude-tmp/llmctl-reserve.aCff0E/llmctl/submodules/llama.cpp/build/bin/llama-server missing)
+RESULT: PASS

@@ -1,0 +1,110 @@
+== positive control: every input readable -> measured, fits, gate admits ==
+  ok: all inputs readable: measured, decide-tiny fits
+  ok: no critical input is unreadable
+  ok: all inputs readable: the start gate admits
+== F1: an unreadable or unparseable verdict-critical input -> undetermined, exit 75, never local; the gate refuses ==
+  ok: meminfo unreadable: measurement not ok, verdict undetermined (was: fits)
+  ok: meminfo unreadable: fallback none without a key (never local)
+  ok: meminfo unreadable: capacity exit code 75
+  ok: meminfo unreadable: the start gate refuses with 75 (was: admitted)
+  ok: meminfo garbage: measurement not ok, verdict undetermined (was: fits)
+  ok: meminfo garbage: fallback none without a key (never local)
+  ok: meminfo garbage: capacity exit code 75
+  ok: meminfo garbage: the start gate refuses with 75 (was: admitted)
+  ok: memory PSI unreadable: measurement not ok, verdict undetermined (was: fits)
+  ok: memory PSI unreadable: fallback none without a key (never local)
+  ok: memory PSI unreadable: capacity exit code 75
+  ok: memory PSI unreadable: the start gate refuses with 75 (was: admitted)
+  ok: memory PSI garbage: measurement not ok, verdict undetermined (was: fits)
+  ok: memory PSI garbage: fallback none without a key (never local)
+  ok: memory PSI garbage: capacity exit code 75
+  ok: memory PSI garbage: the start gate refuses with 75 (was: admitted)
+  ok: memory PSI without full: measurement not ok, verdict undetermined (was: fits)
+  ok: memory PSI without full: fallback none without a key (never local)
+  ok: memory PSI without full: capacity exit code 75
+  ok: memory PSI without full: the start gate refuses with 75 (was: admitted)
+  ok: CPU PSI unreadable: measurement not ok, verdict undetermined (was: fits)
+  ok: CPU PSI unreadable: fallback none without a key (never local)
+  ok: CPU PSI unreadable: capacity exit code 75
+  ok: CPU PSI unreadable: the start gate refuses with 75 (was: admitted)
+  ok: CPU PSI garbage: measurement not ok, verdict undetermined (was: fits)
+  ok: CPU PSI garbage: fallback none without a key (never local)
+  ok: CPU PSI garbage: capacity exit code 75
+  ok: CPU PSI garbage: the start gate refuses with 75 (was: admitted)
+  ok: loadavg unreadable: measurement not ok, verdict undetermined (was: fits)
+  ok: loadavg unreadable: fallback none without a key (never local)
+  ok: loadavg unreadable: capacity exit code 75
+  ok: loadavg unreadable: the start gate refuses with 75 (was: admitted)
+  ok: loadavg garbage: measurement not ok, verdict undetermined (was: fits)
+  ok: loadavg garbage: fallback none without a key (never local)
+  ok: loadavg garbage: capacity exit code 75
+  ok: loadavg garbage: the start gate refuses with 75 (was: admitted)
+  ok: cgroup root missing: measurement not ok, verdict undetermined (was: fits)
+  ok: cgroup root missing: fallback none without a key (never local)
+  ok: cgroup root missing: capacity exit code 75
+  ok: proc dir missing: measurement not ok, verdict undetermined (was: fits)
+  ok: proc dir missing: fallback none without a key (never local)
+  ok: proc dir missing: capacity exit code 75
+  ok: all at once: measurement not ok, verdict undetermined (was: fits)
+  ok: all at once: fallback none without a key (never local)
+  ok: all at once: capacity exit code 75
+  ok: all at once: the start gate refuses with 75 (was: admitted)
+  ok: CPU PSI low-sorting garbage: measurement not ok, verdict undetermined (was: fits)
+  ok: CPU PSI low-sorting garbage: fallback none without a key (never local)
+  ok: CPU PSI low-sorting garbage: capacity exit code 75
+  ok: CPU PSI low-sorting garbage: the start gate refuses with 75 (was: admitted)
+  ok: memory PSI low-sorting garbage: measurement not ok, verdict undetermined (was: fits)
+  ok: memory PSI low-sorting garbage: fallback none without a key (never local)
+  ok: memory PSI low-sorting garbage: capacity exit code 75
+  ok: memory PSI low-sorting garbage: the start gate refuses with 75 (was: admitted)
+  ok: CPU gate: a low-sorting garbage PSI value is refused by the parse check (was: admitted)
+  ok: loadavg 5-minute field garbage: measurement not ok, verdict undetermined (was: fits)
+  ok: loadavg 5-minute field garbage: fallback none without a key (never local)
+  ok: loadavg 5-minute field garbage: capacity exit code 75
+  ok: with a hosted key set: cloud, route hosted
+  ok: the reason names the unreadable input
+  ok: the key VALUE never appears in the document
+  ok: capacity_admit refuses (75) when loadavg is unreadable (was: admitted)
+  ok: reserve off: CPU PSI/loadavg are informational (negative control of the scope)
+  ok: CPU checks off: loadavg is informational
+  ok: io PSI unreadable: informational only, still measured
+  ok: the PSI-only pre-switch gate (CPU checks off) does not read loadavg
+== Y11: memory PSI full threshold boundary (2) ==
+  ok: PSI full 2.5 > 2: does_not_fit
+  ok: PSI full 1.5 <= 2: fits
+  ok: gate: PSI full 2.5 refused
+  ok: gate: PSI full 1.5 admitted
+== Y05: load threshold boundary (3 x CPUs) ==
+  ok: load 48.5 > 48: does_not_fit
+  ok: the pressure reason names the load
+  ok: load 47.5: fits
+  ok: gate: load over the limit refused
+  ok: gate: load under the limit admitted
+== Y03: a tenant's own units are matched as '<tenant>--', never by a bare prefix ==
+  ok: tenant t1 does not count t10--decide-tiny as its own decision unit
+  ok: positive control: tenant t10 does
+== Y13: AllowedCPUs and CPUAffinity are exactly the model CPU set (the reserved CPUs are never allowed) ==
+  ok: AllowedCPUs == the model CPU set
+  ok: CPUAffinity == the model CPU set
+  ok: AllowedCPUs = all online CPUs minus the reserved set (independent computation)
+  ok: no reserved CPU is allowed
+== Y04: the capacity memory limit and the unit drop-in agree for an unmeasured GPU profile (floor 6144 MiB) ==
+  ok: capacity mem_limit_need_mb == _svc_profile_caps MemoryMax (gpu, estimate)
+  ok: the unmeasured GPU floor is 6144 MiB
+== Y09: the tree collector re-snapshots until a pass adds nothing (a child missed by the first snapshot is caught) ==
+  ok: the child the first snapshot missed is collected by a later pass
+tests/test_host_reserve_review4.sh: line 152: 1537609 Killed                     ( sleep 300 & wait )
+== F3: the JSON names what the consumption count covers ==
+  ok: consumption_scope.cgroup_root is the counted root
+  ok: consumption_scope says other users' units are not counted
+== F2: llmctl capacity accepts --json in any position and rejects unknown options ==
+  ok: capacity decide-tiny --json exits 0 (was: 75, --json read as a profile)
+  ok: the output is the JSON document
+  ok: an unknown option is a usage error (exit 2)
+  ok: the usage error says usage
+== F4: restart admission and restart run under the scheduler lock ==
+  ok: bin/llmctl restart calls sched_restart
+  ok: admission and restart both ran while this process held the lock
+  ok: a held lock makes the restart wait and give up (2) without admitting or restarting
+RESULT: PASS
+rc=0

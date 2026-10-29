@@ -1,0 +1,37 @@
+== idle host: decision profiles fit, local fallback ==
+  ok: schema id
+  ok: decide-tiny fits with the decision cap
+  ok: a local model fits -> fallback local
+  ok: a largest decision fit is named
+  ok: decision class detected
+  ok: nothing degraded
+== reduced threads: only 2 CPUs left of the 12-CPU model budget ==
+  ok: 3-CPU decision profile gets 2 threads when 200% CPU is left
+  ok: a running profile is reported running
+  ok: headroom: 200% CPU free
+  ok: capacity_admit: admitted with CAP_THREADS=2
+== no CPU left -> does_not_fit, fallback cloud only with a key variable ==
+  ok: full CPU budget -> does_not_fit
+  ok: reason names the CPU budget
+  ok: no key variable set -> fallback none
+  ok: key variable set -> fallback cloud, named by variable
+  ok: the key VALUE never appears in the JSON
+  ok: capacity_admit refuses with 75
+  ok: machine-readable fallback line on stderr
+  ok: admit stderr never prints the key
+  ok: llmctl capacity <profile> exits 75 when it does not fit
+== host pressure -> does_not_fit; a running model becomes degraded ==
+  ok: CPU PSI 95 -> new profiles do not fit
+  ok: the running model is degraded, stop suggested
+  ok: llmctl capacity exits 3 while a running model is degraded
+  ok: near its memory limit -> degraded
+== memory: MemAvailable minus the footprint must keep the host reserve ==
+  ok: 7 GiB available < 6.4 GiB reserve + footprint
+  ok: reason names the reserve
+== reserve off: capacity_admit is a no-op (diagnostics) ==
+  ok: LLMCTL_HOST_RESERVE=0: no capacity refusal (negative control)
+== start refuses before writing anything ==
+  ok: start of a does_not_fit profile exits 75
+  ok: start prints the fallback line
+  ok: no env record written for a refused start
+RESULT: PASS

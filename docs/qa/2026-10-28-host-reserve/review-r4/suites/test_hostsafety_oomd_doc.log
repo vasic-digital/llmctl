@@ -1,0 +1,4 @@
+  ok: host-safety.md acknowledges the user@.service oomd vendor rule (ManagedOOM*)
+  ok: no unqualified 'oomd not enabled for these slices' claim
+  ok: negative control: the acknowledgement predicate rejects the old wording
+RESULT: PASS

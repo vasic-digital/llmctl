@@ -1,0 +1,274 @@
+== positive control: every input readable -> measured, fits, gate admits ==
+  ok: all inputs readable: measured, decide-tiny fits
+Traceback (most recent call last):
+  File "<string>", line 1, in <module>
+    import json,sys; d=json.loads(sys.argv[1]); print(eval(sys.argv[2]))
+                                                      ~~~~^^^^^^^^^^^^^
+  File "<string>", line 1, in <module>
+    import json,sys; d=json.loads(sys.argv[1]); print(eval(sys.argv[2]))
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+KeyError: 'critical_inputs_unreadable'
+  FAIL: no critical input is unreadable
+    expected: []
+    actual:   
+  ok: all inputs readable: the start gate admits
+== F1: an unreadable or unparseable verdict-critical input -> undetermined, exit 75, never local; the gate refuses ==
+  FAIL: meminfo unreadable: measurement not ok, verdict undetermined (was: fits)
+    expected: False undetermined
+    actual:   True fits
+  FAIL: meminfo unreadable: fallback none without a key (never local)
+    expected: none
+    actual:   local
+  FAIL: meminfo unreadable: capacity exit code 75
+    expected: 75
+    actual:   0
+  FAIL: meminfo unreadable: the start gate refuses with 75 (was: admitted)
+    expected: 75
+    actual:   0
+  FAIL: meminfo garbage: measurement not ok, verdict undetermined (was: fits)
+    expected: False undetermined
+    actual:   True fits
+  FAIL: meminfo garbage: fallback none without a key (never local)
+    expected: none
+    actual:   local
+  FAIL: meminfo garbage: capacity exit code 75
+    expected: 75
+    actual:   0
+  FAIL: meminfo garbage: the start gate refuses with 75 (was: admitted)
+    expected: 75
+    actual:   0
+  FAIL: memory PSI unreadable: measurement not ok, verdict undetermined (was: fits)
+    expected: False undetermined
+    actual:   True fits
+  FAIL: memory PSI unreadable: fallback none without a key (never local)
+    expected: none
+    actual:   local
+  FAIL: memory PSI unreadable: capacity exit code 75
+    expected: 75
+    actual:   0
+  FAIL: memory PSI unreadable: the start gate refuses with 75 (was: admitted)
+    expected: 75
+    actual:   0
+  FAIL: memory PSI garbage: measurement not ok, verdict undetermined (was: fits)
+    expected: False undetermined
+    actual:   True fits
+  FAIL: memory PSI garbage: fallback none without a key (never local)
+    expected: none
+    actual:   local
+  FAIL: memory PSI garbage: capacity exit code 75
+    expected: 75
+    actual:   0
+  FAIL: memory PSI garbage: the start gate refuses with 75 (was: admitted)
+    expected: 75
+    actual:   0
+  FAIL: memory PSI without full: measurement not ok, verdict undetermined (was: fits)
+    expected: False undetermined
+    actual:   True fits
+  FAIL: memory PSI without full: fallback none without a key (never local)
+    expected: none
+    actual:   local
+  FAIL: memory PSI without full: capacity exit code 75
+    expected: 75
+    actual:   0
+  FAIL: memory PSI without full: the start gate refuses with 75 (was: admitted)
+    expected: 75
+    actual:   0
+  FAIL: CPU PSI unreadable: measurement not ok, verdict undetermined (was: fits)
+    expected: False undetermined
+    actual:   True fits
+  FAIL: CPU PSI unreadable: fallback none without a key (never local)
+    expected: none
+    actual:   local
+  FAIL: CPU PSI unreadable: capacity exit code 75
+    expected: 75
+    actual:   0
+  FAIL: CPU PSI unreadable: the start gate refuses with 75 (was: admitted)
+    expected: 75
+    actual:   0
+  FAIL: CPU PSI garbage: measurement not ok, verdict undetermined (was: fits)
+    expected: False undetermined
+    actual:   True fits
+  FAIL: CPU PSI garbage: fallback none without a key (never local)
+    expected: none
+    actual:   local
+  FAIL: CPU PSI garbage: capacity exit code 75
+    expected: 75
+    actual:   0
+  FAIL: CPU PSI garbage: the start gate refuses with 75 (was: admitted)
+    expected: 75
+    actual:   0
+  FAIL: loadavg unreadable: measurement not ok, verdict undetermined (was: fits)
+    expected: False undetermined
+    actual:   True fits
+  FAIL: loadavg unreadable: fallback none without a key (never local)
+    expected: none
+    actual:   local
+  FAIL: loadavg unreadable: capacity exit code 75
+    expected: 75
+    actual:   0
+  FAIL: loadavg unreadable: the start gate refuses with 75 (was: admitted)
+    expected: 75
+    actual:   0
+  ok: loadavg garbage: measurement not ok, verdict undetermined (was: fits)
+  ok: loadavg garbage: fallback none without a key (never local)
+  ok: loadavg garbage: capacity exit code 75
+  FAIL: loadavg garbage: the start gate refuses with 75 (was: admitted)
+    expected: 75
+    actual:   0
+  FAIL: cgroup root missing: measurement not ok, verdict undetermined (was: fits)
+    expected: False undetermined
+    actual:   True fits
+  FAIL: cgroup root missing: fallback none without a key (never local)
+    expected: none
+    actual:   local
+  FAIL: cgroup root missing: capacity exit code 75
+    expected: 75
+    actual:   0
+  FAIL: proc dir missing: measurement not ok, verdict undetermined (was: fits)
+    expected: False undetermined
+    actual:   True fits
+  FAIL: proc dir missing: fallback none without a key (never local)
+    expected: none
+    actual:   local
+  FAIL: proc dir missing: capacity exit code 75
+    expected: 75
+    actual:   0
+  FAIL: all at once: measurement not ok, verdict undetermined (was: fits)
+    expected: False undetermined
+    actual:   True fits
+  FAIL: all at once: fallback none without a key (never local)
+    expected: none
+    actual:   local
+  FAIL: all at once: capacity exit code 75
+    expected: 75
+    actual:   0
+  FAIL: all at once: the start gate refuses with 75 (was: admitted)
+    expected: 75
+    actual:   0
+  FAIL: CPU PSI low-sorting garbage: measurement not ok, verdict undetermined (was: fits)
+    expected: False undetermined
+    actual:   True fits
+  FAIL: CPU PSI low-sorting garbage: fallback none without a key (never local)
+    expected: none
+    actual:   local
+  FAIL: CPU PSI low-sorting garbage: capacity exit code 75
+    expected: 75
+    actual:   0
+  FAIL: CPU PSI low-sorting garbage: the start gate refuses with 75 (was: admitted)
+    expected: 75
+    actual:   0
+  FAIL: memory PSI low-sorting garbage: measurement not ok, verdict undetermined (was: fits)
+    expected: False undetermined
+    actual:   True fits
+  FAIL: memory PSI low-sorting garbage: fallback none without a key (never local)
+    expected: none
+    actual:   local
+  FAIL: memory PSI low-sorting garbage: capacity exit code 75
+    expected: 75
+    actual:   0
+  FAIL: memory PSI low-sorting garbage: the start gate refuses with 75 (was: admitted)
+    expected: 75
+    actual:   0
+  FAIL: CPU gate: a low-sorting garbage PSI value is refused by the parse check (was: admitted)
+    expected: 75
+    actual:   0
+  ok: loadavg 5-minute field garbage: measurement not ok, verdict undetermined (was: fits)
+  ok: loadavg 5-minute field garbage: fallback none without a key (never local)
+  ok: loadavg 5-minute field garbage: capacity exit code 75
+  FAIL: with a hosted key set: cloud, route hosted
+    expected: cloud hosted
+    actual:   local local
+Traceback (most recent call last):
+  File "<string>", line 1, in <module>
+    import json,sys; d=json.loads(sys.argv[1]); print(eval(sys.argv[2]))
+                                                      ~~~~^^^^^^^^^^^^^
+  File "<string>", line 1, in <module>
+    import json,sys; d=json.loads(sys.argv[1]); print(eval(sys.argv[2]))
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^
+KeyError: 'reason'
+  FAIL: the reason names the unreadable input
+    needle not found: meminfo
+    haystack: 
+  ok: the key VALUE never appears in the document
+  FAIL: capacity_admit refuses (75) when loadavg is unreadable (was: admitted)
+    expected: 75
+    actual:   0
+  ok: reserve off: CPU PSI/loadavg are informational (negative control of the scope)
+  ok: CPU checks off: loadavg is informational
+  ok: io PSI unreadable: informational only, still measured
+  ok: the PSI-only pre-switch gate (CPU checks off) does not read loadavg
+== Y11: memory PSI full threshold boundary (2) ==
+  ok: PSI full 2.5 > 2: does_not_fit
+  ok: PSI full 1.5 <= 2: fits
+  ok: gate: PSI full 2.5 refused
+  ok: gate: PSI full 1.5 admitted
+== Y05: load threshold boundary (3 x CPUs) ==
+  ok: load 48.5 > 48: does_not_fit
+  ok: the pressure reason names the load
+  ok: load 47.5: fits
+  ok: gate: load over the limit refused
+  ok: gate: load under the limit admitted
+== Y03: a tenant's own units are matched as '<tenant>--', never by a bare prefix ==
+  ok: tenant t1 does not count t10--decide-tiny as its own decision unit
+  ok: positive control: tenant t10 does
+== Y13: AllowedCPUs and CPUAffinity are exactly the model CPU set (the reserved CPUs are never allowed) ==
+  ok: AllowedCPUs == the model CPU set
+  ok: CPUAffinity == the model CPU set
+  ok: AllowedCPUs = all online CPUs minus the reserved set (independent computation)
+  ok: no reserved CPU is allowed
+== Y04: the capacity memory limit and the unit drop-in agree for an unmeasured GPU profile (floor 6144 MiB) ==
+  ok: capacity mem_limit_need_mb == _svc_profile_caps MemoryMax (gpu, estimate)
+  ok: the unmeasured GPU floor is 6144 MiB
+== Y09: the tree collector re-snapshots until a pass adds nothing (a child missed by the first snapshot is caught) ==
+  ok: the child the first snapshot missed is collected by a later pass
+tests/test_host_reserve_review4.sh: line 152: 1532175 Killed                     ( sleep 300 & wait )
+== F3: the JSON names what the consumption count covers ==
+Traceback (most recent call last):
+  File "<string>", line 1, in <module>
+    import json,sys; d=json.loads(sys.argv[1]); print(eval(sys.argv[2]))
+                                                      ~~~~^^^^^^^^^^^^^
+  File "<string>", line 1, in <module>
+    import json,sys; d=json.loads(sys.argv[1]); print(eval(sys.argv[2]))
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+KeyError: 'consumption_scope'
+  FAIL: consumption_scope.cgroup_root is the counted root
+    expected: /home/milosvasic/.cache/claude-tmp/tmp.MMatr3FfxF/cgroup-root
+    actual:   
+Traceback (most recent call last):
+  File "<string>", line 1, in <module>
+    import json,sys; d=json.loads(sys.argv[1]); print(eval(sys.argv[2]))
+                                                      ~~~~^^^^^^^^^^^^^
+  File "<string>", line 1, in <module>
+    import json,sys; d=json.loads(sys.argv[1]); print(eval(sys.argv[2]))
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+KeyError: 'consumption_scope'
+  FAIL: consumption_scope says other users' units are not counted
+    needle not found: other users
+    haystack: 
+== F2: llmctl capacity accepts --json in any position and rejects unknown options ==
+  FAIL: capacity decide-tiny --json exits 0 (was: 75, --json read as a profile)
+    expected: 0
+    actual:   75
+  FAIL: the output is the JSON document
+    expected: fits
+    actual:   not-json
+  FAIL: an unknown option is a usage error (exit 2)
+    expected: 2
+    actual:   75
+  FAIL: the usage error says usage
+    needle not found: usage
+    haystack: llmctl-fallback: none
+== F4: restart admission and restart run under the scheduler lock ==
+  FAIL: bin/llmctl restart calls sched_restart
+    expected: 1
+    actual:   0
+tests/test_host_reserve_review4.sh: line 176: sched_restart: command not found
+tests/test_host_reserve_review4.sh: line 177: /home/milosvasic/.cache/claude-tmp/tmp.MMatr3FfxF/inlock: No such file or directory
+  FAIL: admission and restart both ran while this process held the lock
+    expected: 0 admit-locked restart-locked
+    actual:   127 
+  FAIL: a held lock makes the restart wait and give up (2) without admitting or restarting
+    expected: 2 
+    actual:   127 
+RESULT: FAIL (65 assertion failure(s))
+rc=1

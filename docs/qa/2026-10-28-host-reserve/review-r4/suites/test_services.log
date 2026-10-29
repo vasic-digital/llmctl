@@ -1,0 +1,58 @@
+installed systemd user units into /home/milosvasic/.cache/claude-tmp/tmp.hG9r0lBKJp/systemd-user (MemoryHigh=22937M MemoryMax=26215M)
+[dry-run] systemctl --user daemon-reload
+[dry-run] systemctl --user enable --now llmctl-revalidate.timer
+llmctl-revalidate.timer enabled: running engines are re-validated daily (never stopped or restarted by it)
+unit-level validation gate enabled (/home/milosvasic/.cache/claude-tmp/tmp.hG9r0lBKJp/state/unit-enforcement): units start only for profiles with a fresh, signed PASS record (llmctl validate <profile>)
+[dry-run] loginctl enable-linger milosvasic
+  ok: llama unit: Restart=on-failure (OOM kills are not retried forever)
+  ok: llama unit: RestartSec=5
+  ok: llama unit: StartLimitBurst=3 (bounded restarts, FR-044)
+  ok: llama unit: StartLimitIntervalSec=900 (bounded restarts, FR-044)
+  ok: llama unit: template MemoryMax = min(85% of RAM, RAM - host reserve) (backstop below total)
+  ok: llama unit: template MemoryHigh = 70% of probed RAM (throttle zone below the max)
+  ok: llama unit, host reserve off: template MemoryMax = 85% of probed RAM
+  ok: llama unit: per-profile EnvironmentFile
+  ok: llama unit: ExecStart from env file (documented in the template comment)
+  ok: llama unit: the real ExecStart execs LLMCTL_EXEC through a shell, globbing off
+  ok: llama unit: ExecStartPre rotates the internal key per start (G-028)
+  ok: llama unit: ExecStartPost publishes the service in the registry (non-fatal)
+  ok: llama unit: ExecStopPost removes the registry row
+  ok: llama unit: StartLimitIntervalSec is in [Unit]
+  ok: llama unit: StartLimitBurst is in [Unit]
+  ok: llama unit: verified-effective hardening (NoNewPrivileges)
+  ok: llama unit: verified-effective hardening (ProtectSystem=full)
+  ok: llama unit: log location
+  ok: fixture: the host's stale layout (StartLimit* inside [Service])
+  ok: svc_start refuses a unit whose restart bound systemd ignores (would restart-loop forever)
+  ok: ...and names the fix (regenerate with llmctl install)
+  ok: ...without ever starting the unit
+  ok: svc_enable refuses the same unit (a persistent service would loop across reboots)
+  ok: svc_start refuses a unit with no StartLimit*= at all (systemd default 10s/5 never trips at RestartSec=5)
+  ok: golden-false: the freshly generated unit (bounds in [Unit]) starts
+  ok: golden-false: ...and really issues the start
+  ok: colibri unit installed
+  ok: colibri unit: description
+WARN: no per-profile memory cap written for fast (planner not loaded here); the template backstop applies - run: llmctl install
+[llmctl] wrote /home/milosvasic/.cache/claude-tmp/tmp.hG9r0lBKJp/state/services/fast.env
+  ok: env file: engine
+  ok: env file: port in args
+  ok: env file: ngl in args
+  ok: env file: port recorded for the registration hook
+  ok: env file: process-identity token for the registry
+WARN: no per-profile memory cap written for perm-check (planner not loaded here); the template backstop applies - run: llmctl install
+[llmctl] wrote /home/milosvasic/.cache/claude-tmp/tmp.hG9r0lBKJp/state/services/perm-check.env
+  ok: env file is mode 0600 under umask 022 (D-03)
+  ok: env file names the key FILE path (never the key)
+  ok: dry-run enable
+  ok: dry-run start
+  ok: plist: label
+  ok: plist: KeepAlive
+  ok: plist: ThrottleInterval
+  ok: plist: throttle 60s (bounded restart rate, FR-044)
+  ok: plist: arg present
+  ok: plist: port present
+  ok: plist is mode 0600
+  ok: plist: log path
+  ok: plist parses (plistlib)
+  ok: dry-run launchctl bootstrap
+RESULT: PASS

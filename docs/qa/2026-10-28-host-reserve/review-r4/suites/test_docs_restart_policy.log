@@ -1,0 +1,22 @@
+  ok: AGENTS.md: no stale Restart=always
+  ok: CLAUDE.md: no stale Restart=always
+  ok: QWEN.md: no stale Restart=always
+  ok: GEMINI.md: no stale Restart=always
+  ok: docs/architecture.md: no stale Restart=always
+  ok: docs/faq.md: no stale Restart=always
+  ok: lib/svc_hook.sh: no comment describing the current policy as Restart=always
+  ok: lib/scheduler.sh: no comment describing the current policy as Restart=always
+  ok: docs/user-manual.md: no stale Restart=always
+  ok: docs/user-manual.md: no stale StartLimit 5/60
+  ok: docs/scripts/service_linux.md: no stale Restart=always
+  ok: docs/scripts/service_linux.md: no stale StartLimit 5/60
+  ok: docs/scripts/test_services.md: no stale Restart=always
+  ok: docs/scripts/test_services.md: no stale StartLimit 5/60
+  ok: docs/scripts/test_services_crashloop.md: no stale Restart=always
+  ok: docs/scripts/test_services_crashloop.md: no stale StartLimit 5/60
+  ok: docs/testing/TEST_TYPE_CLASSIFICATION.md: no stale Restart=always
+  ok: docs/testing/TEST_TYPE_CLASSIFICATION.md: no stale StartLimit 5/60
+  ok: docs/user-manual.md: no stale 'ceiling at the physical limit'
+  ok: service_linux.sh: no stale 'NO artificial ceiling' comment
+  ok: the generated units really use Restart=on-failure
+RESULT: PASS

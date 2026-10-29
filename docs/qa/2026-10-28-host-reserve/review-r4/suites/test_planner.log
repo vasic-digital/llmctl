@@ -1,0 +1,181 @@
+  ok: baseline tier
+  ok: baseline RAM budget (min(30000-4096=25904, 32768*60%=19660): the 60% cap binds)
+  ok: baseline VRAM budget (12288*0.85)
+  ok: baseline recommended set (coder no longer fits: 21793 MiB RAM > the 19660 MiB 60% cap; decide-tiny/decide + iter2 decide-nli/decide-2b + the native decide-julia/kev-08b/kev-4b/laya/lev; decide-kev-9b tier-gated to workstation)
+  ok: baseline fast mode
+  ok: baseline coder mode (17.7GiB > 10444MiB VRAM, and its 21793 MiB RAM > the 19660 MiB 60% cap)
+  ok: baseline fast VRAM footprint (4692 model + 1024 KV)
+  ok: baseline coder RAM footprint (17697 + 4096 KV)
+  ok: baseline gates ws-dense-32b by tier
+  ok: baseline co-residency groups under the 60% RAM cap (measured planner output 2026-10-14)
+  ok: decide-nli mode is always cpu (onnx encoder)
+  ok: decide-nli RAM reservation = 1663*3//2 + 512 = 3006 MiB
+  ok: decide-nli VRAM need is 0 (CPU inference)
+  ok: decide-nli ctx default 512 (encoder, not a generation ctx)
+  ok: decide-nli fits baseline (3006 <= 19660)
+  ok: decide-nli recommended on baseline (min_tier below-minimum)
+  ok: decide-2b GPU footprint (1918 weights + 1088 KV)
+  ok: decide-max tier-gated on baseline
+  ok: decide-max GPU footprint (9086 weights + 1088 KV)
+  ok: workstation fixture tier
+  ok: workstation recommended set (all 22 profiles: decide-pro/decide-max/decide-kev-9b workstation tier gate passes on a datacenter host)
+  ok: ws-dense-32b fully offloaded
+  ok: colibri-glm mode
+  ok: workstation co-residency groups (group 6 = the five remaining letter/NLI decide profiles + decide-julia + decide-kev-08b, whose gpu booking is now its measured 2900 MiB peak instead of 5583; group 7 = the remaining native profiles; measured planner output)
+  ok: apple tier (64GB unified RAM)
+  ok: apple recommended set (colibri-glm gated to datacenter; all twelve decide profiles fit 64GB unified memory)
+  ok: apple gates colibri-glm
+  ok: apple fast uses unified-memory GPU
+  ok: T139: decide-lev (RAM measured, VRAM not) is partial with unknown_overhead=[vram]
+  ok: T139 golden-false: fully measured decide-julia has no unknown overhead
+  ok: T139: decide-tiny has both halves UNKNOWN
+  ok: T139: human plan flags a recommended profile whose overhead is UNKNOWN (booked as 0)
+  ok: T138: a fully measured profile never prints 'experimental: none'
+  ok: T138: fully measured decide-lev prints 'all types measured'
+  ok: human plan header
+  ok: human plan groups
+  ok: T138: unmeasured decide-kev-9b lists every type as experimental
+  ok: T138: decide-kev-08b is experimental on score only
+  ok: T138: fully measured decide-lev has no experimental type
+  ok: T138: golden-false: a non-decision profile carries no maturity field
+  ok: T138: human plan has the maturity section
+  ok: T138: human plan lists decide-kev-08b
+  ok: T138: human plan names the experimental type
+  ok: catalog_classify_tier: baseline fixture
+  ok: catalog_classify_tier: workstation fixture (actually computes datacenter, matching catalog_plan_json above)
+  ok: catalog_classify_tier: apple fixture
+  ok: catalog_classify_tier: constrained fixture (8 cores / 32768 MiB RAM sits exactly at the baseline threshold)
+  ok: vram-contended VRAM budget uses REAL FREE (3000*0.85), not total (12288*0.85=10444)
+  ok: small still fits this host overall (via cpu-mode RAM fallback), just no longer via gpu mode
+  ok: small correctly falls through to cpu mode instead of a gpu mode that would OOM
+  ok: baseline decide-tiny gpu instances (min(10444//1592, 19660//2048)=6)
+  ok: baseline decide-tiny cpu instances (19660//1592=12)
+  ok: baseline decide-tiny slots per instance (parallel=4)
+  ok: baseline decide-tiny total slots (max(6,12)*4=48)
+  ok: baseline decide gpu instances (min(10444//3671, 12)=2)
+  ok: baseline decide cpu instances (19660//3671=5)
+  ok: baseline decide total slots (max(2,5)*2=10)
+  ok: baseline decide-pro tier-gated to 0 gpu instances
+  ok: baseline decide-pro tier-gated to 0 cpu instances
+  ok: baseline decide-pro carries a tier-gate reason
+  ok: baseline decide-nli gpu instances ALWAYS 0 (CPU-only onnx encoder)
+  ok: baseline decide-nli cpu instances (19660//3006=6)
+  ok: baseline decide-nli per-instance VRAM 0
+  ok: baseline decide-nli per-instance RAM 3006 (1663*3//2+512)
+  ok: baseline decide-nli slots per instance (parallel=1: per-option forward passes)
+  ok: baseline decide-nli total slots (max(0,6)*1=6)
+  ok: baseline decide-2b gpu instances (min(10444//3006, 12)=3)
+  ok: baseline decide-2b cpu instances (19660//3006=6)
+  ok: baseline decide-2b total slots (max(3,6)*2=12)
+  ok: baseline decide-max tier-gated to 0
+  ok: baseline decide-max carries a tier-gate reason
+  ok: workstation decide-tiny gpu instances (min(27852//1592, 157286//2048)=17)
+  ok: workstation decide-tiny cpu instances (157286//1592=98)
+  ok: workstation decide gpu instances (min(27852//3671, 76)=7)
+  ok: workstation decide cpu instances (157286//3671=42)
+  ok: workstation decide-pro gpu instances (min(27852//5260, 76)=5)
+  ok: workstation decide-pro cpu instances (157286//5260=29)
+  ok: workstation decide-pro total slots (max(5,29)*2=58)
+  ok: tiny decide-tiny: 0 (0 MiB RAM budget vs 1592 MiB footprint)
+  ok: tiny decide-tiny: footprint reason (tier gate passes)
+  ok: tiny decide: 0 (tier-gated)
+  ok: tiny decide: tier-gate reason
+  ok: tiny decide-pro: 0 (tier-gated)
+  ok: tiny decide-nli: gpu ALWAYS 0 (CPU-only engine)
+  ok: tiny decide-nli: 0 (0 MiB RAM budget vs 3006 MiB reservation)
+  ok: tiny decide-nli: footprint reason (tier gate passes at below-minimum)
+  ok: vram-contended decide-tiny gpu instances (min(2550//1592, 12)=1, down from 6 on baseline)
+  ok: vram-contended decide-tiny cpu instances UNCHANGED (19660//1592=12)
+  ok: vram-contended decide gpu instances (2550 < 3671 -> 0, down from 2 on baseline)
+  ok: vram-contended decide cpu instances UNCHANGED (19660//3671=5)
+  ok: constrained decide-tiny gpu instances (min(6963//1592, 12)=4)
+  ok: constrained decide gpu instances (min(6963//3671, 12)=1)
+  ok: decide capacity --json decision_instances == plan --json decision_instances
+  ok: human plan: Decision capacity section header
+  ok: human plan: Decision capacity lists decide-tiny
+  ok: human plan: Decision capacity lists decide-nli (onnx profile)
+  ok: decision_instances.protocol: decide-tiny jev-verdict (additive field; reclassified 2026-10-08, verdict readout)
+  ok: decision_instances.protocol: decide letter-logit
+  ok: decision_instances.protocol: decide-nli nli-onnx
+  ok: decide-tiny best placement on baseline is cpu (16 cpu > 6 gpu instances)
+  ok: tier-gated decide-pro has no best placement (null)
+  ok: decide-pro tier_ok False on baseline (additive field)
+  ok: placements.cpu footprint exposed for the admission probe
+  ok: decide-nli has no gpu placement (CPU-only encoder)
+  ok: SC-012 apple: only decide-* profiles added; chat/coder/vision recommended sets and auto picks unchanged vs v3.0.2
+  ok: SC-012 apple: the change is documented in docs/hardware-tiers.md (row: | `apple` | `decide-tiny`, `decide`, `decide-pro`, `decide-nli`, `decide-max`, `decide-2b`, `decide-julia`, `decide-kev-08b`, `decide-kev-4b`, `decide-kev-9b`, `decide-laya`, `decide-lev` | `decide-nli` |)
+  ok: SC-012 baseline: only decide-* profiles added; chat/coder/vision recommended sets and auto picks unchanged vs v3.0.2
+  ok: SC-012 baseline: the change is documented in docs/hardware-tiers.md (row: | `baseline` | `decide-tiny`, `decide`, `decide-nli`, `decide-2b`, `decide-julia`, `decide-kev-08b`, `decide-kev-4b`, `decide-laya`, `decide-lev` | `decide-nli` |)
+  ok: SC-012 constrained: only decide-* profiles added; chat/coder/vision recommended sets and auto picks unchanged vs v3.0.2
+  ok: SC-012 constrained: the change is documented in docs/hardware-tiers.md (row: | `constrained` | `decide-tiny`, `decide`, `decide-nli`, `decide-2b`, `decide-julia`, `decide-kev-08b`, `decide-kev-4b`, `decide-laya`, `decide-lev` | `decide-nli` |)
+  ok: SC-012 cpu-heavy: only decide-* profiles added; chat/coder/vision recommended sets and auto picks unchanged vs v3.0.2
+  ok: SC-012 cpu-heavy: the change is documented in docs/hardware-tiers.md (row: | `cpu-heavy` | `decide-tiny`, `decide`, `decide-pro`, `decide-nli`, `decide-max`, `decide-2b`, `decide-julia`, `decide-kev-08b`, `decide-kev-4b`, `decide-kev-9b`, `decide-laya`, `decide-lev` | `decide-nli` |)
+  ok: SC-012 ram-contended-auto-eviction: only decide-* profiles added; chat/coder/vision recommended sets and auto picks unchanged vs v3.0.2
+  ok: SC-012 ram-contended-auto-eviction: the change is documented in docs/hardware-tiers.md (row: | `ram-contended-auto-eviction` | `decide-tiny`, `decide`, `decide-nli`, `decide-2b` | `decide-nli` |)
+  ok: SC-012 small-exact: only decide-* profiles added; chat/coder/vision recommended sets and auto picks unchanged vs v3.0.2
+  ok: SC-012 small-exact: the change is documented in docs/hardware-tiers.md (row: | `small-exact` | `decide-tiny`, `decide-nli`, `decide-julia`, `decide-kev-08b`, `decide-laya` | `decide-nli` |)
+  ok: SC-012 tiny: only decide-* profiles added; chat/coder/vision recommended sets and auto picks unchanged vs v3.0.2
+  ok: SC-012 tiny: the change is documented in docs/hardware-tiers.md (row: | `tiny` | none | no fit |)
+  ok: SC-012 vram-contended-coresident: only decide-* profiles added; chat/coder/vision recommended sets and auto picks unchanged vs v3.0.2
+  ok: SC-012 vram-contended-coresident: the change is documented in docs/hardware-tiers.md (row: | `vram-contended-coresident` | `decide-tiny`, `decide`, `decide-nli`, `decide-2b`, `decide-julia`, `decide-kev-08b`, `decide-kev-4b`, `decide-laya`, `decide-lev` | `decide-nli` |)
+  ok: SC-012 vram-contended: only decide-* profiles added; chat/coder/vision recommended sets and auto picks unchanged vs v3.0.2
+  ok: SC-012 vram-contended: the change is documented in docs/hardware-tiers.md (row: | `vram-contended` | `decide-tiny`, `decide`, `decide-nli`, `decide-2b`, `decide-julia`, `decide-laya` | `decide-nli` |)
+  ok: SC-012 workstation: only decide-* profiles added; chat/coder/vision recommended sets and auto picks unchanged vs v3.0.2
+  ok: SC-012 workstation: the change is documented in docs/hardware-tiers.md (row: | `workstation` | `decide-tiny`, `decide`, `decide-pro`, `decide-nli`, `decide-max`, `decide-2b`, `decide-julia`, `decide-kev-08b`, `decide-kev-4b`, `decide-kev-9b`, `decide-laya`, `decide-lev` | `decide-nli` |)
+  ok: SC-012 mutation: removing 'fast' from the new recommended set is detected as a removal (coder no longer fits baseline under the 60% RAM cap)
+  ok: overhead_mb is added to an ESTIMATED GPU-mode VRAM footprint (decide-2b, baseline fixture)
+  ok: ...and the placement mode is still gpu
+  ok: golden-false: a MEASURED gpu booking (decide-kev-4b) is not inflated by a RAM overhead
+  ok: golden-false: a profile without overhead_mb keeps its footprint
+  ok: overhead_mb is added to the CPU-mode RAM footprint (decide-kev-4b, cpu-heavy fixture)
+  ok: an invalid overhead_mb (-1) is refused loudly, never ignored
+  ok: an invalid overhead_mb ("x") is refused loudly, never ignored
+  ok: an invalid overhead_mb (70000) is refused loudly, never ignored
+  ok: T139: julia lands in cpu mode when the GPU budget is 204 MiB (< its measured 212 MiB gpu peak)
+  ok: T139: julia cpu RAM = 160 weights + 128 KV + 1410 measured overhead
+  ok: T139/G-138: julia in cpu mode books its measured 194 MiB offload VRAM (was 0)
+  ok: T139: ...and it fits
+  ok: T139: julia is refused when its offload VRAM (194) exceeds the VRAM budget (127)
+  ok: T139: ...mode none, never silently 0 VRAM
+  ok: T139 golden-false: a CPU-only host books 0 VRAM (no CUDA build, no offload)
+  ok: T139: CPU-only host: same RAM as the GPU host in cpu mode
+  ok: T139: llmctl plan --json exposes overhead_mb, overhead_vram_mb, window_tokens and memory_status
+  ok: T139: an unmeasured decision profile says so (window_tokens null, memory_status unmeasured)
+  ok: T139: ...and books 0 for it, as before
+  ok: T139: decide-lev RAM = 2872 + 1024 + 3098 (peak 5688.1 MiB measured on nezha)
+  ok: T139: capacity cpu placement of julia books 194 MiB VRAM
+  ok: T139: capacity cpu placement on a CPU-only host books 0 VRAM
+  ok: T139: 204 // 194 = 1 cpu-mode instance (VRAM-bound), not 25904 // 1698 = 15
+  ok: G-138: kev-4b in cpu mode on a CUDA host books its measured 4460 x 1.10 = 4906 MiB VRAM (was 0), provenance measured
+  ok: G-138: the capacity report books the same 4906 MiB for the cpu placement
+  ok: G-138: kev-4b's VRAM half is now measured; only its RAM overhead stays UNKNOWN
+  ok: G-138: kev-4b is refused when the 4906 MiB offload exceeds the VRAM budget (4250), never booked as 0
+  ok: G-138 golden-false: a CPU-only host books 0 VRAM for kev-4b (no CUDA build, no offload), provenance n/a
+  ok: G-138: lev (cpu-mode VRAM UNMEASURED) books its measured gpu peak 3926 MiB as a ceiling and is refused on a 3400 MiB budget
+  ok: G-138: the capacity report books lev's cpu placement at the same 3926 MiB ceiling (cpu_offload_vram, not plain overhead_vram_mb = 0)
+  ok: G-138: kev-9b's cpu-mode VRAM is a floor (not a measurement) and is labelled so
+  ok: G-138: ...and stays reported partial/UNKNOWN(vram): a ceiling is not a measurement
+  ok: G-138: an unmeasured profile with no gpu peak declares provenance unmeasured (booked 0, UNKNOWN)
+  ok: G-138 mutation (data): without the cpu-mode measurement kev-4b is booked 0 and flagged unmeasured - the 4906 assertion is load-bearing
+  ok: G-138 mutation (logic): the mutated planner differs from the real one in exactly the measured-return line
+  ok: G-138 mutation (logic): a helper that drops the measured offload books 0 MiB VRAM, which the 4906 assertion rejects
+  ok: G-138: the human plan says how a cpu-mode VRAM booking was derived
+  ok: G-138: ...and flags a ceiling that is not a measurement
+  ok: live-run fixture reproduces the recorded VRAM budget (7388 MiB)
+  ok: kev-4b: gpu booking = its measured peak 7328 MiB (was 3916), provenance measured
+  ok: kev-4b: the booking points at its evidence file
+  ok: kev-4b: gpu-mode RAM = measured peak VmHWM 5016504 kB -> 4899 MiB (the fixed 2048 under-booked it)
+  ok: kev-08b: gpu booking = measured peak 2900 MiB (was 5583: cpu-mode RAM overhead was added to VRAM); RAM keeps the 2048 floor (peak 2019)
+  ok: lev: measured gpu peak 3926 MiB VRAM, VmHWM 3204400 kB -> 3130 MiB RAM
+  ok: julia/laya: measured gpu peaks 212 / 574 MiB VRAM
+  ok: kev-9b: NOT placed on the GPU on the live-run host (it OOMed there)
+  ok: kev-9b: gpu VRAM need = 6064 + 1024 + 4016 measured compute buffer, flagged lower-bound
+  ok: kev-9b: falls to cpu mode, which still books the 4016 MiB compute-buffer lower bound as offload VRAM (never 0)
+  ok: decide-2b (no gpu measurement): provenance estimated (UNKNOWN compute buffer)
+  ok: ...with no evidence pointer
+  ok: kev-4b at an overridden ctx 4096: the ctx-8192 measurement is not reused
+  ok: capacity: kev-4b gpu placement books the measured 7328 MiB
+  ok: capacity: kev-9b gpu placement books the 11104 MiB lower-bound need (does not fit 7388)
+  ok: human plan flags an estimated (unmeasured) gpu VRAM booking
+  ok: decide rank: nli > 2b > base > pro > max > native (julia > laya > kev-08b > lev > kev-4b > kev-9b) > tiny (jev-verdict, not servable, last)
+RESULT: PASS
