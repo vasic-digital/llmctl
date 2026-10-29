@@ -23,7 +23,7 @@ where `scripts/release/preflight_submodules.sh` reports a fully clean
 35-file test suite is green. Both `v3.0.0` and `v3.0.1` tags remain in the
 repository as an honest record of that process.
 
-## 3.4.0 (2026-10-28)
+## 3.4.0 (2026-10-29)
 
 A **minor release** (version 3.3.2 -> 3.4.0): locally run models can no longer take the whole host. llmctl keeps CPUs and RAM for the system,
 caps every model's threads, CPU quota and CPU set, refuses a start under CPU pressure or when the model does not fit next to the current
@@ -31,7 +31,14 @@ workload, and reports host capacity on demand (`llmctl capacity --json`).
 
 **Release status (read first).**
 
-- **Not yet released:** this entry is written before the independent review; nothing is tagged or pushed until it returns GO.
+- **Evidence (honest scope).** Independent review rounds 1-7 ran against this change. The full suite (194 files) has no failure caused by the change
+  (base-vs-HEAD comparison, `docs/qa/2026-10-28-host-reserve/review-r7/README.md`). The mutant runner (`scripts/qa/host_reserve_mutants.py`) is
+  recorded in `review-r7/`. LIVE evidence is ONE run on ONE 16-CPU host (real `llama-server`, `decide-tiny`, transient user units, cgroup
+  read-back: `cpu.max 300000/100000`, weight 20, `memory.max 3G`, `memory.high 2.5G`, swap 0, refusal rc 75 with `llmctl-fallback: cloud`).
+  NOT proven live: 1-CPU or small-RAM hosts, cgroup v1, a system-level (root) manager, container scopes, deep or hostile cgroup trees; those are
+  fixture-tree (unit-class) tests only. Fail-open follow-ups M8/M9 are documented in `docs/capacity.md` and backstopped by the unit start gate.
+- **1-CPU hosts:** the CPU reserve is 0 there; admission warns loudly and `capacity --json` reports `reserve.cpu_short`;
+  `LLMCTL_HOST_RESERVE_STRICT=1` refuses such a host.
 - **Small hosts:** while the host reserve is on, a host with less than about **4.6 GiB** of RAM refuses EVERY local model start (exit 75):
   the memory reserve (at least 4 GiB) leaves under 512 MiB for models. Route decisions to a hosted endpoint there
   (`llmctl-fallback: cloud`), or use `LLMCTL_HOST_RESERVE=0` for diagnostics only.

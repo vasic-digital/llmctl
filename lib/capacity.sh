@@ -300,7 +300,7 @@ _cap_measure() {
   in_is="$(_cap_psi "${ipsi}" some)"; in_if="$(_cap_psi "${ipsi}" full)"
   if [[ -n "${in_is}" ]]; then _cap_in psi_io "${ipsi}" 1; else _cap_in psi_io "${ipsi}" 0; fi
   CAP_ENABLED="$(reserve_enabled && echo 1 || echo 0)" \
-  CAP_N="${RSV_N}" CAP_RC="${RSV_RC}" CAP_BC="${RSV_BC}" CAP_RSET="${RSV_RESERVED_SET}" CAP_MSET="${RSV_CPUSET}" \
+  CAP_N="${RSV_N}" CAP_RC="${RSV_RC}" CAP_BC="${RSV_BC}" CAP_RSET="${RSV_RESERVED_SET}" CAP_MSET="${RSV_CPUSET}" CAP_CPUSHORT="${RSV_CPU_SHORT:-0}" \
   CAP_CHAT="${RSV_CHAT_CPUS}" CAP_DECIDE="${RSV_DECIDE_CPUS}" CAP_MT="${RSV_MT}" CAP_RM="${RSV_RM}" CAP_BM="${RSV_BM}" \
   CAP_CPU_SOME_MAX="${RSV_GATE_CPU_SOME_MAX}" CAP_LOAD_K="${RSV_GATE_LOAD_PER_CPU}" \
   CAP_MEM_FULL_MAX="${LLMCTL_GATE_FULL_MAX:-2}" CAP_MEM_SOME_MAX="${LLMCTL_GATE_SOME_MAX:-10}" \
@@ -596,6 +596,8 @@ doc = {
              "nproc": nproc},
     "inputs": inputs,
     "reserve": {"enabled": enabled, "cpus_reserved": Rc, "cpus_reserved_set": E.get("CAP_RSET"),
+                # F1 (round 7): true when the host has too few CPUs to keep the configured reserve (a 1-CPU host reserves 0)
+                "cpu_short": E.get("CAP_CPUSHORT") == "1",
                 "cpus_model_budget": Bc, "cpus_model_set": E.get("CAP_MSET"), "chat_cpu_cap": chat,
                 "decide_cpu_cap": decide, "mem_reserved_mb": Rm, "mem_model_budget_mb": Bm},
     "llmctl": {"units": units, "cpu_pct_used": used_cpu, "mem_limits_used_mb": used_mem,
@@ -681,7 +683,9 @@ _cap_refuse() {
 
 # capacity_admit <profile> [new-instances] [replaced-unit-instance] - the admission used by start, switch, restart and
 # decide scale: rc 0 and sets CAP_THREADS (the CPU cap to use) when the profile fits; rc 75, a reason and a
-# machine-readable "llmctl-fallback: cloud|none" line on stderr when it does not. It FAILS CLOSED: a capacity measurement
+# machine-readable "llmctl-fallback: cloud|none" line on stderr when it does not. A host with too few CPUs to keep the CPU
+# reserve (reserve.cpu_short, e.g. a 1-CPU host) is admitted with a loud warning; LLMCTL_HOST_RESERVE_STRICT=1 refuses it.
+# This function does not decide RAM/VRAM: that verdict is deferred to the planner path in start (see below). It FAILS CLOSED: a capacity measurement
 # that errors, or a verdict it cannot read, refuses exactly like does_not_fit (review round 1 S2).
 #   new-instances  (decide scale) judge the profile as that many NEW instances next to the running ones
 #   replaced-unit  (restart) the running instance being replaced: its own limits are not counted as used
@@ -697,6 +701,12 @@ capacity_admit() {
   verdict="$(python3 -c 'import json,sys; d=json.loads(sys.argv[1]); v=d["profiles"].get(sys.argv[2]); m=d.get("measurement") or {}; print("undetermined 0" if not m.get("ok", True) else ("%s %s" % (v["verdict"], v["threads"]) if v else "unknown 0"))' "${doc}" "${p}" 2>/dev/null)" || verdict=""
   case "${verdict%% *}" in
     fits|fits_with_reduced_threads|running)
+      if python3 -c 'import json,sys; sys.exit(0 if json.loads(sys.argv[1])["reserve"].get("cpu_short") else 1)' "${doc}" 2>/dev/null; then
+        printf 'WARNING: this host has too few CPUs to keep a CPU reserve (reserved 0): %s %s can use every CPU. Route decisions to a hosted endpoint, or set LLMCTL_HOST_RESERVE_STRICT=1 to refuse.\n' "${LLMCTL_GATE_ACTION:-start}" "${p}" >&2
+        if [[ "${LLMCTL_HOST_RESERVE_STRICT:-0}" == 1 ]]; then
+          _cap_refuse "${p}" "the host has too few CPUs to keep a CPU reserve and LLMCTL_HOST_RESERVE_STRICT=1"; return 75
+        fi
+      fi
       CAP_THREADS="${verdict##* }"; [[ "${CAP_THREADS}" =~ ^[1-9][0-9]*$ ]] || CAP_THREADS=""; return 0 ;;
     does_not_fit) ;;
     undetermined)

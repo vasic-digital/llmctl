@@ -177,7 +177,8 @@ Both fields are additive; the schema stays `llmctl.capacity/1`.
   "reserve": {
     "enabled": bool, "cpus_reserved": int, "cpus_reserved_set": str, "cpus_model_budget": int,
     "cpus_model_set": str, "chat_cpu_cap": int, "decide_cpu_cap": int,
-    "mem_reserved_mb": int, "mem_model_budget_mb": int
+    "mem_reserved_mb": int, "mem_model_budget_mb": int,
+    "cpu_short": bool   // true when the host has too few CPUs to keep the CPU reserve (a 1-CPU host reserves 0)
   },
   "llmctl": {
     "units": [{"unit": str, "profile": str, "base_profile": str, "cpu_quota_pct": int|null, "memory_max_mb": int|null,
@@ -277,6 +278,12 @@ start is refused; `reserve_pct` and
   `ExecStartPre` gate (`hk_gate`: every start, systemd restart and boot). An unreadable tree is never counted as
   "no units". The `/proc` thread census must see the process doing the counting, else the measurement is not ok.
   The start gate and `hk_gate` read no thread census; only `capacity_admit` checks the RLIMIT_NPROC headroom.
+- `capacity_admit` does not decide RAM/VRAM: when the only reasons are the planner's, it returns 0 and defers the verdict to the
+  planner path in `start`, which refuses with exit 1 and the exact MiB numbers. The reserve, CPU, PSI and thread cases are its own.
+- **1-CPU hosts (`reserve.cpu_short`).** With one online CPU the CPU reserve is 0 (the last CPU is never reserved), so a model can use the
+  whole CPU. `capacity_admit` admits it and prints a loud `WARNING: this host has too few CPUs to keep a CPU reserve` on stderr; set
+  `LLMCTL_HOST_RESERVE_STRICT=1` to refuse such a host (exit 75, `llmctl-fallback:` line) and route decisions to a hosted endpoint instead.
+- `LLMCTL_HOST_RESERVE`: only the literal `0` disables the reserve (diagnostics). `1`, `yes`, `off`, an empty value or unset all keep it ON.
 - cgroup v2 only: the unit census scans `LLMCTL_CGROUP_FS` (default `/sys/fs/cgroup`), and this user's own manager
   (`$LLMCTL_CGROUP_FS/user.slice/user-<uid>.slice/user@<uid>.service`) supplies the `host.cgroup` figures, only when
   the mount has `cgroup.controllers` (the unified hierarchy). On a cgroup v1 or hybrid host the units cannot be counted and the reserve refuses every local start with
