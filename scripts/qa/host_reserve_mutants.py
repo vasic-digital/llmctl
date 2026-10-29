@@ -24,6 +24,7 @@ R4 = "tests/test_host_reserve_review4.sh"
 R5 = "tests/test_host_reserve_review5.sh"
 F3 = "tests/test_host_reserve_f3.sh"
 R6 = "tests/test_host_reserve_review6.sh"
+R7 = "tests/test_host_reserve_review7.sh"
 # a reviewer mutant that is killed by "some suite" names the chain the reviewer ran (killed when any suite fails)
 CHAIN = (R6, R4, R5, "tests/test_capacity.sh", "tests/test_host_reserve.sh", R3, R2, "tests/test_host_reserve_review.sh",
          "tests/test_decision_capacity.sh", "tests/test_start_gate.sh", "tests/test_services.sh",
@@ -323,6 +324,9 @@ MUTANTS = [
     ("R6-RV06-root-x-bit-not-checked", RSV, 'if [[ ! -r "${root}" || ! -x "${root}" ]]', 'if [[ ! -r "${root}" ]]', R6),
     ("R6-RV07-manager-scope-not-self", RSV, '  if [[ -n "${LLMCTL_CGROUP_ROOT:-}" ]]; then echo self; return; fi\n  if [[ "${d}" == "${mine}/"* ]]', '  if [[ "${d}" == "${mine}/"* ]]', R6),
     ("R6-RV10-units-input-always-readable", CAP, '_cap_in units "${scan} (llmctl engine unit cgroups, every owner)" 0; fi', '_cap_in units "${scan} (llmctl engine unit cgroups, every owner)" 1; fi', R6),
+    ("R7-F1-cpu-short-flag-dropped", CAP, '"cpu_short": E.get("CAP_CPUSHORT") == "1",', '"cpu_short": False,', R7),
+    ("R7-F1-strict-not-honoured", CAP, 'if [[ "${LLMCTL_HOST_RESERVE_STRICT:-0}" == 1 ]]; then', 'if false; then', R7),
+    ("R7-F2-reserve-enabled-only-for-1", RSV, 'reserve_enabled() { [[ "${LLMCTL_HOST_RESERVE:-1}" != 0 ]]; }', 'reserve_enabled() { [[ "${LLMCTL_HOST_RESERVE:-1}" == 1 ]]; }', R7),
 ]
 
 
