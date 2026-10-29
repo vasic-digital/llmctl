@@ -128,6 +128,33 @@ DO="${TEST_TMP}/fs-dec-own"; newfs "${DO}"
 mkunit "${DO}/user.slice/user-${U}.slice/user@${U}.service/app.slice/llmctl-llama@decide-tiny.service" "${FULLCPU}" "${FULLMEM}"
 assert_eq "True" "$(q "$(cap_any "${DO}")" 'str(d["fallback"]["recommended"]=="local")')" "RV6-02 control: this user's own running decide-tiny is local"
 
+echo "== restart, manager scope, root mode, units input (reviewer mutants RV6-04, 06, 07, 10) =="
+# RV6-04: a restart only gets back the memory of THIS user's instance; another owner's same-named unit with a big resident
+# set must not make a host that is below the reserve look fine. Budgets pass (small limits); only MemAvailable binds.
+MI="${TEST_TMP}/meminfo"; printf 'MemTotal: 33554432 kB\nMemFree: 1000000 kB\nMemAvailable: %s kB\n' $(( (RSV_RM - 500) * 1024 )) > "${MI}"
+mkcur() { printf '%s\n' $(( $2 * MIB )) > "$1/memory.current"; }
+RF="${TEST_TMP}/fs-rep-foreign"; newfs "${RF}"
+FU="${RF}/user.slice/user-${O}.slice/user@${O}.service/app.slice/llmctl-llama@decide-tiny.service"; mkunit "${FU}" 100 64; mkcur "${FU}" 6000
+rc=0; ( export LLMCTL_CGROUP_ROOT= LLMCTL_CGROUP_FS="${RF}" LLMCTL_MEMINFO_FILE="${MI}"; capacity_admit decide-tiny "" decide-tiny ) >/dev/null 2>&1 || rc=$?
+assert_eq 75 "${rc}" "RV6-04: restart does not get back another owner's resident memory (host below the reserve -> 75)"
+RO="${TEST_TMP}/fs-rep-own"; newfs "${RO}"
+OU="${RO}/user.slice/user-${U}.slice/user@${U}.service/app.slice/llmctl-llama@decide-tiny.service"; mkunit "${OU}" 100 64; mkcur "${OU}" 6000
+rc=0; ( export LLMCTL_CGROUP_ROOT= LLMCTL_CGROUP_FS="${RO}" LLMCTL_MEMINFO_FILE="${MI}"; capacity_admit decide-tiny "" decide-tiny ) >/dev/null 2>&1 || rc=$?
+assert_eq 0 "${rc}" "RV6-04 control: restart of this user's own instance gets its resident memory back (0)"
+# RV6-06: a cgroup root without the search (x) bit is refused by name, not left to the later find failure
+RX="${TEST_TMP}/rootx"; mkdir -p "${RX}"; chmod 0644 "${RX}"
+assert_contains "$( ( export LLMCTL_CGROUP_ROOT="${RX}"; reserve_combined_check 100 512 decide-tiny ) 2>&1 >/dev/null || true )" "is not readable" "RV6-06: root at mode 0644 -> refused as not readable"
+# RV6-07: under the manager scope every unit is this user's own, a container scope included: it is 'running'
+MS="${TEST_TMP}/mscope"; mkdir -p "${MS}/app.slice" "${MS}/libpod-abc.scope"
+mkunit "${MS}/libpod-abc.scope/llmctl-llama@decide-tiny.service" 100 64
+mv=$( ( export LLMCTL_CGROUP_ROOT="${MS}"; capacity_json decide-tiny 2>/dev/null ) )
+assert_eq "running self" "$(q "${mv}" 'd["profiles"]["decide-tiny"]["verdict"]+" "+d["llmctl"]["units"][0]["owner"]')" "RV6-07: manager scope -> unit (even in a .scope) is own, verdict running"
+# RV6-10: an unreadable unit tree is recorded as an unreadable input, never as 'readable, zero units'
+UL="${TEST_TMP}/ulocked"; mkdir -p "${UL}/app.slice"; chmod 000 "${UL}"
+ud=$( ( export LLMCTL_CGROUP_ROOT="${UL}"; capacity_json decide-tiny 2>/dev/null ) )
+chmod 755 "${UL}" "${RX}"
+assert_eq "False" "$(q "${ud}" 'str(d["inputs"]["units"]["readable"])')" "RV6-10: inputs.units.readable is false when the tree cannot be read"
+
 echo "== F5: reserve --json is valid JSON for a hostile cgroup path =="
 J="${TEST_TMP}/fs-json"; newfs "${J}"
 mkunit "${J}/system.slice/odd\"dir/llmctl-llama@x.service" 100 512

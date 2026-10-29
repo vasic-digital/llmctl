@@ -317,6 +317,10 @@ MUTANTS = [
     ("R6-F5-units-error-unescaped", RSV, '"$(_rsv_json_str "${uerr}")"', '"${uerr}"', R6),
     ("R6-RV01-uid-equality-dropped", RSV, '&& "${BASH_REMATCH[1]}" == "${BASH_REMATCH[2]}" ]]; then', ']]; then', R6),
     ("R6-RV02-foreign-owner-local", CAP, '    if u["owner"] != "self": return False\n', '', R6),
+    ("R6-RV04-restart-repcur-any-owner", CAP, ' and (_f[8] if len(_f) > 8 else "self") == "self": rep_cur', ': rep_cur', R6),
+    ("R6-RV06-root-x-bit-not-checked", RSV, 'if [[ ! -r "${root}" || ! -x "${root}" ]]', 'if [[ ! -r "${root}" ]]', R6),
+    ("R6-RV07-manager-scope-not-self", RSV, '  if [[ -n "${LLMCTL_CGROUP_ROOT:-}" ]]; then echo self; return; fi\n  if [[ "${d}" == "${mine}/"* ]]', '  if [[ "${d}" == "${mine}/"* ]]', R6),
+    ("R6-RV10-units-input-always-readable", CAP, '_cap_in units "${scan} (llmctl engine unit cgroups, every owner)" 0; fi', '_cap_in units "${scan} (llmctl engine unit cgroups, every owner)" 1; fi', R6),
 ]
 
 
