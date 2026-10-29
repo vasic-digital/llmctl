@@ -21,6 +21,12 @@ R = "tests/test_host_reserve_review.sh"
 R2 = "tests/test_host_reserve_review2.sh"
 R3 = "tests/test_host_reserve_review3.sh"
 R4 = "tests/test_host_reserve_review4.sh"
+R5 = "tests/test_host_reserve_review5.sh"
+# a reviewer mutant that is killed by "some suite" names the chain the reviewer ran (killed when any suite fails)
+CHAIN = (R4, R5, "tests/test_capacity.sh", "tests/test_host_reserve.sh", R3, R2, "tests/test_host_reserve_review.sh",
+         "tests/test_decision_capacity.sh", "tests/test_start_gate.sh", "tests/test_services.sh",
+         "tests/test_gate_wiring_pressure.sh", "tests/test_gate_wiring_start_paths.sh",
+         "tests/test_gate_wiring_restart_enable.sh", "tests/test_restart_policy.sh")
 RSV = "lib/reserve.sh"
 HW = "lib/hardware.sh"
 C = "tests/test_capacity.sh"
@@ -162,9 +168,9 @@ MUTANTS = [
     ("R4-F1-cpu-psi-not-critical", CAP, '    if psi["cpu"]["some"] is None: critical.append(',
      "    if False: critical.append(", R4),
     ("R4-F1-load-not-critical", CAP, "    if load is None: critical.append(", "    if False: critical.append(", R4),
-    ("R4-F1-cgroot-not-critical", CAP, 'if enabled and not os.path.isdir(E.get("CAP_CG_ROOT") or ""):', "if False:", R4),
-    ("R4-F1-procdir-not-critical", CAP, "if enabled and not nproc_ok: critical.append(",
-     "if False: critical.append(", R4),
+    ("R4-F1-cgroot-not-critical", CAP, 'if enabled and E.get("CAP_CG_ERR"):', "if False:", R4),
+    ("R4-F1-procdir-not-critical", CAP, "if enabled and not nproc_ok:\n    critical.append(",
+     "if False:\n    critical.append(", R4),
     ("R4-F1-strict-forced-off", CAP, 'strict = E.get("CAP_STRICT") == "1"', "strict = False", R4),
     ("R4-F1-garbage-load-parsed", CAP, "if load is not None and None in load: load = None", "pass", R4),
     ("R4-F1-garbage-psi-parsed", CAP, 'return float(x) if re.fullmatch(r"[0-9]+(\\.[0-9]+)?", x or "") else None',
@@ -205,10 +211,84 @@ MUTANTS = [
      "[[ -n \"${full}\" ]] && awk -v v=\"${full}\" -v m=\"${fmax}\" 'BEGIN{exit !(v>m*10)}'", R4),
     ("Y13-allowedcpus-all-cpus", RSV, '"${RSV_CPUSET//,/ }" "${RSV_CPUSET}" "${cap}"',
      '"${RSV_CPUSET//,/ }" "0-$(( RSV_N - 1 ))" "${cap}"', R4),
+    # --- review round 5: reviewer mutants Y01/Y02/Y04(inverted)/Y06/Y07/Y08/Y10/Y12/Y14 and Z01-Z20 ported, plus paired
+    #     mutants for R5-1 (unreadable cgroup tree), R5-2 (gate/hk_gate), R5-6 (own-pid needle) ---
+    ("Y01-exitcode-ignores-undetermined", CAP, 'if not (d.get("measurement") or {}).get("ok", True): sys.exit(75)\n', "", CHAIN),
+    ("Y02-threads-zero-accepted", CAP, '[[ "${CAP_THREADS}" =~ ^[1-9][0-9]*$ ]]', '[[ "${CAP_THREADS}" =~ ^[0-9]+$ ]]', R5),
+    ("Y04-gpu-floor-inverted", CAP, 'if mode == "gpu" and prov != "measured":', 'if mode == "gpu" and prov == "measured":', CHAIN),
+    ("Y06-restart-rss-not-returned", CAP, "if live_avail is not None: live_avail += rep_cur", "pass", CHAIN),
+    ("Y07-cgroup-room-ignores-current", CAP, 'cg_room = cg["memory_max_mb"] - cg["memory_current_mb"] + rep_cur',
+     'cg_room = cg["memory_max_mb"] + rep_cur', CHAIN),
+    ("Y08-nproc-check-only-at-zero", CAP, "nproc_headroom is not None and nproc_headroom < cap:",
+     "nproc_headroom is not None and nproc_headroom < 1:", CHAIN),
+    ("Y10-unlimited-unit-not-degraded", CAP, 'if cpu == "max": reasons.append(', "if False: reasons.append(", CHAIN),
+    ("Y12-reserve-unit-swap-allowed", "lib/service_linux.sh", "printf 'MemorySwapMax=0\\nNice=15\\n", "printf 'Nice=15\\n", CHAIN),
+    ("Y14-degraded-at-100pct", CAP, "int(cur) >= int(mem) * 9 // 10:", "int(cur) >= int(mem):", CHAIN),
+    ("Z01-meminfo-not-critical", CAP, "if avail is None: critical.append(", "if False: critical.append(", CHAIN),
+    ("Z02-mempsi-and-not-or", CAP, 'if psi["memory"]["some"] is None or psi["memory"]["full"] is None:',
+     'if psi["memory"]["some"] is None and psi["memory"]["full"] is None:', CHAIN),
+    ("Z03-cpupsi-not-critical", CAP, 'if psi["cpu"]["some"] is None: critical.append(', "if False: critical.append(", CHAIN),
+    ("Z04-loadavg-not-critical", CAP, "if load is None: critical.append(", "if False: critical.append(", CHAIN),
+    ("Z05-cgtree-not-critical", CAP, 'if enabled and E.get("CAP_CG_ERR"):', "if False:", CHAIN),
+    ("Z06-nproc-not-critical", CAP, "if enabled and not nproc_ok:\n    critical.append(", "if False:\n    critical.append(", CHAIN),
+    ("Z07-strict-forced-off", CAP, 'strict = E.get("CAP_STRICT") == "1"', "strict = False", CHAIN),
+    ("Z08-dec-garbage-is-zero", CAP, 'return float(x) if re.fullmatch(r"[0-9]+(\\.[0-9]+)?", x or "") else None',
+     'return float(x) if re.fullmatch(r"[0-9]+(\\.[0-9]+)?", x or "") else 0.0', CHAIN),
+    ("Z09-midfield-load-accepted", CAP, "if load is not None and None in load: load = None",
+     "if load is not None and None in load: load = [load[0] or 0.0, 0.0, 0.0]", CHAIN),
+    ("Z10-undetermined-fallback-local", CAP, '{"recommended": "cloud", "route": "hosted", "reason": "the host capacity',
+     '{"recommended": "local", "route": "local", "reason": "the host capacity', CHAIN),
+    ("Z11-undetermined-keeps-verdict", CAP, '_v.update({"verdict": "undetermined"', '_v.update({"verdict": _v["verdict"]', CHAIN),
+    ("Z12-gate-mempsi-and", HW, 'if (( strict )) && [[ -z "${some}" || -z "${full}" ]]; then',
+     'if (( strict )) && [[ -z "${some}" && -z "${full}" ]]; then', CHAIN),
+    ("Z13-gate-meminfo-nonstrict", HW, "    if (( strict )); then\n      printf 'refusing to %s %s: the memory input",
+     "    if (( 0 )); then\n      printf 'refusing to %s %s: the memory input", CHAIN),
+    ("Z14-cpugate-psi-nonstrict", RSV, "    if (( strict )); then\n      printf 'refusing to %s %s: the CPU pressure input",
+     "    if (( 0 )); then\n      printf 'refusing to %s %s: the CPU pressure input", CHAIN),
+    ("Z15-cpugate-load-nonstrict", RSV, "    if (( strict )); then\n      printf 'refusing to %s %s: the load input",
+     "    if (( 0 )); then\n      printf 'refusing to %s %s: the load input", CHAIN),
+    ("Z16-avg10-regex-loose", RSV, "  [[ \"${v}\" =~ ^[0-9]+(\\.[0-9]+)?$ ]] || return 1\n  printf '%s' \"${v}\"\n}\n\n# _rsv_load1",
+     "  [[ \"${v}\" =~ ^[0-9x.]+$ ]] || return 1\n  printf '%s' \"${v}\"\n}\n\n# _rsv_load1", CHAIN),
+    ("Z17-strict-never-linux", RSV, '_rsv_inputs_strict() { [[ "$(uname -s 2>/dev/null)" == Linux ]]; }',
+     '_rsv_inputs_strict() { [[ "$(uname -s 2>/dev/null)" == Darwin ]]; }', CHAIN),
+    ("Z18-json-flag-ignored", "bin/llmctl", "--json) _cj=1 ;;", "--json) _cj=0 ;;", CHAIN),
+    ("Z19-restart-unlocked", "lib/scheduler.sh", 'sched_restart() { scheduler::with_lock _sched_restart_impl "$@"; }',
+     'sched_restart() { _sched_restart_impl "$@"; }', CHAIN),
+    ("Z20-restart-skips-admit", "lib/scheduler.sh",
+     '_sched_restart_impl() { sched_restart_admit "$1" || return $?; svc_restart "$1"; }',
+     '_sched_restart_impl() { svc_restart "$1"; }', CHAIN),
+    ("R5-1-unmeasurable-always-measurable", RSV, '  local root fs\n  root="$(_rsv_cgroup_root)"\n',
+     '  local root fs\n  root="$(_rsv_cgroup_root)"\n  return 0\n', R5),
+    ("R5-1-unreadable-subdir-not-checked", RSV, 'if ! find "${root}" -maxdepth 3 -type d >/dev/null 2>&1; then',
+     "if false; then", R5),
+    ("R5-1-cgroup-v2-not-required", RSV, 'if [[ ! -f "${fs}/cgroup.controllers" ]]; then', "if false; then", R5),
+    ("R5-1-census-root-check-passes", RSV, '[[ -d "${root}" && -r "${root}" && -x "${root}" ]] || return 1',
+     '[[ -d "${root}" && -r "${root}" && -x "${root}" ]] || return 0', R5),
+    ("R5-1-census-find-error-ignored", RSV, '-o -name "${LLMCTL_RESERVE_EXTRA_UNIT_GLOB:-llmctl-llama@*.service}" \\) 2>/dev/null)" || return 1',
+     '-o -name "${LLMCTL_RESERVE_EXTRA_UNIT_GLOB:-llmctl-llama@*.service}" \\) 2>/dev/null)" || true', R5),
+    ("R5-1-capacity-cgerr-not-critical", CAP, 'if enabled and E.get("CAP_CG_ERR"):', "if False:", R5),
+    ("R5-1-capacity-cgerr-not-measured", CAP, '  cg_err="$(_rsv_units_unmeasurable)"\n', '  cg_err=""\n', R5),
+    ("R5-2-combined-unmeasurable-admits", RSV,
+     "  if [[ -n \"${why}\" ]]; then\n    printf 'refusing to %s %s: cannot count the running llmctl units (%s), so the model budget",
+     "  if false; then\n    printf 'refusing to %s %s: cannot count the running llmctl units (%s), so the model budget", R5),
+    ("R5-2-start-gate-block-dropped", HW,
+     '  if (( strict )) && reserve_enabled && [[ "${LLMCTL_GATE_CPU_CHECKS:-1}" != 0 ]]; then\n    local why; why=',
+     '  if false; then\n    local why; why=', R5),
+    ("R5-2-report-unreadable-shows-no-units", RSV,
+     '  uerr="$(_rsv_units_unmeasurable)"\n  if [[ -z "${uerr}" ]] && ! census="$(reserve_running_units)"; then uerr="the unit census under ${root} failed"; fi',
+     '  uerr=""; census="$(reserve_running_units)" || true', R5),
+    ("R5-6-own-pid-needle-dropped", CAP, "if not _self_seen: nproc_ok = False", "pass", R5),
 ]
 
 
 def run(tree, suite):
+    if isinstance(suite, tuple):
+        rc, tail = 0, []
+        for one in suite:
+            rc, tail = run(tree, one)
+            if rc != 0:
+                return rc, ["[%s]" % one] + tail
+        return rc, tail
     env = dict(os.environ)
     env["GOMAXPROCS"] = "2"
     r = subprocess.run(SH + [os.path.join(tree, suite)], cwd=tree, env=env, capture_output=True, text=True, timeout=900)
@@ -227,7 +307,7 @@ def main():
     with tempfile.TemporaryDirectory(prefix="llmctl-mut-") as tmp:
         ctl = os.path.join(tmp, "control")
         copy_tree(root, ctl)
-        for suite in sorted({m[4] for m in MUTANTS}):
+        for suite in sorted({x for m in MUTANTS for x in (m[4] if isinstance(m[4], tuple) else (m[4],))}):
             rc, tail = run(ctl, suite)
             results["control"][suite] = {"rc": rc, "tail": tail}
         for name, rel, old, new, suite in MUTANTS:
@@ -236,11 +316,11 @@ def main():
             p = os.path.join(d, rel)
             s = open(p).read()
             if old not in s:
-                results["mutants"].append({"mutant": name, "file": rel, "suite": suite, "verdict": "not-applied"})
+                results["mutants"].append({"mutant": name, "file": rel, "suite": suite if isinstance(suite, str) else "chain", "verdict": "not-applied"})
                 continue
             open(p, "w").write(s.replace(old, new, 1))
             rc, tail = run(d, suite)
-            results["mutants"].append({"mutant": name, "file": rel, "suite": suite, "rc": rc,
+            results["mutants"].append({"mutant": name, "file": rel, "suite": suite if isinstance(suite, str) else "chain", "rc": rc,
                                        "verdict": "killed" if rc != 0 else "SURVIVED", "tail": tail})
             shutil.rmtree(d)
     results["control_green"] = all(v["rc"] == 0 for v in results["control"].values())

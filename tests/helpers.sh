@@ -53,6 +53,12 @@ _test_kill_owned() { # <pid> <start>: kill the pid only while it is still the pr
 }
 
 # assert_eq <expected> <actual> <message>
+# t_proc_self <dir>: the fixture /proc entry for the counting process (LLMCTL_PROC_SELF_PID, this uid, 0 threads)
+t_proc_self() {
+  mkdir -p "$1/${LLMCTL_PROC_SELF_PID:-999999}"
+  printf 'Name:\tllmctl-test\nUid:\t%s\t%s\t%s\t%s\nThreads:\t0\n' "$(id -u)" "$(id -u)" "$(id -u)" "$(id -u)" > "$1/${LLMCTL_PROC_SELF_PID:-999999}/status"
+}
+
 assert_eq() {
   if [[ "$1" == "$2" ]]; then
     printf '  ok: %s\n' "$3"
@@ -171,7 +177,10 @@ test_setup_env() {
   printf '0::/test.scope\n' > "${TEST_TMP}/self.cgroup"
   # RLIMIT_NPROC headroom (3.4.0): the threads counted are those of an empty fixture /proc, so the real process table of
   # the machine running the tests decides nothing (the real soft limit still applies; LLMCTL_NPROC_LIMIT can only lower it)
-  mkdir -p "${TEST_TMP}/proc-empty"; export LLMCTL_PROC_DIR="${TEST_TMP}/proc-empty"
+  # The census must see the counting process (control needle, review round 5): LLMCTL_PROC_SELF_PID names the fixture
+  # entry that stands for it (this uid, 0 threads, so it adds nothing to the count). t_proc_self <dir> adds it elsewhere.
+  export LLMCTL_PROC_SELF_PID=999999
+  mkdir -p "${TEST_TMP}/proc-empty"; export LLMCTL_PROC_DIR="${TEST_TMP}/proc-empty"; t_proc_self "${LLMCTL_PROC_DIR}"
   unset LLMCTL_TEST_HOSTED_KEY LLMCTL_HOST_RESERVE LLMCTL_HOST_MEM_MB LLMCTL_NPROC_LIMIT
   mkdir -p "${LLMCTL_STATE_DIR}" "${LLMCTL_RUNTIME_DIR}"
   # The hermetic world models an INSTALLED llmctl (`llmctl install` ran): the unit-level validation gate marker exists

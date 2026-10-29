@@ -270,15 +270,18 @@ _cap_measure() {
     return 0
   fi
   _cap_in plan "llmctl plan --json (hw_probe_json | catalog_plan_json)" 1
-  local units="" name cpu mem d cur
+  local units="" name cpu mem d cur cg_err census=""
+  # the unit census must be readable (review round 5, R5-1): an unreadable tree is a critical input, never "0 units"
+  cg_err="$(_rsv_units_unmeasurable)"
+  if [[ -z "${cg_err}" ]] && ! census="$(reserve_running_units)"; then cg_err="the unit census under ${root} failed"; fi
   while read -r name cpu mem; do
     [[ -n "${name}" ]] || continue
     d="$(find "${root}" -maxdepth 3 -type d -name "${name}" 2>/dev/null | head -1)"
     cur="$(head -1 "${d}/memory.current" 2>/dev/null || true)"
     [[ "${cur}" =~ ^[0-9]+$ ]] && cur=$(( cur / 1048576 )) || cur=""
     units+="${name} $(_cap_unit_profile "${name}") ${cpu} ${mem} ${cur:-?} $(_cap_cpu_stat "${d}/cpu.stat")"$'\n'
-  done < <(reserve_running_units)
-  if [[ -d "${root}" ]]; then _cap_in units "${root} (llmctl engine unit cgroups)" 1; else _cap_in units "${root} (llmctl engine unit cgroups)" 0; fi
+  done <<< "${census}"
+  if [[ -z "${cg_err}" ]]; then _cap_in units "${root} (llmctl engine unit cgroups)" 1; else _cap_in units "${root} (llmctl engine unit cgroups)" 0; fi
   local decide
   decide="$(reserve_decide_profiles 2>/dev/null || true)"
   local keyvar; keyvar="$(_cap_key_var)"
@@ -306,7 +309,7 @@ _cap_measure() {
   CAP_LOAD="${in_la}" CAP_MEMINFO="${in_mi}" CAP_INPUTS="${_CAP_INPUTS}" CAP_CG_CSTAT="${cg_cstat}" \
   CAP_PROC_DIR="${LLMCTL_PROC_DIR:-/proc}" CAP_NPROC_LIMIT="${LLMCTL_NPROC_LIMIT:-}" \
   CAP_UNITS="${units}" CAP_DECIDE_SET="${decide}" CAP_KEYVAR="${keyvar}" CAP_KEYVARS="${LLMCTL_HOSTED_KEY_VARS}" \
-  CAP_CG_ROOT="${root}" CAP_CG_MMAX="${cg_mmax}" CAP_CG_MCUR="${cg_mcur}" CAP_CG_CMAX="${cg_cmax}" \
+  CAP_CG_ROOT="${root}" CAP_CG_ERR="${cg_err}" CAP_PROC_SELF_PID="${LLMCTL_PROC_SELF_PID:-}" CAP_CG_MMAX="${cg_mmax}" CAP_CG_MCUR="${cg_mcur}" CAP_CG_CMAX="${cg_cmax}" \
   CAP_CHECK_PRESSURE="${LLMCTL_GATE_CPU_CHECKS:-1}" CAP_MEM_SHORT="${RSV_MEM_SHORT}" \
   CAP_NEW_INSTANCES="${_CAP_NEW_INSTANCES:-}" CAP_REPLACE="${_CAP_REPLACE:-}" CAP_TENANT="${LLMCTL_TENANT_ID:-}" \
   CAP_T="${CAP_T:-}" CAP_PT="${CAP_PT:-}" CAP_STRICT="$(_rsv_inputs_strict && echo 1 || echo 0)" \
@@ -375,6 +378,11 @@ try:
     _ents = os.listdir(_pdir)
 except OSError:
     _ents, nproc_ok = [], False
+# control needle (review round 5, R5-6): the census must see the process doing the counting, with this uid. An empty or
+# foreign directory, or a /proc that hides other processes' entries, otherwise reads as "0 threads" and passes.
+# LLMCTL_PROC_SELF_PID (tests only, with LLMCTL_PROC_DIR) names the fixture entry that stands for this process.
+_self = (E.get("CAP_PROC_SELF_PID") or "").strip() or str(os.getpid())
+_self_seen = False
 for _e in _ents:
     if not _e.isdigit(): continue
     try:
@@ -382,9 +390,12 @@ for _e in _ents:
         for _l in open(os.path.join(_pdir, _e, "status")):
             if _l.startswith("Uid:"): _uidl = _l.split()[1]
             elif _l.startswith("Threads:"): _thr = _l.split()[1]
-        if _uidl == str(_uid) and _thr and _thr.isdigit(): user_threads += int(_thr)
+        if _uidl == str(_uid) and _thr and _thr.isdigit():
+            user_threads += int(_thr)
+            if _e == _self: _self_seen = True
     except (OSError, IndexError):
         continue
+if not _self_seen: nproc_ok = False
 nproc_headroom = (nproc_soft - user_threads) if (nproc_soft is not None and nproc_ok) else None
 inputs["rlimit_nproc"] = {"source": "getrlimit(RLIMIT_NPROC) + %s/<pid>/status Threads of uid %s" % (_pdir, _uid),
                           "readable": nproc_ok, "read_at": time.time()}
@@ -554,9 +565,10 @@ if psi["memory"]["some"] is None or psi["memory"]["full"] is None:
 if enabled and E.get("CAP_CHECK_PRESSURE", "1") != "0":
     if psi["cpu"]["some"] is None: critical.append("CPU PSI some avg10 (%s)" % _src("psi_cpu", "/proc/pressure/cpu"))
     if load is None: critical.append("loadavg (%s)" % _src("loadavg", "/proc/loadavg"))
-if enabled and not os.path.isdir(E.get("CAP_CG_ROOT") or ""):
-    critical.append("the cgroup root the llmctl units are counted under (%s)" % E.get("CAP_CG_ROOT"))
-if enabled and not nproc_ok: critical.append("the thread census for RLIMIT_NPROC (%s)" % _pdir)
+if enabled and E.get("CAP_CG_ERR"):
+    critical.append("the cgroup tree the llmctl units are counted under (%s: %s)" % (E.get("CAP_CG_ROOT"), E.get("CAP_CG_ERR")))
+if enabled and not nproc_ok:
+    critical.append("the thread census for RLIMIT_NPROC (%s%s)" % (_pdir, "" if _self_seen else ": it did not see this process, pid %s" % _self))
 strict = E.get("CAP_STRICT") == "1"
 measurement = {"ok": True, "timeout_s": inum("CAP_T", None), "probe_timeout_s": inum("CAP_PT", None),
                "critical_inputs_unreadable": critical}

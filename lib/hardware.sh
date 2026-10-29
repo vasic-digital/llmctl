@@ -468,5 +468,16 @@ hw_pressure_gate() {
   fi
   # CPU pressure / load (host reserve): skipped for the PSI-only pre-switch check (LLMCTL_GATE_CPU_CHECKS=0)
   reserve_cpu_gate "${label}" || return $?
+  # the running llmctl units must be countable (review round 5, R5-2): a missing or unreadable cgroup tree, or a host
+  # without the cgroup v2 unified hierarchy, is refused here too - not read as "no units". Linux only (macOS has no
+  # cgroups; docs/capacity.md "Limits"); skipped with the CPU checks for the PSI-only pre-switch check.
+  if (( strict )) && reserve_enabled && [[ "${LLMCTL_GATE_CPU_CHECKS:-1}" != 0 ]]; then
+    local why; why="$(_rsv_units_unmeasurable)"
+    if [[ -n "${why}" ]]; then
+      printf 'refusing to %s %s: cannot count the running llmctl units (%s), so the host reserve cannot be checked.\n' \
+        "${act}" "${label}" "${why}" >&2
+      return 75
+    fi
+  fi
   return 0
 }

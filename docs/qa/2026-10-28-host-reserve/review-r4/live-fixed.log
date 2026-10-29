@@ -1,0 +1,8 @@
+[10:51:45] label=fixed root=/home/milosvasic/.cache/claude-tmp/llmctl-reserve.aCff0E/llmctl profile=decide-tiny runs=3
+[10:51:47] run 1: starting llmctl-qa-reserve-fixed-r1.service on 127.0.0.1:53455
+[10:53:03] run 1: done
+[10:53:04] run 2: starting llmctl-qa-reserve-fixed-r2.service on 127.0.0.1:59541
+[10:54:15] run 2: done
+[10:54:16] run 3: starting llmctl-qa-reserve-fixed-r3.service on 127.0.0.1:51355
+[10:55:30] run 3: done
+[10:55:30] summary: deterministic_limits=True deterministic_verdicts=True all_checks_true=True

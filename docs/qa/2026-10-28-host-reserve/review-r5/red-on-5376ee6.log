@@ -1,0 +1,161 @@
+# tests/test_host_reserve_review5.sh (and tests/helpers.sh) of the round-5 fix, run on lib/ of 5376ee6 (git archive)
+== positive controls: a readable root is counted (the instrument can see) ==
+  ok: control: an empty readable root -> measured, fits, local
+  ok: control: combined check admits on an empty readable root
+  ok: control: the start gate admits on an empty readable root
+  ok: control: hk_gate admits on an empty readable root
+  ok: control: capacity_admit admits on an empty readable root
+  ok: needle: the unit holding the whole budget IS counted (combined 75)
+  ok: needle: hk_gate counts it too (75)
+  ok: needle: capacity lists the unit
+== R5-1 / R5-2: a missing or unreadable cgroup root (or a directory under it) -> refuse, never admit ==
+  ok: missing: capacity undetermined, fallback none (was: fits local)
+  ok: missing: the reason names the cgroup root
+  ok: missing: capacity exit code 75
+  ok: missing: capacity_admit refuses 75 (was: 0)
+  FAIL: missing: combined budget check refuses 75 (was: 0)
+    expected: 75
+    actual:   0
+  FAIL: missing: the start gate refuses 75 (was: 0)
+    expected: 75
+    actual:   0
+  FAIL: missing: hk_gate (ExecStartPre, every restart and boot) refuses 75 (was: 0)
+    expected: 75
+    actual:   0
+  FAIL: missing: the refusal says why
+    needle not found: cannot count the running llmctl units
+    haystack: 
+  FAIL: missing: reserve_running_units returns 1 with no lines
+    expected: 1:
+    actual:   0:
+  FAIL: mode-000 root: capacity undetermined, fallback none (was: fits local)
+    expected: False undetermined none
+    actual:   True fits local
+  FAIL: mode-000 root: the reason names the cgroup root
+    needle not found: /home/milosvasic/.cache/claude-tmp/tmp.WHxwYFl17U/cg-locked
+    haystack: 
+  FAIL: mode-000 root: capacity exit code 75
+    expected: 75
+    actual:   0
+  FAIL: mode-000 root: capacity_admit refuses 75 (was: 0)
+    expected: 75
+    actual:   0
+  FAIL: mode-000 root: combined budget check refuses 75 (was: 0)
+    expected: 75
+    actual:   0
+  FAIL: mode-000 root: the start gate refuses 75 (was: 0)
+    expected: 75
+    actual:   0
+  FAIL: mode-000 root: hk_gate (ExecStartPre, every restart and boot) refuses 75 (was: 0)
+    expected: 75
+    actual:   0
+  FAIL: mode-000 root: the refusal says why
+    needle not found: cannot count the running llmctl units
+    haystack: 
+  FAIL: mode-000 root: reserve_running_units returns 1 with no lines
+    expected: 1:
+    actual:   0:
+  FAIL: mode-000 directory under the root: capacity undetermined, fallback none (was: fits local)
+    expected: False undetermined none
+    actual:   True fits local
+  FAIL: mode-000 directory under the root: the reason names the cgroup root
+    needle not found: /home/milosvasic/.cache/claude-tmp/tmp.WHxwYFl17U/cg-sublocked
+    haystack: 
+  FAIL: mode-000 directory under the root: capacity exit code 75
+    expected: 75
+    actual:   0
+  FAIL: mode-000 directory under the root: capacity_admit refuses 75 (was: 0)
+    expected: 75
+    actual:   0
+  FAIL: mode-000 directory under the root: combined budget check refuses 75 (was: 0)
+    expected: 75
+    actual:   0
+  FAIL: mode-000 directory under the root: the start gate refuses 75 (was: 0)
+    expected: 75
+    actual:   0
+  FAIL: mode-000 directory under the root: hk_gate (ExecStartPre, every restart and boot) refuses 75 (was: 0)
+    expected: 75
+    actual:   0
+  FAIL: mode-000 directory under the root: the refusal says why
+    needle not found: cannot count the running llmctl units
+    haystack: 
+  FAIL: mode-000 directory under the root: reserve_running_units returns 1 with no lines
+    expected: 1:
+    actual:   0:
+  ok: needle: the census lists the unit on a readable tree
+  ok: after chmod back: the same tree is counted again (75: full budget)
+  ok: reserve disabled: the cgroup root is not a critical input
+== R5-2: the default root needs the cgroup v2 unified hierarchy; v1/hybrid -> refuse with a clear message ==
+  FAIL: no cgroup.controllers at the cgroup mount: refuse 75
+    expected: 75
+    actual:   0
+  FAIL: the refusal names the missing cgroup v2 unified hierarchy
+    needle not found: cgroup v2
+    haystack: 
+  FAIL: capacity: not ok without cgroup v2
+    expected: False
+    actual:   True
+  ok: control: with cgroup.controllers present the default root is used and admits
+  FAIL: needle: a unit under the default root is counted (75)
+    expected: 75
+    actual:   0
+== R5-6: the /proc thread census must see its own process (control needle) ==
+  FAIL: an empty proc dir: measurement not ok (was: ok, 0 threads)
+    expected: False
+    actual:   True
+  FAIL: the reason names the thread census
+    needle not found: thread census
+    haystack: 
+  FAIL: a proc dir with only another uid's processes: not ok
+    expected: False
+    actual:   True
+  ok: control: the real /proc sees this process (>= 1 thread of this uid)
+  ok: control: the real /proc census is not flagged
+== R5-5 (Y02): a running profile leaves CAP_THREADS empty (its verdict carries threads 0) ==
+  ok: precondition: decide-tiny is running, threads 0
+  ok: running: admitted, CAP_THREADS empty (Y02 gave 0)
+  ok: control: a fitting profile sets a positive thread count
+== R5-1: llmctl reserve reports an unreadable unit tree instead of 'no unit is running' ==
+Traceback (most recent call last):
+  File "<string>", line 1, in <module>
+    import json,sys; d=json.loads(sys.argv[1]); print(eval(sys.argv[2]))
+                                                      ~~~~^^^^^^^^^^^^^
+  File "<string>", line 1, in <module>
+    import json,sys; d=json.loads(sys.argv[1]); print(eval(sys.argv[2]))
+        ^^^^^^^^^^^^^^^^^^^
+KeyError: 'units_readable'
+  FAIL: reserve --json: units_readable false on a missing root
+    expected: False
+    actual:   
+Traceback (most recent call last):
+  File "<string>", line 1, in <module>
+    import json,sys; d=json.loads(sys.argv[1]); print(eval(sys.argv[2]))
+                                                      ~~~~^^^^^^^^^^^^^
+  File "<string>", line 1, in <module>
+    import json,sys; d=json.loads(sys.argv[1]); print(eval(sys.argv[2]))
+    ^^^^^^^^^^^^^^^^
+KeyError: 'units_error'
+  FAIL: reserve --json: units_error names the root
+    needle not found: /home/milosvasic/.cache/claude-tmp/tmp.WHxwYFl17U/no-such-root
+    haystack: 
+  FAIL: reserve (text): units UNKNOWN, not 'no unit is running'
+    needle not found: UNKNOWN
+    haystack: Host reserve: ON
+  CPUs:   16 online; 4 reserved for the host (0-3); models may use 12 (4-15)
+          per model: chat 6 CPU(s), decision 3 CPU(s); rule max(2 CPUs, 25%) rounded to whole cores
+  RAM:    32768 MiB total; 6553 MiB reserved for the host; models may be limited to 26215 MiB together; rule max(4096 MiB, 20%)
+  Gate:   refuse a start at PSI cpu some avg10 > 80 or 1-minute load > 3 x 16 CPUs (plus the memory gate)
+  Units:  no llmctl engine unit is running
+Traceback (most recent call last):
+  File "<string>", line 1, in <module>
+    import json,sys; d=json.loads(sys.argv[1]); print(eval(sys.argv[2]))
+                                                      ~~~~^^^^^^^^^^^^^
+  File "<string>", line 1, in <module>
+    import json,sys; d=json.loads(sys.argv[1]); print(eval(sys.argv[2]))
+        ^^^^^^^^^^^^^^^^^^^
+KeyError: 'units_readable'
+  FAIL: control: a readable empty root is readable
+    expected: True
+    actual:   
+RESULT: FAIL (34 assertion failure(s))
+# rc=1

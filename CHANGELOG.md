@@ -159,8 +159,11 @@ workload, and reports host capacity on demand (`llmctl capacity --json`).
     `/proc` directory unreadable (or holding garbage), `llmctl capacity` said `fits`, the route was `local` and the start
     gate admitted. Now on Linux each verdict-critical input that cannot be read or parsed makes the document
     `undetermined` (`measurement.ok: false`, new field `measurement.critical_inputs_unreadable`), exit 75, route never
-    local; the start gate (`hw_pressure_gate`, the CPU/load gate) refuses with 75 and names the input. The critical and
-    informational inputs are listed in `docs/capacity.md`.
+    local; the start gate (`hw_pressure_gate`, the CPU/load gate) refuses with 75 for an unreadable or unparseable
+    meminfo, memory PSI, CPU PSI or loadavg and names the input. Correction (review round 5): the round-4 change did NOT
+    make the start gate refuse on a missing or unreadable cgroup root, and capacity only refused a MISSING root (a
+    mode-000 root counted zero units and said `fits`); that is fixed in round 5 below. The start gate reads no `/proc`
+    thread census (`capacity_admit` does). The critical and informational inputs are listed in `docs/capacity.md`.
   - `llmctl capacity <profile> --json` now emits JSON (`--json` accepted in any position); an unknown option is a usage
     error (exit 2).
   - `restart` admission and the restart itself run under the scheduler lock, so they cannot race a concurrent `start`.
@@ -171,6 +174,31 @@ workload, and reports host capacity on demand (`llmctl capacity --json`).
     process-tree collection.
   - The live harness's dirty-tree check covers the whole tree (untracked files included) and records the dirty paths
     and a hash of the diff.
+
+- Review round 5 (independent review of 5376ee6: NO-GO; `tests/test_host_reserve_review5.sh` fails 27 assertions on
+  5376ee6, `docs/qa/2026-10-28-host-reserve/review-r5/red-on-5376ee6.log`):
+  - A cgroup tree that could not be read was counted as "no running llmctl unit" and admitted a start on a full model
+    budget. Missing root, a mode-000 root and an unreadable directory under the root now make `llmctl capacity`
+    `undetermined` (exit 75, never local), and make `capacity_admit`, the combined budget check, the start gate
+    (`hw_pressure_gate`) and the unit `ExecStartPre` gate (`hk_gate`, which also gates every systemd restart and boot)
+    refuse with 75 and say "cannot count the running llmctl units (...)". `find` errors are no longer discarded: any
+    directory the census cannot enter is a failure.
+  - The default cgroup root is only used when the cgroup mount carries `cgroup.controllers` (the cgroup v2 unified
+    hierarchy). On a cgroup v1 or hybrid host the units cannot be counted, and the reserve refuses every local start
+    with a message that names the missing cgroup v2 hierarchy (`LLMCTL_HOST_RESERVE=0` or the hosted fallback there).
+    New `LLMCTL_CGROUP_FS` (default `/sys/fs/cgroup`) names the cgroup mount.
+  - The `/proc` thread census for RLIMIT_NPROC must see the process doing the counting (a control needle); an empty
+    directory, or one with only other users' processes, now makes the measurement not ok instead of counting 0 threads.
+  - `llmctl reserve [--json]` reports an unreadable unit tree (`units_readable`, `units_error`, text "UNKNOWN") instead
+    of "no llmctl engine unit is running". Additive fields; the capacity schema stays `llmctl.capacity/1`.
+  - A test pins reviewer mutant Y02 (a running profile leaves the thread cap empty). The reviewer's Y and Z mutants
+    and new paired mutants for this round are in `scripts/qa/host_reserve_mutants.py`.
+  - Class inventory (§11.4.276(C)) of every "count X under a source" instrument on the start paths, each run with a
+    control needle: `docs/qa/2026-10-28-host-reserve/review-r5/class_inventory.log`. Two members outside the host
+    reserve still read an unreadable source as "nothing": the planner's per-unit memory list (`systemctl list-units`
+    failing yields no units) and the scheduler's reservation sum (a missing runtime directory yields 0 MiB). They predate
+    3.4.0, are not changed here, and are tracked as a follow-up; the reserve's own budget check counts the units from
+    the cgroup tree and now fails closed.
 
 ### Security
 
@@ -225,7 +253,12 @@ workload, and reports host capacity on demand (`llmctl capacity --json`).
   3.3.x); later starts of that profile then report "already running". Found while building the live harness, which now isolates and clears it.
 - An unknown profile name given to `llmctl capacity` is reported as `does_not_fit` (exit 75), not a usage error (follow-up).
 - Model consumption is counted only for THIS user's llmctl units (`llmctl.consumption_scope`); llmctl units of other users or in
-  `system.slice` are not seen, so two users can together over-subscribe the model budget.
+  `system.slice` are not seen, so two users can together over-subscribe the model budget. This is a known limit PENDING
+  operator acceptance (Constitution 11.4.66); it is not approved.
+- A cgroup v1 or hybrid host refuses every local start while the reserve is on (the units cannot be counted). Not tested
+  on such a host; hermetic test only.
+- The planner's per-unit memory list (`systemctl list-units`) and the scheduler's reservation sum (runtime directory)
+  still read an unreadable source as "nothing" (class inventory, review round 5); follow-up.
 - On Linux a kernel without PSI refuses every local start (fail closed); on macOS and other platforms without `/proc` the critical-input
   check is not enforced (not tested live).
 - The placeholder-key rule's dummy-word list is fully covered by the 16-character minimum except for the `<...>` form; it is kept to match

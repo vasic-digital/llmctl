@@ -13,7 +13,7 @@ export LLMCTL_FAKE_HW="${LLMCTL_ROOT}/tests/fixtures/hw-baseline.json"
 # shellcheck disable=SC1090
 for l in common os_detect hardware catalog reserve capacity; do source "${LLMCTL_ROOT}/lib/${l}.sh"; done
 export LLMCTL_HOST_MEM_MB=32768
-export LLMCTL_PROC_DIR="${TEST_TMP}/proc-fixture"; mkdir -p "${LLMCTL_PROC_DIR}"
+export LLMCTL_PROC_DIR="${TEST_TMP}/proc-fixture"; mkdir -p "${LLMCTL_PROC_DIR}"; t_proc_self "${LLMCTL_PROC_DIR}"
 
 # q <json> <expr>: the expressions are literals written in THIS file (test-authored), never external input
 q() { python3 -c 'import json,sys; d=json.loads(sys.argv[1]); print(eval(sys.argv[2]))' "$@"; }
@@ -60,7 +60,8 @@ check_case "CPU PSI unreadable"      75 LLMCTL_CPU_PSI_FILE="${MISSING}"
 check_case "CPU PSI garbage"         75 LLMCTL_CPU_PSI_FILE="${G}"
 check_case "loadavg unreadable"      75 LLMCTL_LOADAVG_FILE="${MISSING}"
 check_case "loadavg garbage"         75 LLMCTL_LOADAVG_FILE="${G}"
-check_case "cgroup root missing"     -  LLMCTL_CGROUP_ROOT="${MISSING}"
+check_case "cgroup root missing"     75 LLMCTL_CGROUP_ROOT="${MISSING}"
+# the start gate reads no /proc thread census (capacity_admit does): "-" means the gate is not the instrument here
 check_case "proc dir missing"        -  LLMCTL_PROC_DIR="${MISSING}"
 check_case "all at once"             75 LLMCTL_MEMINFO_FILE="${MISSING}" LLMCTL_PSI_FILE="${MISSING}" LLMCTL_CPU_PSI_FILE="${MISSING}" \
   LLMCTL_LOADAVG_FILE="${MISSING}" LLMCTL_CGROUP_ROOT="${MISSING}" LLMCTL_PROC_DIR="${MISSING}"

@@ -111,8 +111,8 @@ fallback `cloud`/`none`, exit 75). They are listed in `measurement.critical_inpu
 | memory PSI `some` and `full` avg10      | always                                         |
 | CPU PSI `some` avg10                    | reserve on and CPU checks on                   |
 | `/proc/loadavg` 1-minute load           | reserve on and CPU checks on                   |
-| the cgroup root (`LLMCTL_CGROUP_ROOT`)  | reserve on (llmctl units are counted under it) |
-| the `/proc` thread census (`nproc`)     | reserve on                                     |
+| the cgroup tree the llmctl units are counted under (`LLMCTL_CGROUP_ROOT`, default under `LLMCTL_CGROUP_FS`) | reserve on |
+| the `/proc` thread census (`nproc`)     | reserve on; the census must see its own process |
 
 Informational only (recorded `readable: false`, value `null`, the verdict does not change): I/O PSI, the scope's
 cgroup `memory.max`, `memory.current`, `cpu.max` and `cpu.stat`. This applies on Linux. On other platforms
@@ -253,7 +253,9 @@ Both fields are additive; the schema stays `llmctl.capacity/1`.
 Prints the computed reserve, the gate thresholds and the running llmctl units. `--json` emits
 `{"enabled", "cpus": {"online", "reserved", "reserved_set", "model_budget", "model_set", "chat_cap", "decide_cap",
 "reserve_pct", "reserve_min", "short"}, "memory": {"total_mb", "reserved_mb", "model_budget_mb", "reserve_pct",
-"reserve_min_mb", "short"}, "gate": {"cpu_psi_some_max", "load_per_cpu_max"}, "units": [...]}`; `reserve_pct` and
+"reserve_min_mb", "short"}, "gate": {"cpu_psi_some_max", "load_per_cpu_max"}, "units": [...], "units_readable",
+"units_error"}`; when the unit tree cannot be read (`units_readable` false) the text output says "UNKNOWN" and every
+start is refused; `reserve_pct` and
 `reserve_min` show the EFFECTIVE values, so a looser knob shows up as the floor it was raised to. `llmctl doctor` and
 `llmctl status` print a one-line summary of the same numbers.
 
@@ -266,12 +268,28 @@ Prints the computed reserve, the gate thresholds and the running llmctl units. `
   reports that, it does not stop the model by itself.
 - If the capacity measurement itself fails or times out (a hung GPU probe), or a verdict-critical input (see above) is
   unreadable or does not parse, the start is refused (75, `undetermined`): the admission fails closed. Before review
-  round 4 an unreadable meminfo, PSI, loadavg or cgroup root was skipped and the start was admitted; that was a defect.
+  round 4 an unreadable meminfo, PSI, loadavg or cgroup root was skipped and the start was admitted; round 4 fixed
+  meminfo, PSI and loadavg and a MISSING cgroup root in `llmctl capacity` only. Round 5 fixed the rest of the cgroup
+  case: a missing root, a mode-000 root and an unreadable directory under the root now refuse with 75 in `llmctl
+  capacity`, `capacity_admit`, the start gate (`hw_pressure_gate`), the combined budget check and the unit
+  `ExecStartPre` gate (`hk_gate`: every start, systemd restart and boot). An unreadable tree is never counted as
+  "no units". The `/proc` thread census must see the process doing the counting, else the measurement is not ok.
+  The start gate and `hk_gate` read no thread census; only `capacity_admit` checks the RLIMIT_NPROC headroom.
+- cgroup v2 only: the default root (`$LLMCTL_CGROUP_FS/user.slice/user-<uid>.slice/user@<uid>.service`,
+  `LLMCTL_CGROUP_FS` default `/sys/fs/cgroup`) is used only when the mount has `cgroup.controllers` (the unified
+  hierarchy). On a cgroup v1 or hybrid host the units cannot be counted and the reserve refuses every local start with
+  a message that says so (use the hosted fallback, or `LLMCTL_HOST_RESERVE=0` for diagnostics only). Not tested on such
+  a host; the refusal is covered by a hermetic test (`tests/test_host_reserve_review5.sh`).
 - Consumption scope (`llmctl.consumption_scope`): the CPU and memory already in use by models is counted from the
   llmctl units (`llmctl-llama@*`, `llmctl-onnx@*`, `llmctl-colibri@*`, plus `LLMCTL_RESERVE_EXTRA_UNIT_GLOB`) under
   this user's cgroup root, at most 3 levels deep. llmctl units of OTHER users or in `system.slice` are not counted, so
   two users running llmctl on one host can together exceed the model budget. Every non-llmctl workload is outside the
-  budget too (it is covered only by the PSI/load gate).
+  budget too (it is covered only by the PSI/load gate). This is a known limit PENDING operator acceptance
+  (Constitution 11.4.66); it is not approved.
+- Outside the host reserve, two older instruments still read an unreadable source as "nothing": the planner's
+  per-unit memory list (`systemctl list-units` failing yields no units) and the scheduler's reservation sum (a missing
+  runtime directory yields 0 MiB). The reserve's own budget check does not depend on them. Follow-up; inventory in
+  `docs/qa/2026-10-28-host-reserve/review-r5/class_inventory.log`.
 - A host with less than about **4.6 GiB** of RAM refuses EVERY local start while the reserve is on: the memory reserve
   (at least 4 GiB) leaves less than 512 MiB for models. Use the hosted fallback there, or `LLMCTL_HOST_RESERVE=0` for
   diagnostics only.

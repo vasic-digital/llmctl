@@ -1,0 +1,8 @@
+MemorySwapMax=0
+Nice=10
+IOWeight=50
+CPUWeight=50
+OOMScoreAdjust=500
+KillMode=control-group
+MemoryHigh=2560M
+MemoryMax=3072M

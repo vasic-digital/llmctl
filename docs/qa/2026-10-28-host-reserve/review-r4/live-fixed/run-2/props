@@ -1,0 +1,15 @@
+MemorySwapMax=0
+Nice=15
+IOWeight=20
+CPUWeight=20
+OOMScoreAdjust=800
+CPUQuota=600%
+CPUAffinity=2-7 10-15
+KillMode=control-group
+CPUQuota=300%
+CPUAffinity=2-7 10-15
+AllowedCPUs=2-7,10-15
+Environment=OMP_NUM_THREADS=3
+Environment=LLMCTL_RESERVE_CPU_PCT_UNIT=300
+MemoryHigh=2560M
+MemoryMax=3072M

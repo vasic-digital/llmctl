@@ -280,11 +280,36 @@ reserve_dropin_body() {
 }
 
 # --- reading the live cgroup tree -----------------------------------------------------------------------------------
-# _rsv_cgroup_root -> the cgroup v2 directory of this user's service manager.
+# _rsv_cgroup_root -> the cgroup v2 directory of this user's service manager. LLMCTL_CGROUP_FS (default /sys/fs/cgroup) is
+# the cgroup mount point; LLMCTL_CGROUP_ROOT replaces the whole path (tests, and hosts with a non-standard layout).
 _rsv_cgroup_root() {
   if [[ -n "${LLMCTL_CGROUP_ROOT:-}" ]]; then echo "${LLMCTL_CGROUP_ROOT}"; return; fi
   local uid; uid="$(id -u)"
-  echo "/sys/fs/cgroup/user.slice/user-${uid}.slice/user@${uid}.service"
+  echo "${LLMCTL_CGROUP_FS:-/sys/fs/cgroup}/user.slice/user-${uid}.slice/user@${uid}.service"
+}
+
+# _rsv_units_unmeasurable -> empty when the running llmctl engine units CAN be counted; otherwise one line saying why
+# (review round 5, R5-1/R5-2). Counting zero units in a tree that could not be read is not "no units": it admitted a
+# start on a full budget. A cgroup v1 or hybrid host has no per-user cgroup v2 tree at the default root, so the units
+# cannot be counted there at all (the reserve refuses on such a host; docs/capacity.md "Limits"). The default root is
+# only used when the cgroup mount carries cgroup.controllers (the cgroup v2 unified hierarchy).
+_rsv_units_unmeasurable() {
+  local root fs
+  root="$(_rsv_cgroup_root)"
+  if [[ -z "${LLMCTL_CGROUP_ROOT:-}" ]]; then
+    fs="${LLMCTL_CGROUP_FS:-/sys/fs/cgroup}"
+    if [[ ! -f "${fs}/cgroup.controllers" ]]; then
+      echo "no cgroup v2 unified hierarchy at ${fs} (cgroup v1 and hybrid hosts are not supported by the host reserve)"
+      return 0
+    fi
+  fi
+  if [[ ! -d "${root}" ]]; then echo "the cgroup root ${root} does not exist"; return 0; fi
+  if [[ ! -r "${root}" || ! -x "${root}" ]]; then echo "the cgroup root ${root} is not readable"; return 0; fi
+  if ! find "${root}" -maxdepth 3 -type d >/dev/null 2>&1; then
+    echo "a directory under the cgroup root ${root} could not be read"
+    return 0
+  fi
+  return 0
 }
 
 # _rsv_self_cgroup -> the absolute cgroup directory of THIS process (empty when unknown).
@@ -317,15 +342,20 @@ _rsv_mem_mb() {
 reserve_running_units() {
   local root self d name cpu mem
   root="$(_rsv_cgroup_root)"; self="$(_rsv_self_cgroup)"
-  [[ -d "${root}" ]] || return 0
+  # rc 1 (and no line) when the tree cannot be read: a caller must not read "no output" as "no units" (round 5, R5-1).
+  # find exits non-zero on any directory it cannot enter, so a partly unreadable tree is a failure too.
+  [[ -d "${root}" && -r "${root}" && -x "${root}" ]] || return 1
+  local list
+  list="$(find "${root}" -maxdepth 3 -type d \( -name 'llmctl-llama@*.service' -o -name 'llmctl-onnx@*.service' -o -name 'llmctl-colibri@*.service' \
+             -o -name "${LLMCTL_RESERVE_EXTRA_UNIT_GLOB:-llmctl-llama@*.service}" \) 2>/dev/null)" || return 1
   while IFS= read -r d; do
+    [[ -n "${d}" ]] || continue
     [[ -n "${self}" && "${d}" == "${self}" ]] && continue
     grep -qx 'populated 1' "${d}/cgroup.events" 2>/dev/null || continue
     name="${d##*/}"
     cpu="$(_rsv_cpu_pct "${d}")"; mem="$(_rsv_mem_mb "${d}")"
     echo "${name} ${cpu:-max} ${mem:-max}"
-  done < <(find "${root}" -maxdepth 3 -type d \( -name 'llmctl-llama@*.service' -o -name 'llmctl-onnx@*.service' -o -name 'llmctl-colibri@*.service' \
-             -o -name "${LLMCTL_RESERVE_EXTRA_UNIT_GLOB:-llmctl-llama@*.service}" \) 2>/dev/null | LC_ALL=C sort)
+  done < <(printf '%s\n' "${list}" | LC_ALL=C sort)
 }
 
 # reserve_combined_check <new-cpu-pct> <new-mem-mb> [label] - rc 75 (message on stderr) when the limits of the running
@@ -344,12 +374,22 @@ reserve_combined_check() {
       "${act}" "${label}" "${RSV_RM}" "${RSV_MT}" "${RSV_BM}" >&2
     return 75
   fi
+  # the running units must be countable: an unreadable or missing tree counted as "no units" admitted a start on a full
+  # budget (review round 5, R5-2; this check runs in hk_gate, the ExecStartPre of every start, restart and boot)
+  local why census
+  why="$(_rsv_units_unmeasurable)"
+  if [[ -z "${why}" ]] && ! census="$(reserve_running_units)"; then why="the unit census under $(_rsv_cgroup_root) failed"; fi
+  if [[ -n "${why}" ]]; then
+    printf 'refusing to %s %s: cannot count the running llmctl units (%s), so the model budget cannot be checked.\n' \
+      "${act}" "${label}" "${why}" >&2
+    return 75
+  fi
   while read -r name cpu mem; do
     [[ -n "${name}" ]] || continue
     [[ "${cpu}" =~ ^[0-9]+$ ]] || cpu="${bcpu}"
     [[ "${mem}" =~ ^[0-9]+$ ]] || mem="${RSV_BM}"
     ucpu=$(( ucpu + cpu )); umem=$(( umem + mem )); list+=" ${name}"
-  done < <(reserve_running_units)
+  done <<< "${census}"
   if (( ucpu + ncpu > bcpu )); then
     printf 'refusing to %s %s: host CPU reserve would be breached (running llmctl units%s hold %s%% CPU, this one needs %s%%, the model budget is %s%% = %s of %s CPUs; %s CPUs stay reserved for the host). Stop a model first.\n' \
       "${act}" "${label}" "${list:- (none)}" "${ucpu}" "${ncpu}" "${bcpu}" "${RSV_BC}" "${RSV_N}" "${RSV_RC}" >&2
@@ -432,8 +472,11 @@ reserve_cpu_gate() {
 reserve_report() {
   reserve_compute
   local json=0; [[ "${1:-}" == --json ]] && json=1
-  local name cpu mem d pid aff thr units=() root
+  local name cpu mem d pid aff thr units=() root uerr census=""
   root="$(_rsv_cgroup_root)"
+  # an unreadable unit tree is reported, never shown as "no unit is running" (review round 5, R5-1)
+  uerr="$(_rsv_units_unmeasurable)"
+  if [[ -z "${uerr}" ]] && ! census="$(reserve_running_units)"; then uerr="the unit census under ${root} failed"; fi
   while read -r name cpu mem; do
     [[ -n "${name}" ]] || continue
     d="$(find "${root}" -maxdepth 3 -type d -name "${name}" 2>/dev/null | head -1)"
@@ -444,7 +487,7 @@ reserve_report() {
       thr="$(awk '/^Threads:/{print $2; exit}' "/proc/${pid}/status" 2>/dev/null || true)"
     fi
     units+=("${name}|${cpu}|${mem}|${aff}|${thr}|$(head -1 "${d}/cpu.weight" 2>/dev/null || true)|$(head -1 "${d}/memory.swap.max" 2>/dev/null || true)")
-  done < <(reserve_running_units)
+  done <<< "${census}"
   if (( json )); then
     local u first=1
     printf '{"enabled":%s,"cpus":{"online":%s,"reserved":%s,"reserved_set":"%s","model_budget":%s,"model_set":"%s","chat_cap":%s,"decide_cap":%s,"reserve_pct":%s,"reserve_min":%s,"short":%s},' \
@@ -452,7 +495,8 @@ reserve_report() {
       "${RSV_CHAT_CPUS}" "${RSV_DECIDE_CPUS}" "${RSV_CPU_PCT}" "${RSV_CPU_MIN}" "$( ((RSV_CPU_SHORT)) && echo true || echo false)"
     printf '"memory":{"total_mb":%s,"reserved_mb":%s,"model_budget_mb":%s,"reserve_pct":%s,"reserve_min_mb":%s,"short":%s},' \
       "${RSV_MT}" "${RSV_RM}" "${RSV_BM}" "${RSV_MEM_PCT}" "${RSV_MEM_MIN}" "$( ((RSV_MEM_SHORT)) && echo true || echo false)"
-    printf '"gate":{"cpu_psi_some_max":%s,"load_per_cpu_max":%s},"units":[' "${RSV_GATE_CPU_SOME_MAX}" "${RSV_GATE_LOAD_PER_CPU}"
+    printf '"gate":{"cpu_psi_some_max":%s,"load_per_cpu_max":%s},"units_readable":%s,"units_error":"%s","units":[' \
+      "${RSV_GATE_CPU_SOME_MAX}" "${RSV_GATE_LOAD_PER_CPU}" "$([[ -z "${uerr}" ]] && echo true || echo false)" "${uerr//\"/\'}"
     for u in "${units[@]}"; do
       IFS='|' read -r name cpu mem aff thr d pid <<<"${u}"
       (( first )) || printf ','; first=0
@@ -471,6 +515,7 @@ reserve_report() {
     "${RSV_MT}" "${RSV_RM}" "${RSV_BM}" "${RSV_MEM_MIN}" "${RSV_MEM_PCT}" "$( ((RSV_MEM_SHORT)) && echo ' [host too small for the full reserve]')"
   printf '  Gate:   refuse a start at PSI cpu some avg10 > %s or 1-minute load > %s x %s CPUs (plus the memory gate)\n' \
     "${RSV_GATE_CPU_SOME_MAX}" "${RSV_GATE_LOAD_PER_CPU}" "${RSV_N}"
+  if [[ -n "${uerr}" ]]; then echo "  Units:  UNKNOWN - cannot count the running llmctl units (${uerr}); starts are refused"; return 0; fi
   if (( ${#units[@]} == 0 )); then echo "  Units:  no llmctl engine unit is running"; return 0; fi
   echo "  Units (applied limits, read from the cgroup and /proc):"
   local u

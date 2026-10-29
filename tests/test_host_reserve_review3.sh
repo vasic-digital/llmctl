@@ -13,7 +13,7 @@ export LLMCTL_FAKE_HW="${LLMCTL_ROOT}/tests/fixtures/hw-baseline.json"
 # shellcheck disable=SC1090
 for l in common os_detect hardware catalog reserve capacity; do source "${LLMCTL_ROOT}/lib/${l}.sh"; done
 export LLMCTL_HOST_MEM_MB=32768
-export LLMCTL_PROC_DIR="${TEST_TMP}/proc-fixture"; mkdir -p "${LLMCTL_PROC_DIR}"   # the thread census reads no real /proc
+export LLMCTL_PROC_DIR="${TEST_TMP}/proc-fixture"; mkdir -p "${LLMCTL_PROC_DIR}"; t_proc_self "${LLMCTL_PROC_DIR}"   # the thread census reads no real /proc
 
 # q <json> <expr>: the expressions are literals written in THIS file (test-authored), never external input
 q() { python3 -c 'import json,sys; d=json.loads(sys.argv[1]); print(eval(sys.argv[2]))' "$@"; }

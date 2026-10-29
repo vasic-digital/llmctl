@@ -1,0 +1,4 @@
+window_s=33.90
+cpu_pct=289.1
+nr_throttled_delta=47
+cpus_seen=2,3,4,5,6,7,10,11,12,13,14,15

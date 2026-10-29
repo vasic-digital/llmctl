@@ -1,0 +1,178 @@
+{
+ "label": "prefix",
+ "runs": 3,
+ "artifact": {
+  "head": "none",
+  "head_tree": "none",
+  "dirty": "unknown (not a git checkout)",
+  "llama_server": "/home/milosvasic/Projects/llmctl/submodules/llama.cpp/build/bin/llama-server",
+  "llama_server_sha256": "09a14c52c9d29f814e57cbcf7e4454412ee44cc94956b365250a57d830b0fa74"
+ },
+ "deterministic_limits": true,
+ "deterministic_verdicts": true,
+ "all_checks_true": false,
+ "results": [
+  {
+   "run": 1,
+   "limits": {
+    "unit": "llmctl-qa-reserve-prefix-r1.service",
+    "cgroup": "/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/llmctl-qa-reserve-prefix-r1.service",
+    "cpu.max": "max 100000",
+    "cpu.weight": "50",
+    "memory.max": "3221225472",
+    "memory.high": "2684354560",
+    "memory.swap.max": "0",
+    "pid": "592307",
+    "exe": "/home/milosvasic/Projects/llmctl/submodules/llama.cpp/build/bin/llama-server",
+    "exe_sha256": "09a14c52c9d29f814e57cbcf7e4454412ee44cc94956b365250a57d830b0fa74",
+    "model_arg": "/home/milosvasic/.local/share/llmctl/models/decide-tiny/Jev-Style-0.8B-Decision-v3-Q4_K_M.gguf",
+    "threads": "31",
+    "nice": "10",
+    "oom_score_adj": "500",
+    "cpus_allowed_main": "0-15",
+    "cpus_allowed_all_threads": "0-15",
+    "argv_threads": "none",
+    "env_omp": "none"
+   },
+   "stress": {
+    "skipped": "negative control is not loaded (an unlimited engine would take the shared host)"
+   },
+   "second_start": {
+    "rc": "0",
+    "reached_admission": "yes",
+    "fallback_line": "none",
+    "units_before": "llmctl-decide-gateway.service llmctl-onnx@decide-nli.service llmctl-qa-reserve-prefix-filler-r1.service llmctl-qa-reserve-prefix-r1.service llmctl-revalidate-weekly.service llmctl-revalidate-weekly.timer",
+    "units_after": "llmctl-decide-gateway.service llmctl-onnx@decide-nli.service llmctl-qa-reserve-prefix-filler-r1.service llmctl-qa-reserve-prefix-r1.service llmctl-revalidate-weekly.service llmctl-revalidate-weekly.timer",
+    "engine_pids_before": "592307",
+    "engine_pids_after": "592307",
+    "env_record_written": "yes"
+   },
+   "pressure": {},
+   "checks": {
+    "cpu_quota_set": false,
+    "engine_exe_is_the_named_binary": true,
+    "affinity_excludes_reserved_cpus": false,
+    "thread_cap_in_argv": false,
+    "swap_off": true,
+    "memory_max_bounded": true,
+    "oom_score_adj_800": false,
+    "nice_15": false,
+    "second_start_reached_admission": true,
+    "second_start_refused_75": false,
+    "second_start_fallback_line": false,
+    "second_start_no_new_unit": true,
+    "second_start_no_new_engine_process": true,
+    "second_start_no_env_record": false,
+    "no_process_left": true
+   }
+  },
+  {
+   "run": 2,
+   "limits": {
+    "unit": "llmctl-qa-reserve-prefix-r2.service",
+    "cgroup": "/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/llmctl-qa-reserve-prefix-r2.service",
+    "cpu.max": "max 100000",
+    "cpu.weight": "50",
+    "memory.max": "3221225472",
+    "memory.high": "2684354560",
+    "memory.swap.max": "0",
+    "pid": "619828",
+    "exe": "/home/milosvasic/Projects/llmctl/submodules/llama.cpp/build/bin/llama-server",
+    "exe_sha256": "09a14c52c9d29f814e57cbcf7e4454412ee44cc94956b365250a57d830b0fa74",
+    "model_arg": "/home/milosvasic/.local/share/llmctl/models/decide-tiny/Jev-Style-0.8B-Decision-v3-Q4_K_M.gguf",
+    "threads": "31",
+    "nice": "10",
+    "oom_score_adj": "500",
+    "cpus_allowed_main": "0-15",
+    "cpus_allowed_all_threads": "0-15",
+    "argv_threads": "none",
+    "env_omp": "none"
+   },
+   "stress": {
+    "skipped": "negative control is not loaded (an unlimited engine would take the shared host)"
+   },
+   "second_start": {
+    "rc": "0",
+    "reached_admission": "yes",
+    "fallback_line": "none",
+    "units_before": "llmctl-decide-gateway.service llmctl-onnx@decide-nli.service llmctl-qa-reserve-prefix-filler-r2.service llmctl-qa-reserve-prefix-r2.service llmctl-revalidate-weekly.service llmctl-revalidate-weekly.timer",
+    "units_after": "llmctl-decide-gateway.service llmctl-onnx@decide-nli.service llmctl-qa-reserve-prefix-filler-r2.service llmctl-qa-reserve-prefix-r2.service llmctl-revalidate-weekly.service llmctl-revalidate-weekly.timer",
+    "engine_pids_before": "619828",
+    "engine_pids_after": "619828",
+    "env_record_written": "yes"
+   },
+   "pressure": {},
+   "checks": {
+    "cpu_quota_set": false,
+    "engine_exe_is_the_named_binary": true,
+    "affinity_excludes_reserved_cpus": false,
+    "thread_cap_in_argv": false,
+    "swap_off": true,
+    "memory_max_bounded": true,
+    "oom_score_adj_800": false,
+    "nice_15": false,
+    "second_start_reached_admission": true,
+    "second_start_refused_75": false,
+    "second_start_fallback_line": false,
+    "second_start_no_new_unit": true,
+    "second_start_no_new_engine_process": true,
+    "second_start_no_env_record": false,
+    "no_process_left": true
+   }
+  },
+  {
+   "run": 3,
+   "limits": {
+    "unit": "llmctl-qa-reserve-prefix-r3.service",
+    "cgroup": "/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/llmctl-qa-reserve-prefix-r3.service",
+    "cpu.max": "max 100000",
+    "cpu.weight": "50",
+    "memory.max": "3221225472",
+    "memory.high": "2684354560",
+    "memory.swap.max": "0",
+    "pid": "653552",
+    "exe": "/home/milosvasic/Projects/llmctl/submodules/llama.cpp/build/bin/llama-server",
+    "exe_sha256": "09a14c52c9d29f814e57cbcf7e4454412ee44cc94956b365250a57d830b0fa74",
+    "model_arg": "/home/milosvasic/.local/share/llmctl/models/decide-tiny/Jev-Style-0.8B-Decision-v3-Q4_K_M.gguf",
+    "threads": "31",
+    "nice": "10",
+    "oom_score_adj": "500",
+    "cpus_allowed_main": "0-15",
+    "cpus_allowed_all_threads": "0-15",
+    "argv_threads": "none",
+    "env_omp": "none"
+   },
+   "stress": {
+    "skipped": "negative control is not loaded (an unlimited engine would take the shared host)"
+   },
+   "second_start": {
+    "rc": "0",
+    "reached_admission": "yes",
+    "fallback_line": "none",
+    "units_before": "llmctl-decide-gateway.service llmctl-onnx@decide-nli.service llmctl-qa-reserve-prefix-filler-r3.service llmctl-qa-reserve-prefix-r3.service llmctl-revalidate-weekly.service llmctl-revalidate-weekly.timer",
+    "units_after": "llmctl-decide-gateway.service llmctl-onnx@decide-nli.service llmctl-qa-reserve-prefix-filler-r3.service llmctl-qa-reserve-prefix-r3.service llmctl-revalidate-weekly.service llmctl-revalidate-weekly.timer",
+    "engine_pids_before": "653552",
+    "engine_pids_after": "653552",
+    "env_record_written": "yes"
+   },
+   "pressure": {},
+   "checks": {
+    "cpu_quota_set": false,
+    "engine_exe_is_the_named_binary": true,
+    "affinity_excludes_reserved_cpus": false,
+    "thread_cap_in_argv": false,
+    "swap_off": true,
+    "memory_max_bounded": true,
+    "oom_score_adj_800": false,
+    "nice_15": false,
+    "second_start_reached_admission": true,
+    "second_start_refused_75": false,
+    "second_start_fallback_line": false,
+    "second_start_no_new_unit": true,
+    "second_start_no_new_engine_process": true,
+    "second_start_no_env_record": false,
+    "no_process_left": true
+   }
+  }
+ ]
+}
