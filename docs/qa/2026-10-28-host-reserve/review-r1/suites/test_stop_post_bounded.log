@@ -1,0 +1,9 @@
+== unregister is bounded when the portreg binary hangs ==
+  ok: unregister with a hanging binary returned in 3.1s (<5s)
+  ok: unregister exits 0 even when the binary hangs (ExecStopPost must never fail the unit)
+== negative control: a fast fake binary returns immediately (harness measures time correctly) ==
+  ok: fast binary: 0.4s
+== the registration waiter is killed on stop ==
+  ok: precondition: the waiter for llmctl-test-2757822 is running
+  ok: waiter gone within 4s of unregister
+RESULT: PASS

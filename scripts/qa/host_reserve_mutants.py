@@ -17,12 +17,12 @@ import sys
 import tempfile
 
 SH = ["bash"]
-GO = ["go", "test", "-count=1", "./internal/isolation/"]
+R = "tests/test_host_reserve_review.sh"
 
 MUTANTS = [
     ("M1-drop-cpu-quota", "lib/reserve.sh", "printf '[Service]\\nCPUQuota=%s%%\\n", "printf '[Service]\\nX=%s%%\\n",
      "tests/test_host_reserve.sh"),
-    ("M2-drop-cpu-reserve-floor", "lib/reserve.sh", '"${LLMCTL_RESERVE_CPU_PCT:-25}" 25 25 90', '"${LLMCTL_RESERVE_CPU_PCT:-25}" 25 0 90',
+    ("M2-drop-cpu-reserve-floor", "lib/reserve.sh", '"${LLMCTL_RESERVE_CPU_PCT:-25}" 25 25 100', '"${LLMCTL_RESERVE_CPU_PCT:-25}" 25 0 100',
      "tests/test_host_reserve.sh"),
     ("M3-invert-combined-cpu-check", "lib/reserve.sh", "if (( ucpu + ncpu > bcpu )); then", "if (( ucpu + ncpu < 0 )); then",
      "tests/test_host_reserve.sh"),
@@ -39,24 +39,48 @@ MUTANTS = [
      "tests/test_host_reserve.sh"),
     ("M10-drop-threads-arg", "lib/scheduler.sh", 'SCHED_ARGS+=(--threads "${_thr}" --threads-batch "${_thr}")', ':',
      "tests/test_host_reserve.sh"),
-    ("M11-go-decide-equals-chat", "llmctld/internal/isolation/reserve.go",
-     "b.DecideCPUs = min(b.ChatCPUs, max(1, bc*pol.DecidePct/100))", "b.DecideCPUs = b.ChatCPUs", "GO"),
     # the two memos (3.4.0 latency fix): a key that misses an input returns a stale answer
     ("M12-reserve-memo-key-drops-topology", "lib/reserve.sh", "printf '%s|' \"${topo}\" ", "printf '%s|' ",
      "tests/test_host_reserve.sh"),
     ("M13-decide-memo-key-drops-catalog-content", "lib/reserve.sh",
      '"${_RSV_DECIDE_MEMO_KEY}" == "${LLMCTL_CATALOG}:${cat}"', '"${_RSV_DECIDE_MEMO_KEY%%:*}" == "${LLMCTL_CATALOG}"',
      "tests/test_host_reserve.sh"),
+    # review round 1 (cb6adb8 NO-GO): each mutant restores one reviewed defect; tests/test_host_reserve_review.sh kills it
+    ("R-M01-cpu-reserve-floor-not-ceil", "lib/reserve.sh", "(RSV_N * RSV_CPU_PCT + 99) / 100", "(RSV_N * RSV_CPU_PCT) / 100", R),
+    ("R-M02-combined-ram-boundary", "lib/reserve.sh", "if (( umem + nmem > RSV_BM )); then", "if (( umem + nmem >= RSV_BM )); then", R),
+    ("R-M03-bash-unlimited-unit-counts-zero", "lib/reserve.sh", '|| mem="${RSV_BM}"', "|| mem=0", R),
+    ("R-M09-python-unlimited-unit-counts-zero", "lib/capacity.sh", "mem_v = int(mem) if mem.isdigit() else Bm",
+     "mem_v = int(mem) if mem.isdigit() else 0", R),
+    ("R-M06-small-host-not-refused", "lib/reserve.sh", "(( RSV_BM < 512 )) && RSV_MEM_SHORT=1", ":", R),
+    ("R-M10-admit-fails-open-on-measure-error", "lib/capacity.sh",
+     '_cap_refuse "${p}" "the host capacity could not be measured', 'return 0; _cap_refuse "${p}" "the host capacity could not be measured', R),
+    ("R-M11-admit-fails-open-on-unknown", "lib/capacity.sh", "    unknown) _cap_refuse", "    unknown) return 0; _cap_refuse", R),
+    ("R-M18-unit-gate-skips-combined-budget", "lib/svc_hook.sh",
+     'msg="$(reserve_combined_check "${ncpu}" "${nmem}" "${inst:-service}" 2>&1 >/dev/null)" || rc=$?', 'msg=""', R),
+    ("R-M21-reduced-threads-ignored", "lib/reserve.sh",
+     '&& (( _RSV_CAP_OVERRIDE < cap )); then cap="${_RSV_CAP_OVERRIDE}"; fi', '&& false; then :; fi', R),
+    ("R-M22-decision-smoke-uses-chat-cap", "lib/download.sh",
+     'args+=(--threads "${RSV_DECIDE_CPUS}" --threads-batch "${RSV_DECIDE_CPUS}")',
+     'args+=(--threads "${RSV_CHAT_CPUS}" --threads-batch "${RSV_CHAT_CPUS}")', R),
+    ("R-S1-decide-scale-skips-capacity", "lib/scheduler.sh",
+     'capacity_admit "${profile}" "${need}" || { local _crc=$?; rm -f "${plan_file}"; return "${_crc}"; }', ":", R),
+    ("R-S3-restart-skips-admission", "bin/llmctl", 'sched_restart_admit "$1" || exit $?; svc_restart', "svc_restart", R),
+    ("R-S4-instance-suffix-not-mapped", "lib/capacity.sh",
+     'return m.group(1) if m and m.group(1) in known else n', "return n", R),
+    ("R-S5-fallback-local-without-decision-model", "lib/capacity.sh",
+     "decision_local = largest is not None or", "decision_local = True or", R),
+    ("R-S6-chat-pct-loosens-cap", "lib/reserve.sh", '"${LLMCTL_CHAT_CPU_PCT:-50}" 50 1 50', '"${LLMCTL_CHAT_CPU_PCT:-50}" 50 1 100', R),
+    ("R-S7-dotted-name-stripped", "lib/reserve.sh", '[[ "${set}" == *" ${n} "* ]] && { echo "${n}"; return 0; }',
+     'n="${n%.[0-9]*}"; echo "${n}"; return 0', R),
+    ("R-restart-same-profile-treated-running", "lib/capacity.sh",
+     "is_running = p in running and not ((new_inst or replace) and p in wanted)", "is_running = p in running", R),
 ]
 
 
 def run(tree, suite):
     env = dict(os.environ)
     env["GOMAXPROCS"] = "2"
-    if suite == "GO":
-        r = subprocess.run(GO, cwd=os.path.join(tree, "llmctld"), env=env, capture_output=True, text=True, timeout=900)
-    else:
-        r = subprocess.run(SH + [os.path.join(tree, suite)], cwd=tree, env=env, capture_output=True, text=True, timeout=900)
+    r = subprocess.run(SH + [os.path.join(tree, suite)], cwd=tree, env=env, capture_output=True, text=True, timeout=900)
     tail = (r.stdout + r.stderr).strip().splitlines()[-3:]
     return r.returncode, tail
 

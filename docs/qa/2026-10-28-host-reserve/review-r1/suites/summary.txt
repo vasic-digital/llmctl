@@ -1,0 +1,13 @@
+test_host_reserve rc=0 4s RESULT: PASS
+test_capacity rc=0 5s RESULT: PASS
+test_host_reserve_review rc=0 18s RESULT: PASS
+test_services rc=0 1s RESULT: PASS
+test_scheduler rc=0 82s RESULT: PASS
+test_syntax rc=0 3s RESULT: PASS
+test_decide_scale rc=0 64s RESULT: PASS
+test_decide_service rc=0 3s RESULT: PASS
+test_start_gate rc=0 6s RESULT: PASS
+test_gate_wait rc=0 7s RESULT: PASS
+test_download rc=0 7s RESULT: PASS
+test_svc_hook absent
+test_cli rc=0 13s RESULT: PASS

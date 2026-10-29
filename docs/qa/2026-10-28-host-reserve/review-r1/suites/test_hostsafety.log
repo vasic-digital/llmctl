@@ -1,0 +1,384 @@
+  ok: shellcheck -x clean on every hostsafety shell script (rc)
+  ok: guard.py parses (rc)
+  ok: assert_skip with the (reason, name) pair works under set -u (rc)
+  ok: app limits for 16 GiB / 8 CPUs (High 70%, Max 80%, swap cap SwapTotal/2)
+  ok: TasksMax floor
+  ok: TasksMax ceiling
+  ok: background swap cap
+  ok: background/user swap cap never exceeds 1/4 of the swap device
+  ok: app swap cap is half of a small swap device too (no fixed 1 GiB cap)
+  ok: HOSTSAFETY_APP_SWAP_PCT=25 sizes the app swap cap at a quarter of swap
+  ok: HOSTSAFETY_APP_SWAP_PCT=0 is refused (1..100) (rc)
+  ok: HOSTSAFETY_APP_SWAP_PCT=101 is refused (1..100) (rc)
+  ok: HOSTSAFETY_APP_SWAP_PCT=abc is refused (1..100) (rc)
+  ok: HOSTSAFETY_APP_SWAP_PCT=-5 is refused (1..100) (rc)
+  ok: no swap device: app swap cap 0
+  ok: mutation [m22 app swap cap reverted to the 1/4 rule]: the mutation is real
+  ok: mutation [m22 app swap cap reverted to the 1/4 rule] is CAUGHT by the app sizing assertion
+  ok: unknown slice (session) refused (rc)
+  ok: install refuses a bad HOSTSAFETY_APP_SWAP_PCT before writing anything (rc)
+  ok: refused install wrote no file (no header-only drop-in)
+  ok: dry-run lists the app drop-in
+  ok: dry-run writes nothing
+  ok: app drop-in installed
+  ok: background drop-in installed
+  ok: podman user.slice drop-in installed
+  ok: session.slice is never touched
+  ok: drop-in sized from fixture MemTotal
+  ok: bounded-run installed executable
+  ok: guard.env is 0600
+  ok: guard ships DISARMED (dry-run)
+  ok: guard service unit carries Nice=19
+  ok: guard service unit carries IOSchedulingClass=idle
+  ok: guard service unit carries CPUWeight=10
+  ok: guard service unit carries MemoryMax=256M
+  ok: guard service unit carries TimeoutStartSec=15
+  ok: guard service unit carries Type=oneshot
+  ok: guard service unit has exactly one ExecStart
+  ok: no RuntimeMaxSec (ignored for Type=oneshot; TimeoutStartSec is the only real wall-clock cap)
+  ok: TimeoutStartSec is 15, not the old 20
+  ok: second install changes nothing (idempotent)
+  ok: operator's guard.env edit survives re-install
+  ok: overwritten file is backed up first
+  ok: backup copy exists under the backup root
+  ok: backup holds the operator's original content
+  ok: guard.env is never listed in the manifest (it is operator config)
+  ok: uninstall does not restore hostsafety's own previous (edited) generated file
+  ok: uninstall removes every managed file; only the operator's guard.env stays
+  ok: guard.env is kept in place on uninstall (as the final message says)
+  ok: kept guard.env holds the operator's edit
+  ok: first install replaced the pre-existing file
+  ok: re-install re-sized the drop-in (a second generated version exists)
+  ok: uninstall restores the file that existed BEFORE the first install, not hostsafety's earlier generation
+  ok: install writes the boot self-check unit
+  ok: self-check unit is wanted by default.target (runs at every boot with linger)
+  ok: self-check unit carries Nice=19
+  ok: self-check unit carries TimeoutStartSec=60
+  ok: self-check unit carries Type=oneshot
+  ok: self-check unit carries persistence-check.sh --boot-check
+  ok: persistence-check.sh never stops, restarts or signals anything (no kill/stop/restart call)
+  ok: install records the source tree its copies came from
+  ok: every setting persistent and in effect: 29 rows PASS (23 user + 6 root)
+  ok: verify-persistence rc 0 when everything persists
+  ok: persistence row present and PASS: app.slice MemorySwapMax
+  ok: persistence row present and PASS: hostsafety-guard.timer
+  ok: persistence row present and PASS: hostsafety-selfcheck.service
+  ok: persistence row present and PASS: linger
+  ok: persistence row present and PASS: guard.env
+  ok: persistence row present and PASS: installed guard.py
+  ok: persistence row present and PASS: installed bounded-run
+  ok: persistence row present and PASS: pressure advisory
+  ok: persistence row present and PASS: root: tmp.mount size
+  ok: persistence row present and PASS: root: earlyoom enabled
+  ok: persistence row present and PASS: root: vm.swappiness
+  ok: --json writes every row with schema and boot id
+  ok: guard timer not enabled (would not start at boot): row 'hostsafety-guard.timer' FAILs
+  ok: guard timer not enabled (would not start at boot): verify-persistence rc 1
+  ok: self-check unit not enabled: row 'hostsafety-selfcheck.service' FAILs
+  ok: self-check unit not enabled: verify-persistence rc 1
+  ok: runtime-only value drifted from the persistent one (systemctl set-property --runtime): row 'app.slice MemorySwapMax' FAILs
+  ok: runtime-only value drifted from the persistent one (systemctl set-property --runtime): verify-persistence rc 1
+  ok: linger off: user units wait for a login: row 'linger' FAILs
+  ok: linger off: user units wait for a login: verify-persistence rc 1
+  ok: pressure advisory stale (guard dead or timing out): row 'pressure advisory' FAILs
+  ok: pressure advisory stale (guard dead or timing out): verify-persistence rc 1
+  ok: pressure advisory older than 30 s (readers treat it as UNKNOWN; one number with the docs): row 'pressure advisory' FAILs
+  ok: pressure advisory older than 30 s (readers treat it as UNKNOWN; one number with the docs): verify-persistence rc 1
+  ok: drop-in removed: the app.slice rows FAIL (no persistent definition)
+  ok: installed guard.py differs from the source tree: FAIL
+  ok: root drop-in removed: the root tmp.mount row FAILs
+  ok: pressure.json from a previous boot: UNDETERMINED, never PASS
+  ok: --boot-check logs the one-line journal summary
+  ok: --boot-check writes boot-check.json
+  ok: a root-steps --verify that aborts (rc 5, 1 of 6 rows) is UNDETERMINED
+  ok: an aborted root verify can never give rc 0
+  ok: mutation [m25 is-enabled check neutered] is CAUGHT: the named case no longer FAILs 'hostsafety-guard.timer' on the mutant
+  ok: mutation [m26 runtime-vs-boot drift check removed] is CAUGHT: the named case no longer FAILs 'app.slice MemorySwapMax' on the mutant
+  ok: mutation [m27 installed-copy sha256 compare removed] is CAUGHT: the named case no longer FAILs 'installed guard.py' on the mutant
+  ok: mutation [m28 linger check neutered] is CAUGHT: the named case no longer FAILs 'linger' on the mutant
+  ok: selects the runaway process group, not the bigger protected/foreign/infrastructure processes
+  ok: victim group has all 31 members
+  ok: victim cgroup reported as evidence
+  ok: evidence records why the tmux/claude group was skipped
+  ok: evidence records foreign-uid skips
+  ok: evidence records protected-cgroup skips
+  ok: pgid<=1 process can only be a single-pid victim
+  ok: pgid<=1 never becomes a group signal target
+  ok: carrier (argv mentions tmux/gnome-shell/claude) is NOT mistaken for the real thing
+  ok: real claude process: nothing killable (fail-safe, no victim)
+  ok: the guard never selects itself
+  ok: HOSTSAFETY_ONLY_CGROUP_RE narrows (no match => no victim)
+  ok: healthy host: no decision logged, nothing selected
+  ok: heartbeat status written on a healthy run (a silent guard must be distinguishable from a dead one)
+  ok: heartbeat carries tmpfs_used_pct
+  ok: pressure advisory written beside the log on every pass (agent admission control reads it)
+  ok: no tmpfs-high event at 10% /tmp
+  ok: tmpfs-high logged once per crossing (75% then 80% = one event)
+  ok: tmpfs-high is report-only (no kill)
+  ok: a new crossing after recovery logs again
+  ok: tmpfs pressure never kills anything
+  ok: real /tmp statvfs path runs (no fixture) (rc)
+  ok: real statvfs value present in heartbeat
+  ok: first high-PSI run only builds the streak
+  ok: second consecutive run decides (DRY-RUN by default)
+  ok: dry-run flag recorded
+  ok: decision names the victim with evidence
+  ok: decision records the trigger reason
+  ok: swap nearly full but no memory stall: no action (golden-FALSE)
+  ok: swap exhausted + memory stalls triggers
+  ok: armed guard with a fixture --proc-root refuses to signal (a fixture pid is never a real pid)
+  ok: with the explicit test hook the armed kill path re-validates against the fixture proc root (fixture has no starttimes: signal withheld; pids above pid_max anyway)
+  ok: guard fixture suite passes on the real guard.py (111 fixtures)
+  ok: T1: 40x200MB git in claude's pgid + idle 5 MB pane shell => the 5 MB group is NOT selected
+  ok: mutation [A pgid<=1 check removed]: the text to mutate occurs exactly once in guard.py (the mutation is real)
+  ok: mutation [B cgroup-protected check removed (group spans a protected cgroup)]: the text to mutate occurs exactly once in guard.py (the mutation is real)
+  ok: mutation [C own-process-group check removed]: the text to mutate occurs exactly once in guard.py (the mutation is real)
+  ok: mutation [D foreign-owner check removed]: the text to mutate occurs exactly once in guard.py (the mutation is real)
+  ok: mutation [E re-validation removed from the kill path]: the text to mutate occurs exactly once in guard.py (the mutation is real)
+  ok: mutation [F pid-set identity check removed (pgid reuse by a new group)]: the text to mutate occurs exactly once in guard.py (the mutation is real)
+  ok: mutation [F2 start-time identity check removed (restarted member)]: the text to mutate occurs exactly once in guard.py (the mutation is real)
+  ok: mutation [I cgroup allowlist removed]: the text to mutate occurs exactly once in guard.py (the mutation is real)
+  ok: mutation [J self/ancestor check removed (single and group)]: the text to mutate occurs exactly once in guard.py (the mutation is real)
+  ok: mutation [protected-name check removed]: the text to mutate occurs exactly once in guard.py (the mutation is real)
+  ok: mutation [argv[0] basename protection reintroduced (spoof)]: the text to mutate occurs exactly once in guard.py (the mutation is real)
+  ok: mutation [dominance rule removed (T1b)]: the text to mutate occurs exactly once in guard.py (the mutation is real)
+  ok: mutation [protected cgroup regex made imprecise again ([^/]*gnome[^/]*)]: the text to mutate occurs exactly once in guard.py (the mutation is real)
+  ok: mutation [m10 storm victim accepted without the cost-fraction check]: the text to mutate occurs exactly once in guard.py (the mutation is real)
+  ok: mutation [m11 rotation shifts/deletes archives before the new one is written]: the text to mutate occurs exactly once in guard.py (the mutation is real)
+  ok: mutation [m12 storm loop stops at the first rejected scope]: the text to mutate occurs exactly once in guard.py (the mutation is real)
+  ok: mutation [m13 archive verified by length only]: the text to mutate occurs exactly once in guard.py (the mutation is real)
+  ok: mutation [m15 pressure advisory never written]: the text to mutate occurs exactly once in guard.py (the mutation is real)
+  ok: mutation [m16 app.slice ratio counts reclaimable page cache (current/high instead of pinned)]: the text to mutate occurs exactly once in guard.py (the mutation is real)
+  ok: mutation [m17 critical tmpfs threshold never reached (warn only)]: the text to mutate occurs exactly once in guard.py (the mutation is real)
+  ok: mutation [m18 du scan not skipped when PSI is already critical]: the text to mutate occurs exactly once in guard.py (the mutation is real)
+  ok: mutation [m19 du scan has no time cap]: the text to mutate occurs exactly once in guard.py (the mutation is real)
+  ok: mutation [m20 /proc walk deadline ignored]: the text to mutate occurs exactly once in guard.py (the mutation is real)
+  ok: mutation [m21 advisory not written before the decision walk (ordering)]: the text to mutate occurs exactly once in guard.py (the mutation is real)
+  ok: mutation [m23 counter delta allowed to go negative (recreated cgroup)]: the text to mutate occurs exactly once in guard.py (the mutation is real)
+  ok: mutation [m24 time series never appended]: the text to mutate occurs exactly once in guard.py (the mutation is real)
+  ok: mutation [m14 no rotation flock]: the text to mutate occurs exactly once in guard.py (the mutation is real)
+  ok: mutation [A pgid<=1 check removed] is CAUGHT by fixture A 
+  ok: mutation [B cgroup-protected check removed (group spans a protected cgroup)] is CAUGHT by fixture B2
+  ok: mutation [C own-process-group check removed] is CAUGHT by fixture C 
+  ok: mutation [D foreign-owner check removed] is CAUGHT by fixture D 
+  ok: mutation [E re-validation removed from the kill path] is CAUGHT by fixture E 
+  ok: mutation [F pid-set identity check removed (pgid reuse by a new group)] is CAUGHT by fixture F 
+  ok: mutation [F2 start-time identity check removed (restarted member)] is CAUGHT by fixture F2
+  ok: mutation [I cgroup allowlist removed] is CAUGHT by fixture I 
+  ok: mutation [J self/ancestor check removed (single and group)] is CAUGHT by fixture J 
+  ok: mutation [protected-name check removed] is CAUGHT by fixture S3
+  ok: mutation [argv[0] basename protection reintroduced (spoof)] is CAUGHT by fixture S2
+  ok: mutation [dominance rule removed (T1b)] is CAUGHT by fixture T1b
+  ok: mutation [protected cgroup regex made imprecise again ([^/]*gnome[^/]*)] is CAUGHT by fixture S4
+  ok: mutation [m10 storm victim accepted without the cost-fraction check] is CAUGHT by fixture TS8
+  ok: mutation [m11 rotation shifts/deletes archives before the new one is written] is CAUGHT by fixture R7
+  ok: mutation [m12 storm loop stops at the first rejected scope] is CAUGHT by fixture TS11
+  ok: mutation [m13 archive verified by length only] is CAUGHT by fixture R9
+  ok: mutation [m15 pressure advisory never written] is CAUGHT by fixture PA1
+  ok: mutation [m16 app.slice ratio counts reclaimable page cache (current/high instead of pinned)] is CAUGHT by fixture PA4b
+  ok: mutation [m17 critical tmpfs threshold never reached (warn only)] is CAUGHT by fixture PA2
+  ok: mutation [m18 du scan not skipped when PSI is already critical] is CAUGHT by fixture TW2
+  ok: mutation [m19 du scan has no time cap] is CAUGHT by fixture TW3
+  ok: mutation [m20 /proc walk deadline ignored] is CAUGHT by fixture SD1
+  ok: mutation [m21 advisory not written before the decision walk (ordering)] is CAUGHT by fixture PA7
+  ok: mutation [m23 counter delta allowed to go negative (recreated cgroup)] is CAUGHT by fixture PA8c
+  ok: mutation [m24 time series never appended] is CAUGHT by fixture PA9
+  ok: mutation [m14 no rotation flock] is CAUGHT by fixture R10
+  ok: audit lists containers
+  ok: audit flags the container without a memory limit
+  ok: audit counts unlimited containers
+  ok: audit sums limits vs MemTotal
+  ok: audit is report-only (no mutating podman verb)
+  ok: tracker dry-run changes nothing
+  ok: tracker shows the before value
+  ok: tracker shows the after value
+  ok: go module cache excluded via .trackerignore marker
+  ok: tracker apply is idempotent
+  ok: revert removes only the entries we added
+  ok: revert removes the .trackerignore WE created
+  ok: revert keeps a pre-existing non-empty .trackerignore
+  ok: revert keeps a pre-existing EMPTY .trackerignore too (not created by us)
+  ok: absent gsettings key => skip, no change
+  ok: root steps carry the journald rate-limit drop-in
+  ok: root steps carry the swappiness sysctl
+  ok: plan mode reports what earlyoom is running right now
+  ok: plan mode prints the live earlyoom command line
+  ok: root-steps --apply refuses to run as non-root (rc)
+  ok: user-1000.slice keeps the MemoryHigh throttle
+  ok: user-1000.slice keeps the task cap
+  ok: user-1000.slice has NO MemoryMax (a parent-level hard limit could OOM-kill gnome-shell)
+  ok: earlyoom config uses --ignore (hard exclusion)
+  ok: earlyoom config does not rely on the soft --avoid
+  ok: the false 'never pick the desktop' comment is gone
+  ok: the pre-hostsafety earlyoom file was kept as THE original
+  ok: --revert restores the backed-up /etc/default/earlyoom (does not delete it)
+  ok: --revert removes files that had no original
+  ok: plan writes the PERSISTENT tmp.mount drop-in
+  ok: drop-in keeps every vendor option and changes only size= (4G)
+  ok: plan shows the BOOT-effective value next to the LIVE value
+  ok: earlyoom thresholds: SIGTERM at 10% / SIGKILL at 5% available, swap condition always true (100,100)
+  ok: plan: small /tmp => live remount planned
+  ok: plan: big /tmp => live remount refused with a clear message
+  ok: refusal says nothing is deleted
+  ok: HOSTSAFETY_TMP_SIZE garbage is refused (rc)
+  ok: HOSTSAFETY_EARLYOOM_THRESHOLDS with anything but -m/-s/-M/-S numbers is refused (rc)
+  ok: HOSTSAFETY_EARLYOOM_THRESHOLDS selects the previous design (-m 5 -s 10)
+  ok: a percent /tmp size is escaped as %% in the drop-in (systemd specifier)
+  ok: the live remount uses the raw percent (mount takes size=25%)
+  ok: --verify before apply fails (rc 1)
+  ok: --verify: tmp.mount size row FAILs without the persistent drop-in
+  ok: --verify: earlyoom args row FAILs with the package default
+  ok: --verify: user-1000.slice row FAILs while the legacy MemoryMax=95% is in place
+  ok: --verify: swappiness row FAILs when live (60) differs from the boot value (20)
+  ok: apply wrote the tmp.mount drop-in with the marker
+  ok: apply: live remount is decided (and only simulated under a test root)
+  ok: a legacy (2026-10-09, unmarked) hostsafety file is recognised as ours, never saved as 'the original'
+  ok: the package-default earlyoom file IS saved as the original
+  ok: the legacy file still gets a timestamped backup copy
+  ok: --verify after apply with matching live values passes (rc 0)
+  ok: --verify after apply: no FAIL row
+  ok: --verify with MemoryHigh=infinity still prints all 6 rows (no set -u abort)
+  ok: --verify: MemoryHigh=infinity is a user-1000.slice FAIL
+  ok: --verify: no unbound-variable abort
+  ok: --verify flags runtime-vs-boot DRIFT on /tmp (a boot would apply 4G, the live mount is 16 GB)
+  ok: --verify with drift fails
+  ok: --verify: running earlyoom args differ from the persistent file => FAIL (restart needed)
+  ok: --verify: earlyoom not enabled => FAIL (would not start at the next boot)
+  ok: --verify: a later drop-in (90-operator.conf) wins at boot and is reported
+  ok: --verify: boot value differs from the hostsafety size => FAIL
+  ok: --verify with an unreadable live /tmp option string is UNDETERMINED (rc 2), never a pass (rc)
+  ok: --verify runs without root (production paths) and prints the tmp.mount row
+  ok: production --verify ignores LIVE_TMP_OPTIONS (a gate cannot be faked by env; impossible value 123457k)
+  ok: production plan ignores HOSTSAFETY_TMP_USED_BYTES (the 3 GiB refusal cannot be bypassed by env)
+  ok: production root-steps ignores HOSTSAFETY_MEMINFO (verdicts cannot be steered by env)
+  ok: --revert that would shrink /tmp (remaining boot size 1G < live 4G) is refused while /tmp is full
+  ok: revert to an equal size (2 KiB page rounding) is a grow, not a refused shrink
+  ok: --revert removes the tmp.mount drop-in
+  ok: --revert restores the live size from the boot definition that remains (vendor 50%)
+  ok: --revert removes the legacy hostsafety file too (there was no pre-hostsafety original)
+  ok: --revert restores the package-default earlyoom file
+  ok: earlyoom real config: earlyoom completed a scan and printed a verdict (the verdict instrument can see)
+  ok: earlyoom test: decoys started
+  ok: earlyoom parsed the --ignore regex through systemd's EnvironmentFile
+  ok: earlyoom parsed the --prefer regex
+  ok: earlyoom (real binary, systemd expansion): SIGTERM at 10% available, swap condition always true
+  ok: earlyoom: SIGKILL at 5% available, swap condition always true (needs -s 100,100)
+  ok: mutation [-s 100 without ,100] is CAUGHT: the SIGKILL swap condition becomes 50%, not always true
+  ok: no protected comm (tmux: server, sshd-session, gnome-shell, gnome-session-c, claude, conmon, Xwayland, systemd, (sd-pam), dbus, pipewire) is ever an earlyoom victim, even at oom_score_adj 1000 and the largest RSS
+  ok: control needle: an UNPROTECTED comm (gnome-terminal-) with the same score IS a candidate (the instrument can see)
+  ok: --prefer: git beats a BIGGER bash at equal oom_score_adj (verdict of every completed scan)
+  ok: mutation [no --prefer]: the env file really lost its --prefer regex
+  ok: mutation [no --prefer]: earlyoom completed a scan and printed a verdict (the verdict instrument can see)
+  ok: mutation [no --prefer] is CAUGHT: without the regex the bigger bash decoy is the verdict, not git
+  ok: mutation [no --ignore]: the env file really lost its --ignore (and --prefer) regex
+  ok: mutation [no --ignore]: earlyoom completed a scan and printed a verdict (the verdict instrument can see)
+  ok: mutation [no --ignore] is CAUGHT: without the regex a protected decoy is the verdict (verdict=2689454)
+  ok: mutation [no --ignore]: the leak instrument (new-victim lines) sees a protected decoy
+  evidence: spawned=99 failed=301 peak=100 (wall 2s)
+  ok: fork-bomb fixture was stopped short of 400 children (spawned=99)
+  ok: kernel refused forks (EAGAIN) once TasksMax=100 was hit (failed=301)
+  ok: scope pids.current never exceeded TasksMax=100 (peak=100)
+  ok: no fixture child survives the run (scope reaped)
+  ok: scope is not active after the run (inactive)
+  ok: timeout returns 124 (-T 2 -- sleep 6)
+  ok: timeout enforced in ~2 s, long before the 6 s sleep ends (took 2s)
+  ok: timeout returns 124 for a command tree
+  ok: tree timeout enforced within seconds (took 2s)
+  ok: timed-out command tree is gone
+  ok: 40 quick successful commands under -T 30: ZERO spurious rc 124
+  ok: 20 quick commands with a delayed pkill (widened race window): ZERO spurious rc 124
+  ok: a real timeout still returns 124 with the delayed pkill (took 3s)
+  ok: the timed-out run's own tree is gone
+  ok: a sibling run's scope is untouched by the timeout
+  ok: a sibling run's process survived the timeout
+  ok: mutation [old stop-then-decide order]: the proof catches it (spurious 124 in 10/10)
+  ok: B1: the shim killed the watchdog's first sleep (the fault was injected)
+  ok: B1: watchdog sleep killed by someone else: the deadline still fires (rc 124, took 4s)
+  ok: B1: the deadline fired near -T 4, not after the 12 s command (took 4s)
+  ok: B1: the deadline did not fire EARLY when the sleep was killed at 0.5 s (took 4s >= 3)
+  ok: Ctrl-C: the command starts with SIGINT and SIGQUIT at their default action (SigIgn=0000000000000000)
+  ok: Ctrl-C: SIGINT to the run's process group ends it with rc 130 (took 1s)
+  ok: Ctrl-C: the run ends within seconds of the SIGINT, not at its -T 30 timeout (took 1s)
+  ok: Ctrl-C: no scope is left behind (inactive)
+  ok: Ctrl-C: the command is gone
+  ok: stale: a run.* dir older than a day with a dead owner is removed, with the TMPDIR it recorded
+  ok: stale: a run.* dir WITHOUT this tool's owner marker is kept (not ours to delete; review r5 #6)
+  ok: stale: a RECENT dir with a dead owner is kept (a run starting right now)
+  ok: stale: an OLD dir whose owner is a live bounded-run is kept (/home/milosvasic/.cache/claude-tmp/tmp.bgl9MaACW3/brstale/run.NW1KM1)
+  ok: sweep: a TMPDIR recorded through a symlinked component pointing outside the tmp root is NOT removed (realpath)
+  ok: sweep: a dead wrapper whose scope is still ACTIVE keeps its state dir and TMPDIR (/home/milosvasic/.cache/claude-tmp/tmp.bgl9MaACW3/brstale/run.LBjXae)
+  ok: sweep: a run that sweeps a dead owner's dir prints nothing on stderr with -q
+  ok: expansion: the command line reaches bash verbatim (got '[hi] [hi] [2712946] ', want '[hi] [hi] [<pid>] ')
+  ok: expansion: a systemd-run without --expand-environment refuses a command with '$' (fail closed)
+  ok: expansion: the refusal says why
+  ok: expansion: without '$' the command still runs on such a systemd-run (rc)
+  ok: B3: during a run its state is ONE private 0700 dir under the state root
+  ok: B3: no state dir or file left behind after 10 runs (5 ok, 3 failing, 2 timed out)
+  ok: B3: with XDG_RUNTIME_DIR unset the state dir is under XDG_STATE_HOME (private, per user), not a shared temp dir
+  ok: mutation [B1: sleep || exit 0]: the proof catches it (rc 0, not 124)
+  ok: mutation [B1: sleep ...; break fires early]: the lower bound catches it (rc 124, took 1s < 3)
+  ok: mutation [command keeps SIGINT ignored]: the Ctrl-C proof catches it (rc 124, not 130)
+  ok: mutation [stale cleanup ignores a live owner]: the proof catches it (a live run's dir was removed)
+  ok: mutation [stale cleanup ignores the age]: the proof catches it (a recent dir was removed)
+  ok: mutation [--expand-environment=no dropped]: the verbatim proof catches it (got '[hi] [] [$] ')
+  ok: mutation [fail-open without the option]: the fail-closed proof catches it (rc 0)
+  ok: mutation [lexical-only TMPDIR containment]: the symlink proof catches it (outside victim removed)
+  ok: mutation [active scope ignored]: the live-scope proof catches it (state of an active scope removed)
+  ok: mutation [owner marker not required]: the marker proof catches it (an unmarked dir removed)
+  ok: mutation [cleanup keeps the state dir]: the leak proof catches it
+  ok: mutation [predictable 0755 state dir]: the private-dir proof catches it (755)
+  ok: mutation [XDG_RUNTIME_DIR unset falls back to a shared temp dir]: the proof catches it (0)
+  ok: second run with an existing scope name is refused (rc 125)
+  ok: the refusal says why
+  ok: the first run's scope is still ACTIVE after the colliding run
+  ok: the first run's process is still alive after the colliding run
+  ok: a lost start race fails the loser (rc 125)
+  ok: the loser's cleanup and timeout watchdog did NOT kill the winner's scope
+  ok: the winner's process survived the losing run
+  ok: command exit status passes through
+  ok: banner reports effective limits
+  ok: no command => usage error 125 (rc)
+  ok: bad memory size refused (rc)
+  ok: MemoryMax < 1 GiB without --tiny is refused (exit 125)
+  ok: the refusal tells the operator about --tiny
+  ok: MemoryMax < 1 GiB with --tiny is accepted (rc)
+  ok: MemoryMax = 1G is accepted without --tiny (rc)
+  ok: banner: MemoryHigh is 75% of MemoryMax (4G -> 3221225472)
+  ok: default MemorySwapMax is non-zero (got 2147482624)
+  ok: default MemorySwapMax is capped at 2 GiB (1/4 of the swap device)
+  ok: TMPDIR defaults to a per-run dir under the disk-backed root (/home/milosvasic/.cache/claude-tmp/tmp.bgl9MaACW3/brtmp/hstmp2665082.Jk5x8x)
+  ok: TMPDIR, TEMP, TMP and GOTMPDIR all point at the per-run dir
+  ok: per-run TMPDIR is mode 0700
+  ok: per-run TMPDIR (and its files) removed after a successful run
+  ok: exit status still passes through with TMPDIR handling
+  ok: per-run TMPDIR removed after a failing run
+  ok: --no-disk-tmp leaves TMPDIR alone
+  ok: --no-disk-tmp with TMPDIR on tmpfs warns with size and fullness (even with -q)
+  ok: the default disk-backed TMPDIR prints no tmpfs warning (golden-FALSE)
+  ok: default per-run TMPDIR is on a disk-backed filesystem (fstype=ext4)
+  ok: 200 MB written under a 96M cap with disk TMPDIR: no OOM kill
+  ok: runaway fixture is alive before the guard acts
+  ok: armed guard kills the runaway test scope's group
+  ok: kill decision names the victim cgroup (evidence)
+  ok: victim processes are gone after the armed kill
+  ok: verify passes when effective == installed and MemTotal drifted by 8 kB since install
+  ok: verify reports the installed value as verified
+  ok: NEGATIVE: an install still carrying the pre-2026-10-14 1 GiB app swap cap is reported (verify fails)
+  ok: NEGATIVE: the old app swap cap is named stale, not silently accepted
+  ok: NEGATIVE: verify still fails when the effective limit differs from the installed one
+  ok: NEGATIVE: the mismatch names the slice and key
+  ok: NEGATIVE: verify fails when the host was re-sized materially (stale drop-ins, 32 GiB -> 16 GiB)
+  ok: NEGATIVE: the stale-sizing failure names the key and says stale
+  ok: NEGATIVE: unreadable meminfo => verify fails (nothing verified is not a pass)
+  ok: NEGATIVE: unreadable meminfo names the cause
+  ok: nothing is reported verified when expected limits cannot be derived
+  ok: NEGATIVE: garbage meminfo => verify fails
+  ok: NEGATIVE: garbage meminfo names the cause
+  ok: NEGATIVE: CPU count changed => verify fails on TasksMax alone
+  ok: NEGATIVE: the TasksMax stale message names slice and key
+  ok: NEGATIVE: non-numeric limit (infinity) => verify fails
+  ok: NEGATIVE: non-numeric limit is a clean MISMATCH
+  ok: no shell abort on a non-numeric limit
+  ok: NEGATIVE: verify fails when a drop-in is not installed
+  ok: installed slice limits are effective (install.sh verify) (rc)
+RESULT: PASS

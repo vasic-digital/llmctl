@@ -34,9 +34,11 @@ workload, and reports host capacity on demand (`llmctl capacity --json`).
 - **Not yet released:** this entry is written before the independent review; nothing is tagged or pushed until it returns GO.
 - **Why (operator mandate, 2026-10-28):** local models, especially decision models, must never take all CPUs or nearly all RAM; the system must
   always keep room to breathe and must never hang.
-- **Unchanged surface (documented here for the release checks):** the `llmctl-decide` gateway's HTTP surface, `decide scale`, `decide calibrate`,
+- **Unchanged surface (documented here for the release checks):** the `llmctl-decide` gateway's HTTP surface, `decide calibrate`,
   probe-order and completions handling, maturity labels, `status --json` (its array contract and `overhead_mb`), the `LLMCTL_CTX_*` knobs and eviction
-  behaviour are not changed. `llmctl doctor` gains a host-reserve section (below).
+  behaviour are not changed. **Changed surface:** `decide scale` and `restart` are now admitted like a start (exit 75 with an
+  `llmctl-fallback:` line when the host has no room; before 3.4.0 `decide scale` refused with exit 1); `llmctl doctor` and `llmctl status` gain a
+  host-reserve section; `llmctl capacity` and `llmctl reserve` are new.
 
 ### Root cause (measured 2026-10-28, 16 CPUs / 31 GiB)
 
@@ -53,18 +55,23 @@ workload, and reports host capacity on demand (`llmctl capacity --json`).
 - **Host reserve** (`lib/reserve.sh`), computed from the live host: `Rc = max(2, ceil(25% x N))` CPUs rounded up to whole physical cores (never the
   last CPU), `Rm = max(4096 MiB, 20% x MemTotal)`. Models together may use `Bc = N - Rc` CPUs and `Bm = MemTotal - Rm` MiB. Per model: chat
   `max(1, 50% x Bc)` CPUs, decision `max(1, 25% x Bc)` (never above chat). Knobs `LLMCTL_RESERVE_CPU_PCT`, `LLMCTL_RESERVE_CPU_MIN`,
-  `LLMCTL_RESERVE_MEM_PCT`, `LLMCTL_RESERVE_MEM_MIN_MB`, `LLMCTL_CHAT_CPU_PCT`, `LLMCTL_DECIDE_CPU_PCT`: stricter values are honoured, looser values
-  are raised back to the floor. On this host: 4 CPUs (0-1,8-9) and 6194 MiB kept; models get CPUs 2-7,10-15 (chat 6, decision 3) and 24780 MiB.
+  `LLMCTL_RESERVE_MEM_PCT`, `LLMCTL_RESERVE_MEM_MIN_MB`, `LLMCTL_CHAT_CPU_PCT`, `LLMCTL_DECIDE_CPU_PCT`: only stricter values are honoured.
+  The reserve knobs accept 25..100 (CPU) and 20..100 (memory) percent and a minimum of at least 4096 MiB; the per-model caps accept 1..50 (chat) and
+  1..25 (decision) percent; anything looser or not a number falls back to the default. A host whose reserve leaves less than 512 MiB for models
+  refuses every local start (75) instead of granting a token budget. On this host: 4 CPUs (0-1,8-9) and 6194 MiB kept; models get CPUs 2-7,10-15 (chat 6, decision 3) and 24780 MiB.
 - `llmctl capacity [--json] [profile...]` (`lib/capacity.sh`, schema `llmctl.capacity/1`, `docs/capacity.md`): live MemAvailable, swap, PSI for
   cpu/memory/io, load, cgroup limits and the limits of running llmctl units; per profile `fits | fits_with_reduced_threads | does_not_fit | running`
   with reasons and headroom; `largest_decision_fit`; running units `ok | degraded` with a `llmctl stop` suggestion; `fallback.recommended`
-  `local | cloud | none` (`cloud` only when a hosted key VARIABLE from `LLMCTL_HOSTED_KEY_VARS` is set - only its name is reported, never the value).
+  `local | cloud | none` (`local` only when a decision profile fits or a decision unit is running and `ok`, and never for a refused named profile;
+  `cloud` only when a hosted key VARIABLE from `LLMCTL_HOSTED_KEY_VARS` is set - only its name is reported, never the value). Instance units
+  (`decide-tiny.2`) and tenant units (`<tenant>--decide-tiny`) are mapped to their catalog profile (`base_profile`); dotted profile names are
+  kept intact.
   Exit 0 / 75 (a named profile does not fit) / 3 (a running model is degraded).
 - `llmctl reserve [--json]`: the effective reserve, gate thresholds and the running units' limits read back from their cgroups.
 - `llmctl doctor` and `llmctl status` print the reserve; doctor also prints the largest decision fit and warns on degradation or a disabled reserve.
-- `llmctld/internal/isolation`: `HostBudget` / `ReservePolicy` (same formulas as the shell code) and `WrapConfig` gains `CPUQuotaPercent`,
-  `CPUAffinity` (validated) and `NoSwap`.
-- Tests: `tests/test_host_reserve.sh`, `tests/test_capacity.sh` (unit-class, hermetic fixtures), `reserve_test.go`; live harness
+- `llmctld` is unchanged: it starts models by running `bin/llmctl`, so the shell reserve and gates apply to it. (The first draft added a Go
+  `HostBudget` and `WrapConfig` fields that nothing called; they were removed in review round 1 rather than claimed.)
+- Tests: `tests/test_host_reserve.sh`, `tests/test_capacity.sh`, `tests/test_host_reserve_review.sh` (unit-class, hermetic fixtures); live harness
   `scripts/qa/host_reserve_live.sh` and mutation runner `scripts/qa/host_reserve_mutants.py`.
 
 ### Changed
@@ -72,14 +79,18 @@ workload, and reports host capacity on demand (`llmctl capacity --json`).
 - Engine units (reserve on): `CPUQuota=` = the profile's cap, `CPUAffinity=`/`AllowedCPUs=` = the model CPU set, `Nice=15`, `CPUWeight=20`,
   `IOWeight=20`, `OOMScoreAdjust=800`, `MemorySwapMax=0`, memory limits bounded by the model budget; `llama-server` gets `--threads` and
   `--threads-batch` equal to the cap, `OMP_NUM_THREADS` likewise; the smoke-test launches are capped too.
-- Start admission (`start`, `switch`, `auto`, `enable`, `restart`): besides the memory gate, a start is refused with exit 75 when CPU PSI `some
+- Start admission (`start`, `switch`, `auto`, `enable`, `restart`, `decide scale`): besides the memory gate, a start is refused with exit 75 when CPU PSI `some
   avg10` exceeds `LLMCTL_GATE_CPU_SOME_MAX` (80, clamped to 0..80) or `load1` exceeds `LLMCTL_GATE_LOAD_PER_CPU` (3, clamped to 1..3) x N, when the
   combined CPU or RAM limits of the running units plus this one exceed the model budget, or when the capacity verdict is `does_not_fit` (printing
-  `llmctl-fallback: cloud|none`). `fits_with_reduced_threads` starts with the CPUs actually left (the override can only lower the cap). The unit's
-  own `ExecStartPre` gate applies the same checks within its existing bounded wait (`LLMCTL_GATE_WAIT`, 120 s). A planner-only RAM/VRAM refusal keeps
-  its exit 1 and message.
+  `llmctl-fallback: cloud|none`; a pressure-gate refusal prints the same line). The admission fails closed: if the capacity measurement fails, is
+  empty, or the profile is unknown, the start is refused with 75 and the fallback line. `fits_with_reduced_threads` starts with the CPUs actually
+  left (the override can only lower the cap). `restart` excludes the replaced unit's own limits and counts its resident memory as coming back;
+  because a restart keeps the unit's limits, it is refused (75) when only a reduced thread count would fit (`llmctl stop` then `llmctl start`).
+  `decide scale` judges all new instances together at the full decision cap. The unit's own `ExecStartPre` gate (also on systemd restarts and at
+  boot) re-checks the CPU/memory pressure, the load and the combined CPU + RAM budget within its bounded wait (`LLMCTL_GATE_WAIT`, 120 s); it
+  does not re-run the per-profile capacity verdict and prints no fallback line. A planner-only RAM/VRAM refusal keeps its exit 1 and message.
 - The memory gate's reserve is `Rm` (max(4 GiB, 20%)) instead of a fixed 4 GiB.
-- Help and docs: `enable` means "start at login/boot"; the command still also starts the profile now, through the same gate.
+- Help and docs: `enable` starts the profile now AND at login/boot; the start now passes the same gate.
 
 ### Fixed
 
@@ -103,9 +114,12 @@ workload, and reports host capacity on demand (`llmctl capacity --json`).
 
 ### Tests and mutation evidence
 
-- 13 paired mutants (`scripts/qa/host_reserve_mutants.py`, M1-M13: CPU quota, CPU and memory reserve floors, combined-budget check, gate clamp,
-  OOM score, admission bypass, key-value leak, no-CPU-left check, `--threads`, Go decide cap, and the two memo keys): control GREEN, all 13
-  killed (`docs/qa/2026-10-28-host-reserve/mutants.json`).
+- Paired mutants (`scripts/qa/host_reserve_mutants.py`): M1-M13 (CPU quota, CPU and memory reserve floors, combined-budget check, gate
+  clamp, OOM score, admission bypass, key-value leak, no-CPU-left check, `--threads`, and the two memo keys; the Go mutant M11 was removed with
+  the Go code) plus 17 review-round-1 mutants (R-*), each restoring one reviewed defect; result in
+  `docs/qa/2026-10-28-host-reserve/mutants.json` and `mutants.log`.
+- Review round 1 (independent review of cb6adb8: NO-GO): S1-S7, M01-M22 and D1-D4 are fixed; `tests/test_host_reserve_review.sh` fails 33
+  assertions on cb6adb8 (`docs/qa/2026-10-28-host-reserve/review-r1/red-on-cb6adb8.log`) and passes on the fix.
 - `tests/test_decide_security_mutation.sh` times out at 900 s on 2 CPUs (rc 124) on 3.4.0 AND on the unmodified 3.3.2 tree, both at the same
   point (18 mutants killed, none survived); this is the suite's own runtime on a 2-CPU budget, not a 3.4.0 regression
   (`docs/qa/2026-10-28-host-reserve/suite/`).
@@ -132,7 +146,6 @@ workload, and reports host capacity on demand (`llmctl capacity --json`).
 - The reserve bounds llmctl units only; other workloads can still use the reserved CPUs.
 - `AllowedCPUs=` needs the `cpuset` controller delegated to the user manager (it is not on this host); `CPUAffinity=` is what binds.
 - The capacity verdict is a snapshot; a model that becomes `degraded` later is reported, not stopped.
-- If the capacity measurement itself fails, `start` does not block on it (the memory, CPU-pressure and load gates still run).
 - The live harness runs the engine as transient `llmctl-qa-reserve-*` units counted through `LLMCTL_RESERVE_EXTRA_UNIT_GLOB`; the installed
   `llmctl-llama@` template path was exercised through the same rendering code, not by starting an operator unit.
 - UNCONFIRMED: behaviour on macOS/launchd (no cgroups) and on hosts with a delegated `cpuset` controller was not tested live.

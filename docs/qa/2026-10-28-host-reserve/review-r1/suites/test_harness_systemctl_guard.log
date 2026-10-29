@@ -1,0 +1,23 @@
+  ok: the harness guard is first on PATH
+  ok: the real systemctl is remembered (/usr/bin/systemctl)
+  ok: refused: systemctl --user stop llmctl-llama@guard-selftest-nonexistent.service
+  ok: refused: systemctl --user disable llmctl-llama@guard-selftest-nonexistent.service
+  ok: refused: systemctl --user restart llmctl-llama@guard-selftest-nonexistent.service
+  ok: refused: systemctl --user kill llmctl-llama@guard-selftest-nonexistent.service
+  ok: refused: systemctl --user stop llmctl-onnx@guard-selftest-nonexistent.service
+  ok: refused: systemctl --user disable llmctl-onnx@guard-selftest-nonexistent.service
+  ok: refused: systemctl --user restart llmctl-onnx@guard-selftest-nonexistent.service
+  ok: refused: systemctl --user kill llmctl-onnx@guard-selftest-nonexistent.service
+  ok: refused: systemctl --user stop llmctl-colibri@guard-selftest-nonexistent.service
+  ok: refused: systemctl --user disable llmctl-colibri@guard-selftest-nonexistent.service
+  ok: refused: systemctl --user restart llmctl-colibri@guard-selftest-nonexistent.service
+  ok: refused: systemctl --user kill llmctl-colibri@guard-selftest-nonexistent.service
+  ok: refused: systemctl --user stop llmctl-decide-gateway-guard-selftest.service
+  ok: refused: systemctl --user disable llmctl-decide-gateway-guard-selftest.service
+  ok: refused: systemctl --user restart llmctl-decide-gateway-guard-selftest.service
+  ok: refused: systemctl --user kill llmctl-decide-gateway-guard-selftest.service
+  ok: every refusal is logged (test_finish fails a suite with any)
+  ok: a read (systemctl --version) passes through to the real binary
+  ok: is-active (a read) of a real-pattern name passes through
+  ok: nested harness: the real systemctl is not replaced by the guard
+RESULT: PASS

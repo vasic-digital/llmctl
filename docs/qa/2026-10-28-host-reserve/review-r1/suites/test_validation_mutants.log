@@ -1,0 +1,86 @@
+== judge mutants (each must turn tests/test_validation_judge_soundness.sh RED)
+  ok: judge/hedged-number - caught (check rc=1)
+  ok: judge/order-subsequence - caught (check rc=1)
+  ok: judge/negation-ignored - caught (check rc=1)
+  ok: judge/code-operator-ignored - caught (check rc=1)
+  ok: judge/empty-checks-vacuous - caught (check rc=1)
+  ok: judge/json-bool-is-int - caught (check rc=1)
+  ok: judge/repeat-once - caught (check rc=1)
+== adversarial-judge mutants (review 2026-10-15 finding 4; each must turn tests/test_validation_judge_adversarial.sh RED)
+  ok: judge2/unicode-letters-uppercased - caught (check rc=1)
+  ok: judge2/post-negation-ignored - caught (check rc=1)
+  ok: judge2/retraction-ignored - caught (check rc=1)
+  ok: judge2/json-duplicate-keys - caught (check rc=1)
+  ok: judge2/exact-text-substring - caught (check rc=1)
+  ok: judge2/number-modifiers-ignored - caught (check rc=1)
+  ok: judge2/alternatives-allowed - caught (check rc=1)
+== review-3 judge mutants (third 2026-10-15 review findings 1-5; each must turn tests/test_validation_judge_adversarial_r3.sh RED)
+  ok: judge3/lead-in-trailing-words - caught (check rc=1)
+  ok: judge3/retraction-word-negates - caught (check rc=1)
+  ok: judge3/abbreviation-period-splits - caught (check rc=1)
+  ok: judge3/aside-counts-as-claim - caught (check rc=1)
+  ok: judge3/extra-label-ignored - caught (check rc=1)
+  ok: judge3/denial-clause-unbounded - caught (check rc=1)
+  ok: judge3/allow-phrase-as-loose-words - caught (check rc=1)
+  ok: judge3/module-statements-allowed - caught (check rc=1)
+  ok: judge3/calls-allowed - caught (check rc=1)
+  ok: judge3/attribute-store-allowed - caught (check rc=1)
+== suite-structure mutant (third 2026-10-15 review finding 13; must turn tests/test_validation_suites.sh RED)
+  ok: suites/check-unknown-to-judge - caught (check rc=1)
+  ok: suites/check-unknown-to-judge: the structure check names the check the judge lacks
+== record mutants (each must turn tests/test_validation_record_integrity.sh RED)
+  ok: record/unsigned-accepted - caught (check rc=1)
+  ok: record/ctime-ignored - caught (check rc=1)
+  ok: record/nan-age - caught (check rc=1)
+  ok: record/undetermined-overwrites-fail - caught (check rc=1)
+  ok: record/evidence-unbound - caught (check rc=1)
+== served-model mutant (must turn tests/test_validation_served_identity.sh RED)
+  ok: served/mismatch-ignored - caught (check rc=1)
+== cleanup mutant (must turn tests/test_validation_cleanup.sh RED)
+  ok: cleanup/started-profile-left-running - caught (check rc=1)
+== enforcement mutants (each must turn tests/test_validation_enforcement.sh RED)
+  ok: enforcement/strict-off-by-default - caught (check rc=1)
+  ok: enforcement/strict-off-by-default: the mutant was really applied
+  ok: enforcement/quarantine-binds-public - caught (check rc=1)
+  ok: enforcement/quarantine-binds-public: the mutant was really applied
+  ok: enforcement/unit-gate-open - caught (check rc=1)
+  ok: enforcement/unit-gate-open: the mutant was really applied
+  ok: enforcement/consumer-facing-ignored - caught (check rc=1)
+  ok: enforcement/consumer-facing-ignored: the mutant was really applied
+  ok: enforcement/optout-consumer-facing-unchecked - caught (check rc=1)
+  ok: enforcement/optout-consumer-facing-unchecked: the mutant was really applied
+== quarantine env-record mutants (third 2026-10-15 review finding 6; each must turn tests/test_validation_quarantine_env.sh RED)
+  ok: qenv/stop-keeps-quarantine-record - caught (check rc=1)
+  ok: qenv/stop-keeps-quarantine-record: the mutant was really applied
+  ok: qenv/previous-record-not-saved - caught (check rc=1)
+  ok: qenv/previous-record-not-saved: the mutant was really applied
+  ok: qenv/validator-not-recorded - caught (check rc=1)
+  ok: qenv/validator-not-recorded: the mutant was really applied
+  ok: qenv/dead-validator-honoured - caught (check rc=1)
+  ok: qenv/dead-validator-honoured: the mutant was really applied
+== manual-validate lock mutants (third 2026-10-15 review finding 10; each must turn tests/test_validation_lock.sh RED)
+  ok: vlock/manual-validate-unlocked - caught (check rc=1)
+  ok: vlock/manual-validate-unlocked: the mutant was really applied
+  ok: vlock/holder-child-not-reentrant - caught (check rc=1)
+  ok: vlock/holder-child-not-reentrant: the mutant was really applied
+  ok: vlock/forged-holder-trusted - caught (check rc=1)
+  ok: vlock/forged-holder-trusted: the mutant was really applied
+== install-marker mutants (review 2026-10-15 finding 1; each must turn tests/test_enforcement_marker.sh RED)
+  ok: marker/waiter-ignores-marker - caught (check rc=1)
+  ok: marker/waiter-ignores-marker: the mutant was really applied
+  ok: marker/condition-ignores-marker - caught (check rc=1)
+  ok: marker/condition-ignores-marker: the mutant was really applied
+  ok: marker/marker-always-on - caught (check rc=1)
+  ok: marker/marker-always-on: the mutant was really applied
+  ok: marker/install-writes-no-marker - caught (check rc=1)
+  ok: marker/install-writes-no-marker: the mutant was really applied
+== interruption mutants (review 2026-10-15 finding 2; each must turn tests/test_validate_interrupt.sh RED)
+  ok: interrupt/lock-not-reentrant - caught (check rc=1)
+  ok: interrupt/lock-not-reentrant: the mutant was really applied
+  ok: interrupt/rfiles-declared-late - caught (check rc=1)
+  ok: interrupt/rfiles-declared-late: the mutant was really applied
+  ok: interrupt/quarantine-left-on-interrupt - caught (check rc=1)
+  ok: interrupt/quarantine-left-on-interrupt: the mutant was really applied
+  ok: interrupt/after-start-handler-inert - caught (check rc=1)
+  ok: interrupt/after-start-handler-inert: the mutant was really applied
+== gate-input mutants (review 2026-10-15 findings 3, 5, 9; each must turn tests/test_gate_launch.sh RED)

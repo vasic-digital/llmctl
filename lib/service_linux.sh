@@ -220,6 +220,9 @@ _svc_rsv_mem_limit() {
   if reserve_enabled; then
     LLMCTL_HOST_MEM_MB="$1" reserve_compute
     (( RSV_BM < lim )) && lim="${RSV_BM}"
+    # a short host has (almost) no model budget; every start is refused by the gates, the template still needs a
+    # positive limit, and a tiny one keeps any unit that slips through from taking the reserve
+    (( lim < 256 )) && lim=256
   fi
   echo "${lim}"
 }

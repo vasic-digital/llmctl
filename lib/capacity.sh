@@ -69,9 +69,10 @@ capacity_json() {
   CAP_LOAD="$(head -1 "${la}" 2>/dev/null || true)" CAP_MEMINFO="$(cat "${mi}" 2>/dev/null || true)" \
   CAP_UNITS="${units}" CAP_DECIDE_SET="${decide}" CAP_KEYVAR="${keyvar}" CAP_KEYVARS="${LLMCTL_HOSTED_KEY_VARS}" \
   CAP_CG_ROOT="${root}" CAP_CG_MMAX="${cg_mmax}" CAP_CG_MCUR="${cg_mcur}" CAP_CG_CMAX="${cg_cmax}" \
-  CAP_CHECK_PRESSURE="${LLMCTL_GATE_CPU_CHECKS:-1}" \
+  CAP_CHECK_PRESSURE="${LLMCTL_GATE_CPU_CHECKS:-1}" CAP_MEM_SHORT="${RSV_MEM_SHORT}" \
+  CAP_NEW_INSTANCES="${_CAP_NEW_INSTANCES:-}" CAP_REPLACE="${_CAP_REPLACE:-}" \
     python3 - "${plan_file}" "$@" <<'PYEOF'
-import json, os, sys, time
+import json, os, re, sys, time
 E = os.environ
 def num(k, d=None):
     try: return float(E.get(k, ""))
@@ -105,8 +106,15 @@ cg = {"path": E.get("CAP_CG_ROOT"), "memory_max_mb": mb_or_none(E.get("CAP_CG_MM
       "cpu_max_pct": int(E["CAP_CG_CMAX"]) if E.get("CAP_CG_CMAX", "").isdigit() else None}
 # usable memory right now: MemAvailable, and the user manager's own memory.max when it is finite
 live_avail = avail
+# restart: the replaced unit's resident memory comes back when it stops (CAP_REPLACE, see below)
+_rep, rep_cur = E.get("CAP_REPLACE", ""), 0
+if _rep:
+    for _line in E.get("CAP_UNITS", "").splitlines():
+        _f = _line.split()
+        if len(_f) >= 5 and _f[1] == _rep and _f[4].isdigit(): rep_cur += int(_f[4])
+if live_avail is not None: live_avail += rep_cur
 if cg["memory_max_mb"] is not None and cg["memory_current_mb"] is not None:
-    cg_room = cg["memory_max_mb"] - cg["memory_current_mb"]
+    cg_room = cg["memory_max_mb"] - cg["memory_current_mb"] + rep_cur
     live_avail = cg_room if live_avail is None else min(live_avail, cg_room)
 # --- host pressure (the same thresholds as the start gate) ---
 pressure = []
@@ -121,12 +129,25 @@ if enabled and E.get("CAP_CHECK_PRESSURE", "1") != "0":
         pressure.append("1-minute load %s > %s x %s CPUs" % (load[0], E.get("CAP_LOAD_K"), N))
 if enabled and live_avail is not None and live_avail < Rm:
     pressure.append("only %s MiB available, below the %s MiB host reserve" % (live_avail, Rm))
+known = set((plan.get("profiles") or {}).keys())
+def base_profile(n):
+    # mirrors reserve_base_profile (lib/reserve.sh): "<tenant>--" prefix dropped; ".<N>" (N >= 2) instance suffix dropped
+    # only when the full name is not a profile and the base is (review round 1 S4/S7)
+    if "--" in n: n = n.rsplit("--", 1)[1]
+    if n in known: return n
+    m = re.fullmatch(r"(.+)\.([2-9]|[1-9][0-9]+)", n)
+    return m.group(1) if m and m.group(1) in known else n
+# CAP_NEW_INSTANCES (decide scale): the named profiles are judged as that many NEW instances next to the running ones.
+# CAP_REPLACE (restart): the named unit instance is about to be replaced, so its own limits are not counted as used.
+new_inst = int(E["CAP_NEW_INSTANCES"]) if E.get("CAP_NEW_INSTANCES", "").isdigit() else 0
+replace = E.get("CAP_REPLACE", "")
 # --- running llmctl engine units ---
 units, used_cpu, used_mem = [], 0, 0
 for line in E.get("CAP_UNITS", "").splitlines():
     f = line.split()
     if len(f) < 5: continue
     name, prof, cpu, mem, cur = f[:5]
+    if replace and prof == replace: continue
     cpu_v = int(cpu) if cpu.isdigit() else Bc * 100
     mem_v = int(mem) if mem.isdigit() else Bm
     used_cpu += cpu_v; used_mem += mem_v
@@ -138,8 +159,9 @@ for line in E.get("CAP_UNITS", "").splitlines():
                   "memory_max_mb": mem_v if mem.isdigit() else None,
                   "memory_current_mb": int(cur) if cur.isdigit() else None,
                   "status": "degraded" if reasons else "ok", "reasons": reasons,
-                  "suggest": ("llmctl stop %s" % prof.rsplit(".", 1)[0] if "." in prof and prof.rsplit(".", 1)[1].isdigit() else "llmctl stop %s" % prof) if reasons else None})
-running = {u["profile"] for u in units}
+                  "base_profile": base_profile(prof),
+                  "suggest": ("llmctl stop %s" % base_profile(prof)) if reasons else None})
+running = {u["base_profile"] for u in units}
 cpu_free = Bc * 100 - used_cpu
 mem_free = Bm - used_mem
 decide_set = set(E.get("CAP_DECIDE_SET", "").split())
@@ -160,11 +182,16 @@ for p, info in sorted((plan.get("profiles") or {}).items()):
     if wanted and p not in wanted: continue
     cls = "decide" if p in decide_set else "chat"
     cap = decide if cls == "decide" else chat
-    fp = int(info.get("ram_mb") or 0)
-    need_mem = mem_limit(fp, info.get("mode"), str(info.get("vram_provenance")))
+    k = new_inst if (new_inst and p in wanted) else 1
+    # a named profile being scaled (new instances) or restarted (replace) is judged as a NEW start, never as "running"
+    is_running = p in running and not ((new_inst or replace) and p in wanted)
+    fp = int(info.get("ram_mb") or 0) * k
+    need_mem = mem_limit(int(info.get("ram_mb") or 0), info.get("mode"), str(info.get("vram_provenance"))) * k
     reasons, verdict, threads = [], "fits", cap
-    if p in running:
+    if is_running:
         reasons.append("already running")
+    if enabled and E.get("CAP_MEM_SHORT") == "1":
+        reasons.append("the host reserve leaves only %s MiB of model memory (< 512 MiB): this host is too small for a local model" % Bm)
     if info.get("fits") is not True:
         reasons.append("planner: does not fit this host's RAM/VRAM budget (llmctl plan)")
     if enabled and need_mem > mem_free:
@@ -175,11 +202,15 @@ for p, info in sorted((plan.get("profiles") or {}).items()):
     if enabled and not reasons:
         if cpu_free < 100:
             reasons.append("no CPU left in the %s-CPU model budget (%s%% in use)" % (Bc, used_cpu))
+        elif k > 1 or (new_inst and p in wanted):
+            # new instances start with the full cap (decide scale has no reduced-thread launch)
+            if cpu_free < cap * 100 * k:
+                reasons.append("%s new instance(s) need %s%% CPU, only %s%% left of the %s-CPU model budget" % (k, cap * 100 * k, cpu_free, Bc))
         elif cpu_free < cap * 100:
             threads = cpu_free // 100
             verdict = "fits_with_reduced_threads"
-    if reasons and p not in running: verdict = "does_not_fit"
-    elif p in running: verdict = "running"
+    if reasons and not is_running: verdict = "does_not_fit"
+    elif is_running: verdict = "running"
     profiles[p] = {"class": cls, "verdict": verdict, "reasons": reasons,
                    "threads": threads if verdict in ("fits", "fits_with_reduced_threads") else 0,
                    "headroom": {"cpu_pct_free": cpu_free, "cpu_pct_need": cap * 100,
@@ -189,17 +220,19 @@ for p, info in sorted((plan.get("profiles") or {}).items()):
 fit_dec = [(profiles[p]["headroom"]["footprint_mb"], p) for p in profiles
            if profiles[p]["class"] == "decide" and profiles[p]["verdict"] in ("fits", "fits_with_reduced_threads")]
 largest = max(fit_dec)[1] if fit_dec else None
-if wanted:
-    blocked = any(profiles.get(p, {}).get("verdict") == "does_not_fit" for p in wanted) or any(p not in profiles for p in wanted)
-else:
-    blocked = largest is None and not any(u["profile"] in decide_set for u in units)
+# The fallback is about where DECISIONS go: "local" only while a local decision model fits now or one is running and
+# healthy, and never for a refused start (review round 1 S5: a fitting chat profile used to yield "local").
+decision_local = largest is not None or any(u["base_profile"] in decide_set and u["status"] == "ok" for u in units)
+named_refused = bool(wanted) and (any(profiles.get(p, {}).get("verdict") == "does_not_fit" for p in wanted)
+                                  or any(p not in profiles for p in wanted))
+blocked = named_refused or not decision_local
 keyvar = E.get("CAP_KEYVAR") or None
 if not blocked:
-    fb = {"recommended": "local", "reason": "a local model fits", "key_variable": None}
+    fb = {"recommended": "local", "reason": "a local decision model fits or is running", "key_variable": None}
 elif keyvar:
-    fb = {"recommended": "cloud", "reason": "no local model fits now; a hosted decision key is set", "key_variable": keyvar}
+    fb = {"recommended": "cloud", "reason": "%s; a hosted decision key is set" % ("the requested start does not fit" if named_refused else "no local decision model can run now"), "key_variable": keyvar}
 else:
-    fb = {"recommended": "none", "reason": "no local model fits now and none of %s is set" % E.get("CAP_KEYVARS"), "key_variable": None}
+    fb = {"recommended": "none", "reason": "%s and none of %s is set" % ("the requested start does not fit" if named_refused else "no local decision model can run now", E.get("CAP_KEYVARS")), "key_variable": None}
 doc = {
     "schema": "llmctl.capacity/1", "time": int(time.time()),
     "host": {"cpus_online": N, "mem_total_mb": T, "mem_available_mb": avail, "usable_mem_mb": live_avail,
@@ -260,22 +293,49 @@ print("Fallback: %s (%s)%s" % (d["fallback"]["recommended"], d["fallback"]["reas
       (" via $" + d["fallback"]["key_variable"]) if d["fallback"]["key_variable"] else ""))' "$1"
 }
 
-# capacity_admit <profile> - the start/switch admission: rc 0 and sets CAP_THREADS (the CPU cap to use) when the
-# profile fits; rc 75 with the reasons and a machine-readable "llmctl-fallback: <cloud|none>" line on stderr when it
-# does not. No-op (rc 0) with the host reserve off.
+# _cap_fallback_name -> "cloud" when a hosted-key VARIABLE is set (by name; the value is never read out), else "none".
+_cap_fallback_name() {
+  local v
+  for v in ${LLMCTL_HOSTED_KEY_VARS}; do
+    [[ "${v}" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || continue
+    [[ -n "${!v:-}" ]] && { echo cloud; return 0; }
+  done
+  echo none
+}
+
+# _cap_refuse <profile> <why> - the fail-closed refusal: message + machine-readable fallback line, rc 75.
+_cap_refuse() {
+  printf 'refusing to %s %s: %s\n' "${LLMCTL_GATE_ACTION:-start}" "$1" "$2" >&2
+  printf 'llmctl-fallback: %s\n' "$(_cap_fallback_name)" >&2
+  return 75
+}
+
+# capacity_admit <profile> [new-instances] [replaced-unit-instance] - the admission used by start, switch, restart and
+# decide scale: rc 0 and sets CAP_THREADS (the CPU cap to use) when the profile fits; rc 75, a reason and a
+# machine-readable "llmctl-fallback: cloud|none" line on stderr when it does not. It FAILS CLOSED: a capacity measurement
+# that errors, or a verdict it cannot read, refuses exactly like does_not_fit (review round 1 S2).
+#   new-instances  (decide scale) judge the profile as that many NEW instances next to the running ones
+#   replaced-unit  (restart) the running instance being replaced: its own limits are not counted as used
 capacity_admit() {
   CAP_THREADS=""
   reserve_enabled || return 0
   local p="$1" doc verdict
-  doc="$(capacity_json "${p}")" || return 0          # a broken measurement never blocks a start; the unit gate still runs
-  verdict="$(python3 -c 'import json,sys; d=json.loads(sys.argv[1]); v=d["profiles"].get(sys.argv[2]); print("%s %s" % (v["verdict"], v["threads"]) if v else "unknown 0")' "${doc}" "${p}")"
+  local _CAP_NEW_INSTANCES="${2:-}" _CAP_REPLACE="${3:-}"
+  if ! doc="$(capacity_json "${p}" 2>/dev/null)" || [[ -z "${doc}" ]]; then
+    _cap_refuse "${p}" "the host capacity could not be measured (llmctl capacity --json ${p}); refusing rather than guessing"
+    return 75
+  fi
+  verdict="$(python3 -c 'import json,sys; d=json.loads(sys.argv[1]); v=d["profiles"].get(sys.argv[2]); print("%s %s" % (v["verdict"], v["threads"]) if v else "unknown 0")' "${doc}" "${p}" 2>/dev/null)" || verdict=""
   case "${verdict%% *}" in
-    fits|fits_with_reduced_threads|running) CAP_THREADS="${verdict##* }"; [[ "${CAP_THREADS}" == 0 ]] && CAP_THREADS=""; return 0 ;;
-    unknown) return 0 ;;
+    fits|fits_with_reduced_threads|running)
+      CAP_THREADS="${verdict##* }"; [[ "${CAP_THREADS}" =~ ^[1-9][0-9]*$ ]] || CAP_THREADS=""; return 0 ;;
+    does_not_fit) ;;
+    unknown) _cap_refuse "${p}" "it is not a catalog profile the capacity check knows; refusing rather than guessing"; return 75 ;;
+    *) _cap_refuse "${p}" "the capacity verdict could not be read; refusing rather than guessing"; return 75 ;;
   esac
   # When the ONLY reason is the planner's RAM/VRAM verdict, defer to the planner path in start, which refuses with
   # exit 1 and the exact MiB numbers ("cannot start '<p>': needs ..."); the capacity gate owns the reserve/CPU/PSI cases.
-  if python3 -c 'import json,sys; v=json.loads(sys.argv[1])["profiles"][sys.argv[2]]; sys.exit(0 if v["reasons"] and all(r.startswith("planner:") for r in v["reasons"]) else 1)' "${doc}" "${p}"; then
+  if python3 -c 'import json,sys; v=json.loads(sys.argv[1])["profiles"][sys.argv[2]]; sys.exit(0 if v["reasons"] and all(r.startswith("planner:") for r in v["reasons"]) else 1)' "${doc}" "${p}" 2>/dev/null; then
     return 0
   fi
   python3 -c '
@@ -284,6 +344,6 @@ d = json.loads(sys.argv[1]); v = d["profiles"][sys.argv[2]]
 sys.stderr.write("refusing to %s %s: the host cannot run it next to its current workload: %s\n" % (sys.argv[3], sys.argv[2], "; ".join(v["reasons"])))
 sys.stderr.write("llmctl-fallback: %s\n" % d["fallback"]["recommended"])
 if d["fallback"]["key_variable"]: sys.stderr.write("route decisions to the hosted endpoint (key variable %s is set)\n" % d["fallback"]["key_variable"])' \
-    "${doc}" "${p}" "${LLMCTL_GATE_ACTION:-start}"
+    "${doc}" "${p}" "${LLMCTL_GATE_ACTION:-start}" || _cap_refuse "${p}" "the host cannot run it next to its current workload"
   return 75
 }

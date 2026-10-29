@@ -75,7 +75,8 @@ USAGE
                                 user service (systemd user unit / launchd agent); idempotent; refuses while
                                 an installed engine unit is stale (fix: llmctl install)
   llmctl decide scale <profile> <N>  start/stop instances of one decision profile until N run
-                                (admission-bounded; refusal exit 3 with exact numbers)
+                                (admission-bounded; refusal exit 3 with exact numbers, exit 75 +
+                                "llmctl-fallback: cloud|none" when the host reserve/capacity says no)
   llmctl decide calibrate --profile P --labels F [--method temperature|platt|isotonic]
         [--catalog F] [--state-dir D] [--model-sha H] [--template-hash H] [--unbound] [--dry-run] [--json]
                                 accuracy +- Wilson interval, baseline, ECE/MCE/Brier over labelled answers

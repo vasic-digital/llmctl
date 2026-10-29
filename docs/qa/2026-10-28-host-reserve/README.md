@@ -93,3 +93,7 @@ are normalised to `<home>`, `<tmp>`, `<scratch>`.
   `llmctl-llama@` template (same rendering code).
 - The pressure case lowers the threshold to the live reading; it does not create real memory or CPU starvation.
 - Manual QA has not been done.
+
+## Review round 1
+
+The evidence for the fixes made after the independent review of cb6adb8 (NO-GO) is in [`review-r1/`](review-r1/README.md).

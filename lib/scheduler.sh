@@ -833,6 +833,16 @@ _sched_decision_scale_impl() {
     used_ram=$(( used_ram + ram )); used_vram=$(( used_vram + vram ))
   done
 
+  # Host pressure + host capacity (review round 1 S1): the same admission as `start` - the memory/CPU pressure gate and
+  # lib/capacity.sh, judging ALL new instances together next to the running ones. A refusal exits 75 with the
+  # machine-readable "llmctl-fallback: cloud|none" line, before anything is started.
+  # Skipped only on the rollback of a failed switch (_sched_rollback_nogate, dynamic scope of _sched_restore_set), as in start.
+  if [[ "${_sched_rollback_nogate:-0}" != 1 ]]; then
+    reserve_prime
+    hw_pressure_gate "$(( ram * need ))" "${profile}" || { local _grc=$?; rm -f "${plan_file}"; _sched_gate_fallback "${_grc}" || true; return "${_grc}"; }
+    capacity_admit "${profile}" "${need}" || { local _crc=$?; rm -f "${plan_file}"; return "${_crc}"; }
+  fi
+
   # A real run needs the registry allocator for any instance beyond the primary
   # (a guessed port cannot be bind-tested): refuse BEFORE anything is started.
   if [[ "${LLMCTL_DRY_RUN:-0}" != "1" ]] && ! portreg_active; then
@@ -1095,6 +1105,44 @@ _sched_pressure_gate() {
   hw_pressure_gate "${fp}" "${p}"
 }
 
+# _sched_gate_fallback <rc> - after a pressure-gate refusal (75) print the same machine-readable "llmctl-fallback:" line
+# capacity_admit prints, so every refusal of start / switch / restart / decide scale carries it (review round 1 S1).
+_sched_gate_fallback() {
+  [[ "$1" == 75 ]] && declare -F _cap_fallback_name >/dev/null && printf 'llmctl-fallback: %s\n' "$(_cap_fallback_name)" >&2
+  return "$1"
+}
+
+# sched_restart_admit <profile> - the admission of `llmctl restart` (review round 1 S3): the CPU/memory pressure gate and
+# the host capacity check, with the running unit being replaced NOT counted (its limits and its resident memory are
+# freed by the restart; counting them would refuse a restart that changes nothing). rc 75 + "llmctl-fallback:" on a
+# refusal. A restart cannot lower the thread count (systemctl restart reuses the unit's limits), so when only fewer CPUs
+# than the profile's cap are left it refuses and says how to restart with fewer threads.
+sched_restart_admit() {
+  local p="$1" base cap key=""
+  base="$(_sched_base_profile "${p}")"
+  # the unit instance being replaced (tenant row name); fail closed when it cannot be named - an empty key would count
+  # the unit against itself and, worse, judge the profile as "running" (admitted without a check)
+  if declare -F _svc_instance_key >/dev/null; then key="$(_svc_instance_key "${p}")" || key=""; else key="${p}"; fi
+  if [[ -z "${key}" ]]; then
+    printf 'refusing to restart %s: its unit instance could not be named; refusing rather than guessing\n' "${p}" >&2
+    _sched_gate_fallback 75 || true
+    return 75
+  fi
+  reserve_prime
+  LLMCTL_GATE_ACTION=restart LLMCTL_GATE_RESERVE_MB=0 hw_pressure_gate 0 "${p}" || _sched_gate_fallback $? || return $?
+  LLMCTL_GATE_ACTION=restart capacity_admit "${base}" "" "${key}" || return $?
+  if [[ -n "${CAP_THREADS}" ]]; then
+    cap="$(reserve_cpu_cap "${base}")"
+    if (( CAP_THREADS < cap )); then
+      printf 'refusing to restart %s: only %s of its %s CPUs are left in the model budget; a restart keeps the unit'"'"'s limits. Use: llmctl stop %s && llmctl start %s (starts it with %s threads)\n' \
+        "${p}" "${CAP_THREADS}" "${cap}" "${p}" "${p}" "${CAP_THREADS}" >&2
+      printf 'llmctl-fallback: %s\n' "$(_cap_fallback_name)" >&2
+      return 75
+    fi
+  fi
+  return 0
+}
+
 # _sched_start_impl <profile...> - returns non-zero (with a clear message)
 # when the combined footprint does not fit. Call sched_start (above) from
 # outside this file; this unlocked form exists so sched_auto can compose it
@@ -1133,7 +1181,7 @@ _sched_start_impl() {
     # and can wait up to 120 s and then fail 75: a rollback under persistent pressure can leave nothing running.
     if [[ "${_sched_rollback_nogate:-0}" != 1 ]]; then
       reserve_prime
-      hw_pressure_gate "${ram}" "${p}" || { local _grc=$?; rm -f "${plan_file}"; return "${_grc}"; }
+      hw_pressure_gate "${ram}" "${p}" || { local _grc=$?; rm -f "${plan_file}"; _sched_gate_fallback "${_grc}" || true; return "${_grc}"; }
       # Host capacity (3.4.0, lib/capacity.sh): can the host run this profile NEXT TO its current workload? A
       # does_not_fit refuses with 75 and a machine-readable "llmctl-fallback: cloud|none" line, before anything is
       # written or started; fits_with_reduced_threads starts it with the CPUs that are actually left.

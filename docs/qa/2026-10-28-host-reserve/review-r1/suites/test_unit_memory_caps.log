@@ -1,0 +1,43 @@
+  ok: llama/decide-julia (gpu, MEASURED provenance): MemoryMax != total RAM (3072)
+  ok: llama/decide-julia (gpu, MEASURED provenance): MemoryMax 3072 MiB within [2560,4096] of footprint 2048
+  ok: llama/decide-julia (gpu, MEASURED provenance): MemoryHigh < MemoryMax (throttle zone exists)
+  ok: vision (gpu, estimated provenance): MemoryHigh 5120 >= 5120, MemoryMax 6144 >= 6144 MiB, below 90% of RAM
+  ok: small (gpu, estimated provenance): MemoryHigh 5120 >= 5120, MemoryMax 6144 >= 6144 MiB, below 90% of RAM
+  ok: the drop-in names the provenance (so a reader knows why)
+  ok: colibri/colibri-qwen36: MemoryMax != total RAM (12288)
+  ok: colibri/colibri-qwen36: MemoryMax 12288 MiB within [10240,16384] of footprint 8192
+  ok: colibri/colibri-qwen36: MemoryHigh < MemoryMax (throttle zone exists)
+  ok: onnx/decide-nli: MemoryMax != total RAM (4509)
+  ok: onnx/decide-nli: MemoryMax 4509 MiB within [3757,6012] of footprint 3006
+  ok: onnx/decide-nli: MemoryHigh < MemoryMax (throttle zone exists)
+  ok: llama@.service: MemorySwapMax=0
+  ok: llama@.service: Nice= set
+  ok: llama@.service: IOWeight= set
+  ok: llama@.service: OOMScoreAdjust= set
+  ok: llama@.service: TimeoutStopSec=20s <= 30
+  ok: llama@.service: MemoryHigh != MemoryMax
+  ok: colibri@.service: MemorySwapMax=0
+  ok: colibri@.service: Nice= set
+  ok: colibri@.service: IOWeight= set
+  ok: colibri@.service: OOMScoreAdjust= set
+  ok: colibri@.service: TimeoutStopSec=20s <= 30
+  ok: colibri@.service: MemoryHigh != MemoryMax
+  ok: onnx@.service: MemorySwapMax=0
+  ok: onnx@.service: Nice= set
+  ok: onnx@.service: IOWeight= set
+  ok: onnx@.service: OOMScoreAdjust= set
+  ok: onnx@.service: TimeoutStopSec=20s <= 30
+  ok: onnx@.service: MemoryHigh != MemoryMax
+  ok: decide-gateway: MemorySwapMax=0
+  ok: decide-gateway: Nice= set
+  ok: decide-gateway: IOWeight= set
+  ok: decide-gateway: OOMScoreAdjust= set
+  ok: decide-gateway: TimeoutStopSec=20s <= 30
+  ok: decide-gateway: MemoryHigh != MemoryMax
+  ok: decide-gateway: MemoryMax 4096 < total RAM
+  ok: an existing 10-hostsafety.conf wins over llmctl's memory drop-in (MemoryMax)
+  ok: an existing 10-hostsafety.conf wins over llmctl's memory drop-in (MemoryHigh)
+  ok: llmctl's own drop-in is 05-memory.conf (sorts before 10-*)
+  ok: the operator's drop-in is left untouched
+  ok: negative control: the predicates reject the old MemoryHigh=MemoryMax=total unit on all 4 counts
+RESULT: PASS

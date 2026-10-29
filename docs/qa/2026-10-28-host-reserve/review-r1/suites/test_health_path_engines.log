@@ -1,0 +1,13 @@
+== portreg_env_lines: health path per engine ==
+  ok: onnx engine registers /readyz (truthful readiness; /healthz is liveness only)
+  ok: llama engine registers /health
+  ok: colibri engine registers /v1/models
+== end to end: the unit's waiter registers each engine against a stub that serves ONLY its real path ==
+  ok: onnx: waiter registers when only /readyz answers
+  ok: llama: waiter registers when only /health answers
+  ok: colibri: waiter registers when only /v1/models answers
+== scheduler readiness path for a decision profile follows the engine ==
+  ok: portreg_health_path onnx
+  ok: portreg_health_path llama
+  ok: portreg_health_path colibri
+OK

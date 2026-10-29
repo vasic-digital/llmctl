@@ -2,11 +2,11 @@
 
 | Field | Value |
 |---|---|
-| Revision | 1 |
+| Revision | 2 |
 | Created | 2026-10-28 |
 | Since | 3.4.0 |
-| Code | `lib/reserve.sh`, `lib/capacity.sh`, `lib/service_linux.sh` (`_svc_resource_directives`), `llmctld/internal/isolation/reserve.go` |
-| Tests | `tests/test_host_reserve.sh`, `tests/test_capacity.sh` (unit-class, hermetic fixtures), `llmctld/internal/isolation/reserve_test.go` (unit-class) |
+| Code | `lib/reserve.sh`, `lib/capacity.sh`, `lib/service_linux.sh` (`_svc_resource_directives`), `lib/svc_hook.sh` (unit gate), `lib/scheduler.sh` (admission). `llmctld` runs `bin/llmctl` and has no reserve code of its own |
+| Tests | `tests/test_host_reserve.sh`, `tests/test_capacity.sh`, `tests/test_host_reserve_review.sh` (unit-class, hermetic fixtures) |
 | Live evidence | `scripts/qa/host_reserve_live.sh` -> `docs/qa/2026-10-28-host-reserve/` |
 
 ## Why
@@ -32,9 +32,11 @@ models could take every CPU. The root causes (measured, see `docs/host-safety.md
 | chat cap | `max(1, floor(Bc*CHAT/100))` threads and CPUQuota | `LLMCTL_CHAT_CPU_PCT` (50) |
 | decide cap | `max(1, floor(Bc*DECIDE/100))`, never above the chat cap | `LLMCTL_DECIDE_CPU_PCT` (25) |
 | Rm | `max(MIN_MB, MemTotal*PCT/100)` | `LLMCTL_RESERVE_MEM_MIN_MB` (4096), `LLMCTL_RESERVE_MEM_PCT` (20) |
-| Bm | `MemTotal - Rm` (floor 512 MiB) - the sum of all llmctl unit memory limits | |
+| Bm | `MemTotal - Rm` - the sum of all llmctl unit memory limits. Below 512 MiB the host is "short": every local start is refused (75) | |
 
-A looser value (for example `LLMCTL_RESERVE_CPU_PCT=10`) is raised to the floor; `llmctl reserve --json` shows the effective value.
+Only stricter values are honoured: the reserve percentages accept 25..100 (CPU) and 20..100 (memory), the memory minimum
+4096 MiB or more, the per-model caps 1..50 (chat) and 1..25 (decision). A looser or non-numeric value falls back to the
+default; `llmctl reserve --json` shows the effective value.
 
 Every llmctl engine unit gets, with the reserve on:
 
@@ -50,18 +52,26 @@ Every llmctl engine unit gets, with the reserve on:
 
 ### The start gate
 
-Before any unit is written or started (`start`, `switch`, `auto`, `enable`, `restart`):
+Before any unit is written or started (`start`, `switch`, `auto`, `enable`, `restart`, `decide scale`):
 
 1. memory PSI gate (unchanged), plus CPU PSI `some avg10` above `LLMCTL_GATE_CPU_SOME_MAX` (default 80, clamped to
    0..80) or `load1` above `LLMCTL_GATE_LOAD_PER_CPU` x N (default 3, clamped to 1..3). The wait is bounded; a
-   refusal exits **75** (`EX_TEMPFAIL`) and starts nothing.
+   refusal exits **75** (`EX_TEMPFAIL`), prints `llmctl-fallback: cloud|none` and starts nothing.
 2. the capacity verdict for the profile (below). `does_not_fit` exits **75** with a `llmctl-fallback:` line;
    `fits_with_reduced_threads` starts it with fewer threads and a lower CPUQuota (the override can only lower the cap).
    When the only reason is the planner's RAM/VRAM verdict, the planner path refuses instead (exit 1 with the exact MiB
    numbers), as before 3.4.0.
+3. the admission fails closed: a capacity measurement that fails or is empty, an unknown profile, or an unreadable
+   verdict refuses with **75** and the fallback line; it never lets a start through unchecked.
 
-`enable` means "start this profile automatically at login/boot". The command also starts the profile now (as it did
-before 3.4.0), and that start passes the same gate.
+`restart` is judged as a start of the same profile that excludes the replaced unit's own limits and counts that unit's
+resident memory as coming back. A restart keeps the unit's existing limits, so when only a reduced thread count would
+fit it is refused (75; run `llmctl stop` then `llmctl start`). `decide scale <profile> <n>` judges all new instances
+together at the full decision cap. Every unit's own `ExecStartPre` gate (systemd restarts and boot included)
+re-checks the pressure, the load and the combined CPU + RAM budget within its bounded wait; it does not re-run the
+per-profile verdict and prints no fallback line.
+
+`enable` starts the profile now AND at login/boot (as before 3.4.0); the start now passes the same gate.
 
 `LLMCTL_HOST_RESERVE=0` is a diagnostics switch that restores the pre-3.4.0 behaviour so the old failure can be
 reproduced. It is reported loudly: `OFF` in `llmctl reserve`, `DISABLED` in `llmctl status` and `llmctl doctor`.
@@ -91,7 +101,7 @@ is unknown; `3` none named and a running llmctl unit is degraded.
     "mem_reserved_mb": int, "mem_model_budget_mb": int
   },
   "llmctl": {
-    "units": [{"unit": str, "profile": str, "cpu_quota_pct": int|null, "memory_max_mb": int|null,
+    "units": [{"unit": str, "profile": str, "base_profile": str, "cpu_quota_pct": int|null, "memory_max_mb": int|null,
                "memory_current_mb": int|null, "status": "ok"|"degraded", "reasons": [str], "suggest": str|null}],
     "cpu_pct_used": int, "mem_limits_used_mb": int, "cpu_pct_free": int, "mem_budget_free_mb": int
   },
@@ -115,8 +125,13 @@ is unknown; `3` none named and a running llmctl unit is degraded.
 - `fits_with_reduced_threads`: the CPU budget left is below the profile's cap but at least one CPU; `threads` is what
   `start` will use.
 - `degraded` (per unit): host pressure (memory/CPU PSI or load over the gate) or the unit's memory at >= 90% of its
-  limit; `suggest` is `llmctl stop <profile>`.
-- `fallback.recommended` is `local` when a decision profile fits, `cloud` when none fits and one of the variables in
+  limit; `suggest` is `llmctl stop <base_profile>` and is set only on a degraded unit. `base_profile` maps an instance
+  unit (`decide-tiny.2`) or a tenant unit (`<tenant>--decide-tiny`) to its catalog profile; a profile whose own name
+  contains a dot is kept intact.
+- `running`: the profile (or one of its instances) is already running. Under `restart` and `decide scale` the named
+  profile is judged as a new start instead.
+- `fallback.recommended` is `local` when a decision profile fits or a decision unit is running and `ok` (never when a
+  named profile was refused), `cloud` otherwise and one of the variables in
   `LLMCTL_HOSTED_KEY_VARS` (default `TYPESAFE_API_KEY OPENROUTER_API_KEY JEV_API_KEY`) is set and non-empty, `none`
   otherwise. Only the variable NAME is reported; the value is never read into the output.
 - Callers route decisions to the hosted endpoint on `cloud`; on a refused start the same answer is printed as
@@ -138,7 +153,6 @@ Prints the computed reserve, the gate thresholds and the running llmctl units. `
   inherited by every thread, which the live evidence reads back per thread).
 - The capacity verdict is a snapshot. A model admitted at time t can become `degraded` later; `llmctl capacity`
   reports that, it does not stop the model by itself.
-- If the capacity measurement itself fails (unreadable `/proc`), `start` does not block on it; the memory PSI and
-  CPU/load gate still run.
+- If the capacity measurement itself fails (unreadable `/proc`), the start is refused (75): the admission fails closed.
 - `LLMCTL_RESERVE_EXTRA_UNIT_GLOB` is a QA knob: the live harness runs its engine as transient
   `llmctl-qa-reserve-*.service` units and counts them as llmctl units through it. It is not meant for normal use.

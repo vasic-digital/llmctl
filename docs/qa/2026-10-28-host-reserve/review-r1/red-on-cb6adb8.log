@@ -1,0 +1,147 @@
+== M01: Rc rounds UP (ceil), not down: 10 CPUs, no SMT -> 3 reserved ==
+  ok: 10 CPUs: ceil(2.5) = 3 reserved, 7 for models
+== S6: per-model CPU caps can only get stricter ==
+  FAIL: CHAT_CPU_PCT=100 is clamped back to 50% of Bc (6)
+    expected: 6
+    actual:   12
+  FAIL: DECIDE_CPU_PCT=100 is clamped back to 25% of Bc (3)
+    expected: 3
+    actual:   6
+  ok: CHAT_CPU_PCT=20 is stricter and honoured (2)
+  ok: RESERVE_CPU_PCT=95 is stricter and honoured (no 90% ceiling): 15 reserved, 1 for models
+  FAIL: a huge MEM_MIN leaves no model memory: short, Bm 0 (never a 512 MiB floor)
+    expected: 1 0
+    actual:   1 512
+== M06: a small host whose model budget is under 512 MiB is short and every start is refused ==
+  FAIL: 4500 MiB host: Rm 4096, Bm 404, short
+    expected: 1 404
+    actual:   1 512
+  ok: 4700 MiB host: Bm 604, not short (negative control)
+  FAIL: 4500 MiB host: decide-tiny does_not_fit
+    expected: does_not_fit
+    actual:   fits
+  FAIL: the reason names the short model budget
+    needle not found: < 512 MiB
+    haystack: 
+  FAIL: 4500 MiB host: the combined check refuses even a tiny unit (rc)
+    expected: 75
+    actual:   0
+== S7: dotted and tenant names map to the right class ==
+tests/test_host_reserve_review.sh: line 55: reserve_base_profile: command not found
+  FAIL: a dotted profile name is kept whole
+    expected: qwen2.5-coder
+    actual:   
+tests/test_host_reserve_review.sh: line 56: reserve_base_profile: command not found
+  FAIL: an instance suffix of a decision profile is dropped
+    expected: decide-tiny
+    actual:   
+tests/test_host_reserve_review.sh: line 57: reserve_base_profile: command not found
+  FAIL: a tenant prefix and instance suffix are both dropped
+    expected: decide-tiny
+    actual:   
+tests/test_host_reserve_review.sh: line 58: reserve_base_profile: command not found
+  FAIL: ordinal 1 is never an instance suffix (the primary has none)
+    expected: foo.1
+    actual:   
+  FAIL: tenant row of a decision profile is decide
+    expected: decide
+    actual:   chat
+  ok: a dotted chat-looking name stays chat
+== S2 / M10 / M11: capacity_admit fails CLOSED ==
+  FAIL: capacity measurement fails -> refused 75 (was: admitted)
+    expected: 75
+    actual:   0
+  FAIL: fail-closed refusal carries the fallback line
+    llmctl-fallback: none not found in /home/milosvasic/.cache/claude-tmp/tmp.TCoD2sFeqP/fail.err
+  ok: capacity measurement prints nothing -> refused 75
+  ok: an unreadable verdict -> refused 75
+  FAIL: a profile the capacity check does not know -> refused 75 (was: admitted)
+    expected: 75
+    actual:   0
+  FAIL: unknown-profile refusal carries the fallback line
+    llmctl-fallback: not found in /home/milosvasic/.cache/claude-tmp/tmp.TCoD2sFeqP/unk.err
+  ok: negative control: an idle host admits decide-tiny (rc)
+== M02: the combined RAM boundary is inclusive (used + new == Bm fits) ==
+  ok: used 22119 + new 4096 == Bm 26215: fits (rc)
+  ok: used 22120 + new 4096 > Bm: refused (rc)
+== M03 / M09: a running unit with MemoryMax=max counts as the WHOLE model memory budget ==
+  ok: bash combined check: CPU fits (1 + 1 <= 12), unlimited memory refuses (rc)
+  ok: capacity: unlimited-memory unit -> does_not_fit
+  ok: capacity: the reason names memory
+== S4: instance-suffixed units are seen as their profile running ==
+Traceback (most recent call last):
+  File "<string>", line 1, in <module>
+    import json,sys; d=json.loads(sys.argv[1]); print(eval(sys.argv[2]))
+                                                      ~~~~^^^^^^^^^^^^^
+  File "<string>", line 1, in <module>
+    import json,sys; d=json.loads(sys.argv[1]); print(eval(sys.argv[2]))
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+KeyError: 'base_profile'
+  FAIL: decide-tiny.2 maps to base profile decide-tiny
+    expected: decide-tiny
+    actual:   
+  FAIL: decide-tiny is running (instance 2)
+    expected: running
+    actual:   fits
+  ok: a degraded instance-2 unit: the stop suggestion names the base profile
+  FAIL: no new decision model fits, but one runs (instance 2) -> local
+    expected: local
+    actual:   none
+== S5: fallback is never local when no decision model fits or runs ==
+  ok: the chat profile fits
+  ok: no decision profile exists
+  FAIL: a fitting CHAT profile never makes the fallback local
+    expected: none
+    actual:   local
+  FAIL: with a hosted key variable: cloud
+    expected: cloud
+    actual:   local
+  ok: a refused named profile never recommends local
+== S1: decide scale goes through the same capacity admission (75 + fallback line, nothing started) ==
+  FAIL: decide scale over capacity exits 75 (was: started without the capacity check)
+    expected: 75
+    actual:   0
+  FAIL: decide scale refusal prints the fallback line
+    llmctl-fallback: not found in /home/milosvasic/.cache/claude-tmp/tmp.TCoD2sFeqP/scale.out
+  FAIL: a refused scale started nothing
+    expected: 
+    actual:   /home/milosvasic/.cache/claude-tmp/tmp.TCoD2sFeqP/state/run/decide-tiny.run
+  FAIL: decide scale under CPU pressure exits 75
+    expected: 75
+    actual:   0
+  FAIL: a pressure-gate refusal also prints the fallback line
+    llmctl-fallback: not found in /home/milosvasic/.cache/claude-tmp/tmp.TCoD2sFeqP/scale2.out
+  ok: negative control: decide scale on an idle host succeeds (dry run)
+== S3: restart goes through the capacity admission, without counting the unit it replaces ==
+  FAIL: the replaced unit alone uses the whole budget: restart admitted (its own limits are not counted) (rc)
+    expected: 0
+    actual:   127
+  FAIL: another unit holds the whole CPU budget: restart refused 75
+    expected: 75
+    actual:   127
+  FAIL: restart refusal prints the fallback line
+    llmctl-fallback: not found in /home/milosvasic/.cache/claude-tmp/tmp.TCoD2sFeqP/restart.err
+  FAIL: only 2 of 3 CPUs left: restart (which keeps its limits) refuses
+    expected: 75
+    actual:   127
+  FAIL: it says how to restart with fewer threads
+    llmctl stop decide-tiny && llmctl start decide-tiny not found in /home/milosvasic/.cache/claude-tmp/tmp.TCoD2sFeqP/restart2.err
+  ok: bin/llmctl restart on an idle host is not refused by the capacity gate (rc 0)
+  FAIL: bin/llmctl restart is wired to the admission (75 with the budget full)
+    expected: 75
+    actual:   0
+  FAIL: another instance of the same profile running does not make the restart 'running' (admitted unchecked) (rc)
+    expected: 75
+    actual:   127
+== M21: reduced threads reach --threads of the started engine ==
+  ok: capacity_admit: reduced to 2 threads
+  ok: the launch carries the reduced --threads 2
+  ok: start with reduced threads succeeds (dry run)
+  ok: start end to end: the recorded launch has --threads 2 (not the 3-CPU cap)
+== M18: the unit's ExecStartPre gate enforces the combined budget (svc_hook.sh gate) ==
+  ok: ExecStartPre (restart, boot, scale): 3 + 12 CPUs > 12 refused 75
+  ok: the gate message names the budget
+  ok: negative control: 3 + 6 <= 12 passes, and the gate's own cgroup is not double-counted
+== M22: the decision smoke server runs with the DECISION cap, not the chat cap ==
+  ok: decision smoke (decide-2b, letter-logit): --threads = decision cap 3 (chat cap is 6)
+RESULT: FAIL (33 assertion failure(s))

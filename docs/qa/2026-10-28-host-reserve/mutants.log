@@ -43,15 +43,79 @@
    "killed"
   ],
   [
-   "M11-go-decide-equals-chat",
-   "killed"
-  ],
-  [
    "M12-reserve-memo-key-drops-topology",
    "killed"
   ],
   [
    "M13-decide-memo-key-drops-catalog-content",
+   "killed"
+  ],
+  [
+   "R-M01-cpu-reserve-floor-not-ceil",
+   "killed"
+  ],
+  [
+   "R-M02-combined-ram-boundary",
+   "killed"
+  ],
+  [
+   "R-M03-bash-unlimited-unit-counts-zero",
+   "killed"
+  ],
+  [
+   "R-M09-python-unlimited-unit-counts-zero",
+   "killed"
+  ],
+  [
+   "R-M06-small-host-not-refused",
+   "killed"
+  ],
+  [
+   "R-M10-admit-fails-open-on-measure-error",
+   "killed"
+  ],
+  [
+   "R-M11-admit-fails-open-on-unknown",
+   "killed"
+  ],
+  [
+   "R-M18-unit-gate-skips-combined-budget",
+   "killed"
+  ],
+  [
+   "R-M21-reduced-threads-ignored",
+   "killed"
+  ],
+  [
+   "R-M22-decision-smoke-uses-chat-cap",
+   "killed"
+  ],
+  [
+   "R-S1-decide-scale-skips-capacity",
+   "killed"
+  ],
+  [
+   "R-S3-restart-skips-admission",
+   "killed"
+  ],
+  [
+   "R-S4-instance-suffix-not-mapped",
+   "killed"
+  ],
+  [
+   "R-S5-fallback-local-without-decision-model",
+   "killed"
+  ],
+  [
+   "R-S6-chat-pct-loosens-cap",
+   "killed"
+  ],
+  [
+   "R-S7-dotted-name-stripped",
+   "killed"
+  ],
+  [
+   "R-restart-same-profile-treated-running",
    "killed"
   ]
  ]

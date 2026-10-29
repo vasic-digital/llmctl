@@ -130,22 +130,7 @@ type WrapConfig struct {
 	// per-tenant memory ceiling FR-049 describes sets a real value for
 	// its own deployment.
 	MemoryMaxBytes uint64
-
-	// CPUQuotaPercent, when non-zero, adds -p CPUQuota=<N>% (100 = one CPU). Host reserve (3.4.0): a
-	// wrapped process can never take the CPUs the host keeps for itself; compute it with HostBudget.
-	CPUQuotaPercent uint
-
-	// CPUAffinity, when non-empty, adds -p CPUAffinity=<list> (for example "2-7 10-15"). CPUAffinity
-	// works without cpuset delegation, unlike AllowedCPUs. Validated against cpuListPattern.
-	CPUAffinity string
-
-	// NoSwap, when true, adds -p MemorySwapMax=0 so the process is OOM-killed inside its own scope
-	// instead of pushing the whole host into swap.
-	NoSwap bool
 }
-
-// cpuListPattern accepts a systemd CPU list: numbers and ranges separated by spaces or commas.
-var cpuListPattern = regexp.MustCompile(`^[0-9]+(-[0-9]+)?([ ,][0-9]+(-[0-9]+)?)*$`)
 
 // WrapCommand returns the real systemd-run invocation (path + argv) that
 // runs cmdPath (with args) inside a transient, per-tenant systemd --user
@@ -175,18 +160,6 @@ func WrapCommand(cfg WrapConfig, cmdPath string, args ...string) (path string, w
 	}
 	if cfg.MemoryMaxBytes > 0 {
 		wrapped = append(wrapped, "-p", "MemoryMax="+strconv.FormatUint(cfg.MemoryMaxBytes, 10))
-	}
-	if cfg.CPUQuotaPercent > 0 {
-		wrapped = append(wrapped, "-p", "CPUQuota="+strconv.FormatUint(uint64(cfg.CPUQuotaPercent), 10)+"%")
-	}
-	if cfg.CPUAffinity != "" {
-		if !cpuListPattern.MatchString(cfg.CPUAffinity) {
-			return "", nil, fmt.Errorf("isolation: invalid CPU affinity %q", cfg.CPUAffinity)
-		}
-		wrapped = append(wrapped, "-p", "CPUAffinity="+cfg.CPUAffinity)
-	}
-	if cfg.NoSwap {
-		wrapped = append(wrapped, "-p", "MemorySwapMax=0")
 	}
 	wrapped = append(wrapped, "--", cmdPath)
 	wrapped = append(wrapped, args...)

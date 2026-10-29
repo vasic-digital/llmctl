@@ -1,0 +1,200 @@
+== S1. prior set recorded, profile loaded with llmctl switch, prior set restored and verified ==
+PASS  run with two resident profiles (decide-nli enabled service + small): exit 0 PASS
+PASS  the profile under test was loaded through llmctl's own switch
+PASS  no plain start of the target (the scheduler path is switch)
+PASS  the switch ran with the same safe env (validation left to this script: ON_START=external, no ready wait, nice 19, ionice idle)
+PASS  evidence: prior status json holds the enabled service
+PASS  evidence: prior set file = the running profiles
+PASS  evidence: prior llmctl units recorded
+PASS  evidence: switch command recorded
+PASS  evidence: restore commands recorded
+PASS  restore: decide-nli started again by llmctl
+PASS  restore: small started again by llmctl
+PASS  restore.txt: decide-nli restored and healthy
+PASS  restore.txt: small restored and healthy
+PASS  after-set recorded
+PASS  verdict table has a restore row
+PASS  restore only AFTER the model under test was stopped (#9 < #10)
+PASS  the model under test and a prior profile were never resident together
+PASS  NEG-CONTROL: nothing resident: exit 0
+PASS    no restore call
+PASS    restore.txt says nothing to restore
+PASS    table: prior set restored n/a
+== S2. restore on every exit path ==
+PASS  watchdog abort during the run: exit 4
+PASS    the prior set is still restored (pressure is fine in the fake)
+PASS    restore.txt: restored
+PASS  switch fails after stopping the resident set (worst case): exit 2
+PASS    belt and braces: our restore brings the set back
+PASS  validate rc 1 (wrong answer): exit 1 FAIL, prior set still restored
+PASS  the final stop of the model under test cannot be confirmed: exit 2
+PASS    restore is NOT attempted while the test model may still be running
+PASS    restore.txt says why it was skipped
+PASS    the manual command is printed
+== S3. restore skipped under pressure, failed, unhealthy, idempotent ==
+PASS  run itself PASSes but memory PSI rose to 8 (< watchdog 20, >= gate 5): restore skipped -> exit 6
+PASS    no restore start was issued under pressure
+PASS    restore.txt: SKIPPED with the pressure reason
+PASS    the exact manual command is printed for BOTH profiles
+PASS    RESTORE_MANUAL.txt written
+PASS    verdict says the run PASSed but the restore did not happen
+PASS  NEG-CONTROL PSI 4.99: restore runs, exit 0
+PASS  watchdog abort under pressure: exit stays 4 (the abort is not masked)
+PASS    restore skipped, reported
+PASS  a profile cannot be restored: exit 7
+PASS    decide-nli FAILED in restore.txt
+PASS    the other profile (small) was still restored
+PASS    loud message on stderr names the failed profile
+PASS    manual command for the failed one
+PASS  restored but never healthy: exit 7
+PASS    restore.txt says not healthy
+PASS  --restore-only with everything already running: exit 0
+PASS    idempotent: no restore start issued
+PASS    reports ALREADY RUNNING
+PASS  --restore-only of a stopped profile: exit 0, restored
+PASS    restore issued once
+PASS    second --restore-only (now running): still exit 0, no second start
+== S4. only llmctl-owned things are touched; nothing is signalled ==
+PASS  run with a foreign unit listed: exit 0
+PASS  no systemctl stop/start/restart at all in the normal path (llmctl does the stopping)
+PASS  pkill/killall never called
+PASS  bystander (foreign process) alive
+PASS  the foreign unit is not in the recorded prior SET
+PASS    foreign unit never becomes a restore target
+PASS  even on the abort path no non-llmctl unit is stopped
+PASS    the fallback (if used) targets the llmctl unit of the test profile
+PASS  still exactly one kill call site in driver+watchdog+runner
+PASS  no stop of anything but the profile under test by us (resident ones are stopped by llmctl switch)
+== S5. resident models do not block a switch, but pressure and the adjusted budget still do ==
+PASS  9000 MiB resident + 8000 available -> 17000 effective >= 12000: accepted, exit 0
+PASS    the resident big model is restored afterwards
+PASS  NEG-CONTROL 3000 resident + 8000 available = 11000 < 12000: refused (exit 3)
+PASS    nothing was switched, nothing restored
+PASS  pressure refuses even with a small resident set (exit 3), nothing switched
+PASS  a resident profile in a failed state is still a refusal (exit 3)
+== S6. --plan: dry run ==
+PASS  --plan: exit 0
+PASS    says what would be stopped
+PASS    says what would be started
+PASS    says what would be restored
+PASS    states the enabled-service interruption
+PASS    verdict is PLAN, not PASS
+PASS    nothing was switched, started, stopped or restored
+PASS  --plan still applies the static refusals (vision-pro w/o --allow-large: exit 3)
+PASS  runner --plan: exit 0
+PASS    runner --plan lists the sequence
+PASS    runner --plan says it switches profile to profile and restores at the end
+PASS    runner --plan did nothing
+== S7. runner: switch profile to profile, ONE restore at the end, also after an abort ==
+PASS  fast then vision with decide-nli resident: exit 0
+PASS  decide-nli restored exactly once, not between the runs
+PASS  the restore comes after the LAST test model was stopped
+PASS  no two test models (or test model + prior profile) resident together
+PASS  runner summary has a restore line
+PASS  the sequence evidence records the prior set once
+PASS  abort in the first profile: runner exit 4, vision never started
+PASS    the prior set is restored after the abort
+PASS  sequence passed but pressure at the end: restore skipped, runner exit 6
+PASS    manual restore command printed
+PASS    summary says NOT restored
+PASS  failed restore at the end of a passing sequence: runner exit 7
+PASS  first profile refused by the gate: nothing was switched off, so no restore needed, exit stays 3
+== S8 (F1). a scaled instance is never silently dropped, also through the runner ==
+PASS  direct driver: resident decide + decide.2 -> restore exit 7
+PASS    restore.txt names the scaled instance
+PASS  RUNNER with decide + decide.2 resident: exit 7 (not 0)
+PASS    summary says the prior set is NOT restored
+PASS    summary names the scaled instance
+PASS    the sequence RESTORE_MANUAL.txt names the scaled instance
+PASS    the base profile was still restored
+PASS    machine-readable state in the summary
+PASS  NEG-CONTROL: only the base profile resident -> runner exit 0
+PASS    RESTORE_STATE=ok
+== S9 (F2). the reservation credit never lowers the watchdog's RAW memory floor ==
+PASS  raw MemAvailable 4000 (+10000 credited): refused by the gate (exit 3), not aborted by the watchdog
+PASS    the resident set was NOT switched off for nothing
+PASS    reason names the raw floor
+PASS  raw 6023 < floor 5000 + 1024: refused (exit 3)
+PASS  NEG-CONTROL raw 6024 passes the gate (switch issued)
+PASS  a watchdog guard check runs before the switch is launched (line 707 < 708)
+== S10 (F3). unknown reserved RAM gets a conservative restore floor ==
+PASS  ram_mb 0 and MemAvailable 5500 < 6144 floor: restore skipped (exit 6)
+PASS    the reason says the RAM figure is unknown and the default floor was used
+PASS  NEG-CONTROL MemAvailable 6200 >= 6144: restored (exit 0)
+PASS  missing / non-numeric ram_mb are both treated as unknown (exit 6)
+PASS    both skipped
+== S11 (F4). a first INT/TERM finishes the current restore start, then stops and leaves the manual commands ==
+PASS  TERM during the first profile's start: exit 6
+PASS    the profile being started finished its start attempt
+PASS    no further profile was started
+PASS    restore.txt: aaa has an outcome, bbb and ccc are SKIPPED (interrupted)
+PASS    manual commands for the remaining profiles
+PASS    the exit state is machine-readable
+PASS  a SECOND signal does not abort the start in flight: exit 6, aaa tracked
+PASS    aaa's outcome is recorded (not lost)
+PASS  NEG-CONTROL without a signal both are restored (exit 0)
+== S12 (F6). restore health path from the unit env file for ANY engine ==
+PASS  colibri-style prior profile restored (exit 0)
+PASS    its health was probed on the env file's LLMCTL_REG_HEALTH path
+PASS  onnx without REG_HEALTH falls back to /healthz
+PASS  NEG-CONTROL llama without REG_HEALTH uses /health
+PASS  row port + env health path
+== S13. machine-readable RESTORE_STATE (verdict, evidence file) also when the run's own code wins ==
+PASS  ok: verdict line
+PASS  ok: evidence file
+PASS  none: nothing resident
+PASS  failed
+PASS  the run's own code (1 FAIL) wins over a failed restore
+PASS    but RESTORE_STATE=failed tells the host-service state
+PASS  manual (pressure)
+== S14 (F-N1). a group-delivered TERM/HUP does not kill the in-flight restore start ==
+PASS  TERM to the driver AND the llmctl start child: exit 6
+PASS    the in-flight start finished: aaa RESTORED
+PASS    aaa is not reported FAILED (rc 143)
+PASS    bbb left for the manual command
+== S15 (F-N2). --no-restore run directly is loud ==
+PASS  direct --no-restore: exit code stays 0
+PASS    stderr warns loudly at the start
+PASS    stderr names RESTORE_MANUAL.txt and the exact command
+PASS    final line NOT RESTORED
+PASS  NEG-CONTROL nothing resident: no warning
+PASS    no NOT RESTORED line
+PASS  via the runner: exit 0, set restored
+PASS    the runner-invoked driver does not print NOT RESTORED
+== S16 (F-N3). a scaled instance that llmctl's rollback brought back is not a failure ==
+PASS  instance running again after the restore: exit 0
+PASS    decide.2 ALREADY RUNNING
+PASS  NEG-CONTROL instance still missing: exit 7
+PASS    FAILED with an actual command
+PASS    RESTORE_MANUAL has the scale command
+== S17 (F-N4). the runner restores what a driver switched off beyond the initial set ==
+PASS  something started during run 1 and switched off by run 2: sequence exit 0
+PASS    extra restored too
+PASS    the initial member restored
+PASS    summary names the additional profile
+PASS    RESTORE_STATE=ok
+== S18 (F-N5). docs state the 1024 margin is estimate-based ==
+PASS  protocol doc says the margin is an estimate-based choice that can only cost an abort+restore
+== S19 (F1). the restore deadline is a WAIT deadline: the message and RESTORE_MANUAL.txt give the operator abort path ==
+PASS  restore start exceeds its deadline: exit 7
+PASS    restore.txt says the start is NOT killed and gives the systemctl stop hint
+PASS    RESTORE_MANUAL.txt carries the abort path (systemctl stop or SIGKILL of the recorded pid)
+PASS    the stderr message carries it too
+PASS    the docs state the real bounds (LLMCTL_START_WAIT, LLMCTL_READY_TIMEOUT)
+PASS    the docs say llmctl's own TERM/INT traps are disabled inside the restore tree
+PASS    the docs name the operator abort path
+== S20 (F2). a scaled instance is only OK when it is healthy ==
+PASS  instance back and healthy: exit 0
+PASS    ALREADY RUNNING (healthy)
+PASS  instance reserved but NOT healthy (dead port): not ok, exit 6
+PASS    reservation present, health not verified
+PASS    RESTORE_STATE=manual
+PASS    RESTORE_MANUAL.txt names the unverified instance (F5)
+== S21 (F3a). the runner takes the evidence path from a file the driver writes, not from scraped stdout ==
+PASS  driver output contains a spoofed 'evidence' line: runner still exit 0
+PASS    the summary table does not show the spoofed path
+PASS    the driver wrote its evidence path to /home/milosvasic/.cache/claude-tmp/livetest.gPBjFT/env.dz9xOd/ev/20261029T000816Z-sequence/fast.evpath
+PASS    run_profiles.sh no longer scrapes the driver's stdout for the path
+
+RESULT: 176 passed, 0 failed
+  ok: all 176 livetest switch assertions passed

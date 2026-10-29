@@ -129,10 +129,13 @@ _reserve_compute_now() {
   mapfile -t online < <(_rsv_online_cpus | sort -n -u)
   (( ${#online[@]} > 0 )) || online=(0)
   RSV_N="${#online[@]}"
-  RSV_CPU_PCT="$(_rsv_int "${LLMCTL_RESERVE_CPU_PCT:-25}" 25 25 90)"
+  # Every knob may only make the reserve STRICTER: a reserve below the floor is raised back to it, a per-model cap above
+  # its default is lowered back to it, and a stricter value is honoured as written (a reserve up to 100 %, which leaves
+  # one CPU / no model memory; review round 1 S6: the old 90 % ceiling and 100 % cap ceilings could loosen the policy).
+  RSV_CPU_PCT="$(_rsv_int "${LLMCTL_RESERVE_CPU_PCT:-25}" 25 25 100)"
   RSV_CPU_MIN="$(_rsv_int "${LLMCTL_RESERVE_CPU_MIN:-2}" 2 2 4096)"
-  RSV_CHAT_PCT="$(_rsv_int "${LLMCTL_CHAT_CPU_PCT:-50}" 50 1 100)"
-  RSV_DECIDE_PCT="$(_rsv_int "${LLMCTL_DECIDE_CPU_PCT:-25}" 25 1 100)"
+  RSV_CHAT_PCT="$(_rsv_int "${LLMCTL_CHAT_CPU_PCT:-50}" 50 1 50)"
+  RSV_DECIDE_PCT="$(_rsv_int "${LLMCTL_DECIDE_CPU_PCT:-25}" 25 1 25)"
   local want=$(( (RSV_N * RSV_CPU_PCT + 99) / 100 ))
   (( want < RSV_CPU_MIN )) && want="${RSV_CPU_MIN}"
   RSV_CPU_SHORT=0
@@ -173,12 +176,16 @@ _reserve_compute_now() {
   fi
   [[ "${mt}" =~ ^[1-9][0-9]*$ ]] || mt=0
   RSV_MT="${mt}"
-  RSV_MEM_PCT="$(_rsv_int "${LLMCTL_RESERVE_MEM_PCT:-20}" 20 20 90)"
+  RSV_MEM_PCT="$(_rsv_int "${LLMCTL_RESERVE_MEM_PCT:-20}" 20 20 100)"
   RSV_MEM_MIN="$(_rsv_int "${LLMCTL_RESERVE_MEM_MIN_MB:-4096}" 4096 4096 4194304)"
   RSV_RM=$(( mt * RSV_MEM_PCT / 100 )); (( RSV_RM < RSV_MEM_MIN )) && RSV_RM="${RSV_MEM_MIN}"
+  # The model budget is what is LEFT after the reserve, never more: a small host (or a huge reserve) whose budget is
+  # below 512 MiB (smaller than any engine's memory limit) is "short", and every start is refused
+  # (capacity does_not_fit, combined check 75) instead of handing models a 512 MiB budget carved out of the reserve
+  # (review round 1 S6 / M06: the old floor did exactly that).
   RSV_MEM_SHORT=0
-  RSV_BM=$(( mt - RSV_RM ))
-  if (( RSV_BM < 512 )); then RSV_BM=512; RSV_MEM_SHORT=1; fi
+  RSV_BM=$(( mt - RSV_RM )); (( RSV_BM < 0 )) && RSV_BM=0
+  (( RSV_BM < 512 )) && RSV_MEM_SHORT=1
   # gate thresholds: stricter (lower) is allowed, looser is clamped back (CPU PSI some <= 80 %, load <= 3 x CPUs)
   RSV_GATE_CPU_SOME_MAX="$(_rsv_int "${LLMCTL_GATE_CPU_SOME_MAX:-80}" 80 0 80)"
   RSV_GATE_LOAD_PER_CPU="$(_rsv_int "${LLMCTL_GATE_LOAD_PER_CPU:-3}" 3 1 3)"
@@ -188,12 +195,26 @@ _reserve_compute_now() {
 # get the strictest budget.
 # One catalog read (reserve_decide_profiles) instead of two or three per call: `start` asks this several times for the
 # same profile. An unknown profile, or no catalog, is "chat" (the looser of the two caps is still bounded by Bc).
+# A unit/instance name maps to its catalog profile by reserve_base_profile: a "<tenant>--" prefix is dropped, and a
+# ".<N>" instance suffix (N >= 2, lib/scheduler.sh _sched_scale_key) is dropped ONLY when the full name is not itself in
+# the set and the base is (review round 1 S7: the old "${1%.[0-9]*}" turned "qwen2.5-coder" into "qwen2").
 reserve_profile_class() {
-  local p="${1%.[0-9]*}"
-  case " $(reserve_decide_profiles 2>/dev/null || true) " in
-    *" ${p} "*) echo decide ;;
+  local set; set=" $(reserve_decide_profiles 2>/dev/null || true) "
+  case "${set}" in
+    *" $(reserve_base_profile "$1" "${set}") "*) echo decide ;;
     *) echo chat ;;
   esac
+}
+
+# reserve_base_profile <name> <space-separated known profiles> -> the known profile the name stands for (or the name).
+reserve_base_profile() {
+  local n="$1" set=" ${2:-} "
+  [[ "${n}" == *--* ]] && n="${n##*--}"
+  [[ "${set}" == *" ${n} "* ]] && { echo "${n}"; return 0; }
+  if [[ "${n}" =~ ^(.+)\.([2-9]|[1-9][0-9]+)$ && "${set}" == *" ${BASH_REMATCH[1]} "* ]]; then
+    echo "${BASH_REMATCH[1]}"; return 0
+  fi
+  echo "${n}"
 }
 
 # reserve_decide_profiles -> the space-separated names of every catalog profile reserve_profile_class calls "decide",
@@ -317,6 +338,12 @@ reserve_combined_check() {
   local bcpu=$(( RSV_BC * 100 )) ucpu=0 umem=0 name cpu mem list=""
   [[ "${ncpu}" =~ ^[0-9]+$ ]] || ncpu="${bcpu}"
   [[ "${nmem}" =~ ^[0-9]+$ ]] || nmem="${RSV_BM}"
+  # a host whose model budget is under 512 MiB is too small for any engine: refuse every start (review round 1 S6/M06)
+  if (( RSV_MEM_SHORT == 1 )); then
+    printf 'refusing to %s %s: the host RAM reserve (%s MiB of %s MiB) leaves only %s MiB for models (< 512 MiB); this host is too small for a local model.\n' \
+      "${act}" "${label}" "${RSV_RM}" "${RSV_MT}" "${RSV_BM}" >&2
+    return 75
+  fi
   while read -r name cpu mem; do
     [[ -n "${name}" ]] || continue
     [[ "${cpu}" =~ ^[0-9]+$ ]] || cpu="${bcpu}"

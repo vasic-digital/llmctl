@@ -152,12 +152,13 @@ DECISION MODELS (typed noul/choice/score decisions)
 PERSISTENT SERVICES (systemd --user on Linux, launchd on macOS)
   install                     install/refresh unit templates (Linux) or
                               prepare LaunchAgents dir (macOS)
-  enable <profile>            start this profile automatically at login/boot.
-                              Enabling is not a way to use a model: it passes the
-                              same validation, capacity and pressure gates as
-                              start (refused with 75 when the host has no room)
+  enable <profile>            start this profile NOW and automatically at
+                              login/boot. The start now passes the same
+                              validation, capacity and pressure gates as start
+                              (refused with 75 when the host has no room)
   disable <profile>           stop + disable autostart
-  restart <profile>           restart a service
+  restart <profile>           restart a service (admitted like a start: 75 with
+                              llmctl-fallback when the host has no room)
 
 CLUSTER (opt-in, requires llmctld)
   cluster join <peer-addr>    join this node to a running cluster
@@ -312,7 +313,7 @@ main() {
           # validate, and publish only on PASS (the .enabled state is kept)
           if [[ -f "${LLMCTL_RUNTIME_DIR}/$1.run" ]] || svc_is_active "$1" 2>/dev/null; then sched_stop "$1"; fi
           sched_start "$1"; validate_after_start "$1" ;;
-        *) svc_restart "$1"; validate_after_start "$1" ;;
+        *) sched_restart_admit "$1" || exit $?; svc_restart "$1"; validate_after_start "$1" ;;
       esac
       ;;
     switch)

@@ -1,0 +1,8 @@
+rc=75
+reached_admission=yes
+fallback_line=llmctl-fallback: cloud
+units_before=llmctl-decide-gateway.service llmctl-onnx@decide-nli.service llmctl-qa-reserve-fixed-filler-r2.service llmctl-qa-reserve-fixed-r2.service llmctl-revalidate-weekly.service llmctl-revalidate-weekly.timer
+units_after=llmctl-decide-gateway.service llmctl-onnx@decide-nli.service llmctl-qa-reserve-fixed-filler-r2.service llmctl-qa-reserve-fixed-r2.service llmctl-revalidate-weekly.service llmctl-revalidate-weekly.timer
+engine_pids_before=3257340
+engine_pids_after=3257340
+env_record_written=no

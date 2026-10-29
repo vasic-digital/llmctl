@@ -1,0 +1,23 @@
+== finding 6: a manual validate that FAILS stops the published profile
+  ok: validate: FAIL -> exit 1
+  ok: the published profile is stopped through the normal stop path
+  ok: its reservation is removed (no longer served)
+  ok: the reason is printed
+== finding 6: UNDETERMINED leaves it running, NOT validated (and says so)
+  ok: validate: UNDETERMINED -> exit 2
+  ok: not stopped
+  ok: the output says it keeps running NOT validated
+== finding 6: the unit waiter's call (attach mode) is decided by the waiter, never by validate itself
+  ok: attach mode: FAIL -> exit 1
+  ok: attach mode: nothing stopped by validate (the waiter stops the unit itself)
+== finding 6: --host (an external endpoint) never touches a local profile
+  ok: --host FAIL: the local profile is untouched
+== finding 8: validate on a STOPPED, ENABLED profile restores its env record
+  ok: setup: enable small (validated)
+  ok: setup: still enabled after the stop
+  ok: a real validation of the stopped profile (quarantine start; nothing answers) -> UNDETERMINED
+  ok: ...it was started (in quarantine) for the validation
+  ok: the env record is the enabled (public) one again, byte for byte
+  ok: no quarantine marker left in the env record
+  ok: the unit's ExecCondition no longer sees a stale quarantine record
+RESULT: PASS
