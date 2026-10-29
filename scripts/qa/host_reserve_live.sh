@@ -28,6 +28,9 @@
 #   5. fixed only: a pressure case against the REAL /proc/pressure/cpu reading - the threshold is made stricter than the
 #      live value (allowed: only looser is clamped) and `llmctl capacity --json` must report pressure, mark the running
 #      QA unit degraded with a stop suggestion and exit 3;
+#   5a. fixed only (review round 5, F3), on any host load: `llmctl capacity --json` and `llmctl reserve --json` with no
+#      threshold changed must scan the whole cgroup tree (scope host, /sys/fs/cgroup), list the QA unit with owner
+#      "self" and the cgroup directory the read-back found, and list only llmctl units;
 #   6. stops every unit it started and checks that no engine process of this run is left.
 # Every run writes run-<i>/ files; summary.json carries the verdicts and the determinism check.
 set -euo pipefail
@@ -234,6 +237,54 @@ over_budget_start() { # <run-dir> <i>
   systemctl --user stop "${filler}" >/dev/null 2>&1 || true
 }
 
+# Review round 5, F3: the host-wide unit census, live, with no threshold changed and on any host load. While the QA unit
+# runs, `llmctl capacity --json` and `llmctl reserve --json` must scan the whole cgroup v2 tree (scope host, root
+# /sys/fs/cgroup), list the QA unit with owner "self" and the same cgroup directory the read-back found, and list only
+# llmctl units (a non-llmctl workload such as a system ollama is never counted as an llmctl unit).
+scope_case() { # <run-dir>
+  local d="$1" rc_c rc_r
+  set +e
+  env "${ENVV[@]}" "${ROOT}/bin/llmctl" capacity --json "${PROFILE}" > "${d}/scope_capacity.json" 2> "${d}/scope_capacity.err"
+  rc_c=$?
+  env "${ENVV[@]}" "${ROOT}/bin/llmctl" reserve --json > "${d}/scope_reserve.json" 2> "${d}/scope_reserve.err"
+  rc_r=$?
+  set -e
+  python3 - "${d}" "${rc_c}" "${rc_r}" > "${d}/scope.txt" <<'PY'
+import json, os, sys
+d, rc_c, rc_r = sys.argv[1], sys.argv[2], sys.argv[3]
+lim = {}
+for line in open(os.path.join(d, "limits.txt")):
+    if "=" in line:
+        k, v = line.rstrip("\n").split("=", 1); lim[k] = v
+def load(f):
+    try: return json.load(open(os.path.join(d, f)))
+    except Exception as e: return {"_error": str(e)}
+c, r = load("scope_capacity.json"), load("scope_reserve.json")
+cs = c.get("llmctl", {}).get("consumption_scope", {})
+cu = c.get("llmctl", {}).get("units", []) if isinstance(c.get("llmctl"), dict) else []
+ru = r.get("units", []) if isinstance(r.get("units"), list) else []
+qa_c = [u for u in cu if u.get("unit", "").startswith("llmctl-qa-reserve-")]
+qa_r = [u for u in ru if u.get("unit", "").startswith("llmctl-qa-reserve-")]
+print("capacity_rc=%s" % rc_c)
+print("reserve_rc=%s" % rc_r)
+print("readback_cgroup=%s" % lim.get("cgroup", ""))
+pv = c.get("profiles") if isinstance(c.get("profiles"), dict) else {}
+print("capacity_profile_verdict=%s" % ",".join(str(v.get("verdict")) for v in pv.values()))
+print("capacity_scope=%s" % cs.get("scope"))
+print("capacity_cgroup_root=%s" % cs.get("cgroup_root"))
+print("capacity_owners=%s" % ",".join(cs.get("owners") or []))
+print("capacity_units=%s" % ",".join("%s:%s" % (u.get("unit"), u.get("owner")) for u in cu))
+print("capacity_qa_owner=%s" % ",".join(str(u.get("owner")) for u in qa_c))
+print("capacity_qa_cgroup=%s" % ",".join(str(u.get("cgroup")) for u in qa_c))
+print("capacity_only_llmctl_units=%s" % (bool(cu) and all(u.get("unit", "").startswith("llmctl-") for u in cu)))
+print("reserve_scope=%s" % r.get("units_scope"))
+print("reserve_readable=%s" % r.get("units_readable"))
+print("reserve_qa_owner=%s" % ",".join(str(u.get("owner")) for u in qa_r))
+print("reserve_qa_cgroup=%s" % ",".join(str(u.get("cgroup")) for u in qa_r))
+print("reserve_only_llmctl_units=%s" % (bool(ru) and all(u.get("unit", "").startswith("llmctl-") for u in ru)))
+PY
+}
+
 pressure_case() { # <run-dir>
   local d="$1" some thr rc
   some="$(awk '/^some/{split($2,a,"="); print a[2]}' /proc/pressure/cpu)"
@@ -308,7 +359,7 @@ for (( i = 1; i <= RUNS; i++ )); do
     echo "skipped=negative control is not loaded (an unlimited engine would take the shared host)" > "${D}/stress.txt"
   fi
   over_budget_start "${D}" "${i}"
-  [[ "${LABEL}" == fixed ]] && pressure_case "${D}"
+  if [[ "${LABEL}" == fixed ]]; then scope_case "${D}"; pressure_case "${D}"; fi
   systemctl --user stop "${U}"
   sleep 1
   model_file="$(model_file)"
@@ -341,8 +392,20 @@ art = kv(os.path.join(out, "artifact_commit.txt"))
 res = []
 for i in range(1, runs + 1):
     d = os.path.join(out, "run-%d" % i)
-    lim, st, ss, pr, ps = (kv(os.path.join(d, f)) for f in ("limits.txt", "stress.txt", "second_start.txt", "pressure.txt", "post_stop.txt"))
+    lim, st, ss, pr, ps, sc = (kv(os.path.join(d, f)) for f in ("limits.txt", "stress.txt", "second_start.txt", "pressure.txt", "post_stop.txt", "scope.txt"))
     checks = {}
+    if label == "fixed":
+        # review round 5, F3: the live host-wide census (scope.txt is always written for the fixed label)
+        checks["scope_captured"] = bool(sc)
+        # a profile is named, so 3 cannot occur: 0 fits, 75 does not fit; "undetermined" would mean the census was blind
+        checks["scope_capacity_determined"] = sc.get("capacity_rc") in ("0", "75") and sc.get("capacity_profile_verdict", "") not in ("", "undetermined", "None")
+        checks["scope_reserve_rc_0"] = sc.get("reserve_rc") == "0"
+        checks["scope_capacity_host_wide"] = sc.get("capacity_scope") == "host" and sc.get("capacity_cgroup_root") == "/sys/fs/cgroup"
+        checks["scope_reserve_host_wide"] = sc.get("reserve_scope") == "host" and sc.get("reserve_readable") == "True"
+        checks["scope_qa_unit_owner_self"] = sc.get("capacity_qa_owner") == "self" and sc.get("reserve_qa_owner") == "self"
+        rb = lim.get("cgroup", "")
+        checks["scope_qa_cgroup_is_readback"] = bool(rb) and sc.get("capacity_qa_cgroup") == rb and sc.get("reserve_qa_cgroup") == rb
+        checks["scope_only_llmctl_units"] = sc.get("capacity_only_llmctl_units") == "True" and sc.get("reserve_only_llmctl_units") == "True"
     cpumax = lim.get("cpu.max", "")
     q = cpumax.split()
     quota_pct = int(q[0]) * 100 // int(q[1]) if q and q[0] != "max" else None
@@ -371,7 +434,7 @@ for i in range(1, runs + 1):
         checks["pressure_unit_degraded"] = pr.get("qa_unit_status", "").startswith("degraded")
         checks["pressure_exit_3_or_75"] = pr.get("rc") in ("3", "75")
     checks["no_process_left"] = ps.get("leftover_engine_pids_with_port", "x") == ""
-    res.append({"run": i, "limits": lim, "stress": st, "second_start": ss, "pressure": pr, "checks": checks})
+    res.append({"run": i, "limits": lim, "stress": st, "second_start": ss, "pressure": pr, "scope": sc, "checks": checks})
 keys = ["cpu.max", "memory.max", "memory.high", "memory.swap.max", "cpus_allowed_all_threads", "argv_threads", "nice", "oom_score_adj"]
 det = all(r["limits"].get(k) == res[0]["limits"].get(k) for r in res for k in keys)
 verdict_keys = sorted({k for r in res for k in r["checks"]})
