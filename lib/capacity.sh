@@ -270,18 +270,17 @@ _cap_measure() {
     return 0
   fi
   _cap_in plan "llmctl plan --json (hw_probe_json | catalog_plan_json)" 1
-  local units="" name cpu mem d cur cg_err census=""
+  local units="" name cpu mem d cur cg_err census="" owner scan; scan="$(_rsv_units_scan)"; scan="${scan% *}"
   # the unit census must be readable (review round 5, R5-1): an unreadable tree is a critical input, never "0 units"
   cg_err="$(_rsv_units_unmeasurable)"
-  if [[ -z "${cg_err}" ]] && ! census="$(reserve_running_units)"; then cg_err="the unit census under ${root} failed"; fi
-  while read -r name cpu mem; do
+  if [[ -z "${cg_err}" ]] && ! census="$(reserve_running_units)"; then cg_err="the unit census under ${scan} failed"; fi
+  while read -r name cpu mem owner d; do
     [[ -n "${name}" ]] || continue
-    d="$(find "${root}" -maxdepth 3 -type d -name "${name}" 2>/dev/null | head -1)"
     cur="$(head -1 "${d}/memory.current" 2>/dev/null || true)"
     [[ "${cur}" =~ ^[0-9]+$ ]] && cur=$(( cur / 1048576 )) || cur=""
-    units+="${name} $(_cap_unit_profile "${name}") ${cpu} ${mem} ${cur:-?} $(_cap_cpu_stat "${d}/cpu.stat")"$'\n'
+    units+="${name} $(_cap_unit_profile "${name}") ${cpu} ${mem} ${cur:-?} $(_cap_cpu_stat "${d}/cpu.stat") ${owner} ${d}"$'\n'
   done <<< "${census}"
-  if [[ -z "${cg_err}" ]]; then _cap_in units "${root} (llmctl engine unit cgroups)" 1; else _cap_in units "${root} (llmctl engine unit cgroups)" 0; fi
+  if [[ -z "${cg_err}" ]]; then _cap_in units "${scan} (llmctl engine unit cgroups, every owner)" 1; else _cap_in units "${scan} (llmctl engine unit cgroups, every owner)" 0; fi
   local decide
   decide="$(reserve_decide_profiles 2>/dev/null || true)"
   local keyvar; keyvar="$(_cap_key_var)"
@@ -309,7 +308,7 @@ _cap_measure() {
   CAP_LOAD="${in_la}" CAP_MEMINFO="${in_mi}" CAP_INPUTS="${_CAP_INPUTS}" CAP_CG_CSTAT="${cg_cstat}" \
   CAP_PROC_DIR="${LLMCTL_PROC_DIR:-/proc}" CAP_NPROC_LIMIT="${LLMCTL_NPROC_LIMIT:-}" \
   CAP_UNITS="${units}" CAP_DECIDE_SET="${decide}" CAP_KEYVAR="${keyvar}" CAP_KEYVARS="${LLMCTL_HOSTED_KEY_VARS}" \
-  CAP_CG_ROOT="${root}" CAP_CG_ERR="${cg_err}" CAP_PROC_SELF_PID="${LLMCTL_PROC_SELF_PID:-}" CAP_CG_MMAX="${cg_mmax}" CAP_CG_MCUR="${cg_mcur}" CAP_CG_CMAX="${cg_cmax}" \
+  CAP_CG_ROOT="${root}" CAP_UNITS_SCAN="$(_rsv_units_scan)" CAP_SCOPE_MANAGER="$([[ -n "${LLMCTL_CGROUP_ROOT:-}" ]] && echo 1 || echo 0)" CAP_CG_ERR="${cg_err}" CAP_PROC_SELF_PID="${LLMCTL_PROC_SELF_PID:-}" CAP_CG_MMAX="${cg_mmax}" CAP_CG_MCUR="${cg_mcur}" CAP_CG_CMAX="${cg_cmax}" \
   CAP_CHECK_PRESSURE="${LLMCTL_GATE_CPU_CHECKS:-1}" CAP_MEM_SHORT="${RSV_MEM_SHORT}" \
   CAP_NEW_INSTANCES="${_CAP_NEW_INSTANCES:-}" CAP_REPLACE="${_CAP_REPLACE:-}" CAP_TENANT="${LLMCTL_TENANT_ID:-}" \
   CAP_T="${CAP_T:-}" CAP_PT="${CAP_PT:-}" CAP_STRICT="$(_rsv_inputs_strict && echo 1 || echo 0)" \
@@ -409,7 +408,7 @@ _rep, rep_cur = E.get("CAP_REPLACE", ""), 0
 if _rep:
     for _line in E.get("CAP_UNITS", "").splitlines():
         _f = _line.split()
-        if len(_f) >= 5 and _f[1] == _rep and _f[4].isdigit(): rep_cur += int(_f[4])
+        if len(_f) >= 5 and _f[1] == _rep and _f[4].isdigit() and (_f[8] if len(_f) > 8 else "self") == "self": rep_cur += int(_f[4])
 if live_avail is not None: live_avail += rep_cur
 if cg["memory_max_mb"] is not None and cg["memory_current_mb"] is not None:
     cg_room = cg["memory_max_mb"] - cg["memory_current_mb"] + rep_cur
@@ -446,7 +445,11 @@ for line in E.get("CAP_UNITS", "").splitlines():
     if len(f) < 5: continue
     name, prof, cpu, mem, cur = f[:5]
     ustat = cpu_stat(" ".join(f[5:8]))
-    if replace and prof == replace: continue
+    # owner (review round 5, F3): "self" = this user's manager; "user-<uid>" / "system" / "other" units count as
+    # consumption but are never this user's instance (not replaced by a restart, never "running", never local)
+    owner = f[8] if len(f) > 8 else "self"
+    ucg = " ".join(f[9:]) if len(f) > 9 else None
+    if replace and prof == replace and owner == "self": continue
     cpu_v = int(cpu) if cpu.isdigit() else Bc * 100
     mem_v = int(mem) if mem.isdigit() else Bm
     used_cpu += cpu_v; used_mem += mem_v
@@ -459,13 +462,13 @@ for line in E.get("CAP_UNITS", "").splitlines():
                   "memory_current_mb": int(cur) if cur.isdigit() else None,
                   "memory_current_provenance": "measured" if cur.isdigit() else None, "cpu_stat": ustat,
                   "status": "degraded" if reasons else "ok", "reasons": reasons,
-                  "base_profile": base_profile(prof),
+                  "base_profile": base_profile(prof), "owner": owner, "cgroup": ucg,
                   "suggest": ("llmctl stop %s" % base_profile(prof)) if reasons else None})
 # "running" means THIS host's own unit instance of the profile is up: the tenant key + the primary name, exactly as
 # _svc_instance_key builds it. Another instance (decide-tiny.2) or another tenant's unit (t1--decide-tiny) of the same
 # profile is only consumption, never "already running" (review round 2 F1).
 tenant = E.get("CAP_TENANT", "")
-unit_keys = {u["profile"] for u in units}
+unit_keys = {u["profile"] for u in units if u["owner"] == "self"}
 def inst_key(p): return ("%s--%s" % (tenant, p)) if tenant else p
 cpu_free = Bc * 100 - used_cpu
 mem_free = Bm - used_mem
@@ -538,6 +541,7 @@ largest = max(fit_dec)[1] if fit_dec else None
 def own_unit(u):
     # this host's / this tenant's own instance (the primary or .N); another tenant's unit is consumption, never a local
     # decision endpoint for this tenant (review round 3, item 1; §11.4.291(E): no fit -> cloud or none, never local)
+    if u["owner"] != "self": return False
     return u["profile"].startswith(tenant + "--") if tenant else "--" not in u["profile"]
 decision_local = largest is not None or any(own_unit(u) and u["base_profile"] in decide_set and u["status"] == "ok" for u in units)
 named_refused = bool(wanted) and (any(profiles.get(p, {}).get("verdict") == "does_not_fit" for p in wanted)
@@ -598,9 +602,12 @@ doc = {
                "cpu_pct_free": cpu_free, "mem_budget_free_mb": mem_free,
                # review round 4, F3: what "used" counts. Only llmctl engine units under this cgroup root (by default this
                # user's systemd manager, user@UID.service); llmctl units of another user or system units are NOT seen.
-               "consumption_scope": {"cgroup_root": E.get("CAP_CG_ROOT"), "max_depth": 3,
+               "consumption_scope": {"cgroup_root": (E.get("CAP_UNITS_SCAN") or " ").rsplit(" ", 1)[0],
+                                     "max_depth": int((E.get("CAP_UNITS_SCAN") or "x 3").rsplit(" ", 1)[1]),
+                                     "scope": "manager" if E.get("CAP_SCOPE_MANAGER") == "1" else "host",
+                                     "owners": sorted({u["owner"] for u in units}),
                                      "units": "llmctl-llama@*, llmctl-onnx@*, llmctl-colibri@* (+ LLMCTL_RESERVE_EXTRA_UNIT_GLOB)",
-                                     "not_counted": "llmctl units of other users or in system.slice, and every non-llmctl workload"}},
+                                     "not_counted": ("llmctl units outside LLMCTL_CGROUP_ROOT (other users' managers, system.slice), and " if E.get("CAP_SCOPE_MANAGER") == "1" else "") + "every non-llmctl workload"}},
     "pressure": {"ok": not pressure, "reasons": pressure},
     "profiles": profiles,
     "unknown_profiles": [p for p in wanted if p not in profiles],

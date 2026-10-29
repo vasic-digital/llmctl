@@ -48,3 +48,14 @@ mkdir -p "${LLMCTL_RUNTIME_DIR}"; printf 'ram_mb=2048\n' > "${LLMCTL_RUNTIME_DIR
 echo "M9 sched_reserved_field (runtime dir *.run): needle=$(sched_reserved_field ram_mb) MiB" \
      "runtime dir missing=$(LLMCTL_RUNTIME_DIR=/nonexistent/rt sched_reserved_field ram_mb) MiB (0 = FAIL-OPEN, scoped out)"
 chmod 000 "${LLMCTL_RUNTIME_DIR}"; echo "   runtime dir mode-000=$(sched_reserved_field ram_mb) MiB"; chmod 700 "${LLMCTL_RUNTIME_DIR}"
+# M10 (F3): the HOST census (LLMCTL_CGROUP_ROOT unset): a fixture cgroup v2 mount with another user's llmctl unit as the
+# needle, then that user's manager at mode 000 (part of the host tree unreadable).
+FS="${TEST_TMP}/cgfs"; U="$(id -u)"; O=4242; [[ "${U}" != 4242 ]] || O=4243
+mkdir -p "${FS}/user.slice/user-${U}.slice/user@${U}.service/app.slice"; : > "${FS}/cgroup.controllers"
+od="${FS}/user.slice/user-${O}.slice/user@${O}.service/app.slice/app-llmctl\\x2dllama.slice/llmctl-llama@big.service"; mkdir -p "${od}"
+printf 'populated 1\n' > "${od}/cgroup.events"; printf '%s 100000\n' $(( RSV_BC * 100000 )) > "${od}/cpu.max"
+printf '%s\n' $(( RSV_BM * 1048576 )) > "${od}/memory.max"; echo 0 > "${od}/memory.current"
+echo "M10 host census (every owner): needle='$(LLMCTL_CGROUP_ROOT= LLMCTL_CGROUP_FS=${FS} reserve_running_units | awk '{print $1, $4}')' combined=$(LLMCTL_CGROUP_ROOT= LLMCTL_CGROUP_FS=${FS} rc reserve_combined_check 100 512 x)"
+chmod 000 "${FS}/user.slice/user-${O}.slice/user@${O}.service"
+echo "    other user's manager mode-000: census rc=$( ( LLMCTL_CGROUP_ROOT= LLMCTL_CGROUP_FS=${FS} reserve_running_units >/dev/null ); echo $? ) combined=$(LLMCTL_CGROUP_ROOT= LLMCTL_CGROUP_FS=${FS} rc reserve_combined_check 100 512 x) hk_gate=$(LLMCTL_CGROUP_ROOT= LLMCTL_CGROUP_FS=${FS} rc hk_gate '')"
+chmod 700 "${FS}/user.slice/user-${O}.slice/user@${O}.service"

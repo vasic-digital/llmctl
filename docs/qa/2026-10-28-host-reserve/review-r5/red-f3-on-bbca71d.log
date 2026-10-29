@@ -1,0 +1,127 @@
+# tests/test_host_reserve_f3.sh run on a git archive of bbca71d (before the F3 fix), 2026-10-29T11:13:21Z
+== controls: a host tree with no llmctl unit admits; the own manager's unit is seen ==
+  ok: control: no unit anywhere -> combined admits
+  ok: control: no unit anywhere -> hk_gate admits
+  ok: control: no unit anywhere -> capacity_admit admits
+Traceback (most recent call last):
+  File "<string>", line 1, in <module>
+    import json,sys; d=json.loads(sys.argv[1]); print(eval(sys.argv[2]))
+                                                      ~~~~^^^^^^^^^^^^^
+  File "<string>", line 1, in <module>
+    import json,sys; d=json.loads(sys.argv[1]); print(eval(sys.argv[2]))
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+KeyError: 'scope'
+  FAIL: scope: the whole host, depth 8
+    expected: host [] 8
+    actual:   
+  FAIL: scope: the scan root is the cgroup mount
+    expected: /home/milosvasic/.cache/claude-tmp/tmp.1d9A7bvBji/fs-empty
+    actual:   /home/milosvasic/.cache/claude-tmp/tmp.1d9A7bvBji/fs-empty/user.slice/user-1000.slice/user@1000.service
+  ok: needle: this user's unit (template slice, depth 6) holding the budget is counted (75)
+Traceback (most recent call last):
+  File "<string>", line 1, in <module>
+    import json,sys; d=json.loads(sys.argv[1]); print(eval(sys.argv[2]))
+                                                      ~~~~^^^^^^^^^^^^^
+  File "<string>", line 1, in <module>
+    import json,sys; d=json.loads(sys.argv[1]); print(eval(sys.argv[2]))
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<string>", line 1, in <genexpr>
+KeyError: 'owner'
+  FAIL: needle: its owner is self
+    expected: self
+    actual:   
+== F3: another user's unit holding the whole budget -> refuse (was: not counted, admitted) ==
+  FAIL: other user's unit: combined budget check refuses 75
+    expected: 75
+    actual:   0
+  FAIL: other user's unit: hk_gate (every start, restart, boot) refuses 75
+    expected: 75
+    actual:   0
+  FAIL: other user's unit: capacity_admit refuses 75
+    expected: 75
+    actual:   0
+  FAIL: other user's unit: capacity does_not_fit
+    expected: does_not_fit
+    actual:   fits
+  FAIL: the unit is listed with its owner
+    expected: user-4242
+    actual:   
+Traceback (most recent call last):
+  File "<string>", line 1, in <module>
+    import json,sys; d=json.loads(sys.argv[1]); print(eval(sys.argv[2]))
+                                                      ~~~~^^^^^^^^^^^^^
+  File "<string>", line 1, in <module>
+    import json,sys; d=json.loads(sys.argv[1]); print(eval(sys.argv[2]))
+    ^^^^^^^^^^^^^^^^^^^^^^^
+IndexError: list index out of range
+  FAIL: the unit's cgroup path is reported
+    needle not found: user@4242.service
+    haystack: 
+  FAIL: the refusal names the owner of the unit
+    needle not found: (user-4242)
+    haystack: 
+== F3: a system.slice unit holding the whole budget -> refuse ==
+  FAIL: system.slice unit: combined refuses 75
+    expected: 75
+    actual:   0
+  FAIL: system.slice unit: hk_gate refuses 75
+    expected: 75
+    actual:   0
+  FAIL: system.slice unit: owner system
+    expected: system
+    actual:   
+== F3: another user's unit is consumption only - never this user's instance ==
+  ok: another user's decide-tiny is not 'running' for this user (a new own start is judged: fits)
+  ok: control: this user's own decide-tiny IS running
+  FAIL: restart of decide-tiny: another user's same-named unit is not 'replaced' (still counted -> 75)
+    expected: 75
+    actual:   0
+  ok: control: restart of this user's own decide-tiny replaces it (0)
+== F3 + R5-1: an unreadable part of the host tree fails closed ==
+  FAIL: another user's manager unreadable: combined refuses 75
+    expected: 75
+    actual:   0
+  FAIL: another user's manager unreadable: hk_gate refuses 75
+    expected: 75
+    actual:   0
+  FAIL: another user's manager unreadable: the start gate refuses 75
+    expected: 75
+    actual:   0
+  FAIL: another user's manager unreadable: capacity undetermined
+    expected: False undetermined
+    actual:   True fits
+  FAIL: after chmod back: the unit is counted again (75: full budget)
+    expected: 75
+    actual:   0
+  FAIL: an unreadable system.slice with no visible unit still refuses (not 'no units')
+    expected: 75
+    actual:   0
+  ok: control: the same tree readable admits
+== scope: LLMCTL_CGROUP_ROOT narrows the scan to one manager and says so ==
+Traceback (most recent call last):
+  File "<string>", line 1, in <module>
+    import json,sys; d=json.loads(sys.argv[1]); print(eval(sys.argv[2]))
+                                                      ~~~~^^^^^^^^^^^^^
+  File "<string>", line 1, in <module>
+    import json,sys; d=json.loads(sys.argv[1]); print(eval(sys.argv[2]))
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+KeyError: 'scope'
+  FAIL: manager scope reported, depth 3
+    expected: manager 3
+    actual:   
+  FAIL: manager scope: says what is not counted
+    needle not found: outside LLMCTL_CGROUP_ROOT
+    haystack: llmctl units of other users or in system.slice, and every non-llmctl workload
+Traceback (most recent call last):
+  File "<string>", line 1, in <module>
+    import json,sys; d=json.loads(sys.argv[1]); print(eval(sys.argv[2]))
+                                                      ~~~~^^^^^^^^^^^^^
+  File "<string>", line 1, in <module>
+    import json,sys; d=json.loads(sys.argv[1]); print(eval(sys.argv[2]))
+    ^^^^^^^^^^^^^^^^
+KeyError: 'units_scope'
+  FAIL: llmctl reserve --json: host scope, the other user's unit listed with its owner
+    expected: host user-4242
+    actual:   
+RESULT: FAIL (23 assertion failure(s))
+rc=1

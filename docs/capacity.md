@@ -111,7 +111,7 @@ fallback `cloud`/`none`, exit 75). They are listed in `measurement.critical_inpu
 | memory PSI `some` and `full` avg10      | always                                         |
 | CPU PSI `some` avg10                    | reserve on and CPU checks on                   |
 | `/proc/loadavg` 1-minute load           | reserve on and CPU checks on                   |
-| the cgroup tree the llmctl units are counted under (`LLMCTL_CGROUP_ROOT`, default under `LLMCTL_CGROUP_FS`) | reserve on |
+| the cgroup tree the llmctl units are counted under (the whole `LLMCTL_CGROUP_FS` mount, every owner; `LLMCTL_CGROUP_ROOT` narrows it to one manager) | reserve on |
 | the `/proc` thread census (`nproc`)     | reserve on; the census must see its own process |
 
 Informational only (recorded `readable: false`, value `null`, the verdict does not change): I/O PSI, the scope's
@@ -184,7 +184,9 @@ Both fields are additive; the schema stays `llmctl.capacity/1`.
                "memory_current_mb": int|null, "memory_current_provenance": "measured"|null,
                "cpu_stat": {...}|null, "status": "ok"|"degraded", "reasons": [str], "suggest": str|null}],
     "cpu_pct_used": int, "mem_limits_used_mb": int, "cpu_pct_free": int, "mem_budget_free_mb": int,
-    "consumption_scope": {"cgroup_root": str, "max_depth": int, "units": str, "not_counted": str}
+    "units": [... , "owner": "self"|"user-<uid>"|"system"|"other", "cgroup": str],
+    "consumption_scope": {"cgroup_root": str, "max_depth": int, "scope": "host"|"manager", "owners": [str],
+                          "units": str, "not_counted": str}
   },
   "pressure": {"ok": bool, "reasons": [str]},
   "profiles": {
@@ -253,8 +255,8 @@ Both fields are additive; the schema stays `llmctl.capacity/1`.
 Prints the computed reserve, the gate thresholds and the running llmctl units. `--json` emits
 `{"enabled", "cpus": {"online", "reserved", "reserved_set", "model_budget", "model_set", "chat_cap", "decide_cap",
 "reserve_pct", "reserve_min", "short"}, "memory": {"total_mb", "reserved_mb", "model_budget_mb", "reserve_pct",
-"reserve_min_mb", "short"}, "gate": {"cpu_psi_some_max", "load_per_cpu_max"}, "units": [...], "units_readable",
-"units_error"}`; when the unit tree cannot be read (`units_readable` false) the text output says "UNKNOWN" and every
+"reserve_min_mb", "short"}, "gate": {"cpu_psi_some_max", "load_per_cpu_max"}, "units": [... "owner", "cgroup"], "units_scope": "host"|"manager",
+"units_readable", "units_error"}`; when the unit tree cannot be read (`units_readable` false) the text output says "UNKNOWN" and every
 start is refused; `reserve_pct` and
 `reserve_min` show the EFFECTIVE values, so a looser knob shows up as the floor it was raised to. `llmctl doctor` and
 `llmctl status` print a one-line summary of the same numbers.
@@ -275,17 +277,35 @@ start is refused; `reserve_pct` and
   `ExecStartPre` gate (`hk_gate`: every start, systemd restart and boot). An unreadable tree is never counted as
   "no units". The `/proc` thread census must see the process doing the counting, else the measurement is not ok.
   The start gate and `hk_gate` read no thread census; only `capacity_admit` checks the RLIMIT_NPROC headroom.
-- cgroup v2 only: the default root (`$LLMCTL_CGROUP_FS/user.slice/user-<uid>.slice/user@<uid>.service`,
-  `LLMCTL_CGROUP_FS` default `/sys/fs/cgroup`) is used only when the mount has `cgroup.controllers` (the unified
-  hierarchy). On a cgroup v1 or hybrid host the units cannot be counted and the reserve refuses every local start with
+- cgroup v2 only: the unit census scans `LLMCTL_CGROUP_FS` (default `/sys/fs/cgroup`), and this user's own manager
+  (`$LLMCTL_CGROUP_FS/user.slice/user-<uid>.slice/user@<uid>.service`) supplies the `host.cgroup` figures, only when
+  the mount has `cgroup.controllers` (the unified hierarchy). On a cgroup v1 or hybrid host the units cannot be counted and the reserve refuses every local start with
   a message that says so (use the hosted fallback, or `LLMCTL_HOST_RESERVE=0` for diagnostics only). Not tested on such
   a host; the refusal is covered by a hermetic test (`tests/test_host_reserve_review5.sh`).
 - Consumption scope (`llmctl.consumption_scope`): the CPU and memory already in use by models is counted from the
-  llmctl units (`llmctl-llama@*`, `llmctl-onnx@*`, `llmctl-colibri@*`, plus `LLMCTL_RESERVE_EXTRA_UNIT_GLOB`) under
-  this user's cgroup root, at most 3 levels deep. llmctl units of OTHER users or in `system.slice` are not counted, so
-  two users running llmctl on one host can together exceed the model budget. Every non-llmctl workload is outside the
-  budget too (it is covered only by the PSI/load gate). This is a known limit PENDING operator acceptance
-  (Constitution 11.4.66); it is not approved.
+  llmctl units (`llmctl-llama@*`, `llmctl-onnx@*`, `llmctl-colibri@*`, plus `LLMCTL_RESERVE_EXTRA_UNIT_GLOB`) found
+  anywhere in the cgroup v2 tree (`LLMCTL_CGROUP_FS`, at most 8 levels deep): this user's manager, every other
+  user's manager (`user.slice/user-<uid>.slice/user@<uid>.service/...`, depth 6) and `system.slice`. Every owner counts
+  as consumption; each unit is reported with `owner` and `cgroup`. Only `owner: self` units are this user's instances:
+  only they can be "running" for a profile and only they are replaced by this user's `restart`. Any unreadable
+  directory in the tree fails the census, and the start is refused (75): a partial census is not a count.
+  `LLMCTL_CGROUP_ROOT` (tests, non-standard layouts) narrows the scan to one manager root at depth 3 and the scope then
+  says `manager`. Every non-llmctl workload is outside the model budget (covered only by the PSI/load gate).
+
+  Decision (review round 5, F3), measured on the reference host (cgroup v2, one user): a full scan of
+  `/sys/fs/cgroup` at depth 8 visits 310 cgroups, 0 unreadable, in about 23 to 38 ms. Options compared:
+  - (A, chosen) llmctl scans the whole cgroup tree and counts units of every owner. Works without privileges for
+    every unit the kernel lets this user read, sees other users' and system units, and fails closed where it cannot
+    read. Cost: one `find` per admission.
+  - (B, rejected) a shared `llmctl.slice` with a parent `MemoryMax`/`CPUQuota`, so the kernel enforces the aggregate.
+    A user unit can only join slices of its own systemd manager, so other users' and system units would stay
+    outside it (the F3 gap); a host-wide slice needs root to create; a parent limit in a delegated user subtree can be
+    raised by that same user, so it is no host guarantee; and it would move every unit's cgroup path. The per-unit
+    caps (`MemoryMax`, `CPUQuota`, `AllowedCPUs`) still apply under A.
+  - (C, rejected) enumerate units with `systemctl --user -M <user>@` and `systemctl --system`. Reaching other users'
+    managers needs privileges, and it shows nothing the cgroup tree does not already show.
+  Residual risk: a host that hides part of its cgroup tree from this user refuses every local start while the reserve
+  is on (fail closed, with a message naming the scan root); only hermetic tests cover other-user and system units.
 - Outside the host reserve, two older instruments still read an unreadable source as "nothing": the planner's
   per-unit memory list (`systemctl list-units` failing yields no units) and the scheduler's reservation sum (a missing
   runtime directory yields 0 MiB). The reserve's own budget check does not depend on them. Follow-up; inventory in

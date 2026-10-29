@@ -294,8 +294,8 @@ _rsv_cgroup_root() {
 # cannot be counted there at all (the reserve refuses on such a host; docs/capacity.md "Limits"). The default root is
 # only used when the cgroup mount carries cgroup.controllers (the cgroup v2 unified hierarchy).
 _rsv_units_unmeasurable() {
-  local root fs
-  root="$(_rsv_cgroup_root)"
+  local root depth fs
+  read -r root depth < <(_rsv_units_scan)
   if [[ -z "${LLMCTL_CGROUP_ROOT:-}" ]]; then
     fs="${LLMCTL_CGROUP_FS:-/sys/fs/cgroup}"
     if [[ ! -f "${fs}/cgroup.controllers" ]]; then
@@ -305,11 +305,35 @@ _rsv_units_unmeasurable() {
   fi
   if [[ ! -d "${root}" ]]; then echo "the cgroup root ${root} does not exist"; return 0; fi
   if [[ ! -r "${root}" || ! -x "${root}" ]]; then echo "the cgroup root ${root} is not readable"; return 0; fi
-  if ! find "${root}" -maxdepth 3 -type d >/dev/null 2>&1; then
+  if ! find "${root}" -maxdepth "${depth}" -type d >/dev/null 2>&1; then
     echo "a directory under the cgroup root ${root} could not be read"
     return 0
   fi
   return 0
+}
+
+# _rsv_units_scan -> "<scan-root> <max-depth>": where the running llmctl engine units are counted (review round 5, F3).
+# Default: the WHOLE cgroup v2 mount (LLMCTL_CGROUP_FS), so the units of this user's manager, of every other user's
+# manager (user.slice/user-<uid>.slice/user@<uid>.service/app.slice/app-llmctl\x2dllama.slice/<unit>, depth 6) and of
+# system.slice all count against the one host model budget. Depth 8 leaves room for two more slice levels. Measured on
+# the reference host: 310 cgroups, every one readable, about 25 ms. LLMCTL_CGROUP_ROOT (tests, non-standard layouts)
+# narrows the scan to that one manager root (depth 3, the layout of a single user manager).
+_rsv_units_scan() {
+  if [[ -n "${LLMCTL_CGROUP_ROOT:-}" ]]; then echo "${LLMCTL_CGROUP_ROOT} 3"; return; fi
+  echo "${LLMCTL_CGROUP_FS:-/sys/fs/cgroup} 8"
+}
+
+# _rsv_unit_owner <unit-cgroup-dir> -> "self" (this user's manager), "user-<uid>" (another user's manager), "system"
+# (system.slice) or "other". Only "self" units are this user's instances (restart replacement, "running"); every owner
+# counts as consumption.
+_rsv_unit_owner() {
+  local d="$1" mine; mine="$(_rsv_cgroup_root)"
+  if [[ -n "${LLMCTL_CGROUP_ROOT:-}" || "${d}" == "${mine}/"* ]]; then echo self; return; fi
+  if [[ "${d}" =~ /user\.slice/user-([0-9]+)\.slice/user@([0-9]+)\.service/ && "${BASH_REMATCH[1]}" == "${BASH_REMATCH[2]}" ]]; then
+    echo "user-${BASH_REMATCH[1]}"; return
+  fi
+  [[ "${d}" == "${LLMCTL_CGROUP_FS:-/sys/fs/cgroup}/system.slice/"* ]] && { echo system; return; }
+  echo other
 }
 
 # _rsv_self_cgroup -> the absolute cgroup directory of THIS process (empty when unknown).
@@ -334,19 +358,20 @@ _rsv_mem_mb() {
   return 0
 }
 
-# reserve_running_units -> "<name> <cpu-pct|max> <mem-mb|max>" for every POPULATED llmctl engine unit cgroup, except
+# reserve_running_units -> "<name> <cpu-pct|max> <mem-mb|max> <owner> <cgroup-dir>" for every POPULATED llmctl engine
+# unit cgroup on the host (_rsv_units_scan: every user's manager and system.slice; owner from _rsv_unit_owner), except
 # the caller's own cgroup (a unit's ExecStartPre runs inside it). The decision gateway is not an engine and not counted.
 # LLMCTL_RESERVE_EXTRA_UNIT_GLOB (QA only): one more unit-name pattern counted as an llmctl engine unit. The live
 # evidence harness (scripts/qa/host_reserve_live.sh) runs its engines as transient units named llmctl-qa-reserve-*,
 # because an instance of the operator's installed llmctl-llama@ template cannot be created as a transient unit.
 reserve_running_units() {
-  local root self d name cpu mem
-  root="$(_rsv_cgroup_root)"; self="$(_rsv_self_cgroup)"
+  local root depth self d name cpu mem
+  read -r root depth < <(_rsv_units_scan); self="$(_rsv_self_cgroup)"
   # rc 1 (and no line) when the tree cannot be read: a caller must not read "no output" as "no units" (round 5, R5-1).
   # find exits non-zero on any directory it cannot enter, so a partly unreadable tree is a failure too.
   [[ -d "${root}" && -r "${root}" && -x "${root}" ]] || return 1
   local list
-  list="$(find "${root}" -maxdepth 3 -type d \( -name 'llmctl-llama@*.service' -o -name 'llmctl-onnx@*.service' -o -name 'llmctl-colibri@*.service' \
+  list="$(find "${root}" -maxdepth "${depth}" -type d \( -name 'llmctl-llama@*.service' -o -name 'llmctl-onnx@*.service' -o -name 'llmctl-colibri@*.service' \
              -o -name "${LLMCTL_RESERVE_EXTRA_UNIT_GLOB:-llmctl-llama@*.service}" \) 2>/dev/null)" || return 1
   while IFS= read -r d; do
     [[ -n "${d}" ]] || continue
@@ -354,7 +379,7 @@ reserve_running_units() {
     grep -qx 'populated 1' "${d}/cgroup.events" 2>/dev/null || continue
     name="${d##*/}"
     cpu="$(_rsv_cpu_pct "${d}")"; mem="$(_rsv_mem_mb "${d}")"
-    echo "${name} ${cpu:-max} ${mem:-max}"
+    echo "${name} ${cpu:-max} ${mem:-max} $(_rsv_unit_owner "${d}") ${d}"
   done < <(printf '%s\n' "${list}" | LC_ALL=C sort)
 }
 
@@ -378,17 +403,18 @@ reserve_combined_check() {
   # budget (review round 5, R5-2; this check runs in hk_gate, the ExecStartPre of every start, restart and boot)
   local why census
   why="$(_rsv_units_unmeasurable)"
-  if [[ -z "${why}" ]] && ! census="$(reserve_running_units)"; then why="the unit census under $(_rsv_cgroup_root) failed"; fi
+  if [[ -z "${why}" ]] && ! census="$(reserve_running_units)"; then why="the unit census under $(_rsv_units_scan) failed"; fi
   if [[ -n "${why}" ]]; then
     printf 'refusing to %s %s: cannot count the running llmctl units (%s), so the model budget cannot be checked.\n' \
       "${act}" "${label}" "${why}" >&2
     return 75
   fi
-  while read -r name cpu mem; do
+  local owner ucg
+  while read -r name cpu mem owner ucg; do
     [[ -n "${name}" ]] || continue
     [[ "${cpu}" =~ ^[0-9]+$ ]] || cpu="${bcpu}"
     [[ "${mem}" =~ ^[0-9]+$ ]] || mem="${RSV_BM}"
-    ucpu=$(( ucpu + cpu )); umem=$(( umem + mem )); list+=" ${name}"
+    ucpu=$(( ucpu + cpu )); umem=$(( umem + mem )); list+=" ${name}"; [[ "${owner}" == self ]] || list+="(${owner})"
   done <<< "${census}"
   if (( ucpu + ncpu > bcpu )); then
     printf 'refusing to %s %s: host CPU reserve would be breached (running llmctl units%s hold %s%% CPU, this one needs %s%%, the model budget is %s%% = %s of %s CPUs; %s CPUs stay reserved for the host). Stop a model first.\n' \
@@ -472,21 +498,20 @@ reserve_cpu_gate() {
 reserve_report() {
   reserve_compute
   local json=0; [[ "${1:-}" == --json ]] && json=1
-  local name cpu mem d pid aff thr units=() root uerr census=""
-  root="$(_rsv_cgroup_root)"
+  local name cpu mem d pid aff thr units=() root uerr census="" owner
+  root="$(_rsv_units_scan)"; root="${root% *}"
   # an unreadable unit tree is reported, never shown as "no unit is running" (review round 5, R5-1)
   uerr="$(_rsv_units_unmeasurable)"
   if [[ -z "${uerr}" ]] && ! census="$(reserve_running_units)"; then uerr="the unit census under ${root} failed"; fi
-  while read -r name cpu mem; do
+  while read -r name cpu mem owner d; do
     [[ -n "${name}" ]] || continue
-    d="$(find "${root}" -maxdepth 3 -type d -name "${name}" 2>/dev/null | head -1)"
     pid="$(head -1 "${d}/cgroup.procs" 2>/dev/null || true)"
     aff=""; thr=""
     if [[ "${pid}" =~ ^[0-9]+$ ]]; then
       aff="$(awk '/^Cpus_allowed_list:/{print $2; exit}' "/proc/${pid}/status" 2>/dev/null || true)"
       thr="$(awk '/^Threads:/{print $2; exit}' "/proc/${pid}/status" 2>/dev/null || true)"
     fi
-    units+=("${name}|${cpu}|${mem}|${aff}|${thr}|$(head -1 "${d}/cpu.weight" 2>/dev/null || true)|$(head -1 "${d}/memory.swap.max" 2>/dev/null || true)")
+    units+=("${name}|${cpu}|${mem}|${aff}|${thr}|$(head -1 "${d}/cpu.weight" 2>/dev/null || true)|$(head -1 "${d}/memory.swap.max" 2>/dev/null || true)|${owner}|${d}")
   done <<< "${census}"
   if (( json )); then
     local u first=1
@@ -495,13 +520,13 @@ reserve_report() {
       "${RSV_CHAT_CPUS}" "${RSV_DECIDE_CPUS}" "${RSV_CPU_PCT}" "${RSV_CPU_MIN}" "$( ((RSV_CPU_SHORT)) && echo true || echo false)"
     printf '"memory":{"total_mb":%s,"reserved_mb":%s,"model_budget_mb":%s,"reserve_pct":%s,"reserve_min_mb":%s,"short":%s},' \
       "${RSV_MT}" "${RSV_RM}" "${RSV_BM}" "${RSV_MEM_PCT}" "${RSV_MEM_MIN}" "$( ((RSV_MEM_SHORT)) && echo true || echo false)"
-    printf '"gate":{"cpu_psi_some_max":%s,"load_per_cpu_max":%s},"units_readable":%s,"units_error":"%s","units":[' \
-      "${RSV_GATE_CPU_SOME_MAX}" "${RSV_GATE_LOAD_PER_CPU}" "$([[ -z "${uerr}" ]] && echo true || echo false)" "${uerr//\"/\'}"
+    printf '"gate":{"cpu_psi_some_max":%s,"load_per_cpu_max":%s},"units_scope":"%s","units_readable":%s,"units_error":"%s","units":[' \
+      "${RSV_GATE_CPU_SOME_MAX}" "${RSV_GATE_LOAD_PER_CPU}" "$([[ -n "${LLMCTL_CGROUP_ROOT:-}" ]] && echo manager || echo host)" "$([[ -z "${uerr}" ]] && echo true || echo false)" "${uerr//\"/\'}"
     for u in "${units[@]}"; do
-      IFS='|' read -r name cpu mem aff thr d pid <<<"${u}"
+      IFS='|' read -r name cpu mem aff thr d pid owner ucg <<<"${u}"
       (( first )) || printf ','; first=0
-      printf '{"unit":"%s","cpu_quota_pct":"%s","memory_max_mb":"%s","cpus_allowed":"%s","threads":"%s","cpu_weight":"%s","swap_max":"%s"}' \
-        "${name}" "${cpu}" "${mem}" "${aff}" "${thr}" "${d}" "${pid}"
+      printf '{"unit":"%s","cpu_quota_pct":"%s","memory_max_mb":"%s","cpus_allowed":"%s","threads":"%s","cpu_weight":"%s","swap_max":"%s","owner":"%s","cgroup":"%s"}' \
+        "${name}" "${cpu}" "${mem}" "${aff}" "${thr}" "${d}" "${pid}" "${owner}" "${ucg//\\/\\\\}"
     done
     printf ']}\n'
     return 0
@@ -520,8 +545,8 @@ reserve_report() {
   echo "  Units (applied limits, read from the cgroup and /proc):"
   local u
   for u in "${units[@]}"; do
-    IFS='|' read -r name cpu mem aff thr d pid <<<"${u}"
-    printf '    %s: CPUQuota %s%%, MemoryMax %s MiB, CPUs %s, threads %s, CPUWeight %s, swap.max %s\n' \
-      "${name}" "${cpu}" "${mem}" "${aff:-?}" "${thr:-?}" "${d:-?}" "${pid:-?}"
+    IFS='|' read -r name cpu mem aff thr d pid owner ucg <<<"${u}"
+    printf '    %s [%s]: CPUQuota %s%%, MemoryMax %s MiB, CPUs %s, threads %s, CPUWeight %s, swap.max %s\n' \
+      "${name}" "${owner}" "${cpu}" "${mem}" "${aff:-?}" "${thr:-?}" "${d:-?}" "${pid:-?}"
   done
 }

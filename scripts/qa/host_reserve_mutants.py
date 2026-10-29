@@ -22,6 +22,7 @@ R2 = "tests/test_host_reserve_review2.sh"
 R3 = "tests/test_host_reserve_review3.sh"
 R4 = "tests/test_host_reserve_review4.sh"
 R5 = "tests/test_host_reserve_review5.sh"
+F3 = "tests/test_host_reserve_f3.sh"
 # a reviewer mutant that is killed by "some suite" names the chain the reviewer ran (killed when any suite fails)
 CHAIN = (R4, R5, "tests/test_capacity.sh", "tests/test_host_reserve.sh", R3, R2, "tests/test_host_reserve_review.sh",
          "tests/test_decision_capacity.sh", "tests/test_start_gate.sh", "tests/test_services.sh",
@@ -257,9 +258,9 @@ MUTANTS = [
     ("Z20-restart-skips-admit", "lib/scheduler.sh",
      '_sched_restart_impl() { sched_restart_admit "$1" || return $?; svc_restart "$1"; }',
      '_sched_restart_impl() { svc_restart "$1"; }', CHAIN),
-    ("R5-1-unmeasurable-always-measurable", RSV, '  local root fs\n  root="$(_rsv_cgroup_root)"\n',
-     '  local root fs\n  root="$(_rsv_cgroup_root)"\n  return 0\n', R5),
-    ("R5-1-unreadable-subdir-not-checked", RSV, 'if ! find "${root}" -maxdepth 3 -type d >/dev/null 2>&1; then',
+    ("R5-1-unmeasurable-always-measurable", RSV, '  local root depth fs\n  read -r root depth < <(_rsv_units_scan)\n',
+     '  local root depth fs\n  read -r root depth < <(_rsv_units_scan)\n  return 0\n', R5),
+    ("R5-1-unreadable-subdir-not-checked", RSV, 'if ! find "${root}" -maxdepth "${depth}" -type d >/dev/null 2>&1; then',
      "if false; then", R5),
     ("R5-1-cgroup-v2-not-required", RSV, 'if [[ ! -f "${fs}/cgroup.controllers" ]]; then', "if false; then", R5),
     ("R5-1-census-root-check-passes", RSV, '[[ -d "${root}" && -r "${root}" && -x "${root}" ]] || return 1',
@@ -278,6 +279,22 @@ MUTANTS = [
      '  uerr="$(_rsv_units_unmeasurable)"\n  if [[ -z "${uerr}" ]] && ! census="$(reserve_running_units)"; then uerr="the unit census under ${root} failed"; fi',
      '  uerr=""; census="$(reserve_running_units)" || true', R5),
     ("R5-6-own-pid-needle-dropped", CAP, "if not _self_seen: nproc_ok = False", "pass", R5),
+    # F3 (review round 5): the host budget counts the llmctl units of every owner on the host
+    ("F3-scan-own-manager-only", RSV, '  echo "${LLMCTL_CGROUP_FS:-/sys/fs/cgroup} 8"\n',
+     '  echo "$(_rsv_cgroup_root) 3"\n', F3),
+    ("F3-host-scan-too-shallow", RSV, '  echo "${LLMCTL_CGROUP_FS:-/sys/fs/cgroup} 8"\n',
+     '  echo "${LLMCTL_CGROUP_FS:-/sys/fs/cgroup} 5"\n', F3),
+    ("F3-owner-always-self", RSV, '  local d="$1" mine; mine="$(_rsv_cgroup_root)"\n',
+     '  local d="$1" mine; mine="$(_rsv_cgroup_root)"\n  echo self; return\n', F3),
+    ("F3-system-owner-unrecognised", RSV,
+     '[[ "${d}" == "${LLMCTL_CGROUP_FS:-/sys/fs/cgroup}/system.slice/"* ]] && { echo system; return; }', ':', F3),
+    ("F3-other-owner-replaced-on-restart", CAP, 'if replace and prof == replace and owner == "self": continue',
+     "if replace and prof == replace: continue", F3),
+    ("F3-other-owner-is-running", CAP, 'unit_keys = {u["profile"] for u in units if u["owner"] == "self"}',
+     'unit_keys = {u["profile"] for u in units}', F3),
+    ("F3-scope-always-manager", CAP, '"owners": sorted({u["owner"] for u in units}),', '"owners": [],', F3),
+    ("F3-census-skips-non-self", RSV, '    name="${d##*/}"\n',
+     '    name="${d##*/}"\n    [[ "$(_rsv_unit_owner "${d}")" == self ]] || continue\n', F3),
 ]
 
 

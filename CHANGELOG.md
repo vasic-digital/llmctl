@@ -167,8 +167,8 @@ workload, and reports host capacity on demand (`llmctl capacity --json`).
   - `llmctl capacity <profile> --json` now emits JSON (`--json` accepted in any position); an unknown option is a usage
     error (exit 2).
   - `restart` admission and the restart itself run under the scheduler lock, so they cannot race a concurrent `start`.
-  - New field `llmctl.consumption_scope` states which units are counted as model consumption (this user's llmctl units
-    only).
+  - New field `llmctl.consumption_scope` states which units are counted as model consumption (round 4: this user's
+    llmctl units only; round 5 widened it to every owner on the host, see F3 below).
   - Tests that kill reviewer mutants which had survived: `AllowedCPUs` equals the reserve set, tenant `t1` does not count
     `t10--decide-tiny`, load and memory-PSI `full` boundary values, GPU estimate memory floor, a short-lived child in the
     process-tree collection.
@@ -191,6 +191,16 @@ workload, and reports host capacity on demand (`llmctl capacity --json`).
     directory, or one with only other users' processes, now makes the measurement not ok instead of counting 0 threads.
   - `llmctl reserve [--json]` reports an unreadable unit tree (`units_readable`, `units_error`, text "UNKNOWN") instead
     of "no llmctl engine unit is running". Additive fields; the capacity schema stays `llmctl.capacity/1`.
+  - F3: the model budget is one budget for the host, but only this user's llmctl units were counted, so a second
+    user's (or a `system.slice`) llmctl unit was invisible and two users could together exceed the budget. The census
+    now scans the whole cgroup v2 mount (`LLMCTL_CGROUP_FS`, at most 8 levels deep) and counts the llmctl engine units
+    of every owner. Each unit carries an `owner` (`self`, `user-<uid>`, `system`, `other`) and its `cgroup` path in
+    `llmctl capacity --json` and `llmctl reserve --json`; only `self` units are this user's instances (never
+    "running", never replaced by this user's restart, for another owner). Any directory of the host tree that cannot be
+    read makes the census fail and refuses the start (75, same class as R5-1). `llmctl.consumption_scope` gains
+    `scope` (`host`, or `manager` when `LLMCTL_CGROUP_ROOT` narrows the scan) and `owners`; `llmctl reserve --json`
+    gains `units_scope`. Test `tests/test_host_reserve_f3.sh` (fails 23 assertions on bbca71d,
+    `review-r5/red-f3-on-bbca71d.log`). Decision and rejected alternatives: `docs/capacity.md` ("Consumption scope").
   - A test pins reviewer mutant Y02 (a running profile leaves the thread cap empty). The reviewer's Y and Z mutants
     and new paired mutants for this round are in `scripts/qa/host_reserve_mutants.py`.
   - Class inventory (§11.4.276(C)) of every "count X under a source" instrument on the start paths, each run with a
@@ -252,9 +262,11 @@ workload, and reports host capacity on demand (`llmctl capacity --json`).
 - A dry-run `llmctl start` (`LLMCTL_DRY_RUN=1`) that is admitted writes a `<profile>.run` reservation in the runtime directory (unchanged from
   3.3.x); later starts of that profile then report "already running". Found while building the live harness, which now isolates and clears it.
 - An unknown profile name given to `llmctl capacity` is reported as `does_not_fit` (exit 75), not a usage error (follow-up).
-- Model consumption is counted only for THIS user's llmctl units (`llmctl.consumption_scope`); llmctl units of other users or in
-  `system.slice` are not seen, so two users can together over-subscribe the model budget. This is a known limit PENDING
-  operator acceptance (Constitution 11.4.66); it is not approved.
+- Model consumption counts the llmctl units of every owner found in the cgroup v2 tree; a host that restricts read
+  access to part of that tree (for example another user's manager at mode 0700 owned by that user) refuses every local
+  start while the reserve is on, because the census cannot be complete. Measured on the reference host: 310 cgroups,
+  none unreadable. Other-user and `system.slice` units are covered by hermetic tests only (single-user host, no root).
+  Non-llmctl workloads are outside the model budget (PSI/load gate only).
 - A cgroup v1 or hybrid host refuses every local start while the reserve is on (the units cannot be counted). Not tested
   on such a host; hermetic test only.
 - The planner's per-unit memory list (`systemctl list-units`) and the scheduler's reservation sum (runtime directory)
