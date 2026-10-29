@@ -1,0 +1,234 @@
+== F1: 'running' is the exact unit instance being started, never another instance of the profile ==
+  FAIL: decide-tiny.2 holds the whole CPU budget: decide-tiny (primary, not running) does_not_fit (was: running)
+    expected: does_not_fit
+    actual:   running
+  FAIL: start decide-tiny is refused 75 (was: admitted unchecked)
+    expected: 75
+    actual:   0
+  FAIL: the refusal carries the fallback line
+    llmctl-fallback: not found in /home/milosvasic/.cache/claude-tmp/tmp.KGdJfpwoJY/admit.err
+  ok: negative control: the primary itself running is 'running'
+  ok: negative control: starting the running primary is a no-op admission
+== F1: another tenant's instance of the profile is consumption, never 'running' ==
+  FAIL: tenant t2 start while t1 holds the budget: refused 75 (was: admitted)
+    expected: 75
+    actual:   0
+  FAIL: the single-host start while tenant t1 holds the budget: refused 75
+    expected: 75
+    actual:   0
+  ok: negative control: tenant t1's own row is 'running' for t1
+  ok: negative control: t1 starting its own running row is admitted
+== M21: the capacity base_profile drops the tenant prefix ==
+  ok: t1--decide-tiny maps to base profile decide-tiny
+  ok: the stop suggestion names the base profile
+== F4: verdict_class and route carry the anchor vocabulary next to llmctl's names ==
+Traceback (most recent call last):
+  File "<string>", line 1, in <module>
+    import json,sys; d=json.loads(sys.argv[1]); print(eval(sys.argv[2]))
+                                                      ~~~~^^^^^^^^^^^^^
+  File "<string>", line 1, in <module>
+    import json,sys; d=json.loads(sys.argv[1]); print(eval(sys.argv[2]))
+                                                       ^^^^^^^^^^^^^^^^^
+KeyError: 'verdict_class'
+  FAIL: idle host: fits -> fits, route local
+    expected: fits fits local
+    actual:   
+Traceback (most recent call last):
+  File "<string>", line 1, in <module>
+    import json,sys; d=json.loads(sys.argv[1]); print(eval(sys.argv[2]))
+                                                      ~~~~^^^^^^^^^^^^^
+  File "<string>", line 1, in <module>
+    import json,sys; d=json.loads(sys.argv[1]); print(eval(sys.argv[2]))
+                                                ~~~~~^^^^^^^^^^^^^^^^^^^
+KeyError: 'verdict_class'
+  FAIL: fits_with_reduced_threads -> fits_reduced
+    expected: fits_with_reduced_threads fits_reduced
+    actual:   
+Traceback (most recent call last):
+  File "<string>", line 1, in <module>
+    import json,sys; d=json.loads(sys.argv[1]); print(eval(sys.argv[2]))
+                                                      ~~~~^^^^^^^^^^^^^
+  File "<string>", line 1, in <module>
+    import json,sys; d=json.loads(sys.argv[1]); print(eval(sys.argv[2]))
+                                                       ^^^^^^^^^^^^^^^^^
+KeyError: 'verdict_class'
+  FAIL: does_not_fit -> does_not_fit, no key: route none
+    expected: does_not_fit does_not_fit none none
+    actual:   
+Traceback (most recent call last):
+  File "<string>", line 1, in <module>
+    import json,sys; d=json.loads(sys.argv[1]); print(eval(sys.argv[2]))
+                                                      ~~~~^^^^^^^^^^^^^
+  File "<string>", line 1, in <module>
+    import json,sys; d=json.loads(sys.argv[1]); print(eval(sys.argv[2]))
+                                     ^^^^^^^^^^^^^^^^^^^^^^
+KeyError: 'route'
+  FAIL: key variable set: cloud -> route hosted
+    expected: cloud hosted
+    actual:   
+  ok: the key VALUE never appears in the document
+Traceback (most recent call last):
+  File "<string>", line 1, in <module>
+    import json,sys; d=json.loads(sys.argv[1]); print(eval(sys.argv[2]))
+                                                      ~~~~^^^^^^^^^^^^^
+  File "<string>", line 1, in <module>
+    import json,sys; d=json.loads(sys.argv[1]); print(eval(sys.argv[2]))
+                                                    ~^^^^^^^^^^^^^^^^^^^
+KeyError: 'verdict_class'
+  FAIL: running is unit state, not a candidate verdict: verdict_class null
+    expected: running None
+    actual:   
+Traceback (most recent call last):
+  File "<string>", line 1, in <module>
+    import json,sys; d=json.loads(sys.argv[1]); print(eval(sys.argv[2]))
+                                                      ~~~~^^^^^^^^^^^^^
+  File "<string>", line 1, in <module>
+    import json,sys; d=json.loads(sys.argv[1]); print(eval(sys.argv[2]))
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+KeyError: 'running'
+  FAIL: the running state is its own boolean field
+    expected: True
+    actual:   
+Traceback (most recent call last):
+  File "<string>", line 1, in <module>
+    import json,sys; d=json.loads(sys.argv[1]); print(eval(sys.argv[2]))
+                                                      ~~~~^^^^^^^^^^^^^
+  File "<string>", line 1, in <module>
+    import json,sys; d=json.loads(sys.argv[1]); print(eval(sys.argv[2]))
+                        ^^^^^^^^^^^^^^^^
+KeyError: 'measurement'
+  FAIL: schema unchanged; measurement.ok true
+    expected: llmctl.capacity/1 True
+    actual:   
+== F2: a hung probe cannot hang the CLI or the admission: bounded, undetermined, 75, fallback ==
+  FAIL: llmctl capacity --json with a hung GPU probe exits 75 (was: hangs; 124 = the test's own 40 s guard)
+    expected: 75
+    actual:   124
+  FAIL: it returns within the bound
+    expected: <= 8 s
+    actual:   41 s
+  FAIL: the CLI prints an undetermined document
+    expected: a JSON document
+    actual:   no document
+  FAIL: the CLI prints the fallback line (never local)
+    llmctl-fallback: none not found in /home/milosvasic/.cache/claude-tmp/tmp.KGdJfpwoJY/hang.err
+  ok: no hung probe process is left behind
+  FAIL: capacity_admit (start/switch/restart/scale) with a hung GPU probe refuses 75
+    expected: 75
+    actual:   124
+  FAIL: the admission returns within the bound
+    expected: <= 8 s
+    actual:   40 s
+  FAIL: with a key variable set the fallback is cloud
+    llmctl-fallback: cloud not found in /home/milosvasic/.cache/claude-tmp/tmp.KGdJfpwoJY/hang-admit.err
+  FAIL: the message says the capacity could not be determined
+    could not be determined not found in /home/milosvasic/.cache/claude-tmp/tmp.KGdJfpwoJY/hang-admit.err
+  ok: no hung probe process is left behind by the admission
+== F2: the time budget knobs are clamped to sane bounds ==
+Traceback (most recent call last):
+  File "<string>", line 1, in <module>
+    import json,sys; d=json.loads(sys.argv[1]); print(eval(sys.argv[2]))
+                                                      ~~~~^^^^^^^^^^^^^
+  File "<string>", line 1, in <module>
+    import json,sys; d=json.loads(sys.argv[1]); print(eval(sys.argv[2]))
+               ^^^^^^^^^^^^^^^^
+KeyError: 'measurement'
+  FAIL: 0 is raised to the floors (2 s / 1 s)
+    expected: 2 1
+    actual:   
+Traceback (most recent call last):
+  File "<string>", line 1, in <module>
+    import json,sys; d=json.loads(sys.argv[1]); print(eval(sys.argv[2]))
+                                                      ~~~~^^^^^^^^^^^^^
+  File "<string>", line 1, in <module>
+    import json,sys; d=json.loads(sys.argv[1]); print(eval(sys.argv[2]))
+               ^^^^^^^^^^^^^^^^
+KeyError: 'measurement'
+  FAIL: 9999 is lowered to the ceilings; the probe budget never exceeds the whole
+    expected: 30 30
+    actual:   
+Traceback (most recent call last):
+  File "<string>", line 1, in <module>
+    import json,sys; d=json.loads(sys.argv[1]); print(eval(sys.argv[2]))
+                                                      ~~~~^^^^^^^^^^^^^
+  File "<string>", line 1, in <module>
+    import json,sys; d=json.loads(sys.argv[1]); print(eval(sys.argv[2]))
+               ^^^^^^^^^^^^^^^^
+KeyError: 'measurement'
+  FAIL: a non-integer is the default (5 s / 3 s)
+    expected: 5 3
+    actual:   
+== F6: a plan/probe failure is 'undetermined', not 'not a catalog profile' ==
+  ok: a failing planner refuses 75
+  FAIL: the message says the capacity could not be determined
+    could not be determined not found in /home/milosvasic/.cache/claude-tmp/tmp.KGdJfpwoJY/plan.err
+  FAIL: it no longer claims the profile is unknown
+    expected: no catalog claim
+    actual:   not a catalog profile
+Traceback (most recent call last):
+  File "<string>", line 1, in <module>
+    import json,sys; d=json.loads(sys.argv[1]); print(eval(sys.argv[2]))
+                                                      ~~~~^^^^^^^^^^^^^
+  File "<string>", line 1, in <module>
+    import json,sys; d=json.loads(sys.argv[1]); print(eval(sys.argv[2]))
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+KeyError: 'decide-tiny'
+  FAIL: unreadable planner output -> undetermined
+    expected: undetermined
+    actual:   
+  ok: negative control: a real unknown profile still refuses
+  ok: negative control: and still says it is not a catalog profile
+== M10: an empty measurement is refused as 'could not be measured' ==
+  ok: empty measurement refused 75
+  ok: the refusal names the failed measurement
+== M03: restart adds the replaced unit's resident memory back to the user manager's cgroup room ==
+  ok: restart: the replaced unit's 2048 MiB come back into the cgroup room (admitted)
+  ok: negative control: the same memory held by another unit refuses a start
+== M04 / M05: decide scale judges NEW instances at the full cap, k of them together ==
+  ok: 2 new instances need 600% CPU, 500% left: refused (k is the instance count)
+  ok: negative control: 1 new instance (300%) fits
+  ok: 1 new instance, only 200% left: refused (a scale never runs with reduced threads)
+  ok: negative control: a plain start with 200% left runs with 2 threads
+== M06 / M07: the fallback is never local for a refused named start or a degraded decision unit ==
+  ok: decide-2b does not fit; a healthy decide-tiny runs
+Traceback (most recent call last):
+  File "<string>", line 1, in <module>
+    import json,sys; d=json.loads(sys.argv[1]); print(eval(sys.argv[2]))
+                                                      ~~~~^^^^^^^^^^^^^
+  File "<string>", line 1, in <module>
+    import json,sys; d=json.loads(sys.argv[1]); print(eval(sys.argv[2]))
+                                     ^^^^^^^^^^^^^^^^^^^^^^
+KeyError: 'route'
+  FAIL: a refused named start: fallback none (never local)
+    expected: none none
+    actual:   
+  ok: the only decision unit is degraded and nothing else fits
+  ok: a degraded decision unit is not local
+== M16: bin/llmctl decide scale passes the instance count to the admission ==
+  ok: decide scale to 2 instances with 500% left exits 75
+  ok: and prints the fallback line
+== M22: decide scale keeps the memory pressure gate even with the host reserve off ==
+  ok: memory PSI full 50 with the reserve off: decide scale refused 75
+  ok: negative control: no pressure, reserve off: decide scale succeeds (dry run)
+== F5: _sched_base_profile uses the same mapping as reserve_base_profile ==
+  ok: _sched_base_profile decide-tiny == reserve_base_profile decide-tiny
+  FAIL: _sched_base_profile decide-tiny.2 == reserve_base_profile decide-tiny.2
+    expected: decide-tiny.2
+    actual:   decide-tiny
+  ok: _sched_base_profile decide-tiny.3 == reserve_base_profile decide-tiny.3
+  FAIL: _sched_base_profile t1--decide-tiny == reserve_base_profile t1--decide-tiny
+    expected: decide-tiny
+    actual:   t1--decide-tiny
+  FAIL: _sched_base_profile t1--decide-tiny.3 == reserve_base_profile t1--decide-tiny.3
+    expected: decide-tiny
+    actual:   t1--decide-tiny.3
+  FAIL: _sched_base_profile decide.1 == reserve_base_profile decide.1
+    expected: decide.1
+    actual:   decide
+  ok: _sched_base_profile decide.10 == reserve_base_profile decide.10
+  ok: _sched_base_profile qwen2.5-coder == reserve_base_profile qwen2.5-coder
+  ok: _sched_base_profile no-such == reserve_base_profile no-such
+== M20: a short host's template unit keeps the 256 MiB MemoryMax floor ==
+  ok: 4300 MiB host (model budget 204 MiB): the template MemoryMax is the 256 MiB floor
+  ok: negative control: 8192 MiB host: the model budget 4096 MiB
+RESULT: FAIL (31 assertion failure(s))

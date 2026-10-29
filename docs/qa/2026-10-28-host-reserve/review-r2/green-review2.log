@@ -1,0 +1,92 @@
+== F1: 'running' is the exact unit instance being started, never another instance of the profile ==
+  ok: decide-tiny.2 holds the whole CPU budget: decide-tiny (primary, not running) does_not_fit (was: running)
+  ok: start decide-tiny is refused 75 (was: admitted unchecked)
+  ok: the refusal carries the fallback line
+  ok: negative control: the primary itself running is 'running'
+  ok: negative control: starting the running primary is a no-op admission
+== F1: another tenant's instance of the profile is consumption, never 'running' ==
+  ok: tenant t2 start while t1 holds the budget: refused 75 (was: admitted)
+  ok: the single-host start while tenant t1 holds the budget: refused 75
+  ok: negative control: tenant t1's own row is 'running' for t1
+  ok: negative control: t1 starting its own running row is admitted
+== M21: the capacity base_profile drops the tenant prefix ==
+  ok: t1--decide-tiny maps to base profile decide-tiny
+  ok: the stop suggestion names the base profile
+== F4: verdict_class and route carry the anchor vocabulary next to llmctl's names ==
+  ok: idle host: fits -> fits, route local
+  ok: fits_with_reduced_threads -> fits_reduced
+  ok: does_not_fit -> does_not_fit, no key: route none
+  ok: key variable set: cloud -> route hosted
+  ok: the key VALUE never appears in the document
+  ok: running is unit state, not a candidate verdict: verdict_class null
+  ok: the running state is its own boolean field
+  ok: schema unchanged; measurement.ok true
+== F2: a hung probe cannot hang the CLI or the admission: bounded, undetermined, 75, fallback ==
+  ok: llmctl capacity --json with a hung GPU probe exits 75 (was: hangs; 124 = the test's own 40 s guard)
+  ok: it returns within the bound (3 s <= 8 s with a 3 s budget)
+  ok: the document says undetermined, route none, measurement.ok false
+  ok: the undetermined document keeps the schema
+  ok: the PROBE bound (1 s) fired first and is named in measurement.reason
+  ok: the CLI prints the fallback line (never local)
+  ok: no hung probe process is left behind
+  ok: llmctl capacity (no profile named, human output) with a hung probe exits 75
+  ok: the human output says UNDETERMINED
+  ok: and prints the fallback line
+  ok: no hung probe process is left behind (no profile named)
+  ok: capacity_admit (start/switch/restart/scale) with a hung GPU probe refuses 75
+  ok: the admission returns within the bound (4 s)
+  ok: with a key variable set the fallback is cloud
+  ok: the message says the capacity could not be determined
+  ok: no hung probe process is left behind by the admission
+== F2: the WHOLE-measurement bound holds when a step outside the probe hangs (a /proc read that never returns) ==
+  ok: capacity_json returns (rc 0, a document) instead of hanging on the read
+  ok: within the 2 s whole budget (3 s)
+  ok: undetermined
+  ok: the WHOLE bound is named
+== F2: the time budget knobs are clamped to sane bounds ==
+  ok: 0 is raised to the floors (2 s / 1 s)
+  ok: 9999 is lowered to the ceilings; the probe budget never exceeds the whole
+  ok: a non-integer is the default (5 s / 3 s)
+== F6: a plan/probe failure is 'undetermined', not 'not a catalog profile' ==
+  ok: a failing planner refuses 75
+  ok: the message says the capacity could not be determined
+  ok: it no longer claims the profile is unknown
+  ok: unreadable planner output -> undetermined
+  ok: negative control: a real unknown profile still refuses
+  ok: negative control: and still says it is not a catalog profile
+== M10: an empty measurement is refused as 'could not be measured' ==
+  ok: empty measurement refused 75
+  ok: the refusal names the failed measurement
+== M03: restart adds the replaced unit's resident memory back to the user manager's cgroup room ==
+  ok: restart: the replaced unit's 2048 MiB come back into the cgroup room (admitted)
+  ok: negative control: the same memory held by another unit refuses a start
+== M04 / M05: decide scale judges NEW instances at the full cap, k of them together ==
+  ok: 2 new instances need 600% CPU, 500% left: refused (k is the instance count)
+  ok: negative control: 1 new instance (300%) fits
+  ok: 1 new instance, only 200% left: refused (a scale never runs with reduced threads)
+  ok: negative control: a plain start with 200% left runs with 2 threads
+== M06 / M07: the fallback is never local for a refused named start or a degraded decision unit ==
+  ok: decide-2b does not fit; a healthy decide-tiny runs
+  ok: a refused named start: fallback none (never local)
+  ok: the only decision unit is degraded and nothing else fits
+  ok: a degraded decision unit is not local
+== M16: bin/llmctl decide scale passes the instance count to the admission ==
+  ok: decide scale to 2 instances with 500% left exits 75
+  ok: and prints the fallback line
+== M22: decide scale keeps the memory pressure gate even with the host reserve off ==
+  ok: memory PSI full 50 with the reserve off: decide scale refused 75
+  ok: negative control: no pressure, reserve off: decide scale succeeds (dry run)
+== F5: _sched_base_profile uses the same mapping as reserve_base_profile ==
+  ok: _sched_base_profile decide-tiny == reserve_base_profile decide-tiny
+  ok: _sched_base_profile decide-tiny.2 == reserve_base_profile decide-tiny.2
+  ok: _sched_base_profile decide-tiny.3 == reserve_base_profile decide-tiny.3
+  ok: _sched_base_profile t1--decide-tiny == reserve_base_profile t1--decide-tiny
+  ok: _sched_base_profile t1--decide-tiny.3 == reserve_base_profile t1--decide-tiny.3
+  ok: _sched_base_profile decide.1 == reserve_base_profile decide.1
+  ok: _sched_base_profile decide.10 == reserve_base_profile decide.10
+  ok: _sched_base_profile qwen2.5-coder == reserve_base_profile qwen2.5-coder
+  ok: _sched_base_profile no-such == reserve_base_profile no-such
+== M20: a short host's template unit keeps the 256 MiB MemoryMax floor ==
+  ok: 4300 MiB host (model budget 204 MiB): the template MemoryMax is the 256 MiB floor
+  ok: negative control: 8192 MiB host: the model budget 4096 MiB
+RESULT: PASS

@@ -1,0 +1,55 @@
+  ok: download_profile toy-decide exit code
+  WARN: UNPINNED: 'toy-decide' downloads from the moving revision 'main' of toy/decide - pin hf_revision to a commit in models/catalog.json (llmctl models pins lists every unpinned entry)
+  [llmctl] downloading model.gguf from toy/decide
+    % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                   Dload  Upload  Total   Spent   Left   Speed
+    0      0   0      0   0      0      0      0                              0100     61 100     61   0      0  20272      0                              0100     61 100     61   0      0  19741      0                              0100     61 100     61   0      0  19316      0                              0
+  verified: model.gguf
+  WARN: smoke test disabled (LLMCTL_SMOKE=0)
+  profile 'toy-decide' downloaded and verified. Evidence: /home/milosvasic/.cache/claude-tmp/tmp.kdHHN4JvFg/state/verify/toy-decide.log
+  ok: model.gguf exists after download
+  ok: downloaded file sha256 matches
+  ok: evidence log records the DECISION smoke path (not the gguf smoke path)
+  ok: gguf smoke path NOT taken for a decide-capable profile
+  ok: evidence log records overall success
+HOSTDEP-BEGIN: section 2 branches on whether a real llama-server is built on this host
+  ok: download with smoke enabled but no llama-server: still rc 0 (skip-warn precedent)
+  ok: evidence log records the decision smoke SKIP-with-reason
+  ok: operator-facing skip warning
+HOSTDEP-END
+HOSTDEP-BEGIN: section 3 runs only when the go toolchain is installed
+  ok: download with a fake engine: decision smoke passes through llmctl-decide smoke
+  ok: evidence log records the Go-backed smoke probe
+  ok: evidence log records the typed billing answer
+  ok: evidence log records the smoke PASS
+  ok: download with a failing engine: decision smoke FAILS the download (rc=1)
+  ok: evidence log records the smoke FAIL
+  ok: download with an unusable LLMCTL_DECIDE_BIN fails (no silent skip)
+  ok: unusable binary: the error names LLMCTL_DECIDE_BIN
+  [llmctl] downloading model.gguf from toy/decide
+    % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                   Dload  Upload  Total   Spent   Left   Speed
+    0      0   0      0   0      0      0      0                              0100     61 100     61   0      0  63674      0                              0100     61 100     61   0      0  60756      0                              0100     61 100     61   0      0  57384      0                              0
+  verified: model.gguf
+  [llmctl] decision smoke test: starting llama-server for toy-native on 127.0.0.1:43237
+  decision smoke test passed for toy-native (llmctl-decide smoke: choice probes)
+  profile 'toy-native' downloaded and verified. Evidence: /home/milosvasic/.cache/claude-tmp/tmp.kdHHN4JvFg/state/verify/toy-native.log
+  ok: 3b native profile: download + decision smoke through /v1/systemone passes
+  ok: 3b native profile: the evidence log records a typed answer from the NATIVE protocol
+  ok: 3b native profile: smoke PASS recorded
+  ok: 3b native profile: smoke engine gets a 4096 context (a native state is scored in one batch)
+HOSTDEP-END
+  ok: _dl_pid_owns_port: the listener's own pid owns its port
+  ok: _dl_pid_owns_port: another pid does NOT own it
+  ok: a foreign server answering /health is NOT accepted as the launched server's readiness
+  ok: ...and the reason names it
+  ok: control: the real owner of the answering port IS ready
+  ok: a launched process that died is never ready, whatever else answers
+  ok: ...with the exit reason
+  ok: the default smoke port is 'auto' (no fixed port that a foreign server can occupy)
+  ok: auto picks an ephemeral port (not the old fixed 18090): 43739
+  ok: a pinned LLMCTL_SMOKE_PORT already in use is refused
+  ok: ...with the reason
+  ok: auto smoke port: the decision smoke passes with a foreign server answering elsewhere
+  ok: ...on its own port (45073), never the foreign server's (35515)
+RESULT: PASS

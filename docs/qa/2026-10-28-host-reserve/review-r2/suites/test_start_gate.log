@@ -1,0 +1,23 @@
+== svc_hook.sh gate ==
+  ok: gate full avg10=3.5: refused with exit 75
+  ok: gate full avg10=3.5: message names the cause
+  ok: gate some avg10=12: refused with exit 75
+  ok: gate some avg10=12: message names the cause
+  ok: gate low MemAvailable: refused with exit 75
+  ok: gate low MemAvailable: message names the cause
+  ok: gate with avg10=0 and ample MemAvailable passes (negative control: the gate is not a constant refusal)
+== llmctl start/enable/switch under pressure ==
+  ok: llmctl start fast: refused with exit 75
+  ok: llmctl start fast: message names the cause
+  ok: llmctl enable small: refused with exit 75
+  ok: llmctl enable small: message names the cause
+  ok: llmctl switch coder: refused with exit 75
+  ok: llmctl switch coder: message names the cause
+  ok: llmctl start vision with avg10=0 still succeeds (dry-run)
+  ok: llmctl validate: refused with exit 2
+  ok: llmctl validate: message names the cause
+== generated unit gates RESTARTS ==
+  ok: llama: ExecStartPre gate (line 51) precedes prestart key rotation (line 52)
+  ok: colibri: ExecStartPre gate (line 51) precedes prestart key rotation (line 52)
+  ok: onnx: ExecStartPre gate (line 51) precedes prestart key rotation (line 52)
+RESULT: PASS

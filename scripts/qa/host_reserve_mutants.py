@@ -18,6 +18,7 @@ import tempfile
 
 SH = ["bash"]
 R = "tests/test_host_reserve_review.sh"
+R2 = "tests/test_host_reserve_review2.sh"
 
 MUTANTS = [
     ("M1-drop-cpu-quota", "lib/reserve.sh", "printf '[Service]\\nCPUQuota=%s%%\\n", "printf '[Service]\\nX=%s%%\\n",
@@ -32,7 +33,7 @@ MUTANTS = [
      "tests/test_host_reserve.sh"),
     ("M6-capacity-admit-always-pass", "lib/capacity.sh", "capacity_admit() {\n  CAP_THREADS=\"\"\n",
      "capacity_admit() {\n  CAP_THREADS=\"\"\n  return 0\n", "tests/test_capacity.sh"),
-    ("M7-leak-key-value", "lib/capacity.sh", '"key_variable": keyvar}', '"key_variable": keyvar, "value": E.get(keyvar)}',
+    ("M7-leak-key-value", "lib/capacity.sh", '"key_variable": keyvar}\nelse:', '"key_variable": keyvar, "value": E.get(keyvar)}\nelse:',
      "tests/test_capacity.sh"),
     ("M8-no-cpu-left-check", "lib/capacity.sh", "if cpu_free < 100:", "if cpu_free < 0:", "tests/test_capacity.sh"),
     ("M9-drop-memory-reserve-floor", "lib/reserve.sh", '"${LLMCTL_RESERVE_MEM_MIN_MB:-4096}" 4096 4096', '"${LLMCTL_RESERVE_MEM_MIN_MB:-4096}" 4096 0',
@@ -73,7 +74,43 @@ MUTANTS = [
     ("R-S7-dotted-name-stripped", "lib/reserve.sh", '[[ "${set}" == *" ${n} "* ]] && { echo "${n}"; return 0; }',
      'n="${n%.[0-9]*}"; echo "${n}"; return 0', R),
     ("R-restart-same-profile-treated-running", "lib/capacity.sh",
-     "is_running = p in running and not ((new_inst or replace) and p in wanted)", "is_running = p in running", R),
+     "is_running = inst_key(p) in unit_keys and not ((new_inst or replace) and p in wanted)",
+     "is_running = inst_key(p) in unit_keys", R),
+    # review round 2: the reviewer's surviving mutants (M03..M22) and the F1/F2/F4/F5/F6 fixes
+    ("R2-M03-replaced-rss-not-in-cgroup-room", "lib/capacity.sh", 'cg["memory_current_mb"] + rep_cur', 'cg["memory_current_mb"]', R2),
+    ("R2-M04-scale-k-forced-1", "lib/capacity.sh", "k = new_inst if (new_inst and p in wanted) else 1", "k = 1", R2),
+    ("R2-M05-scale-one-allows-reduced-threads", "lib/capacity.sh", "elif k > 1 or (new_inst and p in wanted):", "elif k > 1:", R2),
+    ("R2-M06-named-refused-never", "lib/capacity.sh", "named_refused = bool(wanted) and (", "named_refused = False and (", R2),
+    ("R2-M07-degraded-decide-unit-local", "lib/capacity.sh", 'u["base_profile"] in decide_set and u["status"] == "ok"',
+     'u["base_profile"] in decide_set', R2),
+    ("R2-M10-empty-doc-not-refused", "lib/capacity.sh", '|| [[ -z "${doc}" ]]; then', "; then", R2),
+    ("R2-M16-scale-passes-no-instance-count", "lib/scheduler.sh", 'capacity_admit "${profile}" "${need}"', 'capacity_admit "${profile}"', R2),
+    ("R2-M20-template-mem-floor-removed", "lib/service_linux.sh", "    (( lim < 256 )) && lim=256\n", "\n", R2),
+    ("R2-M21-py-tenant-strip-removed", "lib/capacity.sh", '    if "--" in n: n = n.rsplit("--", 1)[1]\n', "\n", R2),
+    ("R2-M22-scale-skips-pressure-gate", "lib/scheduler.sh", '    hw_pressure_gate "$(( ram * need ))" "${profile}" ||', "    true ||", R2),
+    ("R2-F1-running-by-base-profile", "lib/capacity.sh", "is_running = inst_key(p) in unit_keys and",
+     'is_running = any(u["base_profile"] == p for u in units) and', R2),
+    ("R2-F1-tenant-key-ignored", "lib/capacity.sh", 'def inst_key(p): return ("%s--%s" % (tenant, p)) if tenant else p',
+     "def inst_key(p): return p", R2),
+    ("R2-F2-no-probe-bound", "lib/capacity.sh", '_cap_bounded "${CAP_PT}" "${plan_file}" _cap_plan_probe || prc=$?',
+     '_cap_plan_probe > "${plan_file}" || prc=$?', R2),
+    ("R2-F2-no-whole-bound", "lib/capacity.sh", '_CAP_TMPDIR="${tdir}" _cap_bounded "${CAP_T}" "${out}" _cap_measure "$@" || rc=$?',
+     '_CAP_TMPDIR="${tdir}" _cap_measure "$@" > "${out}" || rc=$?', R2),
+    ("R2-F2-tree-not-killed", "lib/capacity.sh", "      _cap_kill_tree \"${pid}\"\n", "      kill -KILL \"${pid}\" 2>/dev/null\n", R2),
+    ("R2-F2-probe-ceiling-loosened", "lib/capacity.sh", '"${LLMCTL_CAPACITY_PROBE_TIMEOUT:-}" 3 1 30', '"${LLMCTL_CAPACITY_PROBE_TIMEOUT:-}" 3 0 9999', R2),
+    ("R2-F2-undetermined-admitted", "lib/capacity.sh", "    undetermined)\n", "    undetermined) return 0 ;;\n    xundetermined)\n", R2),
+    ("R2-F2-exit-code-ignores-measurement", "lib/capacity.sh",
+     'if not (d.get("measurement") or {}).get("ok", True): sys.exit(75)', "pass", R2),
+    ("R2-F2-cli-no-fallback-line", "bin/llmctl", "        printf 'llmctl-fallback: %s\\n' \"${_cfb:-none}\" >&2", "        :", R2),
+    ("R2-F4-verdict-class-map", "lib/capacity.sh", '"fits_with_reduced_threads": "fits_reduced"', '"fits_with_reduced_threads": "fits"', R2),
+    ("R2-F4-route-cloud-not-hosted", "lib/capacity.sh", '"recommended": "cloud", "route": "hosted"', '"recommended": "cloud", "route": "cloud"', R2),
+    ("R2-F5-sched-no-tenant-strip", "lib/scheduler.sh", '  [[ "${k}" == *--* ]] && k="${k##*--}"\n  if catalog_exists', "  if catalog_exists", R2),
+    ("R2-F5-sched-suffix-before-full-name", "lib/scheduler.sh",
+     '  if catalog_exists "${k}" 2>/dev/null; then printf \'%s\\n\' "${k}"; return 0; fi\n  if [[ "${k}" =~ ^(.+)\\.([2-9]|[1-9][0-9]+)$ ]]; then',
+     '  if [[ "${k}" =~ ^(.+)\\.([0-9]+)$ ]]; then', R2),
+    ("R2-F6-plan-failure-is-unknown", "lib/capacity.sh",
+     '    _cap_undetermined_doc "the hardware/plan probe failed (llmctl plan --json); the capacity cannot be judged without it" "$@"\n    return 0',
+     "    echo '{}' > \"${plan_file}\"", R2),
 ]
 
 

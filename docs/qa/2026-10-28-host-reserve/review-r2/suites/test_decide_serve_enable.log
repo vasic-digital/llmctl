@@ -1,0 +1,50 @@
+== Linux: --enable installs, enables, starts (stubbed systemctl) ==
+  ok: serve --enable exits 0
+  ok: the gateway unit was written into the (temp) user unit dir
+  ok: enable went to the service manager
+  ok: start went to the service manager
+  ok: daemon-reload first
+== idempotent: a second --enable --now is the same result ==
+  ok: serve --enable --now exits 0 on an already enabled gateway
+  ok: unit body unchanged by the second enable
+  ok: enable re-issued (systemctl enable is itself idempotent)
+== re-enable applies a CHANGED unit (restart, never start+restart), and does not restart an unchanged one ==
+  ok: unchanged unit: no restart
+  ok: re-enable over a changed unit exits 0
+  ok: changed unit content is applied by restart (also starts a stopped gateway)
+  ok: changed unit: single start path (no start before restart)
+  ok: unit rewritten to the current template
+== --disable removes the unit ==
+  ok: serve --disable exits 0
+  ok: unit removed
+  ok: stopped
+  ok: disabled
+  ok: serve --disable on an already removed gateway is a clean no-op (idempotent)
+== refuses while an engine unit template is stale (same style as the other refusals) ==
+  ok: stale template refused (rc 1)
+  ok: message says it refuses
+  ok: message names the remedy (llmctl install)
+  ok: message names the stale unit
+  ok: nothing was enabled on refusal
+  ok: no unit written on refusal
+== dry run touches nothing ==
+  ok: precondition: no unit file
+  ok: dry-run prints the enable
+  ok: dry-run --enable wrote NO unit file
+  ok: dry-run says what it would write
+== macOS backend (file-level, dry-run; no Mac in this suite) ==
+  ok: launchd path: launchctl bootstrap
+  ok: launchd path: an existing agent is booted out first (idempotent re-enable)
+  ok: bootout precedes bootstrap
+  ok: macOS dry-run --enable wrote NO plist
+  ok: launchd path: launchctl bootout
+== usage errors ==
+  ok: --enable with --disable is a usage error (rc 2)
+  ok: --now alone is a usage error (rc 2)
+  ok: --enable with --foreground is a usage error (rc 2)
+  ok: --disable with --stop is a usage error (rc 2)
+== help text ==
+  ok: decide help documents --enable
+  ok: decide help lists the scale subcommand
+  ok: decide help documents --disable
+OK

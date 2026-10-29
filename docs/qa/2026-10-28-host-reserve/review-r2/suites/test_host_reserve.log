@@ -1,0 +1,75 @@
+== CPU reserve arithmetic (16 CPUs, no SMT topology) ==
+  ok: 16 CPUs: 4 reserved (max(2, 25%))
+  ok: 16 CPUs: 12 for models
+  ok: reserved CPUs are the lowest ones
+  ok: model CPU set
+  ok: chat cap = Bc/2
+  ok: decision cap = Bc/4
+== SMT topology: whole physical cores are reserved (siblings i and i+8) ==
+  ok: SMT: cores 0 and 1 with both siblings
+  ok: SMT: model set excludes the siblings
+  ok: SMT: 12 CPUs for models
+== floors: looser is clamped, stricter is honoured ==
+  ok: CPU_PCT=5 / CPU_MIN=0 clamped back to the floor (4 of 16)
+  ok: CPU_PCT=50 is stricter: 8 reserved
+  ok: 2 CPUs: the reserve never takes the last CPU (Rc = N-1)
+  ok: 2 CPUs: 1 CPU for models
+  ok: 2 CPUs: the shortfall is flagged
+== RAM reserve arithmetic ==
+  ok: 32 GiB: 20% reserved
+  ok: 32 GiB: model RAM budget
+  ok: 8 GiB: the 4 GiB floor wins
+  ok: MEM_PCT=1 / MEM_MIN=1 clamped back to the floor
+  ok: 8 GiB, MEM_MIN=1: the looser minimum is raised back to 4096
+== per-profile drop-in, threads and unit directives ==
+  ok: decision profile drop-in: 3 CPUs
+  ok: decision drop-in pins the model CPU set
+  ok: decision drop-in caps OpenMP threads
+  ok: chat profile drop-in: 6 CPUs
+  ok: an override can never RAISE the cap
+  ok: an override lowers the cap (reduced threads)
+  ok: unit template directive OOMScoreAdjust=800
+  ok: unit template directive Nice=15
+  ok: unit template directive CPUWeight=20
+  ok: unit template directive IOWeight=20
+  ok: unit template directive MemorySwapMax=0
+  ok: unit template directive CPUQuota=600%
+  ok: LLMCTL_HOST_RESERVE=0 restores the 3.3 directives
+  ok: reserve off: no CPUQuota
+  ok: a huge footprint is capped at the model RAM budget, not 90% of RAM
+  ok: llama launch carries --threads = decision cap
+  ok: llama launch carries --threads-batch
+  ok: reserve off: no --threads (negative control)
+== CPU gate ==
+  ok: no pressure: CPU gate passes (rc)
+  ok: CPU PSI some 91 > 80: refused (rc)
+  ok: CPU PSI refusal skipped with the reserve off (rc)
+  ok: load 49 > 3 x 16: refused (rc)
+  ok: load 47 <= 48: passes (rc)
+  ok: a looser LLMCTL_GATE_CPU_SOME_MAX=99 is clamped back to 80: PSI 85 still refused (rc)
+  ok: a stricter LLMCTL_GATE_CPU_SOME_MAX=50 is honoured (rc)
+  ok: hw_pressure_gate includes the CPU gate (rc)
+== memory gate uses the reserve, not a fixed 4 GiB ==
+  ok: 8000 MiB available - 2000 footprint < 6553 reserve: refused (rc)
+  ok: same with the reserve off (4096): passes (negative control) (rc)
+== combined budget across running units (cgroup tree fixture) ==
+  ok: no unit running: a 6-CPU unit fits (rc)
+  ok: one 6-CPU unit + a 3-CPU one = 9 <= 12: fits (rc)
+  ok: two 6-CPU units + 3 = 15 > 12: refused (rc)
+  ok: a unit without limits counts as the whole budget (rc)
+  ok: RAM: 24000 + 4096 > model budget: refused (rc)
+  ok: the caller's own cgroup is never counted (rc)
+== reserve report JSON ==
+  ok: reserve --json: enabled, budget, caps, one running unit
+  ok: reserve --json reads the unit's limits back from its cgroup
+== decision class: one catalog read, same rule as before (capability decide, or engine onnx) ==
+  ok: decide-tiny (capability decide) is a decision profile
+  ok: decide-nli (onnx) is a decision profile
+  ok: small is a chat profile
+  ok: an instance suffix is stripped
+  ok: an unknown profile is chat
+  ok: onnx engine without the decide capability is a decision engine
+== the memos are keyed on their inputs (a cache can never return a stale answer) ==
+  ok: catalog rewritten in place after priming: the class follows the new content
+  ok: a knob changed after priming recomputes the reserve (was 4)
+RESULT: PASS

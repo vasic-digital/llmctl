@@ -1,0 +1,83 @@
+== (a) no record: the start is a QUARANTINE start (loopback, private port, unpublished); PASS -> published
+  ok: UNDETERMINED (default strict): start exits non-zero (rc=1)
+  ok: the quarantine start binds loopback only
+  ok: private port 39971, not the documented 58559
+  ok: the env record carries the quarantine deadline (the unit's ExecCondition reads it)
+  ok: ...and once the quarantined start is stopped, the quarantine record is gone (there was none before)
+  ok: the start says it is unpublished
+  ok: validation ran once
+  ok: UNDETERMINED: stopped (strict is the default)
+  ok: UNDETERMINED: nothing left running
+  ok: UNDETERMINED: the message says an unvalidated model is never served
+  ok: PASS: start exits 0
+  ok: PASS: started twice (quarantine, then published)
+  ok: order: quarantine start (2) < PASS (5) < stop (6) < public start (8)
+  ok: published on the documented port
+  ok: the published env record has no quarantine marker
+  ok: the reservation is no longer a quarantine one
+  ok: the message says PASSED - published
+== (a) a fresh record: published directly, no quarantine, no second validation
+  ok: fresh: start exits 0
+  ok: fresh: started once
+  ok: fresh: not re-validated
+  ok: fresh: documented port
+== (b) FAIL -> stopped; STRICT=0 is REFUSED for a consumer-facing profile; honoured (marked) for a non-consumer-facing one
+  ok: FAIL: exit non-zero
+  ok: FAIL: stopped
+  ok: FAIL: never published
+  ok: STRICT=0 on consumer-facing small: refused (exit non-zero)
+  ok: ...and says why
+  ok: ...never published
+  ok: STRICT=0 on a NON-consumer-facing profile: served
+  ok: ...published (quarantine, then public)
+  ok: ...and its reservation says UNVALIDATED
+  ok: ...as does its env record (the unit gate reads it)
+  ok: status shows the profile as UNVALIDATED
+  ok: status names the opt-out loudly
+  ok: endpoint refuses an UNVALIDATED profile
+  ok: a NON-consumer-facing profile WITHOUT the opt-out: UNDETERMINED is still stopped (strict is the default for every profile)
+  ok: ...never published
+  ok: ...nothing left running
+== (b) LLMCTL_VALIDATE_ON_START=0 is refused for a consumer-facing profile (outside the test harness)
+  ok: ON_START=0: start refused
+  ok: ...nothing started
+  ok: ...and the reason is printed
+== (c) enable: a unit is enabled only for a validated profile
+  ok: enable of a profile that FAILS validation: refused
+  ok: ...no unit enabled
+  ok: ...it was validated (in quarantine) first
+  ok: enable of a profile that PASSES: exit 0
+  ok: ...unit enabled after the PASS
+  ok: ...validation (3) BEFORE enablement (5)
+== (c) restart without a fresh record: never restarted on the public port; quarantine + validation
+  ok: restart: no plain restart of an unvalidated profile
+  ok: restart: validated
+  ok: restart: UNDETERMINED -> not left running
+== (c) decide scale refuses to add instances of an unvalidated decision profile
+  ok: scale without a fresh record: refused
+  ok: ...nothing started
+  ok: ...and the reason is printed
+== (c) switch: a target that fails validation is stopped and the previous set comes back through the gate
+  ok: switch to a failing target: exit non-zero
+  ok: the failing target is not running
+  ok: the previous profile is running again
+== (c) the systemd unit: ExecCondition 'validated' skips an unvalidated start (exit 77), passes quarantine / opt-out
+  ok: no fresh record -> exit 77 (unit skipped, not failed, not restarted)
+  ok: a live quarantine start (its validator is alive) -> allowed
+  ok: an EXPIRED quarantine record (validation never finished) -> refused at boot
+  ok: an opt-out env record of a CONSUMER-FACING profile -> refused (the catalog decides, review 3 finding 9)
+  ok: an opt-out env record of a profile the catalog says is NOT consumer-facing -> allowed (and logged)
+  ok: the generated engine unit carries ExecCondition=... validated %i
+== (c) the waiter: validates BEFORE it registers; kind 'chat' (what the env record really says) is validated
+  ok: kind=chat: the waiter validated (it used to require kind=llm, which no env record carries)
+  ok: UNDETERMINED in the waiter: the unit is stopped (strict default)
+  ok: ...and it was NOT registered
+  ok: a quarantine unit: the waiter neither validates nor registers (llmctl does)
+  ok: ...and says so
+== (d) llmctl endpoint: the URL only for a running, published, validated profile
+  ok: not running -> exit 1
+  ok: unknown profile -> exit 2
+  ok: quarantined -> exit 1
+  ok: ...'being validated'
+  ok: status shows the QUARANTINE state
+RESULT: PASS

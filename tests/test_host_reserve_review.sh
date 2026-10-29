@@ -94,19 +94,23 @@ assert_eq "does_not_fit" "$(q "${doc}" 'd["profiles"]["decide-tiny"]["verdict"]'
 assert_contains "$(q "${doc}" '"; ".join(d["profiles"]["decide-tiny"]["reasons"])')" "memory" "capacity: the reason names memory"
 clean_units
 
-echo "== S4: instance-suffixed units are seen as their profile running =="
+echo "== S4: instance-suffixed units map to their base profile; only the exact instance counts as running (review r2 F1) =="
 mkunit 'llmctl-llama@decide-tiny.2.service' '300000 100000' $(( 1280 * MIB )) $(( 300 * MIB ))
 doc="$(capacity_json decide-tiny)"
 assert_eq "decide-tiny" "$(q "${doc}" 'd["llmctl"]["units"][0]["base_profile"]')" "decide-tiny.2 maps to base profile decide-tiny"
-assert_eq "running" "$(q "${doc}" 'd["profiles"]["decide-tiny"]["verdict"]')" "decide-tiny is running (instance 2)"
+assert_eq "fits False" "$(q "${doc}" 'd["profiles"]["decide-tiny"]["verdict"]+" "+str(d["profiles"]["decide-tiny"]["running"])')" \
+  "instance 2 running does not make the primary decide-tiny 'running'; it is judged as a start next to it"
 printf 'some avg10=95.00 avg60=0 avg300=0 total=0\n' > "${LLMCTL_CPU_PSI_FILE}"
 doc="$(capacity_json decide-tiny)"
 assert_eq "degraded llmctl stop decide-tiny" "$(q "${doc}" 'd["llmctl"]["units"][0]["status"]+" "+d["llmctl"]["units"][0]["suggest"]')" \
   "a degraded instance-2 unit: the stop suggestion names the base profile"
 printf 'some avg10=0.00 avg60=0 avg300=0 total=0\n' > "${LLMCTL_CPU_PSI_FILE}"
 mkunit 'llmctl-llama@big.service' '900000 100000' $(( 2048 * MIB ))
+doc="$(capacity_json)"
+assert_eq "local" "$(q "${doc}" 'd["fallback"]["recommended"]')" "nothing named: no new decision model fits, but one runs healthy (instance 2) -> local"
 doc="$(capacity_json decide-tiny)"
-assert_eq "local" "$(q "${doc}" 'd["fallback"]["recommended"]')" "no new decision model fits, but one runs (instance 2) -> local"
+assert_eq "does_not_fit none" "$(q "${doc}" 'd["profiles"]["decide-tiny"]["verdict"]+" "+d["fallback"]["route"]')" \
+  "a NAMED start of decide-tiny next to instance 2 with the budget held is refused, and the route is not local (r2 F1/M06)"
 clean_units
 
 echo "== S5: fallback is never local when no decision model fits or runs =="
@@ -190,6 +194,26 @@ mkunit 'llmctl-llama@decide-tiny.2.service' '300000 100000' $(( 1280 * MIB ))
 mkunit 'llmctl-llama@big.service' '900000 100000' $(( 2048 * MIB ))
 assert_rc 75 "another instance of the same profile running does not make the restart 'running' (admitted unchecked)" \
   sched_restart_admit decide-tiny
+clean_units
+# the restart of the ONLY running instance (the primary itself) is judged as a new start, never "running": with
+# another unit holding all but 200% of the CPU budget it would need reduced threads, which a restart cannot do -> 75
+mkunit 'llmctl-llama@decide-tiny.service' '300000 100000' $(( 1280 * MIB ))
+mkunit 'llmctl-llama@big.service' '1000000 100000' $(( 2048 * MIB ))
+assert_rc 75 "restarting the primary instance itself is judged as a start, not admitted as 'running'" \
+  sched_restart_admit decide-tiny
+clean_units
+# restarting instance 2 while the primary runs: the replaced unit is decide-tiny.2, so the primary decide-tiny is
+# still in the unit set; the restart must still be judged as a start (the primary plus big use the whole budget -> 75),
+# never as "running" because ANOTHER instance of the profile is up
+mkunit 'llmctl-llama@decide-tiny.service' '300000 100000' $(( 1280 * MIB ))
+mkunit 'llmctl-llama@decide-tiny.2.service' '300000 100000' $(( 1280 * MIB ))
+mkunit 'llmctl-llama@big.service' '900000 100000' $(( 2048 * MIB ))
+assert_rc 75 "restarting instance 2 while the primary runs is judged as a start, not admitted as 'running'" \
+  sched_restart_admit decide-tiny.2
+clean_units
+mkunit 'llmctl-llama@decide-tiny.service' '300000 100000' $(( 1280 * MIB ))
+mkunit 'llmctl-llama@decide-tiny.2.service' '300000 100000' $(( 1280 * MIB ))
+assert_rc 0 "negative control: restarting instance 2 with room left is admitted" sched_restart_admit decide-tiny.2
 clean_units
 
 echo "== M21: reduced threads reach --threads of the started engine =="

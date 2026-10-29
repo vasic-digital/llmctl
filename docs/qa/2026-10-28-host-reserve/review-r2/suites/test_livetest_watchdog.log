@@ -1,0 +1,360 @@
+== 0. static: lint + signal discipline ==
+PASS  bash -n both scripts
+PASS  shellcheck clean (driver, watchdog, runner, this suite, the shared lib)
+PASS  exactly one kill call site in scripts (safe_kill)
+PASS  the one kill targets $WD_PID only
+PASS  no process-group/negative-pid signalling
+PASS  no reboot/suspend/poweroff verbs
+PASS  NEG-CONTROL kill detector flags a bad file
+== 1. happy path (also: start path, nice/ionice, env) ==
+PASS  all-good run exits 0 (PASS)
+PASS  verdict table says PASS
+PASS  start called with LLMCTL_VALIDATE_ON_START=external (unpublished; this script validates)
+PASS  start ran at nice 19
+PASS  start ran at ionice idle
+PASS  validate invoked with --profile vision --json
+PASS  final llmctl stop vision happened
+PASS  no watchdog trigger recorded
+PASS  evidence file gate.log
+PASS  evidence file samples.csv
+PASS  evidence file watchdog.log
+PASS  evidence file commands.log
+PASS  evidence file validate.out
+PASS  evidence file validate.rc
+PASS  evidence file identity.txt
+PASS  evidence file verdict.txt
+PASS  evidence file status_before.json
+PASS  evidence file status_after.json
+PASS  evidence file signals.log
+PASS  identity has model sha256 (64 hex)
+PASS  identity has llama-server version
+PASS  pkill/killall never called
+PASS  signals.log: exactly one signal line
+PASS  the only signal targets the watchdog pid (1520918)
+PASS  watchdog reaped after run
+PASS  bystander process untouched
+== 2. vision-pro without --allow-large, and profiles that are not in the catalog, are refused before any llmctl call ==
+PASS  profile 'vision-pro' refused exit 3
+PASS    no llmctl call at all for 'vision-pro'
+PASS    no evidence dir/side effects for 'vision-pro'
+PASS  profile 'vision-pro-x' refused exit 3
+PASS    no llmctl call at all for 'vision-pro-x'
+PASS    no evidence dir/side effects for 'vision-pro-x'
+PASS  profile 'chat' refused exit 3
+PASS    no llmctl call at all for 'chat'
+PASS    no evidence dir/side effects for 'chat'
+PASS  NEG-CONTROL: 'vision' itself is accepted
+== 3. pre-gate refusals (each metric) with boundary negative controls ==
+PASS  gate refuses: MemAvailable 11999 MiB < 12000 (exit 3)
+PASS    MemAvailable 11999 MiB < 12000: start never called
+PASS    MemAvailable 11999 MiB < 12000: gate.log records refusal
+PASS    MemAvailable 11999 MiB < 12000: no stop called (nothing was started)
+PASS  gate refuses: PSI some avg10 5.00 (not <5) (exit 3)
+PASS    PSI some avg10 5.00 (not <5): start never called
+PASS    PSI some avg10 5.00 (not <5): gate.log records refusal
+PASS    PSI some avg10 5.00 (not <5): no stop called (nothing was started)
+PASS  gate refuses: PSI full avg10 1.00 (not <1) (exit 3)
+PASS    PSI full avg10 1.00 (not <1): start never called
+PASS    PSI full avg10 1.00 (not <1): gate.log records refusal
+PASS    PSI full avg10 1.00 (not <1): no stop called (nothing was started)
+PASS  gate refuses: GPU used 6000 MiB (not <6000) (exit 3)
+PASS    GPU used 6000 MiB (not <6000): start never called
+PASS    GPU used 6000 MiB (not <6000): gate.log records refusal
+PASS    GPU used 6000 MiB (not <6000): no stop called (nothing was started)
+PASS  gate refuses: GPU unreadable (nvidia-smi N/A) (exit 3)
+PASS    GPU unreadable (nvidia-smi N/A): start never called
+PASS    GPU unreadable (nvidia-smi N/A): gate.log records refusal
+PASS    GPU unreadable (nvidia-smi N/A): no stop called (nothing was started)
+PASS  gate refuses: other profile in failed state (exit 3)
+PASS    other profile in failed state: start never called
+PASS    other profile in failed state: gate.log records refusal
+PASS    other profile in failed state: no stop called (nothing was started)
+PASS  gate refuses: profile already running (exit 3)
+PASS    profile already running: start never called
+PASS    profile already running: gate.log records refusal
+PASS    profile already running: no stop called (nothing was started)
+PASS  gate refuses: llmctl unit failed (exit 3)
+PASS    llmctl unit failed: start never called
+PASS    llmctl unit failed: gate.log records refusal
+PASS    llmctl unit failed: no stop called (nothing was started)
+PASS  gate refuses: llmctl unit restarting (exit 3)
+PASS    llmctl unit restarting: start never called
+PASS    llmctl unit restarting: gate.log records refusal
+PASS    llmctl unit restarting: no stop called (nothing was started)
+PASS  gate refuses: PSI file missing (exit 3)
+PASS    PSI file missing: start never called
+PASS    PSI file missing: gate.log records refusal
+PASS    PSI file missing: no stop called (nothing was started)
+PASS  NEG-CONTROL boundary-good values pass gate + run (exit 0)
+== 4. watchdog abort conditions (each calls fake llmctl stop, exit 4) ==
+PASS  watchdog abort: MemAvailable 4999 < 5000 -> exit 4
+PASS    MemAvailable 4999 < 5000: trigger recorded
+PASS    MemAvailable 4999 < 5000: llmctl stop vision called
+PASS    MemAvailable 4999 < 5000: verdict says watchdog
+PASS    MemAvailable 4999 < 5000: profile not running afterwards
+PASS    MemAvailable 4999 < 5000: no pkill/killall
+PASS    MemAvailable 4999 < 5000: no signal except to watchdog
+PASS    MemAvailable 4999 < 5000: bystander alive
+PASS  watchdog abort: PSI some avg10 20.5 > 20 -> exit 4
+PASS    PSI some avg10 20.5 > 20: trigger recorded
+PASS    PSI some avg10 20.5 > 20: llmctl stop vision called
+PASS    PSI some avg10 20.5 > 20: verdict says watchdog
+PASS    PSI some avg10 20.5 > 20: profile not running afterwards
+PASS    PSI some avg10 20.5 > 20: no pkill/killall
+PASS    PSI some avg10 20.5 > 20: no signal except to watchdog
+PASS    PSI some avg10 20.5 > 20: bystander alive
+PASS  watchdog abort: GPU 11501 > 11500 -> exit 4
+PASS    GPU 11501 > 11500: trigger recorded
+PASS    GPU 11501 > 11500: llmctl stop vision called
+PASS    GPU 11501 > 11500: verdict says watchdog
+PASS    GPU 11501 > 11500: profile not running afterwards
+PASS    GPU 11501 > 11500: no pkill/killall
+PASS    GPU 11501 > 11500: no signal except to watchdog
+PASS    GPU 11501 > 11500: bystander alive
+PASS  watchdog abort: wall clock > limit (2 s) -> exit 4
+PASS    wall clock > limit (2 s): trigger recorded
+PASS    wall clock > limit (2 s): llmctl stop vision called
+PASS    wall clock > limit (2 s): verdict says watchdog
+PASS    wall clock > limit (2 s): profile not running afterwards
+PASS    wall clock > limit (2 s): no pkill/killall
+PASS    wall clock > limit (2 s): no signal except to watchdog
+PASS    wall clock > limit (2 s): bystander alive
+PASS  watchdog abort: sensor unreadable x3 -> exit 4
+PASS    sensor unreadable x3: trigger recorded
+PASS    sensor unreadable x3: llmctl stop vision called
+PASS    sensor unreadable x3: verdict says watchdog
+PASS    sensor unreadable x3: profile not running afterwards
+PASS    sensor unreadable x3: no pkill/killall
+PASS    sensor unreadable x3: no signal except to watchdog
+PASS    sensor unreadable x3: bystander alive
+PASS  NEG-CONTROL at-limit does not trigger: MemAvailable 5000 (exit 0)
+PASS    MemAvailable 5000: no trigger file
+PASS  NEG-CONTROL at-limit does not trigger: PSI 20.00 (exit 0)
+PASS    PSI 20.00: no trigger file
+PASS  NEG-CONTROL at-limit does not trigger: GPU 11500 (exit 0)
+PASS    GPU 11500: no trigger file
+PASS  trigger text names the GPU condition
+PASS  trigger text names the memory condition
+PASS  trigger text names the wall-clock condition
+== 5. watchdog started BEFORE model, standalone behaviour ==
+PASS  watchdog log begins no later than model start (2026-10-29T03:50:47Z <= 2026-10-29T03:50:49Z)
+PASS  samples.csv has numeric memory samples
+PASS  NEG-CONTROL samples header present
+PASS  watchdog exits 0 when parent vanishes
+PASS    ...and stopped the profile via llmctl
+PASS    ...trigger says parent vanished
+PASS  NEG-CONTROL healthy watchdog exits 0 on TERM
+PASS    no trigger while healthy
+PASS    no llmctl stop when healthy
+== 6. trap: stop on EXIT / failure / signal ==
+PASS  start failure -> exit 2
+PASS  EXIT trap ran llmctl stop vision after failed start
+PASS  validate rc=2 -> exit 2 (undetermined)
+PASS  stop issued
+PASS  wrong answer (validate rc=1) -> exit 1, never retried
+PASS  validate called exactly once (no retry)
+PASS  verdict FAIL
+PASS  NEG-CONTROL healthy health endpoint -> not stuck waiting
+PASS  health never ready -> exit 2
+PASS  stop issued after readiness timeout
+PASS  VRAM not back to baseline -> exit 2, not PASS
+PASS  verdict names cleanup
+PASS  SIGTERM -> exit 2 (interrupted)
+PASS  trap stopped the profile on SIGTERM
+PASS  watchdog gone after SIGTERM
+PASS  bystander alive after SIGTERM
+== D6. PASS needs parsed JSON, every probe PASS, probe count == suite, hash of the file the unit loaded ==
+PASS  REAL judge capture of a fully correct run (18 probes, 2 controls, 1 determinism, counts.pass=21) PASSES
+PASS  real judge capture 'wrong' (validate rc 1) must NOT pass
+PASS  real judge capture 'truncate' (validate rc 2) must NOT pass
+PASS  real judge capture 'malformed' (validate rc 2) must NOT pass
+PASS  real wrong-answer capture -> exit 1 (FAIL)
+PASS  mutated real capture 'drop one control' must NOT pass
+PASS    'drop one control': verdict is not PASS
+PASS  mutated real capture 'flip determinism' must NOT pass
+PASS    'flip determinism': verdict is not PASS
+PASS  mutated real capture 'no determinism entries' must NOT pass
+PASS    'no determinism entries': verdict is not PASS
+PASS  mutated real capture 'one probe verdict FAIL' must NOT pass
+PASS    'one probe verdict FAIL': verdict is not PASS
+PASS  mutated real capture 'wrong probe count (17)' must NOT pass
+PASS    'wrong probe count (17)': verdict is not PASS
+PASS  mutated real capture 'counts.pass off by one' must NOT pass
+PASS    'counts.pass off by one': verdict is not PASS
+PASS  mutated real capture 'a control is not PASS' must NOT pass
+PASS    'a control is not PASS': verdict is not PASS
+PASS  mutated real capture 'an undetermined count' must NOT pass
+PASS    'an undetermined count': verdict is not PASS
+PASS  mutated real capture 'no results' must NOT pass
+PASS    'no results': verdict is not PASS
+PASS  garbage output must NOT pass
+PASS    reason names the validate output
+PASS  hashes the model the unit loaded (from its env file), not the default name
+PASS    not the default-named file
+PASS  no unit env file -> loaded model unknown -> not PASS (exit 2)
+== D7/L5. overrides only under LT_HERMETIC=1; evidence perms 0700/0600 ==
+PASS  non-hermetic: still exits 3 via the real gate path (llmctl from PATH, *_BIN ignored)
+PASS  non-hermetic: exported LT_PSI/LT_MEMINFO not used (no psi_some=50.00)
+PASS  non-hermetic: exported LT_MEMINFO not used (no MemAvailable_MiB=1 )
+PASS  non-hermetic: ignored overrides are logged in evidence
+PASS  NEG-CONTROL hermetic: LT_PSI honoured (psi_some=50.00)
+PASS  hermetic overrides are logged loudly in evidence
+PASS  watchdog non-hermetic ignores LT_MEMINFO=1MiB (no trigger)
+PASS  evidence dirs all 0700
+PASS  evidence files all 0600
+PASS  NEG-CONTROL: many files were checked
+== D1. breach during load while the scheduler lock is held: stop must land (bounded stop + systemd fallback) ==
+PASS  breach during blocked start -> exit 4
+PASS  fallback: systemd stop of the real unit (llmctl-llama@vision.service)
+PASS  profile stopped while start still held the lock
+PASS  systemd stop landed (call #5) BEFORE the lock-holding start returned (call #7)
+PASS  start ran with LLMCTL_READY_TIMEOUT=0 (lock released at svc_start)
+PASS  watchdog log shows bounded llmctl stop then fallback
+PASS  unit name derived from LLMCTL_ENGINE (colibri)
+PASS  fallback failure recorded in watchdog log
+PASS  NEG-CONTROL slow start without breach passes
+PASS    no systemd fallback used
+PASS  start exceeding its own deadline -> exit 2
+PASS    profile stop attempted
+== D2/D9. watchdog liveness; zombie/killed parent; safe_kill identity ==
+PASS  watchdog died -> driver exits 5 (distinct code)
+PASS    profile stopped on watchdog death
+PASS    verdict says watchdog died
+PASS  NEG-CONTROL healthy run still exits 0
+PASS  the killed driver is a ZOMBIE (unreaped) during detection
+PASS  watchdog noticed the zombie/killed driver
+PASS    watchdog stopped the profile
+PASS  safe_kill verifies /proc/$WD_PID/cmdline before signalling
+PASS  NEG-CONTROL detector flags an unchecked safe_kill
+== D3. validate must not be able to (re)start the model ==
+PASS  validate is pointed at the explicit endpoint (--host http://127.0.0.1:PORT)
+PASS  breach during validate -> exit 4
+PASS  validate never restarted the profile
+PASS  profile is not running at the end
+PASS  NEG-CONTROL fake validate without --host restarts the profile
+PASS  validate not launched when the profile is not up
+== D4. stop verification: final stop rc 0, unit inactive, port closed (VRAM alone is not proof) ==
+PASS  llmctl stop rc 1 (even though .run vanished; systemd fallback worked) -> not PASS (exit 2)
+PASS    reason names the final stop
+PASS  both stops failing -> not PASS (exit 2)
+PASS  unit still active after stop -> not PASS (exit 2)
+PASS    reason names the unit
+PASS  port still answering after stop -> not PASS (exit 2)
+PASS    reason names the port
+PASS  NEG-CONTROL CPU-only run (VRAM flat) with clean stop passes
+PASS    table says VRAM check is informational (no GPU use observed)
+== D8. hung nvidia-smi / llmctl status never hang the watchdog or the driver ==
+PASS  watchdog: hung nvidia-smi -> sensor_unreadable trigger
+PASS    watchdog still stopped the profile
+PASS  hung post-stop sensors -> exit 2 (undetermined), not a hang
+PASS    finished in 14s (bounded)
+PASS    verdict.txt finalized
+PASS    bounded.log records the timeouts
+PASS    verdict mentions unconfirmed cleanup
+== D5. IO pressure + memory PSI full in gate and watchdog (fail-closed) ==
+PASS  gate: IO PSI some 10.00 -> exit 3
+PASS    reason names IO some
+PASS  gate: IO PSI full 2.00 -> exit 3
+PASS    reason names IO full
+PASS  gate: IO PSI unreadable -> exit 3 (fail-closed)
+PASS    reason names IO unreadable
+PASS  NEG-CONTROL IO 9.99/1.99 passes gate and run
+PASS  watchdog: memory PSI full avg10 10.5 > 10 -> exit 4
+PASS    memory PSI full avg10 10.5 > 10: trigger recorded
+PASS    memory PSI full avg10 10.5 > 10: stop vision
+PASS  watchdog: IO PSI some avg10 60.5 > 60 -> exit 4
+PASS    IO PSI some avg10 60.5 > 60: trigger recorded
+PASS    IO PSI some avg10 60.5 > 60: stop vision
+PASS  watchdog: IO PSI full avg10 30.5 > 30 -> exit 4
+PASS    IO PSI full avg10 30.5 > 30: trigger recorded
+PASS    IO PSI full avg10 30.5 > 30: stop vision
+PASS  watchdog: IO PSI file unreadable x3 -> exit 4
+PASS    IO PSI file unreadable x3: trigger recorded
+PASS    IO PSI file unreadable x3: stop vision
+PASS  NEG-CONTROL at-limit mem PSI full 10.00 does not trigger (exit 0)
+PASS  NEG-CONTROL at-limit IO some 60.00 does not trigger (exit 0)
+PASS  NEG-CONTROL at-limit IO full 30.00 does not trigger (exit 0)
+PASS  samples.csv carries IO + mem-full columns
+== D10. richer evidence ==
+PASS  harness.txt records the harness git HEAD
+PASS  harness.txt records llmctl version
+PASS  logs.txt holds llmctl logs vision output
+PASS  journal.txt holds the unit journal since start
+PASS  env_names.txt lists variable NAMES (LT_HERMETIC)
+PASS  env_names.txt never contains a value (no '=')
+PASS  post-stop VRAM sampling recorded (>=2 samples)
+PASS  abort path (exit 4) still collects logs
+PASS  NEG-CONTROL gate refusal collects no model logs
+== N2. a start that reaches svc_start AFTER the stop must not leave the model running ==
+PASS  breach before svc_start -> exit 4
+PASS  profile ends STOPPED although start reached svc_start after the first stop
+PASS  a second stop ran after the start finished
+PASS  NEG-CONTROL delayed start without breach passes
+PASS  watchdog re-stopped the unit that appeared after it fired
+PASS    watchdog issued a second stop
+== N3. failed final stop (rc 11) keeps STOP_NEEDED and the watchdog; cleanup retries ==
+PASS  rc 11 -> exit 2
+PASS    reason says stop failed
+PASS    cleanup retried the stop (systemctl stop x2)
+PASS    watchdog log: stop attempted at least twice
+PASS  NEG-CONTROL rc 10: exactly one systemd stop (no needless retry)
+== N4. unit state must be exactly inactive or failed ==
+PASS  unit state 'deactivating' -> not PASS (exit 2)
+PASS  unit state 'reloading' -> not PASS (exit 2)
+PASS  unit state 'unknown' -> not PASS (exit 2)
+PASS  unit state 'maintenance' -> not PASS (exit 2)
+PASS  empty unit state (systemctl printed nothing) -> not PASS
+PASS    reason names the unit state
+PASS  NEG-CONTROL unit state 'inactive' passes
+PASS  NEG-CONTROL unit state 'failed' passes
+== N5. installed llmctl must support 'vision validate --host' ==
+PASS  help without --host -> exit 2 (validate could restart the model)
+PASS    reason names --host
+PASS    validate never launched
+PASS    profile stopped
+PASS  NEG-CONTROL help with --host proceeds
+== N6. LLAMA_SERVER_BIN / LT_BOUND_DEFAULT / LT_EVIDENCE_ROOT only under LT_HERMETIC=1; watchdog in its own process group ==
+PASS  non-hermetic refusal flow ran (exit 3)
+PASS  LT_EVIDENCE_ROOT ignored outside hermetic (default root used)
+PASS  default evidence root under $HOME/.cache/llmctl-livetest
+PASS    LLAMA_SERVER_BIN ignore logged
+PASS    LT_BOUND_DEFAULT ignore logged
+PASS  NEG-CONTROL hermetic honours LT_EVIDENCE_ROOT
+PASS  watchdog (pgid 1643574) is in a different process group than the driver (1520246)
+== N7. after a systemd-fallback stop, llmctl stop is retried once to clear the stale .run/registry reservation ==
+PASS  llmctl stop retried AFTER the systemd stop (line 11 > 10)
+PASS    retry recorded in the evidence
+PASS  NEG-CONTROL clean stop: no systemctl stop
+PASS    exactly one llmctl stop
+== S1. scheduler lock: gate refuses when held; a still-pending start never lets the watchdog be reaped ==
+PASS  gate refuses while the scheduler lock is held by someone else (exit 3)
+PASS    reason names the scheduler lock
+PASS    nothing was started
+PASS  NEG-CONTROL lock file present but free -> run passes
+PASS  breach with a start that stays pending -> exit 4
+PASS  watchdog NOT reaped while the start is still pending (pid 1649223 alive)
+PASS    no SIGTERM was sent to it
+PASS    verdict says start still pending / watchdog left running
+PASS  late unit was stopped by the watchdog's post-fire re-check
+PASS    watchdog eventually exited by itself
+== S2. two quick SIGINTs: cleanup is non-reentrant but completes ==
+PASS  double SIGINT (+TERM) -> exit 2
+PASS  watchdog reaped despite the second signal (within 5 s)
+PASS  profile stopped
+PASS  verdict finalized
+PASS  cleanup completed (cleanup stop logged)
+== P2. preconditions fail early; validate runs niced ==
+PASS  missing golden suite -> refused BEFORE any model start (exit 3)
+PASS    reason names the missing suite (static refusal on stderr, before any evidence dir)
+PASS    no start
+PASS  validate runs at nice 19
+PASS    validate runs at ionice idle
+PASS  llmctl outside the driver's tree -> refused (exit 3)
+PASS    reason names the tree
+PASS  NEG-CONTROL explicit LT_LLMCTL_TREE override is honoured and logged
+PASS    tree check no longer the refusal reason
+== G1. GPU peak is read from the gpu_used_mb column (real samples.csv shape: 8 columns, gpu LAST) ==
+PASS  run with real GPU use passes
+PASS  GPU use must not be reported as 'no GPU use observed'
+PASS  verdict table carries the real vram peak
+PASS  NEG-CONTROL samples.csv really has gpu 4109 in its last column

@@ -727,12 +727,17 @@ _sched_scale_running() {
   } | sort -n
 }
 
-# _sched_base_profile <instance-key> -> the catalog profile behind a key (decide.2 -> decide)
+# _sched_base_profile <instance-key> -> the catalog profile behind a key (decide.2 -> decide). The same mapping as
+# reserve_base_profile (lib/reserve.sh) and base_profile in capacity_json (review round 2 F5): a "<tenant>--" prefix is
+# dropped, a full name that IS a catalog profile is returned as it is, and only then a ".<N>" (N >= 2) instance
+# suffix is dropped when the base is a catalog profile.
 _sched_base_profile() {
   local k="$1" b
-  if [[ "${k}" =~ ^(.+)\.([0-9]+)$ ]]; then
+  [[ "${k}" == *--* ]] && k="${k##*--}"
+  if catalog_exists "${k}" 2>/dev/null; then printf '%s\n' "${k}"; return 0; fi
+  if [[ "${k}" =~ ^(.+)\.([2-9]|[1-9][0-9]+)$ ]]; then
     b="${BASH_REMATCH[1]}"
-    if catalog_exists "${b}"; then printf '%s\n' "${b}"; return 0; fi
+    if catalog_exists "${b}" 2>/dev/null; then printf '%s\n' "${b}"; return 0; fi
   fi
   printf '%s\n' "${k}"
 }

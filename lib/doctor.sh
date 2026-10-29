@@ -422,7 +422,7 @@ print("; ".join(u))' 2>/dev/null || true)"
       local _doc_cap
       if _doc_cap="$(capacity_json 2>/dev/null)"; then
         local _doc_cs
-        _doc_cs="$(python3 -c 'import json,sys; d=json.loads(sys.argv[1]); deg=[u["unit"] for u in d["llmctl"]["units"] if u["status"]=="degraded"]; print(("DEGRADED "+",".join(deg)) if deg else ("pressure: "+"; ".join(d["pressure"]["reasons"])) if not d["pressure"]["ok"] else "ok largest decision fit: %s, fallback %s" % (d["largest_decision_fit"], d["fallback"]["recommended"]))' "${_doc_cap}" 2>/dev/null || echo "unreadable")"
+        _doc_cs="$(python3 -c 'import json,sys; d=json.loads(sys.argv[1]); m=d.get("measurement") or {}; (m.get("ok", True) or (print("UNDETERMINED "+str(m.get("reason"))), sys.exit(0))); deg=[u["unit"] for u in d["llmctl"]["units"] if u["status"]=="degraded"]; print(("DEGRADED "+",".join(deg)) if deg else ("pressure: "+"; ".join(d["pressure"]["reasons"])) if not d["pressure"]["ok"] else "ok largest decision fit: %s, fallback %s" % (d["largest_decision_fit"], d["fallback"]["recommended"]))' "${_doc_cap}" 2>/dev/null || echo "unreadable")"
         case "${_doc_cs}" in
           ok*) _doc_pass "capacity: ${_doc_cs#ok } (llmctl capacity)" ;;
           *)   _doc_warn "capacity: ${_doc_cs} (llmctl capacity for details)" ;;

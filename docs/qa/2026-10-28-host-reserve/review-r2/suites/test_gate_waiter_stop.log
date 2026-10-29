@@ -1,0 +1,11 @@
+== #3 FAIL verdict: the reservation is gone even though the stop kills the waiter before it can clean up
+  ok: setup: the reservation exists before the validation
+  ok: FAIL: the unit was stopped through systemctl --user stop
+  ok: FAIL: the reservation was removed BEFORE the stop (the waiter never got to clean up after it)
+== #1 a bare exit 1 of the llmctl process is NOT a verdict: it is UNDETERMINED - never reported as a wrong answer
+  ok: llmctl crashed: reported loudly as UNDETERMINED
+  ok: llmctl crashed: NOT reported as a wrong answer
+  ok: llmctl crashed: UNDETERMINED -> the unit is stopped (strict default)
+  ok: opt-out marker in the env record: the unit is NOT stopped
+  ok: opt-out marker: the reservation is untouched
+RESULT: PASS

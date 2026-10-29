@@ -1,0 +1,39 @@
+  ok: tests/py/docs_audit.py exists
+  ok: golden-good fixture: 0 mismatches
+  ok: rule links examined items on the good fixture
+  ok: rule ports examined items on the good fixture
+  ok: rule counts examined items on the good fixture
+  ok: rule code examined items on the good fixture
+  ok: rule keys examined items on the good fixture
+  ok: golden-bad (missing link): exit 1
+  ok: golden-bad (missing link): flagged by rule links
+  ok: golden-bad (table disagrees with catalog): exit 1
+  ok: golden-bad (table disagrees with catalog): flagged by rule ports
+  ok: golden-bad (prose mention disagrees with catalog): exit 1
+  ok: golden-bad (prose mention disagrees with catalog): flagged by rule ports
+  ok: golden-bad (stale decide-profile count): exit 1
+  ok: golden-bad (stale decide-profile count): flagged by rule counts
+  ok: golden-bad (stale CLI-agent count): exit 1
+  ok: golden-bad (stale CLI-agent count): flagged by rule counts
+  ok: golden-bad (env var absent from code): exit 1
+  ok: golden-bad (env var absent from code): flagged by rule code
+  ok: golden-bad (unknown decide subcommand): exit 1
+  ok: golden-bad (unknown decide subcommand): flagged by rule code
+  ok: golden-bad (literal bearer key): exit 1
+  ok: golden-bad (literal bearer key): flagged by rule keys
+  ok: negative controls (placeholders, urls, anchors, fences, historical dirs) are not flagged
+  ok: empty tree is BLIND (exit 2), not clean
+-- real repository --
+    examined links=572
+    examined ports=57
+    examined counts=9
+    examined code=1140
+    examined keys=226
+    RESULT: 0 mismatches
+  ok: real README.md + docs/: 0 mismatches (SC-009)
+  ok: rule links examined items on the real tree
+  ok: rule ports examined items on the real tree
+  ok: rule counts examined items on the real tree
+  ok: rule code examined items on the real tree
+  ok: rule keys examined items on the real tree
+RESULT: PASS

@@ -1,0 +1,58 @@
+== 0. setup: a running profile with a real signed PASS record
+  ok: llmctl validate vision (running, fixture engine) -> PASS and a record is written ([llmctl] validation state for 'vision': pass -> /home/milosvasic/.cache/claude-tmp/tmp.i1sr9emLnZ/state/validation/vision.json)
+  ok: require-validated vision -> 0
+== 1. not due: nothing runs, the record is byte-identical
+  ok: revalidate with a young record -> exit 0
+  ok: the profile is reported as not due
+  ok: the record is byte-identical
+  ok: the engine still runs
+== 2. due + correct engine: PASS, the record is replaced by a NEWER signed one, the engine is untouched
+  ok: revalidate of a due profile against a correct engine -> exit 0
+  ok: the summary says the record was refreshed
+  ok: the record was replaced
+  ok: require-validated vision -> 0 with the NEW record (signature verifies)
+  ok: the engine still runs
+  ok: the reservation is still there
+  ok: the last-revalidation note says pass
+  ok: no staging directory left behind
+== 3. due + WRONG answers: exit 1 - and the previous record is byte-identical, the engine is NOT stopped
+  ok: revalidate against a wrong-answering engine -> exit 1 (the unit shows FAILED)
+  ok: the summary names the FAIL
+  ok: the previous PASS record is BYTE-IDENTICAL (a FAIL never overwrites it)
+  ok: the engine was NOT stopped
+  ok: the reservation was NOT withdrawn
+  ok: the last-revalidation note says fail
+  ok: the failed run's record is kept for diagnosis
+== 4. due + engine unreachable: exit 2 - the previous record is byte-identical, nothing is started
+  ok: revalidate with an unreachable engine -> exit 2 (could not determine)
+  ok: the previous record is BYTE-IDENTICAL (UNDETERMINED never demotes a healthy record)
+  ok: require-validated vision still 0
+== 5. nothing running / quarantined profile
+  ok: no running profile -> exit 0 (a timer tick on an idle host is not a failure)
+  ok: says so
+  ok: a quarantined profile is skipped (its starter validates it)
+  ok: says so
+  ok: the record is untouched
+  ok: an unknown option is a usage error (2)
+== 6. units: written by install, enabled (printed under a dry run), no stop/restart verb
+  ok: install (legacy write mode of a dry run) exits 0
+  ok: llmctl-revalidate.service written
+  ok: llmctl-revalidate.timer written
+  ok: install enables the timer (printed under the dry run)
+  ok: oneshot service
+  ok: ExecStart runs llmctl revalidate
+  ok: daily
+  ok: a missed run fires at the next start
+  ok: installable into timers.target
+  ok: the service carries no Restart=, ExecStop or stop/restart verb
+  ok: systemd-analyze verify finds nothing wrong with the two units
+  ok: svc_stale_units: nothing is stale right after an install (the revalidate oneshot is not flagged)
+  ok: install with LLMCTL_REVALIDATE_TIMER=0 exits 0
+  ok: LLMCTL_REVALIDATE_TIMER=0 leaves the timer disabled
+== 7. paired mutations - each must turn the matching section RED
+  ok: MUTANT no-staging: a FAIL overwrote the live record -> section 3 goes RED (rc=1)
+  ok: re-validated after mutant A (record restored)
+  ok: MUTANT manual-policy: the FAIL was treated as "stop the served engine" -> section 3 (no stop) goes RED
+  ok: MUTANT no-timer-unit: install writes no timer -> section 6 goes RED
+  ok: MUTANT stale-skip removed: the revalidate unit is reported stale -> section 6 goes RED
+RESULT: PASS

@@ -32,6 +32,9 @@ workload, and reports host capacity on demand (`llmctl capacity --json`).
 **Release status (read first).**
 
 - **Not yet released:** this entry is written before the independent review; nothing is tagged or pushed until it returns GO.
+- **Small hosts:** while the host reserve is on, a host with less than about **4.6 GiB** of RAM refuses EVERY local model start (exit 75):
+  the memory reserve (at least 4 GiB) leaves under 512 MiB for models. Route decisions to a hosted endpoint there
+  (`llmctl-fallback: cloud`), or use `LLMCTL_HOST_RESERVE=0` for diagnostics only.
 - **Why (operator mandate, 2026-10-28):** local models, especially decision models, must never take all CPUs or nearly all RAM; the system must
   always keep room to breathe and must never hang.
 - **Unchanged surface (documented here for the release checks):** the `llmctl-decide` gateway's HTTP surface, `decide calibrate`,
@@ -60,18 +63,39 @@ workload, and reports host capacity on demand (`llmctl capacity --json`).
   1..25 (decision) percent; anything looser or not a number falls back to the default. A host whose reserve leaves less than 512 MiB for models
   refuses every local start (75) instead of granting a token budget. On this host: 4 CPUs (0-1,8-9) and 6194 MiB kept; models get CPUs 2-7,10-15 (chat 6, decision 3) and 24780 MiB.
 - `llmctl capacity [--json] [profile...]` (`lib/capacity.sh`, schema `llmctl.capacity/1`, `docs/capacity.md`): live MemAvailable, swap, PSI for
-  cpu/memory/io, load, cgroup limits and the limits of running llmctl units; per profile `fits | fits_with_reduced_threads | does_not_fit | running`
+  cpu/memory/io, load, cgroup limits and the limits of running llmctl units; per profile `fits | fits_with_reduced_threads | does_not_fit | undetermined | running`
   with reasons and headroom; `largest_decision_fit`; running units `ok | degraded` with a `llmctl stop` suggestion; `fallback.recommended`
   `local | cloud | none` (`local` only when a decision profile fits or a decision unit is running and `ok`, and never for a refused named profile;
   `cloud` only when a hosted key VARIABLE from `LLMCTL_HOSTED_KEY_VARS` is set - only its name is reported, never the value). Instance units
   (`decide-tiny.2`) and tenant units (`<tenant>--decide-tiny`) are mapped to their catalog profile (`base_profile`); dotted profile names are
   kept intact.
-  Exit 0 / 75 (a named profile does not fit) / 3 (a running model is degraded).
+  Exit 0 / 75 (a named profile does not fit or the measurement is undetermined; stderr carries `llmctl-fallback: cloud|none`) / 3 (a running
+  model is degraded).
+  - **Verdict vocabulary** (review round 2): llmctl keeps its names and adds the anchor vocabulary as `verdict_class` per profile and `route` in
+    the fallback (additive; schema stays `llmctl.capacity/1`):
+
+    | llmctl                                 | anchor                                    |
+    |----------------------------------------|-------------------------------------------|
+    | `fits`                                 | `verdict_class: fits`                     |
+    | `fits_with_reduced_threads`            | `verdict_class: fits_reduced`             |
+    | `does_not_fit`                         | `verdict_class: does_not_fit`             |
+    | measurement timeout / probe failure    | `verdict: undetermined`, `verdict_class: undetermined` |
+    | `running`                              | not a candidate verdict (`verdict_class: null`, `running: true`) |
+    | `fallback.recommended: local`          | `route: local`                            |
+    | `fallback.recommended: cloud`          | `route: hosted`                           |
+    | `fallback.recommended: none`           | `route: none`                             |
+
+  - **Time bounds** (review round 2): every probe step gets `LLMCTL_CAPACITY_PROBE_TIMEOUT` s (default 3, 1..30, never above the whole budget)
+    and the whole measurement `LLMCTL_CAPACITY_TIMEOUT` s (default 5, 2..30). A probe past its bound (for example `nvidia-smi` on a wedged driver,
+    which used to hang `start` and `llmctl capacity` until killed) is killed with only its own process tree, and the result is `undetermined`
+    (`measurement.ok: false`, refused with 75, fallback `cloud|none`, never `local`). A failed or unreadable plan probe is `undetermined` too, not
+    "not a catalog profile".
 - `llmctl reserve [--json]`: the effective reserve, gate thresholds and the running units' limits read back from their cgroups.
 - `llmctl doctor` and `llmctl status` print the reserve; doctor also prints the largest decision fit and warns on degradation or a disabled reserve.
 - `llmctld` is unchanged: it starts models by running `bin/llmctl`, so the shell reserve and gates apply to it. (The first draft added a Go
   `HostBudget` and `WrapConfig` fields that nothing called; they were removed in review round 1 rather than claimed.)
-- Tests: `tests/test_host_reserve.sh`, `tests/test_capacity.sh`, `tests/test_host_reserve_review.sh` (unit-class, hermetic fixtures); live harness
+- Tests: `tests/test_host_reserve.sh`, `tests/test_capacity.sh`, `tests/test_host_reserve_review.sh`, `tests/test_host_reserve_review2.sh`
+  (unit-class, hermetic fixtures; review2 runs a sleeping fake `nvidia-smi` through the real CLI); live harness
   `scripts/qa/host_reserve_live.sh` and mutation runner `scripts/qa/host_reserve_mutants.py`.
 
 ### Changed
@@ -101,6 +125,10 @@ workload, and reports host capacity on demand (`llmctl capacity --json`).
   unit, no new engine process and no env record; a pressure case on the real CPU PSI reading marked the running model `degraded`. The negative
   controls (`LLMCTL_HOST_RESERVE=0`, and the 3.3.2 tree) read back no quota, all 16 CPUs and no thread cap.
 
+- Review round 2: `running` now means only THIS host's own unit instance of the profile (tenant key + primary name). Before, a running
+  `decide-tiny.2` or another tenant's `t1--decide-tiny` made `start decide-tiny` "already running" and admitted it with no check while that
+  unit held the budget. `_sched_base_profile` now maps names exactly like `reserve_base_profile` and the capacity check (tenant prefix
+  stripped, full catalog name first).
 - Start latency: the first draft read the catalog two to three times per profile inside `capacity_json`, so a dry-run `llmctl start` rose from
   about 2.7 s to 8.5 s and `llmctld`'s 10 s client timeout tripped in the cluster integration tests. The decision-profile set is now read once
   per call and both computations are memoised on all of their inputs (the reserve on the CPU list, SMT topology, MemTotal and every knob; the

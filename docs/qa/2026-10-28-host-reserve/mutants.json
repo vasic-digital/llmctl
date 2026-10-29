@@ -23,6 +23,14 @@
         "  ok: decision smoke (decide-2b, letter-logit): --threads = decision cap 3 (chat cap is 6)",
         "RESULT: PASS"
       ]
+    },
+    "tests/test_host_reserve_review2.sh": {
+      "rc": 0,
+      "tail": [
+        "  ok: 4300 MiB host (model budget 204 MiB): the template MemoryMax is the 256 MiB floor",
+        "  ok: negative control: 8192 MiB host: the model budget 4096 MiB",
+        "RESULT: PASS"
+      ]
     }
   },
   "mutants": [
@@ -94,7 +102,7 @@
       "verdict": "killed",
       "tail": [
         "  FAIL: no env record written for a refused start",
-        "    file should not exist: /home/milosvasic/.cache/claude-tmp/tmp.hk7c6EI0LE/state/services/decide-tiny.env",
+        "    file should not exist: /home/milosvasic/.cache/claude-tmp/tmp.LJJSLH8eNH/state/services/decide-tiny.env",
         "RESULT: FAIL (6 assertion failure(s))"
       ]
     },
@@ -118,7 +126,7 @@
       "verdict": "killed",
       "tail": [
         "  FAIL: no env record written for a refused start",
-        "    file should not exist: /home/milosvasic/.cache/claude-tmp/tmp.ubidd46qnF/state/services/decide-tiny.env",
+        "    file should not exist: /home/milosvasic/.cache/claude-tmp/tmp.mKOyOKzoH5/state/services/decide-tiny.env",
         "RESULT: FAIL (10 assertion failure(s))"
       ]
     },
@@ -142,7 +150,7 @@
       "verdict": "killed",
       "tail": [
         "    needle not found:  --threads-batch 3 ",
-        "    haystack:  --model /home/milosvasic/.cache/claude-tmp/tmp.QWBXQsINsc/models/decide-tiny/Jev-Style-0.8B-Decision-v3-Q4_K_M.gguf --host 127.0.0.1 --port 18080 --ctx-size 2048 --n-gpu-layers 0 --flash-attn off --parallel 1 --jinja --api-key-file /home/milosvasic/.cache/claude-tmp/tmp.QWBXQsINsc/state/keys/llama-decide-tiny.key --no-webui ",
+        "    haystack:  --model /home/milosvasic/.cache/claude-tmp/tmp.S4mRio5ppd/models/decide-tiny/Jev-Style-0.8B-Decision-v3-Q4_K_M.gguf --host 127.0.0.1 --port 18080 --ctx-size 2048 --n-gpu-layers 0 --flash-attn off --parallel 1 --jinja --api-key-file /home/milosvasic/.cache/claude-tmp/tmp.S4mRio5ppd/state/keys/llama-decide-tiny.key --no-webui ",
         "RESULT: FAIL (2 assertion failure(s))"
       ]
     },
@@ -250,7 +258,7 @@
       "verdict": "killed",
       "tail": [
         "  FAIL: unknown-profile refusal carries the fallback line",
-        "    llmctl-fallback: not found in /home/milosvasic/.cache/claude-tmp/tmp.sK8NBcv2Wm/unk.err",
+        "    llmctl-fallback: not found in /home/milosvasic/.cache/claude-tmp/tmp.dHOODB2kcp/unk.err",
         "RESULT: FAIL (2 assertion failure(s))"
       ]
     },
@@ -274,7 +282,7 @@
       "verdict": "killed",
       "tail": [
         "  FAIL: start end to end: the recorded launch has --threads 2 (not the 3-CPU cap)",
-        "    --threads 2  not found in /home/milosvasic/.cache/claude-tmp/tmp.CtAmS4cU3A/threads.txt",
+        "    --threads 2  not found in /home/milosvasic/.cache/claude-tmp/tmp.42NJbj2WaH/threads.txt",
         "RESULT: FAIL (2 assertion failure(s))"
       ]
     },
@@ -286,7 +294,7 @@
       "verdict": "killed",
       "tail": [
         "    needle not found:  --threads 3 ",
-        "    haystack:  --model /home/milosvasic/.cache/claude-tmp/tmp.W30ZFgf8Rp/fake.gguf --ctx-size 512 --n-gpu-layers 0 --host 127.0.0.1 --port 34337 --threads 6 --threads-batch 6 ",
+        "    haystack:  --model /home/milosvasic/.cache/claude-tmp/tmp.hvi929EuEz/fake.gguf --ctx-size 512 --n-gpu-layers 0 --host 127.0.0.1 --port 38069 --threads 6 --threads-batch 6 ",
         "RESULT: FAIL (1 assertion failure(s))"
       ]
     },
@@ -298,7 +306,7 @@
       "verdict": "killed",
       "tail": [
         "  FAIL: a pressure-gate refusal also prints the fallback line",
-        "    llmctl-fallback: not found in /home/milosvasic/.cache/claude-tmp/tmp.eqYBgUwxcg/scale2.out",
+        "    llmctl-fallback: not found in /home/milosvasic/.cache/claude-tmp/tmp.bwkm02WSh1/scale2.out",
         "RESULT: FAIL (5 assertion failure(s))"
       ]
     },
@@ -323,7 +331,7 @@
       "tail": [
         "    expected: local",
         "    actual:   none",
-        "RESULT: FAIL (4 assertion failure(s))"
+        "RESULT: FAIL (3 assertion failure(s))"
       ]
     },
     {
@@ -372,6 +380,294 @@
         "    expected: 75",
         "    actual:   0",
         "RESULT: FAIL (1 assertion failure(s))"
+      ]
+    },
+    {
+      "mutant": "R2-M03-replaced-rss-not-in-cgroup-room",
+      "file": "lib/capacity.sh",
+      "suite": "tests/test_host_reserve_review2.sh",
+      "rc": 1,
+      "verdict": "killed",
+      "tail": [
+        "    expected: 0",
+        "    actual:   75",
+        "RESULT: FAIL (1 assertion failure(s))"
+      ]
+    },
+    {
+      "mutant": "R2-M04-scale-k-forced-1",
+      "file": "lib/capacity.sh",
+      "suite": "tests/test_host_reserve_review2.sh",
+      "rc": 1,
+      "verdict": "killed",
+      "tail": [
+        "  FAIL: and prints the fallback line",
+        "    llmctl-fallback: not found in /home/milosvasic/.cache/claude-tmp/tmp.aB5NZKDEtx/scale2.out",
+        "RESULT: FAIL (3 assertion failure(s))"
+      ]
+    },
+    {
+      "mutant": "R2-M05-scale-one-allows-reduced-threads",
+      "file": "lib/capacity.sh",
+      "suite": "tests/test_host_reserve_review2.sh",
+      "rc": 1,
+      "verdict": "killed",
+      "tail": [
+        "    expected: 75",
+        "    actual:   0",
+        "RESULT: FAIL (1 assertion failure(s))"
+      ]
+    },
+    {
+      "mutant": "R2-M06-named-refused-never",
+      "file": "lib/capacity.sh",
+      "suite": "tests/test_host_reserve_review2.sh",
+      "rc": 1,
+      "verdict": "killed",
+      "tail": [
+        "    expected: none none",
+        "    actual:   local local",
+        "RESULT: FAIL (1 assertion failure(s))"
+      ]
+    },
+    {
+      "mutant": "R2-M07-degraded-decide-unit-local",
+      "file": "lib/capacity.sh",
+      "suite": "tests/test_host_reserve_review2.sh",
+      "rc": 1,
+      "verdict": "killed",
+      "tail": [
+        "    expected: none",
+        "    actual:   local",
+        "RESULT: FAIL (1 assertion failure(s))"
+      ]
+    },
+    {
+      "mutant": "R2-M10-empty-doc-not-refused",
+      "file": "lib/capacity.sh",
+      "suite": "tests/test_host_reserve_review2.sh",
+      "rc": 1,
+      "verdict": "killed",
+      "tail": [
+        "  FAIL: the refusal names the failed measurement",
+        "    could not be measured not found in /home/milosvasic/.cache/claude-tmp/tmp.hFsdBL0FIC/empty.err",
+        "RESULT: FAIL (1 assertion failure(s))"
+      ]
+    },
+    {
+      "mutant": "R2-M16-scale-passes-no-instance-count",
+      "file": "lib/scheduler.sh",
+      "suite": "tests/test_host_reserve_review2.sh",
+      "rc": 1,
+      "verdict": "killed",
+      "tail": [
+        "  FAIL: and prints the fallback line",
+        "    llmctl-fallback: not found in /home/milosvasic/.cache/claude-tmp/tmp.aZvwW8mqew/scale2.out",
+        "RESULT: FAIL (2 assertion failure(s))"
+      ]
+    },
+    {
+      "mutant": "R2-M20-template-mem-floor-removed",
+      "file": "lib/service_linux.sh",
+      "suite": "tests/test_host_reserve_review2.sh",
+      "rc": 1,
+      "verdict": "killed",
+      "tail": [
+        "    expected: 256",
+        "    actual:   204",
+        "RESULT: FAIL (1 assertion failure(s))"
+      ]
+    },
+    {
+      "mutant": "R2-M21-py-tenant-strip-removed",
+      "file": "lib/capacity.sh",
+      "suite": "tests/test_host_reserve_review2.sh",
+      "rc": 1,
+      "verdict": "killed",
+      "tail": [
+        "    expected: llmctl stop decide-tiny",
+        "    actual:   llmctl stop t1--decide-tiny",
+        "RESULT: FAIL (2 assertion failure(s))"
+      ]
+    },
+    {
+      "mutant": "R2-M22-scale-skips-pressure-gate",
+      "file": "lib/scheduler.sh",
+      "suite": "tests/test_host_reserve_review2.sh",
+      "rc": 1,
+      "verdict": "killed",
+      "tail": [
+        "    expected: 75",
+        "    actual:   0",
+        "RESULT: FAIL (1 assertion failure(s))"
+      ]
+    },
+    {
+      "mutant": "R2-F1-running-by-base-profile",
+      "file": "lib/capacity.sh",
+      "suite": "tests/test_host_reserve_review2.sh",
+      "rc": 1,
+      "verdict": "killed",
+      "tail": [
+        "    expected: 75",
+        "    actual:   0",
+        "RESULT: FAIL (5 assertion failure(s))"
+      ]
+    },
+    {
+      "mutant": "R2-F1-tenant-key-ignored",
+      "file": "lib/capacity.sh",
+      "suite": "tests/test_host_reserve_review2.sh",
+      "rc": 1,
+      "verdict": "killed",
+      "tail": [
+        "    expected: 0",
+        "    actual:   75",
+        "RESULT: FAIL (2 assertion failure(s))"
+      ]
+    },
+    {
+      "mutant": "R2-F2-no-probe-bound",
+      "file": "lib/capacity.sh",
+      "suite": "tests/test_host_reserve_review2.sh",
+      "rc": 1,
+      "verdict": "killed",
+      "tail": [
+        "    needle not found: LLMCTL_CAPACITY_PROBE_TIMEOUT",
+        "    haystack: the capacity measurement did not finish within 3 s (LLMCTL_CAPACITY_TIMEOUT)",
+        "RESULT: FAIL (1 assertion failure(s))"
+      ]
+    },
+    {
+      "mutant": "R2-F2-no-whole-bound",
+      "file": "lib/capacity.sh",
+      "suite": "tests/test_host_reserve_review2.sh",
+      "rc": 1,
+      "verdict": "killed",
+      "tail": [
+        "    expected: a JSON document",
+        "    actual:   no document",
+        "RESULT: FAIL (3 assertion failure(s))"
+      ]
+    },
+    {
+      "mutant": "R2-F2-tree-not-killed",
+      "file": "lib/capacity.sh",
+      "suite": "tests/test_host_reserve_review2.sh",
+      "rc": 1,
+      "verdict": "killed",
+      "tail": [
+        "    expected: 0",
+        "    actual:   1",
+        "RESULT: FAIL (3 assertion failure(s))"
+      ]
+    },
+    {
+      "mutant": "R2-F2-probe-ceiling-loosened",
+      "file": "lib/capacity.sh",
+      "suite": "tests/test_host_reserve_review2.sh",
+      "rc": 1,
+      "verdict": "killed",
+      "tail": [
+        "    expected: 2 1",
+        "    actual:   2 0",
+        "RESULT: FAIL (1 assertion failure(s))"
+      ]
+    },
+    {
+      "mutant": "R2-F2-undetermined-admitted",
+      "file": "lib/capacity.sh",
+      "suite": "tests/test_host_reserve_review2.sh",
+      "rc": 1,
+      "verdict": "killed",
+      "tail": [
+        "  FAIL: the message says the capacity could not be determined",
+        "    could not be determined not found in /home/milosvasic/.cache/claude-tmp/tmp.CgK8S2f68t/plan.err",
+        "RESULT: FAIL (5 assertion failure(s))"
+      ]
+    },
+    {
+      "mutant": "R2-F2-exit-code-ignores-measurement",
+      "file": "lib/capacity.sh",
+      "suite": "tests/test_host_reserve_review2.sh",
+      "rc": 1,
+      "verdict": "killed",
+      "tail": [
+        "  FAIL: and prints the fallback line",
+        "    llmctl-fallback: none not found in /home/milosvasic/.cache/claude-tmp/tmp.fNzDOahNb8/hang2.err",
+        "RESULT: FAIL (2 assertion failure(s))"
+      ]
+    },
+    {
+      "mutant": "R2-F2-cli-no-fallback-line",
+      "file": "bin/llmctl",
+      "suite": "tests/test_host_reserve_review2.sh",
+      "rc": 1,
+      "verdict": "killed",
+      "tail": [
+        "  FAIL: and prints the fallback line",
+        "    llmctl-fallback: none not found in /home/milosvasic/.cache/claude-tmp/tmp.VMwD9J1gRP/hang2.err",
+        "RESULT: FAIL (2 assertion failure(s))"
+      ]
+    },
+    {
+      "mutant": "R2-F4-verdict-class-map",
+      "file": "lib/capacity.sh",
+      "suite": "tests/test_host_reserve_review2.sh",
+      "rc": 1,
+      "verdict": "killed",
+      "tail": [
+        "    expected: fits_with_reduced_threads fits_reduced",
+        "    actual:   fits_with_reduced_threads fits",
+        "RESULT: FAIL (1 assertion failure(s))"
+      ]
+    },
+    {
+      "mutant": "R2-F4-route-cloud-not-hosted",
+      "file": "lib/capacity.sh",
+      "suite": "tests/test_host_reserve_review2.sh",
+      "rc": 1,
+      "verdict": "killed",
+      "tail": [
+        "    expected: cloud hosted",
+        "    actual:   cloud cloud",
+        "RESULT: FAIL (1 assertion failure(s))"
+      ]
+    },
+    {
+      "mutant": "R2-F5-sched-no-tenant-strip",
+      "file": "lib/scheduler.sh",
+      "suite": "tests/test_host_reserve_review2.sh",
+      "rc": 1,
+      "verdict": "killed",
+      "tail": [
+        "    expected: decide-tiny",
+        "    actual:   t1--decide-tiny.3",
+        "RESULT: FAIL (2 assertion failure(s))"
+      ]
+    },
+    {
+      "mutant": "R2-F5-sched-suffix-before-full-name",
+      "file": "lib/scheduler.sh",
+      "suite": "tests/test_host_reserve_review2.sh",
+      "rc": 1,
+      "verdict": "killed",
+      "tail": [
+        "    expected: decide.1",
+        "    actual:   decide",
+        "RESULT: FAIL (2 assertion failure(s))"
+      ]
+    },
+    {
+      "mutant": "R2-F6-plan-failure-is-unknown",
+      "file": "lib/capacity.sh",
+      "suite": "tests/test_host_reserve_review2.sh",
+      "rc": 1,
+      "verdict": "killed",
+      "tail": [
+        "    expected: undetermined",
+        "    actual:   ",
+        "RESULT: FAIL (3 assertion failure(s))"
       ]
     }
   ],

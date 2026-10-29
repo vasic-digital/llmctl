@@ -1,0 +1,43 @@
+  ok: fixture: the health endpoint is up on port 43531
+== CONTROL 1 (positive): the fake systemctl recorder sees a stop issued the way the waiter must issue it
+  ok: control: 'systemctl --user stop' is visible in the call log
+== CONTROL 2 (negative): a waiter whose endpoint never answers validates NOTHING and stops NOTHING
+  ok: control: not-ready waiter exits non-zero (rc=1)
+  ok: control: no validation before readiness
+  ok: control: no stop for a service that never became ready
+== CONTROL 3 (negative): a waiter whose main pid died validates NOTHING
+tests/test_gate_wiring_systemd_waiter.sh: line 96: 1489369 Killed                     sleep 300 > /dev/null 2>&1
+  ok: control: dead pid -> no validation
+  ok: control: dead pid -> no stop
+== waiter PASS: validated exactly once after readiness, not recursive, NO stop
+  ok: waiter PASS: exits 0
+  ok: waiter PASS: the registration step still ran (readiness reached)
+  ok: waiter PASS: validate_profile called exactly once (RED: the systemd path has no validation today)
+  ok: waiter PASS: not inside the scheduler lock
+  ok: waiter PASS: no stop
+  ok: waiter PASS: the engine process is untouched
+== waiter FAIL (rc 1): 'systemctl --user stop <unit>' - not a non-zero exit of the main process
+  ok: waiter FAIL: validated exactly once
+  ok: waiter FAIL: the unit is stopped through 'systemctl --user stop llmctl-llama@small.service' (RED)
+  ok: waiter FAIL: the stop comes AFTER the verdict (verdict line 3, stop line 4)
+  ok: waiter FAIL: the waiter did NOT kill/signal the main pid itself (systemd stops it)
+  ok: waiter FAIL: no restart/kill games - only the normal stop
+  ok: waiter FAIL: the failure is reported (waiter output or svc_hook.log)
+== waiter UNDETERMINED (rc 2): STOPPED (strict default since review 2026-10-14), loud, never a PASS
+  ok: waiter UNDETERMINED: validated exactly once
+  ok: waiter UNDETERMINED: the unit is stopped (an unvalidated model is never served)
+  ok: waiter UNDETERMINED: reported loudly
+  ok: waiter UNDETERMINED: never reported as PASSED
+  ok: waiter UNDETERMINED: no PASS recorded
+== waiter with LLMCTL_VALIDATE_ON_START=0: no validation, no stop
+  ok: waiter ON_START=0: no validation
+  ok: waiter ON_START=0: no stop
+== ordering: validation starts only AFTER the endpoint answered (delayed health endpoint)
+  ok: ordering: validation ran
+  ok: ordering: validation began (1793245577.298750376) after the endpoint came up (1793245575.186763)
+== hk_register (ExecStartPost) stays DETACHED: returns promptly while validation is slow
+  ok: hk_register returned in 0.06s (< 2s although the validation takes 4s): it never blocks 'systemctl start'
+  ok: detached waiter: the validation still ran, exactly once (RED: nothing validates today)
+  ok: detached waiter: the verdict arrived AFTER hk_register had returned
+  ok: detached waiter FAIL: the unit is stopped via 'systemctl --user stop' (RED)
+RESULT: PASS

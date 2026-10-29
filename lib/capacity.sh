@@ -9,9 +9,16 @@
 #   fits_with_reduced_threads   memory fits, but only fewer CPUs than the profile's cap are left (>= 1); `start` then
 #                               runs it with that many threads and that CPU quota
 #   does_not_fit                memory, CPU, the planner or the current pressure say no; `start` refuses with 75
+#   undetermined                the measurement did not finish in its time budget or a probe failed (3.4.0 review r2);
+#                               `start` refuses with 75, the fallback is never "local"
+#   running                     not a candidate verdict: THIS host's own unit instance of the profile (tenant key +
+#                               primary name) is already up; other instances/tenants of the profile only count as usage
+# Each verdict also carries the anchor vocabulary in "verdict_class" (fits | fits_reduced | does_not_fit | undetermined,
+# null for running) and the fallback a "route" (local | hosted | none) next to llmctl's "recommended" name.
 # plus the largest decision profile that fits, every running unit's state (ok | degraded, with a suggestion to stop it),
 # and a machine-readable fallback recommendation: "cloud" when no local decision model fits and a hosted-key VARIABLE is
 # set (detected by name only, the value is never read into the output), "local" when one fits, "none" otherwise.
+# Every probe and the whole measurement are time-bounded (LLMCTL_CAPACITY_PROBE_TIMEOUT, LLMCTL_CAPACITY_TIMEOUT).
 # Schema: docs/capacity.md (llmctl.capacity/1).
 
 set -euo pipefail
@@ -31,15 +38,174 @@ _cap_psi() {
 # _cap_unit_profile <unit-name> -> the profile instance of an engine unit name (llmctl-llama@decide-tiny.service).
 _cap_unit_profile() { local n="${1#*@}"; echo "${n%.service}"; }
 
-# capacity_json [profile...] - prints the capacity document (one JSON object).
+# --- time bounds (3.4.0 review round 2, F2) -------------------------------------------------------------------------
+# A hung probe (an nvidia-smi stuck on a wedged driver, measured: the CLI hung until killed) must never hang `start`,
+# `llmctl capacity` or llmctld. Every probe gets LLMCTL_CAPACITY_PROBE_TIMEOUT seconds (default 3, 1..30, never more than
+# the whole) and the whole measurement LLMCTL_CAPACITY_TIMEOUT seconds (default 5, 2..30); a measurement that does not
+# finish is "undetermined": refused with 75 and a cloud|none fallback, never "local". (A healthy measurement takes
+# about 0.8 s on the reference host.)
+
+# _cap_budgets -> sets CAP_T (whole measurement) and CAP_PT (one probe), clamped.
+_cap_budgets() {
+  CAP_T="$(_rsv_int "${LLMCTL_CAPACITY_TIMEOUT:-}" 5 2 30)"
+  CAP_PT="$(_rsv_int "${LLMCTL_CAPACITY_PROBE_TIMEOUT:-}" 3 1 30)"
+  (( CAP_PT > CAP_T )) && CAP_PT="${CAP_T}"
+  return 0
+}
+
+# _cap_pid_start <pid> -> the process start time (field 22 of /proc/<pid>/stat); fails when the process is gone.
+_cap_pid_start() {
+  local s f; s="$(cat "/proc/$1/stat" 2>/dev/null)" || return 1
+  s="${s##*) }"; read -r -a f <<<"${s}"; [[ -n "${f[19]:-}" ]] || return 1; printf '%s' "${f[19]}"
+}
+
+# _cap_children <pid> -> the direct children of a pid (by parent pid, never by command-line match).
+_cap_children() {
+  if command -v pgrep >/dev/null 2>&1; then pgrep -P "$1" 2>/dev/null || true; return 0; fi
+  local d s f
+  for d in /proc/[0-9]*; do
+    s="$(cat "${d}/stat" 2>/dev/null)" || continue; s="${s##*) }"; read -r -a f <<<"${s}"
+    [[ "${f[1]:-}" == "$1" ]] && echo "${d#/proc/}"
+  done
+  return 0
+}
+
+# _cap_kill_tree <pid> - SIGKILL a background measurement subshell this shell started, and everything below it.
+# Only that tree is touched (§11.4.174): the root is our own `$!`, the rest is found by parent pid; every pid is
+# checked to be > 1 and not this shell, and is signalled only while its recorded start time still matches.
+_cap_kill_tree() {
+  local root="$1" p k i pass
+  [[ "${root}" =~ ^[0-9]+$ ]] && (( root > 1 )) || return 0
+  local -a all=() st=() q=()
+  for pass in 1 2; do
+    q=("${root}"); all=(); st=()
+    while (( ${#q[@]} )); do
+      p="${q[0]}"; q=("${q[@]:1}")
+      [[ "${p}" =~ ^[0-9]+$ ]] && (( p > 1 && p != $$ && p != BASHPID )) || continue
+      k="$(_cap_pid_start "${p}")" || continue
+      all+=("${p}"); st+=("${k}")
+      kill -STOP "${p}" 2>/dev/null || true   # no new children while the tree is collected
+      while read -r k; do [[ -n "${k}" ]] && q+=("${k}"); done < <(_cap_children "${p}")
+    done
+  done
+  for i in "${!all[@]}"; do
+    [[ "$(_cap_pid_start "${all[i]}" 2>/dev/null || true)" == "${st[i]}" ]] && kill -KILL "${all[i]}" 2>/dev/null
+  done
+  return 0
+}
+
+# _cap_bounded <seconds> <outfile> <cmd...> - run cmd (a shell function is fine) in a background subshell with stdout to
+# outfile; rc 124 and the whole subshell tree killed when it is still running after <seconds>, else cmd's rc. The
+# subshell writes to a FILE, never to a pipe of a command substitution, so a stuck grandchild cannot hold `$(...)` open.
+_cap_bounded() {
+  local secs="$1" out="$2" pid i=0 n
+  shift 2
+  n=$(( secs * 10 ))
+  ( "$@" ) > "${out}" 2>/dev/null < /dev/null &
+  pid=$!
+  while [[ -d "/proc/${pid}" && "$(awk '{print $3}' "/proc/${pid}/stat" 2>/dev/null)" != Z ]]; do
+    if (( i >= n )); then
+      _cap_kill_tree "${pid}"
+      wait "${pid}" 2>/dev/null || true
+      return 124
+    fi
+    sleep 0.1; i=$(( i + 1 ))
+  done
+  wait "${pid}"
+}
+
+# _cap_key_var -> the NAME of the first hosted-key variable that is set (its value is never read out); empty if none.
+_cap_key_var() {
+  local v
+  for v in ${LLMCTL_HOSTED_KEY_VARS}; do
+    [[ "${v}" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || continue
+    if [[ -n "${!v:-}" ]]; then echo "${v}"; return 0; fi
+  done
+  return 0
+}
+
+# _cap_undetermined_doc <reason> [profile...] - the llmctl.capacity/1 document of a measurement that could not finish:
+# every named profile "undetermined", measurement.ok false, fallback cloud|none (route hosted|none), never local.
+_cap_undetermined_doc() {
+  local reason="$1"; shift
+  # no reserve_compute here: it reads /proc and could be the very read that hung; RSV_* are reported when already known
+  CAP_REASON="${reason}" CAP_KEYVAR="$(_cap_key_var)" CAP_KEYVARS="${LLMCTL_HOSTED_KEY_VARS}" \
+  CAP_T="${CAP_T:-}" CAP_PT="${CAP_PT:-}" CAP_ENABLED="$(reserve_enabled && echo 1 || echo 0)" \
+  CAP_N="${RSV_N:-}" CAP_RC="${RSV_RC:-}" CAP_BC="${RSV_BC:-}" CAP_RSET="${RSV_RESERVED_SET:-}" CAP_MSET="${RSV_CPUSET:-}" \
+  CAP_CHAT="${RSV_CHAT_CPUS:-}" CAP_DECIDE="${RSV_DECIDE_CPUS:-}" CAP_RM="${RSV_RM:-}" CAP_BM="${RSV_BM:-}" \
+    python3 - "$@" <<'PYEOF'
+import json, os, sys, time
+E = os.environ
+def i(k):
+    v = E.get(k, "")
+    return int(v) if v.isdigit() else None
+reason = E.get("CAP_REASON") or "the host capacity could not be determined"
+keyvar = E.get("CAP_KEYVAR") or None
+fb = {"recommended": "cloud" if keyvar else "none", "route": "hosted" if keyvar else "none",
+      "reason": "the host capacity could not be determined (%s); %s" % (
+          reason, "a hosted decision key is set" if keyvar else "none of %s is set" % E.get("CAP_KEYVARS")),
+      "key_variable": keyvar}
+profiles = {p: {"class": None, "verdict": "undetermined", "verdict_class": "undetermined", "running": False,
+                "reasons": [reason], "threads": 0, "headroom": None} for p in sys.argv[1:]}
+doc = {
+    "schema": "llmctl.capacity/1", "time": int(time.time()),
+    "measurement": {"ok": False, "reason": reason, "timeout_s": i("CAP_T"), "probe_timeout_s": i("CAP_PT")},
+    "host": {"cpus_online": i("CAP_N"), "mem_total_mb": None, "mem_available_mb": None, "usable_mem_mb": None,
+             "swap_total_mb": None, "swap_free_mb": None, "load": None,
+             "psi": {"memory": {"some": None, "full": None}, "cpu": {"some": None}, "io": {"some": None, "full": None}},
+             "cgroup": None},
+    "reserve": {"enabled": E.get("CAP_ENABLED") == "1", "cpus_reserved": i("CAP_RC"), "cpus_reserved_set": E.get("CAP_RSET"),
+                "cpus_model_budget": i("CAP_BC"), "cpus_model_set": E.get("CAP_MSET"), "chat_cpu_cap": i("CAP_CHAT"),
+                "decide_cpu_cap": i("CAP_DECIDE"), "mem_reserved_mb": i("CAP_RM"), "mem_model_budget_mb": i("CAP_BM")},
+    "llmctl": {"units": [], "cpu_pct_used": None, "mem_limits_used_mb": None, "cpu_pct_free": None, "mem_budget_free_mb": None},
+    "pressure": {"ok": False, "reasons": [reason]},
+    "profiles": profiles, "unknown_profiles": [], "largest_decision_fit": None, "degraded": False, "fallback": fb,
+}
+print(json.dumps(doc, sort_keys=True))
+PYEOF
+}
+
+# capacity_json [profile...] - prints the capacity document (one JSON object), within LLMCTL_CAPACITY_TIMEOUT seconds.
+# rc 0 with an "undetermined" document when the measurement times out or fails (the caller gets a verdict either way).
 capacity_json() {
+  _cap_budgets
+  local tdir out rc=0
+  if ! tdir="$(mktemp -d)"; then
+    _cap_undetermined_doc "no scratch directory for the measurement" "$@"; return 0
+  fi
+  out="${tdir}/doc.json"
+  _CAP_TMPDIR="${tdir}" _cap_bounded "${CAP_T}" "${out}" _cap_measure "$@" || rc=$?
+  if (( rc == 0 )) && [[ -s "${out}" ]]; then
+    cat -- "${out}"
+  elif (( rc == 124 )); then
+    _cap_undetermined_doc "the capacity measurement did not finish within ${CAP_T} s (LLMCTL_CAPACITY_TIMEOUT)" "$@"
+  else
+    _cap_undetermined_doc "the capacity measurement failed (rc ${rc})" "$@"
+  fi
+  rm -rf -- "${tdir:?}"
+  return 0
+}
+
+# _cap_plan_probe - the hardware probe and the planner (the step that runs nvidia-smi / rocm-smi).
+_cap_plan_probe() { set -o pipefail; hw_probe_json | catalog_plan_json; }
+
+# _cap_measure [profile...] - the measurement itself; runs inside _cap_bounded (capacity_json).
+_cap_measure() {
   reserve_compute
   local mi="${LLMCTL_MEMINFO_FILE:-/proc/meminfo}" la="${LLMCTL_LOADAVG_FILE:-/proc/loadavg}"
   local pdir="${LLMCTL_PSI_DIR:-/proc/pressure}"
   local mpsi="${LLMCTL_PSI_FILE:-${pdir}/memory}" cpsi="${LLMCTL_CPU_PSI_FILE:-${pdir}/cpu}" ipsi="${LLMCTL_IO_PSI_FILE:-${pdir}/io}"
   local root; root="$(_rsv_cgroup_root)"
-  local plan_file; plan_file="$(mktemp)"
-  hw_probe_json | catalog_plan_json > "${plan_file}" 2>/dev/null || echo '{}' > "${plan_file}"
+  local plan_file="${_CAP_TMPDIR:?}/plan.json" prc=0
+  _cap_bounded "${CAP_PT}" "${plan_file}" _cap_plan_probe || prc=$?
+  if (( prc == 124 )); then
+    _cap_undetermined_doc "the hardware/plan probe did not finish within ${CAP_PT} s (LLMCTL_CAPACITY_PROBE_TIMEOUT)" "$@"
+    return 0
+  fi
+  if (( prc != 0 )) || ! python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if isinstance(d.get("profiles"), dict) else 1)' "${plan_file}" 2>/dev/null; then
+    _cap_undetermined_doc "the hardware/plan probe failed (llmctl plan --json); the capacity cannot be judged without it" "$@"
+    return 0
+  fi
   local units="" name cpu mem d cur
   while read -r name cpu mem; do
     [[ -n "${name}" ]] || continue
@@ -70,7 +236,8 @@ capacity_json() {
   CAP_UNITS="${units}" CAP_DECIDE_SET="${decide}" CAP_KEYVAR="${keyvar}" CAP_KEYVARS="${LLMCTL_HOSTED_KEY_VARS}" \
   CAP_CG_ROOT="${root}" CAP_CG_MMAX="${cg_mmax}" CAP_CG_MCUR="${cg_mcur}" CAP_CG_CMAX="${cg_cmax}" \
   CAP_CHECK_PRESSURE="${LLMCTL_GATE_CPU_CHECKS:-1}" CAP_MEM_SHORT="${RSV_MEM_SHORT}" \
-  CAP_NEW_INSTANCES="${_CAP_NEW_INSTANCES:-}" CAP_REPLACE="${_CAP_REPLACE:-}" \
+  CAP_NEW_INSTANCES="${_CAP_NEW_INSTANCES:-}" CAP_REPLACE="${_CAP_REPLACE:-}" CAP_TENANT="${LLMCTL_TENANT_ID:-}" \
+  CAP_T="${CAP_T:-}" CAP_PT="${CAP_PT:-}" \
     python3 - "${plan_file}" "$@" <<'PYEOF'
 import json, os, re, sys, time
 E = os.environ
@@ -161,7 +328,12 @@ for line in E.get("CAP_UNITS", "").splitlines():
                   "status": "degraded" if reasons else "ok", "reasons": reasons,
                   "base_profile": base_profile(prof),
                   "suggest": ("llmctl stop %s" % base_profile(prof)) if reasons else None})
-running = {u["base_profile"] for u in units}
+# "running" means THIS host's own unit instance of the profile is up: the tenant key + the primary name, exactly as
+# _svc_instance_key builds it. Another instance (decide-tiny.2) or another tenant's unit (t1--decide-tiny) of the same
+# profile is only consumption, never "already running" (review round 2 F1).
+tenant = E.get("CAP_TENANT", "")
+unit_keys = {u["profile"] for u in units}
+def inst_key(p): return ("%s--%s" % (tenant, p)) if tenant else p
 cpu_free = Bc * 100 - used_cpu
 mem_free = Bm - used_mem
 decide_set = set(E.get("CAP_DECIDE_SET", "").split())
@@ -177,6 +349,9 @@ def mem_limit(fp, mode, prov):
         if m < 6144: m = 6144
     if m > lim_one: m = lim_one
     return m
+# the anchor vocabulary next to llmctl's own verdict names (review round 2 F4); "running" is a unit state, not a verdict
+VCLASS = {"fits": "fits", "fits_with_reduced_threads": "fits_reduced", "does_not_fit": "does_not_fit",
+          "undetermined": "undetermined", "running": None}
 profiles = {}
 for p, info in sorted((plan.get("profiles") or {}).items()):
     if wanted and p not in wanted: continue
@@ -184,7 +359,7 @@ for p, info in sorted((plan.get("profiles") or {}).items()):
     cap = decide if cls == "decide" else chat
     k = new_inst if (new_inst and p in wanted) else 1
     # a named profile being scaled (new instances) or restarted (replace) is judged as a NEW start, never as "running"
-    is_running = p in running and not ((new_inst or replace) and p in wanted)
+    is_running = inst_key(p) in unit_keys and not ((new_inst or replace) and p in wanted)
     fp = int(info.get("ram_mb") or 0) * k
     need_mem = mem_limit(int(info.get("ram_mb") or 0), info.get("mode"), str(info.get("vram_provenance"))) * k
     reasons, verdict, threads = [], "fits", cap
@@ -212,6 +387,7 @@ for p, info in sorted((plan.get("profiles") or {}).items()):
     if reasons and not is_running: verdict = "does_not_fit"
     elif is_running: verdict = "running"
     profiles[p] = {"class": cls, "verdict": verdict, "reasons": reasons,
+                   "verdict_class": VCLASS.get(verdict), "running": verdict == "running",
                    "threads": threads if verdict in ("fits", "fits_with_reduced_threads") else 0,
                    "headroom": {"cpu_pct_free": cpu_free, "cpu_pct_need": cap * 100,
                                 "mem_budget_free_mb": mem_free, "mem_limit_need_mb": need_mem,
@@ -228,13 +404,14 @@ named_refused = bool(wanted) and (any(profiles.get(p, {}).get("verdict") == "doe
 blocked = named_refused or not decision_local
 keyvar = E.get("CAP_KEYVAR") or None
 if not blocked:
-    fb = {"recommended": "local", "reason": "a local decision model fits or is running", "key_variable": None}
+    fb = {"recommended": "local", "route": "local", "reason": "a local decision model fits or is running", "key_variable": None}
 elif keyvar:
-    fb = {"recommended": "cloud", "reason": "%s; a hosted decision key is set" % ("the requested start does not fit" if named_refused else "no local decision model can run now"), "key_variable": keyvar}
+    fb = {"recommended": "cloud", "route": "hosted", "reason": "%s; a hosted decision key is set" % ("the requested start does not fit" if named_refused else "no local decision model can run now"), "key_variable": keyvar}
 else:
-    fb = {"recommended": "none", "reason": "%s and none of %s is set" % ("the requested start does not fit" if named_refused else "no local decision model can run now", E.get("CAP_KEYVARS")), "key_variable": None}
+    fb = {"recommended": "none", "route": "none", "reason": "%s and none of %s is set" % ("the requested start does not fit" if named_refused else "no local decision model can run now", E.get("CAP_KEYVARS")), "key_variable": None}
 doc = {
     "schema": "llmctl.capacity/1", "time": int(time.time()),
+    "measurement": {"ok": True, "timeout_s": inum("CAP_T", None), "probe_timeout_s": inum("CAP_PT", None)},
     "host": {"cpus_online": N, "mem_total_mb": T, "mem_available_mb": avail, "usable_mem_mb": live_avail,
              "swap_total_mb": swap_t, "swap_free_mb": swap_f,
              "load": {"1": load[0], "5": load[1], "15": load[2]} if load else None, "psi": psi, "cgroup": cg},
@@ -258,13 +435,14 @@ PYEOF
 }
 
 # capacity_exit_code <json> [profile...] -> 0 every named profile fits (or none named and nothing is degraded),
-# 75 a named profile does not fit (or is unknown), 3 nothing named and a running model is degraded.
+# 75 a named profile does not fit (or is unknown) or the measurement is undetermined, 3 nothing named and a running model is degraded.
 capacity_exit_code() {
   python3 -c '
 import json, sys
 d = json.loads(sys.argv[1]); w = sys.argv[2:]
+if not (d.get("measurement") or {}).get("ok", True): sys.exit(75)
 if w:
-    bad = [p for p in w if d["profiles"].get(p, {}).get("verdict", "does_not_fit") == "does_not_fit"]
+    bad = [p for p in w if d["profiles"].get(p, {}).get("verdict", "does_not_fit") in ("does_not_fit", "undetermined")]
     sys.exit(75 if bad else 0)
 sys.exit(3 if d["degraded"] else 0)' "$@"
 }
@@ -274,6 +452,13 @@ capacity_human() {
   python3 -c '
 import json, sys
 d = json.loads(sys.argv[1]); h = d["host"]; r = d["reserve"]
+m = d.get("measurement") or {}
+if not m.get("ok", True):
+    print("Capacity: UNDETERMINED (%s)" % m.get("reason"))
+    for p in sorted(d["profiles"]): print("  %-22s undetermined" % p)
+    print("Fallback: %s (%s)%s" % (d["fallback"]["recommended"], d["fallback"]["reason"],
+          (" via $" + d["fallback"]["key_variable"]) if d["fallback"]["key_variable"] else ""))
+    sys.exit(0)
 print("Host:     %s CPUs, %s MiB RAM (%s MiB usable now), load %s, PSI cpu %s / mem some %s full %s" % (
     h["cpus_online"], h["mem_total_mb"], h["usable_mem_mb"], (h["load"] or {}).get("1"),
     h["psi"]["cpu"]["some"], h["psi"]["memory"]["some"], h["psi"]["memory"]["full"]))
@@ -287,7 +472,7 @@ for u in l["units"]:
 if not d["pressure"]["ok"]: print("Pressure: " + "; ".join(d["pressure"]["reasons"]))
 for p, v in sorted(d["profiles"].items()):
     extra = (" threads=%s" % v["threads"]) if v["threads"] else ""
-    print("  %-22s %-7s %-26s%s %s" % (p, v["class"], v["verdict"], extra, "; ".join(v["reasons"])))
+    print("  %-22s %-7s %-26s%s %s" % (p, v["class"] or "-", v["verdict"], extra, "; ".join(v["reasons"])))
 print("Largest decision model that fits: %s" % (d["largest_decision_fit"] or "none"))
 print("Fallback: %s (%s)%s" % (d["fallback"]["recommended"], d["fallback"]["reason"],
       (" via $" + d["fallback"]["key_variable"]) if d["fallback"]["key_variable"] else ""))' "$1"
@@ -325,11 +510,15 @@ capacity_admit() {
     _cap_refuse "${p}" "the host capacity could not be measured (llmctl capacity --json ${p}); refusing rather than guessing"
     return 75
   fi
-  verdict="$(python3 -c 'import json,sys; d=json.loads(sys.argv[1]); v=d["profiles"].get(sys.argv[2]); print("%s %s" % (v["verdict"], v["threads"]) if v else "unknown 0")' "${doc}" "${p}" 2>/dev/null)" || verdict=""
+  verdict="$(python3 -c 'import json,sys; d=json.loads(sys.argv[1]); v=d["profiles"].get(sys.argv[2]); m=d.get("measurement") or {}; print("undetermined 0" if not m.get("ok", True) else ("%s %s" % (v["verdict"], v["threads"]) if v else "unknown 0"))' "${doc}" "${p}" 2>/dev/null)" || verdict=""
   case "${verdict%% *}" in
     fits|fits_with_reduced_threads|running)
       CAP_THREADS="${verdict##* }"; [[ "${CAP_THREADS}" =~ ^[1-9][0-9]*$ ]] || CAP_THREADS=""; return 0 ;;
     does_not_fit) ;;
+    undetermined)
+      local why
+      why="$(python3 -c 'import json,sys; print((json.loads(sys.argv[1]).get("measurement") or {}).get("reason") or "unknown reason")' "${doc}" 2>/dev/null)" || why="unknown reason"
+      _cap_refuse "${p}" "the host capacity could not be determined: ${why}; refusing rather than guessing"; return 75 ;;
     unknown) _cap_refuse "${p}" "it is not a catalog profile the capacity check knows; refusing rather than guessing"; return 75 ;;
     *) _cap_refuse "${p}" "the capacity verdict could not be read; refusing rather than guessing"; return 75 ;;
   esac

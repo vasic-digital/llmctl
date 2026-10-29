@@ -247,6 +247,14 @@ main() {
       local _cdoc; _cdoc="$(capacity_json "$@")" || die "capacity: measurement failed"
       if (( _cj )); then printf '%s\n' "${_cdoc}"; else capacity_human "${_cdoc}"; fi
       local _crc=0; capacity_exit_code "${_cdoc}" "$@" || _crc=$?
+      # 75 (a named start would be refused, or the measurement is undetermined): the machine-readable fallback line,
+      # cloud|none, never local while the host cannot take the start (review round 2 F2)
+      if (( _crc == 75 )); then
+        local _cfb
+        _cfb="$(python3 -c 'import json,sys; r=json.loads(sys.argv[1])["fallback"]["recommended"]; print(r if r in ("cloud", "none") else "none")' "${_cdoc}" 2>/dev/null)" \
+          || _cfb="$(_cap_fallback_name)"
+        printf 'llmctl-fallback: %s\n' "${_cfb:-none}" >&2
+      fi
       exit "${_crc}"
       ;;
     reserve)

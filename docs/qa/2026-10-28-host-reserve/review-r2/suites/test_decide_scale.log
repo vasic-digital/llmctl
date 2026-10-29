@@ -1,0 +1,94 @@
+== usage and validation ==
+  ok: scale with no arguments is a usage error (rc 2)
+  ok: scale without N is a usage error (rc 2)
+  ok: a non-numeric N is a usage error (rc 2)
+  ok: a negative N is a usage error (rc 2)
+  ok: an unknown profile fails (rc 1)
+  ok: unknown profile is named
+  ok: a chat profile is not a decision profile (rc 1)
+  ok: validation failures start nothing
+== admission refusal: exit 3 with the exact numbers, nothing started ==
+  ok: scaling past the admission bound exits 3
+  ok: refusal names the target
+  ok: refusal carries the instance key and the exact numbers
+  ok: a refused scale is all-or-nothing: no reservation was written
+  ok: a refused scale wrote no service env
+== scale up: instance keys <profile>, <profile>.2; deterministic mode ==
+  ok: scale decide 2 within admission exits 0
+  ok: reservations exist under the instance keys decide and decide.2
+  ok: the second instance key is reported
+  ok: deterministic mode is stated (primary first, overflow to the next instance)
+  ok: the primary keeps the documented port
+  ok: the second instance has a distinct port (9093)
+  ok: each instance has its OWN internal key file (the prestart hook rotates a key per start)
+  ok: the primary keeps its key file
+  ok: the registry profile label of decide.2 is the base profile
+== idempotent, then the admission bound counts what already runs ==
+  ok: scale to the current count exits 0
+  ok: no-op is reported
+  ok: no-op changes nothing
+  ok: with two instances running, a third is still refused (rc 3)
+  ok: the running instances' reservations are subtracted (VRAM 10444 - 2 x 3671 = 3102; RAM: the 60% cap 19660 minus the 2 x 2048 the running instances reserve)
+== scale down stops the highest instance first ==
+  ok: scale decide 1 exits 0
+  ok: decide.2 stopped, the primary stays
+  ok: a scaled-down instance leaves no service env behind
+  ok: scale decide 0 exits 0
+  ok: all instances stopped
+== throughput mode is flagged (FR-029) ==
+  ok: throughput scale exits 0
+  ok: throughput mode is named in the output
+  ok: output states the response marking
+  ok: an invalid LLMCTL_DECIDE_MODE is refused
+== a failed switch restores scaled instances (rollback keeps decide AND decide.2) ==
+  ok: two instances running before the switch
+  ok: status shows the second instance as an instance of decide, not as a profile 'decide.2'
+  ok: status --json: profile is the base profile for every instance
+  ok: status --json names the instance key
+  ok: the switch to a target that cannot start fails
+  ok: rollback does not treat decide.2 as an unknown profile
+  ok: rollback restored decide AND decide.2
+== restore is best-effort: a secondary that cannot restart never costs the primary ==
+  ok: switch failed AND the restore was incomplete (rc 75)
+  ok: decide stays running although decide.2 could not be restored
+  ok: the instance that could not be restored is named
+== tier/footprint refusal states the true reason (plan says it does not fit) ==
+  ok: a profile the plan marks as not fitting is refused with exit 3 (not started)
+  ok: the refusal states the real reason, not a headroom figure
+  ok: nothing reserved for a non-fitting profile
+== ports come from the registry allocator ==
+  ok: scale with the registry active exits 0
+  ok: the primary asks for its documented port
+  ok: decide.2 asks the allocator for a dynamic port
+  ok: the reservation records the allocated port
+  ok: the service env carries the allocated port
+  ok: scale down releases the port hold
+  ok: everything stopped
+== allocator failure: honest rc 1, nothing left behind ==
+  ok: a failed port allocation fails the scale (rc 1)
+  ok: the failing instance key is named
+  ok: the allocator's message (port + override variable) is passed through
+  ok: the failed instance has no reservation
+  ok: an allocation failure rolls back the instances started in this call
+  ok: the rolled-back primary's port hold is released
+== start failure: rolled back, port hold released, no stray env ==
+  ok: a failing svc_start fails the scale (rc 1)
+  ok: the failing key is named
+  ok: the failed instance's port hold is released
+  ok: the instance started earlier in this call was rolled back
+  ok: no stray env for the failed instance
+  ok: no stray env for the rolled-back instance
+== rollback releases the port hold even when svc_stop fails ==
+  ok: the scale fails (rc 1)
+  ok: the rolled-back primary's port hold is released although its svc_stop failed
+  ok: the reservation is dropped regardless
+== best-effort restore (registry active): the unrestorable secondary's hold and env are cleaned ==
+  ok: switch failed AND the restore was incomplete (rc 75)
+  ok: the primary is kept
+  ok: the failed secondary's port hold is released AFTER its re-allocation in best-effort mode
+  ok: no decide.2.env remains after the best-effort restore
+== extra instances refuse to guess a port without the allocator (real run) ==
+  ok: a real scale to 2 without the registry allocator is refused (rc 1)
+  ok: the refusal says how to get the allocator
+  ok: refused before anything was reserved
+RESULT: PASS

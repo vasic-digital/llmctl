@@ -1,0 +1,6 @@
+== stopping unit pid 123 must not kill the waiter of pid 1234
+  ok: waiter of pid 1234 survives a stop of pid 123
+  ok: waiter of pid 1234 stays tracked
+== the exact pid does kill it
+  ok: waiter of pid 1234 is killed by a stop of pid 1234
+RESULT: PASS
