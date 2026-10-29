@@ -90,14 +90,15 @@ reap_fake() { local p; [[ -f "${TEST_TMP}/fake-probe.pids" ]] || return 0
   while read -r p; do test_bg_register "${p}"; done < "${TEST_TMP}/fake-probe.pids"; }
 alive_fake() { local p n=0; [[ -f "${TEST_TMP}/fake-probe.pids" ]] || { echo 0; return; }
   while read -r p; do kill -0 "${p}" 2>/dev/null && n=$(( n + 1 )); done < "${TEST_TMP}/fake-probe.pids"; echo "${n}"; }
-s=$(date +%s); set +e
+s=$(( $(date +%s%N) / 1000000 )); set +e
 env -u LLMCTL_FAKE_HW PATH="${fake}:${PATH}" LLMCTL_CAPACITY_TIMEOUT=3 LLMCTL_CAPACITY_PROBE_TIMEOUT=1 \
   timeout -k 2 40 "${LLMCTL_ROOT}/bin/llmctl" capacity --json decide-tiny > "${TEST_TMP}/hang.json" 2> "${TEST_TMP}/hang.err"; rc=$?
-set -e; el=$(( $(date +%s) - s ))
+set -e; el=$(( $(date +%s%N) / 1000000 - s ))
 reap_fake
 assert_eq 75 "${rc}" "llmctl capacity --json with a hung GPU probe exits 75 (was: hangs; 124 = the test's own 40 s guard)"
-(( el <= 8 )) && assert_eq 1 1 "it returns within the bound (${el} s <= 8 s with a 3 s budget)" \
-  || assert_eq "<= 8 s" "${el} s" "it returns within the bound"
+# review round 3 (X09): the tolerance is the 3 s budget plus 1.5 s of start-up and teardown, not 8 s
+(( el <= 4500 )) && assert_eq 1 1 "it returns within the bound (${el} ms <= 4500 ms with a 3 s budget)" \
+  || assert_eq "<= 4500 ms" "${el} ms" "it returns within the bound"
 doc="$(cat "${TEST_TMP}/hang.json")"
 if [[ -n "${doc}" ]] && q "${doc}" '1' > /dev/null 2>&1; then
   assert_eq "undetermined undetermined none False" "$(q "${doc}" '" ".join([d["profiles"]["decide-tiny"]["verdict"], d["profiles"]["decide-tiny"]["verdict_class"], d["fallback"]["route"], str(d["measurement"]["ok"])])')" \
@@ -122,27 +123,27 @@ assert_file_contains "${TEST_TMP}/hang2.out" "UNDETERMINED" "the human output sa
 assert_file_contains "${TEST_TMP}/hang2.err" "llmctl-fallback: none" "and prints the fallback line"
 sleep 1; assert_eq 0 "$(alive_fake)" "no hung probe process is left behind (no profile named)"
 : > "${TEST_TMP}/fake-probe.pids"
-s=$(date +%s); set +e
-env -u LLMCTL_FAKE_HW PATH="${fake}:${PATH}" LLMCTL_CAPACITY_TIMEOUT=3 LLMCTL_TEST_HOSTED_KEY=x timeout -k 2 40 bash -c '
+s=$(( $(date +%s%N) / 1000000 )); set +e
+env -u LLMCTL_FAKE_HW PATH="${fake}:${PATH}" LLMCTL_CAPACITY_TIMEOUT=3 LLMCTL_TEST_HOSTED_KEY=sk-test-REALISH-0123456789abcdef timeout -k 2 40 bash -c '
   set -uo pipefail; for l in common os_detect hardware catalog reserve capacity; do source "${LLMCTL_ROOT}/lib/${l}.sh"; done
   capacity_admit decide-tiny' > /dev/null 2> "${TEST_TMP}/hang-admit.err"; rc=$?
-set -e; el=$(( $(date +%s) - s ))
+set -e; el=$(( $(date +%s%N) / 1000000 - s ))
 reap_fake
 assert_eq 75 "${rc}" "capacity_admit (start/switch/restart/scale) with a hung GPU probe refuses 75"
-(( el <= 8 )) && assert_eq 1 1 "the admission returns within the bound (${el} s)" || assert_eq "<= 8 s" "${el} s" "the admission returns within the bound"
+(( el <= 4500 )) && assert_eq 1 1 "the admission returns within the bound (${el} ms <= 4500 ms)" || assert_eq "<= 4500 ms" "${el} ms" "the admission returns within the bound"
 assert_file_contains "${TEST_TMP}/hang-admit.err" "llmctl-fallback: cloud" "with a key variable set the fallback is cloud"
 assert_file_contains "${TEST_TMP}/hang-admit.err" "could not be determined" "the message says the capacity could not be determined"
 sleep 1; assert_eq 0 "$(alive_fake)" "no hung probe process is left behind by the admission"
 : > "${TEST_TMP}/fake-probe.pids"
 echo "== F2: the WHOLE-measurement bound holds when a step outside the probe hangs (a /proc read that never returns) =="
 mkfifo "${TEST_TMP}/meminfo.fifo"
-s=$(date +%s); set +e
+s=$(( $(date +%s%N) / 1000000 )); set +e
 LLMCTL_MEMINFO_FILE="${TEST_TMP}/meminfo.fifo" LLMCTL_CAPACITY_TIMEOUT=2 timeout -k 2 40 bash -c '
   set -uo pipefail; for l in common os_detect hardware catalog reserve capacity; do source "${LLMCTL_ROOT}/lib/${l}.sh"; done
   capacity_json decide-tiny' > "${TEST_TMP}/fifo.json" 2>/dev/null; rc=$?
-set -e; el=$(( $(date +%s) - s ))
+set -e; el=$(( $(date +%s%N) / 1000000 - s ))
 assert_eq 0 "${rc}" "capacity_json returns (rc 0, a document) instead of hanging on the read"
-(( el <= 6 )) && assert_eq 1 1 "within the 2 s whole budget (${el} s)" || assert_eq "<= 6 s" "${el} s" "within the whole budget"
+(( el <= 3500 )) && assert_eq 1 1 "within the 2 s whole budget (${el} ms <= 3500 ms)" || assert_eq "<= 3500 ms" "${el} ms" "within the whole budget"
 doc="$(cat "${TEST_TMP}/fifo.json")"
 if [[ -n "${doc}" ]] && q "${doc}" '1' > /dev/null 2>&1; then
   assert_eq "undetermined False" "$(q "${doc}" 'd["profiles"]["decide-tiny"]["verdict"]+" "+str(d["measurement"]["ok"])')" "undetermined"

@@ -135,6 +135,23 @@ workload, and reports host capacity on demand (`llmctl capacity --json`).
   decision set on the catalog path and content), primed once per start. Measured with `scripts/qa/start_latency.sh` (5 alternating dry-run starts per tree, 2 CPUs, host load
   about 13): 3.4.0 3396 ms mean, 3.3.2 2560 ms mean (+0.84 s for the capacity and reserve checks;
   `docs/qa/2026-10-28-host-reserve/start-latency.txt`).
+- Review round 3 (independent review of bbfd380: GO with follow-ups; `tests/test_host_reserve_review3.sh` fails 54 assertions on
+  bbfd380, `docs/qa/2026-10-28-host-reserve/review-r3/red-on-bbfd380.log`):
+  - `fallback.recommended` was `local` when ANOTHER tenant's decision unit was running and healthy (`LLMCTL_TENANT_ID=t2`, a running
+    `t1--decide-tiny`, nothing that fits). Only this tenant's own instances count now; another tenant's unit never makes the route local.
+  - A placeholder hosted key (`x`, `changeme`, `<your-api-key>`, a value shorter than 16 characters, one repeated character) no longer routes
+    `cloud`; the rule is the constitution's `lib_keys.sh` rule. Still by variable NAME only.
+  - The measurement bound is wall-clock elapsed time (it counted 0.1 s sleeps, so a slow host stretched it), and the time-bound tests allow
+    the budget plus 1.5 s instead of 8 s.
+  - The kill of a timed-out measurement STOPs each process, re-reads its start time after the stop and CONTinues + skips a pid that changed
+    (reused). It walks one process-table snapshot per pass instead of one `pgrep` per process: on this host the admission after a hung probe
+    went from 4.7 s to about 3.7 s with a 3 s budget.
+  - The capacity document carries the §11.4.291(C) inputs it was computed from (`inputs.<name>`: source, read time, readable),
+    `footprint_provenance: declared` (the planner's catalog RAM, not a measurement), `memory_current_provenance: measured`, `host.nproc`
+    (RLIMIT_NPROC soft/hard, this user's threads, headroom; a profile whose cap exceeds the headroom does not fit) and the `cpu.stat`
+    throttle counters of the scope and of each unit (§11.4.225). Additive; the schema stays `llmctl.capacity/1`.
+  - `docs/capacity.md` now says that `llmctl capacity` RUNS the hardware probe and the planner, and that a `restart` whose only reason is the
+    planner's RAM/VRAM verdict is admitted.
 
 ### Security
 
@@ -182,6 +199,9 @@ workload, and reports host capacity on demand (`llmctl capacity --json`).
 - Manual QA (Constitution section 11.4.185) has not been performed on this release.
 - UNCONFIRMED: `TestClusterPlacement*` in `llmctld`'s integration tests fail intermittently under host load on both 3.3.2 and 3.4.0 (10 s client
   timeout); whether 3.4.0 changes the failure rate was not measured with enough runs to say.
+- Throttle counters are reported cumulative; llmctl computes no delta over a window (a caller subtracts two documents).
+- The RLIMIT_NPROC check uses the model's thread cap and the threads visible in this pid namespace; a model's real thread count is somewhat
+  higher (HTTP and helper threads), so it is a floor, not a guarantee.
 - A dry-run `llmctl start` (`LLMCTL_DRY_RUN=1`) that is admitted writes a `<profile>.run` reservation in the runtime directory (unchanged from
   3.3.x); later starts of that profile then report "already running". Found while building the live harness, which now isolates and clears it.
 

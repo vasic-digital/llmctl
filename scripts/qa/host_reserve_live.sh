@@ -147,6 +147,10 @@ readback() { # <unit> <file>
     echo "memory.high=$(cat "${cg}/memory.high")"
     echo "memory.swap.max=$(cat "${cg}/memory.swap.max")"
     echo "pid=${pid}"
+    # the real target (review round 3 item 2): what actually runs is identified by the executable the kernel mapped
+    echo "exe=$(readlink "/proc/${pid}/exe" 2>/dev/null || echo unreadable)"
+    echo "exe_sha256=$(sha256sum "/proc/${pid}/exe" 2>/dev/null | awk '{print $1}' || echo unreadable)"
+    echo "model_arg=$(tr '\0' '\n' < "/proc/${pid}/cmdline" | awk 'p{print; exit} $0=="-m"||$0=="--model"{p=1}')"
     echo "threads=$(awk '/^Threads:/{print $2}' "/proc/${pid}/status")"
     echo "nice=$(awk '{print $19}' "/proc/${pid}/stat")"
     echo "oom_score_adj=$(cat "/proc/${pid}/oom_score_adj")"
@@ -264,7 +268,24 @@ PY
 
 mapfile -t ENVV < <(llmctl_env)
 log "label=${LABEL} root=${ROOT} profile=${PROFILE} runs=${RUNS}"
-git -C "${ROOT}" rev-parse HEAD > "${OUT}/artifact_commit.txt" 2>/dev/null || true
+# the code under test (review round 3 item 2): HEAD, its tree, and a hash of any uncommitted diff, so the evidence is tied
+# to exact content and a dirty run is visible as dirty
+{
+  echo "head=$(git -C "${ROOT}" rev-parse HEAD 2>/dev/null || echo none)"
+  echo "head_tree=$(git -C "${ROOT}" rev-parse 'HEAD^{tree}' 2>/dev/null || echo none)"
+  if git -C "${ROOT}" rev-parse --git-dir > /dev/null 2>&1; then
+    if [[ -z "$(git -C "${ROOT}" status --porcelain --untracked-files=no -- lib bin scripts 2>/dev/null)" ]]; then
+      echo "dirty=no"
+    else
+      echo "dirty=yes"
+      echo "dirty_diff_sha256=$(git -C "${ROOT}" diff HEAD -- lib bin scripts | sha256sum | awk '{print $1}')"
+    fi
+  else
+    echo "dirty=unknown (not a git checkout)"
+  fi
+  echo "llama_server=${LLMCTL_LLAMA_SERVER:-unset}"
+  echo "llama_server_sha256=$(sha256sum "${LLMCTL_LLAMA_SERVER:-/nonexistent}" 2>/dev/null | awk '{print $1}' || echo unreadable)"
+} > "${OUT}/artifact_commit.txt"
 for (( i = 1; i <= RUNS; i++ )); do
   D="${OUT}/run-${i}"; mkdir -p "${D}"
   host_ctx "${D}/host_before.txt"
@@ -312,6 +333,7 @@ def cpuset(s):
         if not part: continue
         a, _, b = part.partition("-"); r.update(range(int(a), int(b or a) + 1))
     return r
+art = kv(os.path.join(out, "artifact_commit.txt"))
 res = []
 for i in range(1, runs + 1):
     d = os.path.join(out, "run-%d" % i)
@@ -321,6 +343,8 @@ for i in range(1, runs + 1):
     q = cpumax.split()
     quota_pct = int(q[0]) * 100 // int(q[1]) if q and q[0] != "max" else None
     checks["cpu_quota_set"] = quota_pct is not None
+    # the process in the unit runs the engine binary named in artifact_commit.txt (by content, not by path)
+    checks["engine_exe_is_the_named_binary"] = lim.get("exe_sha256", "x") == art.get("llama_server_sha256", "y") and len(lim.get("exe_sha256", "")) == 64
     allowed = lim.get("cpus_allowed_all_threads", "")
     checks["affinity_excludes_reserved_cpus"] = bool(allowed) and "|" not in allowed and not ({0, 1, 8, 9} & cpuset(allowed)) if os.cpu_count() == 16 else None
     checks["thread_cap_in_argv"] = lim.get("argv_threads", "none") != "none"
@@ -348,7 +372,7 @@ keys = ["cpu.max", "memory.max", "memory.high", "memory.swap.max", "cpus_allowed
 det = all(r["limits"].get(k) == res[0]["limits"].get(k) for r in res for k in keys)
 verdict_keys = sorted({k for r in res for k in r["checks"]})
 det_checks = all(r["checks"].get(k) == res[0]["checks"].get(k) for r in res for k in verdict_keys)
-print(json.dumps({"label": label, "runs": runs, "deterministic_limits": det, "deterministic_verdicts": det_checks,
+print(json.dumps({"label": label, "runs": runs, "artifact": art, "deterministic_limits": det, "deterministic_verdicts": det_checks,
                   "all_checks_true": all(v in (True, None) for r in res for v in r["checks"].values()),
                   "results": res}, indent=1))
 PY

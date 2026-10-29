@@ -19,6 +19,9 @@ import tempfile
 SH = ["bash"]
 R = "tests/test_host_reserve_review.sh"
 R2 = "tests/test_host_reserve_review2.sh"
+R3 = "tests/test_host_reserve_review3.sh"
+C = "tests/test_capacity.sh"
+CAP = "lib/capacity.sh"
 
 MUTANTS = [
     ("M1-drop-cpu-quota", "lib/reserve.sh", "printf '[Service]\\nCPUQuota=%s%%\\n", "printf '[Service]\\nX=%s%%\\n",
@@ -111,6 +114,44 @@ MUTANTS = [
     ("R2-F6-plan-failure-is-unknown", "lib/capacity.sh",
      '    _cap_undetermined_doc "the hardware/plan probe failed (llmctl plan --json); the capacity cannot be judged without it" "$@"\n    return 0',
      "    echo '{}' > \"${plan_file}\"", R2),
+    # --- the round-3 reviewer's mutants X01-X15, ported to the round-3 code (X09 and X15 re-targeted: their original
+    # text was replaced by the fix; the mapping is in docs/qa/2026-10-28-host-reserve/review-r3/README.md) ---
+    ("X01-probe-clamp-floor-0", CAP, '"${LLMCTL_CAPACITY_PROBE_TIMEOUT:-}" 3 1 30', '"${LLMCTL_CAPACITY_PROBE_TIMEOUT:-}" 3 0 30', R2),
+    ("X02-whole-clamp-ceiling-300", CAP, '"${LLMCTL_CAPACITY_TIMEOUT:-}" 5 2 30', '"${LLMCTL_CAPACITY_TIMEOUT:-}" 5 2 300', R2),
+    ("X03-kill-without-starttime-match", CAP,
+     '[[ "$(_cap_pid_start "${all[i]}" 2>/dev/null || true)" == "${st[i]}" ]] && kill -KILL', "kill -KILL", R3),
+    ("X04-kill-tree-no-stop", CAP, '      kill -STOP "${p}" 2>/dev/null || true   # no new children while the tree is collected\n', "\n", R3),
+    ("X05-undetermined-doc-recommends-local", CAP,
+     'fb = {"recommended": "cloud" if keyvar else "none", "route": "hosted" if keyvar else "none",',
+     'fb = {"recommended": "local", "route": "hosted" if keyvar else "none",', R3),
+    ("X06-degraded-exit-3-dropped", CAP, 'sys.exit(3 if d["degraded"] else 0)', "sys.exit(0)", C),
+    ("X07-cpu-free-boundary-le", CAP, "        if cpu_free < 100:", "        if cpu_free <= 100:", R3),
+    ("X08-reduced-threads-boundary-le", CAP, "        elif cpu_free < cap * 100:", "        elif cpu_free <= cap * 100:", R3),
+    ("X09-bound-plus-3s", CAP, "    if (( $(_cap_now_ms) >= deadline )); then", "    if (( $(_cap_now_ms) >= deadline + 3000 )); then", R3),
+    ("X10-kill-wrong-pid", CAP, '      _cap_kill_tree "${pid}"\n', "      _cap_kill_tree 999999999\n", R2),
+    ("X11-mem-reserve-pressure-off", CAP, "if enabled and live_avail is not None and live_avail < Rm:",
+     "if enabled and live_avail is not None and live_avail < 0:", R3),
+    ("X12-mem-after-footprint-le", CAP, "live_avail - fp < (Rm if enabled else 4096):", "live_avail - fp < 0:", C),
+    ("X13-exit-75-to-1", CAP, "    sys.exit(75 if bad else 0)", "    sys.exit(1 if bad else 0)", C),
+    ("X14-running-admit-sets-no-threads-check", CAP, "    fits|fits_with_reduced_threads|running)",
+     "    fits|fits_with_reduced_threads|running|does_not_fit)", C),
+    ("X15-other-tenant-decide-counts-local", CAP, 'any(own_unit(u) and u["base_profile"]', 'any(u["base_profile"]', R3),
+    # --- round-3 author mutants (one per new mechanism) ---
+    ("R3-placeholder-key-accepted", CAP, '  (( ${#k} >= 16 )) || return 1\n', "\n", R3),
+    ("R3-placeholder-list-dropped", CAP,
+     '    x|xx|xxx|changeme|change-me|replace-me|replaceme|your-key-here|your_api_key|placeholder|dummy|test|none|null|todo|empty|"<"*">") return 1 ;;',
+     '    __never__) return 1 ;;', R3),
+    ("R3-collect-no-recheck", CAP, 'if [[ "${k2}" != "${k}" ]]; then kill -CONT', "if false; then kill -CONT", R3),
+    ("R3-collect-no-cont", CAP, 'then kill -CONT "${p}" 2>/dev/null || true; continue; fi', "then continue; fi", R3),
+    ("R3-nproc-check-off", CAP, "if enabled and nproc_headroom is not None and nproc_headroom < cap:",
+     "if enabled and nproc_headroom is not None and nproc_headroom < 0:", R3),
+    ("R3-nproc-counts-other-uids", CAP, "if _uidl == str(_uid) and _thr", "if _thr", R3),
+    ("R3-nproc-override-raises", CAP, "nproc_soft = int(_lim) if nproc_soft is None else min(nproc_soft, int(_lim))",
+     "nproc_soft = int(_lim)", R3),
+    ("R3-footprint-labelled-measured", CAP, '"footprint_provenance": "declared"', '"footprint_provenance": "measured"', R3),
+    ("R3-input-unreadable-reported-readable", CAP, '"readable": _f[1] == "1"', '"readable": True', R3),
+    ("R3-unit-cpu-stat-dropped", CAP, '"cpu_stat": ustat,', '"cpu_stat": None,', R3),
+    ("R3-scope-cpu-stat-dropped", CAP, '"cpu_stat": cpu_stat(E.get("CAP_CG_CSTAT"))}', '"cpu_stat": None}', R3),
 ]
 
 

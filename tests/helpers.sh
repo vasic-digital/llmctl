@@ -169,7 +169,10 @@ test_setup_env() {
     LLMCTL_LOADAVG_FILE="${TEST_TMP}/loadavg.fixture" LLMCTL_SELF_CGROUP="${TEST_TMP}/self.cgroup" \
     LLMCTL_HOSTED_KEY_VARS="LLMCTL_TEST_HOSTED_KEY"
   printf '0::/test.scope\n' > "${TEST_TMP}/self.cgroup"
-  unset LLMCTL_TEST_HOSTED_KEY LLMCTL_HOST_RESERVE LLMCTL_HOST_MEM_MB
+  # RLIMIT_NPROC headroom (3.4.0): the threads counted are those of an empty fixture /proc, so the real process table of
+  # the machine running the tests decides nothing (the real soft limit still applies; LLMCTL_NPROC_LIMIT can only lower it)
+  mkdir -p "${TEST_TMP}/proc-empty"; export LLMCTL_PROC_DIR="${TEST_TMP}/proc-empty"
+  unset LLMCTL_TEST_HOSTED_KEY LLMCTL_HOST_RESERVE LLMCTL_HOST_MEM_MB LLMCTL_NPROC_LIMIT
   mkdir -p "${LLMCTL_STATE_DIR}" "${LLMCTL_RUNTIME_DIR}"
   # The hermetic world models an INSTALLED llmctl (`llmctl install` ran): the unit-level validation gate marker exists
   # (lib/common.sh enforcement_installed). tests/test_enforcement_marker.sh removes it to test the pre-gate units.

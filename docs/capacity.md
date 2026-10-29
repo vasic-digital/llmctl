@@ -2,11 +2,11 @@
 
 | Field | Value |
 |---|---|
-| Revision | 2 |
+| Revision | 3 |
 | Created | 2026-10-28 |
 | Since | 3.4.0 |
 | Code | `lib/reserve.sh`, `lib/capacity.sh`, `lib/service_linux.sh` (`_svc_resource_directives`), `lib/svc_hook.sh` (unit gate), `lib/scheduler.sh` (admission). `llmctld` runs `bin/llmctl` and has no reserve code of its own |
-| Tests | `tests/test_host_reserve.sh`, `tests/test_capacity.sh`, `tests/test_host_reserve_review.sh` (unit-class, hermetic fixtures) |
+| Tests | `tests/test_host_reserve.sh`, `tests/test_capacity.sh`, `tests/test_host_reserve_review.sh`, `tests/test_host_reserve_review2.sh`, `tests/test_host_reserve_review3.sh` (unit-class, hermetic fixtures) |
 | Live evidence | `scripts/qa/host_reserve_live.sh` -> `docs/qa/2026-10-28-host-reserve/` |
 
 ## Why
@@ -59,8 +59,11 @@ Before any unit is written or started (`start`, `switch`, `auto`, `enable`, `res
    refusal exits **75** (`EX_TEMPFAIL`), prints `llmctl-fallback: cloud|none` and starts nothing.
 2. the capacity verdict for the profile (below). `does_not_fit` exits **75** with a `llmctl-fallback:` line;
    `fits_with_reduced_threads` starts it with fewer threads and a lower CPUQuota (the override can only lower the cap).
-   When the only reason is the planner's RAM/VRAM verdict, the planner path refuses instead (exit 1 with the exact MiB
-   numbers), as before 3.4.0.
+   When the only reason is the planner's RAM/VRAM verdict, `start` defers to the planner path, which refuses (exit 1
+   with the exact MiB numbers), as before 3.4.0. `restart` has no planner step: a restart whose ONLY reason is the
+   planner's verdict is ADMITTED (the unit keeps the limits it already runs with; the reserve, pressure and CPU checks
+   above still apply). This is a deliberate choice, not an oversight: the planner counts the running unit itself, so
+   it would refuse a restart that changes nothing.
 3. the admission fails closed: a capacity measurement that fails, times out or is empty (`undetermined`), an unknown
    profile, or an unreadable verdict refuses with **75** and the fallback line; it never lets a start through
    unchecked.
@@ -79,7 +82,10 @@ reproduced. It is reported loudly: `OFF` in `llmctl reserve`, `DISABLED` in `llm
 
 ## `llmctl capacity [--json] [profile...]`
 
-Re-evaluable at any time (it reads only `/proc`, `/sys/fs/cgroup` and the catalog; it changes nothing).
+Re-evaluable at any time; it changes nothing. It reads `/proc` (meminfo, loadavg, pressure, `/proc/<pid>/status` for
+the thread count), `/sys/fs/cgroup`, the catalog, `getrlimit(RLIMIT_NPROC)`, and it RUNS the hardware probe and the
+planner (`llmctl plan --json`; the GPU probe can call `nvidia-smi` or a similar tool), each within the time bounds
+below.
 
 Exit codes: `0` every named profile fits (or none named and nothing is degraded); `75` a named profile does not fit, is
 unknown, or the measurement is `undetermined` - then stderr also carries `llmctl-fallback: cloud|none` (never `local`);
@@ -128,8 +134,12 @@ Both fields are additive; the schema stays `llmctl.capacity/1`.
     "swap_total_mb": int, "swap_free_mb": int,
     "load": {"1": float, "5": float, "15": float},
     "psi": {"memory": {"some": float, "full": float}, "cpu": {"some": float}, "io": {"some": float, "full": float}},
-    "cgroup": {"path": str, "memory_max_mb": int|null, "memory_current_mb": int|null, "cpu_max_pct": int|null}
+    "cgroup": {"path": str, "memory_max_mb": int|null, "memory_current_mb": int|null, "cpu_max_pct": int|null,
+               "cpu_stat": {"nr_periods": int, "nr_throttled": int, "throttled_usec": int}|null},
+    "nproc": {"rlimit_soft": int|null, "rlimit_hard": int|null, "user_threads": int|null, "headroom": int|null,
+              "limit_override": int|null, "source": str}
   },
+  "inputs": {"<name>": {"source": str, "read_at": float, "readable": bool}},
   "reserve": {
     "enabled": bool, "cpus_reserved": int, "cpus_reserved_set": str, "cpus_model_budget": int,
     "cpus_model_set": str, "chat_cpu_cap": int, "decide_cpu_cap": int,
@@ -137,7 +147,8 @@ Both fields are additive; the schema stays `llmctl.capacity/1`.
   },
   "llmctl": {
     "units": [{"unit": str, "profile": str, "base_profile": str, "cpu_quota_pct": int|null, "memory_max_mb": int|null,
-               "memory_current_mb": int|null, "status": "ok"|"degraded", "reasons": [str], "suggest": str|null}],
+               "memory_current_mb": int|null, "memory_current_provenance": "measured"|null,
+               "cpu_stat": {...}|null, "status": "ok"|"degraded", "reasons": [str], "suggest": str|null}],
     "cpu_pct_used": int, "mem_limits_used_mb": int, "cpu_pct_free": int, "mem_budget_free_mb": int
   },
   "pressure": {"ok": bool, "reasons": [str]},
@@ -148,7 +159,8 @@ Both fields are additive; the schema stays `llmctl.capacity/1`.
       "verdict_class": "fits"|"fits_reduced"|"does_not_fit"|"undetermined"|null, "running": bool,
       "reasons": [str], "threads": int,
       "headroom": {"cpu_pct_free": int, "cpu_pct_need": int, "mem_budget_free_mb": int,
-                   "mem_limit_need_mb": int, "footprint_mb": int, "mem_available_after_mb": int}
+                   "mem_limit_need_mb": int, "footprint_mb": int, "footprint_provenance": "declared",
+                   "footprint_source": str, "vram_provenance": str|null, "mem_available_after_mb": int}
     }
   },
   "unknown_profiles": [str],
@@ -159,6 +171,24 @@ Both fields are additive; the schema stays `llmctl.capacity/1`.
 }
 ```
 
+- `inputs` (review round 3, §11.4.291(C)): one entry per input the verdict used - `meminfo`, `loadavg`, `psi_memory`,
+  `psi_cpu`, `psi_io`, `cgroup_memory_max`, `cgroup_memory_current`, `cgroup_cpu_max`, `cgroup_cpu_stat`, `units`,
+  `plan`, `rlimit_nproc` - each `{"source": str, "read_at": float (epoch seconds), "readable": bool}`. An unreadable
+  input is recorded `readable: false` and its value is `null`, never a default.
+- `headroom.footprint_mb` is the planner's DECLARED RAM for the profile (`llmctl plan --json` `profiles.<p>.ram_mb`,
+  times the number of new instances), not a measurement: `footprint_provenance` is `"declared"` and `footprint_source`
+  names it. A running unit's `memory_current_mb` is MEASURED (cgroup `memory.current`):
+  `memory_current_provenance: "measured"`.
+- `host.nproc` (§12.12): `rlimit_soft` / `rlimit_hard` (`null` = unlimited), `user_threads` (threads of processes whose
+  real uid is this user, from `/proc/<pid>/status`; only this pid namespace is visible, so it is a lower bound of what
+  the kernel counts), `headroom` = soft - threads, `limit_override` (`LLMCTL_NPROC_LIMIT`, which can only LOWER the
+  limit). With the reserve on, a profile whose cap is larger than the headroom is `does_not_fit` with a
+  `RLIMIT_NPROC headroom ...` reason. The check uses the thread CAP; a model's real thread count is somewhat higher
+  (HTTP and helper threads), so this is a floor, not a guarantee.
+- `host.cgroup.cpu_stat` and each unit's `cpu_stat` (§11.4.225): `nr_periods`, `nr_throttled`, `throttled_usec` from
+  `cpu.stat`, CUMULATIVE since the cgroup was created. llmctl does not compute deltas: a caller diagnosing throttling
+  takes two documents and subtracts (the anchor's diagnosis is on deltas over a window, with a quiet-phase control).
+  `null` when the file could not be read.
 - `fits_with_reduced_threads`: the CPU budget left is below the profile's cap but at least one CPU; `threads` is what
   `start` will use.
 - `degraded` (per unit): host pressure (memory/CPU PSI or load over the gate) or the unit's memory at >= 90% of its
@@ -172,10 +202,14 @@ Both fields are additive; the schema stays `llmctl.capacity/1`.
   the named profile is judged as a new start instead.
 - `undetermined` (whole document, `measurement.ok: false`): the host fields are `null`, every named profile is
   `undetermined`, `pressure.ok` is false and the fallback is `cloud` or `none`.
-- `fallback.recommended` is `local` when a decision profile fits or a decision unit is running and `ok` (never when a
-  named profile was refused), `cloud` otherwise and one of the variables in
-  `LLMCTL_HOSTED_KEY_VARS` (default `TYPESAFE_API_KEY OPENROUTER_API_KEY JEV_API_KEY`) is set and non-empty, `none`
-  otherwise. Only the variable NAME is reported; the value is never read into the output.
+- `fallback.recommended` is `local` when a decision profile fits or THIS tenant's own decision unit is running and `ok`
+  (`LLMCTL_TENANT_ID` set: only `<tenant>--...` units count; unset: only units without a tenant prefix; another tenant's
+  unit never makes the route local - review round 3), never when a named profile was refused; `cloud` otherwise when one
+  of the variables in `LLMCTL_HOSTED_KEY_VARS` (default `TYPESAFE_API_KEY OPENROUTER_API_KEY JEV_API_KEY`) holds a real
+  key; `none` otherwise. A value that is a placeholder does not count (the same rule as the constitution's
+  `scripts/jev/lib_keys.sh`: shorter than 16 characters, one repeated character, a control character, or one of
+  `x`, `changeme`, `replace-me`, `your-key-here`, `your_api_key`, `placeholder`, `dummy`, `test`, `none`, `null`,
+  `todo`, `empty`, `<...>`, case-insensitive). Only the variable NAME is reported; the value is never printed.
 - Callers route decisions to the hosted endpoint on `cloud`; on a refused start the same answer is printed as
   `llmctl-fallback: cloud|none` on stderr.
 

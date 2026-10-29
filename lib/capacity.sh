@@ -59,67 +59,118 @@ _cap_pid_start() {
   s="${s##*) }"; read -r -a f <<<"${s}"; [[ -n "${f[19]:-}" ]] || return 1; printf '%s' "${f[19]}"
 }
 
-# _cap_children <pid> -> the direct children of a pid (by parent pid, never by command-line match).
-_cap_children() {
-  if command -v pgrep >/dev/null 2>&1; then pgrep -P "$1" 2>/dev/null || true; return 0; fi
+# _cap_ppid_table -> "pid ppid" lines for every process, in ONE scan of the process table (no command-line match).
+_cap_ppid_table() {
+  if command -v ps >/dev/null 2>&1 && ps -e -o pid=,ppid= 2>/dev/null; then return 0; fi
   local d s f
   for d in /proc/[0-9]*; do
-    s="$(cat "${d}/stat" 2>/dev/null)" || continue; s="${s##*) }"; read -r -a f <<<"${s}"
-    [[ "${f[1]:-}" == "$1" ]] && echo "${d#/proc/}"
+    read -r s < "${d}/stat" 2>/dev/null || continue; s="${s##*) }"; read -r -a f <<<"${s}"
+    [[ -n "${f[1]:-}" ]] && printf '%s %s\n' "${d#/proc/}" "${f[1]}"
   done
   return 0
 }
 
-# _cap_kill_tree <pid> - SIGKILL a background measurement subshell this shell started, and everything below it.
-# Only that tree is touched (§11.4.174): the root is our own `$!`, the rest is found by parent pid; every pid is
-# checked to be > 1 and not this shell, and is signalled only while its recorded start time still matches.
-_cap_kill_tree() {
-  local root="$1" p k i pass
+# _cap_tree_collect <pid> - collect a background measurement subshell this shell started and everything below it into
+# _CAP_KT_ALL (pids, parent first) and _CAP_KT_ST (their start times), STOPping each pid so it cannot fork while the
+# tree is walked. Only that tree is touched (§11.4.174): the root is our own `$!`, the rest is found by parent pid; every
+# pid is checked to be > 1 and not this shell. The start time is read again AFTER the STOP: a pid that changed between
+# the read and the STOP (it exited and the number was reused by an unrelated process) is CONTinued and skipped, so a
+# reused pid is never left stopped and never collected (review round 3, item 7). One process-table snapshot per pass;
+# passes repeat until one adds nothing (a child forked between a snapshot and its parent's STOP is caught by the next).
+_CAP_KT_ALL=(); _CAP_KT_ST=()
+_cap_tree_collect() {
+  local root="$1" p k k2 pass added c pp
+  _CAP_KT_ALL=(); _CAP_KT_ST=()
   [[ "${root}" =~ ^[0-9]+$ ]] && (( root > 1 )) || return 0
   local -a all=() st=() q=()
-  for pass in 1 2; do
-    q=("${root}"); all=(); st=()
+  local -A seen=() kids=()
+  for pass in 1 2 3 4 5; do
+    kids=(); added=0
+    while read -r c pp; do [[ -n "${pp}" ]] && kids[${pp}]+=" ${c}"; done < <(_cap_ppid_table)
+    q=("${root}")
     while (( ${#q[@]} )); do
       p="${q[0]}"; q=("${q[@]:1}")
       [[ "${p}" =~ ^[0-9]+$ ]] && (( p > 1 && p != $$ && p != BASHPID )) || continue
+      if [[ -z "${seen[${p}]:-}" ]]; then
       k="$(_cap_pid_start "${p}")" || continue
-      all+=("${p}"); st+=("${k}")
       kill -STOP "${p}" 2>/dev/null || true   # no new children while the tree is collected
-      while read -r k; do [[ -n "${k}" ]] && q+=("${k}"); done < <(_cap_children "${p}")
+      k2="$(_cap_pid_start "${p}" 2>/dev/null || true)"
+      if [[ "${k2}" != "${k}" ]]; then kill -CONT "${p}" 2>/dev/null || true; continue; fi
+      all+=("${p}"); st+=("${k}"); seen[${p}]=1; added=1
+      fi
+      for c in ${kids[${p}]:-}; do q+=("${c}"); done
     done
+    (( added )) || break
   done
+  _CAP_KT_ALL=("${all[@]}"); _CAP_KT_ST=("${st[@]}")
+  return 0
+}
+
+# _cap_tree_kill - SIGKILL every pid _cap_tree_collect recorded, each only while its recorded start time still matches.
+_cap_tree_kill() {
+  local i
+  local -a all=("${_CAP_KT_ALL[@]}") st=("${_CAP_KT_ST[@]}")
   for i in "${!all[@]}"; do
     [[ "$(_cap_pid_start "${all[i]}" 2>/dev/null || true)" == "${st[i]}" ]] && kill -KILL "${all[i]}" 2>/dev/null
   done
   return 0
 }
 
+# _cap_kill_tree <pid> - collect the measurement subshell tree, then SIGKILL it.
+_cap_kill_tree() { _cap_tree_collect "$1"; _cap_tree_kill; }
+
 # _cap_bounded <seconds> <outfile> <cmd...> - run cmd (a shell function is fine) in a background subshell with stdout to
 # outfile; rc 124 and the whole subshell tree killed when it is still running after <seconds>, else cmd's rc. The
 # subshell writes to a FILE, never to a pipe of a command substitution, so a stuck grandchild cannot hold `$(...)` open.
+# The bound is wall-clock elapsed time (review round 3, item 6).
 _cap_bounded() {
-  local secs="$1" out="$2" pid i=0 n
+  local secs="$1" out="$2" pid deadline
   shift 2
-  n=$(( secs * 10 ))
+  deadline=$(( $(_cap_now_ms) + secs * 1000 ))
   ( "$@" ) > "${out}" 2>/dev/null < /dev/null &
   pid=$!
   while [[ -d "/proc/${pid}" && "$(awk '{print $3}' "/proc/${pid}/stat" 2>/dev/null)" != Z ]]; do
-    if (( i >= n )); then
+    if (( $(_cap_now_ms) >= deadline )); then
       _cap_kill_tree "${pid}"
       wait "${pid}" 2>/dev/null || true
       return 124
     fi
-    sleep 0.1; i=$(( i + 1 ))
+    sleep 0.1
   done
   wait "${pid}"
 }
 
-# _cap_key_var -> the NAME of the first hosted-key variable that is set (its value is never read out); empty if none.
+# _cap_now_ms -> wall-clock milliseconds (bash EPOCHREALTIME; `date +%s%N` where bash is older than 5.0). The bound is
+# elapsed time, never a count of 0.1 s polls: a loaded host stretches each poll, an iteration count would not notice.
+_cap_now_ms() {
+  if [[ -n "${EPOCHREALTIME:-}" ]]; then local t="${EPOCHREALTIME/[.,]/}"; echo "${t:0:${#t}-3}"
+  else local t; t="$(date +%s%N)"; echo "${t:0:${#t}-6}"; fi
+}
+
+# _cap_key_real <VAR> - rc 0 when the variable holds a real-looking key: non-empty and not a placeholder. The rule is
+# the constitution's key_state (§11.4.279(E), scripts/jev/lib_keys.sh): a known dummy value, fewer than 16 characters,
+# one repeated character or a control character is a placeholder (treated as absent). The value is only compared here;
+# it is never printed, logged or put on a command line (§11.4.10).
+_cap_key_real() {
+  local v="$1" k lk
+  [[ "${v}" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || return 1
+  k="${!v:-}"
+  [[ -n "${k}" ]] || return 1
+  lk="${k,,}"
+  case "${lk}" in
+    x|xx|xxx|changeme|change-me|replace-me|replaceme|your-key-here|your_api_key|placeholder|dummy|test|none|null|todo|empty|"<"*">") return 1 ;;
+  esac
+  (( ${#k} >= 16 )) || return 1
+  [[ -n "${k//"${k:0:1}"/}" ]] || return 1
+  case "${k}" in *[[:cntrl:]]*) return 1 ;; esac
+  return 0
+}
+
+# _cap_key_var -> the NAME of the first hosted-key variable that holds a real key (never its value); empty if none.
 _cap_key_var() {
   local v
   for v in ${LLMCTL_HOSTED_KEY_VARS}; do
-    [[ "${v}" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || continue
-    if [[ -n "${!v:-}" ]]; then echo "${v}"; return 0; fi
+    if _cap_key_real "${v}"; then echo "${v}"; return 0; fi
   done
   return 0
 }
@@ -153,7 +204,8 @@ doc = {
     "host": {"cpus_online": i("CAP_N"), "mem_total_mb": None, "mem_available_mb": None, "usable_mem_mb": None,
              "swap_total_mb": None, "swap_free_mb": None, "load": None,
              "psi": {"memory": {"some": None, "full": None}, "cpu": {"some": None}, "io": {"some": None, "full": None}},
-             "cgroup": None},
+             "cgroup": None, "nproc": None},
+    "inputs": {},
     "reserve": {"enabled": E.get("CAP_ENABLED") == "1", "cpus_reserved": i("CAP_RC"), "cpus_reserved_set": E.get("CAP_RSET"),
                 "cpus_model_budget": i("CAP_BC"), "cpus_model_set": E.get("CAP_MSET"), "chat_cpu_cap": i("CAP_CHAT"),
                 "decide_cpu_cap": i("CAP_DECIDE"), "mem_reserved_mb": i("CAP_RM"), "mem_model_budget_mb": i("CAP_BM")},
@@ -189,8 +241,19 @@ capacity_json() {
 # _cap_plan_probe - the hardware probe and the planner (the step that runs nvidia-smi / rocm-smi).
 _cap_plan_probe() { set -o pipefail; hw_probe_json | catalog_plan_json; }
 
+# _cap_in <name> <source> <0|1> - record one input of the §11.4.291(C) contract: where it was read, when, whether it
+# could be read. An unreadable input is recorded as unreadable (its value is null), never defaulted.
+_cap_in() { _CAP_INPUTS+="$1"$'\t'"$3"$'\t'"$(_cap_now_ms)"$'\t'"$2"$'\n'; }
+
+# _cap_cpu_stat <cpu.stat file> -> "nr_periods nr_throttled throttled_usec" ("? ? ?" when unreadable)
+_cap_cpu_stat() {
+  awk '$1=="nr_periods"{p=$2} $1=="nr_throttled"{t=$2} $1=="throttled_usec"{u=$2}
+       END{printf "%s %s %s", (p==""?"?":p), (t==""?"?":t), (u==""?"?":u)}' "$1" 2>/dev/null || printf '? ? ?'
+}
+
 # _cap_measure [profile...] - the measurement itself; runs inside _cap_bounded (capacity_json).
 _cap_measure() {
+  _CAP_INPUTS=""
   reserve_compute
   local mi="${LLMCTL_MEMINFO_FILE:-/proc/meminfo}" la="${LLMCTL_LOADAVG_FILE:-/proc/loadavg}"
   local pdir="${LLMCTL_PSI_DIR:-/proc/pressure}"
@@ -206,33 +269,42 @@ _cap_measure() {
     _cap_undetermined_doc "the hardware/plan probe failed (llmctl plan --json); the capacity cannot be judged without it" "$@"
     return 0
   fi
+  _cap_in plan "llmctl plan --json (hw_probe_json | catalog_plan_json)" 1
   local units="" name cpu mem d cur
   while read -r name cpu mem; do
     [[ -n "${name}" ]] || continue
     d="$(find "${root}" -maxdepth 3 -type d -name "${name}" 2>/dev/null | head -1)"
     cur="$(head -1 "${d}/memory.current" 2>/dev/null || true)"
     [[ "${cur}" =~ ^[0-9]+$ ]] && cur=$(( cur / 1048576 )) || cur=""
-    units+="${name} $(_cap_unit_profile "${name}") ${cpu} ${mem} ${cur:-?}"$'\n'
+    units+="${name} $(_cap_unit_profile "${name}") ${cpu} ${mem} ${cur:-?} $(_cap_cpu_stat "${d}/cpu.stat")"$'\n'
   done < <(reserve_running_units)
+  if [[ -d "${root}" ]]; then _cap_in units "${root} (llmctl engine unit cgroups)" 1; else _cap_in units "${root} (llmctl engine unit cgroups)" 0; fi
   local decide
   decide="$(reserve_decide_profiles 2>/dev/null || true)"
-  local keyvar="" v
-  for v in ${LLMCTL_HOSTED_KEY_VARS}; do
-    [[ "${v}" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || continue
-    if [[ -n "${!v:-}" ]]; then keyvar="${v}"; break; fi
-  done
-  local cg_mmax cg_mcur cg_cmax
-  cg_mmax="$(head -1 "${root}/memory.max" 2>/dev/null || true)"
-  cg_mcur="$(head -1 "${root}/memory.current" 2>/dev/null || true)"
+  local keyvar; keyvar="$(_cap_key_var)"
+  local cg_mmax="" cg_mcur="" cg_cmax="" cg_cstat="" in_mi="" in_la="" in_ms="" in_mf="" in_cs="" in_is="" in_if=""
+  if cg_mmax="$(head -1 "${root}/memory.max" 2>/dev/null)"; then _cap_in cgroup_memory_max "${root}/memory.max" 1; else cg_mmax=""; _cap_in cgroup_memory_max "${root}/memory.max" 0; fi
+  if cg_mcur="$(head -1 "${root}/memory.current" 2>/dev/null)"; then _cap_in cgroup_memory_current "${root}/memory.current" 1; else cg_mcur=""; _cap_in cgroup_memory_current "${root}/memory.current" 0; fi
+  if [[ -r "${root}/cpu.max" ]]; then _cap_in cgroup_cpu_max "${root}/cpu.max" 1; else _cap_in cgroup_cpu_max "${root}/cpu.max" 0; fi
   cg_cmax="$(_rsv_cpu_pct "${root}" 2>/dev/null || true)"
+  if [[ -r "${root}/cpu.stat" ]]; then _cap_in cgroup_cpu_stat "${root}/cpu.stat" 1; else _cap_in cgroup_cpu_stat "${root}/cpu.stat" 0; fi
+  cg_cstat="$(_cap_cpu_stat "${root}/cpu.stat")"
+  if in_mi="$(cat "${mi}" 2>/dev/null)"; then _cap_in meminfo "${mi}" 1; else in_mi=""; _cap_in meminfo "${mi}" 0; fi
+  if in_la="$(head -1 "${la}" 2>/dev/null)"; then _cap_in loadavg "${la}" 1; else in_la=""; _cap_in loadavg "${la}" 0; fi
+  in_ms="$(_cap_psi "${mpsi}" some)"; in_mf="$(_cap_psi "${mpsi}" full)"
+  if [[ -n "${in_ms}" ]]; then _cap_in psi_memory "${mpsi}" 1; else _cap_in psi_memory "${mpsi}" 0; fi
+  in_cs="$(_cap_psi "${cpsi}" some)"
+  if [[ -n "${in_cs}" ]]; then _cap_in psi_cpu "${cpsi}" 1; else _cap_in psi_cpu "${cpsi}" 0; fi
+  in_is="$(_cap_psi "${ipsi}" some)"; in_if="$(_cap_psi "${ipsi}" full)"
+  if [[ -n "${in_is}" ]]; then _cap_in psi_io "${ipsi}" 1; else _cap_in psi_io "${ipsi}" 0; fi
   CAP_ENABLED="$(reserve_enabled && echo 1 || echo 0)" \
   CAP_N="${RSV_N}" CAP_RC="${RSV_RC}" CAP_BC="${RSV_BC}" CAP_RSET="${RSV_RESERVED_SET}" CAP_MSET="${RSV_CPUSET}" \
   CAP_CHAT="${RSV_CHAT_CPUS}" CAP_DECIDE="${RSV_DECIDE_CPUS}" CAP_MT="${RSV_MT}" CAP_RM="${RSV_RM}" CAP_BM="${RSV_BM}" \
   CAP_CPU_SOME_MAX="${RSV_GATE_CPU_SOME_MAX}" CAP_LOAD_K="${RSV_GATE_LOAD_PER_CPU}" \
   CAP_MEM_FULL_MAX="${LLMCTL_GATE_FULL_MAX:-2}" CAP_MEM_SOME_MAX="${LLMCTL_GATE_SOME_MAX:-10}" \
-  CAP_MSOME="$(_cap_psi "${mpsi}" some)" CAP_MFULL="$(_cap_psi "${mpsi}" full)" CAP_CSOME="$(_cap_psi "${cpsi}" some)" \
-  CAP_ISOME="$(_cap_psi "${ipsi}" some)" CAP_IFULL="$(_cap_psi "${ipsi}" full)" \
-  CAP_LOAD="$(head -1 "${la}" 2>/dev/null || true)" CAP_MEMINFO="$(cat "${mi}" 2>/dev/null || true)" \
+  CAP_MSOME="${in_ms}" CAP_MFULL="${in_mf}" CAP_CSOME="${in_cs}" CAP_ISOME="${in_is}" CAP_IFULL="${in_if}" \
+  CAP_LOAD="${in_la}" CAP_MEMINFO="${in_mi}" CAP_INPUTS="${_CAP_INPUTS}" CAP_CG_CSTAT="${cg_cstat}" \
+  CAP_PROC_DIR="${LLMCTL_PROC_DIR:-/proc}" CAP_NPROC_LIMIT="${LLMCTL_NPROC_LIMIT:-}" \
   CAP_UNITS="${units}" CAP_DECIDE_SET="${decide}" CAP_KEYVAR="${keyvar}" CAP_KEYVARS="${LLMCTL_HOSTED_KEY_VARS}" \
   CAP_CG_ROOT="${root}" CAP_CG_MMAX="${cg_mmax}" CAP_CG_MCUR="${cg_mcur}" CAP_CG_CMAX="${cg_cmax}" \
   CAP_CHECK_PRESSURE="${LLMCTL_GATE_CPU_CHECKS:-1}" CAP_MEM_SHORT="${RSV_MEM_SHORT}" \
@@ -268,9 +340,53 @@ psi = {"memory": {"some": num("CAP_MSOME"), "full": num("CAP_MFULL")}, "cpu": {"
 def mb_or_none(v):
     v = (v or "").strip()
     return int(v) // 1048576 if v.isdigit() else None
+def cpu_stat(txt):
+    # cgroup v2 cpu.stat throttle counters (cumulative since the cgroup was created; §11.4.225 diagnoses on DELTAS of two
+    # readings over a window, which a caller takes from two documents); None when the file could not be read
+    f = (txt or "").split()
+    if len(f) != 3 or not all(x.isdigit() for x in f): return None
+    return {"nr_periods": int(f[0]), "nr_throttled": int(f[1]), "throttled_usec": int(f[2])}
 cg = {"path": E.get("CAP_CG_ROOT"), "memory_max_mb": mb_or_none(E.get("CAP_CG_MMAX")),
       "memory_current_mb": mb_or_none(E.get("CAP_CG_MCUR")),
-      "cpu_max_pct": int(E["CAP_CG_CMAX"]) if E.get("CAP_CG_CMAX", "").isdigit() else None}
+      "cpu_max_pct": int(E["CAP_CG_CMAX"]) if E.get("CAP_CG_CMAX", "").isdigit() else None,
+      "cpu_stat": cpu_stat(E.get("CAP_CG_CSTAT"))}
+# --- the §11.4.291(C) input record: source, read time and readability per input ---
+inputs = {}
+for _line in E.get("CAP_INPUTS", "").splitlines():
+    _f = _line.split("\t", 3)
+    if len(_f) == 4 and _f[2].isdigit():
+        inputs[_f[0]] = {"source": _f[3], "readable": _f[1] == "1", "read_at": int(_f[2]) / 1000.0}
+# --- RLIMIT_NPROC headroom (§12.12): the soft limit minus the threads of this real uid. LLMCTL_NPROC_LIMIT can only
+# LOWER the limit (a stricter knob, also the test seam); the count reads /proc/<pid>/status (Uid, Threads) and sees only
+# this pid namespace, so it is a lower bound of what the kernel counts ---
+import resource
+_soft, _hard = resource.getrlimit(resource.RLIMIT_NPROC)
+nproc_soft = None if _soft == resource.RLIM_INFINITY else _soft
+nproc_hard = None if _hard == resource.RLIM_INFINITY else _hard
+_lim = E.get("CAP_NPROC_LIMIT", "")
+if _lim.isdigit(): nproc_soft = int(_lim) if nproc_soft is None else min(nproc_soft, int(_lim))
+_pdir = E.get("CAP_PROC_DIR") or "/proc"
+_uid, user_threads, nproc_ok = os.getuid(), 0, True
+try:
+    _ents = os.listdir(_pdir)
+except OSError:
+    _ents, nproc_ok = [], False
+for _e in _ents:
+    if not _e.isdigit(): continue
+    try:
+        _uidl = _thr = None
+        for _l in open(os.path.join(_pdir, _e, "status")):
+            if _l.startswith("Uid:"): _uidl = _l.split()[1]
+            elif _l.startswith("Threads:"): _thr = _l.split()[1]
+        if _uidl == str(_uid) and _thr and _thr.isdigit(): user_threads += int(_thr)
+    except (OSError, IndexError):
+        continue
+nproc_headroom = (nproc_soft - user_threads) if (nproc_soft is not None and nproc_ok) else None
+inputs["rlimit_nproc"] = {"source": "getrlimit(RLIMIT_NPROC) + %s/<pid>/status Threads of uid %s" % (_pdir, _uid),
+                          "readable": nproc_ok, "read_at": time.time()}
+nproc = {"rlimit_soft": nproc_soft, "rlimit_hard": nproc_hard, "user_threads": user_threads if nproc_ok else None,
+         "headroom": nproc_headroom, "limit_override": int(_lim) if _lim.isdigit() else None,
+         "source": inputs["rlimit_nproc"]["source"]}
 # usable memory right now: MemAvailable, and the user manager's own memory.max when it is finite
 live_avail = avail
 # restart: the replaced unit's resident memory comes back when it stops (CAP_REPLACE, see below)
@@ -314,6 +430,7 @@ for line in E.get("CAP_UNITS", "").splitlines():
     f = line.split()
     if len(f) < 5: continue
     name, prof, cpu, mem, cur = f[:5]
+    ustat = cpu_stat(" ".join(f[5:8]))
     if replace and prof == replace: continue
     cpu_v = int(cpu) if cpu.isdigit() else Bc * 100
     mem_v = int(mem) if mem.isdigit() else Bm
@@ -325,6 +442,7 @@ for line in E.get("CAP_UNITS", "").splitlines():
     units.append({"unit": name, "profile": prof, "cpu_quota_pct": cpu_v if cpu.isdigit() else None,
                   "memory_max_mb": mem_v if mem.isdigit() else None,
                   "memory_current_mb": int(cur) if cur.isdigit() else None,
+                  "memory_current_provenance": "measured" if cur.isdigit() else None, "cpu_stat": ustat,
                   "status": "degraded" if reasons else "ok", "reasons": reasons,
                   "base_profile": base_profile(prof),
                   "suggest": ("llmctl stop %s" % base_profile(prof)) if reasons else None})
@@ -373,6 +491,8 @@ for p, info in sorted((plan.get("profiles") or {}).items()):
         reasons.append("memory limit %s MiB > %s MiB left of the %s MiB model budget" % (need_mem, max(mem_free, 0), Bm))
     if live_avail is not None and live_avail - fp < (Rm if enabled else 4096):
         reasons.append("MemAvailable %s MiB - footprint %s MiB would leave less than the %s MiB host reserve" % (live_avail, fp, Rm if enabled else 4096))
+    if enabled and nproc_headroom is not None and nproc_headroom < cap:
+        reasons.append("RLIMIT_NPROC headroom %s threads < the %s-thread cap (limit %s, %s threads of this user)" % (nproc_headroom, cap, nproc_soft, user_threads))
     reasons += pressure
     if enabled and not reasons:
         if cpu_free < 100:
@@ -391,14 +511,20 @@ for p, info in sorted((plan.get("profiles") or {}).items()):
                    "threads": threads if verdict in ("fits", "fits_with_reduced_threads") else 0,
                    "headroom": {"cpu_pct_free": cpu_free, "cpu_pct_need": cap * 100,
                                 "mem_budget_free_mb": mem_free, "mem_limit_need_mb": need_mem,
-                                "footprint_mb": fp,
+                                "footprint_mb": fp, "footprint_provenance": "declared",
+                                "footprint_source": "llmctl plan --json profiles.%s.ram_mb (the catalog's declared RAM, not a measured run)%s" % (p, " x %s instances" % k if k > 1 else ""),
+                                "vram_provenance": info.get("vram_provenance"),
                                 "mem_available_after_mb": (live_avail - fp) if live_avail is not None else None}}
 fit_dec = [(profiles[p]["headroom"]["footprint_mb"], p) for p in profiles
            if profiles[p]["class"] == "decide" and profiles[p]["verdict"] in ("fits", "fits_with_reduced_threads")]
 largest = max(fit_dec)[1] if fit_dec else None
 # The fallback is about where DECISIONS go: "local" only while a local decision model fits now or one is running and
 # healthy, and never for a refused start (review round 1 S5: a fitting chat profile used to yield "local").
-decision_local = largest is not None or any(u["base_profile"] in decide_set and u["status"] == "ok" for u in units)
+def own_unit(u):
+    # this host's / this tenant's own instance (the primary or .N); another tenant's unit is consumption, never a local
+    # decision endpoint for this tenant (review round 3, item 1; §11.4.291(E): no fit -> cloud or none, never local)
+    return u["profile"].startswith(tenant + "--") if tenant else "--" not in u["profile"]
+decision_local = largest is not None or any(own_unit(u) and u["base_profile"] in decide_set and u["status"] == "ok" for u in units)
 named_refused = bool(wanted) and (any(profiles.get(p, {}).get("verdict") == "does_not_fit" for p in wanted)
                                   or any(p not in profiles for p in wanted))
 blocked = named_refused or not decision_local
@@ -414,7 +540,9 @@ doc = {
     "measurement": {"ok": True, "timeout_s": inum("CAP_T", None), "probe_timeout_s": inum("CAP_PT", None)},
     "host": {"cpus_online": N, "mem_total_mb": T, "mem_available_mb": avail, "usable_mem_mb": live_avail,
              "swap_total_mb": swap_t, "swap_free_mb": swap_f,
-             "load": {"1": load[0], "5": load[1], "15": load[2]} if load else None, "psi": psi, "cgroup": cg},
+             "load": {"1": load[0], "5": load[1], "15": load[2]} if load else None, "psi": psi, "cgroup": cg,
+             "nproc": nproc},
+    "inputs": inputs,
     "reserve": {"enabled": enabled, "cpus_reserved": Rc, "cpus_reserved_set": E.get("CAP_RSET"),
                 "cpus_model_budget": Bc, "cpus_model_set": E.get("CAP_MSET"), "chat_cpu_cap": chat,
                 "decide_cpu_cap": decide, "mem_reserved_mb": Rm, "mem_model_budget_mb": Bm},
@@ -478,14 +606,10 @@ print("Fallback: %s (%s)%s" % (d["fallback"]["recommended"], d["fallback"]["reas
       (" via $" + d["fallback"]["key_variable"]) if d["fallback"]["key_variable"] else ""))' "$1"
 }
 
-# _cap_fallback_name -> "cloud" when a hosted-key VARIABLE is set (by name; the value is never read out), else "none".
+# _cap_fallback_name -> "cloud" when a hosted-key VARIABLE holds a real key (by name; the value is never read out, and
+# a placeholder counts as absent), else "none".
 _cap_fallback_name() {
-  local v
-  for v in ${LLMCTL_HOSTED_KEY_VARS}; do
-    [[ "${v}" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || continue
-    [[ -n "${!v:-}" ]] && { echo cloud; return 0; }
-  done
-  echo none
+  if [[ -n "$(_cap_key_var)" ]]; then echo cloud; else echo none; fi
 }
 
 # _cap_refuse <profile> <why> - the fail-closed refusal: message + machine-readable fallback line, rc 75.
