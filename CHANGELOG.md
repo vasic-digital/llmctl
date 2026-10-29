@@ -210,6 +210,29 @@ workload, and reports host capacity on demand (`llmctl capacity --json`).
     3.4.0, are not changed here, and are tracked as a follow-up; the reserve's own budget check counts the units from
     the cgroup tree and now fails closed.
 
+- Review round 6 (independent review of 0440759-era code: NO-GO, one source-defect; `tests/test_host_reserve_review6.sh`
+  fails 17 assertions before the fix):
+  - **F1 (source-defect).** The round-5 check treated any non-zero `find` exit as "tree unreadable". GNU find exits 1
+    when a cgroup disappears between readdir and descent ("No such file or directory"), which is a unit stopping, not
+    an unreadable tree: measured 4 of 277 scans and 1 of 60 end-to-end admissions falsely refused (rc 75). The scan now
+    reads find's own messages (C locale): vanished-directory messages alone are absent units; a permission error, any
+    other message, an exit above 1, or exit 1 with no message still fails closed. The refusal text names the scan root
+    and find's reason. Deterministic test: a find stub that prints the real result and then a vanished-directory
+    message and exits 1 (admit), plus permission/mixed/silent stubs (refuse).
+  - **F2.** A cgroup deeper than the scan depth (8 below the mount) used to be skipped silently (fail-open). The scan
+    now looks one level further and, if anything is there, refuses with a message saying the tree is deeper than the
+    scan covers. The reference host has no directory at depth 8 or 9.
+  - **F3.** An llmctl unit inside a container scope (`*.scope`) under this user's manager was classified `self`; it is now
+    `container` (counts as consumption, never a restart replacement or "running" for this user).
+  - **F4.** `LLMCTL_CGROUP_FS` with a trailing slash made this user's own units look like another user's; the mount point
+    is normalised.
+  - **F5.** `llmctl reserve --json` escaped only backslashes in cgroup paths; `"` and control characters now escape, and
+    the `units_error` text is escaped instead of having its quotes replaced.
+  - Still open, tracked follow-ups (reviewer items M8 and M9: not fixed here; the review hand-off to the author stated
+    them only as fail-open items backstopped by the `hk_gate` ExecStartPre check, which runs at every unit start, so
+    their wording is the reviewer's, not restated here). Related known limit, unchanged: admission and unit start are
+    not atomic, so two concurrent admissions can both pass before either unit exists; `hk_gate` re-checks at start.
+
 ### Security
 
 - The hosted-key fallback reports the key's variable NAME only; the value is never read into output (test and mutant M7).

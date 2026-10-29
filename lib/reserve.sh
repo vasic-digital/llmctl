@@ -285,7 +285,49 @@ reserve_dropin_body() {
 _rsv_cgroup_root() {
   if [[ -n "${LLMCTL_CGROUP_ROOT:-}" ]]; then echo "${LLMCTL_CGROUP_ROOT}"; return; fi
   local uid; uid="$(id -u)"
-  echo "${LLMCTL_CGROUP_FS:-/sys/fs/cgroup}/user.slice/user-${uid}.slice/user@${uid}.service"
+  echo "$(_rsv_cgroup_fs)/user.slice/user-${uid}.slice/user@${uid}.service"
+}
+
+# _rsv_cgroup_fs -> the cgroup mount point without trailing slashes (review round 6, F4): "/x/" and "/x" must classify
+# the same, because find prints "/x/user.slice/..." and every prefix test below compares against that.
+_rsv_cgroup_fs() {
+  local fs="${LLMCTL_CGROUP_FS:-/sys/fs/cgroup}"
+  while [[ "${fs}" == */ && "${fs}" != / ]]; do fs="${fs%/}"; done
+  echo "${fs}"
+}
+
+# _rsv_find <root> <maxdepth> [find-args...] -> rc 0 when the walk is trustworthy (find's stdout is then in
+# _RSV_FIND_OUT), rc 1 otherwise (the reason is in _RSV_FIND_WHY). Both are globals: call it in the current shell, not
+# in a command substitution.
+# GNU find exits 1 when a directory vanished between readdir and descent ("No such file or directory"). In a cgroup
+# tree that is a unit stopping during the scan, i.e. an absent unit, not an unreadable tree (review round 6, F1:
+# measured 4/277 false "unmeasurable" on the reference host). Only that exact cause is tolerated: any other message
+# (Permission denied, I/O error ...), a non-zero status without a message, or a status above 1 fails closed. The error
+# text is read in the C locale so the ENOENT wording is stable.
+_RSV_FIND_WHY=""; _RSV_FIND_OUT=""
+_rsv_find() {
+  local root="$1" depth="$2"; shift 2
+  local errf rc=0 line first="" other=0 n=0
+  _RSV_FIND_WHY=""; _RSV_FIND_OUT=""
+  errf="$(mktemp)" || { _RSV_FIND_WHY="no temporary file for the scan"; return 1; }
+  _RSV_FIND_OUT="$(LC_ALL=C find "${root}" -maxdepth "${depth}" "$@" 2>"${errf}")" || rc=$?
+  if (( rc != 0 )); then
+    while IFS= read -r line; do
+      [[ -n "${line}" ]] || continue
+      n=$(( n + 1 ))
+      if [[ "${line}" == "find: "*": No such file or directory" && "${line}" != "find: ‘${root}’: "* && "${line}" != "find: '${root}': "* ]]; then
+        continue
+      fi
+      other=1; [[ -n "${first}" ]] || first="${line}"
+    done < "${errf}"
+    if (( rc > 1 )) || (( n == 0 )) || (( other )); then
+      _RSV_FIND_WHY="${first:-find exited ${rc} without saying why}"
+      rm -f "${errf:?}"
+      return 1
+    fi
+  fi
+  rm -f "${errf:?}"
+  return 0
 }
 
 # _rsv_units_unmeasurable -> empty when the running llmctl engine units CAN be counted; otherwise one line saying why
@@ -297,7 +339,7 @@ _rsv_units_unmeasurable() {
   local root depth fs
   read -r root depth < <(_rsv_units_scan)
   if [[ -z "${LLMCTL_CGROUP_ROOT:-}" ]]; then
-    fs="${LLMCTL_CGROUP_FS:-/sys/fs/cgroup}"
+    fs="$(_rsv_cgroup_fs)"
     if [[ ! -f "${fs}/cgroup.controllers" ]]; then
       echo "no cgroup v2 unified hierarchy at ${fs} (cgroup v1 and hybrid hosts are not supported by the host reserve)"
       return 0
@@ -305,8 +347,19 @@ _rsv_units_unmeasurable() {
   fi
   if [[ ! -d "${root}" ]]; then echo "the cgroup root ${root} does not exist"; return 0; fi
   if [[ ! -r "${root}" || ! -x "${root}" ]]; then echo "the cgroup root ${root} is not readable"; return 0; fi
-  if ! find "${root}" -maxdepth "${depth}" -type d >/dev/null 2>&1; then
-    echo "a directory under the cgroup root ${root} could not be read"
+  if ! _rsv_find "${root}" "${depth}" -type d; then
+    echo "a directory under ${root} could not be read (${_RSV_FIND_WHY})"
+    return 0
+  fi
+  # anything one level below the scan depth would hold units that are not counted: say so, never skip silently (F2)
+  local deeper
+  if ! _rsv_find "${root}" $(( depth + 1 )) -mindepth $(( depth + 1 )) -type d -print -quit; then
+    echo "a directory under ${root} could not be read (${_RSV_FIND_WHY})"
+    return 0
+  fi
+  deeper="${_RSV_FIND_OUT}"
+  if [[ -n "${deeper}" ]]; then
+    echo "the cgroup tree under ${root} is deeper than the ${depth} levels the unit scan covers (${deeper}); units below that depth would not be counted"
     return 0
   fi
   return 0
@@ -320,7 +373,7 @@ _rsv_units_unmeasurable() {
 # narrows the scan to that one manager root (depth 3, the layout of a single user manager).
 _rsv_units_scan() {
   if [[ -n "${LLMCTL_CGROUP_ROOT:-}" ]]; then echo "${LLMCTL_CGROUP_ROOT} 3"; return; fi
-  echo "${LLMCTL_CGROUP_FS:-/sys/fs/cgroup} 8"
+  echo "$(_rsv_cgroup_fs) 8"
 }
 
 # _rsv_unit_owner <unit-cgroup-dir> -> "self" (this user's manager), "user-<uid>" (another user's manager), "system"
@@ -328,11 +381,18 @@ _rsv_units_scan() {
 # counts as consumption.
 _rsv_unit_owner() {
   local d="$1" mine; mine="$(_rsv_cgroup_root)"
-  if [[ -n "${LLMCTL_CGROUP_ROOT:-}" || "${d}" == "${mine}/"* ]]; then echo self; return; fi
+  if [[ -n "${LLMCTL_CGROUP_ROOT:-}" ]]; then echo self; return; fi
+  if [[ "${d}" == "${mine}/"* ]]; then
+    # an llmctl unit inside a container scope (libpod-*.scope, docker-*.scope ...) is not one of this manager's own
+    # units: it counts as consumption but is never a restart replacement (review round 6, F3)
+    local rel="${d#"${mine}"/}"; rel="${rel%/*}"
+    if [[ "/${rel}/" == */*.scope/* ]]; then echo container; else echo self; fi
+    return
+  fi
   if [[ "${d}" =~ /user\.slice/user-([0-9]+)\.slice/user@([0-9]+)\.service/ && "${BASH_REMATCH[1]}" == "${BASH_REMATCH[2]}" ]]; then
     echo "user-${BASH_REMATCH[1]}"; return
   fi
-  [[ "${d}" == "${LLMCTL_CGROUP_FS:-/sys/fs/cgroup}/system.slice/"* ]] && { echo system; return; }
+  [[ "${d}" == "$(_rsv_cgroup_fs)/system.slice/"* ]] && { echo system; return; }
   echo other
 }
 
@@ -371,8 +431,9 @@ reserve_running_units() {
   # find exits non-zero on any directory it cannot enter, so a partly unreadable tree is a failure too.
   [[ -d "${root}" && -r "${root}" && -x "${root}" ]] || return 1
   local list
-  list="$(find "${root}" -maxdepth "${depth}" -type d \( -name 'llmctl-llama@*.service' -o -name 'llmctl-onnx@*.service' -o -name 'llmctl-colibri@*.service' \
-             -o -name "${LLMCTL_RESERVE_EXTRA_UNIT_GLOB:-llmctl-llama@*.service}" \) 2>/dev/null)" || return 1
+  _rsv_find "${root}" "${depth}" -type d \( -name 'llmctl-llama@*.service' -o -name 'llmctl-onnx@*.service' -o -name 'llmctl-colibri@*.service' \
+             -o -name "${LLMCTL_RESERVE_EXTRA_UNIT_GLOB:-llmctl-llama@*.service}" \) || return 1
+  list="${_RSV_FIND_OUT}"
   while IFS= read -r d; do
     [[ -n "${d}" ]] || continue
     [[ -n "${self}" && "${d}" == "${self}" ]] && continue
@@ -493,6 +554,23 @@ reserve_cpu_gate() {
   return 0
 }
 
+# _rsv_json_str <string> -> the string escaped for use inside a JSON string literal (review round 6, F5): backslash,
+# double quote and every control character.
+_rsv_json_str() {
+  local s="$1" out="" c i
+  s="${s//\\/\\\\}"; s="${s//\"/\\\"}"
+  s="${s//$'\n'/\\n}"; s="${s//$'\t'/\\t}"; s="${s//$'\r'/\\r}"
+  if [[ "${s}" =~ [[:cntrl:]] ]]; then
+    for (( i = 0; i < ${#s}; i++ )); do
+      c="${s:i:1}"
+      if [[ "${c}" == [[:cntrl:]] ]]; then printf -v c '\\u%04x' "'${c}"; fi
+      out+="${c}"
+    done
+    s="${out}"
+  fi
+  printf '%s' "${s}"
+}
+
 # reserve_report [--json] - the effective budget, the reserve and every running engine unit's applied limits, read
 # back from the live cgroup and /proc (never from what llmctl intended to write).
 reserve_report() {
@@ -521,12 +599,12 @@ reserve_report() {
     printf '"memory":{"total_mb":%s,"reserved_mb":%s,"model_budget_mb":%s,"reserve_pct":%s,"reserve_min_mb":%s,"short":%s},' \
       "${RSV_MT}" "${RSV_RM}" "${RSV_BM}" "${RSV_MEM_PCT}" "${RSV_MEM_MIN}" "$( ((RSV_MEM_SHORT)) && echo true || echo false)"
     printf '"gate":{"cpu_psi_some_max":%s,"load_per_cpu_max":%s},"units_scope":"%s","units_readable":%s,"units_error":"%s","units":[' \
-      "${RSV_GATE_CPU_SOME_MAX}" "${RSV_GATE_LOAD_PER_CPU}" "$([[ -n "${LLMCTL_CGROUP_ROOT:-}" ]] && echo manager || echo host)" "$([[ -z "${uerr}" ]] && echo true || echo false)" "${uerr//\"/\'}"
+      "${RSV_GATE_CPU_SOME_MAX}" "${RSV_GATE_LOAD_PER_CPU}" "$([[ -n "${LLMCTL_CGROUP_ROOT:-}" ]] && echo manager || echo host)" "$([[ -z "${uerr}" ]] && echo true || echo false)" "$(_rsv_json_str "${uerr}")"
     for u in "${units[@]}"; do
       IFS='|' read -r name cpu mem aff thr d pid owner ucg <<<"${u}"
       (( first )) || printf ','; first=0
       printf '{"unit":"%s","cpu_quota_pct":"%s","memory_max_mb":"%s","cpus_allowed":"%s","threads":"%s","cpu_weight":"%s","swap_max":"%s","owner":"%s","cgroup":"%s"}' \
-        "${name}" "${cpu}" "${mem}" "${aff}" "${thr}" "${d}" "${pid}" "${owner}" "${ucg//\\/\\\\}"
+        "$(_rsv_json_str "${name}")" "${cpu}" "${mem}" "${aff}" "${thr}" "${d}" "${pid}" "${owner}" "$(_rsv_json_str "${ucg}")"
     done
     printf ']}\n'
     return 0

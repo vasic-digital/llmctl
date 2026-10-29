@@ -288,7 +288,12 @@ start is refused; `reserve_pct` and
   user's manager (`user.slice/user-<uid>.slice/user@<uid>.service/...`, depth 6) and `system.slice`. Every owner counts
   as consumption; each unit is reported with `owner` and `cgroup`. Only `owner: self` units are this user's instances:
   only they can be "running" for a profile and only they are replaced by this user's `restart`. Any unreadable
-  directory in the tree fails the census, and the start is refused (75): a partial census is not a count.
+  directory in the tree fails the census, and the start is refused (75): a partial census is not a count. A directory that
+  disappears while the tree is being walked (a unit stopping; find exits 1 with only "No such file or directory"
+  messages) counts as absent, not unreadable; any other find message (for example Permission denied) fails closed.
+  Anything deeper than the 8 levels scanned also refuses (the message says the tree is deeper than the scan covers) instead
+  of being skipped. An llmctl unit inside a container scope (`*.scope`) under this user's manager is reported with
+  `owner: container`.
   `LLMCTL_CGROUP_ROOT` (tests, non-standard layouts) narrows the scan to one manager root at depth 3 and the scope then
   says `manager`. Every non-llmctl workload is outside the model budget (covered only by the PSI/load gate).
 
@@ -296,7 +301,8 @@ start is refused; `reserve_pct` and
   `/sys/fs/cgroup` at depth 8 visits 310 cgroups, 0 unreadable, in about 23 to 38 ms. Options compared:
   - (A, chosen) llmctl scans the whole cgroup tree and counts units of every owner. Works without privileges for
     every unit the kernel lets this user read, sees other users' and system units, and fails closed where it cannot
-    read. Cost: one `find` per admission.
+    read. Cost: two `find` walks per admission (the unit census, and a one-level-deeper probe that detects a tree deeper
+    than the scan).
   - (B, rejected) a shared `llmctl.slice` with a parent `MemoryMax`/`CPUQuota`, so the kernel enforces the aggregate.
     A user unit can only join slices of its own systemd manager, so other users' and system units would stay
     outside it (the F3 gap); a host-wide slice needs root to create; a parent limit in a delegated user subtree can be
