@@ -228,10 +228,12 @@ workload, and reports host capacity on demand (`llmctl capacity --json`).
     is normalised.
   - **F5.** `llmctl reserve --json` escaped only backslashes in cgroup paths; `"` and control characters now escape, and
     the `units_error` text is escaped instead of having its quotes replaced.
-  - Still open, tracked follow-ups (reviewer items M8 and M9: not fixed here; the review hand-off to the author stated
-    them only as fail-open items backstopped by the `hk_gate` ExecStartPre check, which runs at every unit start, so
-    their wording is the reviewer's, not restated here). Related known limit, unchanged: admission and unit start are
-    not atomic, so two concurrent admissions can both pass before either unit exists; `hk_gate` re-checks at start.
+  - Still open, tracked follow-ups (class-inventory items M8 and M9 of `docs/qa/2026-10-28-host-reserve/review-r5/`:
+    the planner's `systemctl list-units` memory list and the scheduler's reservation sum read an unreadable source as
+    "nothing"). They are fail-open instruments outside the host reserve; the reserve's own budget check does not depend
+    on them and `hk_gate` (the ExecStartPre of every unit start) re-checks at start. Not changed here. Related known
+    limit, unchanged: admission and unit start are not atomic, so two concurrent admissions can both pass before either
+    unit exists; `hk_gate` re-checks at start.
 
 ### Security
 

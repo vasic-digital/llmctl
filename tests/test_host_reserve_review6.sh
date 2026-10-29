@@ -34,6 +34,7 @@ comb_rc() { local fs="$1" rc=0; shift; ( export LLMCTL_CGROUP_ROOT= LLMCTL_CGROU
 comb_msg() { local fs="$1"; shift; ( export LLMCTL_CGROUP_ROOT= LLMCTL_CGROUP_FS="${fs}" "$@"; reserve_combined_check 100 512 decide-tiny ) 2>&1 >/dev/null || true; }
 hk_rc() { local fs="$1" rc=0; shift; ( export LLMCTL_CGROUP_ROOT= LLMCTL_CGROUP_FS="${fs}" "$@"; hk_gate "" ) >/dev/null 2>&1 || rc=$?; echo "${rc}"; }
 cap() { local fs="$1"; shift; ( export LLMCTL_CGROUP_ROOT= LLMCTL_CGROUP_FS="${fs}" "$@"; capacity_json decide-tiny 2>/dev/null ); }
+cap_any() { local fs="$1"; shift; ( export LLMCTL_CGROUP_ROOT= LLMCTL_CGROUP_FS="${fs}" "$@"; capacity_json 2>/dev/null ); }
 
 # --- a find(1) stub: runs the real find, prints its stdout, then adds stderr and an exit status (MODE) ----------------
 REALFIND="$(command -v find)"
@@ -46,6 +47,8 @@ case "\${STUB_FIND_MODE:-}" in
   vanish) printf "find: '%s/user.slice/gone.service': No such file or directory\n" "\${1:-x}" >&2; exit 1 ;;
   perm)   printf "find: '%s/user.slice/locked': Permission denied\n" "\${1:-x}" >&2; exit 1 ;;
   silent) exit 1 ;;
+  rootgone) printf "find: '%s': No such file or directory\n" "\${1:-x}" >&2; exit 1 ;;
+  vanish2)  printf "find: '%s/user.slice/gone.service': No such file or directory\n" "\${1:-x}" >&2; exit 2 ;;
   mixed)  printf "find: '%s/a': No such file or directory\nfind: '%s/b': Permission denied\n" "\${1:-x}" "\${1:-x}" >&2; exit 1 ;;
 esac
 exit 0
@@ -71,7 +74,7 @@ rep="$(LLMCTL_CGROUP_ROOT= LLMCTL_CGROUP_FS="${EMPTY}" PATH="${STUB}:${PATH}" ST
 assert_eq True "$(q "${rep}" 'd["units_readable"]')" "F1: reserve --json units_readable true"
 
 echo "== F1 negative: permission errors, mixed errors and an unexplained exit 1 still fail closed =="
-for m in perm mixed silent; do
+for m in perm mixed silent rootgone vanish2; do
   assert_eq 75 "$(comb_rc "${EMPTY}" PATH="${STUB}:${PATH}" STUB_FIND_MODE=${m})" "F1[${m}]: combined check refuses (75)"
   assert_eq 75 "$(hk_rc   "${EMPTY}" PATH="${STUB}:${PATH}" STUB_FIND_MODE=${m})" "F1[${m}]: hk_gate refuses (75)"
   assert_eq "False undetermined" "$(q "$(cap "${EMPTY}" PATH="${STUB}:${PATH}" STUB_FIND_MODE=${m})" 'str(d["measurement"]["ok"])+" "+d["profiles"]["decide-tiny"]["verdict"]')" "F1[${m}]: capacity undetermined"
@@ -108,12 +111,33 @@ assert_eq self "$(q "$(cap "${FULL}//")" 'd["llmctl"]["units"][0]["owner"]')" "F
 sysfs="${TEST_TMP}/fs-sys"; newfs "${sysfs}"; mkunit "${sysfs}/system.slice/llmctl-llama@x.service" 100 512
 assert_eq system "$(q "$(cap "${sysfs}/")" 'd["llmctl"]["units"][0]["owner"]')" "F4: system.slice unit with a trailing slash -> system"
 
+echo "== owner classification pins (reviewer mutants RV6-01, RV6-02) =="
+# RV6-01: the uid in user-<uid>.slice must equal the uid in user@<uid>.service; a mismatched path is 'other', not a user
+MM="${TEST_TMP}/fs-mismatch"; newfs "${MM}"
+mkunit "${MM}/user.slice/user-${O}.slice/user@${U}.service/app.slice/llmctl-llama@big.service" "${FULLCPU}" "${FULLMEM}"
+assert_eq other "$(q "$(cap "${MM}")" 'd["llmctl"]["units"][0]["owner"]')" "RV6-01: user-<A>.slice/user@<B>.service is 'other' (not user-<A>)"
+assert_eq 75 "$(comb_rc "${MM}")" "RV6-01: and it is still counted as consumption (75)"
+MM2="${TEST_TMP}/fs-match"; newfs "${MM2}"
+mkunit "${MM2}/user.slice/user-${O}.slice/user@${O}.service/app.slice/llmctl-llama@big.service" "${FULLCPU}" "${FULLMEM}"
+assert_eq "user-${O}" "$(q "$(cap "${MM2}")" 'd["llmctl"]["units"][0]["owner"]')" "RV6-01 control: matching uids -> user-<uid>"
+# RV6-02: another owner's decision unit is not a local decision endpoint for this user; this user's own is
+DX="${TEST_TMP}/fs-dec-foreign"; newfs "${DX}"
+mkunit "${DX}/user.slice/user-${O}.slice/user@${O}.service/app.slice/llmctl-llama@decide-tiny.service" "${FULLCPU}" "${FULLMEM}"
+assert_eq "False" "$(q "$(cap_any "${DX}")" 'str(d["fallback"]["recommended"]=="local")')" "RV6-02: another owner's running decide-tiny is not a local decision endpoint"
+DO="${TEST_TMP}/fs-dec-own"; newfs "${DO}"
+mkunit "${DO}/user.slice/user-${U}.slice/user@${U}.service/app.slice/llmctl-llama@decide-tiny.service" "${FULLCPU}" "${FULLMEM}"
+assert_eq "True" "$(q "$(cap_any "${DO}")" 'str(d["fallback"]["recommended"]=="local")')" "RV6-02 control: this user's own running decide-tiny is local"
+
 echo "== F5: reserve --json is valid JSON for a hostile cgroup path =="
 J="${TEST_TMP}/fs-json"; newfs "${J}"
 mkunit "${J}/system.slice/odd\"dir/llmctl-llama@x.service" 100 512
 r="$(LLMCTL_CGROUP_ROOT= LLMCTL_CGROUP_FS="${J}" reserve_report --json)"
 assert_eq 1 "$(q "${r}" 'len(d["units"])')" "F5: quote in the path -> valid JSON with the unit"
 assert_contains "$(q "${r}" 'd["units"][0]["cgroup"]')" 'odd"dir' "F5: and the path round-trips"
+J3="${TEST_TMP}/fs-json3"; newfs "${J3}"
+mkunit "${J3}/system.slice/ctl"$'\001'"dir/llmctl-llama@x.service" 100 512
+r="$(LLMCTL_CGROUP_ROOT= LLMCTL_CGROUP_FS="${J3}" reserve_report --json)"
+assert_eq 1 "$(q "${r}" 'len(d["units"])')" "F5: a 0x01 control character in the path -> valid JSON"
 J2="${TEST_TMP}/fs-json2"; newfs "${J2}"
 mkunit "${J2}/system.slice/ctl"$'\t'"dir/llmctl-llama@x.service" 100 512
 r="$(LLMCTL_CGROUP_ROOT= LLMCTL_CGROUP_FS="${J2}" reserve_report --json)"

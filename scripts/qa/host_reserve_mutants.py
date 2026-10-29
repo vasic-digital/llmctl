@@ -23,8 +23,9 @@ R3 = "tests/test_host_reserve_review3.sh"
 R4 = "tests/test_host_reserve_review4.sh"
 R5 = "tests/test_host_reserve_review5.sh"
 F3 = "tests/test_host_reserve_f3.sh"
+R6 = "tests/test_host_reserve_review6.sh"
 # a reviewer mutant that is killed by "some suite" names the chain the reviewer ran (killed when any suite fails)
-CHAIN = (R4, R5, "tests/test_capacity.sh", "tests/test_host_reserve.sh", R3, R2, "tests/test_host_reserve_review.sh",
+CHAIN = (R6, R4, R5, "tests/test_capacity.sh", "tests/test_host_reserve.sh", R3, R2, "tests/test_host_reserve_review.sh",
          "tests/test_decision_capacity.sh", "tests/test_start_gate.sh", "tests/test_services.sh",
          "tests/test_gate_wiring_pressure.sh", "tests/test_gate_wiring_start_paths.sh",
          "tests/test_gate_wiring_restart_enable.sh", "tests/test_restart_policy.sh")
@@ -295,6 +296,27 @@ MUTANTS = [
     ("F3-scope-always-manager", CAP, '"owners": sorted({u["owner"] for u in units}),', '"owners": [],', F3),
     ("F3-census-skips-non-self", RSV, '    name="${d##*/}"\n',
      '    name="${d##*/}"\n    [[ "$(_rsv_unit_owner "${d}")" == self ]] || continue\n', F3),
+    # --- review round 6 (F1-F5) ---
+    ("R6-F1-any-nonzero-is-unreadable", RSV, 'if (( rc > 1 )) || (( n == 0 )) || (( other )); then', 'if (( rc != 0 )); then', R6),
+    ("R6-F1-permission-tolerated", RSV, '      other=1; [[ -n "${first}" ]] || first="${line}"\n', '      :\n', R6),
+    ("R6-F1-silent-exit1-tolerated", RSV, 'if (( rc > 1 )) || (( n == 0 )) || (( other )); then', 'if (( rc > 1 )) || (( other )); then', R6),
+    ("R6-F1-exit2-tolerated", RSV, 'if (( rc > 1 )) || (( n == 0 )) || (( other )); then', 'if (( n == 0 )) || (( other )); then', R6),
+    ("R6-F1-root-enoent-tolerated", RSV, '&& "${line}" != "find: \'${root}\': "* ]]', ']]', R6),
+    ("R6-F1-locale-not-pinned", RSV, '_RSV_FIND_OUT="$(LC_ALL=C find', '_RSV_FIND_OUT="$(find', R6),
+    ("R6-F1-reason-dropped", RSV, '(${_RSV_FIND_WHY})"\n    return 0\n  fi\n  # anything', '")"\n    return 0\n  fi\n  # anything', R6),
+    ("R6-F2-no-deeper-probe", RSV, '  if [[ -n "${deeper}" ]]; then', '  if false; then', R6),
+    ("R6-F2-probe-one-level-too-deep", RSV, '_rsv_find "${root}" $(( depth + 1 )) -mindepth $(( depth + 1 )) -type d -print -quit',
+     '_rsv_find "${root}" $(( depth + 2 )) -mindepth $(( depth + 2 )) -type d -print -quit', R6),
+    ("R6-F2-probe-at-scan-depth", RSV, '_rsv_find "${root}" $(( depth + 1 )) -mindepth $(( depth + 1 )) -type d -print -quit',
+     '_rsv_find "${root}" ${depth} -mindepth ${depth} -type d -print -quit', R6),
+    ("R6-F3-container-as-self", RSV, 'if [[ "/${rel}/" == */*.scope/* ]]; then echo container; else echo self; fi', 'echo self', R6),
+    ("R6-F3-everything-container", RSV, 'if [[ "/${rel}/" == */*.scope/* ]]; then echo container; else echo self; fi', 'echo container', R6),
+    ("R6-F4-fs-not-normalised", RSV, 'while [[ "${fs}" == */ && "${fs}" != / ]]; do fs="${fs%/}"; done', ':', R6),
+    ("R6-F5-quote-not-escaped", RSV, r'''  s="${s//\\/\\\\}"; s="${s//\"/\\\"}"'''+"\n", r'''  s="${s//\\/\\\\}"'''+"\n", R6),
+    ("R6-F5-control-not-escaped", RSV, '  if [[ "${s}" =~ [[:cntrl:]] ]]; then', '  if false; then', R6),
+    ("R6-F5-units-error-unescaped", RSV, '"$(_rsv_json_str "${uerr}")"', '"${uerr}"', R6),
+    ("R6-RV01-uid-equality-dropped", RSV, '&& "${BASH_REMATCH[1]}" == "${BASH_REMATCH[2]}" ]]; then', ']]; then', R6),
+    ("R6-RV02-foreign-owner-local", CAP, '    if u["owner"] != "self": return False\n', '', R6),
 ]
 
 

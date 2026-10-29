@@ -31,6 +31,11 @@
 #   5a. fixed only (review round 5, F3), on any host load: `llmctl capacity --json` and `llmctl reserve --json` with no
 #      threshold changed must scan the whole cgroup tree (scope host, /sys/fs/cgroup), list the QA unit with owner
 #      "self" and the cgroup directory the read-back found, and list only llmctl units;
+#   5b. fixed only (review round 6, F1), on any host load: while a churn loop starts and stops short-lived transient user
+#      units (their cgroups appear and vanish while the tree is scanned), `llmctl reserve --json` is run CHURN_READS
+#      times against the real /sys/fs/cgroup; every read must report units_readable true (before the F1 fix a cgroup that
+#      vanished mid-scan made find exit 1 and the tree "unreadable"). The leg records how many churn units really
+#      started; it is a probabilistic leg (a race), so its RED on the pre-fix commit is a rate, not a certainty;
 #   6. stops every unit it started and checks that no engine process of this run is left.
 # Every run writes run-<i>/ files; summary.json carries the verdicts and the determinism check.
 set -euo pipefail
@@ -285,6 +290,29 @@ print("reserve_only_llmctl_units=%s" % (bool(ru) and all(u.get("unit", "").start
 PY
 }
 
+# Review round 6, F1: the census must tolerate cgroups that vanish while it runs (the churn units are named qa-reserve-churn-*,
+# which no llmctl unit glob matches, so they are never counted as engines). CHURN_READS reads, CHURN_UNITS churn units.
+CHURN_READS="${CHURN_READS:-100}"; CHURN_UNITS="${CHURN_UNITS:-120}"
+churn_case() { # <run-dir> <run-index>
+  local d="$1" idx="$2" k cpid started=0 reads=0 readable=0 unreadable=0 other=0 out v
+  (
+    for (( k = 1; k <= CHURN_UNITS; k++ )); do
+      systemd-run --user --quiet --unit="qa-reserve-churn-${idx}-${k}" -p Type=exec -- sleep 0.15 >/dev/null 2>&1 && echo started >> "${d}/churn_started.txt"
+      sleep 0.03
+    done
+  ) &
+  cpid=$!
+  for (( k = 1; k <= CHURN_READS; k++ )); do
+    out="$(env "${ENVV[@]}" "${ROOT}/bin/llmctl" reserve --json 2>/dev/null)" || true
+    v="$(python3 -c 'import json,sys; print(json.loads(sys.stdin.read())["units_readable"])' <<<"${out}" 2>/dev/null || echo parse-error)"
+    reads=$(( reads + 1 ))
+    case "${v}" in True) readable=$(( readable + 1 )) ;; False) unreadable=$(( unreadable + 1 )); printf '%s\n' "${out}" >> "${d}/churn_unreadable.json" ;; *) other=$(( other + 1 )) ;; esac
+  done
+  wait "${cpid}" || true
+  [[ -f "${d}/churn_started.txt" ]] && started="$(wc -l < "${d}/churn_started.txt")"
+  { echo "reads=${reads}"; echo "readable=${readable}"; echo "unreadable=${unreadable}"; echo "parse_errors=${other}"; echo "churn_units_started=${started}"; } > "${d}/churn.txt"
+}
+
 pressure_case() { # <run-dir>
   local d="$1" some thr rc
   some="$(awk '/^some/{split($2,a,"="); print a[2]}' /proc/pressure/cpu)"
@@ -359,7 +387,7 @@ for (( i = 1; i <= RUNS; i++ )); do
     echo "skipped=negative control is not loaded (an unlimited engine would take the shared host)" > "${D}/stress.txt"
   fi
   over_budget_start "${D}" "${i}"
-  if [[ "${LABEL}" == fixed ]]; then scope_case "${D}"; pressure_case "${D}"; fi
+  if [[ "${LABEL}" == fixed ]]; then scope_case "${D}"; churn_case "${D}" "${i}"; pressure_case "${D}"; fi
   systemctl --user stop "${U}"
   sleep 1
   model_file="$(model_file)"
@@ -392,7 +420,7 @@ art = kv(os.path.join(out, "artifact_commit.txt"))
 res = []
 for i in range(1, runs + 1):
     d = os.path.join(out, "run-%d" % i)
-    lim, st, ss, pr, ps, sc = (kv(os.path.join(d, f)) for f in ("limits.txt", "stress.txt", "second_start.txt", "pressure.txt", "post_stop.txt", "scope.txt"))
+    lim, st, ss, pr, ps, sc, ch = (kv(os.path.join(d, f)) for f in ("limits.txt", "stress.txt", "second_start.txt", "pressure.txt", "post_stop.txt", "scope.txt", "churn.txt"))
     checks = {}
     if label == "fixed":
         # review round 5, F3: the live host-wide census (scope.txt is always written for the fixed label)
@@ -403,6 +431,9 @@ for i in range(1, runs + 1):
         checks["scope_capacity_host_wide"] = sc.get("capacity_scope") == "host" and sc.get("capacity_cgroup_root") == "/sys/fs/cgroup"
         checks["scope_reserve_host_wide"] = sc.get("reserve_scope") == "host" and sc.get("reserve_readable") == "True"
         checks["scope_qa_unit_owner_self"] = sc.get("capacity_qa_owner") == "self" and sc.get("reserve_qa_owner") == "self"
+        # review round 6, F1: no false "unreadable" under real cgroup churn, and the churn really happened
+        checks["churn_exercised"] = int(ch.get("churn_units_started", "0") or 0) >= 30 and int(ch.get("reads", "0") or 0) >= 50
+        checks["churn_never_unreadable"] = ch.get("unreadable") == "0" and ch.get("parse_errors") == "0" and ch.get("readable") == ch.get("reads")
         rb = lim.get("cgroup", "")
         checks["scope_qa_cgroup_is_readback"] = bool(rb) and sc.get("capacity_qa_cgroup") == rb and sc.get("reserve_qa_cgroup") == rb
         checks["scope_only_llmctl_units"] = sc.get("capacity_only_llmctl_units") == "True" and sc.get("reserve_only_llmctl_units") == "True"
