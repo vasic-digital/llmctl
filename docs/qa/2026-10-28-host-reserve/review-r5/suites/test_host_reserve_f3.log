@@ -1,0 +1,39 @@
+== controls: a host tree with no llmctl unit admits; the own manager's unit is seen ==
+  ok: control: no unit anywhere -> combined admits
+  ok: control: no unit anywhere -> hk_gate admits
+  ok: control: no unit anywhere -> capacity_admit admits
+  ok: scope: the whole host, depth 8
+  ok: scope: the scan root is the cgroup mount
+  ok: needle: this user's unit (template slice, depth 6) holding the budget is counted (75)
+  ok: needle: its owner is self
+== F3: another user's unit holding the whole budget -> refuse (was: not counted, admitted) ==
+  ok: other user's unit: combined budget check refuses 75
+  ok: other user's unit: hk_gate (every start, restart, boot) refuses 75
+  ok: other user's unit: capacity_admit refuses 75
+  ok: other user's unit: capacity does_not_fit
+  ok: the unit is listed with its owner
+  ok: the unit's cgroup path is reported
+  ok: consumption_scope lists the owners whose units were counted
+  ok: the refusal names the owner of the unit
+== F3: a system.slice unit holding the whole budget -> refuse ==
+  ok: system.slice unit: combined refuses 75
+  ok: system.slice unit: hk_gate refuses 75
+  ok: system.slice unit: owner system
+== F3: another user's unit is consumption only - never this user's instance ==
+  ok: another user's decide-tiny is not 'running' for this user (a new own start is judged: fits)
+  ok: control: this user's own decide-tiny IS running
+  ok: restart of decide-tiny: another user's same-named unit is not 'replaced' (still counted -> 75)
+  ok: control: restart of this user's own decide-tiny replaces it (0)
+== F3 + R5-1: an unreadable part of the host tree fails closed ==
+  ok: another user's manager unreadable: combined refuses 75
+  ok: another user's manager unreadable: hk_gate refuses 75
+  ok: another user's manager unreadable: the start gate refuses 75
+  ok: another user's manager unreadable: capacity undetermined
+  ok: after chmod back: the unit is counted again (75: full budget)
+  ok: an unreadable system.slice with no visible unit still refuses (not 'no units')
+  ok: control: the same tree readable admits
+== scope: LLMCTL_CGROUP_ROOT narrows the scan to one manager and says so ==
+  ok: manager scope reported, depth 3
+  ok: manager scope: says what is not counted
+  ok: llmctl reserve --json: host scope, the other user's unit listed with its owner
+RESULT: PASS

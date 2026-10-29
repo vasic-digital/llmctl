@@ -1,0 +1,62 @@
+== positive controls: a readable root is counted (the instrument can see) ==
+  ok: control: an empty readable root -> measured, fits, local
+  ok: control: combined check admits on an empty readable root
+  ok: control: the start gate admits on an empty readable root
+  ok: control: hk_gate admits on an empty readable root
+  ok: control: capacity_admit admits on an empty readable root
+  ok: needle: the unit holding the whole budget IS counted (combined 75)
+  ok: needle: hk_gate counts it too (75)
+  ok: needle: capacity lists the unit
+== R5-1 / R5-2: a missing or unreadable cgroup root (or a directory under it) -> refuse, never admit ==
+  ok: missing: capacity undetermined, fallback none (was: fits local)
+  ok: missing: the reason names the cgroup root
+  ok: missing: capacity exit code 75
+  ok: missing: capacity_admit refuses 75 (was: 0)
+  ok: missing: combined budget check refuses 75 (was: 0)
+  ok: missing: the start gate refuses 75 (was: 0)
+  ok: missing: hk_gate (ExecStartPre, every restart and boot) refuses 75 (was: 0)
+  ok: missing: the refusal says why
+  ok: missing: reserve_running_units returns 1 with no lines
+  ok: mode-000 root: capacity undetermined, fallback none (was: fits local)
+  ok: mode-000 root: the reason names the cgroup root
+  ok: mode-000 root: capacity exit code 75
+  ok: mode-000 root: capacity_admit refuses 75 (was: 0)
+  ok: mode-000 root: combined budget check refuses 75 (was: 0)
+  ok: mode-000 root: the start gate refuses 75 (was: 0)
+  ok: mode-000 root: hk_gate (ExecStartPre, every restart and boot) refuses 75 (was: 0)
+  ok: mode-000 root: the refusal says why
+  ok: mode-000 root: reserve_running_units returns 1 with no lines
+  ok: mode-000 directory under the root: capacity undetermined, fallback none (was: fits local)
+  ok: mode-000 directory under the root: the reason names the cgroup root
+  ok: mode-000 directory under the root: capacity exit code 75
+  ok: mode-000 directory under the root: capacity_admit refuses 75 (was: 0)
+  ok: mode-000 directory under the root: combined budget check refuses 75 (was: 0)
+  ok: mode-000 directory under the root: the start gate refuses 75 (was: 0)
+  ok: mode-000 directory under the root: hk_gate (ExecStartPre, every restart and boot) refuses 75 (was: 0)
+  ok: mode-000 directory under the root: the refusal says why
+  ok: mode-000 directory under the root: reserve_running_units returns 1 with no lines
+  ok: needle: the census lists the unit on a readable tree
+  ok: after chmod back: the same tree is counted again (75: full budget)
+  ok: reserve disabled: the cgroup root is not a critical input
+== R5-2: the default root needs the cgroup v2 unified hierarchy; v1/hybrid -> refuse with a clear message ==
+  ok: no cgroup.controllers at the cgroup mount: refuse 75
+  ok: the refusal names the missing cgroup v2 unified hierarchy
+  ok: capacity: not ok without cgroup v2
+  ok: control: with cgroup.controllers present the default root is used and admits
+  ok: needle: a unit under the default root is counted (75)
+== R5-6: the /proc thread census must see its own process (control needle) ==
+  ok: an empty proc dir: measurement not ok (was: ok, 0 threads)
+  ok: the reason names the thread census
+  ok: a proc dir with only another uid's processes: not ok
+  ok: control: the real /proc sees this process (>= 1 thread of this uid)
+  ok: control: the real /proc census is not flagged
+== R5-5 (Y02): a running profile leaves CAP_THREADS empty (its verdict carries threads 0) ==
+  ok: precondition: decide-tiny is running, threads 0
+  ok: running: admitted, CAP_THREADS empty (Y02 gave 0)
+  ok: control: a fitting profile sets a positive thread count
+== R5-1: llmctl reserve reports an unreadable unit tree instead of 'no unit is running' ==
+  ok: reserve --json: units_readable false on a missing root
+  ok: reserve --json: units_error names the root
+  ok: reserve (text): units UNKNOWN, not 'no unit is running'
+  ok: control: a readable empty root is readable
+RESULT: PASS

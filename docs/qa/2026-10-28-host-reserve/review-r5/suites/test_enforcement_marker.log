@@ -1,0 +1,42 @@
+== llmctl install writes the versioned marker (0600)
+  ok: fresh state dir: no marker
+  ok: svc_install (llmctl install) wrote validation-gate=1
+  ok: the marker is owner-only
+  ok: the regenerated unit carries ExecCondition validated
+  ok: install executes nothing from the unit comment (no backtick command substitution)
+  ok: the launchd backend's svc_install writes it too
+== marker ABSENT (unit installed before the gate): decide kind is registered, NEVER validated, NEVER stopped
+  ok: legacy decide waiter: exits 0
+  ok: legacy decide waiter: registered
+  ok: legacy decide waiter: not validated (c23c2e6: kind decide is not its business)
+  ok: legacy decide waiter: nothing stopped
+== marker ABSENT: kind llm keeps the c23c2e6 order and verdict policy
+  ok: legacy llm UNDETERMINED: registered
+  ok: legacy llm UNDETERMINED: validated once
+  ok: legacy llm: registration BEFORE validation (c23c2e6 order; reg 1, val 2)
+  ok: legacy llm UNDETERMINED: keeps running (c23c2e6: only LLMCTL_VALIDATE_STRICT=1 stopped it)
+  ok: legacy llm FAIL: stopped (as at c23c2e6)
+  ok: legacy llm ON_START=0: not validated (c23c2e6)
+  ok: legacy llm ON_START=0: registered (c23c2e6)
+== marker ABSENT: ExecCondition validated and the launchd run-engine wrapper pass through
+  ok: legacy: 'validated' passes a profile without a record
+  ok: legacy: run-engine execs the engine
+== marker PRESENT: the 2026-10-14 gates apply
+  ok: marker written
+  ok: enforced decide waiter: validated once
+  ok: enforced decide waiter FAIL: never registered
+  ok: enforced decide waiter FAIL: stopped
+  ok: enforced llm UNDETERMINED: stopped (strict)
+  ok: enforced llm UNDETERMINED: never registered
+  ok: enforced: 'validated' refuses a profile without a record (exit 77)
+  ok: enforced: run-engine refuses before exec (the engine never ran; exit 0: not respawned)
+  ok: an unknown marker format is NOT treated as installed (legacy)
+== fixture: a unit installed BEFORE the change (c23c2e6 body), its hooks run in unit order against THIS tree
+  ok: fixture present
+  ok: fixture: the pre-change unit has no ExecCondition validated
+  ok: fixture: four start-side hook commands (portcheck, gate, prestart, register)
+  ok: fixture: every start-side hook of the old unit succeeds (none refuses)
+  ok: fixture: the old unit's detached waiter REGISTERS decide-nli
+  ok: fixture: decide-nli is NOT validated by the old unit's hooks
+  ok: fixture: decide-nli is NOT stopped
+RESULT: PASS

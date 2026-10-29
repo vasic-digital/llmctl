@@ -1,0 +1,16 @@
+capacity_rc=0
+reserve_rc=0
+readback_cgroup=/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/llmctl-qa-reserve-fixed-r3.service
+capacity_profile_verdict=fits
+capacity_scope=host
+capacity_cgroup_root=/sys/fs/cgroup
+capacity_owners=self
+capacity_units=llmctl-qa-reserve-fixed-r3.service:self
+capacity_qa_owner=self
+capacity_qa_cgroup=/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/llmctl-qa-reserve-fixed-r3.service
+capacity_only_llmctl_units=True
+reserve_scope=host
+reserve_readable=True
+reserve_qa_owner=self
+reserve_qa_cgroup=/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/llmctl-qa-reserve-fixed-r3.service
+reserve_only_llmctl_units=True

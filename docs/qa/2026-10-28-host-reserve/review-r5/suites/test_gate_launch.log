@@ -1,0 +1,41 @@
+== finding 9: LLMCTL_VALIDATE_HERMETIC=1 without the harness file relaxes nothing
+  ok: HERMETIC=1 + ON_START=0, no harness file: the consumer-facing start is refused
+  ok: ...and the ignored variable is reported
+  ok: ...nothing was started
+  ok: unit waiter: HERMETIC=1 + ON_START=0 without the harness file -> NOT registered
+  ok: unit waiter: inside the harness the test relaxation still works (control)
+  ok: inside the harness (file + variable): the hermetic start is served (control)
+  ok: status says loudly that the harness relaxation is in effect
+== finding 3: a FRESH record counts before the ON_START=0 refusal
+  ok: ON_START=0 start of a profile WITH a fresh record: served
+  ok: ...started
+  ok: ...published, not quarantined
+  ok: ON_START=0 switch to a target WITH a fresh record: done
+  ok: ...fast runs, small was stopped by the switch
+== finding 3: a refused switch target stops NOTHING
+  ok: ON_START=0 switch to a target WITHOUT a record: refused
+  ok: ...said so
+  ok: ...no svc_stop at all
+  ok: ...the resident set is untouched
+== finding 3: LLMCTL_VALIDATE_ON_START=external starts UNPUBLISHED and leaves the validation to the caller
+  ok: ON_START=external start: rc 0
+  ok: ...quarantined (loopback, private port, unpublished)
+  ok: ...not validated by llmctl
+  ok: ...and it says so
+  ok: ...bound to loopback
+== finding 3: the live test script no longer asks for ON_START=0
+  ok: scripts/livetest/vision_live_test.sh runs nothing with LLMCTL_VALIDATE_ON_START=0
+== finding 5: the gate decides on the launch ABOUT TO RUN (real signed records, fixture server)
+  ok: a real signed PASS record for launch A
+  ok: ...require-validated accepts it
+  ok: a start with CHANGED flags (LLMCTL_SEED=7) is quarantined - the record is for another launch
+  ok: ...loopback, never the documented port (the record it ran with while validated)
+  ok: control: the SAME launch as the record starts
+  ok: control: ...published at once (the candidate launch matches the record)
+  ok: control: ...no quarantine marker
+== finding 5: the publish step re-checks the record against the launch it publishes
+  ok: setup: launch A runs quarantined
+  ok: validated launch A, publishing a seed-7 launch: refused (rc 1)
+  ok: ...the reason is named
+  ok: ...nothing was started on the documented port
+RESULT: PASS

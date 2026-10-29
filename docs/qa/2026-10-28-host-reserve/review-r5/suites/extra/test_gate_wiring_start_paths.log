@@ -1,0 +1,85 @@
+== CONTROL 1: the harness records a validate_profile call (positive control) and its injected verdict
+  ok: control: 'llmctl validate small' (stub verdict PASS) -> 0
+  ok: control: exactly one validate_profile call is visible to the harness
+  ok: control: an injected FAIL verdict comes back as exit 1
+== CONTROL 2: the harness sees NO validate_profile call on a path that does not validate (negative control)
+  ok: control: 'llmctl stop small' -> 0
+  ok: control: stop makes ZERO validate_profile calls (the harness does not invent calls)
+  ok: control: the harness sees the normal stop path (svc_stop small)
+  ok: control: stop removes the reservation
+== start PASS: validation runs exactly once, outside the scheduler lock; profile keeps running
+  ok: start: PASS -> exit 0
+  ok: start: validate_profile called exactly once
+  ok: start: validation ran OUTSIDE the scheduler lock (not recursive)
+  ok: start: PASS: the quarantine instance is stopped once (then the profile is published)
+  ok: start: PASS: started twice - quarantine, then published
+  ok: start: PASS leaves the profile running
+  ok: start: validation is AFTER the profile became ready (svc_start line 2 < validate line 3)
+== start FAIL (rc 1): the profile is STOPPED through the normal stop path and the command exits non-zero
+  ok: start: FAIL: validation still ran exactly once
+  ok: start: FAIL: the profile is stopped through sched_stop -> svc_stop (RED: the gate is advisory today)
+  ok: start: FAIL: no reservation is left behind
+  ok: start: FAIL: the stop comes AFTER the verdict (validate line 3, stop line 6)
+  ok: start: FAIL: exit code is non-zero (rc=1)
+  ok: start: FAIL: the message names the profile
+  ok: start: FAIL: the message says the profile was STOPPED
+  ok: start: FAIL: the message says it was the validation that failed
+== start UNDETERMINED (rc 2): STOPPED (strict default), loud, never a PASS
+  ok: start: UNDETERMINED: validation ran exactly once
+  ok: start: UNDETERMINED: the profile is stopped (an unvalidated model is never served)
+  ok: start: UNDETERMINED: nothing left running
+  ok: start: UNDETERMINED: exit code is non-zero (rc=1)
+  ok: start: UNDETERMINED is reported loudly
+  ok: start: UNDETERMINED is never reported as PASSED
+  ok: start: UNDETERMINED records no PASS (no state file)
+  ok: start: require-validated still refuses after an UNDETERMINED start
+== switch PASS: validation runs exactly once, outside the scheduler lock; profile keeps running
+  ok: switch: PASS -> exit 0
+  ok: switch: validate_profile called exactly once
+  ok: switch: validation ran OUTSIDE the scheduler lock (not recursive)
+  ok: switch: PASS: the quarantine instance is stopped once (then the profile is published)
+  ok: switch: PASS: started twice - quarantine, then published
+  ok: switch: PASS leaves the profile running
+  ok: switch: validation is AFTER the profile became ready (svc_start line 3 < validate line 4)
+== switch FAIL (rc 1): the profile is STOPPED through the normal stop path and the command exits non-zero
+  ok: switch: FAIL: validation still ran exactly once
+  ok: switch: FAIL: the profile is stopped through sched_stop -> svc_stop (RED: the gate is advisory today)
+  ok: switch: FAIL: no reservation is left behind
+  ok: switch: FAIL: the stop comes AFTER the verdict (validate line 4, stop line 7)
+  ok: switch: FAIL: exit code is non-zero (rc=1)
+  ok: switch: FAIL: the message names the profile
+  ok: switch: FAIL: the message says the profile was STOPPED
+  ok: switch: FAIL: the message says it was the validation that failed
+== switch UNDETERMINED (rc 2): STOPPED (strict default), loud, never a PASS
+  ok: switch: UNDETERMINED: validation ran exactly once
+  ok: switch: UNDETERMINED: the profile is stopped (an unvalidated model is never served)
+  ok: switch: UNDETERMINED: nothing left running
+  ok: switch: UNDETERMINED: exit code is non-zero (rc=1)
+  ok: switch: UNDETERMINED is reported loudly
+  ok: switch: UNDETERMINED is never reported as PASSED
+  ok: switch: UNDETERMINED records no PASS (no state file)
+  ok: switch: require-validated still refuses after an UNDETERMINED start
+== auto FAIL / UNDETERMINED / PASS (auto picks the best-ranked downloaded profile)
+  SKIP: auto path wiring cannot be exercised on this fixture
+    reason: 'llmctl auto chat' started nothing on the hermetic fixture host (rc=1): [llmctl] capability 'chat' -> profile 'moe-fast' ERROR: model not downloaded: /home/milosvasic/.cache/claude-tmp/tmp.xkDfH2moOh/models/moe-fast/gpt-oss-20b-MXFP4.gguf. Run: llmctl models download moe-fast 
+== (b) a catalog profile that CANNOT be validated (decide-tiny: jev-verdict has no driver): stopped by default, reason named
+  ok: decide-tiny was started (in quarantine) for its validation
+  ok: default (strict): the profile is stopped
+  ok: ...nothing left running
+  ok: ...exit non-zero (rc=1)
+  ok: ...the message names why it cannot be validated (jev-verdict has no driver)
+  ok: ...nothing records a PASS
+  ok: ...require-validated refuses
+  ok: LLMCTL_VALIDATE_STRICT=0 on a consumer-facing profile: refused, stopped
+  ok: ...exit non-zero (rc=1)
+== (c) LLMCTL_VALIDATE_ON_START=0 still disables the hook inside the test harness (LLMCTL_VALIDATE_HERMETIC=1; refused outside it: tests/test_validation_enforcement.sh)
+  ok: ON_START=0: start exits 0 even though a validator would FAIL
+  ok: ON_START=0: validate_profile is never called
+  ok: ON_START=0: nothing is stopped
+  ok: ON_START=0: says loudly that nothing was validated
+== (d) require-validated exit codes
+  ok: require-validated without a profile -> 2 (usage)
+  ok: require-validated on a never-validated profile -> 1
+  ok: ...with the reason
+  ok: require-validated on an unknown profile is refused (non-zero), never a pass
+RESULT: PASS

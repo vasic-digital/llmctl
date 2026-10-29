@@ -1,0 +1,14 @@
+  ok: precondition: the fake letter-logit engine listens
+== 1. a correct letter-logit engine is validated PASS through the real driver (exit 0)
+  ok: decide against a correct engine -> PASS (was UNDETERMINED 'Unknown model.' on every real engine)
+  ok: the verdict line says PASS
+  ok: every decision was asked 3 times and answered byte-identically by the real driver
+  ok: no "Unknown model" refusal
+== 2. control: a wrong-answering engine is FAIL (exit 1) - the PASS above is not vacuous
+  ok: decide against a wrong engine -> FAIL
+  ok: the failed expectation is named
+== 3. paired mutation: the pre-fix model id must turn this suite RED
+  ok: the mutant differs from the original
+  ok: MUTANT (model 'validate') -> UNDETERMINED (exit 2): this suite goes RED on the original defect
+  ok: the mutant fails for the root-cause reason (the driver refuses the model id)
+RESULT: PASS

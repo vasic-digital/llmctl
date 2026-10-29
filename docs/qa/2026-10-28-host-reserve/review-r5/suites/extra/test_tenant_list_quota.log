@@ -1,0 +1,22 @@
+  ok: tenant create, no daemon at all: exits non-zero
+  ok: tenant create, no daemon at all: clear unreachable message
+  ok: tenant list, no daemon at all: exits non-zero
+  ok: tenant list, no daemon at all: clear unreachable message
+  ok: tenant quota (set), no daemon at all: exits non-zero
+  ok: tenant quota (set), no daemon at all: clear unreachable message
+  ok: tenant quota (view), no daemon at all: exits non-zero
+  ok: tenant quota (view), no daemon at all: clear unreachable message
+  ok: node: real READY line observed
+HOSTDEP-BEGIN: success path runs only when the host curl has HTTP3 (G-089/G-106)
+  ok: tenant create against a REAL running daemon: still exits non-zero, never hangs or crashes
+  ok: tenant create against a REAL running daemon: SAME unreachable message
+  ok: tenant list against a REAL running daemon: exits non-zero (the NEW GET /v1/tenants route reaches the same unreachable gate)
+  ok: tenant list against a REAL running daemon: SAME unreachable message
+  ok: tenant quota (set) against a REAL running daemon: exits non-zero (the NEW PUT /v1/tenants/:id/quota route reaches the same unreachable gate)
+  ok: tenant quota (set) against a REAL running daemon: SAME unreachable message
+  ok: tenant quota (view) against a REAL running daemon: exits non-zero (the NEW GET /v1/tenants/:id/quota route reaches the same unreachable gate)
+  ok: tenant quota (view) against a REAL running daemon: SAME unreachable message
+  SKIP: tenant create/list/quota success path (US3 Acceptance Scenarios 1/2/3)
+    reason: curl --version lists no HTTP3 feature (Features: alt-svc AsynchDNS brotli GSS-API HSTS HTTP2 HTTPS-proxy IDN IPv6 Kerberos Largefile libz NTLM PSL SPNEGO SSL threadsafe TLS-SRP UnixSockets zstd); llmctld serves its cluster API over HTTP/3-QUIC (UDP) only and this curl cannot speak QUIC (the certificate side - SANs, CA, client certificate - is provided by the daemon, G-106) - so no curl-based request can complete a 2xx round trip here, and US3 Acceptance Scenarios 1/2/3 (create-then-list shows the tenant, quota view/set round-trips through the real enforcer state) cannot be exercised on this host. The underlying Go/HTTP-level behavior these routes implement IS proven for real by TestListTenants and TestTenantQuota_ViewAndSet in llmctld/internal/api/routes_tenants_test.go (real httptest round trips, no mocks).
+HOSTDEP-END
+RESULT: PASS

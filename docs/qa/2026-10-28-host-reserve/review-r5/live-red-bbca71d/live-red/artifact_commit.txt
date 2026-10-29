@@ -1,0 +1,5 @@
+head=none
+head_tree=none
+dirty=unknown (not a git checkout)
+llama_server=/home/milosvasic/Projects/llmctl/submodules/llama.cpp/build/bin/llama-server
+llama_server_sha256=09a14c52c9d29f814e57cbcf7e4454412ee44cc94956b365250a57d830b0fa74

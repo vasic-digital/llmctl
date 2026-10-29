@@ -1,0 +1,16 @@
+commit: e6e578ff3a60aa101d3392a7e10b58f91fdf15a6  dirty: 0 changed code paths
+M1 reserve_running_units (cgroup tree): needle=1 unit(s) rc=0; missing rc=1
+   mode-000 rc=1
+M2 reserve_combined_check: needle(full budget)=75 missing=75
+   mode-000=75
+M3 hk_gate (ExecStartPre): needle=75 missing=75
+M4 hw_pressure_gate (start gate): empty-root=0 missing=75
+M5 capacity_json units: needle: ok=True verdict=does_not_fit units=1 fallback=none
+   mode-000: ok=False verdict=undetermined units=0 fallback=none
+M6 reserve_report: needle units_readable=True 1 missing=False 0
+M7 /proc thread census: needle(7 threads + self) ok=True user_threads=7 empty dir ok=False user_threads=None
+M8 catalog _catalog_unit_mem_mb (systemctl list-units): needle='big 2048 current;' systemctl failing='' (empty = counted as no unit: FAIL-OPEN, scoped out)
+M9 sched_reserved_field (runtime dir *.run): needle=2048 MiB runtime dir missing=0 MiB (0 = FAIL-OPEN, scoped out)
+   runtime dir mode-000=0 MiB
+M10 host census (every owner): needle='llmctl-llama@big.service user-4242' combined=75
+    other user's manager mode-000: census rc=1 combined=75 hk_gate=75

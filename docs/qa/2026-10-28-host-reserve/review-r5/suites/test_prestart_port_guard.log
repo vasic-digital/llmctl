@@ -1,0 +1,12 @@
+== control: port free -> prestart succeeds and rotates the key ==
+  ok: free port: prestart exit 0
+  ok: free port: key rotated
+== port already listening ==
+  ok: busy port: distinct exit code 98
+  ok: busy port: returned in 0.22s
+  ok: busy port: key file mtime unchanged after two prestarts
+== generated units prevent restart on that code ==
+  ok: llama: RestartPreventExitStatus lists 98
+  ok: colibri: RestartPreventExitStatus lists 98
+  ok: onnx: RestartPreventExitStatus lists 98
+RESULT: PASS

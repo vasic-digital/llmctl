@@ -1,0 +1,31 @@
+  ok: control needle: extractor sees a planted version
+  ok: control needle: planted version differs from VERSION (a mismatch is detectable)
+  ok: control needle: the CHANGELOG top heading is the first '## ' line, even '## Unreleased'
+  ok: control needle: a versionless top heading reads as an empty version (reported, not an abort)
+  ok: control needle: a CHANGELOG without any '## ' heading reads as '' (reported, not an abort)
+  ok: VERSION is plain X.Y.Z (got '3.4.0')
+  ok: bin/llmctl LLMCTL_VERSION equals VERSION
+  ok: CHANGELOG: newest release heading is 3.4.0 (got: ## 3.4.0 (2026-10-28))
+  ok: CHANGELOG 3.4.0 has '### Added'
+  ok: CHANGELOG 3.4.0 has '### Changed'
+  ok: CHANGELOG 3.4.0 has '### Fixed'
+  ok: CHANGELOG 3.4.0 has '### Security'
+  ok: CHANGELOG 3.4.0 has '### Removed'
+  ok: CHANGELOG 3.4.0 has '### Migration notes'
+  ok: CHANGELOG 3.4.0 has '### Known limitations'
+  ok: CHANGELOG 3.4.0 documents 'llmctl-decide'
+  ok: CHANGELOG 3.4.0 documents 'decide scale'
+  ok: CHANGELOG 3.4.0 documents 'decide calibrate'
+  ok: CHANGELOG 3.4.0 documents 'probe-order'
+  ok: CHANGELOG 3.4.0 documents 'completions'
+  ok: CHANGELOG 3.4.0 documents 'maturity'
+  ok: CHANGELOG 3.4.0 documents 'llmctl doctor'
+  ok: CHANGELOG 3.4.0 documents 'status --json'
+  ok: CHANGELOG 3.4.0 documents 'overhead_mb'
+  ok: CHANGELOG 3.4.0 documents 'LLMCTL_CTX_'
+  ok: CHANGELOG 3.4.0 documents 'eviction'
+  ok: README release banner names 3.4.0
+  ok: docs/*.md: no 'llmctl X.Y.Z' statement other than 3.4.0
+  ok: openapi info.version is 3.4.0 or 3.4.0-draft (got '3.4.0')
+  ok: catalog.json 'version' is the integer schema number (1), not the release version
+RESULT: PASS

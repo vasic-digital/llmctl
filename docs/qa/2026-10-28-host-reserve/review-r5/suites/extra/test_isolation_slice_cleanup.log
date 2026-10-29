@@ -1,0 +1,11 @@
+  ok: TestWrapCommand_RealSystemdRunInvocation green against the fakes (rc=0; --- PASS: TestWrapCommand_RealSystemdRunInvocation (0.05s) PASS ok  	github.com/vasic-digital/llmctl/llmctld/internal/isolation	0.058s )
+  ok: the Go test really ran (not skipped)
+  ok: control: the Go test's is-active probes reached the fake systemctl
+  ok: control: the Go test invoked the fake systemd-run
+  ok: the harness guard refused nothing (no stop of a real llmctl unit name)
+  ok: cleanup stops no llmctl.slice / llmctl-tenant.slice / llmctl-tenant-*.slice
+  ok: systemd-run was given a test-only slice (llmctltest_isolation_3052755_1793276788403474267.slice)
+  ok: systemd-run never received the production llmctl-tenant-* slice
+  ok: cleanup stops exactly the test-only slice it created
+  ok: cleanup issues exactly one stop
+RESULT: PASS

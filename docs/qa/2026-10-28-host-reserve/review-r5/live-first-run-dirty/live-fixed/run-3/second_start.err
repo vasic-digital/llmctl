@@ -1,0 +1,3 @@
+refusing to start decide-tiny: the host cannot run it next to its current workload: no CPU left in the 12-CPU model budget (1300% in use)
+llmctl-fallback: cloud
+route decisions to the hosted endpoint (key variable TYPESAFE_API_KEY is set)

@@ -1,0 +1,65 @@
+== CONTROL A (positive): the WIRED path 'start' shows a validation call to the harness
+  ok: control: start small -> 0
+  ok: control: the harness SEES the start path's validation (so a zero below is a real zero)
+== CONTROL B (negative): the harness sees the restart / enable verbs themselves
+  ok: control: restart small (validation disabled) -> 0
+  ok: control: svc_restart is recorded
+  ok: control: ON_START=0 -> no validation call (the recorder has no phantom calls)
+  ok: control: enable small (validation disabled) -> 0
+  ok: control: svc_enable is recorded
+  ok: control: ON_START=0 -> no validation call
+== restart PASS: stop, quarantine start, validation once (outside the lock), published; never a plain svc_restart
+  ok: restart: PASS -> exit 0
+  ok: restart: validate_profile called exactly once
+  ok: restart: validation ran OUTSIDE the scheduler lock
+  ok: restart: an unvalidated profile is never restarted in place on its public port
+  ok: restart: PASS leaves the (published) profile running
+  ok: restart: validation is AFTER the quarantine start (svc_start line 3 < validate line 4)
+== restart verdict 1: STOPPED (FAIL and UNDETERMINED alike - strict default), non-zero exit
+  ok: restart rc 1: validation ran exactly once
+  ok: restart rc 1: nothing left running
+  ok: restart rc 1: stopped AFTER the verdict (validate 4, stop 7)
+  ok: restart rc 1: exit non-zero (rc=1)
+  ok: restart rc 1: the message says it is stopped
+  ok: restart rc 1: never reported as PASSED
+== restart verdict 2: STOPPED (FAIL and UNDETERMINED alike - strict default), non-zero exit
+  ok: restart rc 2: validation ran exactly once
+  ok: restart rc 2: nothing left running
+  ok: restart rc 2: stopped AFTER the verdict (validate 4, stop 7)
+  ok: restart rc 2: exit non-zero (rc=1)
+  ok: restart rc 2: the message says it is stopped
+  ok: restart rc 2: never reported as PASSED
+== enable PASS: validated (in quarantine) BEFORE the unit is enabled; runs; validated exactly once
+  ok: enable: PASS -> exit 0
+  ok: enable: validate_profile called exactly once
+  ok: enable: validation ran OUTSIDE the scheduler lock
+  ok: enable: the unit is enabled
+  ok: enable: PASS leaves the profile running
+  ok: enable: validation (1) BEFORE enablement (5)
+== enable verdict 1: NO unit enabled, nothing running, non-zero exit
+  ok: enable rc 1: validation ran exactly once
+  ok: enable rc 1: no unit enabled
+  ok: enable rc 1: nothing running
+  ok: enable rc 1: exit non-zero (rc=1)
+  ok: enable rc 1: the message says it is NOT enabled
+  ok: enable rc 1: no .enabled marker
+== enable verdict 2: NO unit enabled, nothing running, non-zero exit
+  ok: enable rc 2: validation ran exactly once
+  ok: enable rc 2: no unit enabled
+  ok: enable rc 2: nothing running
+  ok: enable rc 2: exit non-zero (rc=1)
+  ok: enable rc 2: the message says it is NOT enabled
+  ok: enable rc 2: no .enabled marker
+== restart with LLMCTL_VALIDATE_ON_START=0 inside the test harness (LLMCTL_VALIDATE_HERMETIC=1): no validation, served UNVALIDATED
+  ok: restart: ON_START=0 -> exit 0
+  ok: restart: ON_START=0 -> validate_profile never called
+  ok: restart: ON_START=0 -> nothing stopped
+  ok: restart: ON_START=0 -> still running
+== enable with LLMCTL_VALIDATE_ON_START=0 inside the test harness (LLMCTL_VALIDATE_HERMETIC=1): no validation, served UNVALIDATED
+  ok: enable: ON_START=0 -> exit 0
+  ok: enable: ON_START=0 -> validate_profile never called
+  ok: enable: ON_START=0 -> nothing stopped
+  ok: enable: ON_START=0 -> still running
+== restart of a profile that is NOT running (no reservation): nothing is stopped before it was started
+  ok: restart of a never-started profile: no stop is invented before a start (stop 6, start 2)
+RESULT: PASS

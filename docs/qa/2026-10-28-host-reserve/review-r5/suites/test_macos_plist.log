@@ -1,0 +1,19 @@
+  ok: engine plist written
+  ok: gateway plist written
+  ok: engine plist is a valid property list (python plistlib parse, incl. an '&' in a path)
+  ok: gateway plist is a valid property list
+  ok: C2-04: the engine plist carries the SAME EnvironmentVariables keys as the gateway plist
+  ok: C2-04: ...including LLMCTL_SERVICES_DIR (where the hook finds the env record)
+  ok: C2-04: ...with the operator's OVERRIDDEN value, not a default
+  ok: engine StandardOutPath equals the log dir
+  ok: ProgramArguments starts with /bin/bash
+  ok: ...and is the run-engine wrapper for the profile
+  ok: C2-04 control: without the plist environment the key is NOT rotated (the reported failure mode)
+  ok: C2-04: under the plist environment alone the wrapper rotated the key file
+  ok: C2-04: the hook logged into the OVERRIDDEN log dir
+  ok: launchd svc_install wrote the gate marker into the overridden state dir
+  ok: launchd: an unvalidated profile is refused by the run-engine wrapper (exit 0: not respawned)
+  ok: launchd: ...the refusal is logged
+  ok: launchd: ...before the key is rotated
+  ok: launchd: KeepAlive restarts only an unsuccessful exit (SuccessfulExit=false)
+RESULT: PASS

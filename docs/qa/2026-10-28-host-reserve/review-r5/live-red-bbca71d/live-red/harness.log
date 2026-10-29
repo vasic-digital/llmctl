@@ -1,0 +1,4 @@
+[13:55:58] label=fixed root=/home/milosvasic/.cache/claude-tmp/r5-red-live/tree profile=decide-tiny runs=1
+[13:56:00] run 1: starting llmctl-qa-reserve-fixed-r1.service on 127.0.0.1:52527
+[13:57:05] run 1: done
+[13:57:05] summary: deterministic_limits=True deterministic_verdicts=True all_checks_true=False

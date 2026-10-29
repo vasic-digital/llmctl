@@ -1,0 +1,20 @@
+installed systemd user units into /home/milosvasic/.cache/claude-tmp/tmp.l04W0Zda6M/systemd-user (MemoryHigh=22937M MemoryMax=26215M)
+[dry-run] systemctl --user daemon-reload
+[dry-run] systemctl --user enable --now llmctl-revalidate.timer
+llmctl-revalidate.timer enabled: running engines are re-validated daily (never stopped or restarted by it)
+unit-level validation gate enabled (/home/milosvasic/.cache/claude-tmp/tmp.l04W0Zda6M/state/unit-enforcement): units start only for profiles with a fresh, signed PASS record (llmctl validate <profile>)
+[dry-run] loginctl enable-linger milosvasic
+  ok: llama unit: bounded restart burst (3 attempts)
+  ok: llama unit: bounded restart interval (900s window)
+  ok: colibri unit: bounded restart burst (3 attempts)
+  ok: colibri unit: bounded restart interval (900s window)
+[llmctl] wrote /home/milosvasic/.cache/claude-tmp/tmp.l04W0Zda6M/LaunchAgents/com.llmctl.fast.plist
+  ok: plist: throttle widened to 60s (launchd has no native give-up-after-N; this bounds the RATE, not the total attempts)
+WARN: LLMCTL_VALIDATE_ON_START=0 is set: starts are NOT validated (refused for consumer-facing profiles outside the test harness)
+WARN: TEST-HARNESS MODE (LLMCTL_VALIDATE_HERMETIC=1 with /home/milosvasic/.cache/claude-tmp/tmp.l04W0Zda6M/state/.test-harness): validation relaxations of the test suite are in effect - never on a production host
+host reserve: 4 CPU(s) [0-3] + 6553 MiB kept for the system; models: CPUs [4-15], 26215 MiB (llmctl capacity)
+  ok: status lists the healthy profile
+  ok: healthy profile reported as running
+  ok: crash-looped profile reported as failed (crash-loop)
+  ok: crash-looped profile's last log line surfaced
+RESULT: PASS

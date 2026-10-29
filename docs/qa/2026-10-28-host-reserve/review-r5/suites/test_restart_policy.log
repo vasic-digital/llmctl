@@ -1,0 +1,26 @@
+  ok: llama: Restart=on-failure (not always)
+  ok: llama: RestartPreventExitStatus includes SIGKILL
+  ok: llama: RestartSteps= present
+  ok: llama: RestartMaxDelaySec= present
+  ok: llama: [Unit] StartLimitIntervalSec=900 >= 600
+  ok: llama: [Unit] StartLimitBurst=3 <= 3
+  ok: colibri: Restart=on-failure (not always)
+  ok: colibri: RestartPreventExitStatus includes SIGKILL
+  ok: colibri: RestartSteps= present
+  ok: colibri: RestartMaxDelaySec= present
+  ok: colibri: [Unit] StartLimitIntervalSec=900 >= 600
+  ok: colibri: [Unit] StartLimitBurst=3 <= 3
+  ok: onnx: Restart=on-failure (not always)
+  ok: onnx: RestartPreventExitStatus includes SIGKILL
+  ok: onnx: RestartSteps= present
+  ok: onnx: RestartMaxDelaySec= present
+  ok: onnx: [Unit] StartLimitIntervalSec=900 >= 600
+  ok: onnx: [Unit] StartLimitBurst=3 <= 3
+  ok: reaper timer armed for llmctl-test-1893514-loop
+  ok: behavioral: crash loop gave up and stayed failed (NRestarts=3, Result=exit-code)
+  ok: reaper timer armed for llmctl-test-1893514-oomkill
+  ok: behavioral: SIGKILLed unit is not restarted (state=failed NRestarts=0)
+  ok: reaper timer armed for llmctl-test-1893514-ctl
+  ok: negative control: old policy (always, 5/60 scaled) never trips (state=activating result=exit-code) - the harness can see the bug
+  ok: no llmctl-test-1893514-* unit or timer remains in the user manager
+RESULT: PASS

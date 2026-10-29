@@ -1,0 +1,7 @@
+head=e6e578ff3a60aa101d3392a7e10b58f91fdf15a6
+head_tree=45b63fdf6dfa7f81f957b67c9a462fd3927565e1
+dirty=yes
+dirty_paths=docs/qa/2026-10-28-host-reserve/review-r5/README.md 
+dirty_diff_sha256=47da0a307c30377cac07371a8ffd72fcfbaa452de0f9faea526d49a50e975ce8
+llama_server=/home/milosvasic/Projects/llmctl/submodules/llama.cpp/build/bin/llama-server
+llama_server_sha256=09a14c52c9d29f814e57cbcf7e4454412ee44cc94956b365250a57d830b0fa74

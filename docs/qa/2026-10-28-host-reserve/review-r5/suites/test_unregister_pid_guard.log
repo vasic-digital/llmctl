@@ -1,0 +1,10 @@
+  ok: row pid 2488022 is ALIVE and != stopping pid 2488108: the row is kept (no 'registry unregister')
+  ok: LOW-2: row pid 2488023 is alive but NOT an engine (recycled pid): the row IS dropped
+  ok: control: row pid == stopping pid: the row IS dropped
+  ok: control: row pid is dead (stale row): the row IS dropped
+  ok: LOW-2: 'nice -n 19 llama-server' (pid 2488636) keeps its row
+  ok: LOW-2: custom-named engine matched by the row's cmd_token keeps its row
+  ok: LOW-2: 'taskset ... llama-server' keeps its row
+  ok: LOW-2: 'env FOO=1 onnx_server.py' keeps its row
+  ok: control: an unrelated live pid is still dropped even with a custom cmd_token
+RESULT: PASS

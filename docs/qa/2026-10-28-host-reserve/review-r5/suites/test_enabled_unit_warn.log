@@ -1,0 +1,13 @@
+== fast: enabled, inactive (e.g. SIGKILLed then not restarted); small: running (control) ==
+  ok: status WARNs about the enabled-but-inactive unit
+  ok: ...naming it
+  ok: control: the running profile small is not flagged
+  ok: doctor WARNs about llmctl-llama@fast (inactive)
+  ok: the WARN says the unit is down, it does not claim an OOM kill
+  ok: status WARN says the unit is down
+== failed state ==
+  ok: status shows the failed unit
+  ok: doctor WARNs about llmctl-llama@fast (failed)
+== control: everything enabled is running -> no such WARN ==
+  ok: control: no enabled-but-down WARN
+RESULT: PASS

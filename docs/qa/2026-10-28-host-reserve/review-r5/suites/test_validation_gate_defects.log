@@ -1,0 +1,175 @@
+== 1. HIGH: a scaled instance key (profile.N) must not abort the post-start hook
+  ok: validate-after-start decide.2 does not abort
+  ok: no traceback in hook output
+  ok: the skip is announced, not silent
+  ok: judge key for an unknown profile -> rc 2
+  ok: judge key prints a message, not a traceback
+  ok: an instance key amongst other keys is skipped...
+  ok: ...and does not stop the loop: decide is validated after it
+== 5. models verify: a profile with no suite is reported as NOT validated and the usage text says exactly that
+  ok: no-suite profile: exit 0 (checksum verification is the exit-code contract)
+  ok: ...but the output states in words that the profile is NOT validated
+  ok: no-suite profile with --live: exit 2
+  ok: usage text documents the no-suite behaviour
+  ok: user manual documents the no-suite behaviour
+== 6. the auto hook validates only the profiles auto STARTED, not every running one
+  ok: only the newly started profile reaches the validation hook
+  ok: auto that started nothing hands the hook no profile
+  ok: a profile auto restarted (new started_epoch) is validated again
+  ok: bin/llmctl routes auto through validate_auto
+== 7. false FAILs: budget exhaustion / reasoning channel is UNDETERMINED, a wrong answer is still FAIL
+  ok: reasoning model exhausted max_tokens in the reasoning channel (empty content, finish=length) -> exit 2, not FAIL
+  ok: the output names the reasoning channel as the cause
+  ok: empty content with reasoning content present (finish=stop) -> exit 2
+  ok: finish_reason=length -> exit 2 (budget, not a wrong answer)
+  ok: ...and the hint says to raise max_tokens
+  ok: wrong answer 41 is still exit 1
+  ok: empty answer with NO reasoning content is still exit 1
+  ok: chat-v1 max_tokens=2048
+== 7b. number_equals rule: the number after the LAST '=' when the answer restates the equation, else the FIRST number
+  ok: '17+25=42' passes
+  ok: '17 + 25 = 41' still fails
+  ok: equation with trailing period passes
+  ok: bare number passes
+  ok: first number rule unchanged when no '='
+  ok: hyphenated compound 'twenty-two' is not read as the word 'two' (false PASS guard)
+  ok: plain word 'two' still counts
+  ok: first number 41 fails even though 42 is mentioned later
+  ok: the LAST '=' decides: 41 fails
+  ok: operands only: first number 17 fails
+  ok: wrong number fails
+== 8. a record from the future (or with a garbage epoch) is never fresh
+  ok: a just-recorded pass is fresh
+  ok: epoch one day in the future -> not fresh
+  ok: the reason says the record is from the future
+  ok: non-numeric epoch -> not fresh (no traceback)
+  ok: no traceback
+  ok: null epoch -> not fresh
+== 9. an UNDETERMINED run never overwrites a prior PASS record
+  ok: pass recorded
+  ok: undetermined run (endpoint down) did not replace the prior pass
+  ok: ...so the still-matching pass stays fresh
+  ok: a real FAIL does replace a pass
+  ok: undetermined never replaces a FAIL either (review 2026-10-14 finding 9)
+  ok: a new pass replaces anything
+  ok: vision validates against the fixture endpoint
+  ok: state: pass
+  ok: endpoint down -> exit 2
+  ok: state still pass after the undetermined run
+== 10. an interrupt (SIGTERM/SIGINT) mid-validation removes the temp key file and stops a profile it started
+  ok: SIGTERM ends validate with a signal exit status (143)
+  ok: SIGTERM: the profile validate started is stopped
+  ok: SIGTERM: no temp key file left behind
+  ok: SIGTERM: the judge child is gone
+  ok: SIGINT ends validate with a signal exit status (130)
+  ok: SIGINT: the profile validate started is stopped
+  ok: SIGINT: no temp key file left behind
+  ok: SIGINT: the judge child is gone
+== 11. LLMCTL_VALIDATE_API_KEY is only ever sent to loopback hosts (or an explicit allowlist)
+  ok: chat suite against the loopback fixture
+  ok: loopback endpoint DOES receive the bearer token
+  ok: 127.0.0.1 -> key
+  ok: ::1 -> key
+  ok: localhost -> key
+  ok: a foreign hostname -> no key
+  ok: a foreign IP -> no key
+  ok: a hostname that merely starts with 127.0.0.1 -> no key
+  ok: localhost.<foreign> -> no key
+  ok: userinfo trickery: the host is evil.example.com, not 127.0.0.1 -> no key
+  ok: backslash URL (curl/browsers connect to evil.com, urllib parsers disagree) -> no key
+  ok: backslash URL, other order -> no key
+  ok: control character in the URL -> no key
+  ok: an explicitly allow-listed host -> key
+  ok: ...only that exact host
+  ok: a redirecting endpoint -> exit 2
+  ok: the redirect target received NO request at all (redirect not followed, token not forwarded)
+  ok: the token is never echoed into the output
+== 12. an http_proxy in the environment never carries loopback validation traffic
+  ok: validation passes straight to the loopback endpoint with http_proxy set
+  ok: the recording proxy received nothing (no prompts, no bearer token)
+== 13. number_equals: a thousands separator or a leading dot is not a decimal point
+  ok: '42,000' is not 42
+  ok: '.42' is not 42
+  ok: '1,042' is not 42
+  ok: '10,000' is not 10 (coder-v1 py_output)
+  ok: '10' passes
+  ok: '10.' (sentence period) passes
+  ok: '10, then more' is not only the number (review 2026-10-15 finding 4: the prompt asks for the number only)
+  ok: '42.0' equals 42
+  ok: '41.5' is not 42
+  ok: '1.5' still passes for 1.5
+== 14. finish_reason=length without reasoning content: a WRONG truncated answer is FAIL, only a passing truncation is UNDETERMINED
+  ok: truncated AND wrong (41) -> exit 1
+  ok: the wrong truncated probe is a FAIL
+  ok: truncated, empty content, no reasoning -> exit 1
+  ok: truncated but the content passes -> still exit 2 (cannot tell it was complete)
+  ok: truncated with reasoning content -> exit 2 (unchanged)
+== 15. a malformed completion (non-dict message/choice) is UNDETERMINED, not a traceback
+  ok: malformed-message -> exit 2
+  ok: malformed-message: no traceback
+  ok: malformed-message: verdict line present
+  ok: malformed-choice -> exit 2
+  ok: malformed-choice: no traceback
+  ok: malformed-choice: verdict line present
+== 16. require-validated: a key that cannot be computed returns 2 with a message and leaves no temp file
+  ok: uncomputable key -> exit 2
+  ok: an error message names the cause
+  ok: no mktemp key file left behind
+== 17. an overall wall-clock deadline per request (a trickling endpoint cannot stall validation)
+  ok: trickling /v1/models -> UNDETERMINED (exit 2)
+  ok: gave up after 3s (deadline 3s; per-socket timeouts alone would wait ~60s)
+  ok: the output names the deadline
+== 18. documented number-rule trade-offs are exactly the behaviour (rules of review 2026-10-15 finding 4)
+  ok: '41 because 17+25=42' fails (it states 41; the old '=' trade-off is gone)
+  ok: '42 = 17+25' fails (not one of the number forms)
+  ok: a right number wrapped in other prose fails (documented trade-off)
+  ok: docs state the trade-off
+== 19. only http/https endpoints: file:, ftp:, data: and the fragment trick are refused before any open
+  ok: endpoint file:///home/milosvasic/.cache/claude-tmp/tmp.eK6165O9rE/models_reply.json -> exit 2
+  ok: not read as a model reply
+  ok: the refusal names the scheme
+  ok: endpoint file:///home/milosvasic/.cache/claude-tmp/tmp.eK6165O9rE/models_reply.json -> exit 2
+  ok: not read as a model reply
+  ok: the refusal names the scheme
+  ok: endpoint data:application/json,{"data":[{"id":"/m/x.gguf"}]} -> exit 2
+  ok: not read as a model reply
+  ok: the refusal names the scheme
+  ok: endpoint ftp://127.0.0.1:9/x -> exit 2
+  ok: not read as a model reply
+  ok: the refusal names the scheme
+  ok: endpoint FILE:///home/milosvasic/.cache/claude-tmp/tmp.eK6165O9rE/models_reply.json -> exit 2
+  ok: not read as a model reply
+  ok: the refusal names the scheme
+  ok: the opener has no File/FTP/Data handler
+== 20. an oversized response body is bounded (8 MiB) -> UNDETERMINED
+  ok: a 32 MiB body -> exit 2
+  ok: the output says the response was too large
+== 21. evidence log and state are 0600; userinfo and query strings never reach logs, output or evidence
+  ok: unreachable --host -> exit 2
+  ok: evidence log written
+  ok: evidence log mode is 0600
+  ok: no userinfo/query secret in the evidence log
+  ok: no userinfo/query secret in the command output
+  ok: the host:port is still recorded
+  ok: state record mode is 0600
+  ok: validate against the fixture
+  ok: evidence log written by a successful run is 0600
+  ok: redact_url keeps scheme/host/port/path only
+== 22. no mktemp key file survives a failing 'judge record' / an aborted run
+  ok: a state write failure is exit 2 (could not determine / not recorded), never 0
+  ok: a state write failure is not a PASS (exit 2)
+  ok: validate_profile left no temp key file
+  ok: validate_after_start left no temp key file
+== 23. validate_profile restores the caller's INT/TERM/HUP traps and never touches its EXIT trap
+  ok: validation ran
+  ok: the caller's INT trap is back after validate_profile
+  ok: the caller's TERM trap is back
+  ok: the caller's EXIT trap still fires
+  ok: with no caller traps none remain
+== 23b. negative control: the section-23 assertions FAIL when validate_profile really leaves its traps behind
+  PASS: negative control - mutant detected (leftover traps: rc=0 trap -- '_val_on_signal 130' SIGINT trap -- '_val_on_signal 143' SIGTERM trap -- '_val_on_signal 129' SIGHUP)
+== 24. LLMCTL_VALIDATION_SUITES_DIR is ignored unless LLMCTL_VALIDATE_HERMETIC=1 (suite regexes are code-adjacent input)
+  ok: override without the hermetic switch is ignored (shipped suites used)
+  ok: the ignore is announced
+  ok: with LLMCTL_VALIDATE_HERMETIC=1 the override is honoured
+RESULT: PASS
