@@ -1,0 +1,14 @@
+== pressure that drops after ~3 s: the gate waits and then passes ==
+  ok: gate passes once the PSI fixture drops (waited 3.4s)
+  ok: it actually waited (3.4s, between 2 and 15)
+== pressure that never drops: 75 after the bounded wait, not before ==
+  ok: persistent pressure: exit 75
+  ok: refused only after the wait (3.3s)
+== WAIT=0 keeps the immediate refusal (interactive/test use) ==
+  ok: WAIT=0: exit 75
+  ok: immediate
+== TimeoutStartSec covers gate wait + model start ==
+  ok: llama: TimeoutStartSec=600 >= 420 (120 s gate + 300 s start)
+  ok: colibri: TimeoutStartSec=600 >= 420 (120 s gate + 300 s start)
+  ok: onnx: TimeoutStartSec=600 >= 420 (120 s gate + 300 s start)
+RESULT: PASS

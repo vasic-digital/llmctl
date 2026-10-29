@@ -1,0 +1,8 @@
+== A: winner registered first; the loser's waiter must not publish over it, and the loser's stop keeps the row
+  ok: setup: the winner's row is published
+  ok: loser's waiter did NOT overwrite the live winner's row
+  ok: after the loser's ExecStopPost the live winner still has its row
+== B: the loser's stop must not kill the WINNER's still-polling registration waiter
+  ok: setup: the winner's waiter (pid 3594206) is polling
+  ok: the loser's ExecStopPost left the winner's waiter alive
+RESULT: PASS

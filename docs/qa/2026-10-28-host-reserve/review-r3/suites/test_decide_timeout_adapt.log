@@ -1,0 +1,79 @@
+== hook: CPU-only llama decision instance (enabled) -> cpu-adaptive 120 s ==
+  ok: hook: the CPU placement raises the launcher default to 120 s
+  ok: hook: ...and labels its source
+  ok: hook: ...naming the CPU-placed instance(s)
+== hook: explicit LLMCTL_DECIDE_TIMEOUT always wins ==
+  ok: hook: an explicit 8 is not overridden
+  ok: hook: no adaptive label on an explicit value
+  ok: hook: an explicit 300 is passed through
+== hook: pure GPU instance keeps the Go default (nothing exported) ==
+  ok: hook: GPU placement leaves the 8 s Go default
+  ok: hook: no label
+== hook: the onnx NLI encoder alone does NOT adapt (measured median 433 ms, p95 1585 ms, max 2837 ms on CPU) ==
+  ok: hook: an onnx decision instance alone leaves the 8 s Go default
+  ok: hook: ...and sets no adaptive label
+== hook: onnx + a GPU llama profile stays at the Go default (the encoder must not raise a GPU host's deadline) ==
+  ok: hook: onnx + GPU llama => no adaptation
+== hook: a running (not enabled) instance counts; a stale env record does not ==
+  ok: hook: a stale record (neither enabled nor running) is ignored
+  ok: hook: a running instance counts
+== hook: a CPU CHAT instance does not widen the DECISION deadline ==
+  ok: hook: only kind=decide instances count
+== hook: a scale instance (decide-pro.2) is found through its profile's marker ==
+  ok: hook: instance keys with a scale suffix are scanned
+== serve: CPU-only llama decision instance (enabled) -> cpu-adaptive 120 s ==
+  ok: serve: the CPU placement raises the launcher default to 120 s
+  ok: serve: ...and labels its source
+  ok: serve: ...naming the CPU-placed instance(s)
+== serve: explicit LLMCTL_DECIDE_TIMEOUT always wins ==
+  ok: serve: an explicit 8 is not overridden
+  ok: serve: no adaptive label on an explicit value
+  ok: serve: an explicit 300 is passed through
+== serve: pure GPU instance keeps the Go default (nothing exported) ==
+  ok: serve: GPU placement leaves the 8 s Go default
+  ok: serve: no label
+== serve: the onnx NLI encoder alone does NOT adapt (measured median 433 ms, p95 1585 ms, max 2837 ms on CPU) ==
+  ok: serve: an onnx decision instance alone leaves the 8 s Go default
+  ok: serve: ...and sets no adaptive label
+== serve: onnx + a GPU llama profile stays at the Go default (the encoder must not raise a GPU host's deadline) ==
+  ok: serve: onnx + GPU llama => no adaptation
+== serve: a running (not enabled) instance counts; a stale env record does not ==
+  ok: serve: a stale record (neither enabled nor running) is ignored
+  ok: serve: a running instance counts
+== serve: a CPU CHAT instance does not widen the DECISION deadline ==
+  ok: serve: only kind=decide instances count
+== serve: a scale instance (decide-pro.2) is found through its profile's marker ==
+  ok: serve: instance keys with a scale suffix are scanned
+== scale instance enabled through its own or its profile's marker (T-3) ==
+  ok: a scale instance is served when its PROFILE's <base>.enabled marker exists
+  ok: a scale instance is served when its own <inst>.enabled marker exists
+  ok: a scale instance with no marker at all is ignored
+== -ngl spellings recognised (T-4): value 0 => CPU, last occurrence wins, partial offload is not CPU ==
+  ok: ngl: --n-gpu-layers 0
+  ok: ngl: --n-gpu-layers=0
+  ok: ngl: --gpu-layers 0
+  ok: ngl: --gpu-layers=0
+  ok: ngl: -ngl 0
+  ok: ngl: -ngl=0
+  ok: ngl: leading zeros -ngl 00
+  ok: ngl: leading zeros --n-gpu-layers=000
+  ok: ngl: repeated flag, last is 0 (-ngl 99 -ngl 0)
+  ok: ngl: mixed spellings, last is 0 (-ngl 99 --n-gpu-layers=0)
+  ok: ngl: repeated flag, last is 99 (-ngl 0 -ngl 99)
+  ok: ngl: partial offload -ngl 20
+  ok: ngl: partial offload --n-gpu-layers=10
+  ok: ngl: -ngl 10 is not 0 (no substring match)
+  ok: ngl: -ngl 99
+  ok: ngl: no ngl flag at all (llama.cpp default offloads on CUDA builds)
+  ok: ngl: flag spelled like a different option (--ngl-extra 0)
+== an inherited LLMCTL_DECIDE_TIMEOUT_SOURCE cannot mislabel an explicit value (T-6) ==
+  ok: explicit value kept
+  ok: inherited SOURCE is dropped when the value is explicit
+  ok: inherited NOTE is dropped when the value is explicit
+  ok: an inherited SOURCE without any CPU instance is dropped too
+== mixed GPU + CPU decision instances -> adaptive (the slowest bounds the deadline) ==
+  ok: mixed placement raises the deadline
+  ok: only the CPU-placed profile is named
+== the Go default itself is unchanged (contract) ==
+  ok: Go default stays 8 s
+ALL PASS

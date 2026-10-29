@@ -1,0 +1,12 @@
+  ok: both entry points validated (the stub records no PASS, so the second still runs): 2 begin lines
+  ok: the second validation began (1793255190.477791289) only after the first ended (1793255189.586185897): no concurrent probe loops
+== review 3 of 2026-10-15, finding 10: a MANUAL 'llmctl validate' serialises on the same lock
+  ok: the manual validate ran (PASS) once the lock was free
+  ok: it began (1793255196.682759732) only after the holder released the lock (1793255196.667282047)
+  ok: a lock held past LLMCTL_VALIDATE_LOCK_WAIT -> UNDETERMINED (2)
+  ok: ...and no probe loop ran beside the holder
+  ok: ...and the reason is printed
+  ok: a forged LLMCTL_VALIDATE_LOCK_HELD (pid 1 is no ancestor holding it) does not skip the lock
+  ok: re-entrant: the holder's own 'llmctl validate' child (the waiter's pattern) runs inline, no self-deadlock
+  ok: ...and it validated
+RESULT: PASS

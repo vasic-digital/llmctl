@@ -1,0 +1,17 @@
+== hook: portcheck ==
+  ok: free port: portcheck exits 0
+  ok: busy port: portcheck exits 98
+  ok: portcheck never touches the key file
+== generated units carry the ExecCondition ==
+  ok: llama: ExecCondition portcheck present (line 49); gate at 51
+  ok: colibri: ExecCondition portcheck present (line 49); gate at 51
+  ok: onnx: ExecCondition portcheck present (line 49); gate at 51
+== a crashing hook must not be a silent skip (ExecCondition exit 1-254 = skipped; only 255 or a signal fails the unit) ==
+  ok: real hook, free port: the unit starts (active|success)
+  ok: real hook, busy port: skipped (inactive|success)
+  ok: a hook that crashes with exit 1 FAILS the unit, it is not a silent skip (failed|exit-code)
+  ok: a missing hook FAILS the unit (failed|exit-code)
+== systemd semantics (real transient units) ==
+  ok: control: a failing ExecStartPre (exit 98) IS retried by systemd (3|failed|exit-code) - RestartPreventExitStatus does not cover it
+  ok: ExecCondition exit 98 skips the unit without a restart or a failure (0|inactive|success)
+RESULT: PASS

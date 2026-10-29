@@ -1,0 +1,369 @@
+[
+ {
+  "mutant": "X00-CONTROL-unmutated",
+  "verdict": "SURVIVED",
+  "detail": [
+   {
+    "suite": "tests/test_capacity.sh",
+    "rc": 0,
+    "tail": [
+     "  ok: no env record written for a refused start",
+     "RESULT: PASS"
+    ]
+   },
+   {
+    "suite": "tests/test_host_reserve_review.sh",
+    "rc": 0,
+    "tail": [
+     "  ok: decision smoke (decide-2b, letter-logit): --threads = decision cap 3 (chat cap is 6)",
+     "RESULT: PASS"
+    ]
+   },
+   {
+    "suite": "tests/test_host_reserve_review2.sh",
+    "rc": 0,
+    "tail": [
+     "  ok: negative control: 8192 MiB host: the model budget 4096 MiB",
+     "RESULT: PASS"
+    ]
+   },
+   {
+    "suite": "tests/test_host_reserve_review3.sh",
+    "rc": 0,
+    "tail": [
+     "/home/milosvasic/.cache/claude-tmp/claude-1000/-home-milosvasic-Projects-catalogizer/261db589-353c-4105-9405-009dbfe0bd33/scratchpad/tmp.LwPcGoZttw/X00-CONTROL-unmutated/tests/test_host_reserve_review3.sh: line 123: 3112208 Killed                     ( command sleep 600; : )",
+     "/home/milosvasic/.cache/claude-tmp/claude-1000/-home-milosvasic-Projects-catalogizer/261db589-353c-4105-9405-009dbfe0bd33/scratchpad/tmp.LwPcGoZttw/X00-CONTROL-unmutated/tests/test_host_reserve_review3.sh: line 146: 3112251 Killed                     ( command sleep 600; : )"
+    ]
+   }
+  ]
+ },
+ {
+  "mutant": "X01-probe-clamp-floor-0",
+  "verdict": "killed",
+  "detail": [
+   {
+    "suite": "tests/test_host_reserve_review2.sh",
+    "rc": 1,
+    "tail": [
+     "  FAIL: 0 is raised to the floors (2 s / 1 s)",
+     "RESULT: FAIL (1 assertion failure(s))"
+    ]
+   }
+  ]
+ },
+ {
+  "mutant": "X02-whole-clamp-ceiling-300",
+  "verdict": "killed",
+  "detail": [
+   {
+    "suite": "tests/test_host_reserve_review2.sh",
+    "rc": 1,
+    "tail": [
+     "  FAIL: 9999 is lowered to the ceilings; the probe budget never exceeds the whole",
+     "RESULT: FAIL (1 assertion failure(s))"
+    ]
+   }
+  ]
+ },
+ {
+  "mutant": "X03-kill-without-starttime-match",
+  "verdict": "killed",
+  "detail": [
+   {
+    "suite": "tests/test_host_reserve_review2.sh",
+    "rc": 0,
+    "tail": [
+     "  ok: negative control: 8192 MiB host: the model budget 4096 MiB",
+     "RESULT: PASS"
+    ]
+   },
+   {
+    "suite": "tests/test_host_reserve_review3.sh",
+    "rc": 1,
+    "tail": [
+     "  FAIL: a pid whose start time changed (pid reused) is NOT killed",
+     "RESULT: FAIL (1 assertion failure(s))"
+    ]
+   }
+  ]
+ },
+ {
+  "mutant": "X04-kill-tree-no-stop",
+  "verdict": "killed",
+  "detail": [
+   {
+    "suite": "tests/test_host_reserve_review2.sh",
+    "rc": 0,
+    "tail": [
+     "  ok: negative control: 8192 MiB host: the model budget 4096 MiB",
+     "RESULT: PASS"
+    ]
+   },
+   {
+    "suite": "tests/test_host_reserve_review3.sh",
+    "rc": 1,
+    "tail": [
+     "  FAIL: collect STOPs every pid of the tree (no new children while it is collected)",
+     "RESULT: FAIL (1 assertion failure(s))"
+    ]
+   }
+  ]
+ },
+ {
+  "mutant": "X05-undetermined-doc-recommends-local",
+  "verdict": "killed",
+  "detail": [
+   {
+    "suite": "tests/test_host_reserve_review2.sh",
+    "rc": 0,
+    "tail": [
+     "  ok: negative control: 8192 MiB host: the model budget 4096 MiB",
+     "RESULT: PASS"
+    ]
+   },
+   {
+    "suite": "tests/test_capacity.sh",
+    "rc": 0,
+    "tail": [
+     "  ok: no env record written for a refused start",
+     "RESULT: PASS"
+    ]
+   },
+   {
+    "suite": "tests/test_host_reserve_review3.sh",
+    "rc": 1,
+    "tail": [
+     "  FAIL: no key: recommended none, route none",
+     "  FAIL: a real key set: recommended cloud, route hosted, the variable NAME",
+     "  FAIL: placeholder key: undetermined fallback none"
+    ]
+   }
+  ]
+ },
+ {
+  "mutant": "X06-degraded-exit-3-dropped",
+  "verdict": "killed",
+  "detail": [
+   {
+    "suite": "tests/test_capacity.sh",
+    "rc": 1,
+    "tail": [
+     "  FAIL: llmctl capacity exits 3 while a running model is degraded",
+     "RESULT: FAIL (1 assertion failure(s))"
+    ]
+   }
+  ]
+ },
+ {
+  "mutant": "X07-cpu-free-boundary-le",
+  "verdict": "killed",
+  "detail": [
+   {
+    "suite": "tests/test_capacity.sh",
+    "rc": 0,
+    "tail": [
+     "  ok: no env record written for a refused start",
+     "RESULT: PASS"
+    ]
+   },
+   {
+    "suite": "tests/test_host_reserve_review.sh",
+    "rc": 0,
+    "tail": [
+     "  ok: decision smoke (decide-2b, letter-logit): --threads = decision cap 3 (chat cap is 6)",
+     "RESULT: PASS"
+    ]
+   },
+   {
+    "suite": "tests/test_host_reserve_review2.sh",
+    "rc": 0,
+    "tail": [
+     "  ok: negative control: 8192 MiB host: the model budget 4096 MiB",
+     "RESULT: PASS"
+    ]
+   },
+   {
+    "suite": "tests/test_host_reserve_review3.sh",
+    "rc": 1,
+    "tail": [
+     "  FAIL: exactly 100% CPU left: fits with 1 thread (not does_not_fit)",
+     "RESULT: FAIL (1 assertion failure(s))"
+    ]
+   }
+  ]
+ },
+ {
+  "mutant": "X08-reduced-threads-boundary-le",
+  "verdict": "killed",
+  "detail": [
+   {
+    "suite": "tests/test_capacity.sh",
+    "rc": 0,
+    "tail": [
+     "  ok: no env record written for a refused start",
+     "RESULT: PASS"
+    ]
+   },
+   {
+    "suite": "tests/test_host_reserve_review.sh",
+    "rc": 0,
+    "tail": [
+     "  ok: decision smoke (decide-2b, letter-logit): --threads = decision cap 3 (chat cap is 6)",
+     "RESULT: PASS"
+    ]
+   },
+   {
+    "suite": "tests/test_host_reserve_review2.sh",
+    "rc": 0,
+    "tail": [
+     "  ok: negative control: 8192 MiB host: the model budget 4096 MiB",
+     "RESULT: PASS"
+    ]
+   },
+   {
+    "suite": "tests/test_host_reserve_review3.sh",
+    "rc": 1,
+    "tail": [
+     "  FAIL: exactly the 3-CPU decision cap left: fits with the full cap (not reduced)",
+     "RESULT: FAIL (1 assertion failure(s))"
+    ]
+   }
+  ]
+ },
+ {
+  "mutant": "X09-bound-loop-plus-3s",
+  "verdict": "killed",
+  "detail": [
+   {
+    "suite": "tests/test_host_reserve_review2.sh",
+    "rc": 1,
+    "tail": [
+     "  FAIL: it returns within the bound",
+     "  FAIL: the admission returns within the bound",
+     "  FAIL: within the whole budget"
+    ]
+   }
+  ]
+ },
+ {
+  "mutant": "X10-kill-wrong-pid",
+  "verdict": "killed",
+  "detail": [
+   {
+    "suite": "tests/test_host_reserve_review2.sh",
+    "rc": 1,
+    "tail": [
+     "  FAIL: llmctl capacity --json with a hung GPU probe exits 75 (was: hangs; 124 = the test's own 40 s guard)",
+     "  FAIL: it returns within the bound",
+     "  FAIL: the CLI prints an undetermined document"
+    ]
+   }
+  ]
+ },
+ {
+  "mutant": "X11-mem-reserve-pressure-off",
+  "verdict": "killed",
+  "detail": [
+   {
+    "suite": "tests/test_capacity.sh",
+    "rc": 0,
+    "tail": [
+     "  ok: no env record written for a refused start",
+     "RESULT: PASS"
+    ]
+   },
+   {
+    "suite": "tests/test_host_reserve_review.sh",
+    "rc": 0,
+    "tail": [
+     "  ok: decision smoke (decide-2b, letter-logit): --threads = decision cap 3 (chat cap is 6)",
+     "RESULT: PASS"
+    ]
+   },
+   {
+    "suite": "tests/test_host_reserve_review2.sh",
+    "rc": 0,
+    "tail": [
+     "  ok: negative control: 8192 MiB host: the model budget 4096 MiB",
+     "RESULT: PASS"
+    ]
+   },
+   {
+    "suite": "tests/test_host_reserve_review3.sh",
+    "rc": 1,
+    "tail": [
+     "  FAIL: MemAvailable 6553-512 MiB < the 6553 MiB reserve: pressure.ok false",
+     "  FAIL: the reason names the host reserve",
+     "RESULT: FAIL (2 assertion failure(s))"
+    ]
+   }
+  ]
+ },
+ {
+  "mutant": "X12-mem-after-footprint-le",
+  "verdict": "killed",
+  "detail": [
+   {
+    "suite": "tests/test_capacity.sh",
+    "rc": 1,
+    "tail": [
+     "  FAIL: 7 GiB available < 6.4 GiB reserve + footprint",
+     "  FAIL: reason names the reserve",
+     "RESULT: FAIL (2 assertion failure(s))"
+    ]
+   }
+  ]
+ },
+ {
+  "mutant": "X13-exit-75-to-1",
+  "verdict": "killed",
+  "detail": [
+   {
+    "suite": "tests/test_capacity.sh",
+    "rc": 1,
+    "tail": [
+     "  FAIL: llmctl capacity <profile> exits 75 when it does not fit",
+     "RESULT: FAIL (1 assertion failure(s))"
+    ]
+   }
+  ]
+ },
+ {
+  "mutant": "X14-running-admit-sets-no-threads-check",
+  "verdict": "killed",
+  "detail": [
+   {
+    "suite": "tests/test_capacity.sh",
+    "rc": 1,
+    "tail": [
+     "  FAIL: capacity_admit refuses with 75",
+     "  FAIL: machine-readable fallback line on stderr",
+     "  FAIL: start of a does_not_fit profile exits 75"
+    ]
+   }
+  ]
+ },
+ {
+  "mutant": "X15-other-tenant-decide-counts-local",
+  "verdict": "killed",
+  "detail": [
+   {
+    "suite": "tests/test_host_reserve_review2.sh",
+    "rc": 0,
+    "tail": [
+     "  ok: negative control: 8192 MiB host: the model budget 4096 MiB",
+     "RESULT: PASS"
+    ]
+   },
+   {
+    "suite": "tests/test_host_reserve_review3.sh",
+    "rc": 1,
+    "tail": [
+     "  FAIL: tenant t2 with only t1's decide unit healthy: fallback none (was: local, route local)",
+     "  FAIL: tenant t2 with a hosted key set: cloud, route hosted (never local)",
+     "  FAIL: the single-host (no tenant) view does not count tenant t1's unit either"
+    ]
+   }
+  ]
+ }
+]

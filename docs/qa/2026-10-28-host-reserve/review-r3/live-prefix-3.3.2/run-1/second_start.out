@@ -1,0 +1,4 @@
+[llmctl] wrote /home/milosvasic/.cache/claude-tmp/tmp.eTgmDsXpKG/state/services/decide-tiny.env
+[dry-run] systemctl --user start llmctl-llama@decide-tiny.service
+started decide-tiny (mode=gpu, port=8092, reserved 2048 MiB RAM + 1592 MiB VRAM)
+[llmctl] validation not run (LLMCTL_DRY_RUN=1): nothing was started, so there is nothing to validate

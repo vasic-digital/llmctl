@@ -204,6 +204,11 @@ workload, and reports host capacity on demand (`llmctl capacity --json`).
   higher (HTTP and helper threads), so it is a floor, not a guarantee.
 - A dry-run `llmctl start` (`LLMCTL_DRY_RUN=1`) that is admitted writes a `<profile>.run` reservation in the runtime directory (unchanged from
   3.3.x); later starts of that profile then report "already running". Found while building the live harness, which now isolates and clears it.
+- `llmctl capacity <profile> --json` (flag after the profile) treats `--json` as a profile name: it prints the human view, exits 75 and says
+  the requested start does not fit. `--json` must come first. An unknown profile name should be a usage error, not a refusal; found in
+  review round 3, not changed here (follow-up).
+- The placeholder-key rule's dummy-word list is fully covered by the 16-character minimum except for the `<...>` form; it is kept to match
+  the constitution's `lib_keys.sh` rule exactly.
 
 ## 3.3.2 (2026-10-27)
 

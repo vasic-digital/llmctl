@@ -1,0 +1,17 @@
+== M1: enable whose unit is not active after the start undoes the enable ==
+  ok: M1: enable fails when the unit is not active after the start
+  ok: M1: clear message
+  ok: M1: the .enabled marker is removed again
+  ok: M1: the unit symlink is undone through the backend (systemctl --user disable)
+  ok: M1: no reservation
+== control: enable of a unit that becomes active keeps marker + reservation ==
+  ok: control: enable succeeds
+  ok: control: marker kept
+  ok: control: reservation written for an ACTIVE unit
+== M2: enable whose bounded start timed out (unit still activating) writes no reservation yet ==
+  ok: M2: enable still exits 0 (a slow load must not make enable fail)
+  ok: M2: loud warning
+  ok: M2: the unit is left activating
+  ok: M2: the unit stays enabled (it restarts on its own)
+  ok: M2: no reservation for a unit that may still fail (reconcile writes it once active)
+RESULT: PASS

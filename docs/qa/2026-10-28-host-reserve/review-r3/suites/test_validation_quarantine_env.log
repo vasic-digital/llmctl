@@ -1,0 +1,55 @@
+== FAIL of a quarantine start of an ENABLED profile (the reviewer's r13 sequence)
+  ok: setup: enable small (validated)
+  ok: setup: small stays enabled after the stop
+  ok: the failing quarantine start exits non-zero (rc=1)
+  ok: it really ran in quarantine (loopback) while validated
+  ok: ...with the new launch
+  ok: it was stopped
+  ok: FAIL: the env record is the enabled one again, byte for byte
+  ok: FAIL: no quarantine deadline left in it
+  ok: FAIL: no saved copy left behind
+  ok: FAIL: the quarantine launch (--seed 7) is not what the enabled unit boots
+  ok: marker ABSENT (c23c2e6 behaviour): the unit boots - and it boots the ENABLED record
+  ok: marker present: no quarantine record is seen at all
+== UNDETERMINED (strict default): the same restoration
+  ok: setup: enable small (validated)
+  ok: setup: small stays enabled after the stop
+  ok: UNDETERMINED: start exits non-zero
+  ok: UNDETERMINED: the env record is the enabled one again, byte for byte
+  ok: UNDETERMINED: no quarantine deadline left in it
+  ok: UNDETERMINED: no saved copy left behind
+== a SIGNAL during the validation of the quarantine start: the same restoration
+  ok: setup: enable small (validated)
+  ok: setup: small stays enabled after the stop
+  ok: setup: the quarantine start reached its validation
+  ok: SIGTERM: the quarantined start was stopped
+  ok: SIGTERM: the env record is the enabled one again, byte for byte
+  ok: SIGTERM: no quarantine deadline left in it
+  ok: SIGTERM: no saved copy left behind
+== while it is validated, the record names its LIVE validator; afterwards it is reverted
+  ok: setup: enable small (validated)
+  ok: setup: small stays enabled after the stop
+  ok: the quarantine record names its validator
+  ok: ...which is the llmctl process that started it
+  ok: marker present, validator ALIVE: the quarantine start is allowed
+  ok: FAIL after a validation in progress: the env record is the enabled one again, byte for byte
+  ok: FAIL after a validation in progress: no quarantine deadline left in it
+  ok: FAIL after a validation in progress: no saved copy left behind
+== a profile with NO env record before its quarantine start: the quarantine record is removed
+  ok: no env record before -> none after the failed quarantine start
+  ok: ...and no saved copy left behind
+== PASS: published; the published record stands and no saved copy is left
+  ok: PASS: start exits 0
+  ok: PASS: the published record has no quarantine deadline
+  ok: PASS: no saved copy left behind
+  ok: stopping a PUBLISHED profile keeps its env record (only a quarantine record is reverted)
+== a quarantine record of an older llmctl (no saved copy) is removed by a stop
+  ok: legacy quarantine record without a saved copy: removed on stop
+== the unit's ExecCondition (marker present): a quarantine record is honoured only while its validator lives
+  ok: live validator (this test process) -> allowed
+  ok: validator gone (process exited) -> refused before the deadline
+  ok: ...and the reason is printed
+  ok: a reused PID (same pid, another start time) -> refused
+  ok: a quarantine record naming no validator -> refused
+  ok: an expired record -> refused even with a live validator
+RESULT: PASS

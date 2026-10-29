@@ -1,0 +1,10 @@
+  ok: fixture profile decide-nli is an onnx decision profile
+== site 1: registry publish ==
+  ok: publish registers the engine's health path
+== site 2: decision scale wait ==
+  ok: scale waits on the engine's health path
+== site 3: start wait ==
+  ok: start waits on the engine's health path
+== site 4: enable wait ==
+  ok: enable waits on the engine's health path
+RESULT: PASS

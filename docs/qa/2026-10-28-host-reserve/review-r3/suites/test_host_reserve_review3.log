@@ -1,0 +1,93 @@
+== R3-1: decision_local counts only THIS tenant's own decision instances, never another tenant's ==
+  ok: precondition: tenant t2 has no decision profile that fits (the CPU budget is held)
+  ok: tenant t2 with only t1's decide unit healthy: fallback none (was: local, route local)
+  ok: tenant t2 with a hosted key set: cloud, route hosted (never local)
+  ok: the single-host (no tenant) view does not count tenant t1's unit either
+  ok: positive control: tenant t1's own healthy decide unit is local for t1
+  ok: positive control: this host's own instance .2 is local
+  ok: but not for tenant t2
+  ok: positive control: tenant t2's own instance .2 is local for t2
+== X05: the undetermined document never recommends local ==
+  ok: no key: recommended none, route none
+  ok: a real key set: recommended cloud, route hosted, the variable NAME
+== X11: MemAvailable below the host RAM reserve is pressure ==
+  ok: MemAvailable 6553-512 MiB < the 6553 MiB reserve: pressure.ok false
+  ok: the reason names the host reserve
+  ok: negative control: 6553+512 MiB available is no pressure
+== X07 / X08: the CPU boundaries (exactly 1 CPU left; exactly the decision cap left) ==
+  ok: exactly 100% CPU left: fits with 1 thread (not does_not_fit)
+  ok: exactly the 3-CPU decision cap left: fits with the full cap (not reduced)
+== X09 / R3-6: the time bound is wall-clock elapsed time, not a count of loop iterations ==
+  ok: a 1 s bound on a 30 s command returns 124
+  ok: it returns after the bound (1197 ms, 900..1600)
+  ok: slow polling: still 124
+  ok: slow polling: still bounded by wall-clock time (1414 ms <= 1700)
+  ok: negative control: a fast command returns its own rc and output
+== X03 / X04 / R3-7: the measurement tree kill (collect stops each pid, re-checks it, kills only matching pids) ==
+  ok: collect STOPs every pid of the tree (no new children while it is collected)
+  ok: collect records the root and its child, parent first
+tests/test_host_reserve_review3.sh: line 123: 4038219 Killed                     ( command sleep 600; : )
+  ok: the root whose start time still matches is killed
+  ok: a pid whose start time changed (pid reused) is NOT killed
+  ok: a pid whose start time changed after the STOP is not collected
+  ok: and it is CONTinued, not left stopped (S)
+tests/test_host_reserve_review3.sh: line 146: 4038294 Killed                     ( command sleep 600; : )
+  ok: the collected root is killed
+== R3-5: a placeholder hosted key never routes to the hosted endpoint (by variable NAME, never the value) ==
+  ok: placeholder key value (1 chars): fallback none
+  ok: placeholder key value: the refusal line says none
+  ok: placeholder key: undetermined fallback none
+  ok: placeholder key value (8 chars): fallback none
+  ok: placeholder key value: the refusal line says none
+  ok: placeholder key: undetermined fallback none
+  ok: placeholder key value (8 chars): fallback none
+  ok: placeholder key value: the refusal line says none
+  ok: placeholder key: undetermined fallback none
+  ok: placeholder key value (13 chars): fallback none
+  ok: placeholder key value: the refusal line says none
+  ok: placeholder key: undetermined fallback none
+  ok: placeholder key value (11 chars): fallback none
+  ok: placeholder key value: the refusal line says none
+  ok: placeholder key: undetermined fallback none
+  ok: placeholder key value (14 chars): fallback none
+  ok: placeholder key value: the refusal line says none
+  ok: placeholder key: undetermined fallback none
+  ok: placeholder key value (30 chars): fallback none
+  ok: placeholder key value: the refusal line says none
+  ok: placeholder key: undetermined fallback none
+  ok: placeholder key value (14 chars): fallback none
+  ok: placeholder key value: the refusal line says none
+  ok: placeholder key: undetermined fallback none
+  ok: placeholder key value (24 chars): fallback none
+  ok: placeholder key value: the refusal line says none
+  ok: placeholder key: undetermined fallback none
+  ok: negative control: a real-looking key routes hosted, by variable name
+  ok: the key VALUE never appears in the document
+== R3-4: the anchor input contract: per-input source and read time, footprint provenance, RLIMIT_NPROC, throttling ==
+  ok: the schema name is unchanged (additive fields only)
+  ok: inputs.meminfo carries source, read_at and readable
+  ok: inputs.loadavg carries source, read_at and readable
+  ok: inputs.psi_memory carries source, read_at and readable
+  ok: inputs.psi_cpu carries source, read_at and readable
+  ok: inputs.psi_io carries source, read_at and readable
+  ok: inputs.cgroup_memory_max carries source, read_at and readable
+  ok: inputs.cgroup_memory_current carries source, read_at and readable
+  ok: inputs.cgroup_cpu_max carries source, read_at and readable
+  ok: inputs.cgroup_cpu_stat carries source, read_at and readable
+  ok: inputs.units carries source, read_at and readable
+  ok: inputs.plan carries source, read_at and readable
+  ok: inputs.rlimit_nproc carries source, read_at and readable
+  ok: inputs.meminfo names the file it read
+  ok: the candidate footprint is labelled declared (planner ram_mb)
+  ok: and names its source
+  ok: a running unit's memory is labelled measured
+  ok: the scope throttle counters (cpu.stat, §11.4.225)
+  ok: and each unit's throttle counters
+  ok: host.nproc reports RLIMIT_NPROC, the user's threads and the headroom
+  ok: 10 threads of this uid (another uid not counted), limit 12: headroom 2
+  ok: headroom 2 < the 3-thread cap: does_not_fit
+  ok: the reason names RLIMIT_NPROC
+  ok: negative control: headroom 90 fits
+  ok: LLMCTL_NPROC_LIMIT can only lower the limit, never raise it above the real RLIMIT_NPROC
+  ok: an unreadable input is recorded unreadable, never defaulted
+RESULT: PASS

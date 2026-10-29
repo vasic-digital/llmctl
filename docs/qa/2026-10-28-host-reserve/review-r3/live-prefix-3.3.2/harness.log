@@ -1,0 +1,8 @@
+[07:08:47] label=prefix root=/home/milosvasic/.cache/claude-tmp/claude-1000/-home-milosvasic-Projects-catalogizer/261db589-353c-4105-9405-009dbfe0bd33/scratchpad/prefix332.IO817X profile=decide-tiny runs=3
+[07:08:48] run 1: starting llmctl-qa-reserve-prefix-r1.service on 127.0.0.1:38067
+[07:09:30] run 1: done
+[07:09:31] run 2: starting llmctl-qa-reserve-prefix-r2.service on 127.0.0.1:42451
+[07:10:13] run 2: done
+[07:10:14] run 3: starting llmctl-qa-reserve-prefix-r3.service on 127.0.0.1:55791
+[07:10:57] run 3: done
+[07:10:57] summary: deterministic_limits=True deterministic_verdicts=True all_checks_true=False

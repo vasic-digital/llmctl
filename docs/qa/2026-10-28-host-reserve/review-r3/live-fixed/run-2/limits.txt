@@ -1,0 +1,18 @@
+unit=llmctl-qa-reserve-fixed-r2.service
+cgroup=/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/llmctl-qa-reserve-fixed-r2.service
+cpu.max=300000 100000
+cpu.weight=20
+memory.max=3221225472
+memory.high=2684354560
+memory.swap.max=0
+pid=4062651
+exe=/home/milosvasic/Projects/llmctl/submodules/llama.cpp/build/bin/llama-server
+exe_sha256=09a14c52c9d29f814e57cbcf7e4454412ee44cc94956b365250a57d830b0fa74
+model_arg=/home/milosvasic/.local/share/llmctl/models/decide-tiny/Jev-Style-0.8B-Decision-v3-Q4_K_M.gguf
+threads=26
+nice=15
+oom_score_adj=800
+cpus_allowed_main=2-7,10-15
+cpus_allowed_all_threads=2-7,10-15
+argv_threads=--threads 3
+env_omp=OMP_NUM_THREADS=3

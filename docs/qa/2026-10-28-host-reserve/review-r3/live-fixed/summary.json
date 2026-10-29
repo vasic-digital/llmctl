@@ -1,0 +1,199 @@
+{
+ "label": "fixed",
+ "runs": 3,
+ "artifact": {
+  "head": "9de05571a15d9f5552b40f3ad44408343b52e074",
+  "head_tree": "abfd597ff3c50c35416b916d574ec672dbff3dc6",
+  "dirty": "no",
+  "llama_server": "/home/milosvasic/Projects/llmctl/submodules/llama.cpp/build/bin/llama-server",
+  "llama_server_sha256": "09a14c52c9d29f814e57cbcf7e4454412ee44cc94956b365250a57d830b0fa74"
+ },
+ "deterministic_limits": true,
+ "deterministic_verdicts": true,
+ "all_checks_true": true,
+ "results": [
+  {
+   "run": 1,
+   "limits": {
+    "unit": "llmctl-qa-reserve-fixed-r1.service",
+    "cgroup": "/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/llmctl-qa-reserve-fixed-r1.service",
+    "cpu.max": "300000 100000",
+    "cpu.weight": "20",
+    "memory.max": "3221225472",
+    "memory.high": "2684354560",
+    "memory.swap.max": "0",
+    "pid": "4046970",
+    "exe": "/home/milosvasic/Projects/llmctl/submodules/llama.cpp/build/bin/llama-server",
+    "exe_sha256": "09a14c52c9d29f814e57cbcf7e4454412ee44cc94956b365250a57d830b0fa74",
+    "model_arg": "/home/milosvasic/.local/share/llmctl/models/decide-tiny/Jev-Style-0.8B-Decision-v3-Q4_K_M.gguf",
+    "threads": "26",
+    "nice": "15",
+    "oom_score_adj": "800",
+    "cpus_allowed_main": "2-7,10-15",
+    "cpus_allowed_all_threads": "2-7,10-15",
+    "argv_threads": "--threads 3",
+    "env_omp": "OMP_NUM_THREADS=3"
+   },
+   "stress": {
+    "window_s": "29.50",
+    "cpu_pct": "294.6",
+    "nr_throttled_delta": "46",
+    "cpus_seen": "2,3,4,5,6,7,10,11,12,13,14,15"
+   },
+   "second_start": {
+    "rc": "75",
+    "reached_admission": "yes",
+    "fallback_line": "llmctl-fallback: cloud",
+    "units_before": "llmctl-decide-gateway.service llmctl-onnx@decide-nli.service llmctl-qa-reserve-fixed-filler-r1.service llmctl-qa-reserve-fixed-r1.service llmctl-revalidate-weekly.service llmctl-revalidate-weekly.timer",
+    "units_after": "llmctl-decide-gateway.service llmctl-onnx@decide-nli.service llmctl-qa-reserve-fixed-filler-r1.service llmctl-qa-reserve-fixed-r1.service llmctl-revalidate-weekly.service llmctl-revalidate-weekly.timer",
+    "engine_pids_before": "4046970",
+    "engine_pids_after": "4046970",
+    "env_record_written": "no"
+   },
+   "pressure": {
+    "skipped": "live CPU PSI some avg10 is 0.14, no stricter threshold below it exists"
+   },
+   "checks": {
+    "cpu_quota_set": true,
+    "engine_exe_is_the_named_binary": true,
+    "affinity_excludes_reserved_cpus": true,
+    "thread_cap_in_argv": true,
+    "swap_off": true,
+    "memory_max_bounded": true,
+    "oom_score_adj_800": true,
+    "nice_15": true,
+    "stress_cpu_within_quota": true,
+    "stress_never_on_reserved_cpus": true,
+    "second_start_reached_admission": true,
+    "second_start_refused_75": true,
+    "second_start_fallback_line": true,
+    "second_start_no_new_unit": true,
+    "second_start_no_new_engine_process": true,
+    "second_start_no_env_record": true,
+    "no_process_left": true
+   }
+  },
+  {
+   "run": 2,
+   "limits": {
+    "unit": "llmctl-qa-reserve-fixed-r2.service",
+    "cgroup": "/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/llmctl-qa-reserve-fixed-r2.service",
+    "cpu.max": "300000 100000",
+    "cpu.weight": "20",
+    "memory.max": "3221225472",
+    "memory.high": "2684354560",
+    "memory.swap.max": "0",
+    "pid": "4062651",
+    "exe": "/home/milosvasic/Projects/llmctl/submodules/llama.cpp/build/bin/llama-server",
+    "exe_sha256": "09a14c52c9d29f814e57cbcf7e4454412ee44cc94956b365250a57d830b0fa74",
+    "model_arg": "/home/milosvasic/.local/share/llmctl/models/decide-tiny/Jev-Style-0.8B-Decision-v3-Q4_K_M.gguf",
+    "threads": "26",
+    "nice": "15",
+    "oom_score_adj": "800",
+    "cpus_allowed_main": "2-7,10-15",
+    "cpus_allowed_all_threads": "2-7,10-15",
+    "argv_threads": "--threads 3",
+    "env_omp": "OMP_NUM_THREADS=3"
+   },
+   "stress": {
+    "window_s": "27.77",
+    "cpu_pct": "294.3",
+    "nr_throttled_delta": "67",
+    "cpus_seen": "2,3,4,5,6,7,12,13,14,15"
+   },
+   "second_start": {
+    "rc": "75",
+    "reached_admission": "yes",
+    "fallback_line": "llmctl-fallback: cloud",
+    "units_before": "llmctl-decide-gateway.service llmctl-onnx@decide-nli.service llmctl-qa-reserve-fixed-filler-r2.service llmctl-qa-reserve-fixed-r2.service llmctl-revalidate-weekly.service llmctl-revalidate-weekly.timer",
+    "units_after": "llmctl-decide-gateway.service llmctl-onnx@decide-nli.service llmctl-qa-reserve-fixed-filler-r2.service llmctl-qa-reserve-fixed-r2.service llmctl-revalidate-weekly.service llmctl-revalidate-weekly.timer",
+    "engine_pids_before": "4062651",
+    "engine_pids_after": "4062651",
+    "env_record_written": "no"
+   },
+   "pressure": {
+    "skipped": "live CPU PSI some avg10 is 0.34, no stricter threshold below it exists"
+   },
+   "checks": {
+    "cpu_quota_set": true,
+    "engine_exe_is_the_named_binary": true,
+    "affinity_excludes_reserved_cpus": true,
+    "thread_cap_in_argv": true,
+    "swap_off": true,
+    "memory_max_bounded": true,
+    "oom_score_adj_800": true,
+    "nice_15": true,
+    "stress_cpu_within_quota": true,
+    "stress_never_on_reserved_cpus": true,
+    "second_start_reached_admission": true,
+    "second_start_refused_75": true,
+    "second_start_fallback_line": true,
+    "second_start_no_new_unit": true,
+    "second_start_no_new_engine_process": true,
+    "second_start_no_env_record": true,
+    "no_process_left": true
+   }
+  },
+  {
+   "run": 3,
+   "limits": {
+    "unit": "llmctl-qa-reserve-fixed-r3.service",
+    "cgroup": "/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/llmctl-qa-reserve-fixed-r3.service",
+    "cpu.max": "300000 100000",
+    "cpu.weight": "20",
+    "memory.max": "3221225472",
+    "memory.high": "2684354560",
+    "memory.swap.max": "0",
+    "pid": "4077483",
+    "exe": "/home/milosvasic/Projects/llmctl/submodules/llama.cpp/build/bin/llama-server",
+    "exe_sha256": "09a14c52c9d29f814e57cbcf7e4454412ee44cc94956b365250a57d830b0fa74",
+    "model_arg": "/home/milosvasic/.local/share/llmctl/models/decide-tiny/Jev-Style-0.8B-Decision-v3-Q4_K_M.gguf",
+    "threads": "26",
+    "nice": "15",
+    "oom_score_adj": "800",
+    "cpus_allowed_main": "2-7,10-15",
+    "cpus_allowed_all_threads": "2-7,10-15",
+    "argv_threads": "--threads 3",
+    "env_omp": "OMP_NUM_THREADS=3"
+   },
+   "stress": {
+    "window_s": "28.74",
+    "cpu_pct": "294.8",
+    "nr_throttled_delta": "55",
+    "cpus_seen": "2,3,4,5,6,7,10,11,12,13,14,15"
+   },
+   "second_start": {
+    "rc": "75",
+    "reached_admission": "yes",
+    "fallback_line": "llmctl-fallback: cloud",
+    "units_before": "llmctl-decide-gateway.service llmctl-onnx@decide-nli.service llmctl-qa-reserve-fixed-filler-r3.service llmctl-qa-reserve-fixed-r3.service llmctl-revalidate-weekly.service llmctl-revalidate-weekly.timer",
+    "units_after": "llmctl-decide-gateway.service llmctl-onnx@decide-nli.service llmctl-qa-reserve-fixed-filler-r3.service llmctl-qa-reserve-fixed-r3.service llmctl-revalidate-weekly.service llmctl-revalidate-weekly.timer",
+    "engine_pids_before": "4077483",
+    "engine_pids_after": "4077483",
+    "env_record_written": "no"
+   },
+   "pressure": {
+    "skipped": "live CPU PSI some avg10 is 0.36, no stricter threshold below it exists"
+   },
+   "checks": {
+    "cpu_quota_set": true,
+    "engine_exe_is_the_named_binary": true,
+    "affinity_excludes_reserved_cpus": true,
+    "thread_cap_in_argv": true,
+    "swap_off": true,
+    "memory_max_bounded": true,
+    "oom_score_adj_800": true,
+    "nice_15": true,
+    "stress_cpu_within_quota": true,
+    "stress_never_on_reserved_cpus": true,
+    "second_start_reached_admission": true,
+    "second_start_refused_75": true,
+    "second_start_fallback_line": true,
+    "second_start_no_new_unit": true,
+    "second_start_no_new_engine_process": true,
+    "second_start_no_env_record": true,
+    "no_process_left": true
+   }
+  }
+ ]
+}

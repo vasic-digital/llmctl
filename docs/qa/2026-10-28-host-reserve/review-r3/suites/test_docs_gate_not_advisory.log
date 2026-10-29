@@ -1,0 +1,9 @@
+  ok: scanner flags every planted stale shape
+  ok: scanner leaves allowed sentences alone (advisory flock, tier gate, FAIL stops)
+  ok: no shipped doc or help text calls the validation gate advisory (hits: )
+  ok: docs/validation.md states the enforcement
+  ok: docs/limitations.md states the gate is enforced
+  ok: llmctl help says a FAIL stops the profile
+  ok: docs/limitations.md states the waiter needs the port registry
+  ok: docs/validation.md states the waiter needs the port registry
+RESULT: PASS
