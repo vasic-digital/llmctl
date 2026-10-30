@@ -618,6 +618,8 @@ svc_install() {
   # restart or boot that does not see the invoking shell, so deriving it reserve-OFF would silently run those
   # unreserved while status shows the reserve ON. `local` is dynamically scoped: every callee sees the pin.
   local LLMCTL_HOST_RESERVE=1
+  # a malformed numeric knob would be silently defaulted by the derivations below and persisted: refuse (round 10, F2)
+  reserve_knobs_check || { reserve_knobs_refuse install "the llmctl units"; return 75; }
   local unit_dir; unit_dir="$(svc_unit_dir)"
   ensure_dir "${unit_dir}"
   ensure_state_dirs
@@ -720,6 +722,7 @@ svc_write_env() {
   # restart or boot that does not see the invoking shell, so deriving it reserve-OFF would silently run those
   # unreserved while status shows the reserve ON. `local` is dynamically scoped: every callee sees the pin.
   local LLMCTL_HOST_RESERVE=1
+  reserve_knobs_check || { reserve_knobs_refuse "write the unit state of" "${profile}"; return 75; }
   ensure_dir "${LLMCTL_SERVICES_DIR}"
   local instance; instance="$(_svc_instance_key "${profile}")"
   local env_file="${LLMCTL_SERVICES_DIR}/${instance}.env"

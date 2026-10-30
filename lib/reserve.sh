@@ -332,6 +332,48 @@ _rsv_chain_scan() {
   return 0
 }
 
+# --- ONE validator for every numeric knob of the reserve / gate / capacity code (round 10, F2) --------------------------------
+# Each entry is "<VARIABLE>:<kind>": int = a plain whole number of at most 18 digits, dec = a plain decimal number
+# (digits, optionally ".digits"), flag = exactly 0 or 1. Unset or empty means "use the default" and is valid. Any other
+# value ("8G", " 8", "40%", ".5", 2^63, "yes") must REFUSE, never fall back to a default: the defaults of the stricter
+# knobs are the loosest allowed values, so a silent fallback would loosen what the operator tried to tighten. Adding a
+# knob = adding one entry here (tests/test_host_reserve_review10.sh checks this list against every knob the code reads).
+_RSV_KNOBS=(
+  LLMCTL_RESERVE_CPU_PCT:int LLMCTL_RESERVE_CPU_MIN:int LLMCTL_RESERVE_MEM_PCT:int LLMCTL_RESERVE_MEM_MIN_MB:int
+  LLMCTL_CHAT_CPU_PCT:int LLMCTL_DECIDE_CPU_PCT:int
+  LLMCTL_GATE_CPU_SOME_MAX:int LLMCTL_GATE_LOAD_PER_CPU:int LLMCTL_GATE_RESERVE_MB:int
+  LLMCTL_GATE_FULL_MAX:dec LLMCTL_GATE_SOME_MAX:dec
+  LLMCTL_GATE_WAIT:int LLMCTL_GATE_POLL:int LLMCTL_CAPACITY_TIMEOUT:int LLMCTL_CAPACITY_PROBE_TIMEOUT:int
+  LLMCTL_HOST_RESERVE_STRICT:flag
+)
+
+# reserve_knobs_check -> rc 0 when every knob is well-formed; rc 75 and RSV_G_BAD="<VARIABLE>=<value>" for the first bad one.
+# LLMCTL_GATE_RESERVE_MB is not a user knob for the scheduler's own checks (_LLMCTL_GATE_INTERNAL_RESERVE_MB set).
+reserve_knobs_check() {
+  RSV_G_BAD=""
+  local _spec _k _kind _v
+  for _spec in "${_RSV_KNOBS[@]}"; do
+    _k="${_spec%%:*}"; _kind="${_spec##*:}"; _v="${!_k:-}"
+    [[ -n "${_v}" ]] || continue
+    [[ "${_k}" == LLMCTL_GATE_RESERVE_MB && -n "${_LLMCTL_GATE_INTERNAL_RESERVE_MB:-}" ]] && continue
+    case "${_kind}" in
+      int)  [[ "${_v}" =~ ^[0-9]{1,18}$ ]] || { RSV_G_BAD="${_k}=${_v}"; return 75; } ;;
+      dec)  [[ "${_v}" =~ ^[0-9]{1,18}([.][0-9]{1,18})?$ ]] || { RSV_G_BAD="${_k}=${_v}"; return 75; } ;;
+      flag) [[ "${_v}" == 0 || "${_v}" == 1 ]] || { RSV_G_BAD="${_k}=${_v}"; return 75; } ;;
+    esac
+  done
+  return 0
+}
+
+# reserve_knobs_refuse <action> <label> - the refusal text for a bad knob: the message naming the variable, the
+# machine-readable fallback line, rc 75. Used by the start gate, the capacity report and `llmctl install`.
+reserve_knobs_refuse() {
+  printf 'refusing to %s %s: %q is not a valid value (a plain whole number, a plain decimal, or 0/1 for a flag); llmctl refuses rather than fall back to a looser default.\n' \
+    "$1" "$2" "${RSV_G_BAD:-unknown knob}" >&2
+  printf 'llmctl-fallback: %s\n' "$(_cap_fallback_name 2>/dev/null || echo none)" >&2
+  return 75
+}
+
 # reserve_gate_limits - sets RSV_G_FMAX, RSV_G_SMAX (PSI thresholds) and RSV_G_RESERVE (MiB) for the memory gate and the
 # capacity document. With the reserve ON the user variables can only make the gate STRICTER (round-8 review F3):
 # LLMCTL_GATE_FULL_MAX <= 2, LLMCTL_GATE_SOME_MAX <= 10, LLMCTL_GATE_RESERVE_MB >= the computed reserve; a non-numeric
@@ -346,14 +388,9 @@ reserve_gate_limits() {
     if [[ -n "${internal}" ]]; then RSV_G_RESERVE="${internal}"; else RSV_G_RESERVE="${rsv:-4096}"; fi
     return 0
   fi
-  # a malformed STRICTER knob (" 8192", "8G", 2^63, "40%") must not silently fall back to the looser default
-  # (round-9 R5): the gate refuses and names it. Up to 18 digits (no 64-bit overflow); unset/empty means the default.
-  RSV_G_BAD=""
-  local _k _v
-  for _k in LLMCTL_RESERVE_CPU_PCT LLMCTL_RESERVE_CPU_MIN LLMCTL_RESERVE_MEM_PCT LLMCTL_RESERVE_MEM_MIN_MB; do
-    _v="${!_k:-}"
-    if [[ -n "${_v}" && ! "${_v}" =~ ^[0-9]{1,18}$ ]]; then RSV_G_BAD="${_k}=${_v}"; return 75; fi
-  done
+  # a malformed knob (" 8192", "8G", 2^63, "40%", ".5") must not silently fall back to the looser default (round-9 R5,
+  # round-10 F2): the gate refuses and names it. ONE validator for every numeric knob (reserve_knobs_check).
+  reserve_knobs_check || return 75
   reserve_compute
   local num='^[0-9]+([.][0-9]+)?$'
   [[ "${fmax}" =~ ${num} ]] || fmax=2
@@ -363,8 +400,7 @@ reserve_gate_limits() {
   if [[ "${internal}" =~ ^[0-9]+$ ]]; then RSV_G_RESERVE="${internal}"; return 0; fi
   RSV_G_RESERVE="${RSV_RM}"
   if [[ -n "${rsv}" ]]; then
-    if [[ ! "${rsv}" =~ ^[0-9]{1,18}$ ]]; then RSV_G_BAD="LLMCTL_GATE_RESERVE_MB=${rsv}"; return 75; fi
-    rsv=$(( 10#${rsv} ))
+    rsv=$(( 10#${rsv} ))      # well-formed: reserve_knobs_check above refused anything else
     (( rsv > RSV_G_RESERVE )) && RSV_G_RESERVE="${rsv}"
   fi
   return 0

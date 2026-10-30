@@ -86,9 +86,10 @@ sched_build_launch decide-tiny cpu 18080 2048 0 1 off f16
 args=" ${SCHED_ARGS[*]} "
 assert_contains "${args}" " --threads 3 " "llama launch carries --threads = decision cap"
 assert_contains "${args}" " --threads-batch 3 " "llama launch carries --threads-batch"
+# round 10: the launch is persisted into the unit's env record, so it is ALWAYS derived with the reserve on; the override
+# only skips admission (see tests/test_host_reserve_review10.sh for the full unit-state comparison)
 LLMCTL_HOST_RESERVE=0 sched_build_launch decide-tiny cpu 18080 2048 0 1 off f16
-[[ " ${SCHED_ARGS[*]} " != *" --threads "* ]] && assert_eq 1 1 "reserve off: no --threads (negative control)" \
-  || assert_eq absent present "reserve off: no --threads (negative control)"
+assert_contains " ${SCHED_ARGS[*]} " " --threads 3 " "reserve override: the persisted launch still carries --threads (override does not persist)"
 
 echo "== CPU gate =="
 assert_rc 0 "no pressure: CPU gate passes" reserve_cpu_gate t

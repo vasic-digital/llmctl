@@ -262,7 +262,7 @@ _cap_measure() {
   local plan_file="${_CAP_TMPDIR:?}/plan.json" prc=0
   # the user gate knobs can only be stricter (round-8 review F3); a non-numeric LLMCTL_GATE_RESERVE_MB is undetermined
   if ! reserve_gate_limits; then
-    _cap_undetermined_doc "${RSV_G_BAD:-LLMCTL_GATE_RESERVE_MB=${LLMCTL_GATE_RESERVE_MB:-}} is not a plain whole number; refusing rather than falling back to a looser default" "$@"
+    _cap_undetermined_doc "${RSV_G_BAD:-an unknown knob} is not a valid value; refusing rather than falling back to a looser default" "$@"
     return 0
   fi
   _cap_bounded "${CAP_PT}" "${plan_file}" _cap_plan_probe || prc=$?
