@@ -25,7 +25,7 @@ All results below are UNIT-CLASS (hermetic fixtures: a fake cgroup file system, 
 
 ## Mutants
 
-MUTANT_TOTALS_PLACEHOLDER
+Full harness at HEAD edd1ef1 (UNIT-CLASS): 223 mutants, 223 killed, 0 survived, 0 not-applied; control_green=true, all_killed=true.
 
 ## Not proven
 
