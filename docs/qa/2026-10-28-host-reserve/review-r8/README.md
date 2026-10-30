@@ -7,7 +7,7 @@ Evidence class (§11.4.289): everything here is UNIT-CLASS (fixture cgroup trees
 
 | # | Finding | Change | Test (UNIT-CLASS) |
 |---|---|---|---|
-| 1 | MEDIUM: `LLMCTL_HOST_RESERVE=0` was persisted into the unit env record, so later boots and restarts ran unreserved | `_svc_write_reserve_dropin` never writes the override; a stale line is dropped on every start | review9 R1 (kills OWN4) |
+| 1 | MEDIUM: `LLMCTL_HOST_RESERVE=0` was persisted into the unit env record, so later boots and restarts ran unreserved | `_svc_write_reserve_dropin` never writes the override line; a stale line is dropped on every start. (Incomplete: the other reserve-derived state was still derived from the invoking shell; closed in round 9, see [review-r9](../review-r9/README.md)) | review9 R1 (kills OWN4) |
 | 2 | LOW: memo key ignored the cgroup chain | key includes the chain scan, `LLMCTL_CGROUP_ROOT`, `LLMCTL_CGROUP_FS` | review9 R2 |
 | 3 | LOW: false "reserved 0" CPU warning at `RESERVE_CPU_PCT=100` | warning prints the real reserved and usable CPUs; STRICT=1 still refuses | review9 R3 |
 | 4 | LOW: chain value 2^64-1 wrapped into a false refusal | 16+ digit values bound nothing; 1 MiB floor kept | review9 R4 (kills OWN2) |
