@@ -810,7 +810,7 @@ llmctl reserve [--json]
 
 Prints the host reserve: the CPUs and RAM kept for the system, the CPUs and RAM all models together may use, the
 per-model CPU cap (chat / decision), the start-gate thresholds and the running llmctl units with their applied limits
-read back from the cgroup. `LLMCTL_HOST_RESERVE=0` (diagnostics only) turns the reserve off and is reported as
+read back from the cgroup. `LLMCTL_HOST_RESERVE=0` (diagnostics only, for that command only, never persisted into a unit) turns the reserve off and is reported as
 `OFF` (`llmctl reserve`) or `DISABLED` (`llmctl status`, `llmctl doctor`). Formulas and knobs: [`capacity.md`](capacity.md).
 
 ## version

@@ -85,8 +85,12 @@ get the lock within `LLMCTL_SCHED_LOCK_WAIT` fails without restarting anything.
 
 `enable` starts the profile now AND at login/boot (as before 3.4.0); the start now passes the same gate.
 
-`LLMCTL_HOST_RESERVE=0` is a diagnostics switch that restores the pre-3.4.0 behaviour so the old failure can be
-reproduced. It is reported loudly: `OFF` in `llmctl reserve`, `DISABLED` in `llmctl status` and `llmctl doctor`.
+`LLMCTL_HOST_RESERVE=0` is a diagnostics switch for the invoking command only: it skips the reserve in that one
+`start`/`enable`/`capacity` run so the old failure can be reproduced. It is NOT the pre-3.4.0 behaviour: the legacy
+`hw_pressure_gate` checks still apply and still fail closed. It is not persisted into the unit's env record (round 8): the
+next boot, restart or start without the variable applies the reserve again. The unit file written at `install` time carries
+the pre-3.4.0 resource directives while the switch is on, so reinstall without it to get the backstop back. It is reported
+loudly: `OFF` in `llmctl reserve`, `DISABLED` in `llmctl status` and `llmctl doctor`.
 
 ## `llmctl capacity [--json] [profile...]`
 
@@ -299,6 +303,23 @@ start is refused; `reserve_pct` and
   reviewer's own wording for these two was not available to the author of this text; they are recorded here as the
   limits the author could verify, and the review record in `docs/qa/2026-10-28-host-reserve/review-r7/README.md` lists
   what was not proven live).
+- **Malformed stricter knobs refuse (round 8).** With the reserve on, `LLMCTL_RESERVE_CPU_PCT`, `LLMCTL_RESERVE_CPU_MIN`,
+  `LLMCTL_RESERVE_MEM_PCT` and `LLMCTL_RESERVE_MEM_MIN_MB` must be plain whole numbers (at most 18 digits). A value such as
+  `" 8192"`, `8G`, `0x10` or 2^63 refuses with exit 75 and an `llmctl-fallback:` line naming the variable, the same as
+  `LLMCTL_GATE_RESERVE_MB`; it is never replaced by a looser default.
+- **Memo key and chain overflow (round 8).** The reserve computation is memoised per shell; the key now includes the cgroup
+  chain scan (`LLMCTL_CGROUP_FS`, `LLMCTL_CGROUP_ROOT` and every chain `memory.max`/`memory.high`), so a limit changed
+  between two calls in one shell is seen. A chain value of 16 or more digits (the 2^64-1 sentinel, or at least about 1 PB)
+  bounds nothing; a positive value below 1 MiB counts as 1 MiB.
+- **CPU reserve at 100 % (round 8).** If the CPU reserve percentage leaves models only part of the CPUs, `capacity_admit` warns
+  with the true figures ("reserved N, models may use M CPU(s)"); the "too few CPUs" text is printed only when nothing is reserved.
+  `LLMCTL_HOST_RESERVE_STRICT=1` refuses both cases (exit 75).
+- **Start-time race (finding 10, analysis only).** `hk_gate` runs in `ExecStartPre`, inside the unit's cgroup, which is
+  therefore populated and counted by every other gate's census. Two units that start at the same moment normally see each
+  other and both refuse (fail closed, the bounded wait retries); admitting both would need a gap between the end of
+  `ExecStartPre` and the fork of `ExecStart` in which the cgroup is empty AND the other gate reads in that window. No lock is added:
+  that window was not reproduced and is not measured, so it is documented as a limit, not as proven impossible. Starts through
+  `llmctl start`/`restart` are serialised by the scheduler lock; direct `systemctl --user start` of several units is not.
 - `LLMCTL_HOST_RESERVE`: only the literal `0` disables the reserve (diagnostics). `1`, `yes`, `off`, an empty value or unset all keep it ON.
 - cgroup v2 only: the unit census scans `LLMCTL_CGROUP_FS` (default `/sys/fs/cgroup`), and this user's own manager
   (`$LLMCTL_CGROUP_FS/user.slice/user-<uid>.slice/user@<uid>.service`) supplies the `host.cgroup` figures, only when
