@@ -25,6 +25,7 @@ R5 = "tests/test_host_reserve_review5.sh"
 F3 = "tests/test_host_reserve_f3.sh"
 R6 = "tests/test_host_reserve_review6.sh"
 R7 = "tests/test_host_reserve_review7.sh"
+R8 = "tests/test_host_reserve_review8.sh"
 # a reviewer mutant that is killed by "some suite" names the chain the reviewer ran (killed when any suite fails)
 CHAIN = (R6, R4, R5, "tests/test_capacity.sh", "tests/test_host_reserve.sh", R3, R2, "tests/test_host_reserve_review.sh",
          "tests/test_decision_capacity.sh", "tests/test_start_gate.sh", "tests/test_services.sh",
@@ -327,6 +328,20 @@ MUTANTS = [
     ("R7-F1-cpu-short-flag-dropped", CAP, '"cpu_short": E.get("CAP_CPUSHORT") == "1",', '"cpu_short": False,', R7),
     ("R7-F1-strict-not-honoured", CAP, 'if [[ "${LLMCTL_HOST_RESERVE_STRICT:-0}" == 1 ]]; then', 'if false; then', R7),
     ("R7-F2-reserve-enabled-only-for-1", RSV, 'reserve_enabled() { [[ "${LLMCTL_HOST_RESERVE:-1}" != 0 ]]; }', 'reserve_enabled() { [[ "${LLMCTL_HOST_RESERVE:-1}" == 1 ]]; }', R7),
+    ("R8-O2-cap-limit-not-bounded-by-Bm", CAP, "if enabled and Bm < lim_one: lim_one = Bm", "if False: lim_one = Bm", R8),
+    ("R8-O4-unlimited-unit-counts-zero-cpu", RSV, '[[ "${cpu}" =~ ^[0-9]+$ ]] || cpu="${bcpu}"', '[[ "${cpu}" =~ ^[0-9]+$ ]] || cpu=0', R8),
+    ("R8-O10-smoke-thread-cap-dropped", "lib/download.sh", 'local _thr; _thr="$(reserve_cpu_cap "${profile}")"; args+=(--threads "${_thr}" --threads-batch "${_thr}"); fi', ':; fi', R8),
+    ("R8-O12-planner-only-defer-any-reason", CAP, 'sys.exit(0 if v["reasons"] and all(r.startswith("planner:") for r in v["reasons"]) else 1)', 'sys.exit(0 if v["reasons"] and any(r.startswith("planner:") for r in v["reasons"]) else 1)', R8),
+    ("R8-F1-chain-limit-ignored", RSV, 'if [[ "${_cl}" =~ ^[1-9][0-9]*$ ]] && (( mt == 0 || _cl < mt )); then mt="${_cl}"; fi', ':', R8),
+    ("R8-F1-ancestors-not-walked", RSV, 'if [[ "${root}" == "${fs}"/* ]]; then', 'if false; then', R8),
+    ("R8-F1-memory-high-ignored", RSV, 'for f in memory.max memory.high; do', 'for f in memory.max; do', R8),
+    ("R8-F3-reserve-below-computed-allowed", RSV, '(( rsv > RSV_G_RESERVE )) && RSV_G_RESERVE="${rsv}"', 'RSV_G_RESERVE="${rsv}"', R8),
+    ("R8-F3-non-numeric-reserve-accepted", RSV, 'if [[ ! "${rsv}" =~ ^[0-9]+$ ]]; then return 75; fi', 'if [[ ! "${rsv}" =~ ^[0-9]+$ ]]; then rsv=0; fi', R8),
+    ("R8-F3-full-max-not-clamped", RSV, "RSV_G_FMAX=\"$(awk -v v=\"${fmax}\" 'BEGIN{print (v>2)?2:v}')\"", 'RSV_G_FMAX="${fmax}"', R8),
+    ("R8-F3-some-max-not-clamped", RSV, "RSV_G_SMAX=\"$(awk -v v=\"${smax}\" 'BEGIN{print (v>10)?10:v}')\"", 'RSV_G_SMAX="${smax}"', R8),
+    ("R8-F3-capacity-ignores-clamp", CAP, 'CAP_MEM_FULL_MAX="${RSV_G_FMAX}" CAP_MEM_SOME_MAX="${RSV_G_SMAX}"', 'CAP_MEM_FULL_MAX="${LLMCTL_GATE_FULL_MAX:-2}" CAP_MEM_SOME_MAX="${LLMCTL_GATE_SOME_MAX:-10}"', R8),
+    ("R8-F3-gate-ignores-nonnumeric-refusal", HW, 'if (( grc != 0 )); then', 'if false; then', R8),
+    ("R8-F3-fallback-line-dropped", HW, "printf 'llmctl-fallback: %s\\n' \"$(_cap_fallback_name 2>/dev/null || echo none)\" >&2\n    return 75", "return 75", R8),
 ]
 
 

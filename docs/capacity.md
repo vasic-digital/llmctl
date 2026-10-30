@@ -283,6 +283,22 @@ start is refused; `reserve_pct` and
 - **1-CPU hosts (`reserve.cpu_short`).** With one online CPU the CPU reserve is 0 (the last CPU is never reserved), so a model can use the
   whole CPU. `capacity_admit` admits it and prints a loud `WARNING: this host has too few CPUs to keep a CPU reserve` on stderr; set
   `LLMCTL_HOST_RESERVE_STRICT=1` to refuse such a host (exit 75, `llmctl-fallback:` line) and route decisions to a hosted endpoint instead.
+- **Memory budget and the cgroup chain (round 8, F1).** The model memory budget is the host RAM, bounded by the tightest numeric
+  `memory.high` / `memory.max` of this user's `app.slice`, of the user manager and of every ancestor up to the cgroup mount
+  (a `max` bounds nothing; a limit larger than the RAM bounds nothing). Reserve and budget are computed from that bound
+  (`host.mem_total_mb` shows the bounded figure). Not read: limits on sibling slices, on a scope the unit does not run in, and a limit
+  set after the measurement (the verdict is a snapshot).
+- **Gate knobs only tighten (round 8, F3).** While the reserve is on, `LLMCTL_GATE_RESERVE_MB` cannot go below the computed
+  reserve, `LLMCTL_GATE_FULL_MAX` is at most 2 and `LLMCTL_GATE_SOME_MAX` at most 10 (stricter values are honoured; the
+  same clamps apply in `llmctl capacity`). A non-numeric `LLMCTL_GATE_RESERVE_MB` refuses with exit 75 and an
+  `llmctl-fallback:` line. With `LLMCTL_HOST_RESERVE=0` the legacy values apply unchanged. The scheduler's own PSI-only
+  and restart checks no longer use this variable (they use an internal one).
+- Further round-8 limits, stated plainly: only the literal `LLMCTL_HOST_RESERVE=0` turns the reserve off (F2); `capacity_admit`
+  leaves the RAM/VRAM verdict to the planner (F4); the live evidence is one run on one 16-CPU host and its memory-pressure
+  case could not run in every repetition (live PSI was already above the stricter threshold it needs) (F5, F6: the
+  reviewer's own wording for these two was not available to the author of this text; they are recorded here as the
+  limits the author could verify, and the review record in `docs/qa/2026-10-28-host-reserve/review-r7/README.md` lists
+  what was not proven live).
 - `LLMCTL_HOST_RESERVE`: only the literal `0` disables the reserve (diagnostics). `1`, `yes`, `off`, an empty value or unset all keep it ON.
 - cgroup v2 only: the unit census scans `LLMCTL_CGROUP_FS` (default `/sys/fs/cgroup`), and this user's own manager
   (`$LLMCTL_CGROUP_FS/user.slice/user-<uid>.slice/user@<uid>.service`) supplies the `host.cgroup` figures, only when
