@@ -59,7 +59,7 @@ MUTANTS = [
     ("M10-drop-threads-arg", "lib/scheduler.sh", 'SCHED_ARGS+=(--threads "${_thr}" --threads-batch "${_thr}")', ':',
      "tests/test_host_reserve.sh"),
     # the two memos (3.4.0 latency fix): a key that misses an input returns a stale answer
-    ("M12-reserve-memo-key-drops-topology", "lib/reserve.sh", "printf '%s|' \"${topo}\" ", "printf '%s|' ",
+    ("M12-reserve-memo-key-drops-topology", "lib/reserve.sh", '"${topo}" "${LLMCTL_HOST_CPUS:-}"', '"${LLMCTL_HOST_CPUS:-}"',
      "tests/test_host_reserve.sh"),
     ("M13-decide-memo-key-drops-catalog-content", "lib/reserve.sh",
      '"${_RSV_DECIDE_MEMO_KEY}" == "${LLMCTL_CATALOG}:${cat}"', '"${_RSV_DECIDE_MEMO_KEY%%:*}" == "${LLMCTL_CATALOG}"',
@@ -338,7 +338,7 @@ MUTANTS = [
     ("R8-F1-ancestors-not-walked", RSV, 'if [[ "${root}" == "${fs}"/* ]]; then', 'if false; then', R8),
     ("R8-F1-memory-high-ignored", RSV, 'for f in memory.max memory.high; do', 'for f in memory.max; do', R8),
     ("R8-F3-reserve-below-computed-allowed", RSV, '(( rsv > RSV_G_RESERVE )) && RSV_G_RESERVE="${rsv}"', 'RSV_G_RESERVE="${rsv}"', R8),
-    ("R8-F3-non-numeric-reserve-accepted", RSV, 'if [[ ! "${rsv}" =~ ^[0-9]+$ ]]; then return 75; fi', 'if [[ ! "${rsv}" =~ ^[0-9]+$ ]]; then rsv=0; fi', R8),
+    ("R8-F3-non-numeric-reserve-accepted", RSV, 'RSV_G_BAD="LLMCTL_GATE_RESERVE_MB=${rsv}"; return 75; fi\n    rsv=$(( 10#${rsv} ))', 'RSV_G_BAD=""; rsv=0; fi\n    rsv=$(( 10#${rsv} ))', R8),
     ("R8-F3-full-max-not-clamped", RSV, "RSV_G_FMAX=\"$(awk -v v=\"${fmax}\" 'BEGIN{print (v>2)?2:v}')\"", 'RSV_G_FMAX="${fmax}"', R8),
     ("R8-F3-some-max-not-clamped", RSV, "RSV_G_SMAX=\"$(awk -v v=\"${smax}\" 'BEGIN{print (v>10)?10:v}')\"", 'RSV_G_SMAX="${smax}"', R8),
     ("R8-F3-capacity-ignores-clamp", CAP, 'CAP_MEM_FULL_MAX="${RSV_G_FMAX}" CAP_MEM_SOME_MAX="${RSV_G_SMAX}"', 'CAP_MEM_FULL_MAX="${LLMCTL_GATE_FULL_MAX:-2}" CAP_MEM_SOME_MAX="${LLMCTL_GATE_SOME_MAX:-10}"', R8),

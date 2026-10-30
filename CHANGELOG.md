@@ -25,6 +25,8 @@ repository as an honest record of that process.
 
 ## 3.4.0 (2026-10-29)
 
+Round 8 (after the review of d16e205): LLMCTL_HOST_RESERVE=0 is no longer persisted into a unit env record (it applies to the invoking command only); the reserve memo key covers the cgroup chain; the CPU warning at a 100 % reserve states the real figures; a chain limit of 2^64-1 no longer wraps; malformed stricter reserve knobs refuse with exit 75 instead of loosening. Tests: tests/test_host_reserve_review9.sh and 8 new mutants. Evidence and its limits (unit-class only, no single 201-of-201 run, finding 10 and F5/F6 documented not closed): docs/qa/2026-10-28-host-reserve/review-r8/README.md
+
 A **minor release** (version 3.3.2 -> 3.4.0): locally run models can no longer take the whole host. llmctl keeps CPUs and RAM for the system,
 caps every model's threads, CPU quota and CPU set, refuses a start under CPU pressure or when the model does not fit next to the current
 workload, and reports host capacity on demand (`llmctl capacity --json`).
