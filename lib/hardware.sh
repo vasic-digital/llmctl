@@ -429,11 +429,16 @@ PYEOF
 hw_pressure_gate() {
   local fp="${1:-0}" label="${2:-service}" act="${LLMCTL_GATE_ACTION:-start}"
   local psi="${LLMCTL_PSI_FILE:-/proc/pressure/memory}" mi="${LLMCTL_MEMINFO_FILE:-/proc/meminfo}"
-  local fmax="${LLMCTL_GATE_FULL_MAX:-2}" smax="${LLMCTL_GATE_SOME_MAX:-10}" reserve="${LLMCTL_GATE_RESERVE_MB:-}"
-  # host reserve (lib/reserve.sh): the default reserve is max(4 GiB, 20% of RAM), not a fixed 4 GiB
-  if [[ -z "${reserve}" ]]; then
-    if reserve_enabled; then reserve_compute; reserve="${RSV_RM}"; else reserve=4096; fi
+  # host reserve (lib/reserve.sh): the default reserve is max(4 GiB, 20% of RAM), not a fixed 4 GiB; the user variables
+  # LLMCTL_GATE_FULL_MAX / _SOME_MAX / _RESERVE_MB can only make the gate stricter while the reserve is on (round 8, F3)
+  local fmax smax reserve grc=0
+  reserve_gate_limits || grc=$?
+  if (( grc != 0 )); then
+    printf 'refusing to %s %s: LLMCTL_GATE_RESERVE_MB=%q is not a number of MiB; the gate refuses rather than guess.\n' "${act}" "${label}" "${LLMCTL_GATE_RESERVE_MB:-}" >&2
+    printf 'llmctl-fallback: %s\n' "$(_cap_fallback_name 2>/dev/null || echo none)" >&2
+    return 75
   fi
+  fmax="${RSV_G_FMAX}" smax="${RSV_G_SMAX}" reserve="${RSV_G_RESERVE}"
   [[ "${fp}" =~ ^[0-9]+$ ]] || fp=0
   local some="" full="" avail_kb="" strict=0
   _rsv_inputs_strict && strict=1

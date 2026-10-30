@@ -175,6 +175,10 @@ _reserve_compute_now() {
     mt="$(awk '/^MemTotal:/{print int($2/1024); exit}' "${mi}" 2>/dev/null || true)"
   fi
   [[ "${mt}" =~ ^[1-9][0-9]*$ ]] || mt=0
+  # the host RAM is bounded by the tightest memory limit up the user manager's cgroup chain (round-8 review F1: an
+  # app.slice with memory.high 21682 MiB / max 24779 MiB on a 32 GiB host leaves models 21682 MiB at most, not 32768)
+  local _cl; _cl="$(_rsv_chain_mem_limit_mb)"
+  if [[ "${_cl}" =~ ^[1-9][0-9]*$ ]] && (( mt == 0 || _cl < mt )); then mt="${_cl}"; fi
   RSV_MT="${mt}"
   RSV_MEM_PCT="$(_rsv_int "${LLMCTL_RESERVE_MEM_PCT:-20}" 20 20 100)"
   RSV_MEM_MIN="$(_rsv_int "${LLMCTL_RESERVE_MEM_MIN_MB:-4096}" 4096 4096 4194304)"
@@ -286,6 +290,58 @@ _rsv_cgroup_root() {
   if [[ -n "${LLMCTL_CGROUP_ROOT:-}" ]]; then echo "${LLMCTL_CGROUP_ROOT}"; return; fi
   local uid; uid="$(id -u)"
   echo "$(_rsv_cgroup_fs)/user.slice/user-${uid}.slice/user@${uid}.service"
+}
+
+# _rsv_chain_mem_limit_mb -> the tightest numeric memory.high / memory.max (MiB) of the user manager's app.slice, of the
+# user manager and of every ancestor up to the cgroup mount; nothing when none is a number ("max" bounds nothing).
+_rsv_chain_mem_limit_mb() {
+  local root fs d v f best="" n
+  root="$(_rsv_cgroup_root)"; fs="$(_rsv_cgroup_fs)"
+  local -a dirs=("${root}/app.slice" "${root}")
+  if [[ "${root}" == "${fs}"/* ]]; then
+    d="${root}"
+    while [[ "${d}" == "${fs}"/* ]]; do d="${d%/*}"; dirs+=("${d}"); done
+  fi
+  for d in "${dirs[@]}"; do
+    for f in memory.max memory.high; do
+      v="$(head -1 "${d}/${f}" 2>/dev/null || true)"
+      [[ "${v}" =~ ^[0-9]+$ ]] || continue
+      n=$(( v / 1048576 ))
+      (( n >= 1 )) || n=1
+      if [[ -z "${best}" ]] || (( n < best )); then best="${n}"; fi
+    done
+  done
+  [[ -n "${best}" ]] && echo "${best}"
+  return 0
+}
+
+# reserve_gate_limits - sets RSV_G_FMAX, RSV_G_SMAX (PSI thresholds) and RSV_G_RESERVE (MiB) for the memory gate and the
+# capacity document. With the reserve ON the user variables can only make the gate STRICTER (round-8 review F3):
+# LLMCTL_GATE_FULL_MAX <= 2, LLMCTL_GATE_SOME_MAX <= 10, LLMCTL_GATE_RESERVE_MB >= the computed reserve; a non-numeric
+# LLMCTL_GATE_RESERVE_MB returns 75 (the gate refuses). The scheduler's own PSI-only / restart checks pass
+# _LLMCTL_GATE_INTERNAL_RESERVE_MB (not a user knob). With the reserve OFF the legacy values apply unchanged.
+reserve_gate_limits() {
+  local fmax="${LLMCTL_GATE_FULL_MAX:-2}" smax="${LLMCTL_GATE_SOME_MAX:-10}" rsv="${LLMCTL_GATE_RESERVE_MB:-}"
+  local internal="${_LLMCTL_GATE_INTERNAL_RESERVE_MB:-}"
+  if ! reserve_enabled; then
+    RSV_G_FMAX="${fmax}"; RSV_G_SMAX="${smax}"
+    if [[ -n "${internal}" ]]; then RSV_G_RESERVE="${internal}"; else RSV_G_RESERVE="${rsv:-4096}"; fi
+    return 0
+  fi
+  reserve_compute
+  local num='^[0-9]+([.][0-9]+)?$'
+  [[ "${fmax}" =~ ${num} ]] || fmax=2
+  [[ "${smax}" =~ ${num} ]] || smax=10
+  RSV_G_FMAX="$(awk -v v="${fmax}" 'BEGIN{print (v>2)?2:v}')"
+  RSV_G_SMAX="$(awk -v v="${smax}" 'BEGIN{print (v>10)?10:v}')"
+  if [[ "${internal}" =~ ^[0-9]+$ ]]; then RSV_G_RESERVE="${internal}"; return 0; fi
+  RSV_G_RESERVE="${RSV_RM}"
+  if [[ -n "${rsv}" ]]; then
+    if [[ ! "${rsv}" =~ ^[0-9]+$ ]]; then return 75; fi
+    rsv=$(( 10#${rsv} ))
+    (( rsv > RSV_G_RESERVE )) && RSV_G_RESERVE="${rsv}"
+  fi
+  return 0
 }
 
 # _rsv_cgroup_fs -> the cgroup mount point without trailing slashes (review round 6, F4): "/x/" and "/x" must classify

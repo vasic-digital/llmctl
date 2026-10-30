@@ -1109,7 +1109,7 @@ _sched_unit_started_ok() { declare -F svc_started_ok >/dev/null 2>&1 || return 0
 # wired from this branch): call this before sched_start.
 _sched_pressure_gate() {
   local p="$1" fp=0
-  if [[ "${2:-}" == psi ]]; then LLMCTL_GATE_RESERVE_MB=0 LLMCTL_GATE_CPU_CHECKS=0 hw_pressure_gate 0 "${p}"; return $?; fi
+  if [[ "${2:-}" == psi ]]; then _LLMCTL_GATE_INTERNAL_RESERVE_MB=0 LLMCTL_GATE_CPU_CHECKS=0 hw_pressure_gate 0 "${p}"; return $?; fi
   fp="$(hw_probe_json | catalog_plan_json 2>/dev/null | json_stdin 'd["profiles"][argv[0]]["ram_mb"]' "${p}" 2>/dev/null || echo 0)"
   hw_pressure_gate "${fp}" "${p}"
 }
@@ -1138,7 +1138,7 @@ sched_restart_admit() {
     return 75
   fi
   reserve_prime
-  LLMCTL_GATE_ACTION=restart LLMCTL_GATE_RESERVE_MB=0 hw_pressure_gate 0 "${p}" || _sched_gate_fallback $? || return $?
+  LLMCTL_GATE_ACTION=restart _LLMCTL_GATE_INTERNAL_RESERVE_MB=0 hw_pressure_gate 0 "${p}" || _sched_gate_fallback $? || return $?
   LLMCTL_GATE_ACTION=restart capacity_admit "${base}" "" "${key}" || return $?
   if [[ -n "${CAP_THREADS}" ]]; then
     cap="$(reserve_cpu_cap "${base}")"

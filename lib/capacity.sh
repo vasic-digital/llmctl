@@ -260,6 +260,11 @@ _cap_measure() {
   local mpsi="${LLMCTL_PSI_FILE:-${pdir}/memory}" cpsi="${LLMCTL_CPU_PSI_FILE:-${pdir}/cpu}" ipsi="${LLMCTL_IO_PSI_FILE:-${pdir}/io}"
   local root; root="$(_rsv_cgroup_root)"
   local plan_file="${_CAP_TMPDIR:?}/plan.json" prc=0
+  # the user gate knobs can only be stricter (round-8 review F3); a non-numeric LLMCTL_GATE_RESERVE_MB is undetermined
+  if ! reserve_gate_limits; then
+    _cap_undetermined_doc "LLMCTL_GATE_RESERVE_MB=${LLMCTL_GATE_RESERVE_MB:-} is not a number of MiB; refusing rather than guessing" "$@"
+    return 0
+  fi
   _cap_bounded "${CAP_PT}" "${plan_file}" _cap_plan_probe || prc=$?
   if (( prc == 124 )); then
     _cap_undetermined_doc "the hardware/plan probe did not finish within ${CAP_PT} s (LLMCTL_CAPACITY_PROBE_TIMEOUT)" "$@"
@@ -301,9 +306,9 @@ _cap_measure() {
   if [[ -n "${in_is}" ]]; then _cap_in psi_io "${ipsi}" 1; else _cap_in psi_io "${ipsi}" 0; fi
   CAP_ENABLED="$(reserve_enabled && echo 1 || echo 0)" \
   CAP_N="${RSV_N}" CAP_RC="${RSV_RC}" CAP_BC="${RSV_BC}" CAP_RSET="${RSV_RESERVED_SET}" CAP_MSET="${RSV_CPUSET}" CAP_CPUSHORT="${RSV_CPU_SHORT:-0}" \
-  CAP_CHAT="${RSV_CHAT_CPUS}" CAP_DECIDE="${RSV_DECIDE_CPUS}" CAP_MT="${RSV_MT}" CAP_RM="${RSV_RM}" CAP_BM="${RSV_BM}" \
+  CAP_CHAT="${RSV_CHAT_CPUS}" CAP_DECIDE="${RSV_DECIDE_CPUS}" CAP_MT="${RSV_MT}" CAP_RM="$(reserve_enabled && echo "${RSV_G_RESERVE}" || echo "${RSV_RM}")" CAP_BM="${RSV_BM}" \
   CAP_CPU_SOME_MAX="${RSV_GATE_CPU_SOME_MAX}" CAP_LOAD_K="${RSV_GATE_LOAD_PER_CPU}" \
-  CAP_MEM_FULL_MAX="${LLMCTL_GATE_FULL_MAX:-2}" CAP_MEM_SOME_MAX="${LLMCTL_GATE_SOME_MAX:-10}" \
+  CAP_MEM_FULL_MAX="${RSV_G_FMAX}" CAP_MEM_SOME_MAX="${RSV_G_SMAX}" \
   CAP_MSOME="${in_ms}" CAP_MFULL="${in_mf}" CAP_CSOME="${in_cs}" CAP_ISOME="${in_is}" CAP_IFULL="${in_if}" \
   CAP_LOAD="${in_la}" CAP_MEMINFO="${in_mi}" CAP_INPUTS="${_CAP_INPUTS}" CAP_CG_CSTAT="${cg_cstat}" \
   CAP_PROC_DIR="${LLMCTL_PROC_DIR:-/proc}" CAP_NPROC_LIMIT="${LLMCTL_NPROC_LIMIT:-}" \

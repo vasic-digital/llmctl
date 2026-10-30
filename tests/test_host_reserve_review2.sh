@@ -183,10 +183,12 @@ assert_file_contains "${TEST_TMP}/empty.err" "could not be measured" "the refusa
 
 echo "== M03: restart adds the replaced unit's resident memory back to the user manager's cgroup room =="
 fp="$(q "$(capacity_json decide-tiny)" 'd["profiles"]["decide-tiny"]["headroom"]["footprint_mb"]')"
+# the user manager's memory.max bounds the host RAM the reserve is computed from (round 8, F1): write it BEFORE reading the reserve
+max_mb=20480; printf '%s\n' $(( max_mb * MIB )) > "${LLMCTL_CGROUP_ROOT}/memory.max"
 rm_mb="$(q "$(capacity_json)" 'd["reserve"]["mem_reserved_mb"]')"
 # cgroup room without the add-back is 1000 MiB short of footprint + reserve; the replaced unit holds 2048 MiB
-max_mb=20480; cur_mb=$(( max_mb - (fp + rm_mb - 1000) ))
-printf '%s\n' $(( max_mb * MIB )) > "${LLMCTL_CGROUP_ROOT}/memory.max"; printf '%s\n' $(( cur_mb * MIB )) > "${LLMCTL_CGROUP_ROOT}/memory.current"
+cur_mb=$(( max_mb - (fp + rm_mb - 1000) ))
+printf '%s\n' $(( cur_mb * MIB )) > "${LLMCTL_CGROUP_ROOT}/memory.current"
 mkunit 'llmctl-llama@decide-tiny.service' '300000 100000' $(( 2560 * MIB )) $(( 2048 * MIB ))
 assert_eq 0 "$(admit_rc decide-tiny "" decide-tiny)" "restart: the replaced unit's 2048 MiB come back into the cgroup room (admitted)"
 clean_units
