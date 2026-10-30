@@ -434,7 +434,7 @@ hw_pressure_gate() {
   local fmax smax reserve grc=0
   reserve_gate_limits || grc=$?
   if (( grc != 0 )); then
-    printf 'refusing to %s %s: LLMCTL_GATE_RESERVE_MB=%q is not a number of MiB; the gate refuses rather than guess.\n' "${act}" "${label}" "${LLMCTL_GATE_RESERVE_MB:-}" >&2
+    printf 'refusing to %s %s: %q is not a plain whole number; the gate refuses rather than fall back to a looser default.\n' "${act}" "${label}" "${RSV_G_BAD:-LLMCTL_GATE_RESERVE_MB=${LLMCTL_GATE_RESERVE_MB:-}}" >&2
     printf 'llmctl-fallback: %s\n' "$(_cap_fallback_name 2>/dev/null || echo none)" >&2
     return 75
   fi

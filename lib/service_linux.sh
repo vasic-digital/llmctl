@@ -196,7 +196,7 @@ _svc_hook_cmd() { printf '/bin/bash %s %s' "$(_svc_qx "${_svl_dir}/svc_hook.sh")
 #   * host reserve (3.4.0, lib/reserve.sh): with the reserve ON (the default) the engine yields harder - Nice=15,
 #     CPUWeight=20, IOWeight=20, OOMScoreAdjust=800 (the kernel kills the model long before the desktop session) - and
 #     the TEMPLATE carries a CPU backstop (CPUQuota = the chat cap, CPUAffinity = the model CPU set) for a unit whose
-#     per-profile 06-reserve.conf is missing. LLMCTL_HOST_RESERVE=0 (diagnostics) writes the pre-3.4.0 values.
+#     per-profile 06-reserve.conf is missing. LLMCTL_HOST_RESERVE=0 (diagnostics) writes the pre-3.4.0 values into the unit TEMPLATE only; it is never persisted in the env record.
 _svc_resource_directives() {
   if reserve_enabled; then
     reserve_compute
@@ -281,7 +281,8 @@ _svc_rm_mem_dropin() {
 # _svc_write_reserve_dropin <profile> <engine> <instance> - the per-profile host-reserve drop-in (06-reserve.conf:
 # CPUQuota, CPUAffinity/AllowedCPUs, OMP_NUM_THREADS - lib/reserve.sh reserve_dropin_body) plus the unit's CPU limit in
 # its env record (the start gate's fallback when it does not run inside the unit's cgroup). With LLMCTL_HOST_RESERVE=0
-# the drop-in is removed and the env record says LLMCTL_HOST_RESERVE=0, so the unit's own gate runs the old checks.
+# the drop-in is removed for this start only; the env record never carries LLMCTL_HOST_RESERVE (round-9 R1), so the
+# next boot/restart applies the reserve again.
 _svc_write_reserve_dropin() {
   local profile="$1" engine="$2" instance="$3" dir envf tmp body=""
   dir="$(svc_unit_dir)/llmctl-${engine}@${instance}.service.d"
@@ -297,10 +298,11 @@ _svc_write_reserve_dropin() {
     fi
     if [[ -f "${envf}" ]] && tmp="$(mktemp "${envf}.XXXXXX")"; then
       { grep -v '^LLMCTL_RESERVE_CPU_PCT_UNIT=\|^LLMCTL_HOST_RESERVE=' "${envf}" || true
+        # The reserve-off DIAGNOSTIC override is deliberately NOT written here (round-9 R1): a persisted
+        # LLMCTL_HOST_RESERVE=0 would make every later boot/restart run unreserved while status still shows the
+        # reserve ON. Any stale line is dropped above; the override lives only in the invoking shell.
         if reserve_enabled; then
           printf 'LLMCTL_RESERVE_CPU_PCT_UNIT=%s\n' "$(sed -n 's/^CPUQuota=\([0-9]*\)%$/\1/p' <<<"${body}")"
-        else
-          printf 'LLMCTL_HOST_RESERVE=0\n'
         fi; } > "${tmp}"
       chmod 600 "${tmp}"; mv -f "${tmp}" "${envf}"
     fi

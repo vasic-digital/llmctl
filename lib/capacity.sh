@@ -262,7 +262,7 @@ _cap_measure() {
   local plan_file="${_CAP_TMPDIR:?}/plan.json" prc=0
   # the user gate knobs can only be stricter (round-8 review F3); a non-numeric LLMCTL_GATE_RESERVE_MB is undetermined
   if ! reserve_gate_limits; then
-    _cap_undetermined_doc "LLMCTL_GATE_RESERVE_MB=${LLMCTL_GATE_RESERVE_MB:-} is not a number of MiB; refusing rather than guessing" "$@"
+    _cap_undetermined_doc "${RSV_G_BAD:-LLMCTL_GATE_RESERVE_MB=${LLMCTL_GATE_RESERVE_MB:-}} is not a plain whole number; refusing rather than falling back to a looser default" "$@"
     return 0
   fi
   _cap_bounded "${CAP_PT}" "${plan_file}" _cap_plan_probe || prc=$?
@@ -706,10 +706,17 @@ capacity_admit() {
   verdict="$(python3 -c 'import json,sys; d=json.loads(sys.argv[1]); v=d["profiles"].get(sys.argv[2]); m=d.get("measurement") or {}; print("undetermined 0" if not m.get("ok", True) else ("%s %s" % (v["verdict"], v["threads"]) if v else "unknown 0"))' "${doc}" "${p}" 2>/dev/null)" || verdict=""
   case "${verdict%% *}" in
     fits|fits_with_reduced_threads|running)
-      if python3 -c 'import json,sys; sys.exit(0 if json.loads(sys.argv[1])["reserve"].get("cpu_short") else 1)' "${doc}" 2>/dev/null; then
-        printf 'WARNING: this host has too few CPUs to keep a CPU reserve (reserved 0): %s %s can use every CPU. Route decisions to a hosted endpoint, or set LLMCTL_HOST_RESERVE_STRICT=1 to refuse.\n' "${LLMCTL_GATE_ACTION:-start}" "${p}" >&2
+      local _cs
+      _cs="$(python3 -c 'import json,sys; r=json.loads(sys.argv[1])["reserve"]; print("%s %s %s" % (1 if r.get("cpu_short") else 0, r.get("cpus_reserved",0), r.get("cpus_model_budget",0)))' "${doc}" 2>/dev/null)" || _cs="0 0 0"
+      if [[ "${_cs%% *}" == 1 ]]; then
+        local _rc="${_cs#* }"; local _bc="${_rc#* }"; _rc="${_rc%% *}"
+        if [[ "${_rc}" == 0 ]]; then
+          printf 'WARNING: this host has too few CPUs to keep a CPU reserve (reserved 0): %s %s can use every CPU. Route decisions to a hosted endpoint, or set LLMCTL_HOST_RESERVE_STRICT=1 to refuse.\n' "${LLMCTL_GATE_ACTION:-start}" "${p}" >&2
+        else
+          printf 'WARNING: this host cannot keep the full CPU reserve (reserved %s, models may use %s CPU(s)): %s %s is limited to that set. Set LLMCTL_HOST_RESERVE_STRICT=1 to refuse such a host.\n' "${_rc}" "${_bc}" "${LLMCTL_GATE_ACTION:-start}" "${p}" >&2
+        fi
         if [[ "${LLMCTL_HOST_RESERVE_STRICT:-0}" == 1 ]]; then
-          _cap_refuse "${p}" "the host has too few CPUs to keep a CPU reserve and LLMCTL_HOST_RESERVE_STRICT=1"; return 75
+          _cap_refuse "${p}" "the host cannot keep the full CPU reserve and LLMCTL_HOST_RESERVE_STRICT=1"; return 75
         fi
       fi
       CAP_THREADS="${verdict##* }"; [[ "${CAP_THREADS}" =~ ^[1-9][0-9]*$ ]] || CAP_THREADS=""; return 0 ;;
