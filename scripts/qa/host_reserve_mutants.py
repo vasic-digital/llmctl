@@ -27,6 +27,8 @@ R6 = "tests/test_host_reserve_review6.sh"
 R7 = "tests/test_host_reserve_review7.sh"
 R8 = "tests/test_host_reserve_review8.sh"
 R9 = "tests/test_host_reserve_review9.sh"
+R10 = "tests/test_host_reserve_review10.sh"
+SCH = "lib/scheduler.sh"
 SVCL = "lib/service_linux.sh"
 # a reviewer mutant that is killed by "some suite" names the chain the reviewer ran (killed when any suite fails)
 CHAIN = (R6, R4, R5, "tests/test_capacity.sh", "tests/test_host_reserve.sh", R3, R2, "tests/test_host_reserve_review.sh",
@@ -338,20 +340,42 @@ MUTANTS = [
     ("R8-F1-ancestors-not-walked", RSV, 'if [[ "${root}" == "${fs}"/* ]]; then', 'if false; then', R8),
     ("R8-F1-memory-high-ignored", RSV, 'for f in memory.max memory.high; do', 'for f in memory.max; do', R8),
     ("R8-F3-reserve-below-computed-allowed", RSV, '(( rsv > RSV_G_RESERVE )) && RSV_G_RESERVE="${rsv}"', 'RSV_G_RESERVE="${rsv}"', R8),
-    ("R8-F3-non-numeric-reserve-accepted", RSV, 'RSV_G_BAD="LLMCTL_GATE_RESERVE_MB=${rsv}"; return 75; fi\n    rsv=$(( 10#${rsv} ))', 'RSV_G_BAD=""; rsv=0; fi\n    rsv=$(( 10#${rsv} ))', R8),
+    ("R8-F3-non-numeric-reserve-accepted", RSV, 'int)  [[ "${_v}" =~ ^[0-9]{1,18}$ ]] || { RSV_G_BAD="${_k}=${_v}"; return 75; } ;;', 'int)  : ;;', R8),
     ("R8-F3-full-max-not-clamped", RSV, "RSV_G_FMAX=\"$(awk -v v=\"${fmax}\" 'BEGIN{print (v>2)?2:v}')\"", 'RSV_G_FMAX="${fmax}"', R8),
     ("R8-F3-some-max-not-clamped", RSV, "RSV_G_SMAX=\"$(awk -v v=\"${smax}\" 'BEGIN{print (v>10)?10:v}')\"", 'RSV_G_SMAX="${smax}"', R8),
     ("R8-F3-capacity-ignores-clamp", CAP, 'CAP_MEM_FULL_MAX="${RSV_G_FMAX}" CAP_MEM_SOME_MAX="${RSV_G_SMAX}"', 'CAP_MEM_FULL_MAX="${LLMCTL_GATE_FULL_MAX:-2}" CAP_MEM_SOME_MAX="${LLMCTL_GATE_SOME_MAX:-10}"', R8),
     ("R8-F3-gate-ignores-nonnumeric-refusal", HW, 'if (( grc != 0 )); then', 'if false; then', R8),
     ("R8-F3-fallback-line-dropped", HW, "printf 'llmctl-fallback: %s\\n' \"$(_cap_fallback_name 2>/dev/null || echo none)\" >&2\n    return 75", "return 75", R8),
     ('R9-OWN4-reserve-off-persisted', SVCL, '        fi; } > "${tmp}"', '        else printf \'LLMCTL_HOST_RESERVE=0\\n\'; fi; } > "${tmp}"', R9),
-    ('R9-stale-off-line-not-cleared', SVCL, "grep -v '^LLMCTL_RESERVE_CPU_PCT_UNIT=\\|^LLMCTL_HOST_RESERVE='", "grep -v '^LLMCTL_RESERVE_CPU_PCT_UNIT='", R9),
+    ('R9-stale-off-line-not-cleared', SVCL, "grep -v '^LLMCTL_RESERVE_CPU_PCT_UNIT=\\|^LLMCTL_HOST_RESERVE='", "grep -v '^LLMCTL_RESERVE_CPU_PCT_UNIT='", (R9, R10)),
     ('R9-memo-key-without-chain', RSV, '"${_RSV_CHAIN_SIG}" "${LLMCTL_CGROUP_ROOT:-}" "${LLMCTL_CGROUP_FS:-}"', '"" "" ""', R9),
     ('R9-cpu-warning-always-reserved-0', CAP, 'if [[ "${_rc}" == 0 ]]; then', 'if true; then', R9),
     ('R9-chain-overflow-wraps', RSV, '(( ${#v} > 15 )) && continue', ':', R9),
     ('R9-OWN2-chain-floor-dropped', RSV, '(( n >= 1 )) || n=1', ':', R9),
-    ('R9-malformed-knob-accepted', RSV, 'RSV_G_BAD="${_k}=${_v}"; return 75; fi', 'RSV_G_BAD=""; fi', R9),
-    ('R9-bad-knob-name-dropped', HW, '${RSV_G_BAD:-LLMCTL_GATE_RESERVE_MB=', '${RSV_G_BADX:-LLMCTL_GATE_RESERVE_MB=', R9),
+    ('R9-malformed-knob-accepted', RSV, 'reserve_knobs_check || return 75', ':', (R9, R10)),
+    ('R9-bad-knob-name-dropped', RSV, '"$1" "$2" "${RSV_G_BAD:-unknown knob}"', '"$1" "$2" "unknown knob"', (R9, R10)),
+    ('R10-F1-install-pin-dropped', SVCL, '  local LLMCTL_HOST_RESERVE=1\n  # a malformed numeric knob', '  # a malformed numeric knob', R10),
+    ('R10-F1-write-env-pin-dropped', SVCL, '  local LLMCTL_HOST_RESERVE=1\n  reserve_knobs_check || { reserve_knobs_refuse "write', '  reserve_knobs_check || { reserve_knobs_refuse "write', R10),
+    ('R10-F1-launch-pin-dropped', SCH, '  local LLMCTL_HOST_RESERVE=1\n  local engine; engine=', '  local engine; engine=', R10),
+    ('R10-F2-int-regex-loose', RSV, 'int)  [[ "${_v}" =~ ^[0-9]{1,18}$ ]]', 'int)  [[ "${_v}" =~ ^[0-9]+$ ]]', R10),
+    ('R10-F2-dec-regex-loose', RSV, 'dec)  [[ "${_v}" =~ ^[0-9]{1,18}([.][0-9]{1,18})?$ ]]', 'dec)  [[ "${_v}" =~ ^[0-9.]+$ ]]', R10),
+    ('R10-F2-flag-unchecked', RSV, 'flag) [[ "${_v}" == 0 || "${_v}" == 1 ]]', 'flag) :', R10),
+    ('R10-F2-internal-reserve-not-exempt', RSV, "[[ \"${_k}\" == LLMCTL_GATE_RESERVE_MB && -n \"${_LLMCTL_GATE_INTERNAL_RESERVE_MB:-}\" ]] && continue", ':', R10),
+    ('R10-F2-install-skips-check', SVCL, 'reserve_knobs_check || { reserve_knobs_refuse install "the llmctl units"; return 75; }', ':', R10),
+    ('R10-F2-write-env-skips-check', SVCL, 'reserve_knobs_check || { reserve_knobs_refuse "write the unit state of" "${profile}"; return 75; }', ':', R10),
+    ('R10-F2-gate-ignores-refusal', HW, 'reserve_knobs_refuse "${act}" "${label}"', ':', R10),
+    ('R10-D2-cpu-min-not-validated', RSV, 'LLMCTL_RESERVE_CPU_MIN:int ', '', R10),
+    ('R10-F2-chat-cpu-not-validated', RSV, 'LLMCTL_CHAT_CPU_PCT:int ', '', R10),
+    ('R10-F2-decide-cpu-not-validated', RSV, 'LLMCTL_DECIDE_CPU_PCT:int\n', '\n', R10),
+    ('R10-F2-load-per-cpu-not-validated', RSV, 'LLMCTL_GATE_LOAD_PER_CPU:int ', '', R10),
+    ('R10-F2-cpu-some-max-not-validated', RSV, 'LLMCTL_GATE_CPU_SOME_MAX:int ', '', R10),
+    ('R10-F2-strict-flag-not-validated', RSV, '  LLMCTL_HOST_RESERVE_STRICT:flag\n', '\n', R10),
+    ('R10-F2-gate-poll-not-validated', RSV, 'LLMCTL_GATE_POLL:int ', '', R10),
+    ('R10-D5-capacity-ignores-bad-knob', CAP, 'if ! reserve_gate_limits; then', 'if ! reserve_gate_limits && false; then', R10),
+    ('R10-A1-stale-cpu-unit-line-kept', SVCL, "grep -v '^LLMCTL_RESERVE_CPU_PCT_UNIT=\\|^LLMCTL_HOST_RESERVE='", "grep -v '^LLMCTL_HOST_RESERVE='", R10),
+    ('R10-B-memo-key-chain-sig-stale', RSV, '  _rsv_chain_scan\n  printf \'%s|\' "${_RSV_CHAIN_SIG}"', '  printf \'%s|\' "${_RSV_CHAIN_SIG}"', R10),
+    ('R10-C2-leading-zero-strip-dropped', RSV, 'v="${v#"${v%%[!0]*}"}"; v="${v:-0}"', ':', R10),
+    ('R10-C1-overflow-bound-wide', RSV, '(( ${#v} > 15 )) && continue', '(( ${#v} > 19 )) && continue', R10),
 ]
 
 

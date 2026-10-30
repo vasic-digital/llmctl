@@ -124,6 +124,10 @@ for e in "${KNOBS[@]}"; do
   assert_eq 75 "${rc}" "F2: the unit-state write refuses ${k}='${bad}'"
   assert_eq 0 "$(find "${root}/services" -type f | wc -l)" "F2: ... and writes no env record"
 done
+# a value too long for 64-bit arithmetic is malformed, not a number (the regexes cap the length)
+rc=0; ( export LLMCTL_RESERVE_MEM_MIN_MB=99999999999999999999; reserve_knobs_check ) || rc=$?; assert_eq 75 "${rc}" "F2: a 20-digit integer knob is refused"
+rc=0; ( export LLMCTL_GATE_FULL_MAX=99999999999999999999.5; reserve_knobs_check ) || rc=$?; assert_eq 75 "${rc}" "F2: a 20-digit decimal knob is refused"
+rc=0; ( export LLMCTL_GATE_FULL_MAX=1.5.2; reserve_knobs_check ) || rc=$?; assert_eq 75 "${rc}" "F2: a decimal knob with two points is refused"
 # the scheduler's own PSI-only checks do not depend on the user's GATE_RESERVE_MB
 rc=0; ( export LLMCTL_PSI_FILE="${PSI}" LLMCTL_MEMINFO_FILE="${MEMI}" LLMCTL_GATE_RESERVE_MB=9G _LLMCTL_GATE_INTERNAL_RESERVE_MB=0 LLMCTL_GATE_CPU_CHECKS=0; hw_pressure_gate 0 decide-tiny ) >/dev/null 2>&1 || rc=$?
 assert_eq 0 "${rc}" "F2: a malformed user LLMCTL_GATE_RESERVE_MB does not block the scheduler's internal PSI-only check"
