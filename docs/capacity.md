@@ -85,12 +85,16 @@ get the lock within `LLMCTL_SCHED_LOCK_WAIT` fails without restarting anything.
 
 `enable` starts the profile now AND at login/boot (as before 3.4.0); the start now passes the same gate.
 
-`LLMCTL_HOST_RESERVE=0` is a diagnostics switch for the invoking command only: it skips the reserve in that one
-`start`/`enable`/`capacity` run so the old failure can be reproduced. It is NOT the pre-3.4.0 behaviour: the legacy
-`hw_pressure_gate` checks still apply and still fail closed. It is not persisted into the unit's env record (round 8): the
-next boot, restart or start without the variable applies the reserve again. The unit file written at `install` time carries
-the pre-3.4.0 resource directives while the switch is on, so reinstall without it to get the backstop back. It is reported
-loudly: `OFF` in `llmctl reserve`, `DISABLED` in `llmctl status` and `llmctl doctor`.
+`LLMCTL_HOST_RESERVE=0` is a diagnostics switch for the invoking command only. What it changes: the reserve-based
+admission checks (`capacity_admit`, the reserve part of the start gate) are skipped, `llmctl capacity` and `llmctl reserve`
+report it, and direct launches that are not persisted (the smoke/validation runs of `llmctl download`) start without the
+CPU cap. What it does NOT change (round 10): anything written to disk. `install`, `start` and `enable` always write the unit
+template, `05-memory.conf`, `06-reserve.conf`, the env record (including the `--threads` of `LLMCTL_ARGS` and the
+`LLMCTL_RESERVE_*_UNIT` lines) as if the reserve were ON, so a later restart or boot sees exactly the state a normal start
+writes (tested by diffing the complete unit state after a reserve-off start, a reserve-on start and a restart). The unit
+therefore keeps its CPU quota, memory cap and thread limit even when started under the override; only the check that would
+have refused the start is skipped. It is NOT the pre-3.4.0 behaviour: the legacy `hw_pressure_gate` checks still apply and
+still fail closed. It is reported loudly: `OFF` in `llmctl reserve`, `DISABLED` in `llmctl status` and `llmctl doctor`.
 
 ## `llmctl capacity [--json] [profile...]`
 

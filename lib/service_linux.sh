@@ -196,7 +196,9 @@ _svc_hook_cmd() { printf '/bin/bash %s %s' "$(_svc_qx "${_svl_dir}/svc_hook.sh")
 #   * host reserve (3.4.0, lib/reserve.sh): with the reserve ON (the default) the engine yields harder - Nice=15,
 #     CPUWeight=20, IOWeight=20, OOMScoreAdjust=800 (the kernel kills the model long before the desktop session) - and
 #     the TEMPLATE carries a CPU backstop (CPUQuota = the chat cap, CPUAffinity = the model CPU set) for a unit whose
-#     per-profile 06-reserve.conf is missing. LLMCTL_HOST_RESERVE=0 (diagnostics) writes the pre-3.4.0 values into the unit TEMPLATE only; it is never persisted in the env record.
+#     per-profile 06-reserve.conf is missing. Persisted state is ALWAYS written reserve-ON (svc_install / svc_write_env /
+#     sched_build_launch pin LLMCTL_HOST_RESERVE=1 for their callees): the LLMCTL_HOST_RESERVE=0 diagnostic override
+#     never reaches the template, the drop-ins, the env record or the launch threads.
 _svc_resource_directives() {
   if reserve_enabled; then
     reserve_compute
@@ -280,9 +282,10 @@ _svc_rm_mem_dropin() {
 
 # _svc_write_reserve_dropin <profile> <engine> <instance> - the per-profile host-reserve drop-in (06-reserve.conf:
 # CPUQuota, CPUAffinity/AllowedCPUs, OMP_NUM_THREADS - lib/reserve.sh reserve_dropin_body) plus the unit's CPU limit in
-# its env record (the start gate's fallback when it does not run inside the unit's cgroup). With LLMCTL_HOST_RESERVE=0
-# the drop-in is removed for this start only; the env record never carries LLMCTL_HOST_RESERVE (round-9 R1), so the
-# next boot/restart applies the reserve again.
+# its env record (the start gate's fallback when it does not run inside the unit's cgroup). Its callers (svc_install,
+# svc_write_env) pin LLMCTL_HOST_RESERVE=1, so the diagnostic override never removes the drop-in or drops the env line
+# (round 10 F1); the reserve-off branches below are defensive for a direct call. The env record never carries
+# LLMCTL_HOST_RESERVE (round-9 R1).
 _svc_write_reserve_dropin() {
   local profile="$1" engine="$2" instance="$3" dir envf tmp body=""
   dir="$(svc_unit_dir)/llmctl-${engine}@${instance}.service.d"
@@ -609,6 +612,12 @@ _svc_install_plan() {
 
 svc_install() {
   if dry_run_pure; then _svc_install_plan; return 0; fi
+  # Persisted state is ALWAYS derived with the host reserve ON (round 10, F1): the LLMCTL_HOST_RESERVE=0 diagnostic
+  # override skips admission gates, reporting and non-persisted direct launches only. Everything written here (unit
+  # template directives, 05-memory.conf, 06-reserve.conf, env record lines, launch threads) is read back by a later
+  # restart or boot that does not see the invoking shell, so deriving it reserve-OFF would silently run those
+  # unreserved while status shows the reserve ON. `local` is dynamically scoped: every callee sees the pin.
+  local LLMCTL_HOST_RESERVE=1
   local unit_dir; unit_dir="$(svc_unit_dir)"
   ensure_dir "${unit_dir}"
   ensure_state_dirs
@@ -705,6 +714,12 @@ svc_install() {
 # engine=llama only, never applied unconditionally.
 svc_write_env() {
   local profile="$1" engine="$2" exec_bin="$3"; shift 3
+  # Persisted state is ALWAYS derived with the host reserve ON (round 10, F1): the LLMCTL_HOST_RESERVE=0 diagnostic
+  # override skips admission gates, reporting and non-persisted direct launches only. Everything written here (unit
+  # template directives, 05-memory.conf, 06-reserve.conf, env record lines, launch threads) is read back by a later
+  # restart or boot that does not see the invoking shell, so deriving it reserve-OFF would silently run those
+  # unreserved while status shows the reserve ON. `local` is dynamically scoped: every callee sees the pin.
+  local LLMCTL_HOST_RESERVE=1
   ensure_dir "${LLMCTL_SERVICES_DIR}"
   local instance; instance="$(_svc_instance_key "${profile}")"
   local env_file="${LLMCTL_SERVICES_DIR}/${instance}.env"

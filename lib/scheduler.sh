@@ -405,6 +405,9 @@ sched_registry_withdraw() {
 # SCHED_ARGS (bash has no array returns).
 sched_build_launch() {
   local profile="$1" mode="$2" port="$3" ctx="$4" ngl="$5" parallel="$6" fa="$7" kv_type="${8:-f16}"
+  # the launch is persisted in the unit's env record (and is part of the validation key): always built reserve-ON
+  # (round 10, F1; see svc_write_env), whatever the diagnostic override says for this one command
+  local LLMCTL_HOST_RESERVE=1
   local engine; engine="$(catalog_engine "${profile}")"
   SCHED_ARGS=()
   case "${engine}" in
