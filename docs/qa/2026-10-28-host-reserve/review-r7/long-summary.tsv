@@ -1,0 +1,8 @@
+base-v3.3.2	test_decide_security_mutation	rc=0	1446s	RESULT: PASS
+base-v3.3.2	test_livetest_watchdog	rc=1	936s	RESULT: 346 passed, 1 failed
+base-v3.3.2	test_validation_mutants	rc=0	1382s	RESULT: PASS
+DONE base-v3.3.2
+head	test_decide_security_mutation	rc=0	1427s	RESULT: PASS
+head	test_livetest_watchdog	rc=0	928s	RESULT: 347 passed, 0 failed
+head	test_validation_mutants	rc=0	1434s	RESULT: PASS
+DONE head

@@ -106,3 +106,4 @@ Each round's evidence, newest last. Rounds 2 to 5 are linked here so every recor
 - Round 3: [`review-r3/`](review-r3/README.md)
 - Round 4: [`review-r4/`](review-r4/README.md)
 - Round 5: [`review-r5/`](review-r5/README.md)
+- Round 7 (no `review-r6/` directory exists): [`review-r7/`](review-r7/README.md)

@@ -1,0 +1,18 @@
+tests/test_host_reserve_f3.sh ::   ok: llmctl reserve --json: host scope, the other user's unit listed with its owner RESULT: PASS 
+tests/test_host_reserve_review2.sh ::   ok: negative control: 8192 MiB host: the model budget 4096 MiB RESULT: FAIL (1 assertion failure(s)) 
+tests/test_host_reserve_review3.sh ::   ok: an unreadable input is recorded unreadable, never defaulted RESULT: PASS 
+tests/test_host_reserve_review4.sh ::   ok: a held lock makes the restart wait and give up (2) without admitting or restarting RESULT: PASS 
+tests/test_host_reserve_review5.sh ::   ok: control: a readable empty root is readable RESULT: PASS 
+tests/test_host_reserve_review6.sh ::   ok: F5: units_error carrying a double quote is valid JSON and round-trips RESULT: PASS 
+tests/test_host_reserve_review7.sh ::   ok: literal 0 disables RESULT: PASS 
+tests/test_host_reserve_review8.sh ::   ok: O12: a planner-only verdict is deferred to the planner path (negative control) RESULT: PASS 
+tests/test_host_reserve_review.sh ::   ok: decision smoke (decide-2b, letter-logit): --threads = decision cap 3 (chat cap is 6) RESULT: PASS 
+tests/test_host_reserve.sh ::   ok: a knob changed after priming recomputes the reserve (was 4) RESULT: PASS 
+tests/test_capacity.sh ::   ok: no env record written for a refused start RESULT: PASS 
+tests/test_decision_capacity.sh ::   ok: refused start reports the needed numbers RESULT: PASS 
+tests/test_start_gate.sh ::   ok: onnx: ExecStartPre gate (line 51) precedes prestart key rotation (line 52) RESULT: PASS 
+tests/test_services.sh ::   ok: dry-run launchctl bootstrap RESULT: PASS 
+tests/test_gate_wiring_pressure.sh ::   ok: B4 (control): no pressure -> the probes run (1 requests) RESULT: PASS 
+tests/test_gate_wiring_start_paths.sh ::   ok: require-validated on an unknown profile is refused (non-zero), never a pass RESULT: PASS 
+tests/test_gate_wiring_restart_enable.sh ::   ok: restart of a never-started profile: no stop is invented before a start (stop 6, start 2) RESULT: PASS 
+tests/test_restart_policy.sh ::   ok: no llmctl-test-1452308-* unit or timer remains in the user manager RESULT: PASS 

@@ -1,0 +1,5 @@
+head=536d65ea8030796d84531dcfa8c5b778d7698010
+head_tree=96432b7e66e8cb4fc2d01b069d787d28e5fbe11a
+dirty=no
+llama_server=/home/milosvasic/Projects/llmctl/submodules/llama.cpp/build/bin/llama-server
+llama_server_sha256=09a14c52c9d29f814e57cbcf7e4454412ee44cc94956b365250a57d830b0fa74

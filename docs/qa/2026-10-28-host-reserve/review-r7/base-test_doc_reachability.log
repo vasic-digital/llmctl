@@ -1,0 +1,19 @@
+  ok: scripts/check_doc_reachability.sh exists
+  ok: a fully linked tree passes (relative, ../, anchor+title, directory and transitive links)
+  ok: the checker reports orphans=0 on the clean tree
+  ok: CONTROL NEEDLE: a planted orphan fails the check
+  ok: the orphan is named
+  ok: exactly one orphan is counted
+  ok: a transitively linked doc is not reported
+  ok: NEGATIVE CONTROL: linking the orphan from a reachable doc makes the same tree pass
+  ok: an island of docs linking only each other is unreachable
+  ok: the island's far end is reported too
+  ok: a broken link does not fail the default check
+  ok: --check-links fails on a broken link
+  ok: the broken target is named
+  ok: an unknown option is a usage error
+  ok: a missing root is a usage error
+  ok: a root without README.md is a usage error (never a vacuous pass)
+  ok: the real repository has no orphan documentation (README.md is the entry point)
+  ok: real tree: orphans=0
+RESULT: PASS

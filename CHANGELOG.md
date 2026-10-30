@@ -37,6 +37,9 @@ workload, and reports host capacity on demand (`llmctl capacity --json`).
   read-back: `cpu.max 300000/100000`, weight 20, `memory.max 3G`, `memory.high 2.5G`, swap 0, refusal rc 75 with `llmctl-fallback: cloud`).
   NOT proven live: 1-CPU or small-RAM hosts, cgroup v1, a system-level (root) manager, container scopes, deep or hostile cgroup trees; those are
   fixture-tree (unit-class) tests only. Fail-open follow-ups M8/M9 are documented in `docs/capacity.md` and backstopped by the unit start gate.
+- **Round-7 fixes.** The model memory budget is now bounded by the tightest `memory.high`/`memory.max` up the cgroup chain; `LLMCTL_GATE_RESERVE_MB`,
+  `LLMCTL_GATE_FULL_MAX` and `LLMCTL_GATE_SOME_MAX` can only tighten (a non-numeric reserve refuses with rc 75). Mutant run: 193/193 killed
+  (`review-r7/mutants-r8.json`). The chain bound is unit-class only, not proven live.
 - **1-CPU hosts:** the CPU reserve is 0 there; admission warns loudly and `capacity --json` reports `reserve.cpu_short`;
   `LLMCTL_HOST_RESERVE_STRICT=1` refuses such a host.
 - **Small hosts:** while the host reserve is on, a host with less than about **4.6 GiB** of RAM refuses EVERY local model start (exit 75):

@@ -1,0 +1,10 @@
+live_cpu_some_avg10=4.49 threshold=1
+tool_cpu_some_avg10=4.49
+tool_saw_above_threshold=True
+rc=75
+pressure_ok=False
+pressure_reasons=cpu PSI some avg10=4.49 > 1
+qa_unit_status=degraded
+qa_unit_suggest=llmctl stop llmctl-qa-reserve-fixed-r1
+profile_verdict=does_not_fit
+fallback=cloud
