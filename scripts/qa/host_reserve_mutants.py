@@ -345,7 +345,7 @@ MUTANTS = [
     ("R8-F3-some-max-not-clamped", RSV, "RSV_G_SMAX=\"$(awk -v v=\"${smax}\" 'BEGIN{print (v>10)?10:v}')\"", 'RSV_G_SMAX="${smax}"', R8),
     ("R8-F3-capacity-ignores-clamp", CAP, 'CAP_MEM_FULL_MAX="${RSV_G_FMAX}" CAP_MEM_SOME_MAX="${RSV_G_SMAX}"', 'CAP_MEM_FULL_MAX="${LLMCTL_GATE_FULL_MAX:-2}" CAP_MEM_SOME_MAX="${LLMCTL_GATE_SOME_MAX:-10}"', R8),
     ("R8-F3-gate-ignores-nonnumeric-refusal", HW, 'if (( grc != 0 )); then', 'if false; then', R8),
-    ("R8-F3-fallback-line-dropped", HW, "printf 'llmctl-fallback: %s\\n' \"$(_cap_fallback_name 2>/dev/null || echo none)\" >&2\n    return 75", "return 75", R8),
+    ("R8-F3-fallback-line-dropped", RSV, "printf 'llmctl-fallback: %s\\n' \"$(_cap_fallback_name 2>/dev/null || echo none)\" >&2", ":", R8),
     ('R9-OWN4-reserve-off-persisted', SVCL, '        fi; } > "${tmp}"', '        else printf \'LLMCTL_HOST_RESERVE=0\\n\'; fi; } > "${tmp}"', R9),
     ('R9-stale-off-line-not-cleared', SVCL, "grep -v '^LLMCTL_RESERVE_CPU_PCT_UNIT=\\|^LLMCTL_HOST_RESERVE='", "grep -v '^LLMCTL_RESERVE_CPU_PCT_UNIT='", (R9, R10)),
     ('R9-memo-key-without-chain', RSV, '"${_RSV_CHAIN_SIG}" "${LLMCTL_CGROUP_ROOT:-}" "${LLMCTL_CGROUP_FS:-}"', '"" "" ""', R9),

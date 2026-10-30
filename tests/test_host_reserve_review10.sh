@@ -171,4 +171,9 @@ printf '%020d\n' $(( 12000 * MIB )) > "$(echo "${FS4}/user.slice/user-${U}.slice
 v="$(bm10)"
 if (( v <= 12000 && v < UNB )); then echo "  ok: C2: a 20-digit zero-padded memory.max is read as 12000 MiB (budget ${v}, unlimited ${UNB})"
 else echo "  FAIL: C2: zero-padded limit treated as unlimited (budget ${v}, unlimited ${UNB})" >&2; TEST_FAILS=$((TEST_FAILS+1)); fi
+# C1: a 19-digit value above 2^63 would wrap negative in 64-bit arithmetic: it must count as unlimited, not as a 1 MiB limit
+printf '9300000000000000000\n' > "$(echo "${FS4}/user.slice/user-${U}.slice/user@${U}.service")/memory.max"
+v="$(bm10)"
+(( v == UNB )) && echo "  ok: C1: a 19-digit value above 2^63 is unlimited (budget ${v}), not a wrapped 1 MiB limit" \
+  || { echo "  FAIL: C1: value above 2^63 wrapped (budget ${v}, unlimited ${UNB})" >&2; TEST_FAILS=$((TEST_FAILS+1)); }
 test_finish
