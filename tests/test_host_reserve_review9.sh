@@ -76,6 +76,7 @@ for bad in " 8192" "8G" "9223372036854775808" "0x10"; do
   assert_eq 75 "$(g LLMCTL_RESERVE_MEM_MIN_MB="${bad}")" "R5: LLMCTL_RESERVE_MEM_MIN_MB='${bad}' refuses"
 done
 assert_contains "$(cat "${TEST_TMP}/gerr")" "llmctl-fallback:" "R5: ... with the fallback line"
+assert_contains "$(cat "${TEST_TMP}/gerr")" "LLMCTL_RESERVE_MEM_MIN_MB=" "R5: ... and names the offending variable"
 assert_eq 75 "$(g LLMCTL_RESERVE_MEM_PCT=2O)" "R5: LLMCTL_RESERVE_MEM_PCT=2O refuses"
 assert_eq 75 "$(g LLMCTL_RESERVE_CPU_PCT=40%)" "R5: LLMCTL_RESERVE_CPU_PCT=40% refuses"
 assert_eq 0 "$(g LLMCTL_RESERVE_CPU_PCT=40)" "R5: LLMCTL_RESERVE_CPU_PCT=40 is fine (control)"

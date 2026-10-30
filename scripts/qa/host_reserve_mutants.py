@@ -26,6 +26,8 @@ F3 = "tests/test_host_reserve_f3.sh"
 R6 = "tests/test_host_reserve_review6.sh"
 R7 = "tests/test_host_reserve_review7.sh"
 R8 = "tests/test_host_reserve_review8.sh"
+R9 = "tests/test_host_reserve_review9.sh"
+SVCL = "lib/service_linux.sh"
 # a reviewer mutant that is killed by "some suite" names the chain the reviewer ran (killed when any suite fails)
 CHAIN = (R6, R4, R5, "tests/test_capacity.sh", "tests/test_host_reserve.sh", R3, R2, "tests/test_host_reserve_review.sh",
          "tests/test_decision_capacity.sh", "tests/test_start_gate.sh", "tests/test_services.sh",
@@ -342,6 +344,14 @@ MUTANTS = [
     ("R8-F3-capacity-ignores-clamp", CAP, 'CAP_MEM_FULL_MAX="${RSV_G_FMAX}" CAP_MEM_SOME_MAX="${RSV_G_SMAX}"', 'CAP_MEM_FULL_MAX="${LLMCTL_GATE_FULL_MAX:-2}" CAP_MEM_SOME_MAX="${LLMCTL_GATE_SOME_MAX:-10}"', R8),
     ("R8-F3-gate-ignores-nonnumeric-refusal", HW, 'if (( grc != 0 )); then', 'if false; then', R8),
     ("R8-F3-fallback-line-dropped", HW, "printf 'llmctl-fallback: %s\\n' \"$(_cap_fallback_name 2>/dev/null || echo none)\" >&2\n    return 75", "return 75", R8),
+    ('R9-OWN4-reserve-off-persisted', SVCL, '        fi; } > "${tmp}"', '        else printf \'LLMCTL_HOST_RESERVE=0\\n\'; fi; } > "${tmp}"', R9),
+    ('R9-stale-off-line-not-cleared', SVCL, "grep -v '^LLMCTL_RESERVE_CPU_PCT_UNIT=\\|^LLMCTL_HOST_RESERVE='", "grep -v '^LLMCTL_RESERVE_CPU_PCT_UNIT='", R9),
+    ('R9-memo-key-without-chain', RSV, '"${_RSV_CHAIN_SIG}" "${LLMCTL_CGROUP_ROOT:-}" "${LLMCTL_CGROUP_FS:-}"', '"" "" ""', R9),
+    ('R9-cpu-warning-always-reserved-0', CAP, 'if [[ "${_rc}" == 0 ]]; then', 'if true; then', R9),
+    ('R9-chain-overflow-wraps', RSV, '(( ${#v} > 15 )) && continue', ':', R9),
+    ('R9-OWN2-chain-floor-dropped', RSV, '(( n >= 1 )) || n=1', ':', R9),
+    ('R9-malformed-knob-accepted', RSV, 'RSV_G_BAD="${_k}=${_v}"; return 75; fi', 'RSV_G_BAD=""; fi', R9),
+    ('R9-bad-knob-name-dropped', HW, '${RSV_G_BAD:-LLMCTL_GATE_RESERVE_MB=', '${RSV_G_BADX:-LLMCTL_GATE_RESERVE_MB=', R9),
 ]
 
 
