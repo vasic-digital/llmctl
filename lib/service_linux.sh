@@ -617,6 +617,7 @@ svc_install() {
   # template directives, 05-memory.conf, 06-reserve.conf, env record lines, launch threads) is read back by a later
   # restart or boot that does not see the invoking shell, so deriving it reserve-OFF would silently run those
   # unreserved while status shows the reserve ON. `local` is dynamically scoped: every callee sees the pin.
+  # shellcheck disable=SC2034 # read by callees via dynamic scoping
   local LLMCTL_HOST_RESERVE=1
   # a malformed numeric knob would be silently defaulted by the derivations below and persisted: refuse (round 10, F2)
   reserve_knobs_check || { reserve_knobs_refuse install "the llmctl units"; return 75; }
@@ -721,6 +722,7 @@ svc_write_env() {
   # template directives, 05-memory.conf, 06-reserve.conf, env record lines, launch threads) is read back by a later
   # restart or boot that does not see the invoking shell, so deriving it reserve-OFF would silently run those
   # unreserved while status shows the reserve ON. `local` is dynamically scoped: every callee sees the pin.
+  # shellcheck disable=SC2034 # read by callees via dynamic scoping
   local LLMCTL_HOST_RESERVE=1
   reserve_knobs_check || { reserve_knobs_refuse "write the unit state of" "${profile}"; return 75; }
   ensure_dir "${LLMCTL_SERVICES_DIR}"

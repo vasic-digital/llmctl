@@ -57,6 +57,22 @@ workload, and reports host capacity on demand (`llmctl capacity --json`).
   `llmctl-fallback:` line when the host has no room; before 3.4.0 `decide scale` refused with exit 1); `llmctl doctor` and `llmctl status` gain a
   host-reserve section; `llmctl capacity` and `llmctl reserve` are new.
 
+### Release assembly note
+
+This release was assembled by merging the third-party pin bump 4fbef9e (submodules/colibri and submodules/llama.cpp only) onto the independently reviewed head 54c9657; the merge added nothing else over the reviewed commit (verified with `git diff --stat 54c9657..HEAD`). The final review verdict on 54c9657 was GO with follow-ups, no source-defect (harness 223/223; tests/test_services.sh and tests/test_host_reserve_review10.sh PASS). The only later source edits are two `# shellcheck disable=SC2034` comments on the pinned `local LLMCTL_HOST_RESERVE=1` lines (dynamic-scoping false positives).
+
+### Known limits / follow-ups
+
+- Test-input knobs (LLMCTL_HOST_CPUS, LLMCTL_HOST_MEM_MB, the `*_FILE` knobs) are honoured in production, not only in tests.
+- A planner-only refusal from `start` exits 1, not 75: callers that key cloud fallback on 75 must treat 1 from a refused start the same way.
+- 1-CPU hosts are admitted by default; `LLMCTL_HOST_RESERVE_STRICT` refuses them.
+- The `hk_gate` check-to-use race is narrowed, not closed.
+- The start-time census race is a documented limit.
+- Findings M8/M9 (fail-open paths) remain follow-ups, backstopped by `hk_gate`.
+- Reviewer wording for F5/F6 was never recovered.
+- The smoke tests in lib/download.sh lack MemoryMax.
+- All evidence is unit-class; no live decision-model run exists.
+
 ### Root cause (measured 2026-10-28, 16 CPUs / 31 GiB)
 
 | # | Cause |
