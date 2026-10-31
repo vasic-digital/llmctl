@@ -24,7 +24,7 @@ mkunit() { # <name> <cpu.max> <memory.max MiB> <populated 0|1>
 }
 setpop() { printf 'populated %s\nfrozen 0\n' "$2" > "${LLMCTL_CGROUP_ROOT}/app.slice/$1/cgroup.events"; }
 gate_as() { # <unit> -> rc of hk_gate run "inside" that unit's cgroup
-  ( export LLMCTL_SELF_CGROUP="${LLMCTL_CGROUP_ROOT}/app.slice/$1"; hk_gate "${1#llmctl-llama@}" ) >/dev/null 2>&1
+  ( export LLMCTL_SELF_CGROUP="${LLMCTL_CGROUP_ROOT}/app.slice/$1"; hk_gate "${1#llmctl-llama@}" ) >/dev/null 2>"${TEST_TMP}/gate.err"
 }
 A='llmctl-llama@a.service'; B='llmctl-llama@b.service'
 
@@ -76,7 +76,7 @@ setpop "${A}" 0; setpop "${B}" 1
 rc=0; ( export LLMCTL_RUNTIME_DIR="${TEST_TMP}/user2"; gate_as "${B}" ) || rc=$?
 assert_eq 75 "${rc}" "S2: a gate of a different user (other runtime dir) still sees the record"
 echo "--- F1/F5: a record owned by another uid than its prefix, misnamed, or non-numeric is ignored"
-rm -rf "${LLMCTL_ADMIT_DIR:?}"; mkdir -p "${LLMCTL_ADMIT_DIR}"
+rm -rf "${LLMCTL_ADMIT_DIR:?}"; mkdir -m 700 "${LLMCTL_ADMIT_DIR}"
 printf '600 4096 %s\n' "${LLMCTL_CGROUP_ROOT}/app.slice/${A}" > "${LLMCTL_ADMIT_DIR}/99999~${A}"
 printf '600 4096 %s\n' "${LLMCTL_CGROUP_ROOT}/app.slice/${A}" > "${LLMCTL_ADMIT_DIR}/$(id -u)~llmctl-llama@zzz.service"
 printf 'abc 4096 %s\n' "${LLMCTL_CGROUP_ROOT}/app.slice/${A}" > "${LLMCTL_ADMIT_DIR}/$(id -u)~${A}"
@@ -107,4 +107,12 @@ echo "--- F4: LLMCTL_ADMIT_TTL=0 is refused, not a silent disable"
 setpop "${A}" 1; mkunit "${B}" '100000 100000' 1024 1
 rc=0; ( export LLMCTL_ADMIT_TTL=0; gate_as "${B}" ) || rc=$?
 assert_eq 75 "${rc}" "TTL=0 refuses with 75"
+echo "--- F1: a world-writable NON-sticky admission dir is refused; a sticky one is accepted"
+rm -rf "${LLMCTL_ADMIT_DIR:?}"; mkdir "${LLMCTL_ADMIT_DIR}"; chmod 0777 "${LLMCTL_ADMIT_DIR}"
+mkunit "${A}" '100000 100000' 1024 1; setpop "${B}" 0
+rc=0; gate_as "${A}" || rc=$?
+assert_eq 75 "${rc}" "mode 0777 without the sticky bit refuses"
+chmod 1777 "${LLMCTL_ADMIT_DIR}"
+rc=0; gate_as "${A}" || rc=$?
+assert_eq 0 "${rc}" "mode 1777 is accepted"
 test_finish
