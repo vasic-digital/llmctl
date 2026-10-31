@@ -332,7 +332,11 @@ start is refused; `reserve_pct` and
   turns populated in between is counted twice (safe) rather than never. A populated cgroup is counted from the cgroup,
   never from the record. Fail closed: a record that cannot be written refuses the start (75), and an existing admission
   path that is not a usable directory makes the census unmeasurable (75). A start that never happens reserves its budget
-  for at most the TTL. Remaining limits: a unit whose gate has not started yet (no cgroup content, no record) is not
+  for at most the TTL. Records are written mode 0644 so another user's gate can read them; a correctly named record that cannot be read makes the
+  census unmeasurable (75), never skipped. A record's cgroup path must lie under the cgroup root. A sticky admission dir must be
+  owned by root or the caller. Local-DoS surface: any local user can create valid-looking records for their own uid (counted
+  budget for at most the TTL) or fill the sticky dir; they can only block starts, never hide a unit. `_rsv_test_hook` runs
+  only when `LLMCTL_TEST_MODE` is set. Remaining limits: a unit whose gate has not started yet (no cgroup content, no record) is not
   visible; direct `systemctl --user start` of several units is not serialised (starts through `llmctl start`/`restart` are,
   by the scheduler lock); a hostile local user with the same uid as a victim can forge that uid's records (they can only
   add counted budget, never hide a unit).

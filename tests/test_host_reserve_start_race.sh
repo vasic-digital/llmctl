@@ -123,10 +123,13 @@ echo "--- N3: the test hook is ignored unless LLMCTL_TEST_MODE is set"
 rm -rf "${LLMCTL_ADMIT_DIR:?}"
 mkunit "${A}" '600000 100000' 4096 1; mkunit "${B}" '700000 100000' 4096 0; gate_as "${A}" || true
 setpop "${A}" 0; setpop "${B}" 1
-_rsv_test_hook() { rm -f "${LLMCTL_ADMIT_DIR:?}"/*; }
+_rsv_test_hook() { : > "${TEST_TMP}/hook_ran"; }
+rm -f "${TEST_TMP}/hook_ran"
 rc=0; gate_as "${B}" || rc=$?
 unset -f _rsv_test_hook
-assert_eq 75 "${rc}" "N3: without LLMCTL_TEST_MODE an injected _rsv_test_hook does not run"
+assert_eq 75 "${rc}" "N3: B still refused (A pending)"
+[[ ! -e "${TEST_TMP}/hook_ran" ]] && h=absent || h=ran
+assert_eq absent "${h}" "N3: without LLMCTL_TEST_MODE an injected _rsv_test_hook does not run"
 
 echo "--- N1: a freshly written record is world-readable (another uid's gate must read it)"
 rm -rf "${LLMCTL_ADMIT_DIR:?}"
@@ -149,4 +152,12 @@ printf '1100 max %s\n' "${TEST_TMP}/outside/${A}" > "${LLMCTL_ADMIT_DIR}/$(id -u
 mkunit "${B}" '700000 100000' 4096 1
 rc=0; gate_as "${B}" || rc=$?
 assert_eq 0 "${rc}" "N4: out-of-root cgroup path in a record is not counted"
+
+echo "--- N2: a sticky admission dir owned by a foreign uid is refused (stat shimmed: no second uid available)"
+rm -rf "${LLMCTL_ADMIT_DIR:?}"; mkdir -m 1777 "${LLMCTL_ADMIT_DIR}"
+mkunit "${B}" '100000 100000' 1024 1
+rc=0; ( stat() { if [[ "$*" == *"%a %u"* ]]; then echo "1777 4242"; else command stat "$@"; fi; }; gate_as "${B}" ) || rc=$?
+assert_eq 75 "${rc}" "N2: sticky dir owned by uid 4242 refuses"
+rc=0; ( stat() { if [[ "$*" == *"%a %u"* ]]; then echo "1777 0"; else command stat "$@"; fi; }; gate_as "${B}" ) || rc=$?
+assert_eq 0 "${rc}" "N2: sticky dir owned by root is accepted"
 test_finish
