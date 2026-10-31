@@ -323,12 +323,19 @@ start is refused; `reserve_pct` and
   `ExecStartPre` process exits and before `ExecStart` forks, the unit's cgroup is EMPTY (`populated 0`), so a second gate
   in that window did not count the first unit and could admit a second unit over the budget (reproduced by
   `tests/test_host_reserve_start_race.sh`, RED on 4b68967). An admitted gate now writes a record
-  (`$LLMCTL_ADMIT_DIR`, default `<runtime dir>/admissions/<unit>`: cpu, memory, cgroup path); the census counts a record of
-  another unit for `LLMCTL_ADMIT_TTL` seconds (default 60, validated like every knob) while that unit's cgroup exists and
-  is not populated. A populated cgroup is counted from the cgroup, never twice. A start that never happens reserves its
-  budget for at most the TTL. Remaining limit: a unit whose gate has not started yet (no cgroup content, no record) is not
+  `<uid>~<unit>` (cpu, memory, cgroup path) into ONE host-wide admission directory (`/dev/shm/llmctl-admissions`, else
+  `/tmp/llmctl-admissions`; `LLMCTL_ADMIT_DIR` overrides), because the census is host-wide (every user's manager and
+  system.slice). The directory must be sticky or private to the caller; a reader ignores a record whose file owner is not
+  its uid prefix, whose unit name differs from its cgroup basename, or whose numbers are not integers/`max`. The census
+  counts a valid record of another unit for `LLMCTL_ADMIT_TTL` seconds (default 60, must be >= 1, validated like every
+  knob) while that unit's cgroup exists and is not populated; records are read BEFORE the running census, so a unit that
+  turns populated in between is counted twice (safe) rather than never. A populated cgroup is counted from the cgroup,
+  never from the record. Fail closed: a record that cannot be written refuses the start (75), and an existing admission
+  path that is not a usable directory makes the census unmeasurable (75). A start that never happens reserves its budget
+  for at most the TTL. Remaining limits: a unit whose gate has not started yet (no cgroup content, no record) is not
   visible; direct `systemctl --user start` of several units is not serialised (starts through `llmctl start`/`restart` are,
-  by the scheduler lock).
+  by the scheduler lock); a hostile local user with the same uid as a victim can forge that uid's records (they can only
+  add counted budget, never hide a unit).
 - **Planner-only refusal exit code (exit 1, not 75).** Deliberate and unchanged: a RAM/VRAM refusal by the planner path keeps
   exit 1 with the exact MiB numbers (documented since 3.4.0 in CHANGELOG); callers that key cloud fallback on 75 treat 1 from
   a refused start the same way. No code change was made for this follow-up.
