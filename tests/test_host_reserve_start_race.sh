@@ -113,13 +113,15 @@ mkdir -m 755 "${LLMCTL_ADMIT_DIR}/llmctl-admit-${U}"
 rc=0; ( eval "stat() { if [[ \"\$*\" == *llmctl-admit-${U}* && \"\$*\" == *%a* ]]; then echo '755 4242'; else command stat \"\$@\"; fi; }"; gate_as "${A}" ) || rc=$?
 assert_eq 75 "${rc}" "a per-uid dir squatted by another uid refuses the start (fail closed)"
 
-echo "--- F1/F5: a record misnamed, forged by foreign owner, or non-numeric is ignored"
+echo "--- F1/F5: a misnamed record is ignored; a malformed number in a correctly named own record makes the census unmeasurable (round 5, A)"
 newbase; mkdir -m 755 "${LLMCTL_ADMIT_DIR}/llmctl-admit-${U}"
 printf '600 4096 %s\n' "${LLMCTL_CGROUP_ROOT}/app.slice/${A}" > "${LLMCTL_ADMIT_DIR}/llmctl-admit-${U}/llmctl-llama@zzz.service"
-printf 'abc 4096 %s\n' "${LLMCTL_CGROUP_ROOT}/app.slice/${A}" > "${LLMCTL_ADMIT_DIR}/llmctl-admit-${U}/${A}"
 setpop "${A}" 0; setpop "${B}" 1
 rc=0; gate_as "${B}" || rc=$?
-assert_eq 0 "${rc}" "misnamed and non-numeric records are ignored"
+assert_eq 0 "${rc}" "a misnamed record is ignored"
+printf 'abc 4096 %s\n' "${LLMCTL_CGROUP_ROOT}/app.slice/${A}" > "${LLMCTL_ADMIT_DIR}/llmctl-admit-${U}/${A}"
+rc=0; gate_as "${B}" || rc=$?
+assert_eq 75 "${rc}" "a non-numeric record makes the census unmeasurable"
 
 echo "--- F2/S1: a failing record write refuses (75) instead of failing open"
 newbase; : > "${TEST_TMP}/afile"
