@@ -540,29 +540,32 @@ _rsv_mem_mb() {
 # --- admission records (round-8 finding 10, start-time race) ---------------------------------------------------------
 # hk_gate admits a unit in ExecStartPre; between the end of the last ExecStartPre process and the fork of ExecStart the
 # unit's cgroup is EMPTY, so a gate running in that window does not census it ("populated 0") and may admit a second
-# unit over the budget. An admitted gate therefore leaves a record <dir>/<uid>~<unit-name> ("<cpu|max> <mem|max>
-# <cgroup-dir>") that the census counts for LLMCTL_ADMIT_TTL seconds (default 60, at least 1) while the unit's cgroup
-# exists and is NOT populated. Once the unit is populated the cgroup itself is counted (never both).
-# The census is host-wide (every user's manager + system.slice), so the record dir is host-wide too: one sticky
-# world-writable directory (/dev/shm/llmctl-admissions, else /tmp/llmctl-admissions; LLMCTL_ADMIT_DIR overrides) holding
-# per-owner files. A reader accepts a record only when the file's owner uid equals its name prefix, the unit name equals
-# the cgroup basename and the numbers are integers or "max" (a forged record can only be ignored, never delete another's).
-# Fail closed: a record that cannot be written refuses the start (75); an existing admission path that is not a usable
-# directory makes the census unmeasurable (75).
+# unit over the budget. An admitted gate therefore leaves a record <base>/llmctl-admit-<uid>/<unit-name> ("<cpu|max>
+# <mem|max> <cgroup-dir>") that the census counts for LLMCTL_ADMIT_TTL seconds (default 60, at least 1) while the unit's
+# cgroup exists and is NOT populated. Once the unit is populated the cgroup itself is counted (never both).
+# DESIGN (round 4, one class): the census is host-wide, so the records are too, but never in a shared directory that
+# users own or write into. <base> is a SYSTEM directory that llmctl never creates (/dev/shm, else /tmp; LLMCTL_ADMIT_DIR
+# overrides): sticky and owned by root or the caller. Under it every uid has ITS OWN directory llmctl-admit-<uid>, mode
+# 0755, owned by that uid. Only the owner (or root) can write there, so another user cannot plant, replace or delete
+# the records of a unit (the sticky base stops them renaming the directory). A directory whose owner is not the uid in its
+# name is a squat: the squatted uid's gate refuses to start (fail closed), readers ignore it. Nothing is auto-created
+# world-writable, so the first user to start a unit can no longer lock everyone else out.
+# Fail closed: a record that cannot be written (including a failed rename or a non-file result) refuses the start (75); a
+# base or per-uid directory that exists but cannot be read makes the census unmeasurable (75); a correctly named record
+# that cannot be read does too.
 _rsv_admit_dir() {
   if [[ -n "${LLMCTL_ADMIT_DIR:-}" ]]; then echo "${LLMCTL_ADMIT_DIR}"; return; fi
-  if [[ -d /dev/shm && -w /dev/shm ]]; then echo /dev/shm/llmctl-admissions; else echo /tmp/llmctl-admissions; fi
+  if [[ -d /dev/shm && -w /dev/shm ]]; then echo /dev/shm; else echo /tmp; fi
 }
 
-# _rsv_admit_dir_ok <dir> -> rc 0 when <dir> is a real directory (no symlink) that is readable and either sticky or owned by
-# the caller and closed to group/other writes; prints why on stderr otherwise.
+# _rsv_admit_dir_ok <base> -> rc 0 when <base> is a real directory (no symlink), readable and searchable, and either
+# sticky and owned by root or the caller, or owned by the caller and closed to group/other writes; why on stderr otherwise.
 _rsv_admit_dir_ok() {
   local d="$1" mode owner
   [[ -d "${d}" && ! -L "${d}" && -r "${d}" && -x "${d}" ]] || { echo "the admission path ${d} is not a readable directory" >&2; return 1; }
   read -r mode owner < <(stat -c '%a %u' "${d}" 2>/dev/null) || { echo "cannot stat the admission dir ${d}" >&2; return 1; }
   [[ "${mode}" =~ ^[0-7]+$ ]] || return 1
   if (( 8#${mode} & 8#1000 )); then
-    # sticky: the directory must belong to root or to the caller, else another user could plant/own the shared dir (N2)
     [[ "${owner}" == 0 || "${owner}" == "$(id -u)" ]] && return 0
     echo "the sticky admission dir ${d} is owned by uid ${owner}, neither root nor this user" >&2; return 1
   fi
@@ -570,20 +573,30 @@ _rsv_admit_dir_ok() {
   echo "the admission dir ${d} (mode ${mode}) is neither sticky nor private to this user" >&2; return 1
 }
 
+# _rsv_uid_dir_ok <dir> <uid> -> rc 0 when <dir> is a real directory owned by <uid>, readable, not group/other writable.
+_rsv_uid_dir_ok() {
+  local d="$1" uid="$2" mode owner
+  [[ -d "${d}" && ! -L "${d}" && -r "${d}" && -x "${d}" ]] || return 1
+  read -r mode owner < <(stat -c '%a %u' "${d}" 2>/dev/null) || return 1
+  [[ "${mode}" =~ ^[0-7]+$ && "${owner}" == "${uid}" ]] && (( (8#${mode} & 8#022) == 0 ))
+}
+
 # reserve_admit_record <cpu-pct> <mem-mb> -> record this process's own unit as admitted (no-op outside an engine unit);
 # rc 75 (message on stderr) when the record cannot be written: an unrecorded admission would reopen the race.
 reserve_admit_record() {
-  local self dir name tmp=""
+  local self dir base uid name tmp="" rec
   reserve_enabled || return 0
   self="$(_rsv_self_cgroup)"; name="${self##*/}"
   [[ -n "${self}" && "${name}" == llmctl-*@*.service ]] || return 0
-  dir="$(_rsv_admit_dir)"
-  if [[ ! -e "${dir}" ]]; then ( umask 0; mkdir -m 1777 "${dir}" ) 2>/dev/null || true; fi
-  if ! _rsv_admit_dir_ok "${dir}" 2>/dev/null \
+  uid="$(id -u)"; base="$(_rsv_admit_dir)"; dir="${base}/llmctl-admit-${uid}"; rec="${dir}/${name}"
+  if _rsv_admit_dir_ok "${base}" 2>/dev/null && [[ ! -e "${dir}" && ! -L "${dir}" ]]; then ( umask 022; mkdir -m 0755 "${dir}" ) 2>/dev/null || true; fi
+  if ! _rsv_admit_dir_ok "${base}" 2>/dev/null \
+     || ! _rsv_uid_dir_ok "${dir}" "${uid}" \
      || ! tmp="$(umask 077; mktemp "${dir}/.tmp.XXXXXX" 2>/dev/null)" \
      || ! printf '%s %s %s\n' "${1:-max}" "${2:-max}" "${self}" > "${tmp}" 2>/dev/null \
      || ! chmod 0644 "${tmp}" 2>/dev/null \
-     || ! mv -f "${tmp}" "${dir}/$(id -u)~${name}" 2>/dev/null; then
+     || ! mv -T -f "${tmp}" "${rec}" 2>/dev/null \
+     || [[ ! -f "${rec}" || -L "${rec}" || "$(stat -c %u "${rec}" 2>/dev/null)" != "${uid}" ]]; then
     [[ -z "${tmp}" ]] || rm -f "${tmp:?}" 2>/dev/null || true
     printf 'refusing to start %s: cannot record the admission in %s, so a second start could not see this unit during the empty-cgroup window.\n' "${name}" "${dir}" >&2
     return 75
@@ -594,26 +607,38 @@ reserve_admit_record() {
 # _rsv_admitted_pending -> census lines ("<name> <cpu> <mem> pending <cgroup-dir>") for fresh, valid records of OTHER units
 # whose cgroup exists and is not populated yet. rc 1 (reason on stderr) when the admission path exists but cannot be read.
 _rsv_admitted_pending() {
-  local dir f base uid unit cpu mem cg self ttl="${LLMCTL_ADMIT_TTL:-60}"
+  local base d f uid unit cpu mem cg self croot ttl="${LLMCTL_ADMIT_TTL:-60}"
   [[ "${ttl}" =~ ^[1-9][0-9]{0,17}$ ]] || ttl=60
-  dir="$(_rsv_admit_dir)"; [[ -e "${dir}" || -L "${dir}" ]] || return 0
-  _rsv_admit_dir_ok "${dir}" || return 1
+  base="$(_rsv_admit_dir)"; [[ -e "${base}" || -L "${base}" ]] || return 0
+  _rsv_admit_dir_ok "${base}" || return 1
   self="$(_rsv_self_cgroup)"
-  local croot; read -r croot _ < <(_rsv_units_scan)
-  while IFS= read -r f; do
-    [[ -n "${f}" ]] || continue
-    base="${f##*/}"
-    [[ "${base}" =~ ^([0-9]+)~(llmctl-.*@.*\.service)$ ]] || continue
-    uid="${BASH_REMATCH[1]}"; unit="${BASH_REMATCH[2]}"
-    [[ "$(stat -c %u "${f}" 2>/dev/null)" == "${uid}" ]] || continue
-    # a correctly named record that cannot be read (e.g. another user's 0600 file) must not be skipped: that would hide a
-    # reserved unit, so the census is unmeasurable (round-2 review N1)
-    read -r cpu mem cg < "${f}" 2>/dev/null || { echo "cannot read the admission record ${f}" >&2; return 1; }
-    [[ "${cpu}" =~ ^([0-9]+|max)$ && "${mem}" =~ ^([0-9]+|max)$ ]] || continue
-    [[ -n "${cg}" && "${cg##*/}" == "${unit}" && "${cg}" != "${self}" && "${cg}" == "${croot%/}"/* && -d "${cg}" ]] || continue
-    grep -qx 'populated 1' "${cg}/cgroup.events" 2>/dev/null && continue
-    echo "${unit} ${cpu} ${mem} pending ${cg}"
-  done < <(find "${dir}" -maxdepth 1 -type f -name '*~llmctl-*@*.service' -newermt "${ttl} seconds ago" 2>/dev/null | LC_ALL=C sort)
+  read -r croot _ < <(_rsv_units_scan); croot="$(realpath -m "${croot}" 2>/dev/null)" || croot=""
+  local dirs
+  dirs="$(find "${base}" -mindepth 1 -maxdepth 1 -type d -name 'llmctl-admit-*' 2>/dev/null | LC_ALL=C sort)" || true
+  while IFS= read -r d; do
+    [[ -n "${d}" ]] || continue
+    [[ "${d##*/}" =~ ^llmctl-admit-([0-9]+)$ ]] || continue
+    uid="${BASH_REMATCH[1]}"
+    _rsv_uid_dir_ok "${d}" "${uid}" || continue     # a squatted or writable per-uid dir holds nothing we trust
+    local list
+    # a record dated more than 60 s in the future is invalid (a far-future mtime would outlive the TTL, round-3 F4)
+    list="$(find "${d}" -maxdepth 1 -type f -name 'llmctl-*@*.service' -newermt "${ttl} seconds ago" ! -newermt '60 seconds' 2>/dev/null | LC_ALL=C sort)" \
+      || { echo "cannot list the admission dir ${d}" >&2; return 1; }
+    while IFS= read -r f; do
+      [[ -n "${f}" ]] || continue
+      unit="${f##*/}"
+      [[ "${unit}" =~ ^llmctl-.*@.*\.service$ ]] || continue
+      [[ "$(stat -c %u "${f}" 2>/dev/null)" == "${uid}" ]] || continue
+      # a correctly named record that cannot be read must not be skipped: that would hide a reserved unit (N1)
+      read -r cpu mem cg < "${f}" 2>/dev/null || { echo "cannot read the admission record ${f}" >&2; return 1; }
+      [[ "${cpu}" =~ ^([0-9]+|max)$ && "${mem}" =~ ^([0-9]+|max)$ ]] || continue
+      [[ -n "${cg}" && "${cg##*/}" == "${unit}" && "${cg}" != "${self}" ]] || continue
+      cg="$(realpath -m "${cg}" 2>/dev/null)" || continue
+      [[ -n "${croot}" && "${cg}" == "${croot%/}"/* && -d "${cg}" ]] || continue
+      grep -qx 'populated 1' "${cg}/cgroup.events" 2>/dev/null && continue
+      echo "${unit} ${cpu} ${mem} pending ${cg}"
+    done <<< "${list}"
+  done <<< "${dirs}"
 }
 
 # reserve_running_units -> "<name> <cpu-pct|max> <mem-mb|max> <owner> <cgroup-dir>" for every POPULATED llmctl engine
