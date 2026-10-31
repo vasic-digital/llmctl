@@ -99,7 +99,7 @@ rm -rf "${LLMCTL_ADMIT_DIR:?}"
 mkunit "${A}" '600000 100000' 4096 1; mkunit "${B}" '700000 100000' 4096 1; gate_as "${A}" || true
 setpop "${A}" 0
 _rsv_test_hook() { setpop "${A}" 1; }
-rc=0; gate_as "${B}" || rc=$?
+rc=0; ( export LLMCTL_TEST_MODE=1; gate_as "${B}" ) || rc=$?
 unset -f _rsv_test_hook
 assert_eq 75 "${rc}" "S3: A flipping to populated between the two reads is counted (not zero times)"
 
@@ -118,4 +118,35 @@ assert_eq 0 "${rc}" "mode 1777 is accepted"
 echo "--- F2: census-only (no record write): a non-directory admission path is UNMEASURABLE, rc 75"
 rc=0; ( export LLMCTL_ADMIT_DIR="${TEST_TMP}/afile" LLMCTL_SELF_CGROUP="${LLMCTL_CGROUP_ROOT}/app.slice/${A}"; reserve_combined_check 100 1024 t >/dev/null 2>&1 ) || rc=$?
 assert_eq 75 "${rc}" "reserve_combined_check refuses on an unusable admission path"
+
+echo "--- N3: the test hook is ignored unless LLMCTL_TEST_MODE is set"
+rm -rf "${LLMCTL_ADMIT_DIR:?}"
+mkunit "${A}" '600000 100000' 4096 1; mkunit "${B}" '700000 100000' 4096 1; gate_as "${A}" || true
+setpop "${A}" 0
+_rsv_test_hook() { rm -f "${LLMCTL_ADMIT_DIR:?}"/*; }
+rc=0; gate_as "${B}" || rc=$?
+unset -f _rsv_test_hook
+assert_eq 75 "${rc}" "N3: without LLMCTL_TEST_MODE an injected _rsv_test_hook does not run"
+
+echo "--- N1: a freshly written record is world-readable (another uid's gate must read it)"
+rm -rf "${LLMCTL_ADMIT_DIR:?}"
+mkunit "${A}" '600000 100000' 4096 1; gate_as "${A}" || true
+m="$(stat -c %a "${LLMCTL_ADMIT_DIR}/$(id -u)~${A}")"
+assert_eq 644 "${m}" "N1: the admission record is mode 0644"
+echo "--- N1: a correctly named record that cannot be read makes the census unmeasurable (75), not silently skipped"
+setpop "${A}" 0; mkunit "${B}" '100000 100000' 1024 1
+chmod 000 "${LLMCTL_ADMIT_DIR}/$(id -u)~${A}"
+if [[ "$(id -u)" != 0 ]]; then
+  rc=0; gate_as "${B}" || rc=$?
+  assert_eq 75 "${rc}" "N1: unreadable record refuses (simulated with chmod 000; no second uid available)"
+fi
+chmod 644 "${LLMCTL_ADMIT_DIR}/$(id -u)~${A}"
+
+echo "--- N4: a record whose cgroup path is outside the cgroup root is ignored"
+rm -rf "${LLMCTL_ADMIT_DIR:?}"; mkdir -m 700 "${LLMCTL_ADMIT_DIR}"
+mkdir -p "${TEST_TMP}/outside/${A}"; printf 'populated 0\n' > "${TEST_TMP}/outside/${A}/cgroup.events"
+printf '1100 max %s\n' "${TEST_TMP}/outside/${A}" > "${LLMCTL_ADMIT_DIR}/$(id -u)~${A}"
+mkunit "${B}" '700000 100000' 4096 1
+rc=0; gate_as "${B}" || rc=$?
+assert_eq 0 "${rc}" "N4: out-of-root cgroup path in a record is not counted"
 test_finish
