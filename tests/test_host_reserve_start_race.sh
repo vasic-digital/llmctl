@@ -197,7 +197,7 @@ assert_eq 0 "${rc}" "F3: a '..' path that leaves the cgroup root is not counted"
 echo "--- N2: a sticky base owned by a foreign uid is refused (stat shimmed: no second uid available)"
 newbase
 mkunit "${B}" '100000 100000' 1024 1
-rc=0; ( stat() { if [[ "$*" == *"%a %u"* ]]; then echo "1777 4242"; else command stat "$@"; fi; }; gate_as "${B}" ) || rc=$?
+rc=0; ( stat() { if [[ "$*" == *"%a %u"* && "$*" != *llmctl-admit-* ]]; then echo "1777 4242"; else command stat "$@"; fi; }; gate_as "${B}" ) || rc=$?
 assert_eq 75 "${rc}" "N2: sticky base owned by uid 4242 refuses"
 rc=0; ( stat() { if [[ "$*" == *"%a %u"* && "$*" != *llmctl-admit-* ]]; then echo "1777 0"; else command stat "$@"; fi; }; gate_as "${B}" ) || rc=$?
 assert_eq 0 "${rc}" "N2: sticky base owned by root is accepted"
@@ -239,6 +239,9 @@ chmod 1000 "${LLMCTL_ADMIT_DIR}"
 if [[ "${U}" != 0 ]]; then
   rc=0; gate_as "${B}" || rc=$?
   assert_eq 75 "${rc}" "F5: an unreadable base dir refuses instead of reading as empty"
+  # census only (no record write), so the reader's own base check is what refuses
+  rc=0; ( export LLMCTL_SELF_CGROUP="${LLMCTL_CGROUP_ROOT}/app.slice/${B}"; reserve_combined_check 100 1024 t >/dev/null 2>&1 ) || rc=$?
+  assert_eq 75 "${rc}" "F5: census-only on an unreadable base refuses (reader check, not the writer's)"
 fi
 chmod 1777 "${LLMCTL_ADMIT_DIR}"
 test_finish

@@ -614,7 +614,8 @@ _rsv_admitted_pending() {
   self="$(_rsv_self_cgroup)"
   read -r croot _ < <(_rsv_units_scan); croot="$(realpath -m "${croot}" 2>/dev/null)" || croot=""
   local dirs
-  dirs="$(find "${base}" -mindepth 1 -maxdepth 1 -type d -name 'llmctl-admit-*' 2>/dev/null | LC_ALL=C sort)" || true
+  dirs="$(find "${base}" -mindepth 1 -maxdepth 1 -type d -name 'llmctl-admit-*' 2>/dev/null | LC_ALL=C sort; exit "${PIPESTATUS[0]}")" \
+    || { echo "cannot list the admission base ${base}" >&2; return 1; }
   while IFS= read -r d; do
     [[ -n "${d}" ]] || continue
     [[ "${d##*/}" =~ ^llmctl-admit-([0-9]+)$ ]] || continue
