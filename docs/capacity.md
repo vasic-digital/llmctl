@@ -332,11 +332,19 @@ start is refused; `reserve_pct` and
   turns populated in between is counted twice (safe) rather than never. A populated cgroup is counted from the cgroup,
   never from the record. Fail closed: a record that cannot be written refuses the start (75), and an existing admission
   path that is not a usable directory makes the census unmeasurable (75). A start that never happens reserves its budget
-  for at most the TTL. Records are written mode 0644 so another user's gate can read them; a correctly named record that cannot be read makes the
-  census unmeasurable (75), never skipped. A record's cgroup path must lie under the cgroup root. A sticky admission dir must be
-  owned by root or the caller. Local-DoS surface: any local user can create valid-looking records for their own uid (counted
-  budget for at most the TTL) or fill the sticky dir; they can only block starts, never hide a unit. `_rsv_test_hook` runs
-  only when `LLMCTL_TEST_MODE` is set. Remaining limits: a unit whose gate has not started yet (no cgroup content, no record) is not
+  for at most the TTL. Records live under a system base directory that llmctl never creates (`/dev/shm`, else `/tmp`; `LLMCTL_ADMIT_DIR`
+  overrides; it must be sticky and owned by root or the caller). Each uid has its own directory `llmctl-admit-<uid>` (mode 0755,
+  owned by that uid) holding one file per unit, mode 0644 so other users' gates can read it. Because only the owner (or root)
+  can write there, another user cannot plant, replace or delete a unit's record, and because the base is not auto-created the
+  first user to start a unit can no longer lock everyone else (or root) out. A per-uid directory owned by a different uid is a
+  squat: that uid's gate refuses to start (fail closed) and readers ignore it. The record is written with `mv -T` and
+  verified to be a regular file owned by the caller, otherwise the start is refused (75). A correctly named record that cannot
+  be read, or a base that cannot be listed, makes the census unmeasurable (75). A record's cgroup path is canonicalised and
+  must lie under the cgroup root; a record dated more than 60 s in the future is invalid, so a record counts for at most the
+  TTL plus that skew. Local-DoS surface: a local user can still squat `llmctl-admit-<other uid>` (blocking that uid's starts
+  until it is removed by root or the squatter) or fill `/dev/shm`; they cannot hide a recorded unit. `_rsv_test_hook` runs
+  only when `LLMCTL_TEST_MODE` is set. Not done: lockstep refusal when several gates poll at identical intervals (pre-existing;
+  a small jitter is a follow-up). Remaining limits: a unit whose gate has not started yet (no cgroup content, no record) is not
   visible; direct `systemctl --user start` of several units is not serialised (starts through `llmctl start`/`restart` are,
   by the scheduler lock); a hostile local user with the same uid as a victim can forge that uid's records (they can only
   add counted budget, never hide a unit).
