@@ -115,4 +115,7 @@ assert_eq 75 "${rc}" "mode 0777 without the sticky bit refuses"
 chmod 1777 "${LLMCTL_ADMIT_DIR}"
 rc=0; gate_as "${A}" || rc=$?
 assert_eq 0 "${rc}" "mode 1777 is accepted"
+echo "--- F2: census-only (no record write): a non-directory admission path is UNMEASURABLE, rc 75"
+rc=0; ( export LLMCTL_ADMIT_DIR="${TEST_TMP}/afile" LLMCTL_SELF_CGROUP="${LLMCTL_CGROUP_ROOT}/app.slice/${A}"; reserve_combined_check 100 1024 t >/dev/null 2>&1 ) || rc=$?
+assert_eq 75 "${rc}" "reserve_combined_check refuses on an unusable admission path"
 test_finish
