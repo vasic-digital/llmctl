@@ -121,8 +121,8 @@ assert_eq 75 "${rc}" "reserve_combined_check refuses on an unusable admission pa
 
 echo "--- N3: the test hook is ignored unless LLMCTL_TEST_MODE is set"
 rm -rf "${LLMCTL_ADMIT_DIR:?}"
-mkunit "${A}" '600000 100000' 4096 1; mkunit "${B}" '700000 100000' 4096 1; gate_as "${A}" || true
-setpop "${A}" 0
+mkunit "${A}" '600000 100000' 4096 1; mkunit "${B}" '700000 100000' 4096 0; gate_as "${A}" || true
+setpop "${A}" 0; setpop "${B}" 1
 _rsv_test_hook() { rm -f "${LLMCTL_ADMIT_DIR:?}"/*; }
 rc=0; gate_as "${B}" || rc=$?
 unset -f _rsv_test_hook

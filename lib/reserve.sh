@@ -561,7 +561,11 @@ _rsv_admit_dir_ok() {
   [[ -d "${d}" && ! -L "${d}" && -r "${d}" && -x "${d}" ]] || { echo "the admission path ${d} is not a readable directory" >&2; return 1; }
   read -r mode owner < <(stat -c '%a %u' "${d}" 2>/dev/null) || { echo "cannot stat the admission dir ${d}" >&2; return 1; }
   [[ "${mode}" =~ ^[0-7]+$ ]] || return 1
-  if (( 8#${mode} & 8#1000 )); then return 0; fi
+  if (( 8#${mode} & 8#1000 )); then
+    # sticky: the directory must belong to root or to the caller, else another user could plant/own the shared dir (N2)
+    [[ "${owner}" == 0 || "${owner}" == "$(id -u)" ]] && return 0
+    echo "the sticky admission dir ${d} is owned by uid ${owner}, neither root nor this user" >&2; return 1
+  fi
   if [[ "${owner}" == "$(id -u)" ]] && (( (8#${mode} & 8#022) == 0 )); then return 0; fi
   echo "the admission dir ${d} (mode ${mode}) is neither sticky nor private to this user" >&2; return 1
 }
@@ -578,6 +582,7 @@ reserve_admit_record() {
   if ! _rsv_admit_dir_ok "${dir}" 2>/dev/null \
      || ! tmp="$(umask 077; mktemp "${dir}/.tmp.XXXXXX" 2>/dev/null)" \
      || ! printf '%s %s %s\n' "${1:-max}" "${2:-max}" "${self}" > "${tmp}" 2>/dev/null \
+     || ! chmod 0644 "${tmp}" 2>/dev/null \
      || ! mv -f "${tmp}" "${dir}/$(id -u)~${name}" 2>/dev/null; then
     [[ -z "${tmp}" ]] || rm -f "${tmp:?}" 2>/dev/null || true
     printf 'refusing to start %s: cannot record the admission in %s, so a second start could not see this unit during the empty-cgroup window.\n' "${name}" "${dir}" >&2
@@ -594,15 +599,18 @@ _rsv_admitted_pending() {
   dir="$(_rsv_admit_dir)"; [[ -e "${dir}" || -L "${dir}" ]] || return 0
   _rsv_admit_dir_ok "${dir}" || return 1
   self="$(_rsv_self_cgroup)"
+  local croot; read -r croot _ < <(_rsv_units_scan)
   while IFS= read -r f; do
     [[ -n "${f}" ]] || continue
     base="${f##*/}"
     [[ "${base}" =~ ^([0-9]+)~(llmctl-.*@.*\.service)$ ]] || continue
     uid="${BASH_REMATCH[1]}"; unit="${BASH_REMATCH[2]}"
     [[ "$(stat -c %u "${f}" 2>/dev/null)" == "${uid}" ]] || continue
-    read -r cpu mem cg < "${f}" 2>/dev/null || continue
+    # a correctly named record that cannot be read (e.g. another user's 0600 file) must not be skipped: that would hide a
+    # reserved unit, so the census is unmeasurable (round-2 review N1)
+    read -r cpu mem cg < "${f}" 2>/dev/null || { echo "cannot read the admission record ${f}" >&2; return 1; }
     [[ "${cpu}" =~ ^([0-9]+|max)$ && "${mem}" =~ ^([0-9]+|max)$ ]] || continue
-    [[ -n "${cg}" && "${cg##*/}" == "${unit}" && "${cg}" != "${self}" && -d "${cg}" ]] || continue
+    [[ -n "${cg}" && "${cg##*/}" == "${unit}" && "${cg}" != "${self}" && "${cg}" == "${croot%/}"/* && -d "${cg}" ]] || continue
     grep -qx 'populated 1' "${cg}/cgroup.events" 2>/dev/null && continue
     echo "${unit} ${cpu} ${mem} pending ${cg}"
   done < <(find "${dir}" -maxdepth 1 -type f -name '*~llmctl-*@*.service' -newermt "${ttl} seconds ago" 2>/dev/null | LC_ALL=C sort)
@@ -658,7 +666,7 @@ reserve_combined_check() {
   perr="$(mktemp)" || perr=/dev/null
   pend="$(_rsv_admitted_pending 2>"${perr}")" || why="cannot read the admission records ($(head -c 200 "${perr}" 2>/dev/null))"
   [[ "${perr}" == /dev/null ]] || rm -f "${perr:?}"
-  if declare -F _rsv_test_hook >/dev/null; then _rsv_test_hook; fi
+  if [[ -n "${LLMCTL_TEST_MODE:-}" ]] && declare -F _rsv_test_hook >/dev/null; then _rsv_test_hook; fi
   [[ -n "${why}" ]] || why="$(_rsv_units_unmeasurable)"
   if [[ -z "${why}" ]] && ! census="$(reserve_running_units)"; then why="the unit census under $(_rsv_units_scan) failed"; fi
   if [[ -n "${why}" ]]; then
