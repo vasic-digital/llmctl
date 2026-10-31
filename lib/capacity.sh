@@ -81,7 +81,7 @@ _CAP_KT_ALL=(); _CAP_KT_ST=()
 _cap_tree_collect() {
   local root="$1" p k k2 pass added c pp
   _CAP_KT_ALL=(); _CAP_KT_ST=()
-  [[ "${root}" =~ ^[0-9]+$ ]] && (( root > 1 )) || return 0
+  [[ "${root}" =~ ^[1-9][0-9]{0,8}$ ]] && (( root > 1 )) || return 0
   local -a all=() st=() q=()
   local -A seen=() kids=()
   for pass in 1 2 3 4 5; do
@@ -90,7 +90,7 @@ _cap_tree_collect() {
     q=("${root}")
     while (( ${#q[@]} )); do
       p="${q[0]}"; q=("${q[@]:1}")
-      [[ "${p}" =~ ^[0-9]+$ ]] && (( p > 1 && p != $$ && p != BASHPID )) || continue
+      [[ "${p}" =~ ^[1-9][0-9]{0,8}$ ]] && (( p > 1 && p != $$ && p != BASHPID )) || continue
       if [[ -z "${seen[${p}]:-}" ]]; then
       k="$(_cap_pid_start "${p}")" || continue
       kill -STOP "${p}" 2>/dev/null || true   # no new children while the tree is collected
@@ -282,7 +282,7 @@ _cap_measure() {
   while read -r name cpu mem owner d; do
     [[ -n "${name}" ]] || continue
     cur="$(head -1 "${d}/memory.current" 2>/dev/null || true)"
-    [[ "${cur}" =~ ^[0-9]+$ ]] && cur=$(( cur / 1048576 )) || cur=""
+    [[ "${cur}" =~ ^[0-9]{1,15}$ ]] && cur=$(( 10#${cur} / 1048576 )) || cur=""
     units+="${name} $(_cap_unit_profile "${name}") ${cpu} ${mem} ${cur:-?} $(_cap_cpu_stat "${d}/cpu.stat") ${owner} ${d}"$'\n'
   done <<< "${census}"
   if [[ -z "${cg_err}" ]]; then _cap_in units "${scan} (llmctl engine unit cgroups, every owner)" 1; else _cap_in units "${scan} (llmctl engine unit cgroups, every owner)" 0; fi

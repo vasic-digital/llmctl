@@ -81,7 +81,7 @@ rc=0; gate_as "${A}" || rc=$?
 assert_eq 0 "${rc}" "B control: 0755 per-uid dir is accepted"
 
 echo "=== C: records are re-read AFTER the census (union), also for units that turned populated since"
-mkunit "${A}" '600000 100000' 4096 1; mkunit "${B}" '700000 100000' 4096 1
+mkunit "${A}" '600000 100000' 4096 1; mkunit "${B}" '700000 100000' 4096 0
 newbase; gate_as "${A}" || true     # A admitted, record written, A populated (its own ExecStartPre)
 mkunit "${B}" '700000 100000' 4096 1
 _rsv_test_hook() { setpop "${A}" 0; }     # between the first read and the census A's gate process exits: cgroup empty

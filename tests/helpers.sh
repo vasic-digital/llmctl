@@ -128,6 +128,8 @@ test_setup_env() {
   export LLMCTL_VERIFY_DIR="${TEST_TMP}/state/verify"
   export LLMCTL_SERVICES_DIR="${TEST_TMP}/state/services"
   export LLMCTL_UNIT_DIR="${TEST_TMP}/systemd-user"
+  # hermetic admission store (host reserve): never the host's /dev/shm, removed with TEST_TMP
+  export LLMCTL_ADMIT_DIR="${TEST_TMP}/admit"; mkdir -m 1777 "${LLMCTL_ADMIT_DIR}"
   export LLMCTL_PLIST_DIR="${TEST_TMP}/LaunchAgents"
   export NO_COLOR=1
   # LLMCTL_DRY_RUN=1 writes NOTHING for the install path (lib/common.sh dry_run_pure); the ~80 hermetic suites that read

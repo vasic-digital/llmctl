@@ -323,31 +323,37 @@ start is refused; `reserve_pct` and
   `ExecStartPre` process exits and before `ExecStart` forks, the unit's cgroup is EMPTY (`populated 0`), so a second gate
   in that window did not count the first unit and could admit a second unit over the budget (reproduced by
   `tests/test_host_reserve_start_race.sh`, RED on 4b68967). An admitted gate now writes a record
-  `<uid>~<unit>` (cpu, memory, cgroup path) into ONE host-wide admission directory (`/dev/shm/llmctl-admissions`, else
-  `/tmp/llmctl-admissions`; `LLMCTL_ADMIT_DIR` overrides), because the census is host-wide (every user's manager and
-  system.slice). The directory must be sticky or private to the caller; a reader ignores a record whose file owner is not
-  its uid prefix, whose unit name differs from its cgroup basename, or whose numbers are not integers/`max`. The census
+  (cpu, memory, cgroup path) into a host-wide admission store (see the per-uid layout below; `LLMCTL_ADMIT_DIR` overrides the
+  base), because the census is host-wide (every user's manager and system.slice). A reader ignores a record whose file owner
+  is not the uid of its directory or whose unit name differs from its cgroup basename. Numbers in a record are `max` or a
+  plain decimal of at most 9 digits without leading zeros (never wrapped, never read as octal); a correctly named record
+  holding anything else makes the census unmeasurable (75, "cannot count"), it is not skipped. The census
   counts a valid record of another unit for `LLMCTL_ADMIT_TTL` seconds (default 60, must be >= 1, validated like every
-  knob) while that unit's cgroup exists and is not populated; records are read BEFORE the running census, so a unit that
-  turns populated in between is counted twice (safe) rather than never. A populated cgroup is counted from the cgroup,
+  knob) while that unit's cgroup exists and is not populated; records are read BEFORE the running census and AGAIN after it
+  (union, each cgroup counted once; the second read also lists records whose cgroup has become populated), so a unit that
+  turns populated, or whose gate process exits, between the reads is counted rather than missed. A populated cgroup is counted from the cgroup,
   never from the record. Fail closed: a record that cannot be written refuses the start (75), and an existing admission
-  path that is not a usable directory makes the census unmeasurable (75). A start that never happens reserves its budget
+  path that is not a usable directory makes the census unmeasurable (75), and so does a per-uid directory that is owned by
+  its uid but cannot be listed or is group/other-writable (a directory owned by another uid is a squat and is ignored). A start that never happens reserves its budget
   for at most the TTL. Records live under a system base directory that llmctl never creates (`/dev/shm`, else `/tmp`; `LLMCTL_ADMIT_DIR`
-  overrides; it must be sticky and owned by root or the caller). Each uid has its own directory `llmctl-admit-<uid>` (mode 0755,
+  overrides; it must be sticky and owned by root or the caller, or owned by the caller and closed to group/other writes, so a
+  non-sticky private base is accepted). The old single directory `llmctl-admissions` of earlier builds is no longer read or
+  written; it can be removed by its owner (records in it expire after the TTL anyway). Each uid has its own directory `llmctl-admit-<uid>` (mode 0755,
   owned by that uid) holding one file per unit, mode 0644 so other users' gates can read it. Because only the owner (or root)
   can write there, another user cannot plant, replace or delete a unit's record, and because the base is not auto-created the
   first user to start a unit can no longer lock everyone else (or root) out. A per-uid directory owned by a different uid is a
-  squat: that uid's gate refuses to start (fail closed) and readers ignore it. The record is written with `mv -T` and
+  squat: that uid's gate refuses to start (fail closed) and readers ignore it. The writer also requires the directory to be
+  readable and searchable by others (o+rx, so 0700 is refused), otherwise other uids' gates could not list it. The record is written with `mv -T` and
   verified to be a regular file owned by the caller, otherwise the start is refused (75). A correctly named record that cannot
   be read, or a base that cannot be listed, makes the census unmeasurable (75). A record's cgroup path is canonicalised and
   must lie under the cgroup root; a record dated more than 60 s in the future is invalid, so a record counts for at most the
   TTL plus that skew. Local-DoS surface: a local user can still squat `llmctl-admit-<other uid>` (blocking that uid's starts
-  until it is removed by root or the squatter) or fill `/dev/shm`; they cannot hide a recorded unit. `_rsv_test_hook` runs
+  until it is removed by root or the squatter) or fill `/dev/shm`; they cannot delete or replace a record of another uid. `_rsv_test_hook` runs
   only when `LLMCTL_TEST_MODE` is set. Not done: lockstep refusal when several gates poll at identical intervals (pre-existing;
   a small jitter is a follow-up). Remaining limits: a unit whose gate has not started yet (no cgroup content, no record) is not
   visible; direct `systemctl --user start` of several units is not serialised (starts through `llmctl start`/`restart` are,
   by the scheduler lock); a hostile local user with the same uid as a victim can forge that uid's records (they can only
-  add counted budget, never hide a unit).
+  add counted budget; they cannot hide a unit that is populated, because that is counted from the cgroup).
 - **Planner-only refusal exit code (exit 1, not 75).** Deliberate and unchanged: a RAM/VRAM refusal by the planner path keeps
   exit 1 with the exact MiB numbers (documented since 3.4.0 in CHANGELOG); callers that key cloud fallback on 75 treat 1 from
   a refused start the same way. No code change was made for this follow-up.
