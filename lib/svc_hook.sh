@@ -259,7 +259,10 @@ hk_gate() {
   while :; do
     rc=0; msg="$(hw_pressure_gate "${fp:-0}" "${inst:-service}" 2>&1 >/dev/null)" || rc=$?
     if [[ "${rc}" -eq 0 ]]; then msg="$(reserve_combined_check "${ncpu}" "${nmem}" "${inst:-service}" 2>&1 >/dev/null)" || rc=$?; fi
-    if [[ "${rc}" -eq 0 ]]; then (( waited == 0 )) || _hk_log "${inst}: pressure cleared after ${waited}s"; return 0; fi
+    if [[ "${rc}" -eq 0 ]]; then
+      reserve_admit_record "${ncpu}" "${nmem}"    # closes the empty-cgroup window before ExecStart (finding 10)
+      (( waited == 0 )) || _hk_log "${inst}: pressure cleared after ${waited}s"; return 0
+    fi
     if [[ "${rc}" -ne 75 || "${waited}" -ge "${wait}" ]]; then printf '%s\n' "${msg}" >&2; return "${rc}"; fi
     sleep "${poll}"; waited=$(( waited + poll ))
   done

@@ -73,7 +73,7 @@ KNOBS=(
   "LLMCTL_GATE_CPU_SOME_MAX eighty 70"   "LLMCTL_GATE_LOAD_PER_CPU 3x 2"         "LLMCTL_GATE_RESERVE_MB 9G 6000"
   "LLMCTL_GATE_FULL_MAX .5 1.5"          "LLMCTL_GATE_SOME_MAX 5% 8.5"           "LLMCTL_GATE_WAIT 1m 0"
   "LLMCTL_GATE_POLL fast 1"              "LLMCTL_CAPACITY_TIMEOUT 5s 5"          "LLMCTL_CAPACITY_PROBE_TIMEOUT 3s 3"
-  "LLMCTL_HOST_RESERVE_STRICT yes 0"
+  "LLMCTL_HOST_RESERVE_STRICT yes 0"      "LLMCTL_ADMIT_TTL 1m 60"
 )
 # control needle for the inventory below: the extractor must see a knob in a scratch file (positive) and not an invented one
 printf 'x="${LLMCTL_NEEDLE_KNOB:-7}"\n' > "${TEST_TMP}/needle.sh"

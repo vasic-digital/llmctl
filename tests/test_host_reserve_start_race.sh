@@ -62,6 +62,6 @@ mkunit "${A}" '600000 100000' 4096 1
 mkunit "${B}" '700000 100000' 4096 1
 rc=0; gate_as "${B}" || rc=$?
 assert_eq 75 "${rc}" "B refused against populated A"
-n="$(find "${LLMCTL_ADMIT_DIR}" -type f 2>/dev/null | wc -l)"
+n="$(find "${LLMCTL_ADMIT_DIR}" -type f 2>/dev/null | wc -l || true)"
 assert_eq 0 "${n}" "a refused gate writes no admission record"
 test_finish

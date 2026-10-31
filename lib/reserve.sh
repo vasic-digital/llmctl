@@ -344,7 +344,7 @@ _RSV_KNOBS=(
   LLMCTL_GATE_CPU_SOME_MAX:int LLMCTL_GATE_LOAD_PER_CPU:int LLMCTL_GATE_RESERVE_MB:int
   LLMCTL_GATE_FULL_MAX:dec LLMCTL_GATE_SOME_MAX:dec
   LLMCTL_GATE_WAIT:int LLMCTL_GATE_POLL:int LLMCTL_CAPACITY_TIMEOUT:int LLMCTL_CAPACITY_PROBE_TIMEOUT:int
-  LLMCTL_HOST_RESERVE_STRICT:flag
+  LLMCTL_HOST_RESERVE_STRICT:flag LLMCTL_ADMIT_TTL:int
 )
 
 # reserve_knobs_check -> rc 0 when every knob is well-formed; rc 75 and RSV_G_BAD="<VARIABLE>=<value>" for the first bad one.
@@ -536,6 +536,42 @@ _rsv_mem_mb() {
   return 0
 }
 
+# --- admission records (round-8 finding 10, start-time race) ---------------------------------------------------------
+# hk_gate admits a unit in ExecStartPre; between the end of the last ExecStartPre process and the fork of ExecStart the
+# unit's cgroup is EMPTY, so a gate running in that window does not census it ("populated 0") and may admit a second
+# unit over the budget. An admitted gate therefore leaves a record <dir>/<unit-name> ("<cpu|max> <mem|max> <cgroup-dir>")
+# that the census counts for LLMCTL_ADMIT_TTL seconds (default 60) while the unit's cgroup exists and is NOT populated.
+# Once the unit is populated the cgroup itself is counted (never both). Fail closed: an unreadable record dir counts nothing
+# extra but the census itself is unchanged; a stale or foreign record is simply ignored.
+_rsv_admit_dir() { echo "${LLMCTL_ADMIT_DIR:-${LLMCTL_RUNTIME_DIR:-${LLMCTL_STATE_DIR:-/tmp}/run}/admissions}"; }
+
+# reserve_admit_record <cpu-pct> <mem-mb> -> record this process's own unit as admitted (no-op outside an engine unit)
+reserve_admit_record() {
+  local self dir name tmp
+  reserve_enabled || return 0
+  self="$(_rsv_self_cgroup)"; name="${self##*/}"
+  [[ -n "${self}" && "${name}" == llmctl-*@*.service ]] || return 0
+  dir="$(_rsv_admit_dir)"
+  ( umask 077; mkdir -p "${dir}" && tmp="$(mktemp "${dir}/.tmp.XXXXXX")" && printf '%s %s %s\n' "${1:-max}" "${2:-max}" "${self}" > "${tmp}" \
+      && mv -f "${tmp}" "${dir}/${name}" ) 2>/dev/null || true
+}
+
+# _rsv_admitted_pending -> census lines ("<name> <cpu> <mem> pending <cgroup-dir>") for fresh records of OTHER units whose
+# cgroup exists and is not populated yet.
+_rsv_admitted_pending() {
+  local dir f name cpu mem cg self ttl="${LLMCTL_ADMIT_TTL:-60}"
+  [[ "${ttl}" =~ ^[0-9]+$ ]] || ttl=60
+  dir="$(_rsv_admit_dir)"; [[ -d "${dir}" ]] || return 0
+  self="$(_rsv_self_cgroup)"
+  while IFS= read -r f; do
+    [[ -n "${f}" ]] || continue
+    name="${f##*/}"; read -r cpu mem cg < "${f}" 2>/dev/null || continue
+    [[ -n "${cg}" && "${cg}" != "${self}" && -d "${cg}" ]] || continue
+    grep -qx 'populated 1' "${cg}/cgroup.events" 2>/dev/null && continue
+    echo "${name} ${cpu:-max} ${mem:-max} pending ${cg}"
+  done < <(find "${dir}" -maxdepth 1 -type f -name 'llmctl-*@*.service' -newermt "${ttl} seconds ago" 2>/dev/null | LC_ALL=C sort)
+}
+
 # reserve_running_units -> "<name> <cpu-pct|max> <mem-mb|max> <owner> <cgroup-dir>" for every POPULATED llmctl engine
 # unit cgroup on the host (_rsv_units_scan: every user's manager and system.slice; owner from _rsv_unit_owner), except
 # the caller's own cgroup (a unit's ExecStartPre runs inside it). The decision gateway is not an engine and not counted.
@@ -589,6 +625,7 @@ reserve_combined_check() {
     return 75
   fi
   local owner ucg
+  census+=$'\n'"$(_rsv_admitted_pending)"
   while read -r name cpu mem owner ucg; do
     [[ -n "${name}" ]] || continue
     [[ "${cpu}" =~ ^[0-9]+$ ]] || cpu="${bcpu}"
