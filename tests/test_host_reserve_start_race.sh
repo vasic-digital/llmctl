@@ -64,4 +64,47 @@ rc=0; gate_as "${B}" || rc=$?
 assert_eq 75 "${rc}" "B refused against populated A"
 n="$(find "${LLMCTL_ADMIT_DIR}" -type f 2>/dev/null | wc -l || true)"
 assert_eq 0 "${n}" "a refused gate writes no admission record"
+
+echo "--- F1/S2: the admission dir is HOST-wide: another user's runtime dir does not hide a record"
+a1="$(LLMCTL_RUNTIME_DIR=/x/one LLMCTL_STATE_DIR=/x/s1 XDG_RUNTIME_DIR=/x/r1 LLMCTL_ADMIT_DIR= _rsv_admit_dir)"
+a2="$(LLMCTL_RUNTIME_DIR=/y/two LLMCTL_STATE_DIR=/y/s2 XDG_RUNTIME_DIR=/y/r2 LLMCTL_ADMIT_DIR= _rsv_admit_dir)"
+assert_eq "${a1}" "${a2}" "default admission dir is independent of the per-user runtime/state dir"
+rm -rf "${LLMCTL_ADMIT_DIR:?}"
+mkunit "${A}" '600000 100000' 4096 1; mkunit "${B}" '700000 100000' 4096 0
+( export LLMCTL_RUNTIME_DIR="${TEST_TMP}/user1"; gate_as "${A}" ) || true
+setpop "${A}" 0; setpop "${B}" 1
+rc=0; ( export LLMCTL_RUNTIME_DIR="${TEST_TMP}/user2"; gate_as "${B}" ) || rc=$?
+assert_eq 75 "${rc}" "S2: a gate of a different user (other runtime dir) still sees the record"
+echo "--- F1/F5: a record owned by another uid than its prefix, misnamed, or non-numeric is ignored"
+rm -rf "${LLMCTL_ADMIT_DIR:?}"; mkdir -p "${LLMCTL_ADMIT_DIR}"
+printf '600 4096 %s\n' "${LLMCTL_CGROUP_ROOT}/app.slice/${A}" > "${LLMCTL_ADMIT_DIR}/99999~${A}"
+printf '600 4096 %s\n' "${LLMCTL_CGROUP_ROOT}/app.slice/${A}" > "${LLMCTL_ADMIT_DIR}/$(id -u)~llmctl-llama@zzz.service"
+printf 'abc 4096 %s\n' "${LLMCTL_CGROUP_ROOT}/app.slice/${A}" > "${LLMCTL_ADMIT_DIR}/$(id -u)~${A}"
+setpop "${A}" 0; setpop "${B}" 1
+rc=0; gate_as "${B}" || rc=$?
+assert_eq 0 "${rc}" "forged (foreign uid), misnamed and non-numeric records are ignored"
+
+echo "--- F2/S1: a failing record write refuses (75) instead of failing open"
+rm -rf "${LLMCTL_ADMIT_DIR:?}"; : > "${TEST_TMP}/afile"
+mkunit "${A}" '600000 100000' 4096 1; setpop "${B}" 0
+rc=0; ( export LLMCTL_ADMIT_DIR="${TEST_TMP}/afile/sub"; gate_as "${A}" ) || rc=$?
+assert_eq 75 "${rc}" "S1: admission dir under a regular file: the gate refuses"
+echo "--- F2: a non-directory admission path makes the census unmeasurable"
+mkunit "${B}" '100000 100000' 1024 1
+rc=0; ( export LLMCTL_ADMIT_DIR="${TEST_TMP}/afile"; gate_as "${B}" ) || rc=$?
+assert_eq 75 "${rc}" "a non-directory admission path refuses the start"
+
+echo "--- F3/S3: pending records are read BEFORE the running census (a 0->1 flip in between double counts, never zero)"
+rm -rf "${LLMCTL_ADMIT_DIR:?}"
+mkunit "${A}" '600000 100000' 4096 1; mkunit "${B}" '700000 100000' 4096 1; gate_as "${A}" || true
+setpop "${A}" 0
+_rsv_test_hook() { setpop "${A}" 1; }
+rc=0; gate_as "${B}" || rc=$?
+unset -f _rsv_test_hook
+assert_eq 75 "${rc}" "S3: A flipping to populated between the two reads is counted (not zero times)"
+
+echo "--- F4: LLMCTL_ADMIT_TTL=0 is refused, not a silent disable"
+setpop "${A}" 1; mkunit "${B}" '100000 100000' 1024 1
+rc=0; ( export LLMCTL_ADMIT_TTL=0; gate_as "${B}" ) || rc=$?
+assert_eq 75 "${rc}" "TTL=0 refuses with 75"
 test_finish
