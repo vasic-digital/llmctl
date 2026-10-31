@@ -130,7 +130,7 @@ assert_eq 75 "${rc}" "N3: without LLMCTL_TEST_MODE an injected _rsv_test_hook do
 
 echo "--- N1: a freshly written record is world-readable (another uid's gate must read it)"
 rm -rf "${LLMCTL_ADMIT_DIR:?}"
-mkunit "${A}" '600000 100000' 4096 1; gate_as "${A}" || true
+mkunit "${B}" '100000 100000' 1024 0; mkunit "${A}" '600000 100000' 4096 1; gate_as "${A}" || true
 m="$(stat -c %a "${LLMCTL_ADMIT_DIR}/$(id -u)~${A}")"
 assert_eq 644 "${m}" "N1: the admission record is mode 0644"
 echo "--- N1: a correctly named record that cannot be read makes the census unmeasurable (75), not silently skipped"
