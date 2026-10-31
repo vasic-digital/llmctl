@@ -318,12 +318,20 @@ start is refused; `reserve_pct` and
 - **CPU reserve at 100 % (round 8).** If the CPU reserve percentage leaves models only part of the CPUs, `capacity_admit` warns
   with the true figures ("reserved N, models may use M CPU(s)"); the "too few CPUs" text is printed only when nothing is reserved.
   `LLMCTL_HOST_RESERVE_STRICT=1` refuses both cases (exit 75).
-- **Start-time race (finding 10, analysis only).** `hk_gate` runs in `ExecStartPre`, inside the unit's cgroup, which is
-  therefore populated and counted by every other gate's census. Two units that start at the same moment normally see each
-  other and both refuse (fail closed, the bounded wait retries); admitting both would need a gap between the end of
-  `ExecStartPre` and the fork of `ExecStart` in which the cgroup is empty AND the other gate reads in that window. No lock is added:
-  that window was not reproduced and is not measured, so it is documented as a limit, not as proven impossible. Starts through
-  `llmctl start`/`restart` are serialised by the scheduler lock; direct `systemctl --user start` of several units is not.
+- **Start-time race (finding 10, reproduced and fixed).** `hk_gate` runs in `ExecStartPre`, inside the unit's cgroup. Two
+  gates that run at the same moment see each other's populated cgroup and both refuse (fail closed). But after the last
+  `ExecStartPre` process exits and before `ExecStart` forks, the unit's cgroup is EMPTY (`populated 0`), so a second gate
+  in that window did not count the first unit and could admit a second unit over the budget (reproduced by
+  `tests/test_host_reserve_start_race.sh`, RED on 4b68967). An admitted gate now writes a record
+  (`$LLMCTL_ADMIT_DIR`, default `<runtime dir>/admissions/<unit>`: cpu, memory, cgroup path); the census counts a record of
+  another unit for `LLMCTL_ADMIT_TTL` seconds (default 60, validated like every knob) while that unit's cgroup exists and
+  is not populated. A populated cgroup is counted from the cgroup, never twice. A start that never happens reserves its
+  budget for at most the TTL. Remaining limit: a unit whose gate has not started yet (no cgroup content, no record) is not
+  visible; direct `systemctl --user start` of several units is not serialised (starts through `llmctl start`/`restart` are,
+  by the scheduler lock).
+- **Planner-only refusal exit code (exit 1, not 75).** Deliberate and unchanged: a RAM/VRAM refusal by the planner path keeps
+  exit 1 with the exact MiB numbers (documented since 3.4.0 in CHANGELOG); callers that key cloud fallback on 75 treat 1 from
+  a refused start the same way. No code change was made for this follow-up.
 - `LLMCTL_HOST_RESERVE`: only the literal `0` disables the reserve (diagnostics). `1`, `yes`, `off`, an empty value or unset all keep it ON.
 - cgroup v2 only: the unit census scans `LLMCTL_CGROUP_FS` (default `/sys/fs/cgroup`), and this user's own manager
   (`$LLMCTL_CGROUP_FS/user.slice/user-<uid>.slice/user@<uid>.service`) supplies the `host.cgroup` figures, only when
