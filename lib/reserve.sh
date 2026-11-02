@@ -705,6 +705,12 @@ reserve_running_units() {
   done < <(printf '%s\n' "${list}" | LC_ALL=C sort)
 }
 
+# _rsv_rec_max <old> <new> -> the larger of two validated record numbers. The token "max" is handled explicitly (it is the
+# largest and never reaches the arithmetic); every other value is a plain decimal of at most 9 digits.
+_rsv_rec_max() {
+  if [[ "$1" == max || "$2" == max ]]; then echo max; elif (( $2 > $1 )); then echo "$2"; else echo "$1"; fi
+}
+
 # reserve_combined_check <new-cpu-pct> <new-mem-mb> [label] - rc 75 (message on stderr) when the limits of the running
 # engine units plus the new one would exceed the model budget (Bc CPUs, Bm MiB). A unit without a CPU or memory limit
 # ("max", e.g. one started by an older llmctl) counts as the whole budget: it can take everything.
@@ -756,9 +762,6 @@ reserve_combined_check() {
   # LARGEST cpu and the LARGEST memory win ("max" is the largest), never the first, so a forged record can only add counted
   # budget and cannot hide the owner's pending reservation (review round 5, F-A).
   local -A pcpu=() pmem=() pline=(); local -a porder=()
-  _rsv_rec_max() { # <old> <new> -> the larger of two record numbers ("max" > any decimal)
-    if [[ "$1" == max || "$2" == max ]]; then echo max; elif (( $2 > $1 )); then echo "$2"; else echo "$1"; fi
-  }
   while read -r name cpu mem owner ucg; do
     [[ -n "${ucg}" ]] || continue
     ucg="$(realpath -m "${ucg}" 2>/dev/null || echo "${ucg}")"

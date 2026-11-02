@@ -68,6 +68,7 @@ MUTANTS = [
     ("F-A1-duplicate-record-first-wins", "lib/reserve.sh", "elif (( $2 > $1 )); then echo \"$2\"; else echo \"$1\"; fi", "echo \"$1\"", R11),
     ("F-A2-duplicate-record-keeps-minimum", "lib/reserve.sh", "elif (( $2 > $1 ))", "elif (( $2 < $1 ))", R11),
     ("F-A3-duplicate-record-max-token-not-largest", "lib/reserve.sh", 'if [[ "$1" == max || "$2" == max ]]; then echo max;', 'if [[ "$1" == max || "$2" == max ]]; then echo "$1";', R11),
+    ("F-A4-duplicate-record-memory-first-wins", "lib/reserve.sh", 'pmem["${ucg}"]="$(_rsv_rec_max "${pmem[${ucg}]}" "${mem}")"', 'pmem["${ucg}"]="${pmem[${ucg}]}"', R11),
     ("M13-decide-memo-key-drops-catalog-content", "lib/reserve.sh",
      '"${_RSV_DECIDE_MEMO_KEY}" == "${LLMCTL_CATALOG}:${cat}"', '"${_RSV_DECIDE_MEMO_KEY%%:*}" == "${LLMCTL_CATALOG}"',
      "tests/test_host_reserve.sh"),

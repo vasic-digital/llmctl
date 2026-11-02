@@ -58,4 +58,30 @@ for f in 0 99999; do
   rc=0; gate_forged "${f}" || rc=$?
   assert_eq 75 "${rc}" "F-A: small victim record + forged 'max max' in dir ${f} -> the larger (max) is counted (75)"
 done
+echo "--- F-A memory axis: the same masking on the RAM budget"
+newbase 0; printf '100 %s %s\n' "${RSV_BM}" "${cgA}" > "${LLMCTL_ADMIT_DIR}/llmctl-admit-${U}/${A}"; forged 0 "0 0 ${cgA}"
+rc=0; gate_forged 0 || rc=$?
+assert_eq 75 "${rc}" "F-A mem: victim holds the RAM budget, forged '0 0' in dir 0 -> 75"
+assert_contains "$(cat "${TEST_TMP}/gate.err")" "RAM reserve" "F-A mem: and it is the RAM-reserve refusal"
+for f in 0 99999; do
+  newbase "${f}"; printf '100 512 %s\n' "${cgA}" > "${LLMCTL_ADMIT_DIR}/llmctl-admit-${U}/${A}"; forged "${f}" "100 ${RSV_BM} ${cgA}"
+  rc=0; gate_forged "${f}" || rc=$?
+  assert_eq 75 "${rc}" "F-A mem: small victim + larger forged memory in dir ${f} -> 75"
+  newbase "${f}"; printf '100 512 %s\n' "${cgA}" > "${LLMCTL_ADMIT_DIR}/llmctl-admit-${U}/${A}"; forged "${f}" "999999999 999999999 ${cgA}"
+  rc=0; gate_forged "${f}" || rc=$?
+  assert_eq 75 "${rc}" "F-A mem: forged 999999999 999999999 in dir ${f} -> 75"
+done
+echo "--- F-A malformed forgeries are unmeasurable (75), never arithmetic, never executed"
+for bad in '007 0' '-1 0' '1e3 0' '0x10 0' '' '0' 'a[$(touch '"${TEST_TMP}"'/pwn)] 0'; do
+  newbase 0; victim; if [[ -z "${bad}" ]]; then printf '\n' > "${LLMCTL_ADMIT_DIR}/llmctl-admit-0/${A}"; else forged 0 "${bad} ${cgA}"; fi
+  rc=0; gate_forged 0 || rc=$?
+  assert_eq 75 "${rc}" "F-A malformed: '${bad}' -> 75"
+done
+[[ ! -e "${TEST_TMP}/pwn" ]] && echo "  ok: F-A malformed: the command-substitution forgery executed nothing" || { echo "  FAIL: pwn file created" >&2; TEST_FAILS=$((TEST_FAILS+1)); }
+echo "--- F-A: _rsv_rec_max handles the max token explicitly"
+assert_eq max "$(_rsv_rec_max 5 max)" "_rsv_rec_max 5 max -> max"
+assert_eq max "$(_rsv_rec_max max 5)" "_rsv_rec_max max 5 -> max"
+assert_eq max "$(_rsv_rec_max max max)" "_rsv_rec_max max max -> max"
+assert_eq 9 "$(_rsv_rec_max 9 5)" "_rsv_rec_max 9 5 -> 9"
+assert_eq 9 "$(_rsv_rec_max 5 9)" "_rsv_rec_max 5 9 -> 9"
 test_finish
