@@ -28,6 +28,7 @@ R7 = "tests/test_host_reserve_review7.sh"
 R8 = "tests/test_host_reserve_review8.sh"
 R9 = "tests/test_host_reserve_review9.sh"
 R10 = "tests/test_host_reserve_review10.sh"
+R11 = "tests/test_host_reserve_review11.sh"
 SCH = "lib/scheduler.sh"
 SVCL = "lib/service_linux.sh"
 # a reviewer mutant that is killed by "some suite" names the chain the reviewer ran (killed when any suite fails)
@@ -63,6 +64,10 @@ MUTANTS = [
     # the two memos (3.4.0 latency fix): a key that misses an input returns a stale answer
     ("M12-reserve-memo-key-drops-topology", "lib/reserve.sh", '"${topo}" "${LLMCTL_HOST_CPUS:-}"', '"${LLMCTL_HOST_CPUS:-}"',
      "tests/test_host_reserve.sh"),
+    # review round 5 F-A: duplicate admission records of one cgroup keep the maximum, never the first
+    ("F-A1-duplicate-record-first-wins", "lib/reserve.sh", "elif (( $2 > $1 )); then echo \"$2\"; else echo \"$1\"; fi", "echo \"$1\"", R11),
+    ("F-A2-duplicate-record-keeps-minimum", "lib/reserve.sh", "elif (( $2 > $1 ))", "elif (( $2 < $1 ))", R11),
+    ("F-A3-duplicate-record-max-token-ignored", "lib/reserve.sh", 'if [[ "$1" == max || "$2" == max ]]', 'if [[ "$1" == max ]]', R11),
     ("M13-decide-memo-key-drops-catalog-content", "lib/reserve.sh",
      '"${_RSV_DECIDE_MEMO_KEY}" == "${LLMCTL_CATALOG}:${cat}"', '"${_RSV_DECIDE_MEMO_KEY%%:*}" == "${LLMCTL_CATALOG}"',
      "tests/test_host_reserve.sh"),

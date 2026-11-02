@@ -353,7 +353,7 @@ start is refused; `reserve_pct` and
   a small jitter is a follow-up). Remaining limits: a unit whose gate has not started yet (no cgroup content, no record) is not
   visible; direct `systemctl --user start` of several units is not serialised (starts through `llmctl start`/`restart` are,
   by the scheduler lock); a hostile local user with the same uid as a victim can forge that uid's records (they can only
-  add counted budget; they cannot hide a unit that is populated, because that is counted from the cgroup).
+  add counted budget; they cannot hide a unit that is populated, because that is counted from the cgroup; and several records naming one cgroup, whichever uid's directory they sit in, are merged by keeping the LARGEST cpu and the LARGEST memory (`max` is the largest) - never the first - so a record of another uid cannot hide or shrink a pending reservation either).
 - **Planner-only refusal exit code (exit 1, not 75).** Deliberate and unchanged: a RAM/VRAM refusal by the planner path keeps
   exit 1 with the exact MiB numbers (documented since 3.4.0 in CHANGELOG); callers that key cloud fallback on 75 treat 1 from
   a refused start the same way. No code change was made for this follow-up.

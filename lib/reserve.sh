@@ -752,12 +752,24 @@ reserve_combined_check() {
   while read -r name cpu mem owner ucg; do          # the census first; its cgroups are never counted again
     [[ -n "${ucg}" ]] && seen["$(realpath -m "${ucg}" 2>/dev/null || echo "${ucg}")"]=1
   done <<< "${census}"
-  while read -r name cpu mem owner ucg; do          # then the records, each unit once
+  # then the records, each cgroup once. Several records can name one cgroup (the two reads, or a record of another uid): the
+  # LARGEST cpu and the LARGEST memory win ("max" is the largest), never the first, so a forged record can only add counted
+  # budget and cannot hide the owner's pending reservation (review round 5, F-A).
+  local -A pcpu=() pmem=() pline=(); local -a porder=()
+  _rsv_rec_max() { # <old> <new> -> the larger of two record numbers ("max" > any decimal)
+    if [[ "$1" == max || "$2" == max ]]; then echo max; elif (( $2 > $1 )); then echo "$2"; else echo "$1"; fi
+  }
+  while read -r name cpu mem owner ucg; do
     [[ -n "${ucg}" ]] || continue
     ucg="$(realpath -m "${ucg}" 2>/dev/null || echo "${ucg}")"
     [[ -n "${seen[${ucg}]:-}" ]] && continue
-    seen["${ucg}"]=1; census+=$'\n'"${name} ${cpu} ${mem} ${owner} ${ucg}"
+    if [[ -z "${pline[${ucg}]:-}" ]]; then porder+=("${ucg}"); pline["${ucg}"]="${name} ${owner}"; pcpu["${ucg}"]="${cpu}"; pmem["${ucg}"]="${mem}"
+    else pcpu["${ucg}"]="$(_rsv_rec_max "${pcpu[${ucg}]}" "${cpu}")"; pmem["${ucg}"]="$(_rsv_rec_max "${pmem[${ucg}]}" "${mem}")"; fi
   done <<< "${pend}"$'\n'"${pend2}"
+  for ucg in "${porder[@]}"; do
+    read -r name owner <<< "${pline[${ucg}]}"
+    census+=$'\n'"${name} ${pcpu[${ucg}]} ${pmem[${ucg}]} ${owner} ${ucg}"
+  done
   while read -r name cpu mem owner ucg; do
     [[ -n "${name}" ]] || continue
     cpu="$(_rsv_dec "${cpu}")" || cpu="${bcpu}"

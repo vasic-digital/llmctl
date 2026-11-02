@@ -23,6 +23,10 @@ where `scripts/release/preflight_submodules.sh` reports a fully clean
 35-file test suite is green. Both `v3.0.0` and `v3.0.1` tags remain in the
 repository as an honest record of that process.
 
+## 3.4.1 (unreleased)
+
+Review round 5, finding F-A (fail-open regression of the census-race fix): the gate de-duplicated admission records by canonical cgroup path and the FIRST record won, so a record of another uid (for example `0 0 <victim cgroup>` in a lower-sorting `llmctl-admit-<uid>` directory) replaced the victim's real pending reservation and the host reserve could be breached. Records naming one cgroup are now merged by keeping the largest cpu and the largest memory (`max` is the largest), so a forged record can only add counted budget. Test `tests/test_host_reserve_review11.sh` (RED before the fix, both directory sort orders, smaller/zero/`max` forgeries, a fits control); mutants F-A1..F-A3 in `scripts/qa/host_reserve_mutants.py`; `docs/capacity.md` forged-record sentence corrected.
+
 ## 3.4.0 (2026-10-29)
 
 Round 8 (after the review of d16e205): the override line LLMCTL_HOST_RESERVE=0 is no longer written into a unit env record (the other reserve-derived state was still derived from the invoking shell; round 9 below closes that); the reserve memo key covers the cgroup chain; the CPU warning at a 100 % reserve states the real figures; a chain limit of 2^64-1 no longer wraps; malformed stricter reserve knobs refuse with exit 75 instead of loosening. Tests: tests/test_host_reserve_review9.sh and 8 new mutants. Evidence and its limits (unit-class only, no single 201-of-201 run, finding 10 and F5/F6 documented not closed): docs/qa/2026-10-28-host-reserve/review-r8/README.md
