@@ -52,4 +52,10 @@ echo "--- F-A: the victim record may be the SMALLER one - the larger forged reco
 newbase 0; printf '100 512 %s\n' "${cgA}" > "${LLMCTL_ADMIT_DIR}/llmctl-admit-${U}/${A}"; forged 0 "${FULLCPU} 1024 ${cgA}"
 rc=0; gate_forged 0 || rc=$?
 assert_eq 75 "${rc}" "F-A: the larger of the duplicate records is counted (75)"
+echo "--- F-A: 'max' is the largest number, in either record order (a small victim record plus a forged 'max max' counts the whole budget)"
+for f in 0 99999; do
+  newbase "${f}"; printf '100 512 %s\n' "${cgA}" > "${LLMCTL_ADMIT_DIR}/llmctl-admit-${U}/${A}"; forged "${f}" "max max ${cgA}"
+  rc=0; gate_forged "${f}" || rc=$?
+  assert_eq 75 "${rc}" "F-A: small victim record + forged 'max max' in dir ${f} -> the larger (max) is counted (75)"
+done
 test_finish
