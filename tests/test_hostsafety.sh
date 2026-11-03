@@ -845,7 +845,7 @@ PY
     pg="$(ps -o pgid= -p "${pid}" 2>/dev/null | tr -d ' ')"
     # signal ONLY a validated group: it is the run's own (pgid == the bounded-run pid we started), never ours, never <= 1
     if [[ "${pg}" == "${pid}" && "${pg}" -gt 1 && "${pg}" != "$(ps -o pgid= -p $$ | tr -d ' ')" ]]; then
-      s=$SECONDS; kill -INT -- "-${pg}"
+      s=$SECONDS; kill -INT -- "-$pg"
     fi
     wait "${pid}" 2>/dev/null || r=$?
     sleep 0.5
