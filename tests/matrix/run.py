@@ -744,7 +744,8 @@ def stop_refserver(env):
         try:
             env.proc.wait(timeout=5)
         except subprocess.TimeoutExpired:
-            os.killpg(env.proc.pid, signal.SIGKILL)
+            if pid > 1:  # constitution 11.4.263: the SIGKILL fallback was sent even when the SIGTERM was refused
+                os.killpg(pid, signal.SIGKILL)
 
 
 def spki_from_cert(path):

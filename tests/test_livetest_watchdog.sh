@@ -39,7 +39,7 @@ grep -vE '^\s*#' "$MAIN" | grep -E '\bkill\b' | grep -q 'kill -TERM "\$WD_PID"' 
 hasnt "no process-group/negative-pid signalling" <(grep -vE '^\s*#' "$MAIN" "$WD") 'kill +(-[A-Z0-9]+ +)?-[0-9]|pgid'
 hasnt "no reboot/suspend/poweroff verbs" <(grep -vE '^\s*#' "$MAIN" "$WD") 'systemctl +(suspend|hibernate|poweroff|reboot|halt)|shutdown|reboot'
 # negative control: the detector fires on a deliberately bad file
-printf 'kill -9 -1\npkill foo\n' >"$T/badfile.sh"
+printf 'kill -9 -1\npkill foo\n' >"$T/badfile.sh"  # killpg-gate:allow negative-control fixture text written to a scratch file for a grep detector; never executed
 [ "$(grep -vE '^\s*#' "$T/badfile.sh" | grep -cE '\b(kill|pkill|killall)\b')" = 2 ] && ok "NEG-CONTROL kill detector flags a bad file" || bad "kill detector blind"
 
 echo "== 1. happy path (also: start path, nice/ionice, env) =="

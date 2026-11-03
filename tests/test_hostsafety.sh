@@ -366,6 +366,7 @@ mutate_collect() {
   done
 }
 mutate "A pgid<=1 check removed" "A " 'if pgrp is None or pgrp <= 1:' 'if False:'
+mutate "K6 signal_group pgid<=1 check removed (constitution 11.4.263)" "K6 " 'if not isinstance(pgid, int) or pgid <= 1:' 'if False:'
 mutate "B cgroup-protected check removed (group spans a protected cgroup)" "B2" 'if PROTECTED_CG.search(cg):
         return "cgroup-protected"' 'if False:
         return "cgroup-protected"'
