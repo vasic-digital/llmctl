@@ -23,7 +23,45 @@ where `scripts/release/preflight_submodules.sh` reports a fully clean
 35-file test suite is green. Both `v3.0.0` and `v3.0.1` tags remain in the
 repository as an honest record of that process.
 
-## 3.4.1 (unreleased)
+## 3.4.1 (2026-11-02)
+
+A **patch release** (3.4.0 -> 3.4.1) of the 3.4.0 host reserve and capacity gate: security and race fixes found by five independent review rounds of the admission store. No new commands and no change to the CLI surface.
+
+### Added
+
+- `tests/test_host_reserve_review11.sh` and the review-round RED tests for the start-time race, the host-wide admission directory, per-uid directories, bounded decimal record numbers and forged duplicate records; mutants F-A1..F-A4 (and the round 1 to 5 mutants) in `scripts/qa/host_reserve_mutants.py`.
+
+### Changed
+
+- Admission records live in a host-wide, validated, per-uid directory under a system base (never auto-created); `docs/capacity.md` states the outcomes of squatting, lockout and a future mtime.
+
+### Fixed
+
+- Start-time race: two gates could both pass in the window where a just-started unit's cgroup was still empty; admitted-but-not-yet-running units are now counted.
+- Admission records are world-readable, an unreadable record refuses, a write failure refuses, the pending read happens before the census, the TTL is at least 1, the test hook is gated.
+- Record numbers are bounded decimals; an unusable per-uid directory is unmeasurable (refuses); the second record read happens after the census.
+- Review round 5, finding F-A (fail-open): records naming one cgroup are merged by keeping the largest cpu and the largest memory (`max` is the largest), so a forged record of another uid can only add counted budget.
+
+### Security
+
+- The F-A forgery (`0 0 <victim cgroup>` in a lower-sorting directory hiding a victim's real pending reservation) can no longer breach the host reserve; the per-uid admission directories and the planted-directory cases are covered by the review round 3 tests.
+
+### Removed
+
+- Nothing.
+
+### Migration notes
+
+- None required. Run `llmctl install` as after any release to refresh unit files.
+
+### Known limitations
+
+- Unit-class evidence only for the review rounds (hermetic fixtures); the live counterpart is `scripts/qa/host_reserve_live.sh`.
+- Unchanged from 3.4.0 and not re-measured here: `llmctl-decide`, `decide scale`, `decide calibrate`, `probe-order`, `completions`, `maturity`, `llmctl doctor`, `status --json`, `overhead_mb`, `LLMCTL_CTX_*` and the eviction behaviour.
+- Release gate (2026-11-02, fresh clone, submodules initialised): `tests/run_tests.sh` ran 201 suites; the mutant harness reports F-A1..F-A4 killed. Three older harness patterns (R8-O4, R10-C2, R10-F2-strict-flag) no longer matched the current source text and were retargeted in this release; each was shown to be killed by hand on the current text before the retarget.
+
+### Review round 5 detail
+
 
 Review round 5, finding F-A (fail-open regression of the census-race fix): the gate de-duplicated admission records by canonical cgroup path and the FIRST record won, so a record of another uid (for example `0 0 <victim cgroup>` in a lower-sorting `llmctl-admit-<uid>` directory) replaced the victim's real pending reservation and the host reserve could be breached. Records naming one cgroup are now merged by keeping the largest cpu and the largest memory (`max` is the largest), so a forged record can only add counted budget. Test `tests/test_host_reserve_review11.sh` (RED before the fix, both directory sort orders, smaller/zero/`max` forgeries, a fits control); mutants F-A1..F-A3 in `scripts/qa/host_reserve_mutants.py`; `docs/capacity.md` forged-record sentence corrected.
 

@@ -339,7 +339,7 @@ MUTANTS = [
     ("R7-F1-strict-not-honoured", CAP, 'if [[ "${LLMCTL_HOST_RESERVE_STRICT:-0}" == 1 ]]; then', 'if false; then', R7),
     ("R7-F2-reserve-enabled-only-for-1", RSV, 'reserve_enabled() { [[ "${LLMCTL_HOST_RESERVE:-1}" != 0 ]]; }', 'reserve_enabled() { [[ "${LLMCTL_HOST_RESERVE:-1}" == 1 ]]; }', R7),
     ("R8-O2-cap-limit-not-bounded-by-Bm", CAP, "if enabled and Bm < lim_one: lim_one = Bm", "if False: lim_one = Bm", R8),
-    ("R8-O4-unlimited-unit-counts-zero-cpu", RSV, '[[ "${cpu}" =~ ^[0-9]+$ ]] || cpu="${bcpu}"', '[[ "${cpu}" =~ ^[0-9]+$ ]] || cpu=0', R8),
+    ("R8-O4-unlimited-unit-counts-zero-cpu", RSV, 'cpu="$(_rsv_dec "${cpu}")" || cpu="${bcpu}"', 'cpu="$(_rsv_dec "${cpu}")" || cpu=0', R8),
     ("R8-O10-smoke-thread-cap-dropped", "lib/download.sh", 'local _thr; _thr="$(reserve_cpu_cap "${profile}")"; args+=(--threads "${_thr}" --threads-batch "${_thr}"); fi', ':; fi', R8),
     ("R8-O12-planner-only-defer-any-reason", CAP, 'sys.exit(0 if v["reasons"] and all(r.startswith("planner:") for r in v["reasons"]) else 1)', 'sys.exit(0 if v["reasons"] and any(r.startswith("planner:") for r in v["reasons"]) else 1)', R8),
     ("R8-F1-chain-limit-ignored", RSV, 'if [[ "${_cl}" =~ ^[1-9][0-9]*$ ]] && (( mt == 0 || _cl < mt )); then mt="${_cl}"; fi', ':', R8),
@@ -375,12 +375,12 @@ MUTANTS = [
     ('R10-F2-decide-cpu-not-validated', RSV, 'LLMCTL_DECIDE_CPU_PCT:int\n', '\n', R10),
     ('R10-F2-load-per-cpu-not-validated', RSV, 'LLMCTL_GATE_LOAD_PER_CPU:int ', '', R10),
     ('R10-F2-cpu-some-max-not-validated', RSV, 'LLMCTL_GATE_CPU_SOME_MAX:int ', '', R10),
-    ('R10-F2-strict-flag-not-validated', RSV, '  LLMCTL_HOST_RESERVE_STRICT:flag\n', '\n', R10),
+    ('R10-F2-strict-flag-not-validated', RSV, 'LLMCTL_HOST_RESERVE_STRICT:flag LLMCTL_ADMIT_TTL:pos', 'LLMCTL_ADMIT_TTL:pos', R10),
     ('R10-F2-gate-poll-not-validated', RSV, 'LLMCTL_GATE_POLL:int ', '', R10),
     ('R10-D5-capacity-ignores-bad-knob', CAP, 'if ! reserve_gate_limits; then', 'if ! reserve_gate_limits && false; then', R10),
     ('R10-A1-stale-cpu-unit-line-kept', SVCL, "grep -v '^LLMCTL_RESERVE_CPU_PCT_UNIT=\\|^LLMCTL_HOST_RESERVE='", "grep -v '^LLMCTL_HOST_RESERVE='", R10),
     ('R10-B-memo-key-chain-sig-stale', RSV, '  _rsv_chain_scan\n  printf \'%s|\' "${_RSV_CHAIN_SIG}"', '  printf \'%s|\' "${_RSV_CHAIN_SIG}"', R10),
-    ('R10-C2-leading-zero-strip-dropped', RSV, 'v="${v#"${v%%[!0]*}"}"; v="${v:-0}"', ':', R10),
+    ('R10-C2-leading-zero-strip-dropped', RSV, '      v="${v#"${v%%[!0]*}"}"; v="${v:-0}"\n      (( ${#v} > 15 )) && continue', '      :\n      (( ${#v} > 15 )) && continue', R10),
     ('R10-C1-overflow-bound-wide', RSV, '(( ${#v} > 15 )) && continue', '(( ${#v} > 19 )) && continue', R10),
 ]
 
