@@ -176,12 +176,16 @@ class CalibrationTests(unittest.TestCase):
         # 100 answers at confidence 0.65 (bin 6) of which `correct_low` correct.
         return [(0.95, 1)] * 95 + [(0.95, 0)] * 5 + [(0.65, 1)] * correct_low + [(0.65, 0)] * (100 - correct_low)
 
+    # basis: specs/009-jev-decision-models/spec.md:384 (SC-003): no calibration figure from fewer than 200 labelled items; the 199-pair input is hand-counted ([:199]); CAL_MIN=200 in scripts/golden/stats.py:33 is the implementation of the same number, not the expectation source
+    # oracle: SPECIFIED
     def test_insufficient_below_200(self):
         c = stats.calibration(self._pairs(65)[:199])
         self.assertEqual(c["status"], "insufficient for calibration")
         self.assertEqual(c["n"], 199)
         self.assertNotIn("ece", c)
 
+    # basis: hand-worked in the test comments: bin gaps are 0 so ECE and MCE are 0, Brier = (0.0475 + 0.2275) / 2 = 0.1375; the 200-pair count follows from _pairs (100 + 100)
+    # oracle: DERIVED
     def test_perfectly_calibrated_at_200(self):
         # bins: |0.95-0.95|=0 and |0.65-0.65|=0 -> ECE 0, MCE 0
         # Brier = mean over 200 of (p-correct)^2
@@ -194,6 +198,8 @@ class CalibrationTests(unittest.TestCase):
         self.assertAlmostEqual(c["mce"], 0.0, places=9)
         self.assertAlmostEqual(c["brier"], 0.1375, places=9)
 
+    # basis: hand-worked in the test comments: 45 of 100 correct at confidence 0.65 gives gap 0.20 in bin 6, ECE = (100/200) * 0.20 = 0.10, MCE = 0.20
+    # oracle: DERIVED
     def test_mutation_overconfident_group_is_caught(self):
         # Only 45 of the 100 answers at confidence 0.65 are correct: gap 0.20 in bin 6.
         # ECE = (100/200)*0.20 = 0.10 ; MCE = 0.20
@@ -201,16 +207,22 @@ class CalibrationTests(unittest.TestCase):
         self.assertAlmostEqual(c["ece"], 0.10, places=9)
         self.assertAlmostEqual(c["mce"], 0.20, places=9)
 
+    # basis: specs/009-jev-decision-models/spec.md:384 (SC-003): no calibration figure under 200 labelled items; the boundary 199 -> insufficient, 200 -> ok is hand-counted from the loop sizes (range(199) plus one record); status strings are stats.py's own
+    # oracle: SPECIFIED
     def test_report_gates_calibration_on_label_count(self):
         recs = [rec("i%d" % i, pred=True, p_pred=0.9) for i in range(199)]
         self.assertEqual(stats.report(recs)["calibration"]["status"], "insufficient for calibration")
         recs.append(rec("i199", pred=True, p_pred=0.9))
         self.assertEqual(stats.report(recs)["calibration"]["status"], "ok")
 
+    # basis: specs/009-jev-decision-models/spec.md:384 (SC-003): the minimum counts labelled items; 250 records with expected=None are hand-counted as 0 labelled, so the result must be insufficient; the status string is stats.py's own
+    # oracle: SPECIFIED
     def test_unlabelled_items_do_not_count_toward_calibration_minimum(self):
         recs = [rec("i%d" % i, exp=None, pred=True, p_pred=0.9) for i in range(250)]
         self.assertEqual(stats.report(recs)["calibration"]["status"], "insufficient for calibration")
 
+    # basis: hand-worked in the test comments: 120 correct of 200 is 0.6 accuracy against raw p_pred 0.9, so ECE = |0.9 - 0.6| = 0.30, and 200 records carry a calibration block; the substring checks on calibration_input and the render text (scripts/golden/stats.py:204, 245-247) pin the module's own wording and are characterization only
+    # oracle: DERIVED
     def test_a_calibrated_gateway_cannot_flatter_its_own_evaluation(self):
         # 200 answers whose raw winner probability is 0.9 but only 60% are right (overconfident raw).
         # The calibrated gateway SERVES confidence 0.6 and says so; ECE must still be computed from the
@@ -227,11 +239,15 @@ class CalibrationTests(unittest.TestCase):
         self.assertIn("raw", rep["calibration_input"])
         self.assertIn("served confidence is not used", stats.render(rep))
 
+    # basis: pins stats design (scripts/golden/stats.py:205 counts records that carry a calibration block, so none gives 0, and render omits the calibrated-gateway line, :245); no external source states it
+    # oracle: CHARACTERIZATION
     def test_uncalibrated_run_reports_zero_calibrated_records(self):
         rep = stats.report([rec("1", pred=True, p_pred=0.9)])
         self.assertEqual(rep["calibrated_records"], 0)
         self.assertNotIn("served confidence is not used", stats.render(rep))
 
+    # basis: pins the INSUFFICIENT string rendered by stats.py (scripts/golden/stats.py:35, 218-247); the expected text is the module's own constant, not independent
+    # oracle: CHARACTERIZATION
     def test_render_prints_the_insufficiency_text(self):
         text = stats.render(stats.report([rec("1", pred=True, p_pred=0.9)]))
         self.assertIn("insufficient for calibration", text)
@@ -241,6 +257,8 @@ class RefusalTests(unittest.TestCase):
     """G-160: a gateway limit refusal (422 validation_failed on a choice item with more options than the
     profile's max_options) is reported separately and is not scored as a malformed answer."""
 
+    # basis: hand-counted: of 3 originals one is refused so well_formed n=2 and ok=1, refused {n:1, reasons:{max_options:1}}, accuracy denominator stays 3 with 1 correct; the behaviour (refusal reported apart from malformed) is described in the G-160 row of specs/009-jev-decision-models/evidence/gaps-register.md:178, but that row is a gap description, not a specification; the render substring is stats.py's own wording
+    # oracle: DERIVED
     def test_well_formed_excludes_refused_and_reports_them(self):
         recs = [rec("1", pred=True), rec("2", pred=None, refused=True, refusal_reason="max_options"),
                 rec("3", pred=None)]
@@ -252,17 +270,23 @@ class RefusalTests(unittest.TestCase):
         self.assertEqual(rep["by_type"]["noul"]["correct"], 1)
         self.assertIn("refused (limit): 1", stats.render(rep))
 
+    # basis: pins backward compatibility of stats.py: records without a refused field give refused {n:0, reasons:{}} and no 'refused (limit)' line; the counts are hand-counted (2 records) but the empty-refused shape is the module's own design
+    # oracle: CHARACTERIZATION
     def test_old_records_without_field_unchanged(self):
         rep = stats.report([rec("1", pred=True), rec("2", pred=None)])
         self.assertEqual(rep["well_formed"]["n"], 2)
         self.assertEqual(rep["refused"], {"n": 0, "reasons": {}})
         self.assertNotIn("refused (limit)", stats.render(rep))
 
+    # basis: pins that refused=False is treated as not refused (stats.py:137 reads r.get('refused')); the single-record counts are hand-counted, the rule is stats design
+    # oracle: CHARACTERIZATION
     def test_refused_false_is_not_refused(self):
         rep = stats.report([rec("1", pred=None, refused=False)])
         self.assertEqual(rep["well_formed"]["n"], 1)
         self.assertEqual(rep["refused"]["n"], 0)
 
+    # basis: hand-counted: of the three 20-option/4-option records the refused one is excluded, leaving n=1 and correct=1 at option count 20 and refused n=1; excluding refused items from this table follows the G-160 row (gaps-register.md:178) which is a gap description, not a specification
+    # oracle: DERIVED
     def test_refused_not_in_accuracy_by_option_count(self):
         recs = [rec("1", typ="choice", exp="a", pred="a", option_count=20),
                 rec("2", typ="choice", exp="a", pred=None, option_count=20, refused=True, refusal_reason="max_options"),
@@ -272,6 +296,8 @@ class RefusalTests(unittest.TestCase):
         self.assertEqual(rep["accuracy_by_option_count"]["20"]["correct"], 1)
         self.assertEqual(rep["refused"]["n"], 1)
 
+    # basis: golden master: stored evidence under specs/009-jev-decision-models/evidence/live-models/nezha-decide-2b-2026-10-08 (golden/results.json and golden-stats.txt, both present in this checkout) was produced by an earlier run of this same stats module, so equality shows no rendering drift, not that the text is correct; the test skips when the evidence files are absent
+    # oracle: CHARACTERIZATION
     def test_old_results_render_identically(self):
         import json, os
         root = os.path.join(os.path.dirname(__file__), "..", "..", "specs", "009-jev-decision-models",
