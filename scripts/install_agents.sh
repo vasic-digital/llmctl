@@ -111,9 +111,10 @@ _timeout() {
     gtimeout) gtimeout "${secs}" "$@" ;;
     # perl: fork + alarm in the PARENT, so a timeout is an ordinary exit 124 (an exec'd child killed by SIGALRM would make
     # the shell print "Alarm clock" into the captured output); the child leads its own process group, which is the
-    # group killed, so a probe's own children cannot keep the output pipe open
+    # group killed, so a probe's own children cannot keep the output pipe open; the group is signalled only for a pid > 1
+    # (constitution 11.4.263: a group signal to 1 would reach every process we may signal)
     perl) perl -e 'my $s = shift @ARGV; my $pid = fork(); defined $pid or exit 127; if (!$pid) { setpgrp(0, 0); exec { $ARGV[0] } @ARGV; exit 127 }
-                   $SIG{ALRM} = sub { kill "KILL", -$pid; kill "KILL", $pid; waitpid($pid, 0); exit 124 }; alarm $s; waitpid($pid, 0);
+                   $SIG{ALRM} = sub { if ($pid > 1) { kill "KILL", -$pid; kill "KILL", $pid } waitpid($pid, 0); exit 124 }; alarm $s; waitpid($pid, 0);
                    exit($? & 127 ? 128 + ($? & 127) : $? >> 8)' "${secs}" "$@" ;;
     *) "$@" ;;
   esac

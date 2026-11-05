@@ -819,9 +819,9 @@ read back from the cgroup. `LLMCTL_HOST_RESERVE=0` (diagnostics only: it skips t
 llmctl version
 ```
 
-Prints `llmctl <version>`, e.g. `llmctl 3.4.0` (the `LLMCTL_VERSION`
+Prints `llmctl <version>`, e.g. `llmctl 3.4.1` (the `LLMCTL_VERSION`
 constant at the top of `bin/llmctl`, kept equal to the `VERSION` file at the repository root). Real evidence
-(`tests/test_cli.sh`): the output contains the literal substring `llmctl 3.4.0`.
+(`tests/test_cli.sh`): the output contains the literal substring `llmctl 3.4.1`.
 
 ## help
 

@@ -26,7 +26,7 @@ Safety rules (constitution 11.4.201 / 11.4.263 / 12):
     group) the victim is the best individually-eligible *single process* of that
     group - never a small unrelated group - or, when there is none, the decision
     is "storm inside protected group: no safe victim" with evidence;
-  * a process-group signal is only sent when pgid > 1 (never kill(-1)), every
+  * a process-group signal is only sent when pgid > 1 (never the "all processes" target -1), every
     member is ours and unprotected, and BEFORE EACH signal (SIGTERM and again
     before SIGKILL) the whole group is re-read and must still be exactly the
     selected processes (same pids, same start times: a reused pgid fails this),
@@ -754,16 +754,25 @@ def write_victim_state(path, v, max_bytes):
             pass
 
 
+def signal_group(pgid, sig):
+    """Send sig to process group pgid.  Refuses (SystemExit) unless pgid is an int > 1 (constitution 11.4.263):
+    a pgid of 1 would reach every process we may signal, and a pgid of 0 our own process group."""
+    if not isinstance(pgid, int) or pgid <= 1:
+        raise SystemExit("refusing to signal process group %r (pgid must be an int > 1)" % (pgid,))
+    os.killpg(pgid, sig)
+
+
 def kill_victim(v, my_uid, self_pid, only_cg_re=None, own_pgrp=None, proc_root="/proc", scan_fn=None,
-                killpg=None, kill=None, pidfd_open=None, sleep=time.sleep, sig_delay=2.0):
+                group_signal=None, kill=None, pidfd_open=None, sleep=time.sleep, sig_delay=2.0):
     """Signal the selected victim.  Before EACH signal the target is re-read and must still be exactly what was
     selected (same pids, same start times) and still individually eligible; see the module docstring.
-    scan_fn/killpg/kill/pidfd_open/sleep are injectable so tests never signal a real process."""
-    if proc_root != "/proc" and scan_fn is None and killpg is None and kill is None and os.environ.get("HOSTSAFETY_TEST_ALLOW_FIXTURE_PROC") != "1":
+    scan_fn/group_signal/kill/pidfd_open/sleep are injectable so tests never signal a real process; the default
+    group_signal is signal_group, which itself refuses a pgid <= 1."""
+    if proc_root != "/proc" and scan_fn is None and group_signal is None and kill is None and os.environ.get("HOSTSAFETY_TEST_ALLOW_FIXTURE_PROC") != "1":
         # a fixture /proc must never lead to a real signal: its pids are not the host's pids
         return [("-", "refused-fixture-proc-root")]
     scan_fn = scan_fn or scan
-    killpg = killpg or os.killpg
+    group_signal = group_signal or signal_group
     kill = kill or os.kill
     if pidfd_open is None:
         pidfd_open = getattr(os, "pidfd_open", None)
@@ -803,7 +812,7 @@ def kill_victim(v, my_uid, self_pid, only_cg_re=None, own_pgrp=None, proc_root="
                 results.append((sig.name, "revalidation-failed:" + bad)); break
             try:
                 if group:
-                    killpg(n, sig)
+                    group_signal(n, sig)
                 elif fd is not None:
                     signal.pidfd_send_signal(fd, sig)
                 else:

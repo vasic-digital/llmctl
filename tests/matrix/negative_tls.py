@@ -77,7 +77,8 @@ class Srv:
             try:
                 self.proc.wait(timeout=5)
             except subprocess.TimeoutExpired:
-                os.killpg(pid, signal.SIGKILL)
+                if pid > 1:  # constitution 11.4.263, re-checked at the call
+                    os.killpg(pid, signal.SIGKILL)
 
 
 def sh(argv, inp=None, timeout=20):

@@ -67,6 +67,8 @@ the resolver's message.
 `constitution`, `containers` and `superspec` are **not** submodules of llmctl: they are resolved
 from the constitution hub (or `LLMCTL_*_DIR`) - run `make deps`, see [`docs/dependency-layout.md`](docs/dependency-layout.md).
 
+> **Release 3.4.1** is a fix release of the 3.4.0 host reserve: the start-time admission race is closed (admitted-but-not-yet-running units are counted), the admission store is host-wide, validated and per-uid, and duplicate or forged admission records can only add counted budget. Details: [`CHANGELOG.md`](CHANGELOG.md), [`docs/capacity.md`](docs/capacity.md).
+>
 > **Release 3.4.0** keeps resources for the host when models run locally: by default `max(2 CPUs, 25%)` (whole cores) and
 > `max(4 GiB, 20%)` of the RAM stay reserved, every model gets a thread cap, a CPU quota and a CPU affinity, a start is refused
 > (exit 75) under CPU pressure or when the model does not fit next to the current workload, and `llmctl capacity --json` reports

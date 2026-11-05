@@ -41,6 +41,8 @@ REALFIND="$(command -v find)"
 STUB="${TEST_TMP}/stub"; mkdir -p "${STUB}"
 cat > "${STUB}/find" <<STUBEOF
 #!/usr/bin/env bash
+# the fault models the cgroup scan only; the admission-store listing (a different find) passes through untouched
+case "\${1:-}" in /dev/shm|/dev/shm/*|/tmp|/tmp/llmctl-admit*|*llmctl-admit*|"${LLMCTL_ADMIT_DIR:-/nonexistent}"|"${LLMCTL_ADMIT_DIR:-/nonexistent}"/*) exec ${REALFIND} "\$@" ;; esac
 out="\$(${REALFIND} "\$@" 2>/dev/null)" || true
 [ -n "\${out}" ] && printf '%s\n' "\${out}"
 case "\${STUB_FIND_MODE:-}" in

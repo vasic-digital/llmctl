@@ -366,6 +366,7 @@ mutate_collect() {
   done
 }
 mutate "A pgid<=1 check removed" "A " 'if pgrp is None or pgrp <= 1:' 'if False:'
+mutate "K6 signal_group pgid<=1 check removed (constitution 11.4.263)" "K6 " 'if not isinstance(pgid, int) or pgid <= 1:' 'if False:'
 mutate "B cgroup-protected check removed (group spans a protected cgroup)" "B2" 'if PROTECTED_CG.search(cg):
         return "cgroup-protected"' 'if False:
         return "cgroup-protected"'
@@ -844,7 +845,7 @@ PY
     pg="$(ps -o pgid= -p "${pid}" 2>/dev/null | tr -d ' ')"
     # signal ONLY a validated group: it is the run's own (pgid == the bounded-run pid we started), never ours, never <= 1
     if [[ "${pg}" == "${pid}" && "${pg}" -gt 1 && "${pg}" != "$(ps -o pgid= -p $$ | tr -d ' ')" ]]; then
-      s=$SECONDS; kill -INT -- "-${pg}"
+      s=$SECONDS; kill -INT -- "-$pg"
     fi
     wait "${pid}" 2>/dev/null || r=$?
     sleep 0.5

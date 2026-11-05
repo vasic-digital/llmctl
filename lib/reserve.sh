@@ -37,7 +37,8 @@ reserve_enabled() { [[ "${LLMCTL_HOST_RESERVE:-1}" != 0 ]]; }
 _rsv_int() {
   local v="$1" d="$2" lo="$3" hi="$4"
   [[ "${v}" =~ ^[0-9]+$ ]] || v="${d}"
-  v=$(( 10#${v} ))
+  v="${v#"${v%%[!0]*}"}"; v="${v:-0}"           # leading zeros are not octal; more than 15 digits is beyond any ceiling
+  if (( ${#v} > 15 )); then v="${hi}"; else v=$(( 10#${v} )); fi
   (( v < lo )) && v="${lo}"
   (( v > hi )) && v="${hi}"
   echo "${v}"
@@ -269,7 +270,7 @@ reserve_cpu_cap() {
   reserve_compute
   local cap
   if [[ "$(reserve_profile_class "$1")" == decide ]]; then cap="${RSV_DECIDE_CPUS}"; else cap="${RSV_CHAT_CPUS}"; fi
-  if [[ "${_RSV_CAP_OVERRIDE:-}" =~ ^[1-9][0-9]*$ ]] && (( _RSV_CAP_OVERRIDE < cap )); then cap="${_RSV_CAP_OVERRIDE}"; fi
+  if [[ "${_RSV_CAP_OVERRIDE:-}" =~ ^[1-9][0-9]{0,8}$ ]] && (( _RSV_CAP_OVERRIDE < cap )); then cap="${_RSV_CAP_OVERRIDE}"; fi
   echo "${cap}"
 }
 
@@ -334,7 +335,7 @@ _rsv_chain_scan() {
 
 # --- ONE validator for every numeric knob of the reserve / gate / capacity code (round 10, F2) --------------------------------
 # Each entry is "<VARIABLE>:<kind>": int = a plain whole number of at most 18 digits, dec = a plain decimal number
-# (digits, optionally ".digits"), flag = exactly 0 or 1. Unset or empty means "use the default" and is valid. Any other
+# (digits, optionally ".digits"), pos = a whole number >= 1, flag = exactly 0 or 1. Unset or empty means "use the default" and is valid. Any other
 # value ("8G", " 8", "40%", ".5", 2^63, "yes") must REFUSE, never fall back to a default: the defaults of the stricter
 # knobs are the loosest allowed values, so a silent fallback would loosen what the operator tried to tighten. Adding a
 # knob = adding one entry here (tests/test_host_reserve_review10.sh checks this list against every knob the code reads).
@@ -344,7 +345,7 @@ _RSV_KNOBS=(
   LLMCTL_GATE_CPU_SOME_MAX:int LLMCTL_GATE_LOAD_PER_CPU:int LLMCTL_GATE_RESERVE_MB:int
   LLMCTL_GATE_FULL_MAX:dec LLMCTL_GATE_SOME_MAX:dec
   LLMCTL_GATE_WAIT:int LLMCTL_GATE_POLL:int LLMCTL_CAPACITY_TIMEOUT:int LLMCTL_CAPACITY_PROBE_TIMEOUT:int
-  LLMCTL_HOST_RESERVE_STRICT:flag
+  LLMCTL_HOST_RESERVE_STRICT:flag LLMCTL_ADMIT_TTL:pos
 )
 
 # reserve_knobs_check -> rc 0 when every knob is well-formed; rc 75 and RSV_G_BAD="<VARIABLE>=<value>" for the first bad one.
@@ -359,6 +360,7 @@ reserve_knobs_check() {
     case "${_kind}" in
       int)  [[ "${_v}" =~ ^[0-9]{1,18}$ ]] || { RSV_G_BAD="${_k}=${_v}"; return 75; } ;;
       dec)  [[ "${_v}" =~ ^[0-9]{1,18}([.][0-9]{1,18})?$ ]] || { RSV_G_BAD="${_k}=${_v}"; return 75; } ;;
+      pos)  [[ "${_v}" =~ ^[1-9][0-9]{0,17}$ ]] || { RSV_G_BAD="${_k}=${_v}"; return 75; } ;;
       flag) [[ "${_v}" == 0 || "${_v}" == 1 ]] || { RSV_G_BAD="${_k}=${_v}"; return 75; } ;;
     esac
   done
@@ -521,19 +523,160 @@ _rsv_self_cgroup() {
   [[ -n "${rel}" ]] && echo "/sys/fs/cgroup${rel}"
 }
 
+# _rsv_dec <digits> -> the plain decimal value (leading zeros stripped, never octal); rc 1 when it is not all digits or has
+# more than 15 significant digits (it could wrap the 64-bit arithmetic). Every number read from a file or a cgroup that is
+# summed or compared in this library goes through here (round 5, A).
+_rsv_dec() {
+  local v="${1:-}"
+  [[ "${v}" =~ ^[0-9]+$ ]] || return 1
+  v="${v#"${v%%[!0]*}"}"; v="${v:-0}"
+  (( ${#v} <= 15 )) || return 1
+  printf '%s' "${v}"
+}
+
 # _rsv_cpu_pct <cgroup-dir> -> the cgroup's CPU limit in percent of one CPU ("max" -> empty).
 _rsv_cpu_pct() {
   local q p
   read -r q p < "$1/cpu.max" 2>/dev/null || return 0
-  [[ "${q}" =~ ^[0-9]+$ && "${p}" =~ ^[1-9][0-9]*$ ]] && echo $(( (q * 100 + p - 1) / p ))
+  q="$(_rsv_dec "${q}")" || return 0
+  p="$(_rsv_dec "${p}")" || return 0
+  (( p >= 1 )) && echo $(( (q * 100 + p - 1) / p ))
   return 0
 }
 
 # _rsv_mem_mb <cgroup-dir> -> memory.max in MiB ("max" -> empty).
 _rsv_mem_mb() {
   local m; m="$(head -1 "$1/memory.max" 2>/dev/null || true)"
-  [[ "${m}" =~ ^[0-9]+$ ]] && echo $(( (m + 1048575) / 1048576 ))
+  m="$(_rsv_dec "${m}")" || return 0
+  echo $(( (m + 1048575) / 1048576 ))
   return 0
+}
+
+# --- admission records (round-8 finding 10, start-time race) ---------------------------------------------------------
+# hk_gate admits a unit in ExecStartPre; between the end of the last ExecStartPre process and the fork of ExecStart the
+# unit's cgroup is EMPTY, so a gate running in that window does not census it ("populated 0") and may admit a second
+# unit over the budget. An admitted gate therefore leaves a record <base>/llmctl-admit-<uid>/<unit-name> ("<cpu|max>
+# <mem|max> <cgroup-dir>") that the census counts for LLMCTL_ADMIT_TTL seconds (default 60, at least 1) while the unit's
+# cgroup exists and is NOT populated. Once the unit is populated the cgroup itself is counted (never both).
+# DESIGN (round 4, one class): the census is host-wide, so the records are too, but never in a shared directory that
+# users own or write into. <base> is a SYSTEM directory that llmctl never creates (/dev/shm, else /tmp; LLMCTL_ADMIT_DIR
+# overrides): sticky and owned by root or the caller. Under it every uid has ITS OWN directory llmctl-admit-<uid>, mode
+# 0755, owned by that uid. Only the owner (or root) can write there, so another user cannot plant, replace or delete
+# the records of a unit (the sticky base stops them renaming the directory). A directory whose owner is not the uid in its
+# name is a squat: the squatted uid's gate refuses to start (fail closed), readers ignore it. Nothing is auto-created
+# world-writable, so the first user to start a unit can no longer lock everyone else out.
+# Fail closed: a record that cannot be written (including a failed rename or a non-file result) refuses the start (75); a
+# base directory that exists but cannot be read makes the census unmeasurable (75); so does a per-uid directory owned by
+# its uid that cannot be listed or is group/other-writable (a directory of another owner is a squat and is ignored), a
+# correctly named record that cannot be read, and a record holding a malformed number (max or <=9 decimal digits, no
+# leading zeros). The writer additionally needs the per-uid dir to be o+rx so other uids can list it.
+_rsv_admit_dir() {
+  if [[ -n "${LLMCTL_ADMIT_DIR:-}" ]]; then echo "${LLMCTL_ADMIT_DIR}"; return; fi
+  if [[ -d /dev/shm && -w /dev/shm ]]; then echo /dev/shm; else echo /tmp; fi
+}
+
+# _rsv_admit_dir_ok <base> -> rc 0 when <base> is a real directory (no symlink), readable and searchable, and either
+# sticky and owned by root or the caller, or owned by the caller and closed to group/other writes; why on stderr otherwise.
+_rsv_admit_dir_ok() {
+  local d="$1" mode owner
+  [[ -d "${d}" && ! -L "${d}" && -r "${d}" && -x "${d}" ]] || { echo "the admission path ${d} is not a readable directory" >&2; return 1; }
+  read -r mode owner < <(stat -c '%a %u' "${d}" 2>/dev/null) || { echo "cannot stat the admission dir ${d}" >&2; return 1; }
+  [[ "${mode}" =~ ^[0-7]+$ ]] || return 1
+  if (( 8#${mode} & 8#1000 )); then
+    [[ "${owner}" == 0 || "${owner}" == "$(id -u)" ]] && return 0
+    echo "the sticky admission dir ${d} is owned by uid ${owner}, neither root nor this user" >&2; return 1
+  fi
+  if [[ "${owner}" == "$(id -u)" ]] && (( (8#${mode} & 8#022) == 0 )); then return 0; fi
+  echo "the admission dir ${d} (mode ${mode}) is neither sticky nor private to this user" >&2; return 1
+}
+
+# _rsv_uid_dir_state <dir> <uid> -> rc 0 usable; rc 2 a SQUAT (not a real directory, or owned by a uid other than <uid>:
+# holds nothing we trust, ignored); rc 1 owned by <uid> but unusable (cannot be listed, or group/other writable): the
+# census cannot know what is in it, so it is unmeasurable, never skipped (round 5, B).
+_rsv_uid_dir_state() {
+  local d="$1" uid="$2" mode owner
+  [[ -d "${d}" && ! -L "${d}" ]] || return 2
+  read -r mode owner < <(stat -c '%a %u' "${d}" 2>/dev/null) || return 1
+  [[ "${owner}" == "${uid}" ]] || return 2
+  [[ "${mode}" =~ ^[0-7]+$ && -r "${d}" && -x "${d}" ]] || return 1
+  (( (8#${mode} & 8#022) == 0 )) || return 1
+  return 0
+}
+
+# _rsv_uid_dir_ok <dir> <uid> -> the WRITER's test: usable per the state above AND open to read+search for others
+# (o+rx), so that another uid's gate can list it.
+_rsv_uid_dir_ok() {
+  local mode
+  _rsv_uid_dir_state "$1" "$2" || return 1
+  mode="$(stat -c %a "$1" 2>/dev/null)" || return 1
+  [[ "${mode}" =~ ^[0-7]+$ ]] && (( (8#${mode} & 8#005) == 8#005 ))
+}
+
+# reserve_admit_record <cpu-pct> <mem-mb> -> record this process's own unit as admitted (no-op outside an engine unit);
+# rc 75 (message on stderr) when the record cannot be written: an unrecorded admission would reopen the race.
+reserve_admit_record() {
+  local self dir base uid name tmp="" rec
+  reserve_enabled || return 0
+  self="$(_rsv_self_cgroup)"; name="${self##*/}"
+  [[ -n "${self}" && "${name}" == llmctl-*@*.service ]] || return 0
+  uid="$(id -u)"; base="$(_rsv_admit_dir)"; dir="${base}/llmctl-admit-${uid}"; rec="${dir}/${name}"
+  if _rsv_admit_dir_ok "${base}" 2>/dev/null && [[ ! -e "${dir}" && ! -L "${dir}" ]]; then ( umask 022; mkdir -m 0755 "${dir}" ) 2>/dev/null || true; fi
+  if ! _rsv_admit_dir_ok "${base}" 2>/dev/null \
+     || ! _rsv_uid_dir_ok "${dir}" "${uid}" \
+     || ! tmp="$(umask 077; mktemp "${dir}/.tmp.XXXXXX" 2>/dev/null)" \
+     || ! printf '%s %s %s\n' "${1:-max}" "${2:-max}" "${self}" > "${tmp}" 2>/dev/null \
+     || ! chmod 0644 "${tmp}" 2>/dev/null \
+     || ! mv -T -f "${tmp}" "${rec}" 2>/dev/null \
+     || [[ ! -f "${rec}" || -L "${rec}" || "$(stat -c %u "${rec}" 2>/dev/null)" != "${uid}" ]]; then
+    [[ -z "${tmp}" ]] || rm -f "${tmp:?}" 2>/dev/null || true
+    printf 'refusing to start %s: cannot record the admission in %s, so a second start could not see this unit during the empty-cgroup window.\n' "${name}" "${dir}" >&2
+    return 75
+  fi
+  return 0
+}
+
+# _rsv_admitted_pending [all] -> census lines ("<name> <cpu> <mem> pending <cgroup-dir>") for fresh, valid records of OTHER
+# units whose cgroup exists and is not populated yet (with "all": whether populated or not, for the second read after the
+# census). rc 1 (reason on stderr) when the admission path, a per-uid dir of the reader's own owner, or a record cannot be
+# read, or a correctly named record holds a malformed number: the census is then unmeasurable.
+_rsv_admitted_pending() {
+  local base d f uid unit cpu mem cg self croot ttl="${LLMCTL_ADMIT_TTL:-60}" all="${1:-}" st
+  [[ "${ttl}" =~ ^[1-9][0-9]{0,17}$ ]] || ttl=60
+  base="$(_rsv_admit_dir)"; [[ -e "${base}" || -L "${base}" ]] || return 0
+  _rsv_admit_dir_ok "${base}" || return 1
+  self="$(_rsv_self_cgroup)"
+  read -r croot _ < <(_rsv_units_scan); croot="$(realpath -m "${croot}" 2>/dev/null)" || croot=""
+  local dirs
+  dirs="$(find "${base}" -mindepth 1 -maxdepth 1 -type d -name 'llmctl-admit-*' 2>/dev/null | LC_ALL=C sort; exit "${PIPESTATUS[0]}")" \
+    || { echo "cannot list the admission base ${base}" >&2; return 1; }
+  while IFS= read -r d; do
+    [[ -n "${d}" ]] || continue
+    [[ "${d##*/}" =~ ^llmctl-admit-([0-9]+)$ ]] || continue
+    uid="${BASH_REMATCH[1]}"
+    st=0; _rsv_uid_dir_state "${d}" "${uid}" || st=$?
+    [[ "${st}" == 2 ]] && continue                  # a squat (foreign owner) holds nothing we trust
+    [[ "${st}" == 0 ]] || { echo "cannot use the admission dir ${d} (owned by uid ${uid} but unreadable or group/other-writable)" >&2; return 1; }
+    local list
+    # a record dated more than 60 s in the future is invalid (a far-future mtime would outlive the TTL, round-3 F4)
+    list="$(find "${d}" -maxdepth 1 -type f -name 'llmctl-*@*.service' -newermt "${ttl} seconds ago" ! -newermt '60 seconds' 2>/dev/null | LC_ALL=C sort)" \
+      || { echo "cannot list the admission dir ${d}" >&2; return 1; }
+    while IFS= read -r f; do
+      [[ -n "${f}" ]] || continue
+      unit="${f##*/}"
+      [[ "${unit}" =~ ^llmctl-.*@.*\.service$ ]] || continue
+      [[ "$(stat -c %u "${f}" 2>/dev/null)" == "${uid}" ]] || continue
+      # a correctly named record that cannot be read must not be skipped: that would hide a reserved unit (N1)
+      read -r cpu mem cg < "${f}" 2>/dev/null || { echo "cannot read the admission record ${f}" >&2; return 1; }
+      # a number is "max" or a plain decimal of at most 9 digits without leading zeros: never wrapped, never octal
+      [[ "${cpu}" =~ ^(0|[1-9][0-9]{0,8}|max)$ && "${mem}" =~ ^(0|[1-9][0-9]{0,8}|max)$ ]] \
+        || { echo "malformed number in the admission record ${f}" >&2; return 1; }
+      [[ -n "${cg}" && "${cg##*/}" == "${unit}" && "${cg}" != "${self}" ]] || continue
+      cg="$(realpath -m "${cg}" 2>/dev/null)" || continue
+      [[ -n "${croot}" && "${cg}" == "${croot%/}"/* && -d "${cg}" ]] || continue
+      [[ -n "${all}" ]] || { grep -qx 'populated 1' "${cg}/cgroup.events" 2>/dev/null && continue; }
+      echo "${unit} ${cpu} ${mem} pending ${cg}"
+    done <<< "${list}"
+  done <<< "${dirs}"
 }
 
 # reserve_running_units -> "<name> <cpu-pct|max> <mem-mb|max> <owner> <cgroup-dir>" for every POPULATED llmctl engine
@@ -562,6 +705,12 @@ reserve_running_units() {
   done < <(printf '%s\n' "${list}" | LC_ALL=C sort)
 }
 
+# _rsv_rec_max <old> <new> -> the larger of two validated record numbers. The token "max" is handled explicitly (it is the
+# largest and never reaches the arithmetic); every other value is a plain decimal of at most 9 digits.
+_rsv_rec_max() {
+  if [[ "$1" == max || "$2" == max ]]; then echo max; elif (( $2 > $1 )); then echo "$2"; else echo "$1"; fi
+}
+
 # reserve_combined_check <new-cpu-pct> <new-mem-mb> [label] - rc 75 (message on stderr) when the limits of the running
 # engine units plus the new one would exceed the model budget (Bc CPUs, Bm MiB). A unit without a CPU or memory limit
 # ("max", e.g. one started by an older llmctl) counts as the whole budget: it can take everything.
@@ -570,8 +719,8 @@ reserve_combined_check() {
   reserve_compute
   local ncpu="${1:-}" nmem="${2:-}" label="${3:-service}" act="${LLMCTL_GATE_ACTION:-start}"
   local bcpu=$(( RSV_BC * 100 )) ucpu=0 umem=0 name cpu mem list=""
-  [[ "${ncpu}" =~ ^[0-9]+$ ]] || ncpu="${bcpu}"
-  [[ "${nmem}" =~ ^[0-9]+$ ]] || nmem="${RSV_BM}"
+  ncpu="$(_rsv_dec "${ncpu}")" || ncpu="${bcpu}"
+  nmem="$(_rsv_dec "${nmem}")" || nmem="${RSV_BM}"
   # a host whose model budget is under 512 MiB is too small for any engine: refuse every start (review round 1 S6/M06)
   if (( RSV_MEM_SHORT == 1 )); then
     printf 'refusing to %s %s: the host RAM reserve (%s MiB of %s MiB) leaves only %s MiB for models (< 512 MiB); this host is too small for a local model.\n' \
@@ -580,19 +729,54 @@ reserve_combined_check() {
   fi
   # the running units must be countable: an unreadable or missing tree counted as "no units" admitted a start on a full
   # budget (review round 5, R5-2; this check runs in hk_gate, the ExecStartPre of every start, restart and boot)
-  local why census
-  why="$(_rsv_units_unmeasurable)"
+  local why="" census pend="" pend2="" perr
+  # the admission records are read BEFORE the running census: a unit that turns populated between the two reads is then
+  # counted twice (safe) instead of zero times (round-1 review F3). _rsv_test_hook is a test seam, undefined in production.
+  perr="$(mktemp)" || perr=/dev/null
+  pend="$(_rsv_admitted_pending 2>"${perr}")" || why="cannot read the admission records ($(head -c 200 "${perr}" 2>/dev/null))"
+  [[ "${perr}" == /dev/null ]] || rm -f "${perr:?}"
+  if [[ -n "${LLMCTL_TEST_MODE:-}" ]] && declare -F _rsv_test_hook >/dev/null; then _rsv_test_hook; fi
+  [[ -n "${why}" ]] || why="$(_rsv_units_unmeasurable)"
   if [[ -z "${why}" ]] && ! census="$(reserve_running_units)"; then why="the unit census under $(_rsv_units_scan) failed"; fi
+  # ... and AGAIN after it, taking the union (round 5, C): a unit whose ExecStartPre process exited between the first read
+  # and the census (populated -> empty) is missed by both, and one that forked its engine after the census (empty ->
+  # populated) is missed by the census; the second read lists every fresh record whether its cgroup is populated or not,
+  # and the loop below counts each cgroup once.
+  if [[ -z "${why}" ]]; then
+    if [[ -n "${LLMCTL_TEST_MODE:-}" ]] && declare -F _rsv_test_hook_post >/dev/null; then _rsv_test_hook_post; fi
+    perr="$(mktemp)" || perr=/dev/null
+    pend2="$(_rsv_admitted_pending all 2>"${perr}")" || why="cannot read the admission records ($(head -c 200 "${perr}" 2>/dev/null))"
+    [[ "${perr}" == /dev/null ]] || rm -f "${perr:?}"
+  fi
   if [[ -n "${why}" ]]; then
     printf 'refusing to %s %s: cannot count the running llmctl units (%s), so the model budget cannot be checked.\n' \
       "${act}" "${label}" "${why}" >&2
     return 75
   fi
   local owner ucg
+  local -A seen=()
+  while read -r name cpu mem owner ucg; do          # the census first; its cgroups are never counted again
+    [[ -n "${ucg}" ]] && seen["$(realpath -m "${ucg}" 2>/dev/null || echo "${ucg}")"]=1
+  done <<< "${census}"
+  # then the records, each cgroup once. Several records can name one cgroup (the two reads, or a record of another uid): the
+  # LARGEST cpu and the LARGEST memory win ("max" is the largest), never the first, so a forged record can only add counted
+  # budget and cannot hide the owner's pending reservation (review round 5, F-A).
+  local -A pcpu=() pmem=() pline=(); local -a porder=()
+  while read -r name cpu mem owner ucg; do
+    [[ -n "${ucg}" ]] || continue
+    ucg="$(realpath -m "${ucg}" 2>/dev/null || echo "${ucg}")"
+    [[ -n "${seen[${ucg}]:-}" ]] && continue
+    if [[ -z "${pline[${ucg}]:-}" ]]; then porder+=("${ucg}"); pline["${ucg}"]="${name} ${owner}"; pcpu["${ucg}"]="${cpu}"; pmem["${ucg}"]="${mem}"
+    else pcpu["${ucg}"]="$(_rsv_rec_max "${pcpu[${ucg}]}" "${cpu}")"; pmem["${ucg}"]="$(_rsv_rec_max "${pmem[${ucg}]}" "${mem}")"; fi
+  done <<< "${pend}"$'\n'"${pend2}"
+  for ucg in "${porder[@]}"; do
+    read -r name owner <<< "${pline[${ucg}]}"
+    census+=$'\n'"${name} ${pcpu[${ucg}]} ${pmem[${ucg}]} ${owner} ${ucg}"
+  done
   while read -r name cpu mem owner ucg; do
     [[ -n "${name}" ]] || continue
-    [[ "${cpu}" =~ ^[0-9]+$ ]] || cpu="${bcpu}"
-    [[ "${mem}" =~ ^[0-9]+$ ]] || mem="${RSV_BM}"
+    cpu="$(_rsv_dec "${cpu}")" || cpu="${bcpu}"
+    mem="$(_rsv_dec "${mem}")" || mem="${RSV_BM}"
     ucpu=$(( ucpu + cpu )); umem=$(( umem + mem )); list+=" ${name}"; [[ "${owner}" == self ]] || list+="(${owner})"
   done <<< "${census}"
   if (( ucpu + ncpu > bcpu )); then

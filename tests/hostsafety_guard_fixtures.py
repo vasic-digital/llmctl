@@ -9,6 +9,7 @@ make a NAMED fixture fail - see test_hostsafety.sh section 4b).
 Everything is synthetic: process tables are dicts, and the kill path gets injected kill functions, so no fixture can
 signal a real process (constitution 11.4.263).  All pids/pgids are above the kernel pid_max anyway.
 """
+import contextlib
 import importlib.util
 import os
 import sys
@@ -151,12 +152,28 @@ check("J2 a GROUP containing an ancestor of the guard is never signalled as a gr
 # ---------------------------------------------------------------- kill path (injected, never real)
 
 
+@contextlib.contextmanager
+def intercepted_os_signals():
+    """Replace the real os signal functions for the duration of the block and record every call instead (a safety net:
+    nothing inside the block can send a real signal).  Yields the list of recorded ("kill"|"group", ...) calls."""
+    sent = []
+    real_kill, real_group = os.kill, os.killpg  # killpg-gate:allow saves the real function to restore it; not a signal
+    os.kill = lambda *a: sent.append(("kill",) + a)
+    os.killpg = lambda *a: sent.append(("group",) + a)
+    try:
+        yield sent
+    finally:
+        os.kill, os.killpg = real_kill, real_group  # killpg-gate:allow restores the saved real function; not a signal
+
+
+
+
 class Rec:
     def __init__(self):
         self.calls = []
 
-    def killpg(self, n, sig):
-        self.calls.append(("killpg", n, int(sig)))
+    def group_signal(self, n, sig):
+        self.calls.append(("group", n, int(sig)))
 
     def kill(self, n, sig):
         self.calls.append(("kill", n, int(sig)))
@@ -176,7 +193,7 @@ def run_kill(v, scans, rec=None, **kw):
         t = scans[min(it["i"], len(scans) - 1)]
         it["i"] += 1
         return t
-    res = g.kill_victim(v, ME, GUARD_PID, scan_fn=scan_fn, killpg=rec.killpg, kill=rec.kill,
+    res = g.kill_victim(v, ME, GUARD_PID, scan_fn=scan_fn, group_signal=rec.group_signal, kill=rec.kill,
                         pidfd_open=False, sleep=lambda s: None, **kw)
     return res, rec
 
@@ -184,7 +201,26 @@ def run_kill(v, scans, rec=None, **kw):
 base = table(*guard_ancestry(), *runaway)
 v = victim_from(guard_ancestry() + runaway)
 res, rec = run_kill(v, [base])
-check("K0 unchanged victim: SIGTERM then SIGKILL to the group", [c[:2] for c in rec.calls] == [("killpg", B + 5000)] * 2 and [c[2] for c in rec.calls] == [15, 9], repr(rec.calls))
+check("K0 unchanged victim: SIGTERM then SIGKILL to the group", [c[:2] for c in rec.calls] == [("group", B + 5000)] * 2 and [c[2] for c in rec.calls] == [15, 9], repr(rec.calls))
+
+# K6 (constitution 11.4.263): the guard's DEFAULT group-signal function refuses a pgid <= 1 itself, before any os call,
+# so even a caller that bypasses kill_victim's own check can never send kill(-1) / kill(0).
+for bad in (1, 0, -1, None, "4200001"):
+    with intercepted_os_signals() as sent5:
+        try:
+            g.signal_group(bad, 15)
+            refused5 = False
+        except SystemExit:
+            refused5 = True
+    check("K6 default group signal refuses pgid %r and sends nothing" % (bad,), refused5 and sent5 == [], repr((refused5, sent5)))
+with intercepted_os_signals() as sent5:
+    g.signal_group(B + 5000, 15)
+check("K6b default group signal sends to a valid pgid", sent5 == [("group", B + 5000, 15)], repr(sent5))
+with intercepted_os_signals() as sent5:
+    g.kill_victim(victim_from(guard_ancestry() + runaway), ME, GUARD_PID, scan_fn=lambda r: table(*guard_ancestry(), *runaway),
+                  kill=lambda *a: None, pidfd_open=False, sleep=lambda s: None)
+check("K6c kill_victim with no injected group signal uses the guarded default (os call recorded, never real)",
+      [c[:2] for c in sent5] == [("group", B + 5000)] * 2, repr(sent5))
 
 # E: re-check between TERM and KILL: a member became protected / changed owner
 mut = dict(base); mut[B + 5003] = dict(base[B + 5003], name="claude")
@@ -228,7 +264,7 @@ res, rec = run_kill(sv, [pr])
 check("K2 single-process victim with a different start time (pid reuse) => nothing sent", rec.calls == [])
 for bad in (1, 0, -5):
     try:
-        g.kill_victim({"kind": "group", "pgrp": bad, "pids": [], "starttimes": {}}, ME, GUARD_PID, scan_fn=lambda r: {}, killpg=lambda *a: 1 / 0)
+        g.kill_victim({"kind": "group", "pgrp": bad, "pids": [], "starttimes": {}}, ME, GUARD_PID, scan_fn=lambda r: {}, group_signal=lambda *a: 1 / 0)
         check("K3 refuses pgid %d" % bad, False)
     except SystemExit:
         check("K3 refuses pgid %d" % bad, True)
@@ -236,7 +272,7 @@ for bad in (1, 0, -5):
 # K4: the kill path itself refuses the guard's OWN process group, even when the selection step is bypassed
 rec4 = Rec()
 try:
-    g.kill_victim(v, ME, GUARD_PID, own_pgrp=B + 5000, scan_fn=lambda r: base, killpg=rec4.killpg, kill=rec4.kill,
+    g.kill_victim(v, ME, GUARD_PID, own_pgrp=B + 5000, scan_fn=lambda r: base, group_signal=rec4.group_signal, kill=rec4.kill,
                   pidfd_open=False, sleep=lambda s: None)
     refused4 = False
 except SystemExit:
@@ -352,7 +388,7 @@ real_read = g.read
 g.read = lambda path, default="": (reads.append(path), real_read(path, default))[1]
 try:
     g.kill_victim(vv_full := full.get("victim", {"kind": "group", "pgrp": B + 546537, "pids": [], "starttimes": {}}), ME, GUARD_PID,
-                  scan_fn=lambda r: big_tbl, killpg=lambda *a: None, kill=lambda *a: None, pidfd_open=False, sleep=lambda s: None)
+                  scan_fn=lambda r: big_tbl, group_signal=lambda *a: None, kill=lambda *a: None, pidfd_open=False, sleep=lambda s: None)
 finally:
     g.read = real_read
 check("L8 kill_victim never reads guard.log / the victim state file", not any(("guard-victim" in x or x.endswith("guard.log")) for x in reads), repr(reads[:3]))
@@ -501,14 +537,8 @@ check("P4b an existing 0644 guard.log is chmod-ed 0600 on the next write", oct(o
 
 # ---------------------------------------------------------------- review F5: a fixture proc root can never reach a real pid
 def armed_main(env):
-    sent = []
-    rk, rkp = os.kill, os.killpg
-    os.kill = lambda *a: sent.append(("kill",) + a)
-    os.killpg = lambda *a: sent.append(("killpg",) + a)
-    try:
+    with intercepted_os_signals() as sent:
         calls, lines, d = run_main(BAD, storm_tbl, pre_state={"streak": 1}, env=dict({"HOSTSAFETY_GUARD_ARM": "1"}, **env), extra=["--proc-root", "/nonexistent-fixture-root"])
-    finally:
-        os.kill, os.killpg = rk, rkp
     return sent, lines, calls
 sent, lines, calls = armed_main({})
 check("X1 armed + fixture --proc-root, no test hook: nothing is signalled and the refusal is logged",

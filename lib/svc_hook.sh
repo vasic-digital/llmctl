@@ -170,7 +170,7 @@ hk_validated() {
   if [[ -n "${until}" ]]; then
     local vid
     vid="$(_hk_get "${f}" LLMCTL_QUARANTINE_VALIDATOR)"
-    if [[ "${until}" =~ ^[0-9]+$ ]] && (( $(date +%s) <= until )) \
+    if [[ "${until}" =~ ^[1-9][0-9]{0,14}$ ]] && (( $(date +%s) <= until )) \
         && [[ "${vid}" =~ ^[0-9]+: ]] && [[ "$(proc_identity "${vid%%:*}" 2>/dev/null)" == "${vid}" ]]; then
       _hk_log "${inst}: quarantine start (validation only: loopback, private port, never registered; validator ${vid%%:*} alive)"
       return 0
@@ -178,7 +178,7 @@ hk_validated() {
     # review 3 of 2026-10-15, finding 6: a quarantine record is honoured only while the llmctl process that started it
     # to validate it is ALIVE (same PID, same start time); a record left behind by a validator that is gone (reboot,
     # crash, kill) is never booted, even before its deadline
-    if [[ "${until}" =~ ^[0-9]+$ ]] && (( $(date +%s) <= until )); then
+    if [[ "${until}" =~ ^[1-9][0-9]{0,14}$ ]] && (( $(date +%s) <= until )); then
       _hk_log "${inst}: quarantine record whose validator (${vid:-none recorded}) is not alive - refusing to start (ExecCondition exit 77)"
       printf 'llmctl: %s carries a validation-quarantine record whose validator is gone; not starting (run: llmctl start %s)\n' "${inst}" "${inst}" >&2
       return 77
@@ -259,7 +259,11 @@ hk_gate() {
   while :; do
     rc=0; msg="$(hw_pressure_gate "${fp:-0}" "${inst:-service}" 2>&1 >/dev/null)" || rc=$?
     if [[ "${rc}" -eq 0 ]]; then msg="$(reserve_combined_check "${ncpu}" "${nmem}" "${inst:-service}" 2>&1 >/dev/null)" || rc=$?; fi
-    if [[ "${rc}" -eq 0 ]]; then (( waited == 0 )) || _hk_log "${inst}: pressure cleared after ${waited}s"; return 0; fi
+    if [[ "${rc}" -eq 0 ]]; then
+      # closes the empty-cgroup window before ExecStart (finding 10); a record that cannot be written refuses the start
+      msg="$(reserve_admit_record "${ncpu}" "${nmem}" 2>&1)" || { printf '%s\n' "${msg}" >&2; return 75; }
+      (( waited == 0 )) || _hk_log "${inst}: pressure cleared after ${waited}s"; return 0
+    fi
     if [[ "${rc}" -ne 75 || "${waited}" -ge "${wait}" ]]; then printf '%s\n' "${msg}" >&2; return "${rc}"; fi
     sleep "${poll}"; waited=$(( waited + poll ))
   done
@@ -279,7 +283,7 @@ _hk_kill_waiter() {
   f="$(_hk_waiter_file "$1")"
   [[ -f "${f}" ]] || return 0
   pid="$(head -1 "${f}" 2>/dev/null || true)"
-  [[ "${pid}" =~ ^[0-9]+$ && "${pid}" -gt 1 ]] || { rm -f "${f}"; return 0; }
+  [[ "${pid}" =~ ^[1-9][0-9]{0,8}$ ]] && (( pid > 1 )) || { rm -f "${f}"; return 0; }
   cmd="$(tr '\0' ' ' < "/proc/${pid}/cmdline" 2>/dev/null || true)"
   case "${cmd}" in
     *"_wait_register ${want} "*) kill "${pid}" 2>/dev/null || true; rm -f "${f}" ;;
@@ -290,7 +294,7 @@ _hk_kill_waiter() {
 
 hk_register() {
   local inst="$1" pid="${MAINPID:-${2:-}}"
-  [[ -n "${pid}" && "${pid}" -gt 1 ]] 2>/dev/null || { _hk_log "${inst}: no MAINPID; not registered"; return 0; }
+  [[ "${pid}" =~ ^[1-9][0-9]{0,8}$ ]] && (( pid > 1 )) || { _hk_log "${inst}: no MAINPID; not registered"; return 0; }
   portreg_active || return 0
   ensure_dir "${LLMCTL_LOG_DIR}"
   # Detached: ExecStartPost must return immediately so `systemctl start` is
