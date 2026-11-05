@@ -29,10 +29,12 @@ def mut(body, q, **kw):
 
 
 class AnswerFields(unittest.TestCase):
+    # oracle: SPECIFIED (FR-080 in specs/009-jev-decision-models: the additive answer fields of a calibrating gateway; fixtures are hand-built from the spec, not produced by the validator)
     def test_calibrated_choice_and_score_are_valid(self):
         self.assertEqual(C.validate_systemone(BODY, REQ), [])
         self.assertEqual(C.validate_systemone(SBODY, SREQ), [])
 
+    # oracle: SPECIFIED (FR-080: confidence_raw and calibration{method,n,profile_id} come together and are closed-schema; each rejected mutation violates a stated rule)
     def test_half_present_or_malformed_calibration_is_rejected(self):
         for name, bad in {
             "raw without calibration": mut(BODY, "b", calibration=None),
@@ -56,12 +58,14 @@ class ModelFields(unittest.TestCase):
         m.update(kw)
         return {"object": "list", "data": [m], "models": self.SDK}
 
+    # oracle: SPECIFIED (FR-080: /v1/models template_hash is 64 lowercase hex, calibration is {applied, ...}; hand-built envelopes)
     def test_template_hash_and_calibration_are_accepted(self):
         h = "ab" * 32
         self.assertEqual(C.validate_models(self.env()), [])
         self.assertEqual(C.validate_models(self.env(template_hash=h, calibration={"applied": True, **CAL})), [])
         self.assertEqual(C.validate_models(self.env(template_hash=h, calibration={"applied": False, "reason": "mismatch"})), [])
 
+    # oracle: SPECIFIED (FR-080: each listed malformed template_hash/calibration shape violates a stated rule and must be rejected)
     def test_malformed_additive_fields_are_rejected(self):
         for name, kw in {
             "short hash": {"template_hash": "abc"},

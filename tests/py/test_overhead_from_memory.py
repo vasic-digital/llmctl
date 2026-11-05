@@ -25,6 +25,7 @@ def summary_json(peak_kb_list, ctx=2048):
 
 
 class Rule(unittest.TestCase):
+    # oracle: SPECIFIED (rule overhead = ceil(1.10 x (peak - weights)); expected 550/551/0 computed by hand, the file docstring states the rule)
     def test_hand_computed_overhead(self):
         # peak 600 MiB = 614400 kB, weights 100 MiB: (600-100)*1.10 = 550 exactly -> 550
         self.assertEqual(ofm.overhead_from_peak(ofm.Fraction(614400, 1024), ofm.Fraction(WEIGHTS_BYTES, MIB)), 550)
@@ -33,16 +34,19 @@ class Rule(unittest.TestCase):
         # peak below the weights (mmap not yet touched): never negative
         self.assertEqual(ofm.overhead_from_peak(ofm.Fraction(50), ofm.Fraction(100)), 0)
 
+    # oracle: SPECIFIED (rule ceil(1.10 x peak VRAM); 2621 and 110 computed by hand)
     def test_vram_rule_is_the_same_margin_on_the_peak_pid_vram(self):
         self.assertEqual(ofm.vram_overhead(2382), 2621)   # ceil(2382 x 1.10) = ceil(2620.2)
         self.assertEqual(ofm.vram_overhead(100), 110)     # exactly 110.0 stays 110
 
 
 class Parsers(unittest.TestCase):
+    # oracle: SPECIFIED (the summary format records VmHWM per label; the peak is the maximum, 614400 kB, read off the hand-built input)
     def test_memory_summary_peak_is_the_max_hwm(self):
         peak, ctx = ofm.parse_summary_json(summary_json([100000, 614400, 300000], ctx=2048))
         self.assertEqual((peak, ctx), (ofm.Fraction(614400, 1024), 2048))
 
+    # oracle: SPECIFIED (ctx-peak txt format: the line for the requested model and ctx is selected, a missing line is an error; hand-built input)
     def test_ctx_peak_txt_selects_model_and_ctx(self):
         txt = ("# header\nmodel=A-Q8_0.gguf ctx=1024 idleHWM_kB=1 peakHWM_kB=2048\n"
                "model=A-Q8_0.gguf ctx=2048 idleHWM_kB=1 peakHWM_kB=4096\nmodel=B-Q8_0.gguf ctx=1024 idleHWM_kB=1 peakHWM_kB=9999\n")
@@ -50,12 +54,14 @@ class Parsers(unittest.TestCase):
         with self.assertRaises(ValueError):
             ofm.parse_ctx_peak(txt, "A-Q8_0.gguf", 4096)     # no such line: an error, never a guess
 
+    # oracle: SPECIFIED (pid-vram txt format: maximum over the vram lines is 176; no lines is an error)
     def test_pid_vram_txt_takes_the_maximum(self):
         txt = "## s\nVmHWM: 1 kB\nvram(MiB) pid=1: 126\nvram(MiB) pid=1: 176\nvram(MiB) pid=1: 150\n"
         self.assertEqual(ofm.parse_pid_vram(txt), 176)
         with self.assertRaises(ValueError):
             ofm.parse_pid_vram("nothing here\n")
 
+    # oracle: SPECIFIED (T139/G-138: the pid named by the conclusion line is the authority; disagreeing or missing rows are errors; hand-built transcript)
     def test_cpu_mode_apps_txt_takes_the_pid_the_transcript_names(self):
         # T139/G-138: a cpu-mode (-ngl 0) run recorded as an nvidia-smi compute-apps listing plus the operator's
         # "=> engine pid P holds N MiB" line.  The vision pid at the SAME binary path must NOT be picked.
@@ -96,6 +102,7 @@ class Derive(unittest.TestCase):
                                     "vram": {"status": "unmeasured", "reason": "no GPU on the measuring host"}}},
             "fast": {"capability": ["chat"]}}}
 
+    # oracle: SPECIFIED (values hand-computed from the evidence: (600-100)*1.10 = 550, ceil(1200*1.10) = 1320, window 2048)
     def test_measured_profile_numbers(self):
         d = ofm.derive(self.cat, self.root)
         self.assertEqual(d["decide-x"]["defaults"], {"overhead_mb": 550, "overhead_vram_mb": 1320, "window_tokens": 2048})
@@ -103,6 +110,7 @@ class Derive(unittest.TestCase):
         self.assertEqual(d["decide-x"]["memory"]["ram"]["weights_mib"], 100.0)
         self.assertEqual(d["decide-x"]["memory"]["vram"]["peak_mib"], 1200)
 
+    # oracle: SPECIFIED (ceil(4460 x 1.10) = 4906 computed by hand)
     def test_cpu_mode_apps_format_derives_the_same_margin(self):
         with open(os.path.join(self.root, "ev", "cpu.txt"), "w") as f:
             f.write("1, 4460 MiB, /x/llama-server\n=> engine pid 1 holds 4460 MiB VRAM in cpu mode\n")
@@ -113,14 +121,17 @@ class Derive(unittest.TestCase):
         self.assertEqual(d["decide-x"]["defaults"]["overhead_vram_mb"], 4906)   # ceil(4460 x 1.10) = 4906
         self.assertEqual(d["decide-x"]["memory"]["vram"]["peak_mib"], 4460)
 
+    # oracle: SPECIFIED (an unmeasured profile must carry no derived numbers, never a guess)
     def test_unmeasured_profile_declares_no_numbers(self):
         d = ofm.derive(self.cat, self.root)
         self.assertEqual(d["decide-y"]["defaults"], {})
         self.assertEqual(d["decide-y"]["memory"]["ram"]["status"], "unmeasured")
 
+    # oracle: SPECIFIED (only decision profiles are derived; the chat profile is absent from the result)
     def test_non_decision_profiles_are_skipped(self):
         self.assertNotIn("fast", ofm.derive(self.cat, self.root))
 
+    # oracle: INVARIANT (a catalog written by apply passes check; each hand-made tamper breaks the derived-value invariant and must be rejected)
     def test_check_passes_after_apply_and_catches_each_tamper(self):
         ofm.apply(self.cat, self.root)
         self.assertEqual(ofm.check(self.cat, self.root), [])
@@ -135,6 +146,7 @@ class Derive(unittest.TestCase):
             mutate(bad)
             self.assertTrue(ofm.check(bad, self.root), "a tampered catalog must be rejected")
 
+    # oracle: METAMORPHIC (relation: raising peak from 600 to 700 MiB moves overhead from 550 to 660, hand-computed (700-100)*1.1)
     def test_control_needle_changing_the_evidence_changes_the_number(self):
         before = ofm.derive(self.cat, self.root)["decide-x"]["defaults"]["overhead_mb"]
         with open(os.path.join(self.root, "ev", "mem.json"), "w") as f:

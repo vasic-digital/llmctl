@@ -68,6 +68,7 @@ class AuditTests(Scratch):
     def rows(self, res):
         return {r["id"]: r for r in res["rows"]}
 
+    # oracle: SPECIFIED (SC-004 in spec.md: a high defect closes as FIXED only when its cited guard exists and the green log passes; scratch tree built so the expected closure is known by construction)
     def test_fixed_with_real_test(self):
         self.register({"D-01": "RED", "D-02": "RED", "D-03": "RED", "D-04": "NOT-REPRODUCED", "N-01": "RED"},
                       {"D-01": {"disposition": "regression-test", "guard": ["tests/test_real.sh::the real guard name"]},
@@ -76,6 +77,7 @@ class AuditTests(Scratch):
         self.assertEqual(r["D-01"]["closure"], "FIXED")
         self.assertTrue(r["D-01"]["green"].startswith("PASS"))
 
+    # oracle: SPECIFIED (SC-004; control needle: a planted high row with no evidence MUST be OPEN and fail the exit code)
     def test_planted_row_without_evidence_is_reported(self):
         # control needle: N-01 (H) has no register entry and no map entry
         self.register({"D-01": "RED"}, {"D-01": {"disposition": "regression-test",
@@ -86,6 +88,7 @@ class AuditTests(Scratch):
         self.assertIn("N-01", [x["id"] for x in res["open_high"]])
         self.assertNotEqual(res["exit_code"], 0)
 
+    # oracle: SPECIFIED (SC-004: a closure citing a missing file or an absent test name is OPEN, not closed)
     def test_closure_citing_missing_test_fails(self):
         self.register({"D-01": "RED", "D-02": "RED", "D-04": "RED", "N-01": "RED"},
                       {"D-01": {"disposition": "regression-test", "guard": ["tests/test_ghost.sh::nothing"]},
@@ -96,16 +99,19 @@ class AuditTests(Scratch):
         self.assertEqual(r["D-02"]["closure"], "OPEN")
         self.assertIn("name not found", r["D-02"]["reason"])
 
+    # oracle: SPECIFIED (SC-004/T129: a not-reproduced row with a recorded reason is DEMOTED)
     def test_not_reproduced_is_demoted_with_reason(self):
         self.register({"D-04": "NOT-REPRODUCED"}, {"D-04": {"disposition": "N/A", "guard": "no loader exists"}})
         r = self.rows(self.run_audit())
         self.assertEqual(r["D-04"]["closure"], "DEMOTED")
 
+    # oracle: SPECIFIED (SC-004/T129: demotion without a reason stays OPEN)
     def test_demotion_without_reason_is_open(self):
         self.register({"D-04": "NOT-REPRODUCED"}, {})
         r = self.rows(self.run_audit())
         self.assertEqual(r["D-04"]["closure"], "OPEN")
 
+    # oracle: SPECIFIED (SC-004: only high or critical rows gate the exit code; an unevidenced medium row stays OPEN but exit is 0)
     def test_medium_rows_do_not_gate_exit(self):
         self.register({"D-01": "RED", "D-02": "RED", "D-04": "NOT-REPRODUCED", "N-01": "RED"},
                       {x: {"disposition": "regression-test", "guard": ["tests/test_real.sh::the real guard name"]}
@@ -118,6 +124,7 @@ class AuditTests(Scratch):
         self.assertEqual(res["exit_code"], 0)   # D-03 (M) has no evidence yet is not gating
         self.assertEqual(self.rows(res)["D-03"]["closure"], "OPEN")
 
+    # oracle: SPECIFIED (SC-004/T129: a demotion override counts only when its cited evidence file exists; asserted before and after the file is created)
     def test_override_requires_existing_evidence(self):
         self.register({"D-01": "SKIP"}, {})
         self.w("specs/009/evidence/sc004-overrides.json", json.dumps({"D-01": {
@@ -131,6 +138,7 @@ class AuditTests(Scratch):
         r = self.rows(self.run_audit())
         self.assertEqual(r["D-01"]["closure"], "DEMOTED")
 
+    # oracle: SPECIFIED (the rendered report must carry the GENERATED marker, the generator path and the row for D-01)
     def test_render_marks_generated_and_counts(self):
         self.register({"D-01": "RED"}, {"D-01": {"disposition": "regression-test",
                                                  "guard": ["tests/test_real.sh::the real guard name"]}})

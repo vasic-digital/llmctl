@@ -90,6 +90,7 @@ class ClassifierTest(unittest.TestCase):
             os.unlink(os.path.join(self.tmp, n))
         os.rmdir(self.tmp)
 
+    # oracle: SPECIFIED (bash grammar: comments, function headers, case labels, ;;, esac, else, fi, heredoc bodies and continuation lines are not commands; the fixture is authored so each line class is known)
     def test_non_executable_lines_are_excluded(self):
         ex, owner, n, warn = self.blc.classify(self.fx)
         self.assertEqual(warn, [])
@@ -99,6 +100,7 @@ class ClassifierTest(unittest.TestCase):
             ln = line_of(FIXTURE, needle, nth)
             self.assertNotIn(ln, ex, "line %d (%r) must not be executable" % (ln, needle))
 
+    # oracle: SPECIFIED (bash grammar: command start lines, including heredoc and multi-line statement starts, are executable; known by fixture construction)
     def test_executable_lines_are_included(self):
         ex = self.blc.classify(self.fx)[0]
         for needle in ("set -euo", 'local y=2', 'echo "arm-a"', 'case "${mode}"', "  called_fn"):
@@ -109,6 +111,7 @@ class ClassifierTest(unittest.TestCase):
         self.assertIn(line_of(FIXTURE, "long_cmd=$("), ex)
         self.assertIn(line_of(FIXTURE, 'msg="multi'), ex)
 
+    # oracle: SPECIFIED (the fixture declares exactly two functions; the start line is located by independent text search)
     def test_function_ranges(self):
         fns = {n: (s, e) for n, s, e in self.blc.functions(self.fx)}
         self.assertEqual(set(fns), {"called_fn", "never_called_fn"})
@@ -148,6 +151,7 @@ class EndToEndTraceTest(unittest.TestCase):
             os.unlink(os.path.join(d, n))
         os.rmdir(d)
 
+    # oracle: SPECIFIED (control needle: what bash actually executes for the fixture with default args is known by construction; real BASH_ENV/xtrace/FIFO pipeline)
     def test_called_function_covered_uncalled_function_uncovered(self):
         fx, rep = self.run_pipeline([])
         self.assertTrue(rep["had_any_hit"], "instrument saw nothing - blind, a zero here would be meaningless")
@@ -170,6 +174,7 @@ class EndToEndTraceTest(unittest.TestCase):
         self.assertGreater(funcs["never_called_fn"]["uncovered"], 0)
         self.assertEqual(funcs["called_fn"]["uncovered"], 0)
 
+    # oracle: SPECIFIED (control needle: with argument b the case and if arms flip, known by construction of the fixture)
     def test_other_argument_flips_the_arms(self):
         fx, rep = self.run_pipeline(["b"])
         unc = set(rep["uncovered_lines"])
@@ -178,6 +183,7 @@ class EndToEndTraceTest(unittest.TestCase):
         self.assertIn(line_of(FIXTURE, 'echo "arm-a"'), unc)
         self.assertIn(line_of(FIXTURE, "local x=1"), unc)  # called_fn not called on this path
 
+    # oracle: SPECIFIED (hook contract: without LLMCTL_COV_FIFO the trace hook is inert, bash -c echo ok yields rc 0, stdout ok, empty stderr)
     def test_without_fifo_the_hook_is_inert(self):
         env = {k: v for k, v in os.environ.items() if k != "LLMCTL_COV_FIFO"}
         env["BASH_ENV"] = INIT
