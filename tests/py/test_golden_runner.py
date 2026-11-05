@@ -171,6 +171,7 @@ class RunnerE2ETests(unittest.TestCase):
                     blobs.append(fh.read())
         return b"\n".join(blobs)
 
+    # oracle: CHARACTERIZATION (pins the runner's request shape and counts against the in-file stand-in; 132 and 0.85 are hand-counted from the fixture questions; proves runner plumbing, not model behaviour)
     def test_end_to_end_all_types(self):
         rc, out, err = self.run_main(["--limit", "200", "--types", "noul,choice,score", "--set", "questions"])
         self.assertEqual(rc, 0, err)
@@ -193,6 +194,7 @@ class RunnerE2ETests(unittest.TestCase):
         self.assertAlmostEqual(fam["accuracy"], 0.85)
         self.assertFalse(fam["lower_bound_exceeds_majority"])
 
+    # oracle: CHARACTERIZATION (pins the runner's own record design (p_pred stays the raw winner probability); pins the runner's own design against the in-file stand-in gateway, whose behaviour is defined in this test file (class stand-in); no external spec states this)
     def test_records_keep_raw_and_served_confidence_and_p_pred_stays_raw(self):
         rc, _, err = self.run_main(["--limit", "200", "--types", "choice", "--set", "questions"])
         self.assertEqual(rc, 0, err)
@@ -209,6 +211,7 @@ class RunnerE2ETests(unittest.TestCase):
         # p_pred is the winner's own (raw) probability: a calibrated gateway cannot move it
         self.assertAlmostEqual(r["p_pred"], 0.9)
 
+    # oracle: CHARACTERIZATION (pins answer_confidence() tolerance of hostile shapes as the runner designs it; no spec text)
     def test_answer_confidence_is_defensive(self):
         f = run_golden.answer_confidence
         cal = {"method": "platt", "n": 300, "profile_id": "p"}
@@ -221,6 +224,7 @@ class RunnerE2ETests(unittest.TestCase):
                     {"answers": {"q": {"confidence": float("nan"), "confidence_raw": "x", "calibration": []}}}):
             self.assertEqual(f(bad), (None, None, None))
 
+    # oracle: CHARACTERIZATION (mixed checks: no-leak of the access key and state text is an invariant, but the chain and manifest verifiers are sibling code in tests/evidence, not independent, and the class/real_pass assertions record observed runner behaviour)
     def test_evidence_chain_manifest_and_no_leaks(self):
         rc, out, err = self.run_main(["--limit", "10"])
         self.assertEqual(rc, 0, err)
@@ -236,6 +240,7 @@ class RunnerE2ETests(unittest.TestCase):
         # stand-in evidence is excluded from real-behaviour summaries
         self.assertEqual(writer.summarize(os.path.join(self.out, "evidence.jsonl"))["real_pass"], 0)
 
+    # oracle: CHARACTERIZATION (flip count is computed with run_golden.permuted_keys, the code under test's own helper, so only the 41-group count and wire order are independent; FR-080 flip probe (specs/009-jev-decision-models/spec.md:305))
     def test_permute_groups_detects_position_bias(self):
         rc, out, err = self.run_main(["--types", "choice", "--permute-groups"])
         self.assertEqual(rc, 0, err)
@@ -259,6 +264,7 @@ class RunnerE2ETests(unittest.TestCase):
         for w in want:
             self.assertIn(list(w), [list(x) for x in wire])
 
+    # oracle: CHARACTERIZATION (pins the runner's bounded retry design (attempt counts) against the stand-in; pins the runner's own design against the in-file stand-in gateway, whose behaviour is defined in this test file (class stand-in); no external spec states this)
     def test_retry_is_bounded_and_recovers(self):
         self.srv.fail_first = 1
         rc, out, err = self.run_main(["--limit", "1", "--types", "noul", "--retries", "2"])
@@ -267,6 +273,7 @@ class RunnerE2ETests(unittest.TestCase):
         self.assertEqual(res["records"][0]["attempts"], 2)
         self.assertTrue(res["records"][0]["well_formed"])
 
+    # oracle: CHARACTERIZATION (pins 1 attempt + N retries and the fail record as the runner designs them; pins the runner's own design against the in-file stand-in gateway, whose behaviour is defined in this test file (class stand-in); no external spec states this)
     def test_retry_gives_up_after_bound(self):
         self.srv.always_status = 503
         rc, out, err = self.run_main(["--limit", "1", "--types", "noul", "--retries", "2"])
@@ -278,6 +285,7 @@ class RunnerE2ETests(unittest.TestCase):
         self.assertEqual(recs[0]["result"], "fail")
         self.assertIn("0 of 1", recs[0]["reason"])
 
+    # oracle: SPECIFIED (internal/server/handlers.go:284-286 comment: a client must not retry deadline_exceeded; the contract table specs/009-jev-decision-models/contracts/openapi.yaml:28 lists 502 as retryable and only adds x-llmctl-decide-reason, so it is looser and does not itself say do-not-retry)
     def test_gateway_deadline_502_is_not_retried(self):
         # a 502 the gateway marks deadline_exceeded means a slow-but-alive engine: a retry would cancel
         # the engine task and redo the whole prefill (guaranteed waste), so it is recorded, not retried
@@ -290,6 +298,7 @@ class RunnerE2ETests(unittest.TestCase):
         self.assertEqual(res["records"][0]["attempts"], 1)
         self.assertEqual(res["records"][0]["status"], 502)
 
+    # oracle: SPECIFIED (RFC 9110 section 5.1: HTTP field names are case-insensitive; header name per specs/009-jev-decision-models/contracts/openapi.yaml:28)
     def test_gateway_deadline_502_header_name_is_case_insensitive(self):
         # HTTP header names are case-insensitive: a canonical-case or mixed-case name must be recognised
         for name in ("X-Llmctl-Decide-Reason", "X-LLMCTL-decide-REASON"):
@@ -304,6 +313,7 @@ class RunnerE2ETests(unittest.TestCase):
                 self.assertEqual(res["records"][0]["attempts"], 1)
                 self.assertEqual(res["records"][0]["reason"], "deadline_exceeded")
 
+    # oracle: SPECIFIED (specs/009-jev-decision-models/contracts/openapi.yaml:28 (502 retryable; gateway-internal 502 paths set no reason header))
     def test_gateway_502_without_reason_header_is_still_retried(self):
         self.srv.always_status = 502
         self.srv.always_headers = {}
@@ -314,6 +324,7 @@ class RunnerE2ETests(unittest.TestCase):
         self.assertEqual(res["records"][0]["attempts"], 3)
         self.assertIsNone(res["records"][0]["reason"])
 
+    # oracle: CHARACTERIZATION (record fields status/reason are the runner's own schema; header name and value per specs/009-jev-decision-models/contracts/openapi.yaml:28 only)
     def test_gateway_reason_is_persisted_in_record_and_raw_log(self):
         self.srv.always_status = 502
         self.srv.always_headers = {"x-llmctl-decide-reason": "engine_error"}
@@ -329,6 +340,7 @@ class RunnerE2ETests(unittest.TestCase):
         self.assertEqual(rc, 0, err)
         self.assertIsNone(_jload(os.path.join(self.out, "results.json"))["records"][0]["reason"])
 
+    # oracle: SPECIFIED (specs/009-jev-decision-models/contracts/openapi.yaml:28 (502 retryable; any other backend 502 carries engine_error))
     def test_gateway_engine_error_502_is_still_retried(self):
         self.srv.always_status = 502
         self.srv.always_headers = {"x-llmctl-decide-reason": "engine_error"}
@@ -336,6 +348,7 @@ class RunnerE2ETests(unittest.TestCase):
         self.assertEqual(rc, 1)
         self.assertEqual(len(self.srv.seen), 3)
 
+    # oracle: SPECIFIED (specs/009-jev-decision-models/contracts/openapi.yaml:21 (401 not retryable); key-not-in-output is the runner's secret-handling design)
     def test_wrong_key_is_recorded_not_leaked(self):
         rc, out, err = self.run_main(["--limit", "2", "--types", "noul"], key="gk-wrong-key-0000-not-real-2")
         self.assertEqual(rc, 1)
@@ -344,6 +357,7 @@ class RunnerE2ETests(unittest.TestCase):
         self.assertEqual(len(self.srv.seen), 2)   # 401 is not retried
         self.assertNotIn(b"gk-wrong-key-0000-not-real-2", self.all_output_bytes())
 
+    # oracle: SPECIFIED (specs/009-jev-decision-models/contracts/openapi.yaml:286-340 (answer schemas: a typed answer lacking its value is malformed))
     def test_malformed_answer_shape_fails_not_passes(self):
         self.srv.bad_shape = True
         rc, out, err = self.run_main(["--limit", "3", "--types", "noul,choice,score"])
@@ -351,6 +365,7 @@ class RunnerE2ETests(unittest.TestCase):
         res = _jload(os.path.join(self.out, "results.json"))
         self.assertEqual(res["report"]["well_formed"]["ok"], 0)
 
+    # oracle: CHARACTERIZATION (pins the runner's CLI key-source behaviour and exit code 2 as designed; no spec text)
     def test_key_file_and_missing_key(self):
         kf = os.path.join(self.tmp, "key.txt")
         with open(kf, "w") as f:
@@ -368,6 +383,7 @@ class RunnerE2ETests(unittest.TestCase):
         self.assertEqual(rc, 2)
         self.assertIn("no access key", errs.getvalue())
 
+    # oracle: CHARACTERIZATION (23 probes and 3 pairs are hand-counted from the probes fixture; pins the runner's report shape)
     def test_probes_set_runs_and_pairs_are_reported(self):
         rc, out, err = self.run_main(["--set", "probes"])
         self.assertEqual(rc, 0, err)
@@ -376,6 +392,7 @@ class RunnerE2ETests(unittest.TestCase):
         self.assertEqual(res["report"]["pair_consistency"]["pairs"], 3)
 
 
+    # oracle: SPECIFIED (specs/009-jev-decision-models/contracts/openapi.yaml:25 (422 validation_failed for a limit violation) plus internal/contract/request.go:110 (options above MaxOptions rejected); the refused record shape is the runner's design)
     def test_refusal_recorded_when_over_profile_limit(self):
         """G-160: 422 validation_failed on a choice item with more options than --max-options."""
         self.srv.always_status = 422
@@ -390,6 +407,7 @@ class RunnerE2ETests(unittest.TestCase):
         self.assertEqual(res["report"]["well_formed"]["n"], 0)
         self.assertIn("REFUSED(max_options)", out)
 
+    # oracle: CHARACTERIZATION (pins that a 422 is not called a refusal unless --max-options is given (the runner's G-160 design))
     def test_422_without_max_options_flag_stays_malformed(self):
         self.srv.always_status = 422
         self.srv.always_body = (b'{"message":"Request failed validation.","error_type":"validation_failed"}')
@@ -398,6 +416,7 @@ class RunnerE2ETests(unittest.TestCase):
         self.assertFalse(any(r.get("refused") for r in res["records"]))
         self.assertEqual(res["report"]["well_formed"]["n"], 2)
 
+    # oracle: SPECIFIED (specs/009-jev-decision-models/contracts/openapi.yaml:25 (422 also covers deterministic readout_failure, which is not a limit refusal))
     def test_readout_failed_422_stays_malformed_e2e(self):
         self.srv.always_status = 422
         self.srv.always_body = RefusalClassifyTests.RF
@@ -406,6 +425,7 @@ class RunnerE2ETests(unittest.TestCase):
         self.assertFalse(any(r.get("refused") for r in res["records"]))
 
 
+    # oracle: DERIVED (hand-worked and recounted: 5 items with 12 options and 4 with 20 give 9 items over 8; related context SC-003 at specs/009-jev-decision-models/spec.md:384, which does not itself define refused-item denominators)
     def test_refused_items_do_not_fail_the_run_and_sc003_pass_row_explains(self):
         """IMPORTANT-1: refused items shrink the denominator; run exits 0, SC-003 passes WITH a reason."""
         self.srv.refuse_over = 8
@@ -422,6 +442,7 @@ class RunnerE2ETests(unittest.TestCase):
         sc3 = [r for r in rows if r.get("requirement") == ["SC-003"] and r.get("result") == "pass"][0]
         self.assertIn("9 items refused by max_options=8", sc3["reason"])
 
+    # oracle: CHARACTERIZATION (pins that the runner records the flag in meta and argv; no spec text)
     def test_max_options_recorded_in_meta_and_argv(self):
         self.run_main(["--types", "noul", "--limit", "1", "--max-options", "7"])
         res = _jload(os.path.join(self.out, "results.json"))
@@ -430,6 +451,7 @@ class RunnerE2ETests(unittest.TestCase):
             open(os.path.join(r, f), "rb").read() for r, _, fs in os.walk(self.out) for f in fs
             if f.endswith(".jsonl")).decode())
 
+    # oracle: CHARACTERIZATION (expected 16 is the decide-2b value read from models/catalog.json by the same test author; the warning is the runner's design)
     def test_catalog_mismatch_warns_on_stderr_and_meta(self):
         # real profile name from models/catalog.json (decide-2b has max_options 16)
         argv = ["--base-url", self.srv.url, "--cacert", self.crt, "--key-env", "GOLDEN_TEST_KEY",
@@ -449,6 +471,7 @@ class PureUnitTests(unittest.TestCase):
     def item(self, typ):
         return next(i for i in run_golden.load_items(["questions"]) if i["type"] == typ)
 
+    # oracle: CHARACTERIZATION (thresholds 50/40/30 are the golden-set size chosen in this repo; specs/009-jev-decision-models/spec.md:384 (SC-003) only requires 30 questions in total)
     def test_fixture_loads_with_required_counts(self):
         items = run_golden.load_items(["questions"])
         c = {t: sum(1 for i in items if i["type"] == t) for t in ("noul", "choice", "score")}
@@ -456,6 +479,7 @@ class PureUnitTests(unittest.TestCase):
         self.assertGreaterEqual(c["choice"], 40)
         self.assertGreaterEqual(c["score"], 30)
 
+    # oracle: SPECIFIED (specs/009-jev-decision-models/contracts/openapi.yaml:186-202 (SystemOneRequest: model plus a questions map; noul criteria true/false, choice criteria object, score criteria list))
     def test_build_request_shapes(self):
         n = run_golden.build_request(self.item("noul"), "m")
         self.assertEqual(n["questions"]["q"]["type"], "noul")
@@ -467,6 +491,7 @@ class PureUnitTests(unittest.TestCase):
         self.assertIsInstance(s["questions"]["q"]["criteria"], list)
         self.assertEqual(s["model"], "m")
 
+    # oracle: CHARACTERIZATION (observed runner design: same seed gives the same order and the order is a permutation of the keys; the 'differs from the original order' check is the runner's design, not a property of permutations)
     def test_permutation_deterministic_and_different(self):
         for c in [i for i in run_golden.load_items(["questions"]) if i["type"] == "choice"]:
             a = run_golden.permuted_keys(c, "7")
@@ -476,6 +501,7 @@ class PureUnitTests(unittest.TestCase):
         c = next(i for i in run_golden.load_items(["questions"]) if i.get("option_count") == 20)
         self.assertNotEqual(run_golden.permuted_keys(c, "1"), run_golden.permuted_keys(c, "2"))
 
+    # oracle: SPECIFIED (specs/009-jev-decision-models/contracts/openapi.yaml:286-295 (NoulAnswer: noul is a number in [0,1]; type must match the question))
     def test_parse_answer_noul(self):
         it = self.item("noul")
         ok = {"answers": {"q": {"type": "noul", "noul": 0.2}}}
@@ -486,6 +512,7 @@ class PureUnitTests(unittest.TestCase):
                     {"answers": {}}, {}, {"answers": {"q": {"type": "noul", "noul": True}}}):
             self.assertFalse(run_golden.parse_answer(it, bad)[0])
 
+    # oracle: SPECIFIED (specs/009-jev-decision-models/contracts/openapi.yaml:296-316 (ChoiceAnswer: choice is a listed option, probabilities sum to 1 within 1e-6))
     def test_parse_answer_choice_rejects_unknown_option_and_bad_sum(self):
         it = self.item("choice")
         ks = list(it["criteria"])
@@ -500,6 +527,7 @@ class PureUnitTests(unittest.TestCase):
             mut(body["answers"]["q"])
             self.assertFalse(run_golden.parse_answer(it, body)[0])
 
+    # oracle: SPECIFIED (specs/009-jev-decision-models/contracts/openapi.yaml:317-340 (ScoreAnswer: level index within the scale); rounding 2.6 to 3 is the runner's design)
     def test_parse_answer_score_rounding_and_range(self):
         it = next(i for i in run_golden.load_items(["questions"]) if i["type"] == "score" and i["scale"] == 5)
         probs = {str(i): 0.0 for i in range(5)}
@@ -509,6 +537,7 @@ class PureUnitTests(unittest.TestCase):
         body["answers"]["q"]["score"] = 5.0                                         # outside 0..4
         self.assertFalse(run_golden.parse_answer(it, body)[0])
 
+    # oracle: INVARIANT (--dry-run never prints state text)
     def test_dry_run_prints_no_state_text(self):
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
@@ -516,6 +545,7 @@ class PureUnitTests(unittest.TestCase):
         self.assertEqual(rc, 0)
         self.assertNotIn("rm -rf", out.getvalue())
 
+    # oracle: CHARACTERIZATION (pins exit code 2 for unknown --types and --set values as the runner designs it)
     def test_bad_arguments(self):
         with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
             self.assertEqual(run_golden.main(["--base-url", "u", "--profile", "p", "--types", "bogus", "--dry-run"]), 2)
@@ -531,36 +561,45 @@ class RefusalClassifyTests(unittest.TestCase):
     def choice(self, n):
         return {"id": "C", "type": "choice", "criteria": {"k%d" % i: "d" for i in range(n)}}
 
+    # oracle: SPECIFIED (specs/009-jev-decision-models/contracts/openapi.yaml:25 and internal/contract/request.go:110 (options above MaxOptions give 422 validation_failed))
     def test_a_over_limit_422_is_refused(self):
         self.assertEqual(run_golden.classify_refusal(422, self.VF, self.choice(20), 16), "max_options")
 
+    # oracle: SPECIFIED (specs/009-jev-decision-models/contracts/openapi.yaml:25 (readout_failed is a deterministic model fault, not a limit refusal))
     def test_b_readout_failed_is_still_malformed(self):
         self.assertIsNone(run_golden.classify_refusal(422, self.RF, self.choice(20), 16))
 
+    # oracle: CHARACTERIZATION (pins that a 200 is never classified as a refusal; runner design)
     def test_c_200_unchanged(self):
         self.assertIsNone(run_golden.classify_refusal(200, b"{}", self.choice(20), 16))
 
+    # oracle: CHARACTERIZATION (pins the runner's precise predicate: only an option count above the limit is a refusal (G-160); request.go:110)
     def test_within_limit_validation_failure_is_not_a_refusal(self):
         self.assertIsNone(run_golden.classify_refusal(422, self.VF, self.choice(16), 16))
 
+    # oracle: CHARACTERIZATION (pins that an unknown limit never classifies a refusal; runner design)
     def test_unknown_limit_never_refuses(self):
         self.assertIsNone(run_golden.classify_refusal(422, self.VF, self.choice(20), None))
 
+    # oracle: CHARACTERIZATION (pins the classifier's defensive handling of non-choice items and hostile bodies; runner design)
     def test_non_choice_and_hostile_body(self):
         self.assertIsNone(run_golden.classify_refusal(422, self.VF, {"type": "noul", "criteria": {"a": 1, "b": 2}}, 1))
         self.assertIsNone(run_golden.classify_refusal(422, b"\xff not json", self.choice(20), 16))
         self.assertIsNone(run_golden.classify_refusal(None, b"", self.choice(20), 16))
 
+    # oracle: CHARACTERIZATION (pins that only a 422 can be a limit refusal (specs/009-jev-decision-models/contracts/openapi.yaml:25 names 422 for it))
     def test_other_statuses_with_validation_failed_body_are_not_refused(self):
         for st in (400, 502, 500, 429):
             self.assertIsNone(run_golden.classify_refusal(st, self.VF, self.choice(20), 16), st)
 
 
 class CatalogCheckTests(unittest.TestCase):
+    # oracle: CHARACTERIZATION (16 and 255 are copied from models/catalog.json by the test author; reads the same file as the code under test, so this is a pinned snapshot)
     def test_known_profile_returns_catalog_value(self):
         self.assertEqual(run_golden.catalog_max_options("decide-2b"), 16)
         self.assertEqual(run_golden.catalog_max_options("decide-julia"), 255)
 
+    # oracle: CHARACTERIZATION (pins the runner's None-on-unknown behaviour; no spec text)
     def test_unknown_profile_or_missing_catalog_is_none(self):
         self.assertIsNone(run_golden.catalog_max_options("no-such-profile"))
         self.assertIsNone(run_golden.catalog_max_options("decide-2b", "/nonexistent/catalog.json"))
