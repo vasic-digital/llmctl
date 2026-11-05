@@ -164,12 +164,14 @@ class AdapterBase(unittest.TestCase):
 
 
 class LabelAndGuardTests(AdapterBase):
+    # oracle: CHARACTERIZATION (pins the adapter's rule that a run needs --public-tier; pins the adapter's own fail-closed design against the in-file loopback gateway and fake harness; no external spec states this)
     def test_public_tier_flag_required(self):
         repo = self.make_repo([task(0, "A:yes", "yes")])
         rc, summ = self.run_adapter(repo, public=False)
         self.assertEqual(2, rc)
         self.assertIsNone(summ)  # nothing was run
 
+    # oracle: CHARACTERIZATION (pins the summary labels public-tier / possible / official_score false as the adapter designs them; tasks.md:94 (T065) only requires the public-tier label)
     def test_summary_labels(self):
         repo = self.make_repo([task(0, "A:yes", "yes")])
         rc, s = self.run_adapter(repo)
@@ -181,18 +183,21 @@ class LabelAndGuardTests(AdapterBase):
         self.assertEqual("served-x", s["served_model"])
         self.assertIn("Bearer k-test", Gateway.seen_auth)  # the key reached the gateway via the env var
 
+    # oracle: CHARACTERIZATION (pins fail-closed on a pin mismatch (rc 2, nothing run); pins the adapter's own fail-closed design against the in-file loopback gateway and fake harness; no external spec states this)
     def test_commit_pin_mismatch_fails_closed(self):
         repo = self.make_repo([task(0, "A:yes", "yes")])
         rc, s = self.run_adapter(repo, commit="0" * 40)
         self.assertEqual(2, rc)
         self.assertIsNone(s)
 
+    # oracle: CHARACTERIZATION (pins fail-closed on a manifest hash mismatch; pins the adapter's own fail-closed design against the in-file loopback gateway and fake harness; no external spec states this)
     def test_dataset_hash_mismatch_fails_closed(self):
         repo = self.make_repo([task(0, "A:yes", "yes")], manifest_sha="f" * 64)
         rc, s = self.run_adapter(repo)
         self.assertEqual(2, rc)
         self.assertIsNone(s)
 
+    # oracle: CHARACTERIZATION (pins fail-closed on a modified tracked file; pins the adapter's own fail-closed design against the in-file loopback gateway and fake harness; no external spec states this)
     def test_dirty_checkout_fails_closed(self):
         repo = self.make_repo([task(0, "A:yes", "yes")])
         with open(os.path.join(repo, "datasets", "public", "original.jsonl"), "a") as fh:
@@ -202,6 +207,7 @@ class LabelAndGuardTests(AdapterBase):
 
 
 class CountTests(AdapterBase):
+    # oracle: DERIVED (hand-worked: 6 constructed items give 3 answered, 2 refused, 1 malformed, 2 correct, 1 wrong; Wilson lower 0.2077 for 2/3 by hand)
     def test_refusals_tallied_separately_from_wrong(self):
         # 6 items: 2 correct, 1 wrong, 1 x 422, 1 x 503, 1 malformed.
         ts = [task(0, "A:yes", "yes"), task(1, "A:no", "no"), task(2, "A:yes", "no"),
@@ -215,12 +221,14 @@ class CountTests(AdapterBase):
         self.assertAlmostEqual(2 / 3, s["accuracy_answered"]["value"])
         self.assertAlmostEqual(0.2077, s["accuracy_answered"]["wilson_low"], places=3)
 
+    # oracle: DERIVED (hand-worked: 10 of 10 yes gives majority share 1.0 and a Wilson lower bound of about 0.72, below the baseline)
     def test_baseline_and_verdict(self):
         ts = [task(i, "A:yes", "yes") for i in range(10)]
         rc, s = self.run_adapter(self.make_repo(ts))
         self.assertAlmostEqual(1.0, s["baseline"]["majority_share"])
         self.assertFalse(s["verdict_lower_exceeds_baseline"])  # 10/10 lower bound 0.72 < baseline 1.0
 
+    # oracle: CHARACTERIZATION (pins that excluded and unlabeled items stay out of the headline count; adapter design)
     def test_excluded_items_not_in_headline(self):
         ts = [task(0, "A:yes", "yes"), task(1, "A:yes", "yes", exclude="ambiguous"), task(2, "A:yes", None)]
         rc, s = self.run_adapter(self.make_repo(ts))
@@ -237,12 +245,14 @@ class CalibrationTests(AdapterBase):
             ts.append(task(n_clean + j, "A:yes", "yes", lic="CC-BY-NC-4.0"))
         return ts
 
+    # oracle: SPECIFIED (tasks.md:94 (T065: calibration only if at least 200 licence-clean labels) and specs/009-jev-decision-models/spec.md:384 (SC-003) (no ECE from fewer than 200 labelled items))
     def test_below_200_refused_no_csv(self):
         rc, s = self.run_adapter(self.make_repo(self.many(199)))
         self.assertEqual("insufficient: 199<200", s["calibration"])
         self.assertIsNone(s["calibration_csv"])
         self.assertFalse(os.path.exists(os.path.join(self.root, "run1", "calibration.csv")))
 
+    # oracle: SPECIFIED (specs/009-jev-decision-models/spec.md:384 (SC-003) (200 labelled items is the threshold); the first CSV rows are hand-worked from the constructed items)
     def test_at_200_writes_csv_with_columns(self):
         rc, s = self.run_adapter(self.make_repo(self.many(200)))
         self.assertTrue(s["calibration"].startswith("ok: 200"))
@@ -253,18 +263,21 @@ class CalibrationTests(AdapterBase):
         self.assertEqual(["0.900000", "1"], rows[1])   # item 0: p(yes)=0.9, expected yes -> correct
         self.assertEqual(["0.900000", "0"], rows[2])   # item 1: expected no -> wrong
 
+    # oracle: CHARACTERIZATION (pins that only licence-clean items feed calibration (tasks.md:94 T065); the 150 + 100 split is constructed)
     def test_unlicensed_counted_in_accuracy_not_in_calibration(self):
         # 150 clean + 100 unlicensed: accuracy sees 250 items, calibration only 150 -> insufficient
         rc, s = self.run_adapter(self.make_repo(self.many(150, 100)))
         self.assertEqual(250, s["counts"]["n"])
         self.assertEqual("insufficient: 150<200", s["calibration"])
 
+    # oracle: SPECIFIED (specs/009-jev-decision-models/spec.md:384 (SC-003) (no calibration figure from fewer than 200 labelled items))
     def test_csv_writer_has_its_own_guard(self):
         with self.assertRaises(ValueError):
             ja.write_calibration_csv(os.path.join(self.root, "x.csv"), [(0.5, True)] * 199)
 
 
 class EvidenceTests(AdapterBase):
+    # oracle: INVARIANT (item text never reaches the tracked evidence files)
     def test_evidence_has_ids_and_aggregates_only(self):
         ts = [task(0, "A:yes", "yes"), task(1, "R422", "no")]
         ev = os.path.join(self.root, "ev")
@@ -278,6 +291,7 @@ class EvidenceTests(AdapterBase):
         with open(os.path.join(ev, "README.md")) as fh:
             self.assertIn("stay outside git (the run directory) unless EVERY item", fh.read())
 
+    # oracle: CHARACTERIZATION (pins that --verify-only writes no run directory; adapter design)
     def test_verify_only_runs_nothing(self):
         repo = self.make_repo([task(0, "A:yes", "yes")])
         rc = ja.main(["--public-tier", "--jevbench-dir", repo, "--expect-commit", self.commit,
@@ -302,6 +316,7 @@ class ReviewFixTests(AdapterBase):
     """Findings of the independent review (J1-J9 surviving mutants, J-c..J-g)."""
 
     # J1: a dirty tree whose dataset hash is intact must still fail
+    # oracle: CHARACTERIZATION (pins that a dirty tree fails even when the dataset hash is intact (review J1); pins the adapter's own fail-closed design against the in-file loopback gateway and fake harness; no external spec states this)
     def test_dirty_tree_with_intact_dataset_hash_fails(self):
         repo = self.make_repo([task(0, "A:yes", "yes")], files={"README.md": "x\n"})
         commit = self.commit
@@ -310,6 +325,7 @@ class ReviewFixTests(AdapterBase):
         rc, _ = self.run_adapter(repo, commit=commit)
         self.assertEqual(2, rc)
 
+    # oracle: CHARACTERIZATION (pins that an untracked file in the checkout fails the run; pins the adapter's own fail-closed design against the in-file loopback gateway and fake harness; no external spec states this)
     def test_untracked_file_in_checkout_fails(self):
         repo = self.make_repo([task(0, "A:yes", "yes")])
         with open(os.path.join(repo, "evil.py"), "w") as fh:
@@ -318,6 +334,7 @@ class ReviewFixTests(AdapterBase):
         self.assertEqual(2, rc)
 
     # J-e: gitignored files count (they can still change the harness), bytecode caches do not
+    # oracle: CHARACTERIZATION (pins review J-e: gitignored non-cache files block, bytecode caches do not; pins the adapter's own fail-closed design against the in-file loopback gateway and fake harness; no external spec states this)
     def test_ignored_non_cache_file_fails_but_pycache_is_tolerated(self):
         repo = self.make_repo([task(0, "A:yes", "yes")], files={".gitignore": "*.cfg\n__pycache__/\n"})
         commit = self.commit
@@ -332,6 +349,7 @@ class ReviewFixTests(AdapterBase):
         self.assertEqual(2, rc, "an ignored non-cache file must block the run")
 
     # J3: absent / null / empty licence is never clean
+    # oracle: CHARACTERIZATION (pins review J3: an absent, null or empty licence is never clean; the 0-of-200 outcome is constructed)
     def test_missing_or_null_licence_is_not_clean(self):
         ts = []
         for i in range(200):
@@ -349,6 +367,7 @@ class ReviewFixTests(AdapterBase):
         self.assertFalse(ja.licence_clean({"expected": "yes"}, ("MIT",)))
 
     # J4: no shell, argv lists only
+    # oracle: INVARIANT (every subprocess call is an argv list and never uses shell=True; observed through a spy, so a unit-class check)
     def test_no_shell_true_and_argv_lists(self):
         calls = []
         real = subprocess.run
@@ -366,6 +385,7 @@ class ReviewFixTests(AdapterBase):
         self.assertTrue(any("run" in c[0] and "--endpoint" in c[0] for c in calls), "the harness call was seen")
 
     # J6: SSL_CERT_FILE reaches the child only
+    # oracle: INVARIANT (SSL_CERT_FILE reaches the child process only and never the parent environment)
     def test_ssl_cert_file_child_only(self):
         os.environ.pop("SSL_CERT_FILE", None)
         repo = self.make_repo([task(0, "A:yes", "yes")])
@@ -376,6 +396,7 @@ class ReviewFixTests(AdapterBase):
             self.assertEqual("/tmp/ca-test.pem", json.load(fh)["SSL_CERT_FILE"])
 
     # J-e: inherited PYTHONPATH is dropped for the child; bytecode writing is off
+    # oracle: INVARIANT (an inherited PYTHONPATH never reaches the harness child and bytecode writing is off)
     def test_pythonpath_is_not_inherited(self):
         os.environ["PYTHONPATH"] = "/evil/path"
         self.addCleanup(os.environ.pop, "PYTHONPATH", None)
@@ -386,12 +407,14 @@ class ReviewFixTests(AdapterBase):
         self.assertIsNone(env["PYTHONPATH"])
         self.assertEqual("1", env["PYTHONDONTWRITEBYTECODE"])
 
+    # oracle: CHARACTERIZATION (pins the default launcher argv prefix (-E -s -m jevbench.cli run); adapter design)
     def test_default_launcher_ignores_python_env_and_user_site(self):
         ns = ja.parse_args(["--jevbench-dir", "x", "--expect-commit", "0" * 40, "--run-dir", "y"])
         cmd = ja.build_harness_cmd(ns, "t.jsonl", "r", "raw", "l")
         self.assertEqual([sys.executable, "-E", "-s", "-m", "jevbench.cli", "run"], cmd[:6])
 
     # J-e: realpath for the run-dir containment check
+    # oracle: CHARACTERIZATION (pins review J-e: the run-dir containment check uses realpath; pins the adapter's own fail-closed design against the in-file loopback gateway and fake harness; no external spec states this)
     def test_run_dir_symlink_into_checkout_refused(self):
         repo = self.make_repo([task(0, "A:yes", "yes")])
         link = os.path.join(self.root, "linkdir")
@@ -402,12 +425,14 @@ class ReviewFixTests(AdapterBase):
         self.assertIn("outside the jevbench checkout", err)
 
     # J8: timeouts are refusals, with their own bucket
+    # oracle: CHARACTERIZATION (pins review J8: timeouts are refusals with their own bucket and a refused connection is failed_other; adapter design)
     def test_timeouts_counted_as_refused(self):
         for err in ("TimeoutError: timed out", "ConnectionError: timeout while reading", "socket.timeout: The read operation timed out"):
             self.assertEqual("refused", ja.classify({"ok": False, "status_code": None, "error": err}), err)
         self.assertEqual("failed_other", ja.classify({"ok": False, "status_code": None, "error": "ConnectionError: Connection refused"}))
 
     # J9: the pin must be exactly 40 hex digits
+    # oracle: SPECIFIED (git object names are 40 hex digits (SHA-1); the rest is the adapter's rejection design)
     def test_commit_must_be_40_hex(self):
         repo = self.make_repo([task(0, "A:yes", "yes")])
         for bad in ("z" * 40, self.commit[:39], self.commit + "0", self.commit[:39] + "g", ""):
@@ -419,6 +444,7 @@ class ReviewFixTests(AdapterBase):
         self.assertEqual(0, rc, "upper-case hex of the right commit is accepted")
 
     # J-c: empty allowlist entries
+    # oracle: CHARACTERIZATION (pins review J-c: empty --allow-licence entries are rejected; pins the adapter's own fail-closed design against the in-file loopback gateway and fake harness; no external spec states this)
     def test_empty_licence_allowlist_entry_rejected(self):
         repo = self.make_repo([task(0, "A:yes", "yes", lic="")])
         for bad in ("", "  "):
@@ -428,11 +454,13 @@ class ReviewFixTests(AdapterBase):
             self.assertIn("allow-licence", err)
 
     # J-d: the override is recorded
+    # oracle: CHARACTERIZATION (pins review J-d: harness_override is recorded true when a custom harness command is used; pins the adapter's own fail-closed design against the in-file loopback gateway and fake harness; no external spec states this)
     def test_harness_override_recorded(self):
         rc, s = self.run_adapter(self.make_repo([task(0, "A:yes", "yes")]))
         self.assertIs(True, s["harness_override"])
 
     # access / rate-limit stop: exit 3 explicitly, even when the stop is on the last item
+    # oracle: CHARACTERIZATION (pins exit 3 on a 401, 403 or 429 stop, mirroring the stop rule the in-file fake harness implements (not an independent upstream check))
     def test_access_stop_exits_3_and_is_named(self):
         for code in (401, 403, 429):
             ts = [task(0, "A:yes", "yes"), task(1, "R%d" % code, "no"), task(2, "A:yes", "yes")]
@@ -443,6 +471,7 @@ class ReviewFixTests(AdapterBase):
             self.assertEqual(2, s["attempted"])
             shutil.rmtree(os.path.join(self.root, "jevbench"))
 
+    # oracle: CHARACTERIZATION (pins exit 3 even when the cut is on the last item; adapter design)
     def test_access_stop_on_last_item_still_exits_3(self):
         ts = [task(0, "A:yes", "yes"), task(1, "R401", "no")]
         rc, s = self.run_adapter(self.make_repo(ts))
@@ -451,6 +480,7 @@ class ReviewFixTests(AdapterBase):
         self.assertEqual([401], s["access_stop"]["status_codes"])
 
     # J-g: 429 is tallied as failed_other (not a gateway refusal), and named
+    # oracle: CHARACTERIZATION (pins review J-g: a 429 is tallied failed_other, not refused; specs/009-jev-decision-models/contracts/openapi.yaml:26 only says 429 is a retryable auth throttle)
     def test_429_is_failed_other_not_refused(self):
         self.assertEqual("failed_other", ja.classify({"ok": False, "status_code": 429, "error": "HTTP 429"}))
         rc, s = self.run_adapter(self.make_repo([task(0, "R429", "no")]))
@@ -458,6 +488,7 @@ class ReviewFixTests(AdapterBase):
         self.assertEqual(0, s["counts"]["refused"])
 
     # J-f: an unparseable results line -> summary written, marked incomplete, exit 3
+    # oracle: CHARACTERIZATION (pins review J-f: an unparseable results line gives rc 3 and an incomplete summary; pins the adapter's own fail-closed design against the in-file loopback gateway and fake harness; no external spec states this)
     def test_bad_results_line_exit_3_incomplete(self):
         ts = [task(0, "BADLINE", "yes"), task(1, "A:yes", "yes")]
         rc, s = self.run_adapter(self.make_repo(ts))
@@ -465,6 +496,7 @@ class ReviewFixTests(AdapterBase):
         self.assertFalse(s["complete"])
         self.assertEqual(1, s["results_unparseable_lines"])
 
+    # oracle: CHARACTERIZATION (pins that duplicate result ids give rc 3 and an incomplete summary; pins the adapter's own fail-closed design against the in-file loopback gateway and fake harness; no external spec states this)
     def test_duplicate_result_ids_exit_3_incomplete(self):
         rc, s = self.run_adapter(self.make_repo([task(0, "DUPRESULT", "yes")]))
         self.assertEqual(3, rc)
@@ -472,6 +504,7 @@ class ReviewFixTests(AdapterBase):
         self.assertEqual(1, s["results_duplicate_ids"])
 
     # J-f: duplicate ids across splits are refused before anything runs
+    # oracle: CHARACTERIZATION (pins that duplicate task ids across splits are refused before anything runs; pins the adapter's own fail-closed design against the in-file loopback gateway and fake harness; no external spec states this)
     def test_duplicate_task_ids_across_splits_refused(self):
         repo = self.make_repo([task(0, "A:yes", "yes")], extra_splits={"easy": [task(0, "A:no", "no")]})
         rc, err = run_capturing(["--public-tier", "--jevbench-dir", repo, "--expect-commit", self.commit,
@@ -531,6 +564,7 @@ class RealHarnessContractTests(unittest.TestCase):
     """Runs the REAL upstream harness (stdlib only) against a stand-in gateway: proves the CLI flags, the
     result field names and the scoring contract the adapter relies on."""
 
+    # oracle: SPECIFIED (the real upstream JevBench harness pinned at commit bb05a335bc80 (CLI flags, result field names, scoring contract); skipped unless that checkout exists, and the gateway is a stand-in)
     def test_real_harness_end_to_end(self):
         srv = HTTPServer(("127.0.0.1", 0), RealGateway)
         threading.Thread(target=srv.serve_forever, daemon=True).start()

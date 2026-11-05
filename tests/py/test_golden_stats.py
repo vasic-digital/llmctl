@@ -15,6 +15,7 @@ def rec(i, typ="noul", exp=True, pred=True, family="f", **kw):
 
 
 class WilsonTests(unittest.TestCase):
+    # oracle: DERIVED (hand-worked Wilson interval for 8 of 10 (0.4902, 0.9433) in the comments, plus textbook values for 0/10, 10/10 and 50/100)
     def test_known_values(self):
         # Hand calculation for k=8, n=10, z=1.96:
         #   p=0.8, z^2=3.8416, denom=1+z^2/n=1.38416
@@ -36,9 +37,11 @@ class WilsonTests(unittest.TestCase):
         self.assertAlmostEqual(lo, 0.4038, places=3)
         self.assertAlmostEqual(hi, 0.5962, places=3)
 
+    # oracle: CHARACTERIZATION (pins the convention (0.0, 1.0) for n=0; no source states it)
     def test_empty_sample_is_uninformative(self):
         self.assertEqual(stats.wilson(0, 0), (0.0, 1.0))
 
+    # oracle: INVARIANT (the Wilson interval stays informative at the boundaries (10 of 10 lower bound below 0.75, 0 of 10 upper above 0.25), unlike a Wald interval)
     def test_mutation_wald_interval_would_fail(self):
         # Mutation-style guard: a naive Wald interval gives [1,1] for 10/10 and [0,0] for 0/10.
         # Wilson must stay informative; this test fails if wilson() is mutated to p +/- z*sqrt(p(1-p)/n).
@@ -47,12 +50,14 @@ class WilsonTests(unittest.TestCase):
         _, hi = stats.wilson(0, 10)
         self.assertGreater(hi, 0.25)
 
+    # oracle: METAMORPHIC (a smaller z gives a strictly narrower interval: lower bound at z=1.0 exceeds the z=1.96 one by more than 0.05)
     def test_mutation_wrong_z_detected(self):
         # With z=1.0 instead of 1.96 the 8/10 lower bound would be ~0.65, not 0.49.
         lo_wrong, _ = stats.wilson(8, 10, z=1.0)
         lo, _ = stats.wilson(8, 10)
         self.assertGreater(lo_wrong, lo + 0.05)
 
+    # oracle: SPECIFIED (specs/009-jev-decision-models/spec.md:384 (SC-003) (lower bound of the interval must exceed the baseline); 0.8882 and 0.8256 are hand-worked; equality is not exceeding)
     def test_lower_bound_vs_baseline(self):
         # 95/100 -> lower 0.8882 > 0.85 ; 90/100 -> lower 0.8256 <= 0.85 (the "79% majority trap" shape)
         self.assertTrue(stats.lower_exceeds_baseline(stats.wilson(95, 100)[0], 0.85))
@@ -62,6 +67,7 @@ class WilsonTests(unittest.TestCase):
 
 
 class BaselineTests(unittest.TestCase):
+    # oracle: DERIVED (hand-worked: 17 false and 3 true give majority false at 0.85)
     def test_majority(self):
         # 17 false / 3 true -> majority false at 0.85
         label, share = stats.majority([False] * 17 + [True] * 3)
@@ -69,11 +75,13 @@ class BaselineTests(unittest.TestCase):
         self.assertAlmostEqual(share, 0.85)
         self.assertEqual(stats.majority([]), (None, 0.0))
 
+    # oracle: METAMORPHIC (reordering the input must not change the majority result)
     def test_majority_tie_is_deterministic(self):
         a = stats.majority(["x", "y", "x", "y"])
         b = stats.majority(["y", "x", "y", "x"])
         self.assertEqual(a, b)
 
+    # oracle: SPECIFIED (specs/009-jev-decision-models/spec.md:384 (SC-003) (golden set includes imbalanced items; per-class accuracy against a majority baseline); 0.85, 1.0 and 0.0 are hand-worked)
     def test_imbalanced_item_always_false_matches_baseline_not_beats_it(self):
         # 20 items, 17 false: a model that always says false scores 17/20 = 0.85 exactly the majority share.
         recs = [rec("a%d" % i, exp=False, pred=False, family="is_urgent") for i in range(17)]
@@ -87,6 +95,7 @@ class BaselineTests(unittest.TestCase):
         self.assertAlmostEqual(rep["per_class"]["noul:False"]["accuracy"], 1.0)
         self.assertAlmostEqual(rep["per_class"]["noul:True"]["accuracy"], 0.0)
 
+    # oracle: DERIVED (hand-worked: 4 options give chance 0.25, labels a,a,a,b give majority 0.75)
     def test_type_baseline_is_larger_of_majority_and_chance(self):
         # 4 choice items with 4 options each: chance 0.25; expected labels a,a,a,b -> majority 0.75
         recs = [rec("c%d" % i, typ="choice", exp=e, pred=e, option_count=4) for i, e in enumerate("aaab")]
@@ -98,6 +107,7 @@ class BaselineTests(unittest.TestCase):
 
 
 class AccuracyTests(unittest.TestCase):
+    # oracle: CHARACTERIZATION (pins that a malformed answer counts as wrong in the denominator; stats design)
     def test_malformed_counts_as_wrong(self):
         recs = [rec("1", pred=True), rec("2", pred=None), rec("3", exp=False, pred=False)]
         rep = stats.report(recs)
@@ -105,6 +115,7 @@ class AccuracyTests(unittest.TestCase):
         self.assertEqual(rep["by_type"]["noul"]["correct"], 2)   # items 1 and 3
         self.assertEqual(rep["by_type"]["noul"]["n"], 3)
 
+    # oracle: DERIVED (hand-worked: levels 3,4,0 against 3 give accuracy 1/3 and within-one 2/3)
     def test_score_within_one(self):
         recs = [rec("s1", typ="score", exp=3, pred=3, scale=5), rec("s2", typ="score", exp=3, pred=4, scale=5),
                 rec("s3", typ="score", exp=3, pred=0, scale=5)]
@@ -112,6 +123,7 @@ class AccuracyTests(unittest.TestCase):
         self.assertAlmostEqual(row["accuracy"], 1 / 3.0)
         self.assertAlmostEqual(row["within_one_level"], 2 / 3.0)
 
+    # oracle: DERIVED (hand-worked: option count 2 gives 1/2, option count 8 gives 1/1)
     def test_accuracy_by_option_count_table(self):
         recs = [rec("a", typ="choice", exp="x", pred="x", option_count=2),
                 rec("b", typ="choice", exp="x", pred="y", option_count=2),
@@ -121,6 +133,7 @@ class AccuracyTests(unittest.TestCase):
         self.assertAlmostEqual(t["2"]["accuracy"], 0.5)
         self.assertAlmostEqual(t["8"]["accuracy"], 1.0)
 
+    # oracle: CHARACTERIZATION (pins that only the original variant is scored, so permuted answers do not change n; stats design)
     def test_permuted_variants_do_not_inflate_accuracy(self):
         recs = [rec("c1", typ="choice", exp="x", pred="y", option_count=2, perm_group="g"),
                 rec("c1", typ="choice", exp="x", pred="x", option_count=2, perm_group="g", variant="perm")]
@@ -130,6 +143,7 @@ class AccuracyTests(unittest.TestCase):
 
 
 class FlipTests(unittest.TestCase):
+    # oracle: DERIVED (hand-worked: g1 stable, g2 flips, g3 has one answer, so 2 groups, 1 flipped, rate 0.5; probe defined by FR-080 (specs/009-jev-decision-models/spec.md:305))
     def test_flip_rate(self):
         # group g1 answers x,x (stable); g2 answers x,y (flip); g3 has only one answer (not counted)
         recs = [rec("1", typ="choice", pred="x", perm_group="g1"), rec("1p", typ="choice", pred="x", perm_group="g1", variant="perm"),
@@ -139,13 +153,16 @@ class FlipTests(unittest.TestCase):
         self.assertEqual((fl["groups"], fl["flipped"]), (2, 1))
         self.assertAlmostEqual(fl["flip_rate"], 0.5)
 
+    # oracle: CHARACTERIZATION (pins None for a flip rate with no complete group; stats design)
     def test_flip_rate_none_when_no_groups(self):
         self.assertIsNone(stats.flip_rate([rec("1", typ="choice", pred="x", perm_group="g")])["flip_rate"])
 
+    # oracle: CHARACTERIZATION (pins that a malformed answer is not counted as a flip; stats design)
     def test_malformed_answer_is_not_a_flip(self):
         recs = [rec("1", typ="choice", pred="x", perm_group="g"), rec("1p", typ="choice", pred=None, perm_group="g", variant="perm")]
         self.assertIsNone(stats.flip_rate(recs)["flip_rate"])
 
+    # oracle: DERIVED (hand-worked: pair A agrees, pair B disagrees, so 2 pairs and 1 agree)
     def test_pair_consistency(self):
         recs = [rec("a", pred=True, pair_id="A"), rec("b", pred=True, pair_id="A"),
                 rec("c", pred=True, pair_id="B"), rec("d", pred=False, pair_id="B")]
