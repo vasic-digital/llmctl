@@ -224,7 +224,7 @@ class RunnerE2ETests(unittest.TestCase):
                     {"answers": {"q": {"confidence": float("nan"), "confidence_raw": "x", "calibration": []}}}):
             self.assertEqual(f(bad), (None, None, None))
 
-    # oracle: INVARIANT (the access key and state text never appear in any output file or log; chain and manifest verifiers are sibling code in tests/evidence, not an independent implementation)
+    # oracle: CHARACTERIZATION (mixed checks: no-leak of the access key and state text is an invariant, but the chain and manifest verifiers are sibling code in tests/evidence, not independent, and the class/real_pass assertions record observed runner behaviour)
     def test_evidence_chain_manifest_and_no_leaks(self):
         rc, out, err = self.run_main(["--limit", "10"])
         self.assertEqual(rc, 0, err)
@@ -285,7 +285,7 @@ class RunnerE2ETests(unittest.TestCase):
         self.assertEqual(recs[0]["result"], "fail")
         self.assertIn("0 of 1", recs[0]["reason"])
 
-    # oracle: SPECIFIED (specs/009-jev-decision-models/contracts/openapi.yaml:28 (502 deadline_exceeded signalled by x-llmctl-decide-reason; internal/server/handlers.go:284-286 says a client must not retry it))
+    # oracle: SPECIFIED (internal/server/handlers.go:284-286 comment: a client must not retry deadline_exceeded; the contract table specs/009-jev-decision-models/contracts/openapi.yaml:28 lists 502 as retryable and only adds x-llmctl-decide-reason, so it is looser and does not itself say do-not-retry)
     def test_gateway_deadline_502_is_not_retried(self):
         # a 502 the gateway marks deadline_exceeded means a slow-but-alive engine: a retry would cancel
         # the engine task and redo the whole prefill (guaranteed waste), so it is recorded, not retried
@@ -425,7 +425,7 @@ class RunnerE2ETests(unittest.TestCase):
         self.assertFalse(any(r.get("refused") for r in res["records"]))
 
 
-    # oracle: DERIVED (hand-worked: 5 items with 12 options and 4 with 20 give 9 items over 8; specs/009-jev-decision-models/spec.md:384 (SC-003) denominators)
+    # oracle: DERIVED (hand-worked and recounted: 5 items with 12 options and 4 with 20 give 9 items over 8; related context SC-003 at specs/009-jev-decision-models/spec.md:384, which does not itself define refused-item denominators)
     def test_refused_items_do_not_fail_the_run_and_sc003_pass_row_explains(self):
         """IMPORTANT-1: refused items shrink the denominator; run exits 0, SC-003 passes WITH a reason."""
         self.srv.refuse_over = 8
@@ -491,7 +491,7 @@ class PureUnitTests(unittest.TestCase):
         self.assertIsInstance(s["questions"]["q"]["criteria"], list)
         self.assertEqual(s["model"], "m")
 
-    # oracle: INVARIANT (same seed gives the same order, the result is a permutation of the keys, and it differs from the original order)
+    # oracle: CHARACTERIZATION (observed runner design: same seed gives the same order and the order is a permutation of the keys; the 'differs from the original order' check is the runner's design, not a property of permutations)
     def test_permutation_deterministic_and_different(self):
         for c in [i for i in run_golden.load_items(["questions"]) if i["type"] == "choice"]:
             a = run_golden.permuted_keys(c, "7")

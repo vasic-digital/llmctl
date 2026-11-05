@@ -564,7 +564,7 @@ class RealHarnessContractTests(unittest.TestCase):
     """Runs the REAL upstream harness (stdlib only) against a stand-in gateway: proves the CLI flags, the
     result field names and the scoring contract the adapter relies on."""
 
-    # oracle: SPECIFIED (the real upstream JevBench harness pinned at commit bb05a335bc80 (CLI flags, result field names, scoring contract); skipped unless that checkout exists, and the gateway is a stand-in)
+    # oracle: SPECIFIED (UNCONFIRMED here: the real upstream JevBench harness pinned at commit bb05a335bc80 (CLI flags, result field names, scoring contract); skipped when that checkout is absent, as in this run, so the label was not exercised; the gateway is a stand-in)
     def test_real_harness_end_to_end(self):
         srv = HTTPServer(("127.0.0.1", 0), RealGateway)
         threading.Thread(target=srv.serve_forever, daemon=True).start()
