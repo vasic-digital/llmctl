@@ -93,7 +93,7 @@ class ManifestTests(unittest.TestCase):
         self.assertFalse(res["ok"])
         self.assertIn("raw/x.txt", res["extra"])
 
-    # basis: pins no vacuous pass when SHA256SUMS is absent; specs/009-jev-decision-models/contracts/evidence-schema.md:31 forbids absence-of-error passes
+    # basis: pins no vacuous pass when SHA256SUMS is absent (the verifier's design; no spec line states this manifest property)
     # oracle: CHARACTERIZATION
     def test_verify_without_sums_fails_not_passes(self):
         res = manifest.verify(self.d)

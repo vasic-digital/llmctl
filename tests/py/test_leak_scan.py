@@ -35,7 +35,7 @@ class LeakScanTests(unittest.TestCase):
         self._w("a.log", "nothing to see here\n")
         self.assertEqual(leak_scan.scan_paths([self.d], [SECRET]), [])
 
-    # basis: specs/009-jev-decision-models/spec.md:386 (SC-005: an automated scan finds key values) and specs/009-jev-decision-models/contracts/evidence-schema.md:35; not echoing the value is the scanner's design
+    # basis: specs/009-jev-decision-models/spec.md:386 (SC-005: 0 key values present in process listings, logs, evidence files, documentation or world-readable files, checked by an automated scan) and specs/009-jev-decision-models/contracts/evidence-schema.md:35; not echoing the value is the scanner's design
     # oracle: SPECIFIED
     def test_literal_secret_found_without_echoing_value(self):
         self._w("sub/out.txt", "x " + SECRET + " y")

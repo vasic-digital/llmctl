@@ -43,8 +43,8 @@ class WriterTests(unittest.TestCase):
         self.assertTrue(r["ts"].endswith("Z"))
         self.assertEqual(r["class"], "real-component")
 
-    # basis: expected digest computed in the test with hashlib from literal bytes; hashlib is the same library the writer uses, so only the field wiring and the artifact content are independently checked; specs/009-jev-decision-models/contracts/evidence-schema.md:18-19
-    # oracle: DERIVED
+    # basis: pins the writer's current behaviour (field wiring and artifact content); the expected digest is computed in the test with hashlib, the same library the writer uses, so it is not an independent digest oracle; field names per specs/009-jev-decision-models/contracts/evidence-schema.md:18-19
+    # oracle: CHARACTERIZATION
     def test_sha256_of_output_and_artifact_written(self):
         _rec(self.w, stdout=b"payload")
         r = self.lines()[0]
@@ -68,8 +68,8 @@ class WriterTests(unittest.TestCase):
         _rec(w2)
         self.assertEqual([r["id"] for r in self.lines()], ["EV-r1-0001", "EV-r1-0002", "EV-r1-0003"])
 
-    # basis: specs/009-jev-decision-models/contracts/evidence-schema.md:38 (prev_sha256 is the hash of the previous line); the all-zero genesis value is the writer's design; hashlib is the writer's own library
-    # oracle: SPECIFIED
+    # basis: pins the writer's current chain behaviour; the rule is specs/009-jev-decision-models/contracts/evidence-schema.md:38 (prev_sha256 is the hash of the previous line), but the expected hash is computed in the test with hashlib, the writer's own library, and the all-zero genesis value is the writer's design, so this is not an independent oracle
+    # oracle: CHARACTERIZATION
     def test_hash_chain_links_previous_line(self):
         _rec(self.w)
         _rec(self.w)
