@@ -99,19 +99,19 @@ class AuditTests(Scratch):
         self.assertEqual(r["D-02"]["closure"], "OPEN")
         self.assertIn("name not found", r["D-02"]["reason"])
 
-    # oracle: SPECIFIED (SC-004/T129: a not-reproduced row with a recorded reason is DEMOTED)
+    # oracle: CHARACTERIZATION (pins the script's own design: a not-reproduced row with a recorded reason is DEMOTED; SC-004 only requires demotion to rest on captured evidence, spec.md:385)
     def test_not_reproduced_is_demoted_with_reason(self):
         self.register({"D-04": "NOT-REPRODUCED"}, {"D-04": {"disposition": "N/A", "guard": "no loader exists"}})
         r = self.rows(self.run_audit())
         self.assertEqual(r["D-04"]["closure"], "DEMOTED")
 
-    # oracle: SPECIFIED (SC-004/T129: demotion without a reason stays OPEN)
+    # oracle: CHARACTERIZATION (pins the script's own design: demotion without a recorded reason stays OPEN; not stated in SC-004)
     def test_demotion_without_reason_is_open(self):
         self.register({"D-04": "NOT-REPRODUCED"}, {})
         r = self.rows(self.run_audit())
         self.assertEqual(r["D-04"]["closure"], "OPEN")
 
-    # oracle: SPECIFIED (SC-004: only high or critical rows gate the exit code; an unevidenced medium row stays OPEN but exit is 0)
+    # oracle: CHARACTERIZATION (pins the script's own exit-code design: only high or critical rows gate the exit code, an unevidenced medium row stays OPEN with exit 0; SC-004 states high/critical gating, medium behaviour is the script's choice)
     def test_medium_rows_do_not_gate_exit(self):
         self.register({"D-01": "RED", "D-02": "RED", "D-04": "NOT-REPRODUCED", "N-01": "RED"},
                       {x: {"disposition": "regression-test", "guard": ["tests/test_real.sh::the real guard name"]}
@@ -124,7 +124,7 @@ class AuditTests(Scratch):
         self.assertEqual(res["exit_code"], 0)   # D-03 (M) has no evidence yet is not gating
         self.assertEqual(self.rows(res)["D-03"]["closure"], "OPEN")
 
-    # oracle: SPECIFIED (SC-004/T129: a demotion override counts only when its cited evidence file exists; asserted before and after the file is created)
+    # oracle: SPECIFIED (SC-004, spec.md:385: a demotion counts only with captured evidence; the override counts only when its cited evidence file exists, asserted before and after the file is created)
     def test_override_requires_existing_evidence(self):
         self.register({"D-01": "SKIP"}, {})
         self.w("specs/009/evidence/sc004-overrides.json", json.dumps({"D-01": {
@@ -138,7 +138,7 @@ class AuditTests(Scratch):
         r = self.rows(self.run_audit())
         self.assertEqual(r["D-01"]["closure"], "DEMOTED")
 
-    # oracle: SPECIFIED (the rendered report must carry the GENERATED marker, the generator path and the row for D-01)
+    # oracle: CHARACTERIZATION (pins the script's own render format: GENERATED marker, generator path and the D-01 row; no spec states it)
     def test_render_marks_generated_and_counts(self):
         self.register({"D-01": "RED"}, {"D-01": {"disposition": "regression-test",
                                                  "guard": ["tests/test_real.sh::the real guard name"]}})

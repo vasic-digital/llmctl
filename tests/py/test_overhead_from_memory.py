@@ -131,7 +131,7 @@ class Derive(unittest.TestCase):
     def test_non_decision_profiles_are_skipped(self):
         self.assertNotIn("fast", ofm.derive(self.cat, self.root))
 
-    # oracle: INVARIANT (a catalog written by apply passes check; each hand-made tamper breaks the derived-value invariant and must be rejected)
+    # oracle: METAMORPHIC (relation: check(apply(x)) == [] is the code agreeing with itself and proves nothing alone; the independent half is the hand-made tampers, each of which breaks the derived-value invariant and must be rejected)
     def test_check_passes_after_apply_and_catches_each_tamper(self):
         ofm.apply(self.cat, self.root)
         self.assertEqual(ofm.check(self.cat, self.root), [])
