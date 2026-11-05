@@ -25,17 +25,23 @@ per-class:
 
 
 class ParseStats(unittest.TestCase):
+    # basis: expected n=60, lower 0.701, baseline 0.667 are hand-read from the STATS fixture text defined in this file, which mimics scripts/golden/stats.py output; pins the parser against its own stand-in
+    # oracle: CHARACTERIZATION
     def test_reads_every_type_with_numbers(self):
         r = mfg.parse_stats(STATS)
         self.assertEqual(sorted(r), ["choice", "noul", "score"])
         self.assertEqual(r["noul"], {"n": 60, "lower_bound": 0.701, "baseline": 0.667})
         self.assertEqual(r["score"]["n"], 31)
 
+    # basis: specs/009-jev-decision-models/spec.md:384 (SC-003: a profile is measured only when the lower bound exceeds the baseline; equal does not exceed); numbers are hand-picked
+    # oracle: SPECIFIED
     def test_status_rule_is_strictly_greater(self):
         self.assertEqual(mfg.status_for(0.701, 0.667), "measured")
         self.assertEqual(mfg.status_for(0.667, 0.667), "experimental")  # equal does not clear
         self.assertEqual(mfg.status_for(0.161, 0.290), "experimental")
 
+    # basis: the same STATS text with only the noul lower bound moved below the baseline must flip noul and no other type; relation between two inputs
+    # oracle: METAMORPHIC
     def test_control_needle_flip_is_visible(self):
         # the SAME text with the noul lower bound moved below the baseline must flip noul and only noul
         flipped = STATS.replace("CI95=[0.701,0.894]", "CI95=[0.601,0.894]").replace("lower>baseline=True\nchoice", "lower>baseline=False\nchoice", 1)
@@ -45,11 +51,15 @@ class ParseStats(unittest.TestCase):
         self.assertEqual(b["noul"], "experimental")
         self.assertEqual(a["choice"], b["choice"])
 
+    # basis: pins parse_stats refusing a text whose printed verdict contradicts its own numbers; the fixture is hand-edited
+    # oracle: CHARACTERIZATION
     def test_disagreement_between_numbers_and_printed_verdict_is_an_error(self):
         bad = STATS.replace("baseline=0.290 (majority) lower>baseline=False", "baseline=0.290 (majority) lower>baseline=True")
         with self.assertRaises(ValueError):
             mfg.parse_stats(bad)
 
+    # basis: pins parse_stats refusing a text without one of the three types; no spec text
+    # oracle: CHARACTERIZATION
     def test_missing_type_is_an_error(self):
         with self.assertRaises(ValueError):
             mfg.parse_stats("\n".join(l for l in STATS.splitlines() if not l.startswith("score")))
@@ -74,6 +84,8 @@ class Derive(unittest.TestCase):
             "fast": {"capability": ["chat"]},
         }}
 
+    # basis: statuses hand-worked from the STATS numbers per specs/009-jev-decision-models/spec.md:384 (0.701>0.667 measured, 0.745>0.235 measured, 0.161<0.290 experimental); the evidence path is built from the module's own LIVE_REL constant, so that part is not independent
+    # oracle: DERIVED
     def test_profile_with_a_golden_run_is_measured_or_experimental_per_type(self):
         m = mfg.derive(self.cat, self.root)
         self.assertEqual({t: m["decide-a"][t]["status"] for t in ("noul", "choice", "score")},
@@ -81,18 +93,26 @@ class Derive(unittest.TestCase):
         self.assertEqual(m["decide-a"]["noul"]["evidence"], mfg.LIVE_REL + "/decide-a/golden-stats.txt")
         self.assertEqual(m["decide-a"]["noul"]["n"], 60)
 
+    # basis: pins derive's own fallback evidence location, built from the module's LIVE_REL constant; no spec text
+    # oracle: CHARACTERIZATION
     def test_nezha_location_is_used_when_the_primary_one_is_absent(self):
         m = mfg.derive(self.cat, self.root)
         self.assertEqual(m["decide-b"]["choice"]["evidence"], mfg.LIVE_REL + "/nezha/decide-b/golden-stats.txt")
 
+    # basis: specs/009-jev-decision-models/contracts/openapi.yaml:401-413 (maturity status unmeasured with a reason; a type absent from a map is unmeasured); the reason text 'not yet measured' is the module's wording
+    # oracle: SPECIFIED
     def test_profile_without_a_run_is_unmeasured_with_the_reason(self):
         m = mfg.derive(self.cat, self.root)
         for t in ("noul", "choice", "score"):
             self.assertEqual(m["decide-c"][t], {"status": "unmeasured", "reason": "not yet measured"})
 
+    # basis: pins that a chat-only catalog profile gets no maturity; no spec text
+    # oracle: CHARACTERIZATION
     def test_non_decision_profiles_get_nothing(self):
         self.assertNotIn("fast", mfg.derive(self.cat, self.root))
 
+    # basis: pins check/apply: a hand-edited status is detected then repaired, with derive as the code's own source of truth; specs/009-jev-decision-models/spec.md:336 (FR-042) wants derived, not typed, summaries
+    # oracle: CHARACTERIZATION
     def test_check_detects_a_hand_typed_status_and_write_repairs_it(self):
         derived = mfg.derive(self.cat, self.root)
         for name, m in derived.items():
@@ -105,6 +125,8 @@ class Derive(unittest.TestCase):
         mfg.apply(self.cat, self.root)
         self.assertEqual(mfg.check(self.cat, self.root), [])
 
+    # basis: pins check's own detection of missing maturity and a deleted evidence file; no spec text
+    # oracle: CHARACTERIZATION
     def test_check_detects_a_missing_maturity_object_and_a_vanished_evidence_file(self):
         self.assertTrue(any("decide-a" in d for d in mfg.check(self.cat, self.root)))
         mfg.apply(self.cat, self.root)
@@ -130,6 +152,8 @@ class Recompute(unittest.TestCase):
             json.dump({"records": recs}, f)
         return tmp.name
 
+    # basis: the honest text is generated with scripts/golden/stats.py, the same library check recomputes with, so the pass side is not independent; the doctored n=61 versus 60 recorded rows is hand-made and caught by name
+    # oracle: CHARACTERIZATION
     def test_agreeing_text_passes_and_doctored_text_is_caught(self):
         sys_path = os.path.join(ROOT, "scripts", "golden")
         import sys

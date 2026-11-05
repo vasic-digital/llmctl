@@ -57,6 +57,8 @@ class NodePipedStdoutTests(unittest.TestCase):
         self.srv.server_close()
         shutil.rmtree(self.d, ignore_errors=True)
 
+    # basis: round trip: the 100 KiB os.urandom payload the in-file TLS server sends equals the bytes the node adapter plus M.parse_lines hand back; payload is independent of the client, server is a stand-in
+    # oracle: INVARIANT
     def test_100kb_body_through_a_pipe_is_complete(self):
         url = "https://localhost:%d/x" % self.srv.server_address[1]
         p = subprocess.run(["node", NODE_CLIENT, "GET", url, self.crt, "20", "-", "-"], stdout=subprocess.PIPE,
@@ -71,6 +73,8 @@ class NodePipedStdoutTests(unittest.TestCase):
 
 # ------------------------------------------------------------------ (5) truncated base64
 class TruncatedAdapterOutputTests(unittest.TestCase):
+    # basis: pins the harness's own error wording (a problem mentioning base64) for a truncated adapter line; no spec text
+    # oracle: CHARACTERIZATION
     def test_invalid_base64_is_named_not_reported_as_non_json(self):
         full = base64.b64encode(b'{"a": "' + b"x" * 9000 + b'"}').decode()
         r = M.parse_lines("STATUS 200\nHEADER content-type: application/json\nBODY_B64 %s\n" % full[:8190])
@@ -98,15 +102,21 @@ MAT = {"noul": {"status": "measured", "lower_bound": 0.9, "baseline": 0.5, "n": 
 
 
 class AdditiveKeyTests(unittest.TestCase):
+    # basis: specs/009-jev-decision-models/contracts/openapi.yaml:401-418 (ModelList entry maturity and experimental_types are additive, valid when well-formed); the validator under test is the harness's reading of that schema
+    # oracle: SPECIFIED
     def test_models_entry_with_maturity_and_experimental_types(self):
         e = _entry(maturity=MAT, experimental_types=["choice", "score"], notes="n")
         self.assertEqual(C.validate_models(_models(e)), [])
 
+    # basis: specs/009-jev-decision-models/contracts/openapi.yaml:386-394 (limits: max_options, score_levels plus max_state_chars, max_context_tokens, max_pairs integers >= 1)
+    # oracle: SPECIFIED
     def test_models_entry_with_limit_extras(self):
         e = _entry(limits={"max_options": 20, "score_levels": [2, 10], "max_state_chars": 4000,
                            "max_context_tokens": 2048, "max_pairs": 64})
         self.assertEqual(C.validate_models(_models(e)), [])
 
+    # basis: specs/009-jev-decision-models/contracts/openapi.yaml:401-418 and :354-358 (maturity status enum, propertyNames enum, experimental_types item enum, additionalProperties false); limits typing at :386-394
+    # oracle: SPECIFIED
     def test_malformed_additive_keys_are_still_rejected(self):
         bad = [_entry(maturity={"noul": {"status": "great"}}),
                _entry(maturity={"bogus": {"status": "measured"}}),
@@ -118,6 +128,8 @@ class AdditiveKeyTests(unittest.TestCase):
         for e in bad:
             self.assertTrue(C.validate_models(_models(e)), e)
 
+    # basis: specs/009-jev-decision-models/contracts/openapi.yaml:347-349 (AnswerMaturity const experimental) and :286-295 (NoulAnswer additionalProperties false rejects unknown keys)
+    # oracle: SPECIFIED
     def test_answer_maturity_label(self):
         req = {"questions": {"a": {"type": "noul"}}}
         body = {"model": "m", "usage": {"input_tokens": 1, "output_tokens": 2},
@@ -129,6 +141,8 @@ class AdditiveKeyTests(unittest.TestCase):
         body["answers"]["a"]["zzz"] = 1
         self.assertTrue(C.validate_systemone(body, req))
 
+    # basis: greps the contract file for the two tokens the test author chose; a presence check of a repo file, not an independent expectation
+    # oracle: CHARACTERIZATION
     def test_contract_documents_the_additive_keys(self):
         with open(os.path.join(M.ROOT, "specs", "009-jev-decision-models", "contracts", "openapi.yaml")) as f:
             txt = f.read()
@@ -138,12 +152,16 @@ class AdditiveKeyTests(unittest.TestCase):
 
 # ------------------------------------------------------------------ (2) model selection
 class ModelTests(unittest.TestCase):
+    # basis: pins the matrix CLI flag defaults (--model None, --each-profile False) as designed; no spec text
+    # oracle: CHARACTERIZATION
     def test_flag_exists_default_none(self):
         a = M.parser().parse_args([])
         self.assertIsNone(a.model)
         self.assertEqual(M.parser().parse_args(["--model", "decide-2b"]).model, "decide-2b")
         self.assertFalse(M.parser().parse_args([]).each_profile)
 
+    # basis: pins apply_model's own rule (inject only when the request lacks model; never touch raw or GET steps); no spec text
+    # oracle: CHARACTERIZATION
     def test_apply_model_injects_only_when_missing(self):
         st = C.ok_systemone(C.req())
         M.apply_model(st, "decide")
@@ -163,6 +181,8 @@ class ModelTests(unittest.TestCase):
         M.apply_model(none, None)
         self.assertEqual(none["data"], before)
 
+    # basis: pins the harness's own choice rule (an entry carrying alias decide, else the first id) on constructed listings; no spec text
+    # oracle: CHARACTERIZATION
     def test_pick_default_model(self):
         body = {"data": [{"id": "decide-nli", "aliases": []}, {"id": "decide-2b", "aliases": ["decide"]}]}
         self.assertEqual(M.pick_default_model(body), "decide")
@@ -172,6 +192,8 @@ class ModelTests(unittest.TestCase):
         self.assertIsNone(M.pick_default_model("junk"))
         self.assertEqual(M.profile_ids({"data": [{"id": "a"}, {"id": "b"}]}), ["a", "b"])
 
+    # basis: pins the matrix harness's own design against the in-file FakeEnv stand-in defined in this test file (class stand-in); no external spec states this
+    # oracle: CHARACTERIZATION
     def test_exec_http_sends_the_model(self):
         env = FakeEnv([resp(200, {}, b"{}")], model="decide-2b")
         case = {"steps": [C.ok_systemone(C.req())]}
@@ -181,6 +203,8 @@ class ModelTests(unittest.TestCase):
 
 
 class ModelResolutionTests(unittest.TestCase):
+    # basis: pins the matrix harness's own design against the in-file FakeEnv stand-in defined in this test file (class stand-in); no external spec states this
+    # oracle: CHARACTERIZATION
     def test_resolve_model_from_the_gateway_listing(self):
         body = json.dumps({"data": [{"id": "decide-2b", "aliases": ["decide"]}]}).encode()
         env = FakeEnv([resp(200, {"content-type": "application/json"}, body)])
@@ -189,6 +213,8 @@ class ModelResolutionTests(unittest.TestCase):
         self.assertEqual(M.resolve_model(env, a), "GET /v1/models")
         self.assertEqual(env.model, "decide")
 
+    # basis: pins the matrix harness's own design against the in-file FakeEnv stand-in defined in this test file (class stand-in); no external spec states this
+    # oracle: CHARACTERIZATION
     def test_resolve_model_flag_wins_and_reference_server_sends_none(self):
         env = FakeEnv([])
         self.assertEqual(M.resolve_model(env, M.parser().parse_args(["--model", "m1"])), "flag")
@@ -197,12 +223,16 @@ class ModelResolutionTests(unittest.TestCase):
         M.resolve_model(env2, M.parser().parse_args([]))
         self.assertIsNone(env2.model)
 
+    # basis: pins the matrix harness's own design against the in-file FakeEnv stand-in defined in this test file (class stand-in); no external spec states this; the 503 status is from specs/009-jev-decision-models/contracts/openapi.yaml:14-30 status table
+    # oracle: CHARACTERIZATION
     def test_unlistable_gateway_sends_no_model_and_says_so(self):
         env = FakeEnv([resp(503, {}, b"{}")])
         a = M.parser().parse_args(["--base-url", "https://x:1", "--cacert", "c"])
         self.assertIn("no model sent", M.resolve_model(env, a))
         self.assertIsNone(env.model)
 
+    # basis: pins do_each_profile's own design (one run per profile, run dir per profile, worst return code) with injected run/fetch lambdas defined in this test
+    # oracle: CHARACTERIZATION
     def test_each_profile_runs_once_per_profile_in_its_own_dir(self):
         a = M.parser().parse_args(["--base-url", "https://x:1", "--cacert", "c", "--each-profile", "--run-dir", "/r"])
         seen = []
@@ -211,6 +241,8 @@ class ModelResolutionTests(unittest.TestCase):
         self.assertEqual(seen, [("a", "/r/a", False), ("b", "/r/b", False)])
         self.assertEqual(rc, 1)
 
+    # basis: pins exit code 2 for --each-profile without a gateway as designed; no spec text
+    # oracle: CHARACTERIZATION
     def test_each_profile_needs_a_gateway(self):
         self.assertEqual(M.main(["--each-profile"]), 2)
 
@@ -256,6 +288,8 @@ class AuthThrottleTests(unittest.TestCase):
         M.exec_http(env, "curl", "EP-031", case or neg_case(), cell)
         return cell
 
+    # basis: pins the matrix harness's own design against the in-file FakeEnv stand-in defined in this test file (class stand-in); no external spec states this; statuses 401/429 and Retry-After from specs/009-jev-decision-models/contracts/openapi.yaml:21,:26
+    # oracle: CHARACTERIZATION
     def test_429_then_reprobe_after_retry_after_passes_with_documented_class(self):
         env = FakeEnv([resp(429, {"retry-after": "3"}, E429), resp(401, WWW, E401)])
         cell = self.run_cell(env)
@@ -264,11 +298,15 @@ class AuthThrottleTests(unittest.TestCase):
         self.assertEqual(len(env.sent), 2)
         self.assertTrue(env.slept and env.slept[0] >= 3, env.slept)
 
+    # basis: pins the matrix harness's own design against the in-file FakeEnv stand-in defined in this test file (class stand-in); no external spec states this; 429 retryable per specs/009-jev-decision-models/contracts/openapi.yaml:26
+    # oracle: CHARACTERIZATION
     def test_429_that_persists_after_the_wait_fails(self):
         env = FakeEnv([resp(429, {"retry-after": "1"}, E429), resp(429, {"retry-after": "1"}, E429)])
         cell = self.run_cell(env)
         self.assertEqual(cell.result, "fail")
 
+    # basis: pins the matrix harness's own design against the in-file FakeEnv stand-in defined in this test file (class stand-in); no external spec states this; a missing key must answer 401 per specs/009-jev-decision-models/contracts/openapi.yaml:21, the fail classification is the harness's
+    # oracle: CHARACTERIZATION
     def test_reprobe_must_still_be_the_right_answer(self):
         # after the wait the answer is a 200: the assertion stays meaningful (an auth hole is not hidden by the retry)
         env = FakeEnv([resp(429, {"retry-after": "1"}, E429), resp(200, {}, b"{}")])
@@ -276,6 +314,8 @@ class AuthThrottleTests(unittest.TestCase):
         self.assertEqual(cell.result, "fail")
         self.assertIsNone(cell.reason_class)  # a wrong re-probe is never labelled auth_throttled
 
+    # basis: pins the matrix harness's own design against the in-file FakeEnv stand-in defined in this test file (class stand-in); no external spec states this; the wait cap is the harness's own
+    # oracle: CHARACTERIZATION
     def test_429_with_unusable_retry_after_or_over_the_cap_fails_without_waiting_forever(self):
         for hdr in ({}, {"retry-after": "abc"}, {"retry-after": "9999"}):
             env = FakeEnv([resp(429, hdr, E429)], max_wait=60)
@@ -284,6 +324,8 @@ class AuthThrottleTests(unittest.TestCase):
             self.assertFalse(env.slept and env.slept[0] > 60, env.slept)
             self.assertEqual(len(env.sent), 1)
 
+    # basis: pins the matrix harness's own design against the in-file FakeEnv stand-in defined in this test file (class stand-in); no external spec states this; specs/009-jev-decision-models/contracts/openapi.yaml:26 says 429 is never applied to a valid-key request, the no-retry rule is the harness's
+    # oracle: CHARACTERIZATION
     def test_authenticated_steps_are_never_retried(self):
         step = C.ok_systemone(C.req())
         env = FakeEnv([resp(429, {"retry-after": "1"}, E429)])
@@ -292,21 +334,29 @@ class AuthThrottleTests(unittest.TestCase):
         self.assertEqual(len(env.sent), 1)
         self.assertEqual(env.slept, [])
 
+    # basis: pins the matrix harness's own design against the in-file FakeEnv stand-in defined in this test file (class stand-in); no external spec states this
+    # oracle: CHARACTERIZATION
     def test_no_throttle_no_class_no_sleep(self):
         env = FakeEnv([resp(401, WWW, E401)])
         cell = self.run_cell(env)
         self.assertEqual((cell.result, cell.reason_class, env.slept), ("pass", None, []))
 
+    # basis: pins the matrix harness's own design against the in-file FakeEnv stand-in defined in this test file (class stand-in); no external spec states this; the 0.25 s gap is a value chosen in this test
+    # oracle: CHARACTERIZATION
     def test_spacing_between_failed_auth_steps(self):
         env = FakeEnv([resp(401, WWW, E401)], gap=0.25)
         self.run_cell(env)
         self.assertEqual(env.slept, [0.25])
 
+    # basis: pins check_completeness's own treatment of a pass carrying a reason_class; specs/009-jev-decision-models/contracts/evidence-schema.md:33 only requires no missing cell
+    # oracle: CHARACTERIZATION
     def test_a_pass_with_class_is_not_a_completeness_problem(self):
         cells = [{"case_id": "EP-001", "client": "curl", "vantage": "host", "result": "pass",
                   "reason_class": "auth_throttled", "reason": "r"}]
         self.assertEqual(M.check_completeness(["EP-001"], ["EP-001"], ["curl"], ["host"], cells, False), [])
 
+    # basis: EP ids are hand-picked by the test author from the case table the code under test also reads; pins the harness's own phase design
+    # oracle: CHARACTERIZATION
     def test_phase_order_puts_failed_auth_negatives_late_and_burst_last(self):
         table = C.cases(C.Params())
         ids = sorted(table)

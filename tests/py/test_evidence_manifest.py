@@ -24,6 +24,8 @@ class ManifestTests(unittest.TestCase):
             f.write(data)
         return p
 
+    # basis: specs/009-jev-decision-models/contracts/evidence-schema.md:5 (SHA256SUMS over the run's files); whether MANIFEST.json is listed and SHA256SUMS excluded is the tool's design
+    # oracle: SPECIFIED
     def test_build_writes_manifest_and_sha256sums(self):
         manifest.build(self.d)
         sums = open(os.path.join(self.d, "SHA256SUMS")).read().splitlines()
@@ -35,18 +37,24 @@ class ManifestTests(unittest.TestCase):
         m = json.load(open(os.path.join(self.d, "MANIFEST.json")))
         self.assertEqual(sorted(f["path"] for f in m["files"]), ["evidence.jsonl", "raw/x.txt"])
 
+    # basis: independent reference implementation: coreutils sha256sum -c verifies the file the tool wrote
+    # oracle: DERIVED
     def test_sha256sums_format_compatible_with_sha256sum(self):
         manifest.build(self.d)
         import subprocess
         r = subprocess.run(["sha256sum", "-c", "SHA256SUMS"], cwd=self.d, capture_output=True, text=True)
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
 
+    # basis: specs/009-jev-decision-models/contracts/evidence-schema.md:37 (rule 7: SHA256SUMS verified at the end of a run); result keys are the tool's own
+    # oracle: SPECIFIED
     def test_verify_clean(self):
         manifest.build(self.d)
         res = manifest.verify(self.d)
         self.assertTrue(res["ok"])
         self.assertEqual((res["tampered"], res["missing"], res["extra"]), ([], [], []))
 
+    # basis: specs/009-jev-decision-models/contracts/evidence-schema.md:37 (a mismatch fails); the changed byte is hand-made
+    # oracle: SPECIFIED
     def test_verify_detects_tamper(self):
         manifest.build(self.d)
         self._w("raw/x.txt", "HELLO")
@@ -54,6 +62,8 @@ class ManifestTests(unittest.TestCase):
         self.assertFalse(res["ok"])
         self.assertEqual(res["tampered"], ["raw/x.txt"])
 
+    # basis: pins the tool's own missing-file detection; specs/009-jev-decision-models/contracts/evidence-schema.md:37 only names a mismatch
+    # oracle: CHARACTERIZATION
     def test_verify_detects_missing(self):
         manifest.build(self.d)
         os.remove(os.path.join(self.d, "raw/x.txt"))
@@ -61,6 +71,8 @@ class ManifestTests(unittest.TestCase):
         self.assertFalse(res["ok"])
         self.assertEqual(res["missing"], ["raw/x.txt"])
 
+    # basis: pins the tool's own extra-file detection; no spec text
+    # oracle: CHARACTERIZATION
     def test_verify_detects_extra(self):
         manifest.build(self.d)
         self._w("raw/new.txt", "late")
@@ -68,6 +80,8 @@ class ManifestTests(unittest.TestCase):
         self.assertFalse(res["ok"])
         self.assertEqual(res["extra"], ["raw/new.txt"])
 
+    # basis: pins that a deleted sums line shows up as an extra file; tool design
+    # oracle: CHARACTERIZATION
     def test_verify_detects_tampered_sha256sums_itself(self):
         manifest.build(self.d)
         p = os.path.join(self.d, "SHA256SUMS")
@@ -79,17 +93,23 @@ class ManifestTests(unittest.TestCase):
         self.assertFalse(res["ok"])
         self.assertIn("raw/x.txt", res["extra"])
 
+    # basis: pins no vacuous pass when SHA256SUMS is absent; specs/009-jev-decision-models/contracts/evidence-schema.md:31 forbids absence-of-error passes
+    # oracle: CHARACTERIZATION
     def test_verify_without_sums_fails_not_passes(self):
         res = manifest.verify(self.d)
         self.assertFalse(res["ok"])
         self.assertTrue(res["errors"])
 
+    # basis: pins ManifestError on an empty directory; tool design
+    # oracle: CHARACTERIZATION
     def test_empty_dir_does_not_vacuously_pass(self):
         e = tempfile.mkdtemp(prefix="manifest-empty-")
         self.addCleanup(shutil.rmtree, e, True)
         with self.assertRaises(manifest.ManifestError):
             manifest.build(e)
 
+    # basis: building twice over unchanged files yields identical SHA256SUMS
+    # oracle: INVARIANT
     def test_rebuild_is_idempotent(self):
         manifest.build(self.d)
         a = open(os.path.join(self.d, "SHA256SUMS")).read()
@@ -97,6 +117,8 @@ class ManifestTests(unittest.TestCase):
         b = open(os.path.join(self.d, "SHA256SUMS")).read()
         self.assertEqual(a, b)
 
+    # basis: pins CLI exit 0 on a clean tree and 1 after a tamper; tool design
+    # oracle: CHARACTERIZATION
     def test_cli_verify_exit_codes(self):
         manifest.build(self.d)
         with contextlib.redirect_stdout(io.StringIO()):
